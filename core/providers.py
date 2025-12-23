@@ -1,5 +1,7 @@
 import json
+import re
 import sys
+import time
 import urllib.request
 import warnings
 from typing import Optional
@@ -9,6 +11,74 @@ from core import config, secrets
 
 def _log(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
+
+
+def _safe_error_message(exc: Exception, limit: int = 300) -> str:
+    msg = str(exc).replace("\n", " ").strip()
+    if not msg:
+        return exc.__class__.__name__
+    if len(msg) <= limit:
+        return msg
+    return msg[: max(0, limit - 3)] + "..."
+
+
+_RETRY_IN_RE = re.compile(r"retry in ([0-9.]+)s", re.IGNORECASE)
+
+
+def _retry_delay_seconds(exc: Exception, attempt: int) -> float:
+    match = _RETRY_IN_RE.search(str(exc))
+    if match:
+        try:
+            seconds = float(match.group(1))
+            return max(0.1, min(seconds, 30.0))
+        except Exception:
+            pass
+    return min(2.0 * (2**attempt), 8.0)
+
+
+def _retryable_gemini_error(exc: Exception) -> bool:
+    name = exc.__class__.__name__
+    if name in {"ResourceExhausted", "TooManyRequests", "ServiceUnavailable", "DeadlineExceeded"}:
+        return True
+    if isinstance(exc, RuntimeError) and str(exc).startswith("Empty Gemini response"):
+        return True
+    return False
+
+
+def _extract_gemini_text(response) -> str:
+    try:
+        text = response.text or ""
+        if text.strip():
+            return str(text)
+    except Exception:
+        pass
+    try:
+        candidates = getattr(response, "candidates", None) or []
+        for candidate in candidates:
+            content = getattr(candidate, "content", None)
+            parts = getattr(content, "parts", None) or []
+            collected = []
+            for part in parts:
+                part_text = getattr(part, "text", None)
+                if part_text:
+                    collected.append(str(part_text))
+            joined = "".join(collected).strip()
+            if joined:
+                return joined
+    except Exception:
+        pass
+    return ""
+
+
+_LAST_GEMINI_ERROR: Optional[str] = None
+_LAST_OLLAMA_ERROR: Optional[str] = None
+
+
+def last_provider_errors() -> dict:
+    return {
+        "gemini": _LAST_GEMINI_ERROR or "",
+        "ollama": _LAST_OLLAMA_ERROR or "",
+    }
 
 
 def _gemini_client():
@@ -154,31 +224,65 @@ def ask_gemini(prompt: str, max_output_tokens: int = 512, cfg: Optional[dict] = 
     if not client:
         raise RuntimeError("Gemini client unavailable (missing key or dependency)")
     model = client.GenerativeModel(_gemini_model_name(cfg))
-    response = model.generate_content(
-        prompt,
-        generation_config={"max_output_tokens": max_output_tokens},
-        request_options={"timeout": 30},
-    )
-    text = getattr(response, "text", "") or ""
-    if not text:
-        raise RuntimeError("Empty response from Gemini")
-    return text
+    last_exc: Optional[Exception] = None
+    total_wait = 0.0
+    for attempt in range(4):
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config={"max_output_tokens": max_output_tokens},
+                request_options={"timeout": 30},
+            )
+            text = _extract_gemini_text(response).strip()
+            if text:
+                return text
+            finish_reason = None
+            try:
+                candidates = getattr(response, "candidates", None) or []
+                if candidates:
+                    finish_reason = getattr(candidates[0], "finish_reason", None)
+            except Exception:
+                finish_reason = None
+            if finish_reason is not None:
+                raise RuntimeError(f"Empty Gemini response (finish_reason={finish_reason})")
+            raise RuntimeError("Empty Gemini response")
+        except Exception as exc:
+            last_exc = exc
+            if attempt < 3 and _retryable_gemini_error(exc):
+                delay = _retry_delay_seconds(exc, attempt)
+                if total_wait + delay > 45.0:
+                    raise
+                _log(f"Gemini retrying in {delay:.1f}s...")
+                time.sleep(delay)
+                total_wait += delay
+                continue
+            raise
+    raise RuntimeError(_safe_error_message(last_exc or RuntimeError("Gemini failed")))
 
 
 def ask_jarvis(prompt: str, max_output_tokens: int = 512) -> Optional[str]:
+    global _LAST_GEMINI_ERROR, _LAST_OLLAMA_ERROR
     cfg = config.load_config()
     try:
         text = ask_gemini(prompt, max_output_tokens=max_output_tokens, cfg=cfg)
+        _LAST_GEMINI_ERROR = None
+        _LAST_OLLAMA_ERROR = None
         _log(f"Jarvis (Cloud): {_gemini_model_name(cfg)}")
         return text
     except Exception as exc:
         _log("Switching to Local Backup...")
-        _log(f"Gemini error: {exc.__class__.__name__}")
+        _LAST_GEMINI_ERROR = f"{exc.__class__.__name__}: {_safe_error_message(exc)}"
+        _log(f"Gemini error: {_LAST_GEMINI_ERROR}")
         try:
             text = ask_ollama(prompt, max_output_tokens=max_output_tokens, cfg=cfg)
+            _LAST_OLLAMA_ERROR = None
             _log(f"Jarvis (Local): {_ollama_model_name(cfg)}")
             return text
-        except Exception:
+        except Exception as ollama_exc:
+            _LAST_OLLAMA_ERROR = (
+                f"{ollama_exc.__class__.__name__}: {_safe_error_message(ollama_exc)}"
+            )
+            _log(f"Ollama error: {_LAST_OLLAMA_ERROR}")
             return None
 
 

@@ -6,9 +6,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 venv_python = ROOT / "venv" / "bin" / "python"
 if venv_python.exists():
-    current = Path(sys.executable).resolve()
+    in_venv = getattr(sys, "base_prefix", sys.prefix) != sys.prefix
     # Re-exec inside venv for consistent deps when available.
-    if current != venv_python.resolve():
+    if not in_venv:
         os.execv(str(venv_python), [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]])
 
 sys.path.insert(0, str(ROOT))

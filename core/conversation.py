@@ -30,6 +30,8 @@ def _format_history(entries: List[Dict[str, str]]) -> str:
 
 
 def _fallback_response(user_text: str) -> str:
+    status = providers.provider_status()
+    errors = providers.last_provider_errors()
     plain = (
         "Plain English:\n"
         f"- What I heard: {user_text}\n"
@@ -41,6 +43,8 @@ def _fallback_response(user_text: str) -> str:
         "Technical Notes:\n"
         "- Modules/files involved: core/conversation.py, core/providers.py\n"
         "- Key concepts/terms: Offline fallback\n"
+        f"- Provider status: {status}\n"
+        f"- Provider errors: {errors}\n"
         "- Commands executed (or would execute in dry-run): None\n"
         "- Risks/constraints: No model output available.\n"
     )
