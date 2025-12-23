@@ -43,7 +43,7 @@
     "speech_voice": "Alex",
     "chat_greeting": "Hi, I'm here. What do you want me to do?",
     "chat_stop_phrase": "thank you goodbye for now",
-    "chat_silence_limit": 8,
+    "chat_silence_limit": 10,
     "track_mouse": true
   },
   "hotkeys": {
@@ -58,6 +58,11 @@
     "openai": {
       "enabled": "auto",
       "model": "gpt-4o-mini"
+    },
+    "ollama": {
+      "enabled": true,
+      "model": "llama3.2:3b",
+      "base_url": "http://localhost:11434"
     }
   },
   "diagnostics": {

@@ -1,3 +1,5 @@
+import json
+import urllib.request
 from typing import Optional
 
 from core import config, secrets
@@ -38,15 +40,61 @@ def _gemini_model_name(cfg: dict) -> str:
 def _openai_model_name(cfg: dict) -> str:
     return cfg.get("providers", {}).get("openai", {}).get("model", "gpt-4o-mini")
 
+def _ollama_model_name(cfg: dict) -> str:
+    return cfg.get("providers", {}).get("ollama", {}).get("model", "llama3.2:3b")
+
+
+def _ollama_base_url(cfg: dict) -> str:
+    base_url = cfg.get("providers", {}).get("ollama", {}).get(
+        "base_url", "http://localhost:11434"
+    )
+    return str(base_url).rstrip("/")
+
+
+def _ollama_enabled(cfg: dict) -> bool:
+    return bool(cfg.get("providers", {}).get("ollama", {}).get("enabled", False))
+
+
+def _ollama_generate(prompt: str, max_output_tokens: int) -> Optional[str]:
+    cfg = config.load_config()
+    if not _ollama_enabled(cfg):
+        return None
+    base_url = _ollama_base_url(cfg)
+    if not base_url:
+        return None
+    payload = {
+        "model": _ollama_model_name(cfg),
+        "prompt": prompt,
+        "stream": False,
+        "options": {"num_predict": max_output_tokens},
+    }
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            f"{base_url}/api/generate",
+            data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8")
+        result = json.loads(body)
+        text = result.get("response", "")
+        if not text:
+            return None
+        return text
+    except Exception:
+        return None
 
 def provider_status() -> dict:
     cfg = config.load_config()
     gemini_enabled = cfg.get("providers", {}).get("gemini", {}).get("enabled", True)
     openai_enabled = cfg.get("providers", {}).get("openai", {}).get("enabled", "auto")
+    ollama_enabled = _ollama_enabled(cfg)
     return {
         "gemini_available": bool(_gemini_client()) and bool(gemini_enabled),
         "openai_available": bool(_openai_client())
         and (openai_enabled in (True, "auto")),
+        "ollama_available": bool(ollama_enabled),
     }
 
 
@@ -67,9 +115,16 @@ def generate_text(prompt: str, max_output_tokens: int = 512) -> Optional[str]:
                         max_output_tokens=max_output_tokens
                     ),
                 )
-                return getattr(response, "text", "") or ""
+                text = getattr(response, "text", "") or ""
+                if text:
+                    return text
             except Exception:
-                return None
+                pass
+
+    if status["ollama_available"]:
+        text = _ollama_generate(prompt, max_output_tokens=max_output_tokens)
+        if text:
+            return text
 
     if status["openai_available"]:
         client = _openai_client()
@@ -80,8 +135,10 @@ def generate_text(prompt: str, max_output_tokens: int = 512) -> Optional[str]:
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=max_output_tokens,
                 )
-                return response.choices[0].message.content or ""
+                text = response.choices[0].message.content or ""
+                if text:
+                    return text
             except Exception:
-                return None
+                pass
 
     return None
