@@ -29,9 +29,18 @@ def _speak(text: str) -> None:
     if not cfg.get("voice", {}).get("speak_responses", False):
         return
     payload = json.dumps(text)
+    voice_name = str(cfg.get("voice", {}).get("speech_voice", "")).strip()
     try:
         import subprocess
 
+        if voice_name:
+            voice_payload = json.dumps(voice_name)
+            result = subprocess.run(
+                ["osascript", "-e", f"say {payload} using {voice_payload}"],
+                check=False,
+            )
+            if result.returncode == 0:
+                return
         subprocess.run(["osascript", "-e", f"say {payload}"], check=False)
     except Exception:
         return

@@ -35,14 +35,15 @@
     "wake_word": "jarvis",
     "wake_word_threshold": 0.6,
     "frame_length": 1280,
-    "command_timeout_seconds": 6,
-    "phrase_time_limit": 6,
+    "command_timeout_seconds": 18,
+    "phrase_time_limit": 18,
     "max_cpu_load": 4.0,
     "allow_cloud_stt": true,
     "speak_responses": true,
+    "speech_voice": "Alex",
     "chat_greeting": "Hi, I'm here. What do you want me to do?",
     "chat_stop_phrase": "thank you goodbye for now",
-    "chat_silence_limit": 3,
+    "chat_silence_limit": 8,
     "track_mouse": true
   },
   "hotkeys": {
@@ -52,7 +53,7 @@
   "providers": {
     "gemini": {
       "enabled": true,
-      "model": "gemini-1.5-flash"
+      "model": "gemini-flash-latest"
     },
     "openai": {
       "enabled": "auto",
