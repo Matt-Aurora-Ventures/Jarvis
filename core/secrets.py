@@ -27,7 +27,10 @@ def get_key(name: str, env_name: str) -> str:
 
 
 def get_gemini_key() -> str:
-    return get_key("google_api_key", "GOOGLE_API_KEY")
+    value = get_key("google_api_key", "GOOGLE_API_KEY")
+    if value:
+        return value
+    return os.getenv("GEMINI_API_KEY", "")
 
 
 def get_openai_key() -> str:

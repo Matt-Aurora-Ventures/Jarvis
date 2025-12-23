@@ -1,4 +1,3 @@
-import json
 import threading
 import time
 from dataclasses import dataclass
@@ -28,20 +27,27 @@ def _speak(text: str) -> None:
     cfg = _load_config()
     if not cfg.get("voice", {}).get("speak_responses", False):
         return
-    payload = json.dumps(text)
     voice_name = str(cfg.get("voice", {}).get("speech_voice", "")).strip()
     try:
         import subprocess
 
-        if voice_name:
-            voice_payload = json.dumps(voice_name)
+        def _run_say(selected_voice: str = "") -> int:
+            cmd = ["say"]
+            if selected_voice:
+                cmd.extend(["-v", selected_voice])
             result = subprocess.run(
-                ["osascript", "-e", f"say {payload} using {voice_payload}"],
+                cmd,
+                input=text,
+                text=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 check=False,
             )
-            if result.returncode == 0:
-                return
-        subprocess.run(["osascript", "-e", f"say {payload}"], check=False)
+            return result.returncode
+
+        if voice_name and _run_say(voice_name) == 0:
+            return
+        _run_say()
     except Exception:
         return
 

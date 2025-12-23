@@ -1,4 +1,4 @@
-google-genai
+google-generativeai
 openai
 pyaudio
 SpeechRecognition
