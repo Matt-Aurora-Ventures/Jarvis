@@ -1,0 +1,72 @@
+{
+  "timezone": "America/Costa_Rica",
+  "reports": {
+    "enabled": true,
+    "schedule": {
+      "morning": "07:30",
+      "afternoon": "15:00"
+    }
+  },
+  "paths": {
+    "root": "lifeos",
+    "config_dir": "lifeos/config",
+    "memory_dir": "lifeos/memory",
+    "context_dir": "lifeos/context",
+    "reports_dir": "lifeos/reports",
+    "logs_dir": "lifeos/logs",
+    "models_dir": "lifeos/models"
+  },
+  "memory": {
+    "adaptive_cap": true,
+    "target_cap": 200,
+    "min_cap": 50,
+    "max_cap": 300
+  },
+  "context": {
+    "load_budget_entries": 100,
+    "load_budget_docs": 20,
+    "load_budget_chars": 12000
+  },
+  "voice": {
+    "enabled": true,
+    "mode": "wake-word",
+    "fallback_mode": "push-to-talk",
+    "engine": "openwakeword",
+    "wake_word": "jarvis",
+    "wake_word_threshold": 0.6,
+    "frame_length": 1280,
+    "command_timeout_seconds": 6,
+    "phrase_time_limit": 6,
+    "max_cpu_load": 4.0,
+    "allow_cloud_stt": true,
+    "speak_responses": true,
+    "chat_greeting": "Hi, I'm here. What do you want me to do?",
+    "chat_stop_phrase": "thank you goodbye for now",
+    "chat_silence_limit": 3,
+    "track_mouse": true
+  },
+  "hotkeys": {
+    "enabled": true,
+    "chat_activation": "ctrl+shift+up"
+  },
+  "providers": {
+    "gemini": {
+      "enabled": true,
+      "model": "gemini-1.5-flash"
+    },
+    "openai": {
+      "enabled": "auto",
+      "model": "gpt-4o-mini"
+    }
+  },
+  "diagnostics": {
+    "top_processes": 5
+  },
+  "research": {
+    "allow_web": false
+  },
+  "safety": {
+    "default_mode": "dry-run",
+    "require_apply_token": true
+  }
+}

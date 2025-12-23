@@ -1,0 +1,10 @@
+secrets/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+lifeos/config/lifeos.config.local.json
+lifeos/logs/
+lifeos/models/
+lifeos/memory/
+lifeos/reports/
