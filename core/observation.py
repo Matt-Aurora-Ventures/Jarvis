@@ -14,7 +14,7 @@ def _run_osascript(script: str) -> str:
             check=False,
         )
         return (result.stdout or "").strip()
-    except Exception:
+    except Exception as e:
         return ""
 
 
@@ -52,13 +52,13 @@ def visible_apps(limit: int = 8) -> list[str]:
 def mouse_position() -> Optional[tuple[int, int]]:
     try:
         from pynput import mouse
-    except Exception:
+    except Exception as e:
         return None
     try:
         controller = mouse.Controller()
         position = controller.position
         return int(position[0]), int(position[1])
-    except Exception:
+    except Exception as e:
         return None
 
 
@@ -85,7 +85,7 @@ class MouseTracker:
     def start(self) -> bool:
         try:
             from pynput import mouse
-        except Exception:
+        except Exception as e:
             return False
 
         def _on_move(x: int, y: int) -> None:
@@ -111,7 +111,7 @@ class MouseTracker:
         try:
             self._listener = mouse.Listener(on_move=_on_move)
             self._listener.start()
-        except Exception:
+        except Exception as e:
             return False
         return True
 
@@ -119,7 +119,7 @@ class MouseTracker:
         if self._listener:
             try:
                 self._listener.stop()
-            except Exception:
+            except Exception as e:
                 pass
 
     def summary(self) -> MouseSummary:

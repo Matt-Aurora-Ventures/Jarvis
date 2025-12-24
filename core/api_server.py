@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import parse_qs, urlparse
 
-from core import config, conversation, passive, providers, proactive, secrets, state
+from core import config, conversation, passive, providers, proactive, secrets, state, autonomous_learner, autonomous_controller, research_engine, prompt_distiller, service_discovery, google_integration, google_manager, ability_acquisition
 
 ROOT = Path(__file__).resolve().parents[1]
 PORT = 8765
@@ -56,6 +56,40 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
             self._handle_get_keys()
         elif path == "/api/suggestions":
             self._handle_suggestions()
+        elif path == "/api/autonomous":
+            self._handle_autonomous()
+        elif path == "/api/autonomous/enable":
+            self._handle_enable_autonomous()
+        elif path == "/api/autonomous/status":
+            self._handle_autonomous_status()
+        elif path == "/api/research":
+            self._handle_research()
+        elif path == "/api/research/topics":
+            self._handle_research_topics()
+        elif path == "/api/learning":
+            self._handle_learning_report()
+        elif path == "/api/services/discover":
+            self._handle_discover_services()
+        elif path == "/api/services/signup":
+            self._handle_service_signup()
+        elif path == "/api/services/integrate":
+            self._handle_service_integrate()
+        elif path == "/api/services/integrated":
+            self._handle_integrated_services()
+        elif path == "/api/google/setup":
+            self._handle_google_setup()
+        elif path == "/api/google/authenticate":
+            self._handle_google_authenticate()
+        elif path == "/api/google/status":
+            self._handle_google_status()
+        elif path == "/api/google/sync":
+            self._handle_google_sync()
+        elif path == "/api/abilities/discover":
+            self._handle_discover_abilities()
+        elif path == "/api/abilities/acquire":
+            self._handle_acquire_abilities()
+        elif path == "/api/abilities/status":
+            self._handle_abilities_status()
         else:
             self._send_json({"error": "Not found"}, 404)
 
@@ -219,6 +253,218 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
         """Stop voice listening."""
         state.update_state(mic_status="off")
         self._send_json({"success": True})
+
+    def _handle_autonomous(self):
+        """Get autonomous learner summary."""
+        try:
+            summary = autonomous_learner.get_autonomous_summary()
+            self._send_json(summary)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_enable_autonomous(self):
+        """Enable/disable autonomous improvements."""
+        body = self._read_body()
+        enable = body.get("enable", False)
+        
+        try:
+            autonomous_learner.enable_autonomous_improvements(enable)
+            self._send_json({"success": True, "enabled": enable})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_autonomous_status(self):
+        """Get detailed autonomous controller status."""
+        try:
+            controller = autonomous_controller.get_autonomous_controller()
+            status = controller.get_status()
+            self._send_json(status)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_research(self):
+        """Handle research request."""
+        body = self._read_body()
+        topic = body.get("topic", "")
+        
+        if not topic:
+            self._send_json({"error": "Topic required"}, 400)
+            return
+        
+        try:
+            engine = research_engine.get_research_engine()
+            result = engine.research_topic(topic, max_pages=5)
+            self._send_json(result)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_research_topics(self):
+        """Get research topics and queue."""
+        try:
+            controller = autonomous_controller.get_autonomous_controller()
+            topics = controller.schedule["priority_topics"]
+            self._send_json({"topics": topics})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_learning_report(self):
+        """Get comprehensive learning report."""
+        try:
+            distiller = prompt_distiller.get_prompt_distiller()
+            report = distiller.get_learning_report()
+            self._send_json(report)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_discover_services(self):
+        """Get available services for integration."""
+        try:
+            discovery = service_discovery.get_service_discovery()
+            services = discovery.discover_services()
+            self._send_json({"services": services})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_service_signup(self):
+        """Initiate signup for a service."""
+        body = self._read_body()
+        service_id = body.get("service_id", "")
+        
+        if not service_id:
+            self._send_json({"error": "service_id required"}, 400)
+            return
+        
+        try:
+            discovery = service_discovery.get_service_discovery()
+            result = discovery.initiate_signup(service_id)
+            self._send_json(result)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_service_integrate(self):
+        """Integrate a service with API key."""
+        body = self._read_body()
+        service_id = body.get("service_id", "")
+        api_key = body.get("api_key", "")
+        
+        if not service_id or not api_key:
+            self._send_json({"error": "service_id and api_key required"}, 400)
+            return
+        
+        try:
+            discovery = service_discovery.get_service_discovery()
+            result = discovery.integrate_service(service_id, api_key)
+            self._send_json(result)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_integrated_services(self):
+        """Get list of integrated services."""
+        try:
+            discovery = service_discovery.get_service_discovery()
+            services = discovery.get_integrated_services()
+            self._send_json({"services": services})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_google_setup(self):
+        """Set up Google credentials."""
+        body = self._read_body()
+        client_id = body.get("client_id", "")
+        client_secret = body.get("client_secret", "")
+        project_id = body.get("project_id", "")
+        
+        if not all([client_id, client_secret, project_id]):
+            self._send_json({"error": "All fields required: client_id, client_secret, project_id"}, 400)
+            return
+        
+        try:
+            integration = google_integration.get_google_integration()
+            success = integration.setup_credentials(client_id, client_secret, project_id)
+            if success:
+                self._send_json({"success": True, "message": "Google credentials configured"})
+            else:
+                self._send_json({"error": "Failed to configure credentials"}, 500)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_google_authenticate(self):
+        """Authenticate with Google."""
+        body = self._read_body()
+        services = body.get("services", ["drive", "gmail", "calendar", "sheets"])
+        
+        try:
+            integration = google_integration.get_google_integration()
+            result = integration.authenticate(services)
+            self._send_json(result)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_google_status(self):
+        """Get Google integration status."""
+        try:
+            integration = google_integration.get_google_integration()
+            status = integration.get_status()
+            
+            # Add sync status
+            manager = google_manager.get_google_manager()
+            status["last_sync_results"] = {}
+            
+            return self._send_json(status)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_google_sync(self):
+        """Trigger Google services sync."""
+        body = self._read_body()
+        service = body.get("service", "all")
+        
+        try:
+            manager = google_manager.get_google_manager()
+            results = {}
+            
+            if service in ["all", "drive"]:
+                results["drive"] = manager.sync_drive()
+            
+            if service in ["all", "gmail"]:
+                results["gmail"] = manager.scan_gmail()
+            
+            if service in ["all", "calendar"]:
+                results["calendar"] = manager.sync_calendar()
+            
+            if service in ["all", "analyze"]:
+                results["analysis"] = manager.analyze_drive_content()
+            
+            self._send_json({"success": True, "results": results})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_discover_abilities(self):
+        """Discover new open-source abilities."""
+        try:
+            acquisition = ability_acquisition.get_ability_acquisition()
+            discoveries = acquisition.discover_open_source_models()
+            self._send_json({"success": True, "discoveries": discoveries})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_acquire_abilities(self):
+        """Trigger ability acquisition cycle."""
+        try:
+            acquisition = ability_acquisition.get_ability_acquisition()
+            result = acquisition.run_acquisition_cycle()
+            self._send_json({"success": True, "result": result})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_abilities_status(self):
+        """Get ability acquisition status."""
+        try:
+            acquisition = ability_acquisition.get_ability_acquisition()
+            status = acquisition.get_status()
+            self._send_json(status)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
 
     def log_message(self, format, *args):
         # Suppress default logging

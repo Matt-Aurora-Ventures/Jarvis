@@ -194,7 +194,7 @@ def get_clipboard() -> str:
             timeout=5,
         )
         return result.stdout
-    except Exception:
+    except Exception as e:
         return ""
 
 
@@ -239,7 +239,7 @@ def get_screen_size() -> Tuple[int, int]:
         try:
             parts = output.split(", ")
             return int(parts[2]), int(parts[3])
-        except Exception:
+        except Exception as e:
             pass
     return 1920, 1080  # Default
 

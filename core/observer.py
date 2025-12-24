@@ -95,7 +95,7 @@ class DeepObserver(threading.Thread):
             if result.stdout and "||" in result.stdout:
                 parts = result.stdout.strip().split("||", 1)
                 return parts[0], parts[1] if len(parts) > 1 else ""
-        except Exception:
+        except Exception as e:
             pass
         return self._current_app, self._current_window
 
@@ -124,7 +124,7 @@ class DeepObserver(threading.Thread):
                     key_str = key.char
                 else:
                     key_str = f"[{key.name}]" if hasattr(key, 'name') else "[?]"
-            except Exception:
+            except Exception as e:
                 key_str = "[?]"
             
             self._log_action("key", {
@@ -138,7 +138,7 @@ class DeepObserver(threading.Thread):
             self._keyboard_listener = keyboard.Listener(on_press=on_press)
             self._keyboard_listener.start()
             return True
-        except Exception:
+        except Exception as e:
             return False
 
     def _start_mouse_listener(self) -> bool:
@@ -180,7 +180,7 @@ class DeepObserver(threading.Thread):
             )
             self._mouse_listener.start()
             return True
-        except Exception:
+        except Exception as e:
             return False
 
     def _flush_to_disk(self) -> None:
@@ -202,7 +202,7 @@ class DeepObserver(threading.Thread):
                 for entry in entries:
                     line = json.dumps(asdict(entry), ensure_ascii=True) + "\n"
                     f.write(line.encode("utf-8"))
-        except Exception:
+        except Exception as e:
             pass
 
     def get_recent_actions(self, seconds: int = 60) -> List[ActionLog]:
@@ -262,7 +262,7 @@ class DeepObserver(threading.Thread):
                     last_flush = now
 
                 time.sleep(1)
-            except Exception:
+            except Exception as e:
                 time.sleep(5)
 
         # Final flush

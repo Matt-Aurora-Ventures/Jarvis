@@ -60,7 +60,7 @@
     "max_cpu_load": 4.0,
     "allow_cloud_stt": true,
     "speak_responses": true,
-    "speech_voice": "Daniel",
+    "speech_voice": "morgan freeman",
     "chat_greeting": "Hi, I'm here. What do you want me to do?",
     "chat_stop_phrase": "thank you goodbye for now",
     "chat_silence_limit": 60,

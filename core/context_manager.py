@@ -65,7 +65,7 @@ def load_master_context() -> MasterContext:
             with open(MASTER_CONTEXT_FILE, "r") as f:
                 data = json.load(f)
                 return MasterContext(**data)
-        except Exception:
+        except Exception as e:
             pass
     return MasterContext()
 
@@ -86,7 +86,7 @@ def load_activity_context() -> ActivityContext:
             with open(ACTIVITY_CONTEXT_FILE, "r") as f:
                 data = json.load(f)
                 return ActivityContext(**data)
-        except Exception:
+        except Exception as e:
             pass
     return ActivityContext()
 
@@ -107,7 +107,7 @@ def load_conversation_context() -> ConversationContext:
             with open(CONVERSATION_CONTEXT_FILE, "r") as f:
                 data = json.load(f)
                 return ConversationContext(**data)
-        except Exception:
+        except Exception as e:
             pass
     return ConversationContext()
 

@@ -66,7 +66,7 @@ def generate_response(
     if cfg.get("context", {}).get("include_activity_summary", True):
         try:
             activity_summary = passive.summarize_activity(hours=2)
-        except Exception:
+        except Exception as e:
             activity_summary = ""
 
     # Get mission context and safety rules

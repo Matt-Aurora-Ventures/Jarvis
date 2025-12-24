@@ -75,7 +75,7 @@ def _load_jarvis_state() -> Dict[str, Any]:
     try:
         with open(JARVIS_STATE_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
-    except Exception:
+    except Exception as e:
         return {"boot_count": 0, "last_boot": 0}
 
 
@@ -161,7 +161,7 @@ Max 5 best options."""
                 discovered_at=time.time(),
             ))
         return resources
-    except Exception:
+    except Exception as e:
         return []
 
 
@@ -221,7 +221,7 @@ Output JSON array of strings only:
             clean = re.sub(r"\n?```$", "", clean)
         
         return json.loads(clean)
-    except Exception:
+    except Exception as e:
         return []
 
 
@@ -254,7 +254,7 @@ Output just the questions, numbered."""
     try:
         response = providers.generate_text(prompt, max_output_tokens=250)
         return response or "How can I help you today?"
-    except Exception:
+    except Exception as e:
         return """1. What are you working on today?
 2. What's your top priority this week?
 3. Is there anything blocking your progress?

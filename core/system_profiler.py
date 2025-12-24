@@ -18,7 +18,7 @@ def _run_command(cmd: list[str]) -> str:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         return result.stdout.strip()
-    except Exception:
+    except Exception as e:
         return ""
 
 
@@ -50,7 +50,7 @@ def _extract_pages(line: str) -> int:
     try:
         value = line.split(":")[1].strip().strip(".")
         return int(value)
-    except Exception:
+    except Exception as e:
         return 0
 
 
@@ -82,7 +82,7 @@ def _disk_free_gb() -> float:
     try:
         usage = shutil.disk_usage("/")
         return usage.free / (1024**3)
-    except Exception:
+    except Exception as e:
         return 0.0
 
 

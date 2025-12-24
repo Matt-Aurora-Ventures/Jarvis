@@ -209,7 +209,7 @@ def load_prompts() -> Dict[str, PromptTemplate]:
                 custom = json.load(f)
                 for pid, data in custom.items():
                     prompts[pid] = PromptTemplate(**data)
-        except Exception:
+        except Exception as e:
             pass
     
     return prompts
@@ -258,7 +258,7 @@ def record_prompt_usage(prompt_id: str, success: bool, response_time: float) -> 
     try:
         with open(PROMPT_STATS_PATH, "a") as f:
             f.write(json.dumps(stat) + "\n")
-    except Exception:
+    except Exception as e:
         pass
     
     # Update prompt success rate

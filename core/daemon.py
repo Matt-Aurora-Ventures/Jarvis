@@ -24,7 +24,7 @@ def _parse_time(value: str) -> tuple[int, int]:
     try:
         hour, minute = value.split(":")
         return int(hour), int(minute)
-    except Exception:
+    except Exception as e:
         return 0, 0
 
 
@@ -52,7 +52,7 @@ def _send_notification(title: str, message: str) -> None:
             check=False,
             timeout=5,
         )
-    except Exception:
+    except Exception as e:
         pass
 
 

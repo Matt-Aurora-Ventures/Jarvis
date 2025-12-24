@@ -18,7 +18,7 @@ def _top_processes(limit: int = 5) -> List[Dict[str, str]]:
     rows: List[Dict[str, str]] = []
     try:
         import psutil
-    except Exception:
+    except Exception as e:
         return rows
     for proc in psutil.process_iter(["pid", "name", "cpu_percent", "memory_info"]):
         try:
@@ -49,7 +49,7 @@ def _listening_ports() -> List[Dict[str, str]]:
             text=True,
             check=False,
         ).stdout
-    except Exception:
+    except Exception as e:
         output = ""
 
     lines = output.splitlines()

@@ -77,7 +77,7 @@ class KeyboardTracker:
     def start(self) -> bool:
         try:
             from pynput import keyboard
-        except Exception:
+        except Exception as e:
             return False
 
         def _on_press(key) -> None:
@@ -102,21 +102,21 @@ class KeyboardTracker:
                             if self._word_buffer > 0:
                                 self._words += 1
                                 self._word_buffer = 0
-                except Exception:
+                except Exception as e:
                     pass
 
         try:
             self._listener = keyboard.Listener(on_press=_on_press)
             self._listener.start()
             return True
-        except Exception:
+        except Exception as e:
             return False
 
     def stop(self) -> None:
         if self._listener:
             try:
                 self._listener.stop()
-            except Exception:
+            except Exception as e:
                 pass
 
     def summary(self) -> KeyboardSummary:
@@ -245,7 +245,7 @@ def _run_osascript(script: str) -> str:
             timeout=2,
         )
         return (result.stdout or "").strip()
-    except Exception:
+    except Exception as e:
         return ""
 
 
@@ -298,10 +298,10 @@ def capture_screen_thumbnail(output_path: Path, max_size: int = 200) -> bool:
             img.save(output_path, "PNG", optimize=True)
             temp_path.unlink()
             return True
-        except Exception:
+        except Exception as e:
             temp_path.rename(output_path)
             return True
-    except Exception:
+    except Exception as e:
         return False
 
 
@@ -333,7 +333,7 @@ class PassiveObserver(threading.Thread):
     def _start_mouse_tracking(self) -> bool:
         try:
             from pynput import mouse
-        except Exception:
+        except Exception as e:
             return False
 
         def _on_move(x, y) -> None:
@@ -344,14 +344,14 @@ class PassiveObserver(threading.Thread):
             self._mouse_listener = mouse.Listener(on_move=_on_move)
             self._mouse_listener.start()
             return True
-        except Exception:
+        except Exception as e:
             return False
 
     def _stop_mouse_tracking(self) -> None:
         if self._mouse_listener:
             try:
                 self._mouse_listener.stop()
-            except Exception:
+            except Exception as e:
                 pass
 
     def _save_activity_log(self, snapshot: ActivitySnapshot) -> None:
@@ -380,7 +380,7 @@ class PassiveObserver(threading.Thread):
         try:
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=True) + "\n")
-        except Exception:
+        except Exception as e:
             pass
 
     def _build_context_summary(self, snapshot: ActivitySnapshot) -> str:
@@ -470,7 +470,7 @@ class PassiveObserver(threading.Thread):
 
                 time.sleep(1)
 
-            except Exception:
+            except Exception as e:
                 time.sleep(5)
 
         self._keyboard_tracker.stop()
@@ -499,7 +499,7 @@ def load_recent_activity(hours: int = 24) -> List[Dict[str, Any]]:
                             entries.append(entry)
                     except json.JSONDecodeError:
                         continue
-        except Exception:
+        except Exception as e:
             continue
 
         if entries and entries[-1].get("ts", 0) < cutoff:

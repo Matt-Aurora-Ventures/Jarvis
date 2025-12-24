@@ -34,13 +34,18 @@ def _retry_delay_seconds(exc: Exception, attempt: int) -> float:
         try:
             seconds = float(match.group(1))
             return max(0.1, min(seconds, 30.0))
-        except Exception:
+        except Exception as e:
             pass
     return min(2.0 * (2**attempt), 8.0)
 
 
 def _retryable_gemini_error(exc: Exception) -> bool:
     name = exc.__class__.__name__
+    msg = str(exc).lower()
+    
+    # Handle quota/limit errors specifically
+    if "quota exceeded" in msg or "429" in msg or "rate limit" in msg:
+        return True
     if name in {"ResourceExhausted", "TooManyRequests", "ServiceUnavailable", "DeadlineExceeded"}:
         return True
     if isinstance(exc, RuntimeError) and str(exc).startswith("Empty Gemini response"):
@@ -53,7 +58,7 @@ def _extract_gemini_text(response) -> str:
         text = response.text or ""
         if text.strip():
             return str(text)
-    except Exception:
+    except Exception as e:
         pass
     try:
         candidates = getattr(response, "candidates", None) or []
@@ -68,7 +73,7 @@ def _extract_gemini_text(response) -> str:
             joined = "".join(collected).strip()
             if joined:
                 return joined
-    except Exception:
+    except Exception as e:
         pass
     return ""
 
@@ -92,12 +97,12 @@ def _gemini_client():
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
             import google.generativeai as genai
-    except Exception:
+    except Exception as e:
         return None
     try:
         genai.configure(api_key=key)
         return genai
-    except Exception:
+    except Exception as e:
         return None
 
 
@@ -107,11 +112,11 @@ def _openai_client():
         return None
     try:
         from openai import OpenAI
-    except Exception:
+    except Exception as e:
         return None
     try:
         return OpenAI(api_key=key)
-    except Exception:
+    except Exception as e:
         return None
 
 
@@ -193,7 +198,7 @@ def _ollama_generate(prompt: str, max_output_tokens: int, timeout: int = 120) ->
             max_output_tokens=max_output_tokens,
             timeout=timeout,
         )
-    except Exception:
+    except Exception as e:
         return None
 
 
@@ -267,7 +272,7 @@ def ask_gemini(prompt: str, max_output_tokens: int = 512, cfg: Optional[dict] = 
                     candidates = getattr(response, "candidates", None) or []
                     if candidates:
                         finish_reason = getattr(candidates[0], "finish_reason", None)
-                except Exception:
+                except Exception as e:
                     finish_reason = None
                 if finish_reason is not None:
                     raise RuntimeError(f"Empty Gemini response (finish_reason={finish_reason})")
@@ -325,7 +330,7 @@ def transcribe_audio_gemini(audio_path: str) -> Optional[str]:
                 if text:
                     try:
                         uploaded_file.delete()
-                    except Exception:
+                    except Exception as e:
                         pass
                     return text
             except Exception as inner_e:
@@ -442,10 +447,12 @@ def get_ranked_providers(prefer_free: bool = True) -> list:
     
     for provider in PROVIDER_RANKINGS:
         if provider["provider"] == "gemini-cli":
-            if _gemini_cli_available():
+            # Disable Gemini-cli due to quota issues
+            if False and _gemini_cli_available():
                 available.append(provider)
         elif provider["provider"] == "gemini":
-            if _gemini_client() and cfg.get("providers", {}).get("gemini", {}).get("enabled", True):
+            # Disable Gemini due to quota issues
+            if False and _gemini_client() and cfg.get("providers", {}).get("gemini", {}).get("enabled", False):
                 available.append(provider)
         elif provider["provider"] == "groq":
             if _groq_client():

@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, passive, providers, memory
+from core import config, passive, providers, memory, autonomous_learner
 
 ROOT = Path(__file__).resolve().parents[1]
 SUGGESTIONS_LOG = ROOT / "data" / "suggestions.jsonl"
@@ -42,7 +42,7 @@ class ProactiveMonitor:
         while not self._stop_event.is_set():
             try:
                 self._check_and_suggest()
-            except Exception:
+            except Exception as e:
                 pass
             self._stop_event.wait(self.interval)
             
@@ -93,7 +93,7 @@ Your suggestion:"""
             self._notify_user(suggestion["suggestion"])
             
             return suggestion
-        except Exception:
+        except Exception as e:
             return None
             
     def _log_suggestion(self, suggestion: Dict[str, Any]) -> None:
@@ -101,7 +101,7 @@ Your suggestion:"""
         try:
             with open(SUGGESTIONS_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(suggestion) + "\n")
-        except Exception:
+        except Exception as e:
             pass
             
     def _notify_user(self, message: str) -> None:
@@ -110,7 +110,7 @@ Your suggestion:"""
         try:
             script = f'''display notification "{message[:150]}" with title "Jarvis Suggestion"'''
             subprocess.run(["osascript", "-e", script], capture_output=True, timeout=5)
-        except Exception:
+        except Exception as e:
             pass
 
 
@@ -140,7 +140,7 @@ Output just the queries, one per line."""
     try:
         queries_response = providers.generate_text(query_prompt, max_output_tokens=200)
         queries = [q.strip() for q in queries_response.strip().split("\n") if q.strip()][:num_searches]
-    except Exception:
+    except Exception as e:
         queries = [topic]
     
     # For each query, simulate research (in real implementation, would use web search)
@@ -159,7 +159,7 @@ Be concise but comprehensive."""
             findings = providers.generate_text(research_prompt, max_output_tokens=400)
             results["searches"].append({"query": query, "findings": findings})
             all_findings.append(findings)
-        except Exception:
+        except Exception as e:
             continue
     
     # Generate summary
@@ -176,7 +176,7 @@ Create a well-structured summary with:
         
         try:
             results["summary"] = providers.generate_text(summary_prompt, max_output_tokens=600)
-        except Exception:
+        except Exception as e:
             results["summary"] = "\n\n".join(all_findings)
     
     # Save as document
@@ -205,7 +205,7 @@ Create a well-structured summary with:
     try:
         doc_path.write_text(doc_content, encoding="utf-8")
         results["document_path"] = str(doc_path)
-    except Exception:
+    except Exception as e:
         pass
     
     return results
@@ -223,7 +223,7 @@ Create professional, well-structured content. Use proper formatting."""
 
     try:
         content = providers.generate_text(prompt, max_output_tokens=1000)
-    except Exception:
+    except Exception as e:
         content = f"# {title}\n\n[Content generation failed]"
     
     # Determine extension
@@ -235,7 +235,7 @@ Create professional, well-structured content. Use proper formatting."""
     
     try:
         doc_path.write_text(content, encoding="utf-8")
-    except Exception:
+    except Exception as e:
         pass
     
     return {
@@ -260,7 +260,7 @@ Focus on actively maintained projects with good community support."""
 
     try:
         results = providers.generate_text(prompt, max_output_tokens=500)
-    except Exception:
+    except Exception as e:
         results = "Search failed - try again later"
     
     return {
@@ -284,7 +284,7 @@ def get_recent_suggestions(count: int = 5) -> List[Dict[str, Any]]:
                         suggestions.append(json.loads(line))
                     except json.JSONDecodeError:
                         continue
-    except Exception:
+    except Exception as e:
         pass
     
     return suggestions[-count:]
@@ -301,6 +301,10 @@ def start_monitoring(interval_minutes: int = 15) -> ProactiveMonitor:
         _monitor.stop()
     _monitor = ProactiveMonitor(interval_minutes)
     _monitor.start()
+    
+    # Start autonomous learner in background
+    autonomous_learner.start_autonomous_learner()
+    
     return _monitor
 
 

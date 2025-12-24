@@ -36,7 +36,7 @@ class HotkeyManager(threading.Thread):
         if self._listener:
             try:
                 self._listener.stop()
-            except Exception:
+            except Exception as e:
                 pass
 
     def run(self) -> None:
@@ -48,7 +48,7 @@ class HotkeyManager(threading.Thread):
 
         try:
             from pynput import keyboard
-        except Exception:
+        except Exception as e:
             state.update_state(hotkeys_enabled=False, hotkey_error="pynput_unavailable")
             return
 
@@ -60,7 +60,7 @@ class HotkeyManager(threading.Thread):
                 return
             try:
                 self._on_trigger()
-            except Exception:
+            except Exception as e:
                 state.update_state(hotkey_error="activation_failed")
 
         try:
@@ -71,11 +71,11 @@ class HotkeyManager(threading.Thread):
             )
             while not self._stop_event.is_set():
                 time.sleep(0.25)
-        except Exception:
+        except Exception as e:
             state.update_state(hotkeys_enabled=False, hotkey_error="hotkey_unavailable")
         finally:
             if self._listener:
                 try:
                     self._listener.stop()
-                except Exception:
+                except Exception as e:
                     pass

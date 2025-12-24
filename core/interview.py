@@ -65,7 +65,7 @@ def _load_interview_log() -> List[Dict[str, Any]]:
                         entries.append(json.loads(line))
                     except json.JSONDecodeError:
                         continue
-    except Exception:
+    except Exception as e:
         pass
     return entries
 
@@ -75,7 +75,7 @@ def _save_interview_entry(entry: Dict[str, Any]) -> None:
     try:
         with open(INTERVIEW_LOG_PATH, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=True) + "\n")
-    except Exception:
+    except Exception as e:
         pass
 
 

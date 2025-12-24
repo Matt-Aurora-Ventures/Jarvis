@@ -696,7 +696,7 @@ def cmd_secret(args: argparse.Namespace) -> None:
         try:
             with open(secrets.KEYS_PATH, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
-        except Exception:
+        except Exception as e:
             data = {}
 
     data[target_key] = args.key
@@ -706,7 +706,7 @@ def cmd_secret(args: argparse.Namespace) -> None:
 
     try:
         os.chmod(secrets.KEYS_PATH, 0o600)
-    except Exception:
+    except Exception as e:
         pass
 
     plain = {

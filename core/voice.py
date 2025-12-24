@@ -47,58 +47,81 @@ def _speak(text: str) -> None:
     openai_key = secrets.get_openai_key()
     if openai_key:
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=openai_key)
-            response = client.audio.speech.create(
-                model="tts-1",
-                voice="alloy",
-                input=text,
-            )
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-                f.write(response.content)
-                temp_path = f.name
-            
-            subprocess.run(
-                ["afplay", temp_path],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            os.unlink(temp_path)
-            return
+            import subprocess
+            model_path = cfg.get("voice", {}).get("piper_model", "")
+            if model_path and Path(model_path).exists():
+                subprocess.run(
+                    ["piper", "--model", model_path, "--output_file", "/tmp/tts.wav"],
+                    input=text.encode(),
+                    check=True,
+                )
+                subprocess.run(["afplay", "/tmp/tts.wav"], check=True)
+                return
         except Exception:
             pass
 
-    # Fallback to macOS 'say'
+    # Fallback to macOS 'say' with proper voice testing
     voice_name = str(cfg.get("voice", {}).get("speech_voice", "")).strip()
+    
+    # Check for Morgan Freeman voice preference
+    if voice_name.lower() == "morgan freeman":
+        voice_name = "Reed (English (US))"  # Reed US is closest to Morgan Freeman's deep voice
+    
     try:
-        import subprocess
-
-        def _run_say(selected_voice: str = "") -> int:
+        def _test_voice(voice: str) -> bool:
+            """Test if voice exists by trying to say something short."""
+            result = subprocess.run(
+                ["say", "-v", voice, "test"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False
+            )
+            return result.returncode == 0 and "not found" not in result.stderr.lower()
+        
+        def _speak_with_voice(selected_voice: str = "") -> bool:
+            """Speak text with specified voice, return True if successful."""
             cmd = ["say"]
             if selected_voice:
                 cmd.extend(["-v", selected_voice])
-            result = subprocess.run(
-                cmd,
-                input=text,
-                text=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-            return result.returncode
-
-        if voice_name and _run_say(voice_name) == 0:
-            return
-        _run_say()
-    except Exception:
+            
+            # Add rate adjustment for deeper voice
+            if voice_name.lower() == "morgan freeman":
+                cmd.extend(["-r", "140"])  # Slower rate for deeper effect
+            
+            try:
+                subprocess.run(
+                    cmd,
+                    input=text,
+                    text=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=True
+                )
+                return True
+            except subprocess.CalledProcessError:
+                return False
+        
+        # Try specified voice first
+        if voice_name:
+            if _test_voice(voice_name):
+                if _speak_with_voice(voice_name):
+                    return
+            else:
+                print(f"Voice '{voice_name}' not found, using default")
+        
+        # Fallback to default voice
+        _speak_with_voice()
+        
+    except Exception as e:
+        print(f"Speech synthesis failed: {e}")
         return
 
 
 def _transcribe_once(timeout: int, phrase_time_limit: int) -> str:
     try:
         import speech_recognition as sr
-    except Exception:
+    except Exception as e:
         return ""
 
     recognizer = sr.Recognizer()
@@ -108,7 +131,7 @@ def _transcribe_once(timeout: int, phrase_time_limit: int) -> str:
             audio = recognizer.listen(
                 source, timeout=timeout, phrase_time_limit=phrase_time_limit
             )
-    except Exception:
+    except Exception as e:
         return ""
 
     # Try Gemini STT (Multimodal)
@@ -123,7 +146,7 @@ def _transcribe_once(timeout: int, phrase_time_limit: int) -> str:
             os.unlink(temp_path)
             if transcript:
                 return transcript
-        except Exception:
+        except Exception as e:
             pass
 
     # Try OpenAI Whisper
@@ -144,19 +167,19 @@ def _transcribe_once(timeout: int, phrase_time_limit: int) -> str:
             os.unlink(temp_path)
             if transcript.text:
                 return transcript.text
-        except Exception:
+        except Exception as e:
             pass
 
     # Fallback to Google
     try:
         return recognizer.recognize_google(audio)
-    except Exception:
+    except Exception as e:
         pass
 
     # Fallback to Sphinx (Last resort)
     try:
         return recognizer.recognize_sphinx(audio)
-    except Exception:
+    except Exception as e:
         return ""
 
 def _stop_phrase_match(text: str, phrase: str) -> bool:
@@ -275,7 +298,7 @@ def handle_command(command: VoiceCommand) -> str:
             try:
                 import signal as sig
                 os.kill(pid, sig.SIGTERM)
-            except Exception:
+            except Exception as e:
                 pass
         state.clear_pid()
         state.update_state(running=False)
@@ -393,7 +416,7 @@ class VoiceManager(threading.Thread):
             import numpy as np
             import openwakeword
             import pyaudio
-        except Exception:
+        except Exception as e:
             state.update_state(
                 voice_mode="push-to-talk",
                 mic_status="off",
@@ -414,7 +437,7 @@ class VoiceManager(threading.Thread):
                 from openwakeword import utils as oww_utils
 
                 oww_utils.download_models([model_name])
-            except Exception:
+            except Exception as e:
                 state.update_state(
                     voice_mode="push-to-talk",
                     mic_status="off",
@@ -423,7 +446,7 @@ class VoiceManager(threading.Thread):
                 return
         try:
             model = openwakeword.Model(wakeword_models=[model_name])
-        except Exception:
+        except Exception as e:
             state.update_state(
                 voice_mode="push-to-talk",
                 mic_status="off",
@@ -439,7 +462,7 @@ class VoiceManager(threading.Thread):
                 input=True,
                 frames_per_buffer=frame_length,
             )
-        except Exception:
+        except Exception as e:
             state.update_state(
                 voice_mode="push-to-talk",
                 mic_status="off",

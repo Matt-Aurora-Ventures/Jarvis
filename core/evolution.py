@@ -45,7 +45,7 @@ def _load_evolution_log() -> List[Dict[str, Any]]:
                         entries.append(json.loads(line))
                     except json.JSONDecodeError:
                         continue
-    except Exception:
+    except Exception as e:
         pass
     return entries
 
@@ -55,7 +55,7 @@ def _save_evolution_entry(entry: Dict[str, Any]) -> None:
     try:
         with open(EVOLUTION_LOG_PATH, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=True) + "\n")
-    except Exception:
+    except Exception as e:
         pass
 
 
@@ -128,7 +128,7 @@ If no improvement is needed, output: {{"category": "none"}}"""
             timestamp=time.time(),
             status="proposed",
         )
-    except Exception:
+    except Exception as e:
         return None
 
 
@@ -178,7 +178,7 @@ For skills, the code MUST:
             timestamp=time.time(),
             status="proposed",
         )
-    except Exception:
+    except Exception as e:
         return None
 
 
@@ -310,7 +310,7 @@ def list_skills() -> List[Dict[str, str]]:
                 "name": name_match.group(1) if name_match else skill_file.stem,
                 "description": desc_match.group(1) if desc_match else "",
             })
-        except Exception:
+        except Exception as e:
             continue
 
     return skills
@@ -472,5 +472,5 @@ If no improvement needed: {{"category": "none"}}"""
             timestamp=time.time(),
             status="proposed",
         )
-    except Exception:
+    except Exception as e:
         return None
