@@ -273,6 +273,47 @@ def execute_action(action_name: str, **kwargs) -> Tuple[bool, str]:
         return False, f"Action failed: {str(e)}"
 
 
+def execute_with_fallback(action_name: str, fallbacks: list = None, **kwargs) -> Tuple[bool, str]:
+    """Execute an action with fallback alternatives if it fails."""
+    # Try primary action
+    success, msg = execute_action(action_name, **kwargs)
+    if success:
+        return success, msg
+    
+    # Try fallbacks
+    if fallbacks:
+        for fallback in fallbacks:
+            fb_name = fallback.get("action", "")
+            fb_kwargs = fallback.get("params", {})
+            success, msg = execute_action(fb_name, **fb_kwargs)
+            if success:
+                return success, f"Used fallback {fb_name}: {msg}"
+    
+    # Try to find alternative automatically
+    alternatives = get_alternative_actions(action_name)
+    for alt in alternatives:
+        success, msg = execute_action(alt, **kwargs)
+        if success:
+            return success, f"Used alternative {alt}: {msg}"
+    
+    return False, f"All attempts failed for {action_name}"
+
+
+def get_alternative_actions(action_name: str) -> list:
+    """Get alternative actions for a given action."""
+    alternatives = {
+        "compose_email": ["send_email", "open_mail"],
+        "send_email": ["compose_email", "open_mail"],
+        "google": ["open_browser"],
+        "search": ["spotlight", "google"],
+        "open_notes": ["create_note"],
+        "create_note": ["open_notes"],
+        "send_message": ["open_messages"],
+        "create_event": ["open_calendar"],
+    }
+    return alternatives.get(action_name, [])
+
+
 def get_available_actions() -> list:
     """Get list of available actions."""
     return list(ACTION_REGISTRY.keys())

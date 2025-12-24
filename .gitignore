@@ -11,3 +11,9 @@ lifeos/reports/
 data/
 *.log
 test_*.py
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-electron/
+.env
+.env.*

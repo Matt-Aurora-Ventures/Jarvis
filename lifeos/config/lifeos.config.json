@@ -60,7 +60,7 @@
     "max_cpu_load": 4.0,
     "allow_cloud_stt": true,
     "speak_responses": true,
-    "speech_voice": "Alex",
+    "speech_voice": "Daniel",
     "chat_greeting": "Hi, I'm here. What do you want me to do?",
     "chat_stop_phrase": "thank you goodbye for now",
     "chat_silence_limit": 60,
@@ -71,20 +71,27 @@
     "chat_activation": "ctrl+shift+up"
   },
   "providers": {
+    "groq": {
+      "enabled": true,
+      "model": "llama-3.3-70b-versatile",
+      "priority": 1
+    },
     "gemini": {
       "enabled": true,
-      "model": "gemini-2.5-pro",
-      "free_tier": false
+      "model": "gemini-2.5-flash",
+      "free_tier": true,
+      "priority": 2
     },
     "openai": {
       "enabled": "auto",
-      "model": "gpt-4o-mini"
+      "model": "gpt-4o-mini",
+      "priority": 3
     },
     "ollama": {
       "enabled": true,
       "model": "qwen2.5:1.5b",
       "base_url": "http://localhost:11434",
-      "fallback_priority": 1
+      "priority": 4
     }
   },
   "diagnostics": {

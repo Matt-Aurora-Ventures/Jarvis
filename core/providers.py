@@ -355,23 +355,20 @@ def transcribe_audio_gemini(audio_path: str) -> Optional[str]:
 # Priority: Best free models first, then paid as fallback
 
 PROVIDER_RANKINGS = [
-    # Rank 0: Gemini CLI (fastest, uses local auth)
-    {"name": "gemini-cli", "provider": "gemini-cli", "intelligence": 95, "free": True, "notes": "Gemini CLI - fastest"},
+    # Rank 0: Groq (PRIMARY - ultra fast, free, reliable)
+    {"name": "llama-3.3-70b-versatile", "provider": "groq", "intelligence": 90, "free": True, "notes": "PRIMARY - Groq ultra fast"},
+    {"name": "mixtral-8x7b-32768", "provider": "groq", "intelligence": 85, "free": True, "notes": "Groq Mixtral - fast"},
+    {"name": "llama-3.1-8b-instant", "provider": "groq", "intelligence": 78, "free": True, "notes": "Groq instant"},
     
-    # Rank 1: Best free cloud models (high intelligence, free tier)
-    {"name": "gemini-2.5-flash", "provider": "gemini", "intelligence": 92, "free": True, "notes": "Fast, smart - best for speed"},
-    {"name": "gemini-2.5-pro", "provider": "gemini", "intelligence": 95, "free": True, "notes": "Best free model"},
-    {"name": "gemini-2.0-flash-exp", "provider": "gemini", "intelligence": 85, "free": True, "notes": "Experimental"},
-    
-    # Rank 1.5: Groq (extremely fast, free tier)
-    {"name": "llama-3.3-70b-versatile", "provider": "groq", "intelligence": 88, "free": True, "notes": "Groq - ultra fast"},
-    {"name": "llama-3.1-8b-instant", "provider": "groq", "intelligence": 75, "free": True, "notes": "Groq - instant"},
-    {"name": "mixtral-8x7b-32768", "provider": "groq", "intelligence": 82, "free": True, "notes": "Groq Mixtral"},
-    
-    # Rank 2: Local models (free, private, always available)
+    # Rank 1: Local models (free, private, always available offline)
     {"name": "qwen2.5:7b", "provider": "ollama", "intelligence": 80, "free": True, "notes": "Best local 7B"},
     {"name": "llama3.1:8b", "provider": "ollama", "intelligence": 78, "free": True, "notes": "Good local"},
     {"name": "qwen2.5:1.5b", "provider": "ollama", "intelligence": 65, "free": True, "notes": "Fast, lightweight"},
+    
+    # Rank 2: Gemini (fallback - has been unreliable)
+    {"name": "gemini-cli", "provider": "gemini-cli", "intelligence": 95, "free": True, "notes": "Gemini CLI - needs credits"},
+    {"name": "gemini-2.5-flash", "provider": "gemini", "intelligence": 92, "free": True, "notes": "May fail without credits"},
+    {"name": "gemini-2.5-pro", "provider": "gemini", "intelligence": 95, "free": True, "notes": "May fail without credits"},
     
     # Rank 3: Paid fallbacks (only if free exhausted)
     {"name": "gpt-4o-mini", "provider": "openai", "intelligence": 88, "free": False, "notes": "Paid fallback"},
@@ -408,7 +405,7 @@ def _ask_gemini_cli(prompt: str, max_output_tokens: int = 512) -> Optional[str]:
 
 def _groq_client():
     """Get Groq client if available."""
-    key = os.environ.get("GROQ_API_KEY") or secrets.get_key("groq_api_key")
+    key = os.environ.get("GROQ_API_KEY") or secrets.get_groq_key()
     if not key:
         return None
     try:
