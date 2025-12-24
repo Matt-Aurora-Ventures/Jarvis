@@ -28,9 +28,21 @@ def get_key(name: str, env_name: str) -> str:
 
 def get_gemini_key() -> str:
     value = get_key("google_api_key", "GOOGLE_API_KEY")
-    if value:
-        return value
-    return os.getenv("GEMINI_API_KEY", "")
+    if not value:
+        value = os.getenv("GEMINI_API_KEY", "")
+    
+    # Sanitize common copy-paste error
+    if value and "YOUR_API_KEY_HERE" in value:
+        value = value.replace("YOUR_API_KEY_HERE", "")
+    return value.strip()
+
+
+def get_groq_key() -> str:
+    return get_key("groq_api_key", "GROQ_API_KEY")
+
+
+def get_anthropic_key() -> str:
+    return get_key("anthropic_api_key", "ANTHROPIC_API_KEY")
 
 
 def get_openai_key() -> str:

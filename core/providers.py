@@ -1,5 +1,8 @@
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
 import time
 import urllib.request
@@ -114,15 +117,20 @@ def _openai_client():
 
 def _gemini_model_name(cfg: dict) -> str:
     raw_name = str(
-        cfg.get("providers", {}).get("gemini", {}).get("model", "gemini-flash-latest")
+        cfg.get("providers", {}).get("gemini", {}).get("model", "gemini-2.0-flash-exp")
     ).strip()
     if raw_name.startswith("models/"):
         raw_name = raw_name[len("models/") :]
+    # Use only models that actually exist - checked via ListModels
     aliases = {
-        "gemini-1.5-flash": "gemini-flash-latest",
-        "gemini-1.5-flash-latest": "gemini-flash-latest",
-        "gemini-1.5-pro": "gemini-pro-latest",
-        "gemini-1.5-pro-latest": "gemini-pro-latest",
+        "gemini-flash-latest": "gemini-2.5-flash",
+        "gemini-2.0-flash": "gemini-2.0-flash",
+        "gemini-2.0-flash-exp": "gemini-2.0-flash-exp",
+        "gemini-2.5-flash": "gemini-2.5-flash",
+        "gemini-2.5-pro": "gemini-2.5-pro",
+        "gemini-1.5-flash": "gemini-2.5-flash",  # Redirect old to new
+        "gemini-1.5-pro": "gemini-2.5-pro",  # Redirect old to new
+        "gemini-pro": "gemini-2.5-flash",
     }
     return aliases.get(raw_name, raw_name)
 
@@ -143,11 +151,11 @@ def _ollama_base_url(cfg: dict) -> str:
 
 
 def _ollama_enabled(cfg: dict) -> bool:
-    return bool(cfg.get("providers", {}).get("ollama", {}).get("enabled", False))
+    return bool(cfg.get("providers", {}).get("ollama", {}).get("enabled", True))
 
 
 def _ollama_generate_raw(
-    base_url: str, model: str, prompt: str, max_output_tokens: int
+    base_url: str, model: str, prompt: str, max_output_tokens: int, timeout: int = 120
 ) -> str:
     payload = {
         "model": model,
@@ -161,7 +169,7 @@ def _ollama_generate_raw(
         data=data,
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         body = response.read().decode("utf-8")
     result = json.loads(body)
     text = result.get("response", "")
@@ -170,7 +178,7 @@ def _ollama_generate_raw(
     return text
 
 
-def _ollama_generate(prompt: str, max_output_tokens: int) -> Optional[str]:
+def _ollama_generate(prompt: str, max_output_tokens: int, timeout: int = 120) -> Optional[str]:
     cfg = config.load_config()
     if not _ollama_enabled(cfg):
         return None
@@ -183,12 +191,13 @@ def _ollama_generate(prompt: str, max_output_tokens: int) -> Optional[str]:
             model=_ollama_model_name(cfg),
             prompt=prompt,
             max_output_tokens=max_output_tokens,
+            timeout=timeout,
         )
     except Exception:
         return None
 
 
-def ask_ollama(prompt: str, max_output_tokens: int = 512, cfg: Optional[dict] = None) -> str:
+def ask_ollama(prompt: str, max_output_tokens: int = 512, cfg: Optional[dict] = None, timeout: int = 180) -> str:
     cfg = cfg or config.load_config()
     if not _ollama_enabled(cfg):
         raise RuntimeError("Ollama is disabled in config")
@@ -200,6 +209,7 @@ def ask_ollama(prompt: str, max_output_tokens: int = 512, cfg: Optional[dict] = 
         model=_ollama_model_name(cfg),
         prompt=prompt,
         max_output_tokens=max_output_tokens,
+        timeout=timeout,
     )
 
 
@@ -216,6 +226,10 @@ def provider_status() -> dict:
     }
 
 
+# Only use models that exist - verified via API
+_FREE_TIER_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash-exp", "gemini-2.0-flash"]
+
+
 def ask_gemini(prompt: str, max_output_tokens: int = 512, cfg: Optional[dict] = None) -> str:
     cfg = cfg or config.load_config()
     if not cfg.get("providers", {}).get("gemini", {}).get("enabled", True):
@@ -223,91 +237,340 @@ def ask_gemini(prompt: str, max_output_tokens: int = 512, cfg: Optional[dict] = 
     client = _gemini_client()
     if not client:
         raise RuntimeError("Gemini client unavailable (missing key or dependency)")
-    model = client.GenerativeModel(_gemini_model_name(cfg))
+
+    is_free_tier = cfg.get("providers", {}).get("gemini", {}).get("free_tier", True)
+    primary_model = _gemini_model_name(cfg)
+
+    if is_free_tier:
+        models_to_try = [primary_model] + [m for m in _FREE_TIER_MODELS if m != primary_model]
+    else:
+        models_to_try = [primary_model]
+
     last_exc: Optional[Exception] = None
-    total_wait = 0.0
-    for attempt in range(4):
-        try:
+
+    for model_name in models_to_try:
+        model = client.GenerativeModel(model_name)
+        total_wait = 0.0
+
+        for attempt in range(3):
+            try:
+                response = model.generate_content(
+                    prompt,
+                    generation_config={"max_output_tokens": max_output_tokens},
+                    request_options={"timeout": 30},
+                )
+                text = _extract_gemini_text(response).strip()
+                if text:
+                    return text
+                finish_reason = None
+                try:
+                    candidates = getattr(response, "candidates", None) or []
+                    if candidates:
+                        finish_reason = getattr(candidates[0], "finish_reason", None)
+                except Exception:
+                    finish_reason = None
+                if finish_reason is not None:
+                    raise RuntimeError(f"Empty Gemini response (finish_reason={finish_reason})")
+                raise RuntimeError("Empty Gemini response")
+            except Exception as exc:
+                last_exc = exc
+                exc_name = exc.__class__.__name__
+                if exc_name in {"ResourceExhausted", "TooManyRequests"}:
+                    if attempt < 2:
+                        delay = min(5.0 * (attempt + 1), 15.0)
+                        if total_wait + delay <= 30.0:
+                            _log(f"Gemini {model_name} rate limited, waiting {delay:.0f}s...")
+                            time.sleep(delay)
+                            total_wait += delay
+                            continue
+                    _log(f"Gemini {model_name} quota exceeded, trying next model...")
+                    break
+                if attempt < 2 and _retryable_gemini_error(exc):
+                    delay = _retry_delay_seconds(exc, attempt)
+                    if total_wait + delay > 30.0:
+                        break
+                    _log(f"Gemini {model_name} retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+                    total_wait += delay
+                    continue
+                break
+
+    raise RuntimeError(_safe_error_message(last_exc or RuntimeError("All Gemini models failed")))
+
+
+def transcribe_audio_gemini(audio_path: str) -> Optional[str]:
+    client = _gemini_client()
+    if not client:
+        return None
+    
+    # Debug: Verify key (first 4 chars)
+    key = secrets.get_gemini_key()
+    if key:
+        _log(f"Gemini Key Prefix: {key[:4]}...")
+
+    uploaded_file = None
+    try:
+        uploaded_file = client.upload_file(audio_path, mime_type="audio/wav")
+        
+        # Try a list of likely model names
+        candidates = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-exp"]
+        
+        for model_name in candidates:
+            try:
+                model = client.GenerativeModel(model_name)
+                response = model.generate_content(
+                    ["Transcribe this audio exactly. Output only the text.", uploaded_file]
+                )
+                text = _extract_gemini_text(response)
+                if text:
+                    try:
+                        uploaded_file.delete()
+                    except Exception:
+                        pass
+                    return text
+            except Exception as inner_e:
+                _log(f"Gemini Model {model_name} failed: {_safe_error_message(inner_e)}")
+                continue
+        
+        # If we get here, all models failed
+        if uploaded_file:
+            try:
+                uploaded_file.delete()
+            except Exception:
+                pass
+        return None
+
+    except Exception as e:
+        _log(f"Gemini STT Error: {_safe_error_message(e)}")
+        if uploaded_file:
+            try:
+                uploaded_file.delete()
+            except Exception:
+                pass
+        return None
+
+
+# === INTELLIGENT PROVIDER RANKING ===
+# Ranked by: Intelligence, Free tier availability, Resource efficiency
+# Priority: Best free models first, then paid as fallback
+
+PROVIDER_RANKINGS = [
+    # Rank 0: Gemini CLI (fastest, uses local auth)
+    {"name": "gemini-cli", "provider": "gemini-cli", "intelligence": 95, "free": True, "notes": "Gemini CLI - fastest"},
+    
+    # Rank 1: Best free cloud models (high intelligence, free tier)
+    {"name": "gemini-2.5-flash", "provider": "gemini", "intelligence": 92, "free": True, "notes": "Fast, smart - best for speed"},
+    {"name": "gemini-2.5-pro", "provider": "gemini", "intelligence": 95, "free": True, "notes": "Best free model"},
+    {"name": "gemini-2.0-flash-exp", "provider": "gemini", "intelligence": 85, "free": True, "notes": "Experimental"},
+    
+    # Rank 1.5: Groq (extremely fast, free tier)
+    {"name": "llama-3.3-70b-versatile", "provider": "groq", "intelligence": 88, "free": True, "notes": "Groq - ultra fast"},
+    {"name": "llama-3.1-8b-instant", "provider": "groq", "intelligence": 75, "free": True, "notes": "Groq - instant"},
+    {"name": "mixtral-8x7b-32768", "provider": "groq", "intelligence": 82, "free": True, "notes": "Groq Mixtral"},
+    
+    # Rank 2: Local models (free, private, always available)
+    {"name": "qwen2.5:7b", "provider": "ollama", "intelligence": 80, "free": True, "notes": "Best local 7B"},
+    {"name": "llama3.1:8b", "provider": "ollama", "intelligence": 78, "free": True, "notes": "Good local"},
+    {"name": "qwen2.5:1.5b", "provider": "ollama", "intelligence": 65, "free": True, "notes": "Fast, lightweight"},
+    
+    # Rank 3: Paid fallbacks (only if free exhausted)
+    {"name": "gpt-4o-mini", "provider": "openai", "intelligence": 88, "free": False, "notes": "Paid fallback"},
+]
+
+
+def _gemini_cli_available() -> bool:
+    """Check if Gemini CLI is installed and configured."""
+    return shutil.which("gemini") is not None
+
+
+def _ask_gemini_cli(prompt: str, max_output_tokens: int = 512) -> Optional[str]:
+    """Use Gemini CLI to generate text."""
+    # Set up environment with API key
+    env = dict(os.environ)
+    key = secrets.get_gemini_key()
+    if key:
+        env["GEMINI_API_KEY"] = key
+    
+    try:
+        result = subprocess.run(
+            ["gemini", "-p", prompt],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        return None
+    except Exception:
+        return None
+
+
+def _groq_client():
+    """Get Groq client if available."""
+    key = os.environ.get("GROQ_API_KEY") or secrets.get_key("groq_api_key")
+    if not key:
+        return None
+    try:
+        from groq import Groq
+        return Groq(api_key=key)
+    except ImportError:
+        return None
+    except Exception:
+        return None
+
+
+def _ask_groq(prompt: str, model: str, max_output_tokens: int = 512) -> Optional[str]:
+    """Use Groq for ultra-fast inference."""
+    client = _groq_client()
+    if not client:
+        return None
+    
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_output_tokens,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content
+    except Exception:
+        return None
+
+
+def get_ranked_providers(prefer_free: bool = True) -> list:
+    """Get providers ranked by intelligence, with free models first if preferred."""
+    cfg = config.load_config()
+    available = []
+    
+    for provider in PROVIDER_RANKINGS:
+        if provider["provider"] == "gemini-cli":
+            if _gemini_cli_available():
+                available.append(provider)
+        elif provider["provider"] == "gemini":
+            if _gemini_client() and cfg.get("providers", {}).get("gemini", {}).get("enabled", True):
+                available.append(provider)
+        elif provider["provider"] == "groq":
+            if _groq_client():
+                available.append(provider)
+        elif provider["provider"] == "ollama":
+            if _ollama_enabled(cfg):
+                available.append(provider)
+        elif provider["provider"] == "openai":
+            if _openai_client() and cfg.get("providers", {}).get("openai", {}).get("enabled", "auto") != False:
+                available.append(provider)
+    
+    if prefer_free:
+        # Sort: free first, then by intelligence
+        available.sort(key=lambda x: (not x["free"], -x["intelligence"]))
+    else:
+        # Sort purely by intelligence
+        available.sort(key=lambda x: -x["intelligence"])
+    
+    return available
+
+
+def _try_provider(provider: dict, prompt: str, max_output_tokens: int, cfg: dict) -> Optional[str]:
+    """Try a single provider and return result or None."""
+    name = provider["name"]
+    ptype = provider["provider"]
+    
+    try:
+        if ptype == "gemini-cli":
+            text = _ask_gemini_cli(prompt, max_output_tokens)
+            if text:
+                _log(f"✓ Using Gemini CLI (intelligence: {provider['intelligence']})")
+                return text
+            return None
+        
+        elif ptype == "groq":
+            text = _ask_groq(prompt, name, max_output_tokens)
+            if text:
+                _log(f"✓ Using Groq {name} (intelligence: {provider['intelligence']}) - FAST")
+                return text
+            return None
+            
+        elif ptype == "gemini":
+            # Use specific model
+            client = _gemini_client()
+            if not client:
+                return None
+            model = client.GenerativeModel(name)
             response = model.generate_content(
                 prompt,
                 generation_config={"max_output_tokens": max_output_tokens},
-                request_options={"timeout": 30},
+                request_options={"timeout": 60},
             )
             text = _extract_gemini_text(response).strip()
             if text:
+                _log(f"✓ Using {name} (intelligence: {provider['intelligence']})")
                 return text
-            finish_reason = None
-            try:
-                candidates = getattr(response, "candidates", None) or []
-                if candidates:
-                    finish_reason = getattr(candidates[0], "finish_reason", None)
-            except Exception:
-                finish_reason = None
-            if finish_reason is not None:
-                raise RuntimeError(f"Empty Gemini response (finish_reason={finish_reason})")
-            raise RuntimeError("Empty Gemini response")
-        except Exception as exc:
-            last_exc = exc
-            if attempt < 3 and _retryable_gemini_error(exc):
-                delay = _retry_delay_seconds(exc, attempt)
-                if total_wait + delay > 45.0:
-                    raise
-                _log(f"Gemini retrying in {delay:.1f}s...")
-                time.sleep(delay)
-                total_wait += delay
-                continue
-            raise
-    raise RuntimeError(_safe_error_message(last_exc or RuntimeError("Gemini failed")))
+                
+        elif ptype == "ollama":
+            base_url = _ollama_base_url(cfg)
+            text = _ollama_generate_raw(
+                base_url=base_url,
+                model=name,
+                prompt=prompt,
+                max_output_tokens=max_output_tokens,
+                timeout=120,
+            )
+            if text:
+                _log(f"✓ Using {name} locally (intelligence: {provider['intelligence']})")
+                return text
+                
+        elif ptype == "openai":
+            client = _openai_client()
+            if not client:
+                return None
+            response = client.chat.completions.create(
+                model=name,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_output_tokens,
+            )
+            text = response.choices[0].message.content or ""
+            if text:
+                _log(f"✓ Using {name} (intelligence: {provider['intelligence']})")
+                return text
+                
+    except Exception as e:
+        error_name = e.__class__.__name__
+        if error_name in ("ResourceExhausted", "RateLimitError"):
+            _log(f"⚠ {name} rate limited, trying next...")
+        else:
+            _log(f"⚠ {name} failed: {error_name}")
+    
+    return None
+
+
+def generate_text(prompt: str, max_output_tokens: int = 512, prefer_free: bool = True) -> Optional[str]:
+    """Generate text using the best available provider, ranked by intelligence.
+    
+    Priority order:
+    1. Best free cloud models (Gemini 2.5 Pro/Flash)
+    2. Local models (Ollama - always available, private)
+    3. Paid fallbacks (OpenAI - only if free exhausted)
+    
+    This ensures we use the most intelligent, free resources first.
+    """
+    cfg = config.load_config()
+    ranked = get_ranked_providers(prefer_free=prefer_free)
+    
+    if not ranked:
+        _log("No AI providers available")
+        return None
+    
+    _log(f"Provider chain: {' → '.join(p['name'] for p in ranked[:4])}")
+    
+    for provider in ranked:
+        result = _try_provider(provider, prompt, max_output_tokens, cfg)
+        if result:
+            return result
+    
+    _log("All providers exhausted")
+    return None
 
 
 def ask_jarvis(prompt: str, max_output_tokens: int = 512) -> Optional[str]:
-    global _LAST_GEMINI_ERROR, _LAST_OLLAMA_ERROR
-    cfg = config.load_config()
-    try:
-        text = ask_gemini(prompt, max_output_tokens=max_output_tokens, cfg=cfg)
-        _LAST_GEMINI_ERROR = None
-        _LAST_OLLAMA_ERROR = None
-        _log(f"Jarvis (Cloud): {_gemini_model_name(cfg)}")
-        return text
-    except Exception as exc:
-        _log("Switching to Local Backup...")
-        _LAST_GEMINI_ERROR = f"{exc.__class__.__name__}: {_safe_error_message(exc)}"
-        _log(f"Gemini error: {_LAST_GEMINI_ERROR}")
-        try:
-            text = ask_ollama(prompt, max_output_tokens=max_output_tokens, cfg=cfg)
-            _LAST_OLLAMA_ERROR = None
-            _log(f"Jarvis (Local): {_ollama_model_name(cfg)}")
-            return text
-        except Exception as ollama_exc:
-            _LAST_OLLAMA_ERROR = (
-                f"{ollama_exc.__class__.__name__}: {_safe_error_message(ollama_exc)}"
-            )
-            _log(f"Ollama error: {_LAST_OLLAMA_ERROR}")
-            return None
-
-
-def generate_text(prompt: str, max_output_tokens: int = 512) -> Optional[str]:
-    cfg = config.load_config()
-    status = provider_status()
-
-    if status["gemini_available"] or status["ollama_available"]:
-        text = ask_jarvis(prompt, max_output_tokens=max_output_tokens)
-        if text:
-            return text
-
-    if status["openai_available"]:
-        client = _openai_client()
-        if client:
-            try:
-                response = client.chat.completions.create(
-                    model=_openai_model_name(cfg),
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=max_output_tokens,
-                )
-                text = response.choices[0].message.content or ""
-                if text:
-                    return text
-            except Exception:
-                pass
-
-    return None
+    """Legacy function - now uses smart ranking."""
+    return generate_text(prompt, max_output_tokens=max_output_tokens, prefer_free=True)

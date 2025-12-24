@@ -14,7 +14,8 @@
     "context_dir": "lifeos/context",
     "reports_dir": "lifeos/reports",
     "logs_dir": "lifeos/logs",
-    "models_dir": "lifeos/models"
+    "models_dir": "lifeos/models",
+    "activity_logs_dir": "data/activity_logs"
   },
   "memory": {
     "adaptive_cap": true,
@@ -25,7 +26,26 @@
   "context": {
     "load_budget_entries": 100,
     "load_budget_docs": 20,
-    "load_budget_chars": 12000
+    "load_budget_chars": 12000,
+    "include_activity_summary": true
+  },
+  "passive": {
+    "enabled": true,
+    "log_interval_seconds": 60,
+    "track_keyboard": true,
+    "track_mouse": true,
+    "track_apps": true,
+    "capture_thumbnails": false,
+    "thumbnail_interval_seconds": 300,
+    "max_idle_before_pause": 600
+  },
+  "interview": {
+    "enabled": true,
+    "interval_minutes": 120,
+    "notifications": true,
+    "smart_questions": false,
+    "morning_checkin": "08:00",
+    "evening_checkin": "18:00"
   },
   "voice": {
     "enabled": true,
@@ -43,7 +63,7 @@
     "speech_voice": "Alex",
     "chat_greeting": "Hi, I'm here. What do you want me to do?",
     "chat_stop_phrase": "thank you goodbye for now",
-    "chat_silence_limit": 10,
+    "chat_silence_limit": 60,
     "track_mouse": true
   },
   "hotkeys": {
@@ -53,7 +73,8 @@
   "providers": {
     "gemini": {
       "enabled": true,
-      "model": "gemini-flash-latest"
+      "model": "gemini-2.5-pro",
+      "free_tier": false
     },
     "openai": {
       "enabled": "auto",
@@ -61,8 +82,9 @@
     },
     "ollama": {
       "enabled": true,
-      "model": "llama3.2:3b",
-      "base_url": "http://localhost:11434"
+      "model": "qwen2.5:1.5b",
+      "base_url": "http://localhost:11434",
+      "fallback_priority": 1
     }
   },
   "diagnostics": {
@@ -70,6 +92,12 @@
   },
   "research": {
     "allow_web": false
+  },
+  "observer": {
+    "enabled": true,
+    "log_keys": true,
+    "log_mouse": true,
+    "flush_interval": 30
   },
   "safety": {
     "default_mode": "dry-run",

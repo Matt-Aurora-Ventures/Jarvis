@@ -25,7 +25,7 @@ def _format_report(
     kind: str,
     plain: str,
     technical: str,
-    ask_matt: str,
+    ask_user: str,
     glossary: Optional[str] = None,
 ) -> str:
     lines = [
@@ -37,8 +37,8 @@ def _format_report(
         "Technical Notes:",
         technical.strip(),
         "",
-        "Ask Matt:",
-        ask_matt.strip(),
+        "Ask User:",
+        ask_user.strip(),
     ]
     if glossary:
         lines.extend(["", "Glossary:", glossary.strip()])
@@ -69,7 +69,7 @@ def _fallback_report(kind: str, memory_summary: str, diag_summary: str) -> str:
             "- Risks/constraints: Read-only summaries if LLM is unavailable",
         ]
     )
-    ask_matt = "\n".join(
+    ask_user = "\n".join(
         [
             "- What is the single most important money task today?",
             "- Which client/project needs the biggest push right now?",
@@ -77,7 +77,7 @@ def _fallback_report(kind: str, memory_summary: str, diag_summary: str) -> str:
         ]
     )
     glossary = "- ROI: Return on investment (how much value you get for the time/money)."
-    return _format_report(kind, plain, technical, ask_matt, glossary)
+    return _format_report(kind, plain, technical, ask_user, glossary)
 
 
 def _diagnostics_summary(diag_data: Dict[str, object]) -> str:
@@ -109,7 +109,7 @@ def generate_report_text(kind: str, dry_run: bool = True) -> str:
         "- Modules/files involved\n"
         "- Key concepts/terms\n"
         "- Risks/constraints\n"
-        "Ask Matt:\n"
+        "Ask User:\n"
         "- 3 questions\n"
         "Glossary:\n"
         "- 1-3 terms with 1 sentence each\n"

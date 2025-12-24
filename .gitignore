@@ -8,3 +8,6 @@ lifeos/logs/
 lifeos/models/
 lifeos/memory/
 lifeos/reports/
+data/
+*.log
+test_*.py

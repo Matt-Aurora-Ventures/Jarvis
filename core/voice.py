@@ -1,10 +1,14 @@
+import os
+import subprocess
+import tempfile
 import threading
 import time
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from core import config, conversation, memory, observation, skill_manager, state, system_profiler
+from core import config, conversation, evolution, memory, observation, providers, secrets, skill_manager, state, system_profiler
 
 
 @dataclass
@@ -18,8 +22,19 @@ def _load_config() -> dict:
 
 
 def _wake_word_model_name(wake_word: str) -> str:
-    if "jarvis" in wake_word.lower():
-        return "hey_jarvis"
+    wake_lower = wake_word.lower().strip()
+    model_map = {
+        "jarvis": "hey_jarvis",
+        "hey jarvis": "hey_jarvis",
+        "alexa": "alexa",
+        "hey mycroft": "hey_mycroft",
+        "mycroft": "hey_mycroft",
+        "ok google": "ok_google",
+        "hey google": "hey_google",
+    }
+    for key, model in model_map.items():
+        if key in wake_lower:
+            return model
     return "hey_jarvis"
 
 
@@ -27,6 +42,34 @@ def _speak(text: str) -> None:
     cfg = _load_config()
     if not cfg.get("voice", {}).get("speak_responses", False):
         return
+
+    # Try OpenAI TTS first
+    openai_key = secrets.get_openai_key()
+    if openai_key:
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=openai_key)
+            response = client.audio.speech.create(
+                model="tts-1",
+                voice="alloy",
+                input=text,
+            )
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                f.write(response.content)
+                temp_path = f.name
+            
+            subprocess.run(
+                ["afplay", temp_path],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            os.unlink(temp_path)
+            return
+        except Exception:
+            pass
+
+    # Fallback to macOS 'say'
     voice_name = str(cfg.get("voice", {}).get("speech_voice", "")).strip()
     try:
         import subprocess
@@ -67,15 +110,52 @@ def _transcribe_once(timeout: int, phrase_time_limit: int) -> str:
             )
     except Exception:
         return ""
-    try:
-        return recognizer.recognize_sphinx(audio)
-    except Exception:
-        cfg = _load_config()
-        allow_cloud = cfg.get("voice", {}).get("allow_cloud_stt", True)
-        if not allow_cloud:
-            return ""
+
+    # Try Gemini STT (Multimodal)
+    gemini_key = secrets.get_gemini_key()
+    if gemini_key:
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(audio.get_wav_data())
+                temp_path = f.name
+            
+            transcript = providers.transcribe_audio_gemini(temp_path)
+            os.unlink(temp_path)
+            if transcript:
+                return transcript
+        except Exception:
+            pass
+
+    # Try OpenAI Whisper
+    openai_key = secrets.get_openai_key()
+    if openai_key:
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=openai_key)
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(audio.get_wav_data())
+                temp_path = f.name
+            
+            with open(temp_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1", 
+                    file=audio_file
+                )
+            os.unlink(temp_path)
+            if transcript.text:
+                return transcript.text
+        except Exception:
+            pass
+
+    # Fallback to Google
     try:
         return recognizer.recognize_google(audio)
+    except Exception:
+        pass
+
+    # Fallback to Sphinx (Last resort)
+    try:
+        return recognizer.recognize_sphinx(audio)
     except Exception:
         return ""
 
@@ -119,6 +199,17 @@ def parse_command(text: str) -> Optional[VoiceCommand]:
         or "build skill" in lower
     ):
         return VoiceCommand(action="evolve", payload=text)
+    # Shutdown commands
+    if (
+        "shut down" in lower
+        or "shutdown" in lower
+        or "turn off" in lower
+        or "go to sleep" in lower
+        or "stop running" in lower
+        or "goodbye jarvis" in lower
+        or "bye jarvis" in lower
+    ):
+        return VoiceCommand(action="shutdown", payload="")
     return None
 
 
@@ -169,8 +260,26 @@ def handle_command(command: VoiceCommand) -> str:
 
     if command.action == "evolve":
         if not _confirm_apply():
-            return "Plain English:\n- What I did: Canceled skill creation because APPLY was not confirmed.\n- Why I did it: Safety gate.\n- What happens next: Ask again and confirm APPLY.\n- What I need from you: Say APPLY.\n\nTechnical Notes:\n- Modules/files involved: core/skill_manager.py\n- Key concepts/terms: Skill generation\n- Commands executed (or would execute in dry-run): None\n- Risks/constraints: No changes made.\n"
-        return skill_manager.create_skill(command.payload, safety_context(apply=True))
+            return "Plain English:\n- What I did: Canceled self-improvement because APPLY was not confirmed.\n- Why I did it: Safety gate.\n- What happens next: Ask again and confirm APPLY.\n- What I need from you: Say APPLY.\n\nTechnical Notes:\n- Modules/files involved: core/evolution.py\n- Key concepts/terms: Self-improvement\n- Commands executed (or would execute in dry-run): None\n- Risks/constraints: No changes made.\n"
+        return evolution.evolve_from_conversation(
+            user_text=command.payload,
+            conversation_history=[],
+            context=safety_context(apply=True),
+        )
+
+    if command.action == "shutdown":
+        _speak("Goodbye. Shutting down now.")
+        # Signal daemon to stop
+        pid = state.read_pid()
+        if pid:
+            try:
+                import signal as sig
+                os.kill(pid, sig.SIGTERM)
+            except Exception:
+                pass
+        state.clear_pid()
+        state.update_state(running=False)
+        return "Plain English:\n- What I did: Shut down Jarvis.\n- Why I did it: You asked me to stop.\n- What happens next: Run 'lifeos on --apply' to start again.\n- What I need from you: Nothing.\n\nTechnical Notes:\n- Modules/files involved: core/state.py\n- Key concepts/terms: SIGTERM, graceful shutdown\n- Commands executed: kill daemon process\n- Risks/constraints: None.\n"
 
     return "Plain English:\n- What I did: I could not map that request.\n- Why I did it: The command did not match supported actions.\n- What happens next: Try 'status', 'log', 'report', or 'diagnostics'.\n- What I need from you: A supported command.\n\nTechnical Notes:\n- Modules/files involved: core/voice.py\n- Key concepts/terms: Intent parsing\n- Commands executed (or would execute in dry-run): None\n- Risks/constraints: No changes made.\n"
 

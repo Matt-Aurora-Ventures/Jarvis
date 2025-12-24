@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import signal
 import subprocess
@@ -11,12 +12,18 @@ from core import (
     config,
     context_router,
     diagnostics,
+    evolution,
+    guardian,
+    interview,
+    jarvis,
     memory,
     overnight,
     output,
+    passive,
     reporting,
     research,
     safety,
+    secrets,
     state,
     voice,
 )
@@ -267,9 +274,13 @@ def _status_payload() -> Dict[str, str]:
     current = state.read_state()
     voice_cfg = cfg.get("voice", {})
     memory_cfg = cfg.get("memory", {})
+    passive_cfg = cfg.get("passive", {})
+    interview_cfg = cfg.get("interview", {})
     memory_state = memory.load_memory_state()
     voice_enabled = current.get("voice_enabled", voice_cfg.get("enabled", False))
     hotkey_cfg = cfg.get("hotkeys", {})
+
+    interview_stats = interview.get_interview_stats()
 
     return {
         "running": "yes" if running else "no",
@@ -285,6 +296,15 @@ def _status_payload() -> Dict[str, str]:
             "hotkey_combo", hotkey_cfg.get("chat_activation", "ctrl+shift+up")
         ),
         "hotkey_error": current.get("hotkey_error", "none"),
+        "passive_enabled": "yes"
+        if current.get("passive_enabled", passive_cfg.get("enabled", False))
+        else "no",
+        "passive_keyboard": "yes" if current.get("passive_keyboard", False) else "no",
+        "passive_idle_seconds": str(int(current.get("passive_idle_seconds", 0))),
+        "interview_enabled": "yes"
+        if current.get("interview_enabled", interview_cfg.get("enabled", False))
+        else "no",
+        "interviews_today": str(interview_stats.get("today", 0)),
         "memory_target_cap": str(memory_cfg.get("target_cap", "unknown")),
         "memory_cap": str(memory_state.get("memory_cap", "unknown")),
         "recent_entries": str(memory_state.get("recent_count", "0")),
@@ -662,6 +682,249 @@ def cmd_listen(args: argparse.Namespace) -> None:
     _render(plain, technical)
 
 
+def cmd_secret(args: argparse.Namespace) -> None:
+    key_map = {
+        "gemini": "google_api_key",
+        "openai": "openai_api_key",
+    }
+    target_key = key_map.get(args.provider)
+    if not target_key:
+        return
+
+    data = {}
+    if secrets.KEYS_PATH.exists():
+        try:
+            with open(secrets.KEYS_PATH, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except Exception:
+            data = {}
+
+    data[target_key] = args.key
+    secrets.KEYS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(secrets.KEYS_PATH, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+
+    try:
+        os.chmod(secrets.KEYS_PATH, 0o600)
+    except Exception:
+        pass
+
+    plain = {
+        "What I did": f"Saved your {args.provider} API key securely.",
+        "Why I did it": "You asked to configure your API credentials.",
+        "What happens next": "The system will use this key for AI tasks.",
+        "What I need from you": "Nothing right now.",
+    }
+    technical = {
+        "Modules/files involved": "core/secrets.py, secrets/keys.json",
+        "Key concepts/terms": "JSON storage, file permissions (0600)",
+        "Commands executed": f"Write to {secrets.KEYS_PATH}",
+        "Risks/constraints": "Key is stored in plain text JSON locally.",
+    }
+    _render(plain, technical)
+
+
+def cmd_activity(args: argparse.Namespace) -> None:
+    """Show recent activity summary."""
+    hours = getattr(args, "hours", 4)
+    summary = passive.summarize_activity(hours=hours)
+    recent = passive.load_recent_activity(hours=hours)
+
+    plain = {
+        "What I did": f"Retrieved activity summary for the last {hours} hours.",
+        "Why I did it": "You asked for an activity report.",
+        "What happens next": "Review your activity patterns.",
+        "What I need from you": "Nothing right now.",
+    }
+    technical = {
+        "Modules/files involved": "core/passive.py, data/activity_logs/",
+        "Key concepts/terms": "Passive observation, activity tracking",
+        "Commands executed (or would execute in dry-run)": "Read activity logs",
+        "Risks/constraints": "Read-only.",
+    }
+    _render(plain, technical)
+    print("")
+    print(summary)
+    print(f"\nTotal log entries: {len(recent)}")
+
+
+def cmd_checkin(args: argparse.Namespace) -> None:
+    """Start an interactive check-in session."""
+    context = _resolve_mode(args)
+
+    prompt = interview.generate_interview_prompt()
+    print("LifeOS Check-in")
+    print("=" * 40)
+    print(prompt)
+    print("")
+
+    if context.dry_run:
+        plain = {
+            "What I did": "Prepared a check-in prompt.",
+            "Why I did it": "You asked for a check-in.",
+            "What happens next": "Run with --apply to record your response.",
+            "What I need from you": "Type APPLY to confirm.",
+        }
+        technical = {
+            "Modules/files involved": "core/interview.py",
+            "Key concepts/terms": "Check-in, context capture",
+            "Commands executed (or would execute in dry-run)": "None",
+            "Risks/constraints": "Write action requires APPLY.",
+        }
+        _render(plain, technical)
+        return
+
+    if not safety.allow_action(context, "Record check-in response"):
+        return
+
+    response = input("Your response: ").strip()
+    if not response:
+        print("No response provided.")
+        return
+
+    questions = prompt.split("\n")
+    result = interview.process_interview_response(
+        response=response,
+        questions_asked=questions,
+        context=context,
+    )
+
+    plain = {
+        "What I did": "Recorded your check-in response.",
+        "Why I did it": "Building context about your current state.",
+        "What happens next": "Response saved to memory and interview log.",
+        "What I need from you": "Nothing right now.",
+    }
+    technical = {
+        "Modules/files involved": "core/interview.py, core/memory.py",
+        "Key concepts/terms": "Check-in, context building",
+        "Commands executed (or would execute in dry-run)": "Append to interview log and memory",
+        "Risks/constraints": "None.",
+    }
+    _render(plain, technical)
+    print(f"\nStatus: {result.get('status', 'unknown')}")
+
+
+def cmd_evolve(args: argparse.Namespace) -> None:
+    """Trigger self-improvement based on a request."""
+    context = _resolve_mode(args)
+    request = getattr(args, "request", "") or ""
+
+    if not request:
+        stats = evolution.get_evolution_stats()
+        skills = evolution.list_skills()
+
+        plain = {
+            "What I did": "Retrieved self-improvement stats.",
+            "Why I did it": "You asked about my evolution capabilities.",
+            "What happens next": "Use 'lifeos evolve \"add skill to...\"' to request improvements.",
+            "What I need from you": "Tell me what capability to add.",
+        }
+        technical = {
+            "Modules/files involved": "core/evolution.py",
+            "Key concepts/terms": "Self-improvement, skill generation",
+            "Commands executed (or would execute in dry-run)": "None",
+            "Risks/constraints": "Read-only.",
+        }
+        _render(plain, technical)
+        print(f"\nEvolution Stats:")
+        print(f"- Total improvements: {stats.get('total_improvements', 0)}")
+        print(f"- Skills created: {stats.get('skills_created', 0)}")
+        print(f"\nInstalled Skills ({len(skills)}):")
+        for skill in skills:
+            print(f"  - {skill['name']}: {skill['description'][:50]}")
+        return
+
+    if context.dry_run:
+        proposal = evolution.propose_improvement_from_request(request)
+        if proposal:
+            print("Proposed Improvement (dry-run):")
+            print(f"  Title: {proposal.title}")
+            print(f"  Category: {proposal.category}")
+            print(f"  Description: {proposal.description}")
+            print(f"  Rationale: {proposal.rationale}")
+            if proposal.code:
+                print(f"\n  Code Preview:\n{proposal.code[:300]}...")
+            print("\nRun with --apply to implement this.")
+        else:
+            print("Could not generate an improvement proposal.")
+        return
+
+    if not safety.allow_action(context, "Apply self-improvement"):
+        return
+
+    result = evolution.evolve_from_conversation(
+        user_text=request,
+        conversation_history=[],
+        context=context,
+    )
+    print(result)
+
+
+def cmd_jarvis(args: argparse.Namespace) -> None:
+    """Jarvis commands - interview, discover, research, profile."""
+    action = getattr(args, "action", "status")
+
+    if action == "interview":
+        questions = jarvis.conduct_interview()
+        print("=== Jarvis Interview ===")
+        print(questions)
+        print("\n(Your responses help me understand and serve you better)")
+
+    elif action == "discover":
+        print("Discovering latest free AI resources...")
+        resources = jarvis.discover_free_ai_resources()
+        if resources:
+            print(f"\nFound {len(resources)} resources:")
+            for r in resources:
+                print(f"  - {r.name} ({r.provider}): {r.description[:60]}")
+        else:
+            print("Could not discover resources at this time.")
+
+    elif action == "research":
+        print("Researching trading strategies...")
+        result = jarvis.research_trading_strategies()
+        print("\n=== Trading Research ===")
+        print(result)
+
+    elif action == "profile":
+        profile = jarvis.get_user_profile()
+        print("=== User Profile ===")
+        print(f"Name: {profile.name}")
+        print(f"LinkedIn: {profile.linkedin}")
+        print(f"Trading Focus: {profile.trading_focus}")
+        print(f"\nGoals:")
+        for g in profile.primary_goals:
+            print(f"  - {g}")
+        print(f"\nInterests:")
+        for i in profile.interests:
+            print(f"  - {i}")
+        print(f"\nMentor Channels: {', '.join(profile.mentor_channels)}")
+
+    elif action == "suggest":
+        print("Generating proactive suggestions...")
+        suggestions = jarvis.generate_proactive_suggestions()
+        if suggestions:
+            print("\n=== Suggestions for You ===")
+            for i, s in enumerate(suggestions, 1):
+                print(f"{i}. {s}")
+        else:
+            print("Could not generate suggestions at this time.")
+
+    else:
+        print("Jarvis Status:")
+        profile = jarvis.get_user_profile()
+        print(f"  User: {profile.name}")
+        print(f"  Mission: Help you make money and achieve your goals")
+        print(f"  Safety: Active (cannot harm self or computer)")
+        print(f"\nCommands:")
+        print(f"  lifeos jarvis interview  - Get interviewed to update profile")
+        print(f"  lifeos jarvis discover   - Find new free AI resources")
+        print(f"  lifeos jarvis research   - Research trading strategies")
+        print(f"  lifeos jarvis profile    - View your profile")
+        print(f"  lifeos jarvis suggest    - Get proactive suggestions")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lifeos")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -695,6 +958,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     listen_parser = subparsers.add_parser("listen", parents=[mode_parser])
     listen_parser.add_argument("state", choices=["on", "off"])
+
+    secret_parser = subparsers.add_parser("secret")
+    secret_parser.add_argument("provider", choices=["gemini", "openai"])
+    secret_parser.add_argument("key")
+
+    activity_parser = subparsers.add_parser("activity")
+    activity_parser.add_argument("--hours", type=int, default=4)
+
+    subparsers.add_parser("checkin", parents=[mode_parser])
+
+    evolve_parser = subparsers.add_parser("evolve", parents=[mode_parser])
+    evolve_parser.add_argument("request", nargs="?", default="")
+
+    jarvis_parser = subparsers.add_parser("jarvis")
+    jarvis_parser.add_argument("action", nargs="?", default="status",
+                               choices=["status", "interview", "discover", "research", "profile", "suggest"])
 
     return parser
 
@@ -738,6 +1017,21 @@ def main() -> None:
         return
     if args.command == "listen":
         cmd_listen(args)
+        return
+    if args.command == "secret":
+        cmd_secret(args)
+        return
+    if args.command == "activity":
+        cmd_activity(args)
+        return
+    if args.command == "checkin":
+        cmd_checkin(args)
+        return
+    if args.command == "evolve":
+        cmd_evolve(args)
+        return
+    if args.command == "jarvis":
+        cmd_jarvis(args)
         return
 
     parser.print_help()

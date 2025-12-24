@@ -35,7 +35,7 @@ def _fallback_overview(memory_summary: str, diag_summary: str) -> str:
         "- Key concepts/terms: Overnight plan, diagnostics snapshot",
         "- Risks/constraints: Safe mode only; no system changes",
         "",
-        "Ask Matt:",
+        "Ask User:",
         "- What is the #1 money task to complete by noon?",
         "- Which client/project needs the biggest push?",
         "- What should be automated next?",
@@ -65,7 +65,7 @@ def generate_overnight_text(dry_run: bool = True) -> str:
         "- Modules/files involved\n"
         "- Key concepts/terms\n"
         "- Risks/constraints\n"
-        "Ask Matt:\n"
+        "Ask User:\n"
         "- 3 questions\n"
         "Glossary:\n"
         "- 1-3 terms with 1 sentence each\n"
