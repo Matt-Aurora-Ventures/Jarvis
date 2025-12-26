@@ -47,6 +47,12 @@
 - **Document creation** — "Create a business plan for my startup"
 - **Free software discovery** — "Find open source alternatives to Photoshop"
 
+### 📓 Local Knowledge Engine
+- **Distilled note archive** — All notes/research saved as `.md/.txt/.py` in `data/notes/`
+- **Auto-summary + prompts** — Every capture creates a concise summary + reusable prompt snippet
+- **Command-line + voice parity** — `lifeos capture`, voice `log`, and missions share the same pipeline
+- **Raw artifact storage** — curl outputs, transcripts, and CLI logs saved for full traceability
+
 ### 👁️ Activity Monitoring
 - **App usage tracking** — Know where your time goes
 - **Productivity insights** — Identify patterns and distractions
@@ -58,6 +64,17 @@
 - **Skill learning** — Add new capabilities via simple Python modules
 - **Error analysis** — Learns from failures and fixes itself
 - **Continuous iteration** — Gets smarter every day
+
+### 🌙 Idle Missions (Auto-Research)
+- **MoonDev Watcher** — Tracks official MoonDevOnYT X feed for new HFT drops
+- **AlgoTradeCamp Digest** — Snapshots algotradecamp.com for lessons and tactics
+- **MoonDev YouTube Harvester** — Pulls transcripts via yt-dlp and summarizes key experiments
+- **Self-Improvement Pulse** — Reviews provider errors + memory to prioritize upgrades
+
+### 🔊 Offline Voice
+- **Piper TTS** — Bundled model auto-downloads to `data/voices/`, works with no internet
+- **Voice fallback** — Seamlessly drops to macOS `say` only if local synthesis fails
+- **Configurable** — Customize `voice.tts_engine`, `piper_model`, and `speech_voice` in config
 
 ## 📦 Quick Start
 
@@ -104,7 +121,9 @@ Edit `lifeos/config/lifeos.config.json`:
   "voice": {
     "wake_word": "jarvis",
     "chat_silence_limit": 60,
-    "speak_responses": true
+    "speak_responses": true,
+    "tts_engine": "piper",
+    "piper_model": "en_US-amy-low.onnx"
   },
   "providers": {
     "gemini": { "enabled": true, "model": "gemini-2.5-pro" },

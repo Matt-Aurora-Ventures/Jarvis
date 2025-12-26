@@ -2,6 +2,40 @@
 
 All notable changes to Jarvis (LifeOS) will be documented in this file.
 
+## [0.6.0] - 2025-12-25
+
+### 🚀 Major Features
+
+#### Local Knowledge Base & Prompt Distillation
+- All notes, research dumps, and scratchpads now save to `data/notes/` as `.md/.txt/.py`.
+- Each capture auto-generates a distilled summary plus prompt-library snippet for reuse.
+- CLI capture, voice `log`, and automation actions share the same pipeline for consistency.
+
+#### Targeted Idle Missions
+- Background scheduler now runs when the system is idle for 10+ minutes.
+- Missions include:
+  - **MoonDev Watcher** – curls the official MoonDevOnYT X feed.
+  - **AlgoTradeCamp Digest** – snapshots algotradecamp.com for new strategies.
+  - **MoonDev YouTube Harvester** – pulls transcripts via yt-dlp and summarizes key ideas.
+  - **Self-Improvement Pulse** – inspects recent provider failures & memory to queue upgrades.
+- Mission output lands in context docs *and* the local notes archive.
+
+#### Offline Piper Voice
+- Bundled Piper TTS support with automatic model download to `data/voices/`.
+- `_speak` now prefers the local Piper engine, falling back to macOS `say` only if needed.
+- Works without an internet connection while keeping the familiar voice preferences.
+
+### 🔧 Improvements
+
+- Added `core/youtube_ingest.py` helper for consistent transcript extraction.
+- Guardian now whitelists key repo subdirectories so Jarvis can open/save local resources safely.
+- Requirements updated with `yt-dlp` and `piper-tts` to support the new pipelines.
+
+### 🐛 Fixes
+
+- Stopped Jarvis from launching macOS Notes; local folder access no longer trips safety checks.
+- Voice logging and CLI capture now report saved file locations for easy reference.
+
 ## [0.5.0] - 2024-12-24
 
 ### 🚀 Major Features
