@@ -17,6 +17,8 @@ from typing import Callable, Dict, List, Optional
 from core import (
     config,
     context_manager,
+    crypto_trading,
+    git_ops,
     interview,
     notes_manager,
     providers,
@@ -144,6 +146,35 @@ def _run_moondev_watcher() -> Optional[Dict[str, str]]:
         metadata={"source": url},
     )
     return {"doc_id": doc.doc_id, "summary": doc.summary}
+
+
+def _run_hft_sandbox() -> Optional[Dict[str, str]]:
+    trader = crypto_trading.CryptoTrading()
+    result = trader.run_hft_sandbox_cycle()
+    if not result:
+        return None
+    strategy = result["strategy"]
+    summary = (
+        f"{strategy['objective']} on {strategy['chain']} {strategy['pair']} "
+        f"PnL {result['pnl']} ({result['roi']*100:.2f}% ROI)"
+    )
+    doc = context_manager.add_context_document(
+        title=f"HFT Sandbox – {strategy['pair']} ({strategy['chain']})",
+        source="HFT Sandbox",
+        category="research",
+        summary=summary,
+        content=(
+            f"## Strategy\n- Chain: {strategy['chain']}\n- Pair: {strategy['pair']}\n"
+            f"- Objective: {strategy['objective']}\n- Liquidity: {strategy['liquidity_source']}\n"
+            f"- Capital: ${strategy['entry_capital']}\n\n"
+            f"## Simulation Results\n- Trades: {result['trades']}\n"
+            f"- Win rate: {result['win_rate']*100:.1f}%\n- PnL: {result['pnl']}\n"
+            f"- ROI: {result['roi']*100:.2f}%\n"
+        ),
+        tags=["crypto", "hft", "sandbox"],
+        monetization_angle="Identify low-cap strategies worth live testing.",
+    )
+    return {"doc_id": doc.doc_id, "summary": summary}
 
 
 def _run_algotradecamp_digest() -> Optional[Dict[str, str]]:
@@ -324,6 +355,14 @@ def _default_missions(state_map: Dict[str, float]) -> List[Mission]:
             tags=["improvement", "diagnostics"],
         ),
         Mission(
+            mission_id="hft_sandbox",
+            name="HFT Sandbox",
+            interval_minutes=180,
+            min_idle_seconds=900,
+            runner=_run_hft_sandbox,
+            tags=["crypto", "automation"],
+        ),
+        Mission(
             mission_id="weekly_interview",
             name="Weekly Interview Prep",
             interval_minutes=60 * 24 * 3,  # every 3 days
@@ -343,6 +382,8 @@ class MissionScheduler(threading.Thread):
         self._stop_event = threading.Event()
         self._poll_seconds = poll_seconds
         self._idle_grace_seconds = idle_grace_seconds
+        cfg = config.load_config()
+        self._mission_cfg = cfg.get("missions", {})
         state_map = _load_state()
         self._missions = _default_missions(state_map)
 
@@ -360,11 +401,31 @@ class MissionScheduler(threading.Thread):
         idle_seconds = self._current_idle()
         return idle_seconds >= max(mission.min_idle_seconds, self._idle_grace_seconds)
 
+    def _maybe_auto_commit(self, mission: Mission, payload: Optional[Dict[str, str]]) -> None:
+        if not self._mission_cfg.get("auto_commit_enabled", True):
+            return
+        summary = ""
+        if isinstance(payload, dict):
+            summary = payload.get("summary") or payload.get("doc_id", "")
+        try:
+            result = git_ops.auto_commit_with_state(
+                task_name=f"mission:{mission.mission_id}",
+                summary=summary,
+                push_after=bool(self._mission_cfg.get("auto_commit_push", True)),
+                throttle_seconds=int(self._mission_cfg.get("auto_commit_min_seconds", 10800)),
+            )
+            if result.get("status") == "committed":
+                _log_event(mission.mission_id, "auto_commit", result)
+        except Exception as exc:
+            _log_event(mission.mission_id, "auto_commit_error", {"error": str(exc)})
+
     def _run_mission(self, mission: Mission) -> None:
         try:
             result = mission.runner()
             mission.last_run = time.time()
             _log_event(mission.mission_id, "success", result or {})
+            if result:
+                self._maybe_auto_commit(mission, result)
         except Exception as exc:
             mission.last_run = time.time()
             _log_event(mission.mission_id, "error", {"error": str(exc)})

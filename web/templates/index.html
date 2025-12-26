@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis Task Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #3498db;
+        }
+        
+        .stat-label {
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .controls form {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .controls input, .controls select, .controls button {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .controls input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .controls button {
+            background: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .controls button:hover {
+            background: #2980b9;
+        }
+        
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .task-list {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .task-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .task-item:last-child {
+            border-bottom: none;
+        }
+        
+        .task-info {
+            flex: 1;
+        }
+        
+        .task-title {
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+        
+        .task-meta {
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+        
+        .task-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .task-actions button {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .btn-start {
+            background: #f39c12;
+            color: white;
+        }
+        
+        .btn-complete {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .btn-start:hover {
+            background: #e67e22;
+        }
+        
+        .btn-complete:hover {
+            background: #229954;
+        }
+        
+        .priority {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .priority-urgent {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .priority-high {
+            background: #e67e22;
+            color: white;
+        }
+        
+        .priority-medium {
+            background: #f39c12;
+            color: white;
+        }
+        
+        .priority-low {
+            background: #95a5a6;
+            color: white;
+        }
+        
+        .status {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-left: 5px;
+        }
+        
+        .status-pending {
+            background: #ecf0f1;
+            color: #7f8c8d;
+        }
+        
+        .status-in_progress {
+            background: #3498db;
+            color: white;
+        }
+        
+        .status-completed {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .no-tasks {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+        }
+        
+        .refresh {
+            float: right;
+            background: #95a5a6;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .refresh:hover {
+            background: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Jarvis Task Manager</h1>
+            <button class="refresh" onclick="loadTasks()">Refresh</button>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="stat-total">{{ stats.total }}</div>
+                    <div class="stat-label">Total Tasks</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="stat-pending">{{ stats.pending }}</div>
+                    <div class="stat-label">Pending</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="stat-progress">{{ stats.in_progress }}</div>
+                    <div class="stat-label">In Progress</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="stat-completed">{{ stats.completed }}</div>
+                    <div class="stat-label">Completed</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <form id="add-task-form">
+                <input type="text" id="task-title" placeholder="Enter task title..." required>
+                <select id="task-priority">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                </select>
+                <button type="submit">Add Task</button>
+            </form>
+            
+            <div class="filters">
+                <select id="status-filter" onchange="loadTasks()">
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                </select>
+                <select id="priority-filter" onchange="loadTasks()">
+                    <option value="">All Priorities</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="task-list" id="task-list">
+            <!-- Tasks will be loaded here -->
+        </div>
+    </div>
+    
+    <script>
+        function loadTasks() {
+            const statusFilter = document.getElementById('status-filter').value;
+            const priorityFilter = document.getElementById('priority-filter').value;
+            
+            let url = '/api/tasks?';
+            if (statusFilter) url += 'status=' + statusFilter + '&';
+            if (priorityFilter) url += 'priority=' + priorityFilter;
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(tasks => {
+                    renderTasks(tasks);
+                    updateStats();
+                });
+        }
+        
+        function renderTasks(tasks) {
+            const taskList = document.getElementById('task-list');
+            
+            if (tasks.length === 0) {
+                taskList.innerHTML = '<div class="no-tasks">No tasks found</div>';
+                return;
+            }
+            
+            taskList.innerHTML = tasks.map(task => `
+                <div class="task-item">
+                    <div class="task-info">
+                        <div class="task-title">${task.title}</div>
+                        <div class="task-meta">
+                            <span class="priority priority-${task.priority}">${task.priority}</span>
+                            <span class="status status-${task.status}">${task.status.replace('_', ' ')}</span>
+                            <span>Created: ${task.created_str}</span>
+                        </div>
+                    </div>
+                    <div class="task-actions">
+                        ${task.status === 'pending' ? `<button class="btn-start" onclick="startTask('${task.id}')">Start</button>` : ''}
+                        ${task.status === 'in_progress' ? `<button class="btn-complete" onclick="completeTask('${task.id}')">Complete</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function addTask(title, priority) {
+            fetch('/api/tasks', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ title, priority })
+            })
+            .then(response => response.json())
+            .then(() => {
+                document.getElementById('task-title').value = '';
+                loadTasks();
+            });
+        }
+        
+        function startTask(taskId) {
+            fetch(`/api/tasks/${taskId}/start`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(() => loadTasks());
+        }
+        
+        function completeTask(taskId) {
+            fetch(`/api/tasks/${taskId}/complete`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(() => loadTasks());
+        }
+        
+        function updateStats() {
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(stats => {
+                    document.getElementById('stat-total').textContent = stats.total;
+                    document.getElementById('stat-pending').textContent = stats.pending;
+                    document.getElementById('stat-progress').textContent = stats.in_progress;
+                    document.getElementById('stat-completed').textContent = stats.completed;
+                });
+        }
+        
+        // Event listeners
+        document.getElementById('add-task-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const title = document.getElementById('task-title').value;
+            const priority = document.getElementById('task-priority').value;
+            addTask(title, priority);
+        });
+        
+        // Auto-refresh every 10 seconds
+        setInterval(loadTasks, 10000);
+        
+        // Initial load
+        loadTasks();
+    </script>
+</body>
+</html>

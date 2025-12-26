@@ -4,18 +4,26 @@ Handles boot-time discovery, self-improvement, and goal-oriented operation.
 """
 
 import json
+import subprocess
 import time
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, guardian, providers
+from core import config, guardian, memory, providers
 
 ROOT = Path(__file__).resolve().parents[1]
 JARVIS_STATE_PATH = ROOT / "data" / "jarvis_state.json"
 DISCOVERIES_PATH = ROOT / "data" / "discoveries.jsonl"
 USER_PROFILE_PATH = ROOT / "lifeos" / "context" / "user_profile.md"
+MCP_CONFIG_PATH = ROOT / "lifeos" / "config" / "mcp.config.json"
+SYSTEM_INSTRUCTIONS_PATH = ROOT / "lifeos" / "config" / "system_instructions.md"
+BOOT_REPORTS_DIR = ROOT / "data" / "boot_reports"
+DAEMON_LOG_PATH = ROOT / "lifeos" / "logs" / "daemon.log"
+EVOLUTION_LOG_PATH = ROOT / "data" / "evolution_log.jsonl"
+MCP_LOG_DIR = ROOT / "lifeos" / "logs" / "mcp"
+MISSION_LOG_DIR = ROOT / "lifeos" / "logs" / "missions"
 
 
 @dataclass
@@ -286,8 +294,222 @@ def boot_sequence() -> Dict[str, Any]:
     suggestions = generate_proactive_suggestions()
     results["suggestions"] = suggestions
     
+    boot_report = _build_boot_report(state, results)
+    results["boot_report"] = str(boot_report["path"])
+
     _save_jarvis_state(state)
     return results
+
+
+def _build_boot_report(state: Dict[str, Any], boot_result: Dict[str, Any]) -> Dict[str, Any]:
+    BOOT_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.utcnow().isoformat()
+
+    report: Dict[str, Any] = {
+        "timestamp": timestamp,
+        "boot_count": state.get("boot_count", 0),
+        "capabilities": _summarize_capabilities(),
+        "context_snapshot": _load_context_snapshot(state, boot_result),
+        "audits": _audit_recent_logs(),
+        "self_tests": _run_self_tests(),
+    }
+
+    report["remediation"] = _auto_remediate(report["self_tests"])
+
+    report_path = BOOT_REPORTS_DIR / f"boot_report_{int(time.time())}.json"
+    with open(report_path, "w", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=2)
+
+    return {"data": report, "path": report_path}
+
+
+def _summarize_capabilities() -> Dict[str, Any]:
+    summary = {"mcp_servers": [], "instruction_highlights": []}
+    try:
+        with open(MCP_CONFIG_PATH, "r", encoding="utf-8") as handle:
+            mcp_cfg = json.load(handle)
+        summary["mcp_servers"] = [
+            server.get("name", "unknown")
+            for server in mcp_cfg.get("servers", [])
+            if server.get("enabled", True)
+        ]
+    except Exception as exc:
+        summary["mcp_servers"].append(f"Error reading MCP config: {exc}")
+
+    try:
+        with open(SYSTEM_INSTRUCTIONS_PATH, "r", encoding="utf-8") as handle:
+            lines = [line.strip() for line in handle.readlines() if line.strip()]
+        summary["instruction_highlights"] = lines[:10]
+    except FileNotFoundError:
+        summary["instruction_highlights"].append("System instructions file missing.")
+    except Exception as exc:
+        summary["instruction_highlights"].append(f"Error reading instructions: {exc}")
+
+    return summary
+
+
+def _load_context_snapshot(state: Dict[str, Any], boot_result: Dict[str, Any]) -> Dict[str, Any]:
+    snapshot = {
+        "last_discovery_check": state.get("last_discovery_check"),
+        "last_discoveries": boot_result.get("discoveries", []),
+        "last_suggestions": boot_result.get("suggestions", []),
+        "recent_missions": [],
+        "recent_memory_entries": [],
+    }
+
+    try:
+        mission_logs = sorted(MISSION_LOG_DIR.glob("*.log"), reverse=True)[:2]
+        for log_path in mission_logs:
+            with open(log_path, "r", encoding="utf-8") as handle:
+                lines = handle.readlines()[-5:]
+            snapshot["recent_missions"].append({log_path.name: [line.strip() for line in lines]})
+    except Exception:
+        pass
+
+    try:
+        recent_memory = memory.fetch_recent_entries(limit=5)
+        snapshot["recent_memory_entries"] = [
+            {"timestamp": entry.get("timestamp"), "summary": entry.get("summary", entry.get("text", "")[:120])}
+            for entry in recent_memory
+        ]
+    except Exception:
+        pass
+
+    return snapshot
+
+
+def _audit_recent_logs() -> Dict[str, Any]:
+    audits: Dict[str, Any] = {"daemon_warnings": [], "evolution_errors": [], "mcp_errors": []}
+
+    def _tail(path: Path, lines: int = 50) -> List[str]:
+        if not path.exists():
+            return []
+        with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+            content = handle.readlines()
+        return [line.strip() for line in content[-lines:]]
+
+    for line in _tail(DAEMON_LOG_PATH, 80):
+        if "warning" in line.lower() or "error" in line.lower():
+            audits["daemon_warnings"].append(line)
+
+    for line in _tail(EVOLUTION_LOG_PATH, 40):
+        if "error" in line.lower():
+            audits["evolution_errors"].append(line)
+
+    if MCP_LOG_DIR.exists():
+        for log_file in sorted(MCP_LOG_DIR.glob("*.log"))[-3:]:
+            for line in _tail(log_file, 40):
+                if "error" in line.lower() or "failed" in line.lower():
+                    audits["mcp_errors"].append(f"{log_file.name}: {line}")
+
+    return audits
+
+
+def _run_self_tests() -> Dict[str, Dict[str, str]]:
+    tests: Dict[str, Dict[str, str]] = {}
+
+    tests["filesystem"] = _test_filesystem_access()
+    tests["memory"] = _test_memory_pipeline()
+    tests["git"] = _test_git_status()
+    tests["shell"] = _test_shell_command()
+    tests["puppeteer"] = _test_puppeteer_binary()
+    tests["sequential_thinking"] = _test_sequential_thinking_config()
+
+    return tests
+
+
+def _test_filesystem_access() -> Dict[str, str]:
+    temp_file = ROOT / "data" / "self_test_fs.tmp"
+    try:
+        temp_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(temp_file, "w", encoding="utf-8") as handle:
+            handle.write("fs-test")
+        with open(temp_file, "r", encoding="utf-8") as handle:
+            contents = handle.read()
+        return {"status": "pass", "detail": f"Read/Write OK ({len(contents)} bytes)."}
+    except Exception as exc:
+        return {"status": "fail", "detail": f"Filesystem error: {exc}"}
+    finally:
+        temp_file.unlink(missing_ok=True)
+
+
+def _test_memory_pipeline() -> Dict[str, str]:
+    try:
+        memory.append_entry("self-test memory entry", "self_test", memory.safety_context(apply=False))
+        recent = memory.fetch_recent_entries(limit=1)
+        if recent:
+            return {"status": "pass", "detail": "Memory append/fetch OK."}
+        return {"status": "fail", "detail": "Memory fetch returned no entries."}
+    except Exception as exc:
+        return {"status": "fail", "detail": f"Memory error: {exc}"}
+
+
+def _test_git_status() -> Dict[str, str]:
+    try:
+        result = subprocess.run(
+            ["git", "status", "--short"],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode == 0:
+            return {"status": "pass", "detail": "Git status succeeded."}
+        return {"status": "fail", "detail": result.stderr.strip() or "git status returned non-zero."}
+    except Exception as exc:
+        return {"status": "fail", "detail": f"Git error: {exc}"}
+
+
+def _test_shell_command() -> Dict[str, str]:
+    try:
+        result = subprocess.run(
+            ["pwd"],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+        return {"status": "pass", "detail": f"Shell command OK ({result.stdout.strip()})."}
+    except Exception as exc:
+        return {"status": "fail", "detail": f"Shell error: {exc}"}
+
+
+def _test_puppeteer_binary() -> Dict[str, str]:
+    puppeteer_path = ROOT / "Documents" / "Jarvis context" / "mcp-servers" / "puppeteer" / "src" / "dist" / "index.js"
+    if puppeteer_path.exists():
+        return {"status": "pass", "detail": f"Puppeteer binary present at {puppeteer_path}."}
+    return {"status": "warn", "detail": "Puppeteer binary missing; run MCP install."}
+
+
+def _test_sequential_thinking_config() -> Dict[str, str]:
+    try:
+        with open(MCP_CONFIG_PATH, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        names = [server.get("name") for server in data.get("servers", [])]
+        if "sequential-thinking" in names:
+            return {"status": "pass", "detail": "Sequential thinking MCP configured."}
+        return {"status": "warn", "detail": "Sequential thinking MCP not configured."}
+    except Exception as exc:
+        return {"status": "fail", "detail": f"Config read error: {exc}"}
+
+
+def _auto_remediate(self_tests: Dict[str, Dict[str, str]]) -> List[str]:
+    notes: List[str] = []
+    needs_restart = any(result["status"] == "fail" for result in self_tests.values())
+
+    if needs_restart:
+        try:
+            from core import mcp_loader
+
+            mcp_loader.stop_mcp_servers()
+            mcp_loader.start_mcp_servers()
+            notes.append("Restarted MCP servers after failed self-test.")
+        except Exception as exc:
+            notes.append(f"Failed to restart MCP servers: {exc}")
+
+    return notes
 
 
 def get_mission_context() -> str:

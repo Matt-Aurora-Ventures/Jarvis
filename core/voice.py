@@ -30,8 +30,9 @@ from core import (
 VOICES_DIR = Path(__file__).resolve().parents[1] / "data" / "voices"
 DEFAULT_PIPER_MODEL = "en_US-amy-low.onnx"
 DEFAULT_PIPER_URL = (
-    "https://github.com/rhasspy/piper/releases/download/v0.0.2/en_US-amy-low.onnx.gz"
+    "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US-amy-low.onnx.gz"
 )
+PIPER_BINARY = "piper"
 
 
 @dataclass
@@ -63,7 +64,15 @@ def _wake_word_model_name(wake_word: str) -> str:
 
 def _voice_cfg() -> dict:
     cfg = _load_config()
-    return cfg.get("voice", {})
+    voice_cfg = cfg.get("voice", {}).copy()
+    voice_cfg.setdefault("tts_engine", "piper")
+    voice_cfg.setdefault("speak_responses", True)
+    return voice_cfg
+
+
+def _set_voice_error(message: str) -> None:
+    """Persist the latest voice error so CLI/status can surface it."""
+    state.update_state(voice_error=message[:160])
 
 
 def _ensure_piper_model(voice_cfg: dict) -> Optional[Path]:
@@ -98,10 +107,14 @@ def _ensure_piper_model(voice_cfg: dict) -> Optional[Path]:
 def _speak_with_piper(text: str, voice_cfg: dict) -> bool:
     model_path = _ensure_piper_model(voice_cfg)
     if not model_path:
+        _set_voice_error("Missing Piper model; falling back to macOS say.")
+        return False
+    if shutil.which(PIPER_BINARY) is None:
+        _set_voice_error("Piper binary not found in PATH; install piper.")
         return False
     tmp_wav = Path(tempfile.mkstemp(suffix=".wav")[1])
     cmd = [
-        "piper",
+        PIPER_BINARY,
         "--model",
         str(model_path),
         "--output_file",
@@ -126,7 +139,7 @@ def _speak_with_piper(text: str, voice_cfg: dict) -> bool:
         )
         return True
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-        print(f"Piper TTS failed: {exc}")
+        _set_voice_error(f"Piper TTS failed: {exc}")
         return False
     finally:
         if tmp_wav.exists():
@@ -170,10 +183,14 @@ def _speak_with_say(text: str, voice_cfg: dict) -> bool:
     try:
         if voice_name and _test_voice(voice_name):
             if _run_say(voice_name):
+                _set_voice_error("")
                 return True
-        return _run_say()
+        success = _run_say()
+        if success:
+            _set_voice_error("")
+        return success
     except Exception as exc:
-        print(f"macOS say failed: {exc}")
+        _set_voice_error(f"macOS say failed: {exc}")
         return False
 
 
@@ -183,14 +200,16 @@ def _speak(text: str) -> None:
         return
 
     engine = str(voice_cfg.get("tts_engine", "piper")).lower()
+    spoke = False
     if engine == "piper":
-        if _speak_with_piper(text, voice_cfg):
-            return
+        spoke = _speak_with_piper(text, voice_cfg)
+    elif engine == "say":
+        spoke = _speak_with_say(text, voice_cfg)
     else:
-        # If a different engine is specified but not implemented yet, fall through to say.
-        pass
-
-    _speak_with_say(text, voice_cfg)
+        _set_voice_error(f"Unsupported TTS engine '{engine}', falling back to say().")
+    if not spoke:
+        # Final fallback
+        _speak_with_say(text, voice_cfg)
 
 
 def _transcribe_once(timeout: int, phrase_time_limit: int) -> str:

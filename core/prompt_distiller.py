@@ -86,7 +86,7 @@ APPLICATIONS:
 {json.dumps(all_applications[:10], indent=2)}
 
 EXAMPLES:
-{json.dumps(all_examples[:5], indent=2))
+{json.dumps(all_examples[:5], indent=2)}
 
 IMPROVEMENTS:
 {json.dumps(all_improvements[:10], indent=2)}

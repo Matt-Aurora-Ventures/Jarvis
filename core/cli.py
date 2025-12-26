@@ -13,10 +13,12 @@ from core import (
     context_router,
     diagnostics,
     evolution,
+    git_ops,
     guardian,
     interview,
     jarvis,
     memory,
+    notes_manager,
     overnight,
     output,
     passive,
@@ -25,8 +27,8 @@ from core import (
     safety,
     secrets,
     state,
+    task_manager,
     voice,
-    notes_manager,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -874,6 +876,66 @@ def cmd_evolve(args: argparse.Namespace) -> None:
     print(result)
 
 
+def cmd_task(args):
+    """Handle task commands."""
+    tm = task_manager.get_task_manager()
+    
+    if args.task_action == "add":
+        priority = task_manager.TaskPriority(args.priority)
+        task = tm.add_task(args.title, priority)
+        print(f"Task added: {task.id}")
+        print(f"Title: {task.title}")
+        print(f"Priority: {task.priority.value}")
+        print(f"Status: {task.status.value}")
+        
+    elif args.task_action == "list":
+        status_filter = None
+        priority_filter = None
+        
+        if args.status:
+            status_filter = task_manager.TaskStatus(args.status)
+        if args.priority:
+            priority_filter = task_manager.TaskPriority(args.priority)
+        
+        tasks = tm.list_tasks(status=status_filter, priority=priority_filter, limit=args.limit)
+        
+        if not tasks:
+            print("No tasks found.")
+            return
+        
+        print(f"\n{'ID':<8} {'Priority':<10} {'Status':<12} {'Title'}")
+        print("-" * 70)
+        for task in tasks:
+            print(f"{task.id[:7]:<8} {task.priority.value:<10} {task.status.value:<12} {task.title}")
+            
+    elif args.task_action == "complete":
+        if tm.complete_task(args.task_id):
+            print(f"Task {args.task_id} marked as complete.")
+        else:
+            print(f"Task {args.task_id} not found.")
+            
+    elif args.task_action == "start":
+        if tm.start_task(args.task_id):
+            print(f"Task {args.task_id} marked as in progress.")
+        else:
+            print(f"Task {args.task_id} not found.")
+            
+    elif args.task_action == "status":
+        stats = tm.get_stats()
+        print("\nTask Statistics:")
+        print(f"Total: {stats['total']}")
+        print(f"Pending: {stats['pending']}")
+        print(f"In Progress: {stats['in_progress']}")
+        print(f"Completed: {stats['completed']}")
+        print(f"Cancelled: {stats['cancelled']}")
+        
+        print("\nBy Priority:")
+        print(f"Urgent: {stats['by_priority']['urgent']}")
+        print(f"High: {stats['by_priority']['high']}")
+        print(f"Medium: {stats['by_priority']['medium']}")
+        print(f"Low: {stats['by_priority']['low']}")
+
+
 def cmd_jarvis(args: argparse.Namespace) -> None:
     """Jarvis commands - interview, discover, research, profile."""
     action = getattr(args, "action", "status")
@@ -988,6 +1050,32 @@ def build_parser() -> argparse.ArgumentParser:
     jarvis_parser.add_argument("action", nargs="?", default="status",
                                choices=["status", "interview", "discover", "research", "profile", "suggest"])
 
+    # Task management commands
+    task_parser = subparsers.add_parser("task")
+    task_subparsers = task_parser.add_subparsers(dest="task_action", required=True)
+    
+    # task add
+    task_add_parser = task_subparsers.add_parser("add")
+    task_add_parser.add_argument("title", help="Task title")
+    task_add_parser.add_argument("--priority", choices=["low", "medium", "high", "urgent"], default="medium")
+    
+    # task list
+    task_list_parser = task_subparsers.add_parser("list")
+    task_list_parser.add_argument("--status", choices=["pending", "in_progress", "completed", "cancelled"])
+    task_list_parser.add_argument("--priority", choices=["low", "medium", "high", "urgent"])
+    task_list_parser.add_argument("--limit", type=int, default=20)
+    
+    # task complete
+    task_complete_parser = task_subparsers.add_parser("complete")
+    task_complete_parser.add_argument("task_id", help="Task ID to complete")
+    
+    # task start
+    task_start_parser = task_subparsers.add_parser("start")
+    task_start_parser.add_argument("task_id", help="Task ID to start")
+    
+    # task status
+    task_status_parser = task_subparsers.add_parser("status")
+
     return parser
 
 
@@ -1045,6 +1133,9 @@ def main() -> None:
         return
     if args.command == "jarvis":
         cmd_jarvis(args)
+        return
+    if args.command == "task":
+        cmd_task(args)
         return
 
     parser.print_help()

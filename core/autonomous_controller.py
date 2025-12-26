@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, context_manager, evolution, guardian, providers, research_engine, prompt_distiller, service_discovery, google_manager, ability_acquisition, learning_validator, iterative_improver, self_evaluator, google_cli, crypto_trading, autonomous_restart, browser_automation, autonomous_researcher, autonomous_agent
+from core import config, context_manager, evolution, guardian, providers, research_engine, prompt_distiller, service_discovery, google_manager, ability_acquisition, learning_validator, iterative_improver, self_evaluator, google_cli, crypto_trading, autonomous_restart, browser_automation, autonomous_researcher, autonomous_agent, task_manager, circular_logic
 
 ROOT = Path(__file__).resolve().parents[1]
 AUTO_LOG_PATH = ROOT / "data" / "autonomous_controller.log"
@@ -23,28 +23,38 @@ class AutonomousController:
     """Controls continuous autonomous learning and improvement."""
     
     def __init__(self):
-        self.running = False
+        self.schedule = self._load_schedule()
         self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-        self._load_schedule()
-        # RE-ENABLED - Ability acquisition is primary focus
-        # self.service_discovery = service_discovery.get_service_discovery()
-        # self.google_manager = google_manager.get_google_manager()
-        self.ability_acquisition = ability_acquisition.get_ability_acquisition()
-        self.learning_validator = learning_validator.get_learning_validator()
-        self.iterative_improver = iterative_improver.get_iterative_improver()
-        self.self_evaluator = self_evaluator.get_self_evaluator()
-        self.google_cli = google_cli.get_google_cli()
-        self.crypto_trading = crypto_trading.get_crypto_trading()
-        self.restart_manager = autonomous_restart.get_autonomous_restart()
-        self.browser_automation = browser_automation.get_browser_automation()
-        self.autonomous_researcher = autonomous_researcher.get_autonomous_researcher()
-        self.autonomous_agent = autonomous_agent.get_autonomous_agent()
+        self._lock = threading.Lock()
+        
+        # Initialize circular logic detection
+        self.circular_detector = circular_logic.CircularLogicDetector()
+        self.cycle_governor = circular_logic.CycleGovernor()
+        
+        # Initialize components
+        self.research_engine = research_engine.ResearchEngine()
+        self.prompt_distiller = prompt_distiller.PromptDistiller()
+        self.guardian = guardian.Guardian()
+        self.context_manager = context_manager.ContextManager()
+        self.providers = providers.Providers()
+        self.evolution = evolution.Evolution()
+        self.google_manager = google_manager.GoogleManager()
+        self.ability_acquisition = ability_acquisition.AbilityAcquisition()
+        self.learning_validator = learning_validator.LearningValidator()
+        self.iterative_improver = iterative_improver.IterativeImprover()
+        self.self_evaluator = self_evaluator.SelfEvaluator()
+        self.google_cli = google_cli.GoogleCLI()
+        self.crypto_trading = crypto_trading.CryptoTrading()
+        self.restart_manager = autonomous_restart.AutonomousRestartManager()
+        self.browser_automation = browser_automation.BrowserAutomation()
+        self.autonomous_researcher = autonomous_researcher.AutonomousResearcher()
+        self.autonomous_agent = autonomous_agent.AutonomousAgent()
         
         # Check if Jarvis was restarted
         restart_state = autonomous_restart.check_for_restart_flag()
         if restart_state:
             self._log("Jarvis restarted", restart_state)
+    
         
     def _load_schedule(self):
         """Load research schedule."""
@@ -123,83 +133,75 @@ class AutonomousController:
         self._log("Controller stopped")
     
     def _run_loop(self):
-        """Main control loop."""
+        """Main control loop with circular logic prevention."""
         while not self._stop_event.is_set():
             try:
                 now = time.time()
                 
-                # Check if it's time for research
-                if now - self.schedule["last_research"] > self.schedule["research_cycle_minutes"] * 60:
-                    self._run_research_cycle()
-                    self.schedule["last_research"] = now
+                # Check for circular logic
+                circular_issue = self.circular_detector.detect_circular_logic()
+                if circular_issue:
+                    self._log("Circular logic detected", circular_issue)
+                    # Apply corrective measures
+                    self._apply_circular_logic_fix(circular_issue)
+                    time.sleep(60)  # Pause after detecting circular logic
+                    continue
                 
-                # Check if it's time for distillation
-                if now - self.schedule["last_distillation"] > self.schedule["distillation_cycle_minutes"] * 60:
-                    self._run_distillation_cycle()
-                    self.schedule["last_distillation"] = now
+                # TASK GATE: Check for explicit tasks before running any cycles
+                current_task = self._get_next_task()
+                if not current_task:
+                    self._log("No explicit task found, pausing autonomous cycles")
+                    time.sleep(30)  # Wait 30 seconds before checking again
+                    continue
                 
-                # Check if it's time for improvements
-                if now - self.schedule["last_improvement"] > self.schedule["improvement_cycle_minutes"] * 60:
-                    self._run_improvement_cycle()
-                    self.schedule["last_improvement"] = now
+                self._log("Processing task", {"task": current_task["title"], "priority": current_task.get("priority", "medium")})
                 
-                # Check for new services
-                # TEMPORARILY DISABLED - Focus on self-improvement
-                # if now - self.schedule.get("last_service_discovery", 0) > self.schedule["service_discovery_minutes"] * 60:
-                #     self._run_service_discovery_cycle()
-                #     self.schedule["last_service_discovery"] = now
+                # Check cycles with governor approval
+                cycles_to_check = [
+                    ("research", self.schedule["research_cycle_minutes"], "last_research", self._run_research_cycle),
+                    ("distillation", self.schedule["distillation_cycle_minutes"], "last_distillation", self._run_distillation_cycle),
+                    ("improvement", self.schedule["improvement_cycle_minutes"], "last_improvement", self._run_improvement_cycle),
+                    ("ability_acquisition", self.schedule["ability_acquisition_minutes"], "last_ability_acquisition", self._run_ability_acquisition_cycle),
+                    ("learning_validation", self.schedule["learning_validation_minutes"], "last_learning_validation", self._run_learning_validation_cycle),
+                    ("iterative_improvement", self.schedule["iterative_improvement_minutes"], "last_iterative_improvement", self._run_iterative_improvement_cycle),
+                    ("self_evaluation", self.schedule["self_evaluation_minutes"], "last_self_evaluation", self._run_self_evaluation_cycle),
+                    ("crypto_trading", self.schedule["crypto_trading_minutes"], "last_crypto_trading", self._run_crypto_trading_cycle),
+                    ("google_cli", self.schedule["google_cli_minutes"], "last_google_cli", self._run_google_cli_cycle),
+                    ("browser_automation", self.schedule["browser_automation_minutes"], "last_browser_automation", self._run_browser_automation_cycle),
+                    ("autonomous_research", self.schedule["autonomous_research_minutes"], "last_autonomous_research", self._run_autonomous_research_cycle),
+                    ("autonomous_agent", self.schedule["autonomous_agent_minutes"], "last_autonomous_agent", self._run_autonomous_agent_cycle),
+                ]
                 
-                # Check if it's time for Google sync
-                # TEMPORARILY DISABLED - Focus on self-improvement
-                # if now - self.schedule.get("last_google_sync", 0) > self.schedule["google_sync_minutes"] * 60:
-                #     self._run_google_sync_cycle()
-                #     self.schedule["last_google_sync"] = now
-                
-                # Check if it's time for ability acquisition
-                # Check if it's time for ability acquisition
-                if now - self.schedule.get("last_ability_acquisition", 0) > self.schedule["ability_acquisition_minutes"] * 60:
-                    self._run_ability_acquisition_cycle()
-                    self.schedule["last_ability_acquisition"] = now
-                
-                # Check if it's time for learning validation
-                if now - self.schedule.get("last_learning_validation", 0) > self.schedule["learning_validation_minutes"] * 60:
-                    self._run_learning_validation_cycle()
-                    self.schedule["last_learning_validation"] = now
-                
-                # Check if it's time for iterative improvement
-                if now - self.schedule.get("last_iterative_improvement", 0) > self.schedule["iterative_improvement_minutes"] * 60:
-                    self._run_iterative_improvement_cycle()
-                    self.schedule["last_iterative_improvement"] = now
-                
-                # Check if it's time for self-evaluation
-                if now - self.schedule.get("last_self_evaluation", 0) > self.schedule["self_evaluation_minutes"] * 60:
-                    self._run_self_evaluation_cycle()
-                    self.schedule["last_self_evaluation"] = now
-                
-                # Check if it's time for crypto trading research
-                if now - self.schedule.get("last_crypto_trading", 0) > self.schedule["crypto_trading_minutes"] * 60:
-                    self._run_crypto_trading_cycle()
-                    self.schedule["last_crypto_trading"] = now
-                
-                # Check if it's time for Google CLI integration
-                if now - self.schedule.get("last_google_cli", 0) > self.schedule["google_cli_minutes"] * 60:
-                    self._run_google_cli_cycle()
-                    self.schedule["last_google_cli"] = now
-                
-                # Check if it's time for browser automation
-                if now - self.schedule.get("last_browser_automation", 0) > self.schedule["browser_automation_minutes"] * 60:
-                    self._run_browser_automation_cycle()
-                    self.schedule["last_browser_automation"] = now
-                
-                # Check if it's time for autonomous research
-                if now - self.schedule.get("last_autonomous_research", 0) > self.schedule["autonomous_research_minutes"] * 60:
-                    self._run_autonomous_research_cycle()
-                    self.schedule["last_autonomous_research"] = now
-                
-                # Check if it's time for autonomous agent tasks
-                if now - self.schedule.get("last_autonomous_agent", 0) > self.schedule["autonomous_agent_minutes"] * 60:
-                    self._run_autonomous_agent_cycle()
-                    self.schedule["last_autonomous_agent"] = now
+                for cycle_name, cycle_minutes, last_key, cycle_func in cycles_to_check:
+                    if now - self.schedule.get(last_key, 0) > cycle_minutes * 60:
+                        # Check with governor
+                        can_run, reason = self.cycle_governor.can_run_cycle(cycle_name)
+                        if not can_run:
+                            self._log(f"Cycle blocked: {cycle_name}", {"reason": reason})
+                            continue
+                        
+                        # Record cycle start
+                        self.circular_detector.record_cycle_start(cycle_name, current_task)
+                        
+                        try:
+                            # Run the cycle
+                            if cycle_name in ["research", "browser_automation"]:
+                                # These cycles need the task context
+                                cycle_func(current_task)
+                            else:
+                                cycle_func()
+                            
+                            # Record successful completion
+                            self.circular_detector.record_cycle_end(cycle_name)
+                            self.cycle_governor.record_cycle(cycle_name)
+                            
+                            # Update schedule
+                            self.schedule[last_key] = now
+                            
+                        except Exception as e:
+                            # Record error
+                            self.circular_detector.record_cycle_end(cycle_name, error=str(e))
+                            self._log(f"Cycle error: {cycle_name}", {"error": str(e)})
                 
                 # Save schedule
                 self._save_schedule()
@@ -211,13 +213,61 @@ class AutonomousController:
                 self._log("Controller error", {"error": str(e)})
                 time.sleep(60)  # Wait longer on error
     
-    def _run_research_cycle(self):
-        """Run a research cycle."""
-        # Get current topic
-        topics = self.schedule["priority_topics"]
-        topic = topics[self.schedule["current_topic_index"]]
+    def _apply_circular_logic_fix(self, issue: Dict):
+        """Apply fixes for detected circular logic."""
+        if issue["type"] == "research_improvement_loop":
+            # Add cooldown between research and improvement
+            self.schedule["last_research"] = time.time()
+            self.schedule["last_improvement"] = time.time()
+            self._log("Applied fix: Extended cooldown for research and improvement")
+            
+        elif issue["type"] == "self_evaluation_loop":
+            # Disable self-evaluation for 1 hour
+            self.schedule["last_self_evaluation"] = time.time() + 3600
+            self._log("Applied fix: Disabled self-evaluation for 1 hour")
+            
+        elif issue["type"] == "restart_loop":
+            # Disable restart capability for 30 minutes
+            self.restart_manager.disable_restart(1800)
+            self._log("Applied fix: Disabled restarts for 30 minutes")
+            
+        elif issue["type"] == "error_recovery_loop":
+            # Increase error wait time
+            self._log("Applied fix: Increased error recovery wait time")
+    
+    def _get_next_task(self) -> Optional[Dict[str, Any]]:
+        """Get the next explicit task from task manager."""
+        tm = task_manager.get_task_manager()
+        task = tm.get_next_task()
         
-        self._log("Starting research cycle", {"topic": topic})
+        if task:
+            return {
+                "id": task.id,
+                "title": task.title,
+                "priority": task.priority.value,
+                "status": task.status.value
+            }
+        
+        return None
+    
+    def add_user_task(self, task: str, priority: str = "medium"):
+        """Add a user-specified task."""
+        tm = task_manager.get_task_manager()
+        priority_enum = task_manager.TaskPriority(priority)
+        tm.add_task(task, priority_enum)
+        self._log("User task added", {"task": task, "priority": priority})
+    
+    def _run_research_cycle(self, task: Dict[str, Any] = None):
+        """Run a research cycle focused on specific task."""
+        # Use task title as topic if provided, otherwise use default rotation
+        if task:
+            topic = task["title"]
+            self._log("Starting task-focused research", {"task": topic})
+        else:
+            # Get current topic from schedule
+            topics = self.schedule["priority_topics"]
+            topic = topics[self.schedule["current_topic_index"]]
+            self._log("Starting research cycle", {"topic": topic})
         
         # Get research engine and research
         engine = research_engine.get_research_engine()
@@ -229,6 +279,9 @@ class AutonomousController:
                 "pages_processed": result["pages_processed"]
             })
             
+            # Log research to MCP memory
+            self._log_research_to_memory(topic, result)
+            
             # Update context with research
             ctx = context_manager.load_master_context()
             if topic not in ctx.recent_topics:
@@ -237,8 +290,84 @@ class AutonomousController:
         else:
             self._log("Research failed", {"topic": topic, "error": result.get("error")})
         
-        # Move to next topic
-        self.schedule["current_topic_index"] = (self.schedule["current_topic_index"] + 1) % len(topics)
+        # Move to next topic only if not task-focused
+        if not task:
+            self.schedule["current_topic_index"] = (self.schedule["current_topic_index"] + 1) % len(topics)
+    
+    def _log_research_to_memory(self, topic: str, result: Dict[str, Any]):
+        """Log research results to MCP memory."""
+        try:
+            # Create memory entry
+            memory_entry = {
+                "type": "research",
+                "topic": topic,
+                "timestamp": datetime.now().isoformat(),
+                "pages_processed": result.get("pages_processed", 0),
+                "key_findings": result.get("summary", "")[:500],
+                "sources": result.get("sources", [])[:5]
+            }
+            
+            # Save to memory system
+            memory_path = ROOT / "data" / "memory" / f"research_{int(time.time())}.json"
+            memory_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(memory_path, "w") as f:
+                json.dump(memory_entry, f, indent=2)
+            
+            self._log("Research logged to memory", {"topic": topic, "path": str(memory_path)})
+            
+        except Exception as e:
+            self._log("Failed to log research to memory", {"error": str(e)})
+    
+    def _run_browser_automation_cycle(self, task: Dict[str, Any] = None):
+        """Run browser automation focused on specific task."""
+        if task:
+            self._log("Starting task-focused browser automation", {"task": task["title"]})
+            
+            # Use browser automation to research the specific task
+            result = self.browser_automation.research_topic_automatically(task["title"])
+            
+            # Log results to memory
+            self._log_browser_results_to_memory(task["title"], result)
+            
+            self._log("Task browser automation completed", {
+                "task": task["title"],
+                "sources": result.get("sources_visited", 0)
+            })
+        else:
+            # Default browser automation (reduced scope)
+            self._log("Starting limited browser automation")
+            cycle_number = int(time.time() / (self.schedule["browser_automation_minutes"] * 60)) % 2
+            
+            if cycle_number == 0:
+                # Only scrape crypto prices (no random browsing)
+                result = self.browser_automation.scrape_crypto_prices()
+                self._log("Crypto prices scraped", {
+                    "exchanges": result.get("scraped_exchanges", 0)
+                })
+            else:
+                self._log("Browser automation skipped (no task)")
+    
+    def _log_browser_results_to_memory(self, task: str, result: Dict[str, Any]):
+        """Log browser automation results to memory."""
+        try:
+            memory_entry = {
+                "type": "browser_research",
+                "task": task,
+                "timestamp": datetime.now().isoformat(),
+                "sources_visited": result.get("sources_visited", 0),
+                "data_extracted": result.get("data_extracted", [])[:10],
+                "summary": result.get("summary", "")[:500]
+            }
+            
+            memory_path = ROOT / "data" / "memory" / f"browser_{int(time.time())}.json"
+            memory_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(memory_path, "w") as f:
+                json.dump(memory_entry, f, indent=2)
+            
+            self._log("Browser results logged to memory", {"task": task, "path": str(memory_path)})
+            
+        except Exception as e:
+            self._log("Failed to log browser results to memory", {"error": str(e)})
     
     def _run_distillation_cycle(self):
         """Run a distillation cycle."""
@@ -347,24 +476,7 @@ class AutonomousController:
         except Exception as e:
             self._log("Google sync error", {"error": str(e)})
     
-    def _run_ability_acquisition_cycle(self):
-        """Run an ability acquisition cycle."""
-        self._log("Starting ability acquisition cycle")
         
-        try:
-            result = self.ability_acquisition.run_acquisition_cycle()
-            self._log("Ability acquisition completed", result)
-            
-            # If new abilities were integrated, trigger improvement cycle
-            if result.get("integrated", 0) > 0:
-                self._log("New abilities integrated, triggering improvement", {
-                    "integrated_count": result.get("integrated")
-                })
-                self._run_improvement_cycle()
-                
-        except Exception as e:
-            self._log("Ability acquisition error", {"error": str(e)})
-    
     def _run_learning_validation_cycle(self):
         """Run a learning validation cycle."""
         self._log("Starting learning validation cycle")
@@ -518,56 +630,7 @@ class AutonomousController:
         except Exception as e:
             self._log("Google CLI error", {"error": str(e)})
     
-    def _run_browser_automation_cycle(self):
-        """Run a browser automation cycle."""
-        self._log("Starting browser automation cycle")
         
-        try:
-            # Rotate through different browser automation tasks
-            cycle_number = int(time.time() / (self.schedule["browser_automation_minutes"] * 60)) % 4
-            
-            if cycle_number == 0:
-                # Scrape crypto prices
-                result = self.browser_automation.scrape_crypto_prices()
-                self._log("Crypto prices scraped", {
-                    "exchanges": result.get("scraped_exchanges", 0)
-                })
-                
-            elif cycle_number == 1:
-                # Research current focus topic
-                topic = self.schedule["priority_topics"][
-                    self.schedule.get("current_topic_index", 0) % len(self.schedule["priority_topics"])
-                ]
-                result = self.browser_automation.research_topic_automatically(topic)
-                self._log("Topic researched", {
-                    "topic": topic,
-                    "sources": result.get("sources_visited", 0)
-                })
-                
-            elif cycle_number == 2:
-                # Automate trading research
-                result = self.browser_automation.automate_trading_research()
-                self._log("Trading research automated", {
-                    "sources": result.get("sources_analyzed", 0)
-                })
-                
-            else:
-                # Monitor a key website for changes
-                monitor_urls = [
-                    "https://www.coingecko.com",
-                    "https://coinmarketcap.com",
-                    "https://www.tradingview.com"
-                ]
-                url = monitor_urls[int(time.time() / 3600) % len(monitor_urls)]
-                result = self.browser_automation.monitor_website_changes(url)
-                self._log("Website monitored", {
-                    "url": url,
-                    "changes": result.get("changes_detected", False)
-                })
-                
-        except Exception as e:
-            self._log("Browser automation error", {"error": str(e)})
-    
     def _run_ability_acquisition_cycle(self):
         """Run an ability acquisition cycle with full autonomy."""
         self._log("Starting ability acquisition cycle")

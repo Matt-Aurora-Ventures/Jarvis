@@ -4,16 +4,22 @@ Researches trading strategies, analyzes markets, and builds trading tools.
 """
 
 import json
+import math
+import random
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from core import config, providers, research_engine, learning_validator
+from core import config, learning_validator, notes_manager, providers, research_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 CRYPTO_PATH = ROOT / "data" / "crypto_trading"
 CRYPTO_LOG_PATH = ROOT / "data" / "crypto_trading.log"
+HFT_BACKLOG_PATH = CRYPTO_PATH / "hft_backlog.json"
+HFT_HISTORY_PATH = CRYPTO_PATH / "hft_history.jsonl"
+LOW_FEE_CHAINS = ["Solana", "Base", "Arbitrum", "Optimism", "Polygon", "BSC"]
+DEFAULT_PAIRS = ["SOL/USDC", "PYTH/SOL", "JUP/USDC", "WIF/SOL", "BONK/SOL", "AERO/USDC"]
 
 
 class CryptoTrading:
@@ -24,7 +30,8 @@ class CryptoTrading:
         self.strategies_db = CRYPTO_PATH / "strategies.json"
         self._ensure_directories()
         self._load_trading_data()
-        
+        self._load_hft_backlog()
+    
     def _ensure_directories(self):
         """Ensure data directories exist."""
         CRYPTO_PATH.mkdir(parents=True, exist_ok=True)
@@ -42,6 +49,13 @@ class CryptoTrading:
                 "performance_metrics": {},
                 "exchanges": []
             }
+    
+    def _load_hft_backlog(self):
+        if HFT_BACKLOG_PATH.exists():
+            with open(HFT_BACKLOG_PATH, "r", encoding="utf-8") as handle:
+                self.hft_backlog = json.load(handle)
+        else:
+            self.hft_backlog = []
         
         if self.strategies_db.exists():
             with open(self.strategies_db, "r") as f:
@@ -381,6 +395,129 @@ Is the overall sentiment bullish, bearish, or neutral? Provide brief reasoning."
         self._log_trading("knowledge_base_created", {"categories": len(knowledge_base["categories"])})
         
         return knowledge_base
+
+    # === HFT sandbox helpers ===
+
+    def _save_hft_backlog(self) -> None:
+        HFT_BACKLOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(HFT_BACKLOG_PATH, "w", encoding="utf-8") as handle:
+            json.dump(self.hft_backlog, handle, indent=2)
+
+    def _record_hft_history(self, result: Dict[str, Any]) -> None:
+        HFT_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(HFT_HISTORY_PATH, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(result) + "\n")
+
+    def enqueue_hft_strategy(self, strategy: Dict[str, Any]) -> None:
+        uid = f"{strategy.get('chain', 'chain')}-{strategy.get('pair', 'pair')}-{int(time.time())}"
+        strategy.setdefault("id", uid)
+        strategy.setdefault("created_at", datetime.now().isoformat())
+        self.hft_backlog.append(strategy)
+        self._save_hft_backlog()
+
+    def seed_low_cap_backlog(self, max_new: int = 5) -> List[Dict[str, Any]]:
+        added: List[Dict[str, Any]] = []
+        existing_pairs = {item.get("pair") for item in self.hft_backlog}
+        for chain in LOW_FEE_CHAINS:
+            if len(added) >= max_new:
+                break
+            pair = random.choice(DEFAULT_PAIRS)
+            if pair in existing_pairs:
+                continue
+            strategy = {
+                "chain": chain,
+                "pair": pair,
+                "entry_capital": random.choice([100, 250, 500]),
+                "latency_target_ms": random.choice([50, 80, 120]),
+                "liquidity_source": random.choice(["Jupiter", "Orca", "Phoenix", "Raydium"]),
+                "objective": random.choice(["scalp", "arbitrage", "market-making"]),
+            }
+            self.enqueue_hft_strategy(strategy)
+            added.append(strategy)
+        return added
+
+    def _pop_next_hft_strategy(self) -> Optional[Dict[str, Any]]:
+        if not self.hft_backlog:
+            return None
+        strategy = self.hft_backlog.pop(0)
+        self._save_hft_backlog()
+        return strategy
+
+    def _simulate_price_series(
+        self, ticks: int = 400, base_price: float = 1.0, volatility: float = 0.015
+    ) -> List[float]:
+        prices = [base_price]
+        for i in range(1, ticks):
+            noise = random.gauss(0, volatility)
+            drift = math.sin(i / 25.0) * volatility * 0.5
+            prices.append(max(0.0001, prices[-1] * (1 + noise + drift)))
+        return prices
+
+    def run_hft_simulation(
+        self,
+        strategy: Dict[str, Any],
+        capital: float = 200.0,
+        ticks: int = 400,
+    ) -> Dict[str, Any]:
+        random.seed(hash(strategy.get("pair", "") + strategy.get("chain", "")))
+        prices = self._simulate_price_series(ticks=ticks, base_price=random.uniform(0.5, 2.0))
+        pnl = 0.0
+        trades = 0
+        wins = 0
+        latency_ms = strategy.get("latency_target_ms", 80)
+        for i in range(1, len(prices)):
+            if i % 10 != 0:
+                continue
+            delta = prices[i] - prices[i - 1]
+            edge = (0.003 - latency_ms / 10000)
+            trades += 1
+            if delta > edge:
+                pnl += delta * capital * 0.1
+                wins += 1
+            else:
+                pnl -= abs(delta) * capital * 0.05
+        win_rate = wins / trades if trades else 0
+        roi = pnl / capital if capital else 0
+        result = {
+            "strategy": strategy,
+            "pnl": round(pnl, 2),
+            "roi": round(roi, 4),
+            "trades": trades,
+            "win_rate": round(win_rate, 3),
+            "simulated_at": datetime.now().isoformat(),
+        }
+        self._record_hft_history(result)
+        return result
+
+    def run_hft_sandbox_cycle(self) -> Optional[Dict[str, Any]]:
+        if not self.hft_backlog:
+            self.seed_low_cap_backlog(max_new=3)
+        strategy = self._pop_next_hft_strategy()
+        if not strategy:
+            return None
+        result = self.run_hft_simulation(strategy, capital=strategy.get("entry_capital", 200))
+        summary_note = (
+            f"# HFT Sandbox Simulation\n\n"
+            f"- Chain: {strategy['chain']}\n"
+            f"- Pair: {strategy['pair']}\n"
+            f"- Objective: {strategy['objective']}\n"
+            f"- Liquidity Source: {strategy['liquidity_source']}\n"
+            f"- Trades: {result['trades']} | Win rate: {result['win_rate']}\n"
+            f"- PnL: {result['pnl']} ({result['roi']*100:.2f}% of capital)\n"
+        )
+        notes_manager.save_note(
+            topic="hft_sandbox",
+            content=summary_note,
+            fmt="md",
+            tags=["crypto", "hft", "simulation"],
+            source="crypto_trading.run_hft_sandbox_cycle",
+            metadata={"strategy_id": strategy.get("id")},
+        )
+        self._log_trading(
+            "hft_simulation",
+            {"strategy": strategy, "pnl": result["pnl"], "roi": result["roi"], "trades": result["trades"]},
+        )
+        return result
     
     def run_trading_research_cycle(self) -> Dict[str, Any]:
         """Run complete trading research cycle."""

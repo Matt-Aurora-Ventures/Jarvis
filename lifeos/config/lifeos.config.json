@@ -52,6 +52,8 @@
     "mode": "wake-word",
     "fallback_mode": "push-to-talk",
     "engine": "openwakeword",
+    "piper_model": "en-us-lessac-medium.onnx",
+    "piper_model_path": "/Users/burritoaccount/Desktop/LifeOS/data/voices/en-us-lessac-medium.onnx",
     "wake_word": "jarvis",
     "wake_word_threshold": 0.6,
     "frame_length": 1280,
@@ -77,7 +79,7 @@
       "priority": 1
     },
     "gemini": {
-      "enabled": true,
+      "enabled": false,
       "model": "gemini-2.5-flash",
       "free_tier": true,
       "priority": 2

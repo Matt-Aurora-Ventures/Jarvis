@@ -7,16 +7,34 @@ import subprocess
 import time
 from typing import Any, Dict, Optional, Tuple
 
-from core import computer, guardian, notes_manager
+from core import computer, guardian, config, state, notes_manager
+
+
+def _ui_allowed(action: str) -> bool:
+    cfg = config.load_config()
+    allow_cfg = bool(cfg.get("actions", {}).get("allow_ui", True))
+    state_flag = state.read_state().get("ui_actions_enabled")
+    return allow_cfg and (state_flag is not False)
+
+
+def _ui_blocked_msg(action: str) -> Tuple[bool, str]:
+    return False, (
+        f"UI actions are disabled while autonomy tasks run (blocked: {action}). "
+        "Set actions.allow_ui=true and ui_actions_enabled=true to override."
+    )
 
 
 def open_mail_app() -> Tuple[bool, str]:
     """Open the default mail application."""
+    if not _ui_allowed("open_mail_app"):
+        return _ui_blocked_msg("open_mail_app")
     return computer.open_app("Mail")
 
 
 def compose_email(to: str = "", subject: str = "", body: str = "") -> Tuple[bool, str]:
     """Open a new email composition window with pre-filled fields."""
+    if not _ui_allowed("compose_email"):
+        return _ui_blocked_msg("compose_email")
     script = f'''
     tell application "Mail"
         activate
@@ -35,6 +53,8 @@ def compose_email(to: str = "", subject: str = "", body: str = "") -> Tuple[bool
 
 def send_email_via_mailto(to: str, subject: str = "", body: str = "") -> Tuple[bool, str]:
     """Open email via mailto: URL (works with any mail client)."""
+    if not _ui_allowed("send_email"):
+        return _ui_blocked_msg("send_email")
     import urllib.parse
     params = urllib.parse.urlencode({"subject": subject, "body": body})
     url = f"mailto:{to}?{params}"
@@ -43,6 +63,8 @@ def send_email_via_mailto(to: str, subject: str = "", body: str = "") -> Tuple[b
 
 def open_browser(url: str = "") -> Tuple[bool, str]:
     """Open default browser, optionally to a URL."""
+    if not _ui_allowed("open_browser"):
+        return _ui_blocked_msg("open_browser")
     if url:
         return computer.open_url(url)
     return computer.open_app("Safari")
@@ -50,6 +72,8 @@ def open_browser(url: str = "") -> Tuple[bool, str]:
 
 def google_search(query: str) -> Tuple[bool, str]:
     """Perform a Google search."""
+    if not _ui_allowed("google_search"):
+        return _ui_blocked_msg("google_search")
     import urllib.parse
     url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
     return computer.open_url(url)
@@ -57,6 +81,8 @@ def google_search(query: str) -> Tuple[bool, str]:
 
 def open_finder(path: str = "~") -> Tuple[bool, str]:
     """Open Finder to a specific path."""
+    if not _ui_allowed("open_finder"):
+        return _ui_blocked_msg("open_finder")
     import os
     expanded = os.path.expanduser(path)
     return computer.open_file(expanded)
@@ -64,11 +90,15 @@ def open_finder(path: str = "~") -> Tuple[bool, str]:
 
 def open_terminal() -> Tuple[bool, str]:
     """Open Terminal app."""
+    if not _ui_allowed("open_terminal"):
+        return _ui_blocked_msg("open_terminal")
     return computer.open_app("Terminal")
 
 
 def open_notes(topic: str = "") -> Tuple[bool, str]:
     """Open local note folder for a topic."""
+    if not _ui_allowed("open_notes"):
+        return _ui_blocked_msg("open_notes")
     dest = notes_manager.topic_dir(topic or None)
     dest.mkdir(parents=True, exist_ok=True)
     success, output = computer.open_file(str(dest))
@@ -107,11 +137,15 @@ def create_note(title: str, body: str, topic: str = "") -> Tuple[bool, str]:
 
 def open_calendar() -> Tuple[bool, str]:
     """Open Calendar app."""
+    if not _ui_allowed("open_calendar"):
+        return _ui_blocked_msg("open_calendar")
     return computer.open_app("Calendar")
 
 
 def create_calendar_event(title: str, date: str, time_str: str = "09:00", duration_hours: int = 1) -> Tuple[bool, str]:
     """Create a calendar event."""
+    if not _ui_allowed("create_calendar_event"):
+        return _ui_blocked_msg("create_calendar_event")
     script = f'''
     tell application "Calendar"
         activate
@@ -127,11 +161,15 @@ def create_calendar_event(title: str, date: str, time_str: str = "09:00", durati
 
 def open_messages() -> Tuple[bool, str]:
     """Open Messages app."""
+    if not _ui_allowed("open_messages"):
+        return _ui_blocked_msg("open_messages")
     return computer.open_app("Messages")
 
 
 def send_imessage(to: str, message: str) -> Tuple[bool, str]:
     """Send an iMessage."""
+    if not _ui_allowed("send_imessage"):
+        return _ui_blocked_msg("send_imessage")
     script = f'''
     tell application "Messages"
         set targetService to 1st account whose service type = iMessage
@@ -144,6 +182,8 @@ def send_imessage(to: str, message: str) -> Tuple[bool, str]:
 
 def set_reminder(title: str, due_date: str = "") -> Tuple[bool, str]:
     """Create a reminder."""
+    if not _ui_allowed("set_reminder"):
+        return _ui_blocked_msg("set_reminder")
     if due_date:
         script = f'''
         tell application "Reminders"
