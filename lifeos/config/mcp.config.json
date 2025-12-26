@@ -1,0 +1,126 @@
+{
+  "log_dir": "lifeos/logs/mcp",
+  "servers": [
+    {
+      "name": "filesystem",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/burritoaccount/Desktop/LifeOS",
+        "/Users/burritoaccount/Documents/Jarvis context"
+      ],
+      "env": {}
+    },
+    {
+      "name": "memory",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "env": {
+        "MEMORY_FILE_PATH": "/Users/burritoaccount/Documents/Jarvis context/memory/jarvis-memory.jsonl"
+      }
+    },
+    {
+      "name": "obsidian-memory",
+      "enabled": true,
+      "autostart": true,
+      "command": "node",
+      "args": [
+        "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/obsidian-memory-mcp/dist/index.js"
+      ],
+      "env": {
+        "MEMORY_DIR": "/Users/burritoaccount/Documents/Obsidian/LifeOSVault"
+      }
+    },
+    {
+      "name": "mcp-obsidian",
+      "enabled": true,
+      "autostart": true,
+      "command": "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/mcp-obsidian/.venv/bin/python",
+      "args": [
+        "-m",
+        "mcp_obsidian.server"
+      ],
+      "env": {
+        "OBSIDIAN_API_KEY": "SET_OBSIDIAN_API_KEY",
+        "OBSIDIAN_HOST": "127.0.0.1",
+        "OBSIDIAN_PORT": "27124",
+        "OBSIDIAN_VAULT_PATH": "/Users/burritoaccount/Documents/Obsidian/LifeOSVault"
+      }
+    },
+    {
+      "name": "sqlite",
+      "enabled": true,
+      "autostart": true,
+      "command": "node",
+      "args": [
+        "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/sqlite-src/dist/sqlite/index.js",
+        "--db-path",
+        "/Users/burritoaccount/Documents/Jarvis context/data/sqlite/lifeos.db"
+      ],
+      "env": {}
+    },
+    {
+      "name": "system-monitor",
+      "enabled": true,
+      "autostart": true,
+      "command": "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/mcp-monitor/bin/mcp-monitor",
+      "args": [],
+      "env": {}
+    },
+    {
+      "name": "shell",
+      "enabled": true,
+      "autostart": true,
+      "command": "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/mcp-shell/node_modules/.bin/mcp-shell-server",
+      "args": [],
+      "env": {
+        "MCP_ALLOWED_ROOT": "/Users/burritoaccount/Desktop/LifeOS",
+        "MCP_LOG_DIR": "/Users/burritoaccount/Documents/Jarvis context/logs/mcp-shell"
+      }
+    },
+    {
+      "name": "puppeteer",
+      "enabled": true,
+      "autostart": true,
+      "command": "node",
+      "args": [
+        "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/puppeteer/src/dist/index.js"
+      ],
+      "env": {
+        "PUPPETEER_DATA_DIR": "/Users/burritoaccount/Documents/Jarvis context/browser-data"
+      }
+    },
+    {
+      "name": "sequential-thinking",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "env": {}
+    },
+    {
+      "name": "git",
+      "enabled": true,
+      "autostart": true,
+      "command": "/Users/burritoaccount/Documents/Jarvis context/venvs/mcp-git/bin/python",
+      "args": [
+        "-m",
+        "mcp_server_git",
+        "--repository",
+        "/Users/burritoaccount/Desktop/LifeOS"
+      ],
+      "env": {}
+    }
+  ]
+}

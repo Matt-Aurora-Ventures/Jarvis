@@ -65,6 +65,17 @@
 - **Error analysis** — Learns from failures and fixes itself
 - **Continuous iteration** — Gets smarter every day
 
+### 🧩 MCP Autonomy Stack
+- **Filesystem + Git MCP** — Safe read/write access to `LifeOS` and Jarvis context with enforced branch discipline.
+- **Dual Memory Layer** — JSONL knowledge graph (`server-memory`) plus Obsidian-native graph (`obsidian-memory`) stored in `/Users/burritoaccount/Documents/Obsidian/LifeOSVault`.
+- **Knowledge Connectors** — Obsidian REST MCP enables Jarvis to search, edit, and append to vault notes with API-key protection.
+- **Systems Insight** — `mcp-monitor` streams CPU/GPU/RAM/network metrics for optimization cycles.
+- **Persistent Reasoning** — SQLite MCP hosts long-term structured data and queryable memories.
+- **Action Surface** — Shell MCP (sandboxed to LifeOS) and Puppeteer MCP (browser automation) give Jarvis “hands” for executing plans.
+- **Sequential Thinking MCP** — Provides scratchpad-style reasoning traces to enforce decomposition before acting.
+
+> The entire MCP stack is declared in `lifeos/config/mcp.config.json`, autostarted by `core/mcp_loader.py`, and mirrored in Windsurf’s `~/.codeium/windsurf/mcp_config.json` for editor parity.
+
 ### 🌙 Idle Missions (Auto-Research)
 - **MoonDev Watcher** — Tracks official MoonDevOnYT X feed for new HFT drops
 - **AlgoTradeCamp Digest** — Snapshots algotradecamp.com for lessons and tactics
@@ -132,6 +143,16 @@ Edit `lifeos/config/lifeos.config.json`:
   }
 }
 ```
+
+### 🧠 System Instructions
+
+Jarvis follows the memory-first/decomposition/git-safety workflow defined in [`lifeos/config/system_instructions.md`](lifeos/config/system_instructions.md):
+
+1. Query memory MCP servers before asking the user.
+2. Break work into steps, logging reasoning and verification.
+3. Create/switch feature branches before editing tracked files.
+4. Limit filesystem actions to approved LifeOS/Jarvis-context paths and prefer MCP tooling.
+5. Record discoveries, blockers, and fixes back into memory for future runs.
 
 ## 💰 Cost
 

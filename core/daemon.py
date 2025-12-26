@@ -18,6 +18,7 @@ from core import (
     reporting,
     state,
     voice,
+    mcp_loader,
 )
 
 
@@ -77,6 +78,7 @@ def run() -> None:
 
     voice_manager = voice.VoiceManager()
     hotkey_manager = hotkeys.HotkeyManager(voice.start_chat_session)
+    mcp_manager = None
 
     passive_cfg = config.get("passive", {})
     log_interval = int(passive_cfg.get("log_interval_seconds", 60))
@@ -105,6 +107,13 @@ def run() -> None:
         updated_at=_timestamp(),
     )
     _log_message(log_path, "LifeOS daemon started.")
+
+    # Start MCP servers
+    try:
+        mcp_manager = mcp_loader.start_mcp_servers()
+        _log_message(log_path, "MCP servers started.")
+    except Exception as e:
+        _log_message(log_path, f"MCP loader warning: {str(e)[:100]}")
 
     # Run Jarvis boot sequence
     try:
@@ -203,6 +212,13 @@ def run() -> None:
 
     hotkey_manager.stop()
     hotkey_manager.join(timeout=2)
+
+    if mcp_manager:
+        try:
+            mcp_loader.stop_mcp_servers()
+            _log_message(log_path, "MCP servers stopped.")
+        except Exception as e:
+            _log_message(log_path, f"MCP shutdown warning: {str(e)[:100]}")
 
     state.update_state(running=False, passive_enabled=False, updated_at=_timestamp())
     state.clear_pid()

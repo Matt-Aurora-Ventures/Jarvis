@@ -2,6 +2,22 @@
 
 All notable changes to Jarvis (LifeOS) will be documented in this file.
 
+# [0.7.0] - 2025-12-26
+
+### 🧩 MCP Autonomy Stack
+- Added a dedicated MCP configuration (`lifeos/config/mcp.config.json`) declared in priority order, covering filesystem, dual memory layers, Obsidian REST, SQLite, system monitor, shell, Puppeteer, sequential thinking, and git servers.
+- Mirrored the same stack inside Windsurf’s `~/.codeium/windsurf/mcp_config.json` so the editor and LifeOS share the exact capabilities and storage paths.
+
+### ⚙️ MCP Process Loader
+- Introduced `core/mcp_loader.py`, a process supervisor that reads the MCP config, launches enabled servers with per-tool log files, and shuts them down cleanly.
+- Wired the loader into `core/daemon.py` so MCP services start before the Jarvis boot sequence and are automatically stopped during shutdown.
+
+### 🧠 System Instructions
+- Authored `lifeos/config/system_instructions.md`, enforcing memory-first queries, structured decomposition, git safety rules, filesystem boundaries, and tool usage guidelines for Jarvis.
+
+### ✅ Testing
+- Verified the loader by launching every autostart server (filesystem, memory, obsidian-memory, mcp-obsidian, sqlite, system-monitor, shell, puppeteer, sequential-thinking, git) and confirmed clean shutdown.
+
 ## [0.6.0] - 2025-12-25
 
 ### 🚀 Major Features
