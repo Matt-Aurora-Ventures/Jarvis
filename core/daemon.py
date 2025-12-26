@@ -6,8 +6,19 @@ import time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from core import config as config_module
-from core import guardian, hotkeys, interview, jarvis, observer, passive, reporting, state, voice
+from core import (
+    config as config_module,
+    guardian,
+    hotkeys,
+    interview,
+    jarvis,
+    missions,
+    observer,
+    passive,
+    reporting,
+    state,
+    voice,
+)
 
 
 def _timestamp() -> str:
@@ -135,6 +146,16 @@ def run() -> None:
         deep_observer = observer.start_observer()
         _log_message(log_path, "Deep observer started (logging all activity).")
 
+    mission_cfg = config.get("missions", {})
+    mission_poll = int(mission_cfg.get("poll_seconds", 120))
+    mission_scheduler = None
+    if mission_cfg.get("enabled", True):
+        try:
+            mission_scheduler = missions.start_scheduler(poll_seconds=mission_poll)
+            _log_message(log_path, "Mission scheduler started.")
+        except Exception as e:
+            _log_message(log_path, f"Mission scheduler warning: {str(e)[:120]}")
+
     while running:
         cfg = config_module.load_config()
         tz_name = str(cfg.get("timezone", "UTC"))
@@ -173,6 +194,9 @@ def run() -> None:
     passive_observer.stop()
     if passive_observer.is_alive():
         passive_observer.join(timeout=2)
+
+    if mission_scheduler:
+        missions.stop_scheduler()
 
     voice_manager.stop()
     voice_manager.join(timeout=2)

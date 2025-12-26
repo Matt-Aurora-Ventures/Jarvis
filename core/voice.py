@@ -1,4 +1,7 @@
+import gzip
+import io
 import os
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -8,7 +11,27 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from core import config, conversation, evolution, memory, observation, providers, secrets, skill_manager, state, system_profiler
+import requests
+
+from core import (
+    config,
+    conversation,
+    evolution,
+    memory,
+    notes_manager,
+    observation,
+    providers,
+    secrets,
+    skill_manager,
+    state,
+    system_profiler,
+)
+
+VOICES_DIR = Path(__file__).resolve().parents[1] / "data" / "voices"
+DEFAULT_PIPER_MODEL = "en_US-amy-low.onnx"
+DEFAULT_PIPER_URL = (
+    "https://github.com/rhasspy/piper/releases/download/v0.0.2/en_US-amy-low.onnx.gz"
+)
 
 
 @dataclass
@@ -38,84 +61,136 @@ def _wake_word_model_name(wake_word: str) -> str:
     return "hey_jarvis"
 
 
-def _speak(text: str) -> None:
+def _voice_cfg() -> dict:
     cfg = _load_config()
-    if not cfg.get("voice", {}).get("speak_responses", False):
-        return
+    return cfg.get("voice", {})
 
-    # Try OpenAI TTS first
-    openai_key = secrets.get_openai_key()
-    if openai_key:
-        try:
-            import subprocess
-            model_path = cfg.get("voice", {}).get("piper_model", "")
-            if model_path and Path(model_path).exists():
-                subprocess.run(
-                    ["piper", "--model", model_path, "--output_file", "/tmp/tts.wav"],
-                    input=text.encode(),
-                    check=True,
-                )
-                subprocess.run(["afplay", "/tmp/tts.wav"], check=True)
-                return
-        except Exception:
-            pass
 
-    # Fallback to macOS 'say' with proper voice testing
-    voice_name = str(cfg.get("voice", {}).get("speech_voice", "")).strip()
-    
-    # Check for Morgan Freeman voice preference
-    if voice_name.lower() == "morgan freeman":
-        voice_name = "Reed (English (US))"  # Reed US is closest to Morgan Freeman's deep voice
-    
+def _ensure_piper_model(voice_cfg: dict) -> Optional[Path]:
+    model_path_value = voice_cfg.get("piper_model_path")
+    if model_path_value:
+        model_path = Path(model_path_value).expanduser()
+    else:
+        model_name = voice_cfg.get("piper_model", DEFAULT_PIPER_MODEL)
+        model_path = VOICES_DIR / model_name
+    if model_path.exists():
+        return model_path
+
+    download_url = voice_cfg.get("piper_download_url", DEFAULT_PIPER_URL)
+    model_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        def _test_voice(voice: str) -> bool:
-            """Test if voice exists by trying to say something short."""
-            result = subprocess.run(
-                ["say", "-v", voice, "test"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
+        response = requests.get(download_url, timeout=120)
+        response.raise_for_status()
+        data = response.content
+        if download_url.endswith(".gz"):
+            with gzip.GzipFile(fileobj=io.BytesIO(data)) as gz:
+                with open(model_path, "wb") as handle:
+                    shutil.copyfileobj(gz, handle)
+        else:
+            with open(model_path, "wb") as handle:
+                handle.write(data)
+    except Exception as exc:
+        print(f"Failed to download Piper model: {exc}")
+        return None
+    return model_path
+
+
+def _speak_with_piper(text: str, voice_cfg: dict) -> bool:
+    model_path = _ensure_piper_model(voice_cfg)
+    if not model_path:
+        return False
+    tmp_wav = Path(tempfile.mkstemp(suffix=".wav")[1])
+    cmd = [
+        "piper",
+        "--model",
+        str(model_path),
+        "--output_file",
+        str(tmp_wav),
+    ]
+    speaker = voice_cfg.get("piper_speaker")
+    if speaker:
+        cmd.extend(["--speaker", str(speaker)])
+    try:
+        subprocess.run(
+            cmd,
+            input=text.encode("utf-8"),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        subprocess.run(
+            ["afplay", str(tmp_wav)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        print(f"Piper TTS failed: {exc}")
+        return False
+    finally:
+        if tmp_wav.exists():
+            tmp_wav.unlink(missing_ok=True)
+
+
+def _speak_with_say(text: str, voice_cfg: dict) -> bool:
+    voice_name = str(voice_cfg.get("speech_voice", "")).strip()
+    if voice_name.lower() == "morgan freeman":
+        voice_name = "Reed (English (US))"
+
+    def _test_voice(name: str) -> bool:
+        result = subprocess.run(
+            ["say", "-v", name, "test"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        return result.returncode == 0 and "not found" not in result.stderr.lower()
+
+    def _run_say(name: str = "") -> bool:
+        cmd = ["say"]
+        if name:
+            cmd.extend(["-v", name])
+        if voice_name.lower() == "morgan freeman":
+            cmd.extend(["-r", "140"])
+        try:
+            subprocess.run(
+                cmd,
+                input=text,
                 text=True,
-                check=False
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
             )
-            return result.returncode == 0 and "not found" not in result.stderr.lower()
-        
-        def _speak_with_voice(selected_voice: str = "") -> bool:
-            """Speak text with specified voice, return True if successful."""
-            cmd = ["say"]
-            if selected_voice:
-                cmd.extend(["-v", selected_voice])
-            
-            # Add rate adjustment for deeper voice
-            if voice_name.lower() == "morgan freeman":
-                cmd.extend(["-r", "140"])  # Slower rate for deeper effect
-            
-            try:
-                subprocess.run(
-                    cmd,
-                    input=text,
-                    text=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=True
-                )
+            return True
+        except subprocess.CalledProcessError:
+            return False
+
+    try:
+        if voice_name and _test_voice(voice_name):
+            if _run_say(voice_name):
                 return True
-            except subprocess.CalledProcessError:
-                return False
-        
-        # Try specified voice first
-        if voice_name:
-            if _test_voice(voice_name):
-                if _speak_with_voice(voice_name):
-                    return
-            else:
-                print(f"Voice '{voice_name}' not found, using default")
-        
-        # Fallback to default voice
-        _speak_with_voice()
-        
-    except Exception as e:
-        print(f"Speech synthesis failed: {e}")
+        return _run_say()
+    except Exception as exc:
+        print(f"macOS say failed: {exc}")
+        return False
+
+
+def _speak(text: str) -> None:
+    voice_cfg = _voice_cfg()
+    if not voice_cfg.get("speak_responses", False):
         return
+
+    engine = str(voice_cfg.get("tts_engine", "piper")).lower()
+    if engine == "piper":
+        if _speak_with_piper(text, voice_cfg):
+            return
+    else:
+        # If a different engine is specified but not implemented yet, fall through to say.
+        pass
+
+    _speak_with_say(text, voice_cfg)
 
 
 def _transcribe_once(timeout: int, phrase_time_limit: int) -> str:
@@ -278,8 +353,29 @@ def handle_command(command: VoiceCommand) -> str:
             return "Plain English:\n- What I did: Could not log because I did not hear the note.\n- Why I did it: Logging requires text.\n- What happens next: Say 'log' followed by your note.\n- What I need from you: Your note text.\n\nTechnical Notes:\n- Modules/files involved: core/voice.py\n- Key concepts/terms: Speech recognition\n- Commands executed (or would execute in dry-run): None\n- Risks/constraints: No changes made.\n"
         if not _confirm_apply():
             return "Plain English:\n- What I did: Canceled log because APPLY was not confirmed.\n- Why I did it: Safety gate.\n- What happens next: Say 'log ...' again and confirm APPLY.\n- What I need from you: Say APPLY.\n\nTechnical Notes:\n- Modules/files involved: core/memory.py\n- Key concepts/terms: Apply confirmation\n- Commands executed (or would execute in dry-run): None\n- Risks/constraints: No changes made.\n"
+        topic, body = notes_manager.extract_topic_and_body(command.payload)
+        note_path, summary_path, _ = notes_manager.save_note(
+            topic=topic,
+            content=f"# {topic.title()}\n\n{body}",
+            fmt="md",
+            tags=["voice", "log"],
+            source="voice.log",
+            metadata={"command": "voice.log"},
+        )
         memory.append_entry(command.payload, "voice_log", safety_context(apply=True))
-        return "Plain English:\n- What I did: Saved your note to memory.\n- Why I did it: You asked to log a note.\n- What happens next: Say 'summarize' to route notes.\n- What I need from you: Nothing.\n\nTechnical Notes:\n- Modules/files involved: core/memory.py\n- Key concepts/terms: JSONL memory buffer\n- Commands executed (or would execute in dry-run): Append entry\n- Risks/constraints: None.\n"
+        return (
+            "Plain English:\n"
+            "- What I did: Saved your note to memory and wrote a local file.\n"
+            "- Why I did it: You asked to log a note.\n"
+            "- What happens next: Say 'summarize' to route notes or open the saved file.\n"
+            "- What I need from you: Nothing.\n\n"
+            "Technical Notes:\n"
+            "- Modules/files involved: core/memory.py, core/notes_manager.py\n"
+            "- Key concepts/terms: JSONL memory buffer, local note store\n"
+            "- Commands executed (or would execute in dry-run): Append entry; write note "
+            f"({note_path}) and summary ({summary_path})\n"
+            "- Risks/constraints: None.\n"
+        )
 
     if command.action == "evolve":
         if not _confirm_apply():

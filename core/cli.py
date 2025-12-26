@@ -26,6 +26,7 @@ from core import (
     secrets,
     state,
     voice,
+    notes_manager,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -567,22 +568,34 @@ def cmd_capture(args: argparse.Namespace) -> None:
         _render(plain, technical)
         return
 
+    topic, body = notes_manager.extract_topic_and_body(text)
+    note_path, summary_path, _ = notes_manager.save_note(
+        topic=topic,
+        content=f"# {topic.title()}\n\n{body}",
+        fmt="md",
+        tags=["cli", "capture"],
+        source="cli.capture",
+        metadata={"command": "lifeos capture"},
+    )
     recent, overflow = memory.append_entry(text, "cli_capture", context)
     plain = {
-        "What I did": "Captured your note into the memory buffer.",
+        "What I did": "Captured your note into the memory buffer and saved it locally.",
         "Why I did it": "You asked to save a note interactively.",
-        "What happens next": "Use `lifeos summarize` to route notes.",
+        "What happens next": "Use `lifeos summarize` to route notes or open the saved file.",
         "What I need from you": "Nothing right now.",
     }
     technical = {
-        "Modules/files involved": "core/memory.py",
-        "Key concepts/terms": "JSONL memory buffer",
-        "Commands executed (or would execute in dry-run)": "Append to lifeos/memory/recent.jsonl",
+        "Modules/files involved": "core/memory.py, core/notes_manager.py",
+        "Key concepts/terms": "JSONL memory buffer, local note store",
+        "Commands executed (or would execute in dry-run)": (
+            "Append to lifeos/memory/recent.jsonl; write markdown under data/notes/"
+        ),
         "Risks/constraints": "Write already confirmed.",
     }
     _render(plain, technical)
     print("")
     print(f"Recent count: {len(recent)}; overflow queued: {len(overflow)}.")
+    print(f"Saved note: {note_path}\nSummary: {summary_path}")
 
 
 def cmd_summarize(args: argparse.Namespace) -> None:

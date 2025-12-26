@@ -1,6 +1,16 @@
 from typing import Dict, List, Optional
 
-from core import actions, config, context_loader, guardian, jarvis, memory, passive, providers
+from core import (
+    actions,
+    config,
+    context_loader,
+    guardian,
+    jarvis,
+    memory,
+    passive,
+    providers,
+    prompt_library,
+)
 
 
 def _truncate(text: str, limit: int = 800) -> str:
@@ -27,6 +37,27 @@ def _format_history(entries: List[Dict[str, str]]) -> str:
         if text:
             lines.append(f"{role}: {text}")
     return "\n".join(lines).strip()
+
+
+def _support_prompts(user_text: str) -> tuple[str, list[str]]:
+    """Select prompt library snippets relevant to the current input."""
+    lowered = user_text.lower()
+    tags = ["conversation"]
+    if any(word in lowered for word in ("crypto", "trading", "defi", "solana", "base", "bnb")):
+        tags.append("crypto")
+    if any(word in lowered for word in ("research", "dig", "analyze", "learn")):
+        tags.append("research")
+    if any(word in lowered for word in ("social", "linkedin", "linktree", "profile", "audience")):
+        tags.append("social")
+    prompts = prompt_library.get_support_prompts(tags, limit=3)
+    if not prompts:
+        return "", []
+    inspirations = []
+    ids = []
+    for prompt in prompts:
+        inspirations.append(f"{prompt.title}: {prompt.body}")
+        ids.append(prompt.id)
+    return "\n".join(inspirations), ids
 
 
 def _fallback_response(user_text: str) -> str:
@@ -106,13 +137,19 @@ def generate_response(
     if activity_summary and "No recent activity" not in activity_summary:
         prompt += f"Recent Activity:\n{activity_summary}\n\n"
 
+    inspirations_text, inspiration_ids = _support_prompts(user_text)
+    if inspirations_text:
+        prompt += f"Prompt inspirations:\n{inspirations_text}\n\n"
+
     prompt += f"User says: {user_text}\n"
 
     text = providers.generate_text(prompt, max_output_tokens=500)
     if text:
         # Parse and execute any actions in the response
         result = _execute_actions_in_response(text)
+        prompt_library.record_usage(inspiration_ids, success=True)
         return result.strip() + "\n"
+    prompt_library.record_usage(inspiration_ids, success=False)
     return _fallback_response(user_text)
 
 

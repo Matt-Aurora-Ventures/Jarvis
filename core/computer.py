@@ -157,7 +157,7 @@ def open_file(path: str) -> Tuple[bool, str]:
     
     try:
         subprocess.run(["open", path], check=True, timeout=5)
-        return True, f"Opened {path}"
+        return True, f"Opened file {path}"
     except Exception as e:
         return False, str(e)
 

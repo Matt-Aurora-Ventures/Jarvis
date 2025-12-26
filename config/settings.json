@@ -1,0 +1,41 @@
+{
+  "voice": {
+    "speech_voice": "Daniel",
+    "speak_responses": true,
+    "wake_word": "jarvis",
+    "wake_word_sensitivity": 0.5,
+    "wake_word_timeout": 3,
+    "speech_rate": 180,
+    "speech_pitch": 0.8,
+    "volume": 1.0
+  },
+  "assistant": {
+    "name": "Jarvis",
+    "personality": "helpful, intelligent, and slightly witty",
+    "max_response_length": 1000,
+    "enable_learning": true
+  },
+  "audio": {
+    "energy_threshold": 300,
+    "pause_threshold": 0.8,
+    "dynamic_energy_threshold": true,
+    "ambient_noise_duration": 1.0,
+    "timeout": 5,
+    "phrase_time_limit": 10
+  },
+  "features": {
+    "voice_commands": true,
+    "wake_word": true,
+    "speech_recognition": true,
+    "text_to_speech": true,
+    "conversation_history": true,
+    "context_awareness": true
+  },
+  "advanced": {
+    "debug_mode": false,
+    "log_level": "INFO",
+    "auto_update": true,
+    "backup_settings": true,
+    "privacy_mode": false
+  }
+}

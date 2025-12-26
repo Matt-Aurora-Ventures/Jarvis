@@ -16,6 +16,8 @@ CONTEXT_PATH = ROOT / "data" / "context"
 MASTER_CONTEXT_FILE = CONTEXT_PATH / "master_context.json"
 ACTIVITY_CONTEXT_FILE = CONTEXT_PATH / "activity_context.json"
 CONVERSATION_CONTEXT_FILE = CONTEXT_PATH / "conversation_context.json"
+CONTEXT_DOCS_PATH = ROOT / "data" / "context_docs"
+DOC_INDEX_FILE = CONTEXT_DOCS_PATH / "index.json"
 
 
 @dataclass
@@ -53,8 +55,24 @@ class ConversationContext:
     session_start: float = 0.0
 
 
+@dataclass
+class ContextDocument:
+    """Structured context document metadata."""
+    doc_id: str
+    title: str
+    source: str
+    category: str
+    summary: str
+    path: str
+    created_at: float
+    tags: List[str] = field(default_factory=list)
+    monetization_angle: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
 def _ensure_paths():
     CONTEXT_PATH.mkdir(parents=True, exist_ok=True)
+    CONTEXT_DOCS_PATH.mkdir(parents=True, exist_ok=True)
 
 
 def load_master_context() -> MasterContext:
@@ -282,5 +300,97 @@ def _extract_topics(text: str) -> List[str]:
 
 def clear_session_context() -> None:
     """Clear session-specific context (keeps master context)."""
-    save_conversation_context(ConversationContext())
-    save_activity_context(ActivityContext())
+    ctx = ConversationContext()
+    save_conversation_context(ctx)
+
+
+# === Context document utilities ===
+
+def _load_doc_index() -> Dict[str, ContextDocument]:
+    _ensure_paths()
+    if not DOC_INDEX_FILE.exists():
+        return {}
+    try:
+        with open(DOC_INDEX_FILE, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return {}
+    docs: Dict[str, ContextDocument] = {}
+    for doc_id, payload in raw.items():
+        try:
+            docs[doc_id] = ContextDocument(**payload)
+        except TypeError:
+            continue
+    return docs
+
+
+def _save_doc_index(index: Dict[str, ContextDocument]) -> None:
+    _ensure_paths()
+    serializable = {doc_id: asdict(doc) for doc_id, doc in index.items()}
+    with open(DOC_INDEX_FILE, "w", encoding="utf-8") as handle:
+        json.dump(serializable, handle, indent=2)
+
+
+def add_context_document(
+    title: str,
+    source: str,
+    category: str,
+    summary: str,
+    content: str,
+    tags: Optional[List[str]] = None,
+    monetization_angle: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+) -> ContextDocument:
+    """Persist a rich context document and register its metadata."""
+    _ensure_paths()
+    safe_title = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip() or "context"
+    timestamp = datetime.now()
+    doc_id = f"{timestamp.strftime('%Y%m%d%H%M%S')}_{safe_title.replace(' ', '_')[:40]}"
+    file_name = f"{doc_id}.md"
+    file_path = CONTEXT_DOCS_PATH / file_name
+
+    body = [
+        f"# {title}",
+        "",
+        f"**Source:** {source}",
+        f"**Category:** {category}",
+        f"**Created:** {timestamp.isoformat()}",
+    ]
+    if monetization_angle:
+        body.append(f"**Monetization Angle:** {monetization_angle}")
+    if tags:
+        body.append(f"**Tags:** {', '.join(tags)}")
+    body.extend(["", "## Summary", "", summary.strip(), "", "## Details", "", content.strip(), ""])
+
+    file_path.write_text("\n".join(body), encoding="utf-8")
+
+    index = _load_doc_index()
+    doc = ContextDocument(
+        doc_id=doc_id,
+        title=title,
+        source=source,
+        category=category,
+        summary=summary,
+        path=str(file_path),
+        created_at=timestamp.timestamp(),
+        tags=tags or [],
+        monetization_angle=monetization_angle,
+        metadata=metadata or {},
+    )
+    index[doc_id] = doc
+    _save_doc_index(index)
+    return doc
+
+
+def list_context_documents(limit: int = 20, category: Optional[str] = None) -> List[ContextDocument]:
+    """Return recent context docs, optionally filtered by category."""
+    index = _load_doc_index()
+    docs = sorted(index.values(), key=lambda doc: doc.created_at, reverse=True)
+    if category:
+        docs = [doc for doc in docs if doc.category == category]
+    return docs[:limit]
+
+
+def get_context_document(doc_id: str) -> Optional[ContextDocument]:
+    """Fetch a single document metadata entry."""
+    return _load_doc_index().get(doc_id)

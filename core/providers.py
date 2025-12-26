@@ -7,7 +7,9 @@ import sys
 import time
 import urllib.request
 import warnings
-from typing import Optional
+from collections import deque
+from dataclasses import asdict, dataclass, field
+from typing import Any, Deque, Dict, List, Optional
 
 from core import config, secrets
 
@@ -78,15 +80,60 @@ def _extract_gemini_text(response) -> str:
     return ""
 
 
-_LAST_GEMINI_ERROR: Optional[str] = None
-_LAST_OLLAMA_ERROR: Optional[str] = None
+@dataclass
+class ProviderAttempt:
+    provider: str
+    provider_type: str
+    success: bool
+    error: str = ""
+    latency_ms: int = 0
+    timestamp: float = 0.0
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+_LAST_PROVIDER_ERRORS: Dict[str, str] = {"gemini": "", "ollama": "", "groq": "", "openai": ""}
+_ATTEMPT_HISTORY: Deque[ProviderAttempt] = deque(maxlen=25)
+
+
+def _record_attempt(attempt: ProviderAttempt, diagnostics: Optional[List[Dict[str, Any]]] = None) -> None:
+    _ATTEMPT_HISTORY.append(attempt)
+    if diagnostics is not None:
+        diagnostics.append(asdict(attempt))
+
+
+def _record_success_attempt(
+    provider: str,
+    provider_type: str,
+    start_ts: float,
+    metadata: Dict[str, Any],
+    diagnostics: Optional[List[Dict[str, Any]]],
+) -> None:
+    attempt = ProviderAttempt(
+        provider=provider,
+        provider_type=provider_type,
+        success=True,
+        error="",
+        latency_ms=int((time.time() - start_ts) * 1000),
+        timestamp=time.time(),
+        metadata=metadata,
+    )
+    _set_provider_error(provider_type, "")
+    _record_attempt(attempt, diagnostics)
+
+
+def last_generation_attempts(limit: int = 10) -> List[Dict[str, Any]]:
+    """Return recent provider attempts for debugging."""
+    recent = list(_ATTEMPT_HISTORY)[-limit:]
+    return [asdict(item) for item in recent]
+
+
+def _set_provider_error(provider_type: str, message: str) -> None:
+    provider_type = provider_type or "unknown"
+    _LAST_PROVIDER_ERRORS[provider_type] = message
 
 
 def last_provider_errors() -> dict:
-    return {
-        "gemini": _LAST_GEMINI_ERROR or "",
-        "ollama": _LAST_OLLAMA_ERROR or "",
-    }
+    return dict(_LAST_PROVIDER_ERRORS)
 
 
 def _gemini_client():
@@ -474,80 +521,119 @@ def get_ranked_providers(prefer_free: bool = True) -> list:
     return available
 
 
-def _try_provider(provider: dict, prompt: str, max_output_tokens: int, cfg: dict) -> Optional[str]:
+def _try_provider(
+    provider: dict,
+    prompt: str,
+    max_output_tokens: int,
+    cfg: dict,
+    diagnostics: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[str]:
     """Try a single provider and return result or None."""
     name = provider["name"]
     ptype = provider["provider"]
-    
+    start_ts = time.time()
+    metadata = {
+        "model": name,
+        "intelligence": provider.get("intelligence"),
+        "free": provider.get("free", False),
+        "notes": provider.get("notes", ""),
+    }
+    success_log: Optional[str] = None
+    text: Optional[str] = None
+    error_message = ""
+
     try:
         if ptype == "gemini-cli":
             text = _ask_gemini_cli(prompt, max_output_tokens)
             if text:
-                _log(f"✓ Using Gemini CLI (intelligence: {provider['intelligence']})")
-                return text
-            return None
-        
+                success_log = f"✓ Using Gemini CLI (intelligence: {provider['intelligence']})"
+
         elif ptype == "groq":
             text = _ask_groq(prompt, name, max_output_tokens)
             if text:
-                _log(f"✓ Using Groq {name} (intelligence: {provider['intelligence']}) - FAST")
-                return text
-            return None
-            
+                success_log = f"✓ Using Groq {name} (intelligence: {provider['intelligence']}) - FAST"
+
         elif ptype == "gemini":
             # Use specific model
             client = _gemini_client()
             if not client:
-                return None
-            model = client.GenerativeModel(name)
-            response = model.generate_content(
-                prompt,
-                generation_config={"max_output_tokens": max_output_tokens},
-                request_options={"timeout": 60},
-            )
-            text = _extract_gemini_text(response).strip()
-            if text:
-                _log(f"✓ Using {name} (intelligence: {provider['intelligence']})")
-                return text
-                
+                error_message = "Gemini client unavailable"
+            else:
+                model = client.GenerativeModel(name)
+                response = model.generate_content(
+                    prompt,
+                    generation_config={"max_output_tokens": max_output_tokens},
+                    request_options={"timeout": 60},
+                )
+                text = _extract_gemini_text(response).strip()
+                if text:
+                    success_log = f"✓ Using {name} (intelligence: {provider['intelligence']})"
+
         elif ptype == "ollama":
             base_url = _ollama_base_url(cfg)
-            text = _ollama_generate_raw(
-                base_url=base_url,
-                model=name,
-                prompt=prompt,
-                max_output_tokens=max_output_tokens,
-                timeout=120,
-            )
-            if text:
-                _log(f"✓ Using {name} locally (intelligence: {provider['intelligence']})")
-                return text
-                
+            if not base_url:
+                error_message = "Ollama base_url not configured"
+            else:
+                text = _ollama_generate_raw(
+                    base_url=base_url,
+                    model=name,
+                    prompt=prompt,
+                    max_output_tokens=max_output_tokens,
+                    timeout=120,
+                )
+                if text:
+                    success_log = f"✓ Using {name} locally (intelligence: {provider['intelligence']})"
+
         elif ptype == "openai":
             client = _openai_client()
             if not client:
-                return None
-            response = client.chat.completions.create(
-                model=name,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=max_output_tokens,
-            )
-            text = response.choices[0].message.content or ""
-            if text:
-                _log(f"✓ Using {name} (intelligence: {provider['intelligence']})")
-                return text
-                
+                error_message = "OpenAI client unavailable"
+            else:
+                response = client.chat.completions.create(
+                    model=name,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=max_output_tokens,
+                )
+                text = response.choices[0].message.content or ""
+                if text:
+                    success_log = f"✓ Using {name} (intelligence: {provider['intelligence']})"
+
     except Exception as e:
+        error_message = _safe_error_message(e)
         error_name = e.__class__.__name__
         if error_name in ("ResourceExhausted", "RateLimitError"):
-            _log(f"⚠ {name} rate limited, trying next...")
+            _log(f"⚠ {name} rate limited, trying next... ({error_message})")
         else:
-            _log(f"⚠ {name} failed: {error_name}")
-    
+            _log(f"⚠ {name} failed: {error_message}")
+    else:
+        if text:
+            if success_log:
+                _log(success_log)
+            _record_success_attempt(name, ptype, start_ts, metadata, diagnostics)
+            return text
+        if not error_message:
+            error_message = "Empty response"
+
+    attempt = ProviderAttempt(
+        provider=name,
+        provider_type=ptype,
+        success=False,
+        error=error_message,
+        latency_ms=int((time.time() - start_ts) * 1000),
+        timestamp=time.time(),
+        metadata=metadata,
+    )
+    _set_provider_error(ptype, error_message)
+    _record_attempt(attempt, diagnostics)
     return None
 
 
-def generate_text(prompt: str, max_output_tokens: int = 512, prefer_free: bool = True) -> Optional[str]:
+def generate_text(
+    prompt: str,
+    max_output_tokens: int = 512,
+    prefer_free: bool = True,
+    diagnostics: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[str]:
     """Generate text using the best available provider, ranked by intelligence.
     
     Priority order:
@@ -567,7 +653,13 @@ def generate_text(prompt: str, max_output_tokens: int = 512, prefer_free: bool =
     _log(f"Provider chain: {' → '.join(p['name'] for p in ranked[:4])}")
     
     for provider in ranked:
-        result = _try_provider(provider, prompt, max_output_tokens, cfg)
+        result = _try_provider(
+            provider,
+            prompt,
+            max_output_tokens,
+            cfg,
+            diagnostics=diagnostics,
+        )
         if result:
             return result
     

@@ -7,11 +7,17 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import base64
 import re
+import logging
 
 from core import config, providers, research_engine
+from core.window_interaction import get_window_interactor
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[1]
 BROWSER_PATH = ROOT / "data" / "browser_automation"
@@ -23,6 +29,7 @@ class BrowserAutomation:
     
     def __init__(self):
         self.automation_db = BROWSER_PATH / "automation_data.json"
+        self.window_interactor = get_window_interactor()
         self._ensure_directories()
         self._load_automation_data()
         
@@ -484,16 +491,161 @@ Provide:
         
         return {"error": "No trading data collected"}
     
-    def get_automation_status(self) -> Dict[str, Any]:
+    def get_automation_status(self):
         """Get browser automation status."""
         return {
-            "data_extractions": len(self.automation_data["data_extracted"]),
-            "forms_filled": len(self.automation_data["forms_filled"]),
-            "screenshots_analyzed": len(self.automation_data["screenshots"]),
-            "scraped_data": len(self.automation_data["scraped_data"]),
-            "last_activity": max([item.get("timestamp", "") for item in self.automation_data["scraped_data"]]) if self.automation_data["scraped_data"] else None
+            "status": "active",
+            "last_updated": datetime.now().isoformat(),
+            "automation_count": len(self.automation_data.get("automations", [])),
+            "data_points": len(self.automation_data.get("scraped_data", [])),
+            "forms_filled": len(self.automation_data.get("forms_filled", [])),
+            "screenshots_taken": len(self.automation_data.get("screenshots", [])),
+            "browser_windows": len(self.window_interactor.list_browser_windows())
         }
-
+        
+    def interact_with_browser(self, action: str, **kwargs) -> Dict[str, Any]:
+        """Interact with browser windows and elements.
+        
+        Args:
+            action: The action to perform (list_windows, activate_window, click, type, scroll, etc.)
+            **kwargs: Additional parameters for the action
+            
+        Returns:
+            Dict with the result of the interaction
+        """
+        try:
+            if action == "list_windows":
+                windows = self.window_interactor.list_browser_windows()
+                return {"success": True, "windows": [w.__dict__ for w in windows]}
+                
+            elif action == "activate_window":
+                title = kwargs.get("title")
+                if not title:
+                    return {"success": False, "error": "Window title is required"}
+                success = self.window_interactor.activate_window(title)
+                return {"success": success}
+                
+            elif action == "click":
+                x = kwargs.get("x")
+                y = kwargs.get("y")
+                button = kwargs.get("button", "left")
+                clicks = kwargs.get("clicks", 1)
+                
+                if x is not None and y is not None:
+                    success = self.window_interactor.click_element(x, y, button, clicks)
+                    return {"success": success}
+                else:
+                    return {"success": False, "error": "x and y coordinates are required"}
+                    
+            elif action == "type":
+                text = kwargs.get("text")
+                if not text:
+                    return {"success": False, "error": "Text is required"}
+                success = self.window_interactor.type_text(text)
+                return {"success": success}
+                
+            elif action == "press":
+                key = kwargs.get("key")
+                if not key:
+                    return {"success": False, "error": "Key is required"}
+                success = self.window_interactor.press_key(key)
+                return {"success": success}
+                
+            elif action == "scroll":
+                clicks = kwargs.get("clicks", 1)
+                success = self.window_interactor.scroll(clicks)
+                return {"success": success}
+                
+            elif action == "move_mouse":
+                x = kwargs.get("x")
+                y = kwargs.get("y")
+                duration = kwargs.get("duration", 0.5)
+                
+                if x is not None and y is not None:
+                    success = self.window_interactor.move_mouse(x, y, duration)
+                    return {"success": success}
+                else:
+                    return {"success": False, "error": "x and y coordinates are required"}
+                    
+            elif action == "get_screen_size":
+                width, height = self.window_interactor.get_screen_size()
+                return {"success": True, "width": width, "height": height}
+                
+            elif action == "get_mouse_position":
+                x, y = self.window_interactor.get_mouse_position()
+                return {"success": True, "x": x, "y": y}
+                
+            else:
+                return {"success": False, "error": f"Unknown action: {action}"}
+                
+        except Exception as e:
+            logger.error(f"Error in interact_with_browser: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def find_and_click_element(self, element_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Find and click an element based on its properties.
+        
+        Args:
+            element_info: Dictionary containing element properties like text, class, id, etc.
+            
+        Returns:
+            Dict with the result of the operation
+        """
+        try:
+            # First try to find by image if image path is provided
+            if "image_path" in element_info and element_info["image_path"]:
+                success = self.window_interactor.find_and_click(element_info["image_path"])
+                if success:
+                    return {"success": True, "method": "image_matching"}
+            
+            # If no image or image matching failed, try other methods
+            if "coordinates" in element_info and len(element_info["coordinates"]) == 2:
+                x, y = element_info["coordinates"]
+                success = self.window_interactor.click_element(x, y)
+                return {"success": success, "method": "coordinates"}
+                
+            # TODO: Add more element location strategies (OCR, etc.)
+            
+            return {"success": False, "error": "No valid element location method found"}
+            
+        except Exception as e:
+            logger.error(f"Error in find_and_click_element: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def extract_visible_text(self, region: Optional[Tuple[int, int, int, int]] = None) -> Dict[str, Any]:
+        """Extract visible text from the screen or a specific region.
+        
+        Args:
+            region: Optional (left, top, width, height) tuple defining the region to extract from
+            
+        Returns:
+            Dict containing the extracted text and metadata
+        """
+        try:
+            import pytesseract
+            from PIL import ImageGrab
+            
+            # Capture the screen or region
+            if region:
+                screenshot = ImageGrab.grab(bbox=region)
+            else:
+                screenshot = ImageGrab.grab()
+            
+            # Use OCR to extract text
+            text = pytesseract.image_to_string(screenshot)
+            
+            return {
+                "success": True,
+                "text": text.strip(),
+                "region": region,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except ImportError:
+            return {"success": False, "error": "Required OCR libraries not installed"}
+        except Exception as e:
+            logger.error(f"Error in extract_visible_text: {e}")
+            return {"success": False, "error": str(e)}
 
 # Global browser automation instance
 _browser_automation: Optional[BrowserAutomation] = None

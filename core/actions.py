@@ -7,7 +7,7 @@ import subprocess
 import time
 from typing import Any, Dict, Optional, Tuple
 
-from core import computer, guardian
+from core import computer, guardian, notes_manager
 
 
 def open_mail_app() -> Tuple[bool, str]:
@@ -67,22 +67,42 @@ def open_terminal() -> Tuple[bool, str]:
     return computer.open_app("Terminal")
 
 
-def open_notes() -> Tuple[bool, str]:
-    """Open Notes app."""
-    return computer.open_app("Notes")
+def open_notes(topic: str = "") -> Tuple[bool, str]:
+    """Open local note folder for a topic."""
+    dest = notes_manager.topic_dir(topic or None)
+    dest.mkdir(parents=True, exist_ok=True)
+    success, output = computer.open_file(str(dest))
+    if success:
+        return True, f"Opened notes folder: {dest}"
+    # Fallback: try revealing in Finder, otherwise surface manual path info.
+    try:
+        subprocess.run(
+            ["open", "-R", str(dest)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True, f"Revealed notes folder in Finder: {dest}"
+    except Exception:
+        return True, (
+            f"Notes folder is ready at {dest}, but macOS refused to open it automatically "
+            f"({output}). Please open it manually if needed."
+        )
 
 
-def create_note(title: str, body: str) -> Tuple[bool, str]:
-    """Create a new note in Notes app."""
-    script = f'''
-    tell application "Notes"
-        activate
-        tell account "iCloud"
-            make new note at folder "Notes" with properties {{name:"{title.replace('"', '\\"')}", body:"{body.replace('"', '\\"')}"}}
-        end tell
-    end tell
-    '''
-    return computer._run_applescript(script)
+def create_note(title: str, body: str, topic: str = "") -> Tuple[bool, str]:
+    """Persist a note locally and capture a distilled summary."""
+    final_topic, note_body = notes_manager.extract_topic_and_body(
+        f"{topic.strip()}: {body or title}".strip(": ")
+    )
+    note_path, summary_path, _ = notes_manager.save_note(
+        topic=final_topic,
+        content=f"# {title or final_topic}\n\n{note_body}",
+        fmt="md",
+        tags=["action", "note"],
+        source="actions.create_note",
+    )
+    return True, f"Saved note to {note_path} (summary: {summary_path})"
 
 
 def open_calendar() -> Tuple[bool, str]:

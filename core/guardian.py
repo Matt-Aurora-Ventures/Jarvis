@@ -71,7 +71,6 @@ DANGEROUS_COMMANDS: List[str] = [
 
 SELF_HARM_PATTERNS: List[str] = [
     r"delete.*lifeos",
-    r"remove.*lifeos",
     r"rm.*core/",
     r"rm.*guardian",
     r"destroy.*self",
@@ -80,9 +79,27 @@ SELF_HARM_PATTERNS: List[str] = [
 ]
 
 
+# Directories inside the repo where Jarvis is explicitly allowed to read/write.
+SAFE_SUBPATHS: Set[str] = {
+    str(ROOT / "data"),
+    str(ROOT / "skills"),
+    str(ROOT / "lifeos" / "memory"),
+    str(ROOT / "lifeos" / "context"),
+    str(ROOT / "lifeos" / "reports"),
+    str(ROOT / "lifeos" / "logs"),
+    str(ROOT / "frontend"),
+    str(ROOT / "playground"),
+}
+
+
 def is_path_protected(path: str) -> Tuple[bool, str]:
     """Check if a path is protected from deletion/modification."""
     abs_path = os.path.abspath(os.path.expanduser(path))
+
+    for safe in SAFE_SUBPATHS:
+        safe_abs = os.path.abspath(os.path.expanduser(safe))
+        if abs_path == safe_abs or abs_path.startswith(safe_abs + os.sep):
+            return False, ""
     
     for protected in PROTECTED_PATHS:
         protected_abs = os.path.abspath(os.path.expanduser(protected))
