@@ -407,9 +407,12 @@ class PassiveObserver(threading.Thread):
         if not passive_cfg.get("enabled", True):
             state.update_state(passive_enabled=False)
             return
+        track_keyboard = bool(passive_cfg.get("track_keyboard", True))
+        track_mouse = bool(passive_cfg.get("track_mouse", True))
+        track_apps = bool(passive_cfg.get("track_apps", True))
 
-        keyboard_ok = self._keyboard_tracker.start()
-        mouse_ok = self._start_mouse_tracking()
+        keyboard_ok = self._keyboard_tracker.start() if track_keyboard else False
+        mouse_ok = self._start_mouse_tracking() if track_mouse else False
 
         state.update_state(
             passive_enabled=True,
@@ -422,8 +425,11 @@ class PassiveObserver(threading.Thread):
 
         while not self._stop_event.is_set():
             try:
-                app, window = get_frontmost_app()
-                kb_summary = self._keyboard_tracker.summary()
+                if track_apps:
+                    app, window = get_frontmost_app()
+                else:
+                    app, window = "", ""
+                kb_summary = self._keyboard_tracker.summary() if track_keyboard else KeyboardSummary()
 
                 if kb_summary.last_activity > 0:
                     self._idle_detector.update_keyboard(kb_summary.last_activity)
@@ -431,13 +437,14 @@ class PassiveObserver(threading.Thread):
                 mouse_delta = self._mouse_moves
                 self._mouse_moves = 0
 
-                self._app_tracker.update(app, window, kb_summary.keystrokes, mouse_delta)
+                if track_apps:
+                    self._app_tracker.update(app, window, kb_summary.keystrokes, mouse_delta)
 
                 now = time.time()
                 if now - last_log_time >= self._log_interval:
-                    kb_reset = self._keyboard_tracker.reset()
-                    sessions = self._app_tracker.get_sessions(since=last_log_time)
-                    visible = get_visible_apps()
+                    kb_reset = self._keyboard_tracker.reset() if track_keyboard else KeyboardSummary()
+                    sessions = self._app_tracker.get_sessions(since=last_log_time) if track_apps else []
+                    visible = get_visible_apps() if track_apps else []
 
                     snapshot = ActivitySnapshot(
                         timestamp=now,

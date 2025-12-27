@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, context_manager, evolution, guardian, providers, research_engine, prompt_distiller, service_discovery, google_manager, ability_acquisition, learning_validator, iterative_improver, self_evaluator, google_cli, crypto_trading, autonomous_restart, browser_automation, autonomous_researcher, autonomous_agent, task_manager, circular_logic
+from core import config, context_manager, evolution, guardian, providers, research_engine, prompt_distiller, service_discovery, google_manager, ability_acquisition, learning_validator, iterative_improver, self_evaluator, google_cli, crypto_trading, autonomous_restart, browser_automation, autonomous_researcher, autonomous_agent, task_manager, circular_logic, safety
 
 ROOT = Path(__file__).resolve().parents[1]
 AUTO_LOG_PATH = ROOT / "data" / "autonomous_controller.log"
@@ -187,12 +187,15 @@ class AutonomousController:
                             # Run the cycle
                             if cycle_name in ["research", "browser_automation"]:
                                 # These cycles need the task context
-                                cycle_func(current_task)
+                                cycle_result = cycle_func(current_task)
                             else:
-                                cycle_func()
+                                cycle_result = cycle_func()
                             
                             # Record successful completion
-                            self.circular_detector.record_cycle_end(cycle_name)
+                            if isinstance(cycle_result, dict):
+                                self.circular_detector.record_cycle_end(cycle_name, result=cycle_result)
+                            else:
+                                self.circular_detector.record_cycle_end(cycle_name, result={"result": cycle_result})
                             self.cycle_governor.record_cycle(cycle_name)
                             
                             # Update schedule
@@ -245,7 +248,8 @@ class AutonomousController:
                 "id": task.id,
                 "title": task.title,
                 "priority": task.priority.value,
-                "status": task.status.value
+                "status": task.status.value,
+                "metadata": task.metadata,
             }
         
         return None
@@ -262,16 +266,18 @@ class AutonomousController:
         # Use task title as topic if provided, otherwise use default rotation
         if task:
             topic = task["title"]
+            focus = task.get("metadata", {}).get("focus", "")
             self._log("Starting task-focused research", {"task": topic})
         else:
             # Get current topic from schedule
             topics = self.schedule["priority_topics"]
             topic = topics[self.schedule["current_topic_index"]]
+            focus = ""
             self._log("Starting research cycle", {"topic": topic})
         
         # Get research engine and research
         engine = research_engine.get_research_engine()
-        result = engine.research_topic(topic, self.schedule["max_pages_per_cycle"])
+        result = engine.research_topic(topic, self.schedule["max_pages_per_cycle"], focus=focus)
         
         if result.get("success"):
             self._log("Research completed", {
@@ -303,7 +309,8 @@ class AutonomousController:
                 "topic": topic,
                 "timestamp": datetime.now().isoformat(),
                 "pages_processed": result.get("pages_processed", 0),
-                "key_findings": result.get("summary", "")[:500],
+                "summary": result.get("summary", "")[:1000],
+                "key_findings": result.get("key_findings", [])[:8],
                 "sources": result.get("sources", [])[:5]
             }
             
@@ -320,6 +327,11 @@ class AutonomousController:
     
     def _run_browser_automation_cycle(self, task: Dict[str, Any] = None):
         """Run browser automation focused on specific task."""
+        cfg = config.load_config()
+        if not cfg.get("actions", {}).get("allow_ui", True):
+            self._log("Browser automation skipped (UI actions disabled)")
+            return
+
         if task:
             self._log("Starting task-focused browser automation", {"task": task["title"]})
             
@@ -427,12 +439,20 @@ class AutonomousController:
                         continue
                 
                 # Apply improvement
-                success = evolution.apply_improvement(improvement, dry_run=False)
-                if success:
+                result = evolution.apply_improvement(
+                    improvement,
+                    safety.SafetyContext(apply=True, dry_run=False),
+                )
+                status = result.get("status")
+                if status in ("applied", "saved"):
                     applied += 1
-                    self._log("Improvement applied", {"title": improvement.title})
+                    self._log("Improvement applied", {"title": improvement.title, "status": status})
                 else:
-                    self._log("Improvement failed", {"title": improvement.title})
+                    self._log("Improvement failed", {
+                        "title": improvement.title,
+                        "status": status,
+                        "message": result.get("message", ""),
+                    })
                     
             except Exception as e:
                 self._log("Improvement error", {

@@ -6,6 +6,7 @@ Lightweight, compressed logging with privacy controls.
 
 import gzip
 import json
+import random
 import threading
 import time
 from collections import deque
@@ -52,12 +53,25 @@ class DeepObserver(threading.Thread):
 
     def __init__(self, buffer_size: int = 1000, flush_interval: int = 30):
         super().__init__(daemon=True)
+        cfg = config.load_config()
+        obs_cfg = cfg.get("observer", {})
+        mode = str(obs_cfg.get("mode", "full")).lower()
+        if mode == "lite":
+            buffer_size = int(obs_cfg.get("buffer_size", 400))
+            flush_interval = int(obs_cfg.get("flush_interval", 45))
+        else:
+            buffer_size = int(obs_cfg.get("buffer_size", buffer_size))
+            flush_interval = int(obs_cfg.get("flush_interval", flush_interval))
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         
         # Rolling buffer for recent actions
         self._buffer: Deque[ActionLog] = deque(maxlen=buffer_size)
         self._flush_interval = flush_interval
+        self._log_keys = bool(obs_cfg.get("log_keys", True))
+        self._log_mouse = bool(obs_cfg.get("log_mouse", True))
+        self._mouse_move_interval = float(obs_cfg.get("mouse_move_interval", 2))
+        self._key_sample_rate = float(obs_cfg.get("key_sample_rate", 1.0))
         
         # Listeners
         self._keyboard_listener = None
@@ -110,12 +124,16 @@ class DeepObserver(threading.Thread):
 
     def _start_keyboard_listener(self) -> bool:
         """Start capturing all keyboard input."""
+        if not self._log_keys:
+            return False
         try:
             from pynput import keyboard
         except ImportError:
             return False
 
         def on_press(key):
+            if self._key_sample_rate < 1.0 and random.random() > self._key_sample_rate:
+                return
             self._current_app, self._current_window = self._get_frontmost_app()
             
             # Get key representation
@@ -143,6 +161,8 @@ class DeepObserver(threading.Thread):
 
     def _start_mouse_listener(self) -> bool:
         """Start capturing mouse actions."""
+        if not self._log_mouse:
+            return False
         try:
             from pynput import mouse
         except ImportError:
@@ -168,7 +188,7 @@ class DeepObserver(threading.Thread):
         def on_move(x, y):
             # Only log moves every 2 seconds to stay lightweight
             now = time.time()
-            if now - last_move_log[0] > 2:
+            if now - last_move_log[0] > self._mouse_move_interval:
                 self._log_action("move", {"x": x, "y": y})
                 last_move_log[0] = now
 

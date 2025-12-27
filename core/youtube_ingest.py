@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import tempfile
+import urllib.parse
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -29,6 +30,52 @@ def _plain_text_from_vtt(vtt_text: str) -> str:
     text = " ".join(lines)
     # Collapse repeated whitespace
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _extract_video_id(video_url: str) -> Optional[str]:
+    if not video_url:
+        return None
+    if re.fullmatch(r"[A-Za-z0-9_-]{8,}", video_url.strip()):
+        return video_url.strip()
+    parsed = urllib.parse.urlparse(video_url)
+    if parsed.netloc in {"youtu.be", "www.youtu.be"}:
+        return parsed.path.lstrip("/")
+    if "youtube.com" in parsed.netloc:
+        if parsed.path == "/watch":
+            qs = urllib.parse.parse_qs(parsed.query)
+            return (qs.get("v") or [None])[0]
+        if parsed.path.startswith("/shorts/"):
+            return parsed.path.split("/shorts/")[-1].split("/")[0]
+    return None
+
+
+def _fetch_transcript_api(video_url: str) -> Optional[Dict[str, str]]:
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi  # type: ignore
+    except Exception:
+        return None
+    video_id = _extract_video_id(video_url)
+    if not video_id:
+        return None
+    try:
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["en"])
+    except Exception:
+        return None
+    text = " ".join(item.get("text", "") for item in transcript if item.get("text"))
+    if not text:
+        return None
+    raw_path = notes_manager.log_command_snapshot(
+        ["youtube-transcript-api", video_id],
+        f"youtube-api-{video_id}",
+        text,
+    )
+    return {
+        "video_id": video_id,
+        "title": f"YouTube Video {video_id}",
+        "url": video_url,
+        "transcript": text.strip(),
+        "raw_path": str(raw_path),
+    }
 
 
 def list_latest_videos(channel_url: str, limit: int = 3) -> List[Dict[str, str]]:
@@ -73,6 +120,9 @@ def fetch_transcript(video_url: str, label: str = "youtube") -> Optional[Dict[st
     Returns dict with transcript text, title, video id, and raw storage path,
     or None if no transcript was available.
     """
+    api_result = _fetch_transcript_api(video_url)
+    if api_result:
+        return api_result
     tmp_dir = tempfile.TemporaryDirectory()
     tmp_path = Path(tmp_dir.name)
     ydl_opts = {

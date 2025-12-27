@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, providers, evolution, guardian, learning_validator, ability_acquisition, error_recovery
+from core import config, providers, evolution, guardian, learning_validator, ability_acquisition, error_recovery, safety
 
 ROOT = Path(__file__).resolve().parents[1]
 ITERATIVE_PATH = ROOT / "data" / "iterative_improvements"
@@ -145,11 +145,12 @@ class IterativeImprover:
         try:
             # Check for risky patterns
             risky_keywords = ["import os", "subprocess", "exec(", "eval(", "rm -rf", "sudo"]
-            code_snippet = proposal.code_snippet.lower()
-            
-            for keyword in risky_keywords:
-                if keyword in code_snippet:
-                    return False, f"Risky keyword detected: {keyword}"
+            code_snippet = (proposal.code_snippet or "").lower()
+
+            if code_snippet:
+                for keyword in risky_keywords:
+                    if keyword in code_snippet:
+                        return False, f"Risky keyword detected: {keyword}"
             
             # Check if modification targets critical files
             critical_files = ["core/autonomous_controller.py", "core/jarvis.py", "core/daemon.py"]
@@ -171,6 +172,91 @@ class IterativeImprover:
         except Exception as e:
             self.error_manager.handle_error(e, {"function": "validate_improvement_safety"})
             return False, f"Validation error: {str(e)}"
+
+    def generate_improvement_plan(self, gaps: List[Dict[str, Any]]) -> List[evolution.ImprovementProposal]:
+        """Generate lightweight improvement proposals based on identified gaps."""
+        proposals: List[evolution.ImprovementProposal] = []
+        for gap in gaps:
+            severity = gap.get("severity", "medium")
+            priority = 0.8 if severity == "high" else 0.6 if severity == "medium" else 0.4
+            confidence = 0.8 if severity == "high" else 0.6 if severity == "medium" else 0.5
+            gap_type = gap.get("type", "general")
+
+            if gap_type == "test_coverage":
+                proposals.append(evolution.ImprovementProposal(
+                    category="behavior",
+                    title="Increase test coverage",
+                    description=(
+                        f"Raise test success rate from {gap.get('current_rate', 0):.2f} "
+                        f"toward {gap.get('target_rate', 0):.2f} by adding targeted tests."
+                    ),
+                    rationale="Validation metrics are below target.",
+                    priority=priority,
+                    confidence=confidence,
+                    source="iterative_improver",
+                ))
+            elif gap_type == "backtest_reliability":
+                proposals.append(evolution.ImprovementProposal(
+                    category="behavior",
+                    title="Stabilize backtests",
+                    description="Reduce backtest flakiness with smaller test scopes and clearer success criteria.",
+                    rationale="Backtest failures reduce confidence in improvements.",
+                    priority=priority,
+                    confidence=confidence,
+                    source="iterative_improver",
+                ))
+            elif gap_type == "ability_acquisition":
+                proposals.append(evolution.ImprovementProposal(
+                    category="behavior",
+                    title="Boost ability acquisition cadence",
+                    description="Prioritize lightweight abilities and shorten acquisition cycles until targets are met.",
+                    rationale="Ability count below target.",
+                    priority=priority,
+                    confidence=confidence,
+                    source="iterative_improver",
+                ))
+            elif gap_type == "recent_failures":
+                proposals.append(evolution.ImprovementProposal(
+                    category="behavior",
+                    title="Mitigate recent validation failures",
+                    description="Address recurring validation failures with targeted checks and smaller changes.",
+                    rationale="Recent validation failures indicate fragile improvements.",
+                    priority=priority,
+                    confidence=confidence,
+                    source="iterative_improver",
+                ))
+            elif gap_type == "error_recovery":
+                proposals.append(evolution.ImprovementProposal(
+                    category="behavior",
+                    title="Improve error recovery",
+                    description="Add clearer error categorization and recovery playbooks for repeat failures.",
+                    rationale="Low resolution rate in error recovery.",
+                    priority=priority,
+                    confidence=confidence,
+                    source="iterative_improver",
+                ))
+            elif gap_type == "circular_improvement":
+                proposals.append(evolution.ImprovementProposal(
+                    category="behavior",
+                    title="Reduce circular improvement loops",
+                    description="Increase cooldowns and require stronger validation before retrying improvements.",
+                    rationale="Repeated validation failures suggest circular loops.",
+                    priority=priority,
+                    confidence=confidence,
+                    source="iterative_improver",
+                ))
+            else:
+                proposals.append(evolution.ImprovementProposal(
+                    category="behavior",
+                    title="General improvement hygiene",
+                    description=f"Address gap type: {gap_type}",
+                    rationale="Unknown gap type reported.",
+                    priority=priority,
+                    confidence=confidence,
+                    source="iterative_improver",
+                ))
+
+        return proposals
     
     def run_improvement_cycle(self) -> Dict[str, Any]:
         """Run a complete improvement cycle with validation."""
@@ -184,7 +270,10 @@ class IterativeImprover:
                 return {
                     "success": True,
                     "message": "No performance gaps detected",
-                    "gaps_found": 0
+                    "gaps_found": 0,
+                    "improvements_applied": [],
+                    "improvements_validated": 0,
+                    "improvements_failed": 0
                 }
             
             # Generate improvement proposals
@@ -205,32 +294,55 @@ class IterativeImprover:
             
             # Apply safe improvements
             improvements_applied = []
+            improvements_validated = 0
+            improvements_failed = 0
             for proposal in safe_proposals:
                 try:
-                    # Backtest the improvement
-                    backtest_result = self.validator.backtest_improvement(proposal)
-                    
-                    if backtest_result["success"]:
-                        # Apply the improvement
-                        evolution.apply_improvement(proposal)
-                        improvements_applied.append(proposal.title)
-                        
+                    code_present = bool(proposal.code_snippet)
+                    if code_present:
+                        backtest_result = self.validator.backtest_improvement(proposal)
+                        if not backtest_result.get("validation_passed"):
+                            improvements_failed += 1
+                            self.iterations["validation_failures"].append({
+                                "timestamp": time.time(),
+                                "proposal": proposal.title,
+                                "reason": f"Backtest failed: {backtest_result.get('error', 'Unknown')}"
+                            })
+                            continue
+                        improvements_validated += 1
+
+                    # Apply the improvement
+                    result = evolution.apply_improvement(
+                        proposal,
+                        safety.SafetyContext(apply=True, dry_run=False),
+                    )
+                    status = result.get("status")
+                    if status in ("applied", "saved"):
+                        improvements_applied.append({
+                            "title": proposal.title,
+                            "category": proposal.category,
+                            "status": status,
+                            "files_to_modify": proposal.files_to_modify,
+                            "source": proposal.source,
+                        })
                         # Record successful application
                         self.iterations["improvements_applied"].append({
                             "timestamp": time.time(),
                             "proposal": proposal.title,
-                            "confidence": proposal.confidence
+                            "confidence": proposal.confidence,
+                            "status": status,
                         })
                     else:
-                        # Record failed backtest
+                        improvements_failed += 1
                         self.iterations["validation_failures"].append({
                             "timestamp": time.time(),
                             "proposal": proposal.title,
-                            "reason": f"Backtest failed: {backtest_result.get('error', 'Unknown')}"
+                            "reason": result.get("message", "Apply failed"),
                         })
                         
                 except Exception as e:
                     self.error_manager.handle_error(e, {"function": "run_improvement_cycle", "proposal": proposal.title})
+                    improvements_failed += 1
                     self.iterations["validation_failures"].append({
                         "timestamp": time.time(),
                         "proposal": proposal.title,
@@ -247,6 +359,8 @@ class IterativeImprover:
                 "proposals_generated": len(proposals),
                 "safe_proposals": len(safe_proposals),
                 "improvements_applied": len(improvements_applied),
+                "improvements_validated": improvements_validated,
+                "improvements_failed": improvements_failed,
                 "duration": cycle_duration
             })
             
@@ -256,6 +370,8 @@ class IterativeImprover:
                 "proposals_generated": len(proposals),
                 "safe_proposals": len(safe_proposals),
                 "improvements_applied": improvements_applied,
+                "improvements_validated": improvements_validated,
+                "improvements_failed": improvements_failed,
                 "duration": cycle_duration
             }
             
@@ -266,3 +382,54 @@ class IterativeImprover:
                 "error": str(e),
                 "duration": time.time() - cycle_start
             }
+
+    def run_learning_cycle(self) -> Dict[str, Any]:
+        """Run a complete learning and improvement cycle."""
+        cycle_start = datetime.now()
+        cycle_id = len(self.iterations.get("cycles", [])) + 1
+
+        self._log_iteration("cycle_started", {"cycle_id": cycle_id})
+
+        improvement_result = self.run_improvement_cycle()
+        insights = self._learn_from_cycle_results(improvement_result)
+
+        cycle_result = {
+            "cycle_id": cycle_id,
+            "start_time": cycle_start.isoformat(),
+            "end_time": datetime.now().isoformat(),
+            "gaps_identified": improvement_result.get("gaps_found", 0),
+            "proposals_generated": improvement_result.get("proposals_generated", 0),
+            "improvements_applied": improvement_result.get("improvements_applied", []),
+            "improvements_validated": improvement_result.get("improvements_validated", 0),
+            "improvements_failed": improvement_result.get("improvements_failed", 0),
+            "learning_insights": insights,
+            "success": improvement_result.get("success", False),
+        }
+
+        self.iterations["cycles"].append(cycle_result)
+        self._save_iterations()
+        self._log_iteration("cycle_completed", cycle_result)
+
+        return cycle_result
+
+    def _learn_from_cycle_results(self, results: Dict[str, Any]) -> List[str]:
+        """Extract lightweight insights from cycle results."""
+        insights: List[str] = []
+        validated = results.get("improvements_validated", 0)
+        failed = results.get("improvements_failed", 0)
+        applied = results.get("improvements_applied", [])
+
+        if validated > failed:
+            insights.append("Validation success rate is trending positive.")
+        if failed > validated:
+            insights.append("Validation failures outweigh successes; tighten proposal filters.")
+        if not applied:
+            insights.append("No improvements applied; revisit gap detection and proposal generation.")
+
+        self.iterations["learning_progress"].append({
+            "timestamp": datetime.now().isoformat(),
+            "insights": insights,
+            "success_rate": validated / max(len(applied), 1),
+        })
+
+        return insights

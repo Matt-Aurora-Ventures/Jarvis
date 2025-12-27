@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import config, providers, evolution, guardian, research_engine, learning_validator
+from core import config, providers, evolution, guardian, research_engine, learning_validator, safety
 
 ROOT = Path(__file__).resolve().parents[1]
 SELF_EVAL_PATH = ROOT / "data" / "self_evaluation"
@@ -474,9 +474,12 @@ Rate from 1-10 and provide brief reasoning."""
                 
                 if proposal:
                     # Apply the improvement
-                    result = evolution.apply_improvement(proposal, dry_run=False)
-                    
-                    if result["success"]:
+                    result = evolution.apply_improvement(
+                        proposal,
+                        safety.SafetyContext(apply=True, dry_run=False),
+                    )
+
+                    if result.get("status") in ("applied", "saved"):
                         integration_results["integrated"] += 1
                         self.expansions["integrated"].append({
                             **expansion,
@@ -493,15 +496,15 @@ Rate from 1-10 and provide brief reasoning."""
                                 proposal.code_snippet
                             )
                             
-                            integration_results["details"].append({
-                                "expansion": expansion["title"],
-                                "status": "integrated",
-                                "validation": validation["overall_status"]
-                            })
-                        else:
-                            integration_results["details"].append({
-                                "expansion": expansion["title"],
-                                "status": "integrated",
+                        integration_results["details"].append({
+                            "expansion": expansion["title"],
+                            "status": "integrated",
+                            "validation": validation["overall_status"]
+                        })
+                    else:
+                        integration_results["details"].append({
+                            "expansion": expansion["title"],
+                            "status": "integrated",
                                 "validation": "not_applicable"
                             })
                     else:
@@ -515,7 +518,7 @@ Rate from 1-10 and provide brief reasoning."""
                         integration_results["details"].append({
                             "expansion": expansion["title"],
                             "status": "failed",
-                            "error": result.get("error")
+                            "error": result.get("message", result.get("error"))
                         })
                 else:
                     integration_results["failed"] += 1
@@ -566,12 +569,14 @@ def implement_{expansion['title'].lower().replace(' ', '_').replace('-', '_')}()
 """
                 
                 return evolution.ImprovementProposal(
+                    category="module",
                     title=title,
                     description=expansion["snippet"],
                     code_snippet=code_snippet,
                     files_to_modify=["core/actions.py"],
                     rationale=f"Based on research: {expansion['title']}",
-                    confidence=0.7
+                    confidence=0.7,
+                    source="self_evaluator"
                 )
         except Exception as e:
             pass

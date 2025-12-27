@@ -1,7 +1,7 @@
 """Circular Logic Prevention for Autonomous Controller."""
 
 import time
-from typing import Dict, List, Set, Optional
+from typing import Any, Dict, List, Set, Optional
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,7 +11,7 @@ class CircularLogicDetector:
     """Detects and prevents circular logic in autonomous cycles."""
     
     def __init__(self):
-        self.cycle_history: List[Dict[str, any]] = []
+        self.cycle_history: List[Dict[str, Any]] = []
         self.max_history = 100
         self.recent_actions: List[str] = []
         self.max_recent_actions = 20
@@ -92,25 +92,29 @@ class CircularLogicDetector:
             }
             
         return None
+
+    def _recent_cycles(self, count: int, phase: str = "end") -> List[Dict]:
+        """Return the most recent cycles filtered by phase."""
+        filtered = [cycle for cycle in self.cycle_history if cycle.get("phase") == phase]
+        return filtered[-count:]
         
     def _detect_research_improvement_loop(self) -> bool:
         """Detect research -> improvement -> research loops."""
-        if len(self.cycle_history) < 6:
+        recent = self._recent_cycles(6)
+        if len(recent) < 4:
             return False
             
-        # Check last 6 cycles for pattern
-        recent = self.cycle_history[-6:]
         research_count = sum(1 for c in recent if c["type"] == "research")
         improvement_count = sum(1 for c in recent if c["type"] == "improvement")
         
-        return research_count >= 3 and improvement_count >= 3
+        return research_count >= 2 and improvement_count >= 2
         
     def _detect_self_evaluation_loop(self) -> bool:
         """Detect self-evaluation -> improvement loops."""
-        if len(self.cycle_history) < 4:
+        recent = self._recent_cycles(4)
+        if len(recent) < 3:
             return False
             
-        recent = self.cycle_history[-4:]
         eval_count = sum(1 for c in recent if c["type"] == "self_evaluation")
         improvement_count = sum(1 for c in recent if c["type"] == "iterative_improvement")
         
@@ -119,8 +123,8 @@ class CircularLogicDetector:
     def _detect_restart_loop(self) -> bool:
         """Detect frequent restarts."""
         recent_restarts = [
-            c for c in self.cycle_history[-20:]
-            if c.get("result", {}).get("restart_triggered")
+            c for c in self._recent_cycles(20)
+            if c.get("result", {}).get("restart_triggered") or c.get("result", {}).get("restart_needed")
         ]
         
         if len(recent_restarts) >= 2:
@@ -133,12 +137,13 @@ class CircularLogicDetector:
         
     def _detect_error_recovery_loop(self) -> bool:
         """Detect repeated error recovery patterns."""
-        if len(self.cycle_history) < 6:
+        recent = self._recent_cycles(10)
+        if len(recent) < 4:
             return False
             
         # Look for same error pattern repeating
         error_patterns = {}
-        for cycle in self.cycle_history[-10:]:
+        for cycle in recent:
             if cycle.get("error"):
                 error_type = cycle["error"].split(":")[0]  # Get error type
                 error_patterns[error_type] = error_patterns.get(error_type, 0) + 1
@@ -178,6 +183,7 @@ class CycleGovernor:
         }
         self.last_cycle_times: Dict[str, float] = {}
         self.cycle_counts: Dict[str, int] = {}
+        self.cycle_history: Dict[str, List[float]] = {}
         self.max_cycles_per_hour = {
             "research": 3,
             "improvement": 2,

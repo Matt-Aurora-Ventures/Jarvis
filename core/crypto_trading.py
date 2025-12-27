@@ -18,8 +18,38 @@ CRYPTO_PATH = ROOT / "data" / "crypto_trading"
 CRYPTO_LOG_PATH = ROOT / "data" / "crypto_trading.log"
 HFT_BACKLOG_PATH = CRYPTO_PATH / "hft_backlog.json"
 HFT_HISTORY_PATH = CRYPTO_PATH / "hft_history.jsonl"
-LOW_FEE_CHAINS = ["Solana", "Base", "Arbitrum", "Optimism", "Polygon", "BSC"]
-DEFAULT_PAIRS = ["SOL/USDC", "PYTH/SOL", "JUP/USDC", "WIF/SOL", "BONK/SOL", "AERO/USDC"]
+LOW_FEE_CHAINS = [
+    "Solana",
+    "Base",
+    "BNB Chain",
+    "Monad",
+    "Abstract",
+    "Arbitrum",
+    "Optimism",
+    "Polygon",
+]
+DEFAULT_PAIRS = [
+    "SOL/USDC",
+    "ETH/USDC",
+    "BNB/USDC",
+    "JUP/USDC",
+    "WIF/SOL",
+    "BONK/SOL",
+    "ARB/USDC",
+    "OP/USDC",
+    "AERO/USDC",
+]
+DEFAULT_DEX_SOURCES = ["Uniswap", "Sushi", "PancakeSwap"]
+DEX_SOURCES = {
+    "Solana": ["Jupiter", "Raydium", "Orca", "Phoenix"],
+    "Base": ["Aerodrome", "Uniswap", "BaseSwap"],
+    "BNB Chain": ["PancakeSwap", "Thena", "Biswap"],
+    "Arbitrum": ["Uniswap", "Camelot", "Sushi"],
+    "Optimism": ["Uniswap", "Velodrome"],
+    "Polygon": ["QuickSwap", "Uniswap"],
+    "Monad": ["Monad DEX (TBD)"],
+    "Abstract": ["Abstract DEX (TBD)"],
+}
 
 
 class CryptoTrading:
@@ -100,7 +130,11 @@ class CryptoTrading:
             "grid trading bot strategies",
             "scalping techniques crypto",
             "market making algorithms",
-            "momentum trading strategies"
+            "momentum trading strategies",
+            "dex scalping strategies low fee chains",
+            "solana dex api trading bot",
+            "base chain dex market making",
+            "hyperliquid api trading bot",
         ]
         
         engine = research_engine.get_research_engine()
@@ -186,6 +220,8 @@ Provide:
     
     def create_trading_bot_code(self, strategy: Dict[str, Any]) -> Dict[str, Any]:
         """Create trading bot code for a strategy."""
+        cfg = config.load_config()
+        dex_only = cfg.get("trading", {}).get("dex_only", True)
         code_prompt = f"""Create Python code for an automated trading bot based on this strategy:
 
 Strategy: {strategy['title']}
@@ -199,6 +235,7 @@ Requirements:
 4. Implement risk management
 5. Include position sizing
 6. Add stop-loss and take-profit
+7. Prefer decentralized exchange APIs{' only' if dex_only else ''} where possible
 
 Focus on practical, implementable code."""
         
@@ -244,15 +281,18 @@ Focus on practical, implementable code."""
         return {"error": "Failed to create bot code"}
     
     def research_crypto_exchanges(self) -> List[Dict[str, Any]]:
-        """Research crypto exchanges and their APIs."""
+        """Research DEX-focused exchanges and their APIs."""
         exchanges = []
         
         exchange_info = [
-            {"name": "Binance", "api": "REST/WebSocket", "fees": "0.1%", "features": "spot, futures, margin"},
-            {"name": "Coinbase", "api": "REST", "fees": "0.5%", "features": "spot, pro"},
-            {"name": "Kraken", "api": "REST/WebSocket", "fees": "0.26%", "features": "spot, futures"},
-            {"name": "Bybit", "api": "REST/WebSocket", "fees": "0.1%", "features": "spot, derivatives"},
-            {"name": "KuCoin", "api": "REST/WebSocket", "fees": "0.1%", "features": "spot, futures, margin"}
+            {"name": "Jupiter", "api": "REST", "fees": "route-based", "features": "Solana DEX aggregator"},
+            {"name": "Raydium", "api": "REST", "fees": "swap", "features": "Solana AMM"},
+            {"name": "Orca", "api": "REST", "fees": "swap", "features": "Solana AMM"},
+            {"name": "Phoenix", "api": "REST", "fees": "swap", "features": "Solana CLOB"},
+            {"name": "Aerodrome", "api": "REST", "fees": "swap", "features": "Base DEX"},
+            {"name": "Uniswap", "api": "Subgraph/REST", "fees": "swap", "features": "EVM DEX"},
+            {"name": "PancakeSwap", "api": "REST", "fees": "swap", "features": "BNB Chain DEX"},
+            {"name": "Hyperliquid", "api": "REST", "fees": "perps", "features": "Perps DEX"},
         ]
         
         for exchange in exchange_info:
@@ -260,7 +300,7 @@ Focus on practical, implementable code."""
             try:
                 engine = research_engine.get_research_engine()
                 results = engine.search_web(
-                    f"{exchange['name']} API documentation trading bot",
+                    f"{exchange['name']} API documentation dex trading bot free",
                     max_results=3
                 )
                 
@@ -418,18 +458,21 @@ Is the overall sentiment bullish, bearish, or neutral? Provide brief reasoning."
     def seed_low_cap_backlog(self, max_new: int = 5) -> List[Dict[str, Any]]:
         added: List[Dict[str, Any]] = []
         existing_pairs = {item.get("pair") for item in self.hft_backlog}
-        for chain in LOW_FEE_CHAINS:
+        cfg = config.load_config()
+        chains = cfg.get("trading", {}).get("preferred_chains") or LOW_FEE_CHAINS
+        for chain in chains:
             if len(added) >= max_new:
                 break
             pair = random.choice(DEFAULT_PAIRS)
             if pair in existing_pairs:
                 continue
+            source_pool = DEX_SOURCES.get(chain, DEFAULT_DEX_SOURCES)
             strategy = {
                 "chain": chain,
                 "pair": pair,
                 "entry_capital": random.choice([100, 250, 500]),
                 "latency_target_ms": random.choice([50, 80, 120]),
-                "liquidity_source": random.choice(["Jupiter", "Orca", "Phoenix", "Raydium"]),
+                "liquidity_source": random.choice(source_pool),
                 "objective": random.choice(["scalp", "arbitrage", "market-making"]),
             }
             self.enqueue_hft_strategy(strategy)

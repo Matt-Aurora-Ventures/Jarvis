@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, guardian, memory, providers
+from core import config, guardian, memory, providers, safety
 
 ROOT = Path(__file__).resolve().parents[1]
 JARVIS_STATE_PATH = ROOT / "data" / "jarvis_state.json"
@@ -21,7 +21,7 @@ MCP_CONFIG_PATH = ROOT / "lifeos" / "config" / "mcp.config.json"
 SYSTEM_INSTRUCTIONS_PATH = ROOT / "lifeos" / "config" / "system_instructions.md"
 BOOT_REPORTS_DIR = ROOT / "data" / "boot_reports"
 DAEMON_LOG_PATH = ROOT / "lifeos" / "logs" / "daemon.log"
-EVOLUTION_LOG_PATH = ROOT / "data" / "evolution_log.jsonl"
+EVOLUTION_LOG_PATH = ROOT / "data" / "evolution.jsonl"
 MCP_LOG_DIR = ROOT / "lifeos" / "logs" / "mcp"
 MISSION_LOG_DIR = ROOT / "lifeos" / "logs" / "missions"
 
@@ -53,6 +53,7 @@ class UserProfile:
                 "Crypto trading",
                 "Algorithmic trading",
                 "Self-improvement",
+                "Creative agency workflows",
             ]
         if self.mentor_channels is None:
             self.mentor_channels = ["Moon Dev"]
@@ -435,7 +436,7 @@ def _test_filesystem_access() -> Dict[str, str]:
 
 def _test_memory_pipeline() -> Dict[str, str]:
     try:
-        memory.append_entry("self-test memory entry", "self_test", memory.safety_context(apply=False))
+        memory.append_entry("self-test memory entry", "self_test", safety.SafetyContext(apply=True, dry_run=False))
         recent = memory.fetch_recent_entries(limit=1)
         if recent:
             return {"status": "pass", "detail": "Memory append/fetch OK."}
@@ -477,10 +478,25 @@ def _test_shell_command() -> Dict[str, str]:
 
 
 def _test_puppeteer_binary() -> Dict[str, str]:
-    puppeteer_path = ROOT / "Documents" / "Jarvis context" / "mcp-servers" / "puppeteer" / "src" / "dist" / "index.js"
-    if puppeteer_path.exists():
-        return {"status": "pass", "detail": f"Puppeteer binary present at {puppeteer_path}."}
-    return {"status": "warn", "detail": "Puppeteer binary missing; run MCP install."}
+    try:
+        with open(MCP_CONFIG_PATH, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        for server in data.get("servers", []):
+            if server.get("name") != "puppeteer":
+                continue
+            command = server.get("command", "")
+            args = server.get("args", [])
+            if command and command.startswith("/") and Path(command).exists():
+                return {"status": "pass", "detail": f"Puppeteer command present at {command}."}
+            if command == "node" and args:
+                script_path = Path(args[0])
+                if script_path.exists():
+                    return {"status": "pass", "detail": f"Puppeteer script present at {script_path}."}
+            return {"status": "warn", "detail": "Puppeteer MCP configured but binary not found."}
+    except Exception as exc:
+        return {"status": "fail", "detail": f"Puppeteer check error: {exc}"}
+
+    return {"status": "warn", "detail": "Puppeteer MCP not configured."}
 
 
 def _test_sequential_thinking_config() -> Dict[str, str]:
@@ -527,6 +543,8 @@ PRIMARY MISSION:
 
 CURRENT FOCUS:
 - Algorithmic crypto trading (learning from: {', '.join(profile.mentor_channels)})
+- DEX-only, low-fee chains with high volume
+- Prompt pack building for agency and website work
 - Building autonomous systems
 - Self-improvement and efficiency
 

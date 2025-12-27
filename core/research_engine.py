@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import urllib.parse
+import re
 
 from core import config, context_manager, providers, guardian
 
@@ -104,6 +105,106 @@ class ResearchEngine:
                 (action, json.dumps(details))
             )
             conn.commit()
+
+    def _extract_keywords(self, topic: str) -> List[str]:
+        words = re.findall(r"[a-z0-9]{3,}", topic.lower())
+        stopwords = {
+            "the", "and", "for", "with", "from", "that", "this", "into",
+            "about", "what", "how", "are", "you", "your", "our", "their",
+            "latest", "new", "best", "free", "open", "source", "systems",
+        }
+        return [w for w in words if w not in stopwords][:12]
+
+    def _score_result(self, result: Dict[str, str], keywords: List[str]) -> int:
+        url = result.get("url", "")
+        title = (result.get("title") or "").lower()
+        snippet = (result.get("snippet") or "").lower()
+        domain = urllib.parse.urlparse(url).netloc.lower()
+
+        preferred_domains = [
+            "arxiv.org",
+            "github.com",
+            "huggingface.co",
+            "paperswithcode.com",
+            "openai.com",
+            "microsoft.com",
+            "google.com",
+            "aws.amazon.com",
+            "nvidia.com",
+            "developer.apple.com",
+            "solana.com",
+            "docs.solana.com",
+            "base.org",
+            "docs.base.org",
+            "bnbchain.org",
+            "docs.bnbchain.org",
+            "hyperliquid.xyz",
+            "docs.hyperliquid.xyz",
+            "jup.ag",
+            "raydium.io",
+            "orca.so",
+            "uniswap.org",
+            "pancakeswap.finance",
+            "aerodrome.finance",
+            "velodrome.finance",
+        ]
+        blocked_domains = [
+            "pinterest.",
+            "tiktok.",
+            "instagram.",
+            "facebook.",
+            "reddit.com",
+            "medium.com",
+            "quora.com",
+        ]
+
+        score = 0
+        if any(domain.endswith(d) or d in domain for d in preferred_domains):
+            score += 3
+        if any(blocked in domain for blocked in blocked_domains):
+            score -= 3
+        if url.endswith(".pdf"):
+            score += 1
+        for kw in keywords:
+            if kw in title:
+                score += 2
+            elif kw in snippet:
+                score += 1
+        return score
+
+    def _select_results(
+        self,
+        search_results: List[Dict[str, str]],
+        keywords: List[str],
+        max_pages: int,
+    ) -> List[Dict[str, str]]:
+        scored = []
+        for result in search_results:
+            url = result.get("url", "")
+            if not url or url.startswith("javascript:"):
+                continue
+            score = self._score_result(result, keywords)
+            scored.append((score, result))
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+
+        selected = []
+        seen_domains = set()
+        for score, result in scored:
+            if len(selected) >= max_pages:
+                break
+            if score < 1:
+                continue
+            domain = urllib.parse.urlparse(result.get("url", "")).netloc.lower()
+            if domain in seen_domains:
+                continue
+            seen_domains.add(domain)
+            selected.append(result)
+
+        if not selected:
+            selected = [result for _, result in scored[:max_pages]]
+
+        return selected
     
     def search_web(self, query: str, max_results: int = 10) -> List[Dict[str, str]]:
         """Search the web for information."""
@@ -320,9 +421,10 @@ class ResearchEngine:
             self._log_action("extract_error", {"url": url, "error": str(e)})
             return None
     
-    def process_content(self, topic: str, content: str, url: str = "") -> Dict[str, Any]:
+    def process_content(self, topic: str, content: str, url: str = "", focus: str = "") -> Dict[str, Any]:
         """Process content to extract insights."""
-        prompt = f"""Analyze this research content about {topic}:
+        focus_clause = f"\nFocus on: {focus}\n" if focus else "\n"
+        prompt = f"""Analyze this research content about {topic}:{focus_clause}
 
 {content[:5000]}
 
@@ -391,7 +493,36 @@ Output as JSON with keys: insights, applications, concepts, improvements, exampl
             
             conn.commit()
     
-    def research_topic(self, topic: str, max_pages: int = 5) -> Dict[str, Any]:
+    def _summarize_research(self, topic: str, sources: List[Dict[str, Any]], focus: str = "") -> str:
+        if not sources:
+            return ""
+        focus_clause = f" Focus on: {focus}." if focus else ""
+        prompt = (
+            f"Create a concise, deep research summary about {topic}.{focus_clause}\n\n"
+            "Sources and insights:\n"
+            f"{json.dumps([{'title': s['title'], 'url': s['url'], 'insights': s.get('insights', [])} for s in sources], indent=2)}\n\n"
+            "Provide:\n"
+            "1. Executive summary (2 short paragraphs)\n"
+            "2. Key findings (5-7 bullets)\n"
+            "3. Open questions or risks\n"
+        )
+        try:
+            response = providers.ask_llm(prompt, max_output_tokens=700)
+            if response:
+                return response.strip()
+        except Exception:
+            pass
+
+        findings = []
+        for source in sources:
+            findings.extend(source.get("insights", [])[:2])
+        findings = [item for item in findings if item][:8]
+        if not findings:
+            return "No summary available."
+        bullets = "\n".join(f"- {item}" for item in findings)
+        return f"Key findings:\n{bullets}"
+
+    def research_topic(self, topic: str, max_pages: int = 5, focus: str = "") -> Dict[str, Any]:
         """Research a topic comprehensively."""
         self._log_action("research_started", {"topic": topic})
         
@@ -402,9 +533,13 @@ Output as JSON with keys: insights, applications, concepts, improvements, exampl
             self._log_action("research_failed", {"topic": topic, "reason": "no_results"})
             return {"success": False, "error": "No search results"}
         
+        keywords = self._extract_keywords(topic)
+        selected_results = self._select_results(search_results, keywords, max_pages)
+
         # Process top results
         processed = 0
-        for i, result in enumerate(search_results[:max_pages]):
+        sources: List[Dict[str, Any]] = []
+        for i, result in enumerate(selected_results):
             url = result["url"]
             if not url or url.startswith("javascript:"):
                 self._log_action("skipping_invalid_url", {"index": i, "url": url})
@@ -421,7 +556,7 @@ Output as JSON with keys: insights, applications, concepts, improvements, exampl
                 })
                 
                 if len(content) > 500:
-                    insights = self.process_content(topic, content, url)
+                    insights = self.process_content(topic, content, url, focus=focus)
                     
                     # Store research
                     self.store_research(topic, url, result["title"], content, insights)
@@ -432,6 +567,12 @@ Output as JSON with keys: insights, applications, concepts, improvements, exampl
                     
                     processed += 1
                     time.sleep(2)  # Rate limiting
+                    sources.append({
+                        "title": result.get("title", ""),
+                        "url": url,
+                        "insights": insights.get("insights", [])[:5],
+                        "applications": insights.get("applications", [])[:3],
+                    })
                 else:
                     self._log_action("content_too_short_for_storage", {
                         "index": i,
@@ -441,13 +582,26 @@ Output as JSON with keys: insights, applications, concepts, improvements, exampl
             else:
                 self._log_action("failed_to_extract_content", {"index": i, "url": url})
         
-        self._log_action("research_completed", {"topic": topic, "pages_processed": processed})
+        summary = self._summarize_research(topic, sources, focus=focus)
+        key_findings = []
+        for source in sources:
+            key_findings.extend(source.get("insights", [])[:2])
+        key_findings = [item for item in key_findings if item][:10]
+
+        self._log_action("research_completed", {
+            "topic": topic,
+            "pages_processed": processed,
+            "sources": len(sources),
+        })
         
         return {
             "success": True,
             "topic": topic,
             "pages_processed": processed,
-            "total_results": len(search_results)
+            "total_results": len(search_results),
+            "summary": summary,
+            "sources": [{"title": s["title"], "url": s["url"]} for s in sources],
+            "key_findings": key_findings,
         }
     
     def get_research_summary(self, topic: str = None, limit: int = 10) -> List[Dict[str, Any]]:

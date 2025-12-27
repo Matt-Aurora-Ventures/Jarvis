@@ -52,8 +52,9 @@
     "mode": "wake-word",
     "fallback_mode": "push-to-talk",
     "engine": "openwakeword",
-    "piper_model": "en-us-lessac-medium.onnx",
-    "piper_model_path": "/Users/burritoaccount/Desktop/LifeOS/data/voices/en-us-lessac-medium.onnx",
+    "piper_model": "en_US-lessac-medium.onnx",
+    "piper_model_path": "/Users/burritoaccount/Desktop/LifeOS/data/voices/en_US-lessac-medium.onnx",
+    "piper_download_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US-lessac-medium.onnx.gz",
     "wake_word": "jarvis",
     "wake_word_threshold": 0.6,
     "frame_length": 1280,
@@ -62,11 +63,23 @@
     "max_cpu_load": 4.0,
     "allow_cloud_stt": true,
     "speak_responses": true,
-    "speech_voice": "morgan freeman",
-    "chat_greeting": "Hi, I'm here. What do you want me to do?",
+    "tts_engine": "say",
+    "speech_voice": "Samantha",
+    "speech_rate": 175,
+    "fallback_voices": [
+      "Ava",
+      "Allison",
+      "Victoria",
+      "Alex"
+    ],
+    "chat_greeting": "Hi, I'm Jarvis. What do you want me to do?",
     "chat_stop_phrase": "thank you goodbye for now",
     "chat_silence_limit": 60,
     "track_mouse": true
+  },
+  "actions": {
+    "allow_ui": false,
+    "require_confirm": true
   },
   "hotkeys": {
     "enabled": true,
@@ -99,14 +112,95 @@
   "diagnostics": {
     "top_processes": 5
   },
+  "resource_monitor": {
+    "enabled": true,
+    "poll_seconds": 20,
+    "ram_free_gb_warn": 2.0,
+    "ram_free_percent_warn": 0.1,
+    "cpu_load_warn": 4.0,
+    "disk_free_gb_warn": 10.0,
+    "notify": true,
+    "notify_interval_seconds": 900,
+    "log_interval_seconds": 300,
+    "security_scan": true,
+    "security_scan_minutes": 360
+  },
+  "network_monitor": {
+    "enabled": true,
+    "throughput_mbps_warn": 20.0,
+    "packets_per_sec_warn": 5000,
+    "log_interval_seconds": 120
+  },
+  "process_guard": {
+    "enabled": true,
+    "cpu_percent_warn": 180.0,
+    "mem_mb_warn": 1500.0,
+    "connections_warn": 200,
+    "connection_scan_seconds": 120,
+    "auto_kill": false,
+    "force_kill": false,
+    "cooldown_seconds": 900,
+    "protect_processes": [
+      "kernel_task",
+      "WindowServer",
+      "launchd",
+      "SystemUIServer",
+      "coreaudiod",
+      "lifeos",
+      "python",
+      "python3"
+    ]
+  },
   "research": {
-    "allow_web": false
+    "allow_web": true
   },
   "observer": {
     "enabled": true,
+    "mode": "lite",
     "log_keys": true,
     "log_mouse": true,
-    "flush_interval": 30
+    "flush_interval": 45,
+    "mouse_move_interval": 4,
+    "key_sample_rate": 1.0
+  },
+  "missions": {
+    "enabled": true,
+    "poll_seconds": 120,
+    "idle_grace_seconds": 120,
+    "auto_commit_enabled": false,
+    "auto_commit_push": false,
+    "auto_commit_min_seconds": 10800,
+    "max_cpu_load": 4.0,
+    "min_free_ram_gb": 2.0
+  },
+  "idle_research": {
+    "enabled": true,
+    "min_idle_seconds": 1200,
+    "max_pages": 5
+  },
+  "trading": {
+    "dex_only": true,
+    "preferred_chains": [
+      "Solana",
+      "Base",
+      "BNB Chain",
+      "Monad",
+      "Abstract",
+      "Arbitrum",
+      "Optimism"
+    ],
+    "low_fee_focus": true
+  },
+  "hyperliquid": {
+    "enabled": true,
+    "lookback_days": 30,
+    "interval": "1h",
+    "symbols": [
+      "ETH",
+      "BTC",
+      "SOL"
+    ],
+    "exchange": "hyperliquid"
   },
   "safety": {
     "default_mode": "dry-run",

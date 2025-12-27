@@ -19,6 +19,7 @@ from core import (
     state,
     voice,
     mcp_loader,
+    resource_monitor,
 )
 
 
@@ -155,6 +156,11 @@ def run() -> None:
         deep_observer = observer.start_observer()
         _log_message(log_path, "Deep observer started (logging all activity).")
 
+    # Start resource monitor
+    if config.get("resource_monitor", {}).get("enabled", True):
+        resource_monitor.start_monitor()
+        _log_message(log_path, "Resource monitor started.")
+
     mission_cfg = config.get("missions", {})
     mission_poll = int(mission_cfg.get("poll_seconds", 120))
     mission_scheduler = None
@@ -219,6 +225,8 @@ def run() -> None:
             _log_message(log_path, "MCP servers stopped.")
         except Exception as e:
             _log_message(log_path, f"MCP shutdown warning: {str(e)[:100]}")
+
+    resource_monitor.stop_monitor()
 
     state.update_state(running=False, passive_enabled=False, updated_at=_timestamp())
     state.clear_pid()

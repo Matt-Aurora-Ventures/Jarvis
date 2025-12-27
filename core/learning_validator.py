@@ -182,6 +182,13 @@ if __name__ == "__main__":
         }
         
         try:
+            if not improvement.code_snippet:
+                backtest_result["error"] = "Missing code snippet for backtest."
+                self.validations["backtest_results"].append(backtest_result)
+                self._save_validations()
+                self._log_validation("backtest_failed", backtest_result)
+                return backtest_result
+
             # 1. Safety validation
             is_safe, safety_reason = guardian.validate_code_for_safety(improvement.code_snippet)
             if not is_safe:

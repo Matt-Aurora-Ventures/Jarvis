@@ -47,6 +47,11 @@
 - **Document creation** — "Create a business plan for my startup"
 - **Free software discovery** — "Find open source alternatives to Photoshop"
 
+### 📈 Trading + Market Research
+- **DEX-first focus** — Low-fee chains (Solana/Base/BNB/Monad/Abstract)
+- **Hyperliquid data** — 30-day snapshots with lightweight backtests
+- **Strategy backlog** — Keeps experiments moving while you’re idle
+
 ### 📓 Local Knowledge Engine
 - **Distilled note archive** — All notes/research saved as `.md/.txt/.py` in `data/notes/`
 - **Auto-summary + prompts** — Every capture creates a concise summary + reusable prompt snippet
@@ -57,7 +62,12 @@
 - **App usage tracking** — Know where your time goes
 - **Productivity insights** — Identify patterns and distractions
 - **Screen context** — Jarvis sees what you see
-- **Privacy-first** — All data stays local
+- **Configurable depth** — Lite or deep logging, all stored locally
+
+### 🛡️ Security + Resource Guard
+- **Resource alerts** — CPU/RAM/Disk warnings with OS notifications
+- **Network monitoring** — Throughput + packet rate logging
+- **Process guard** — Flags heavy/abusive processes and can auto-terminate (opt-in)
 
 ### 🔄 Self-Evolution
 - **Auto-upgrades on boot** — Applies pending improvements automatically
@@ -73,6 +83,7 @@
 - **Persistent Reasoning** — SQLite MCP hosts long-term structured data and queryable memories.
 - **Action Surface** — Shell MCP (sandboxed to LifeOS) and Puppeteer MCP (browser automation) give Jarvis “hands” for executing plans.
 - **Sequential Thinking MCP** — Provides scratchpad-style reasoning traces to enforce decomposition before acting.
+- **YouTube Transcript MCP** — Fast transcript access for research and MoonDev ingestion.
 
 > The entire MCP stack is declared in `lifeos/config/mcp.config.json`, autostarted by `core/mcp_loader.py`, and mirrored in Windsurf’s `~/.codeium/windsurf/mcp_config.json` for editor parity.
 
@@ -80,6 +91,12 @@
 - **MoonDev Watcher** — Tracks official MoonDevOnYT X feed for new HFT drops
 - **AlgoTradeCamp Digest** — Snapshots algotradecamp.com for lessons and tactics
 - **MoonDev YouTube Harvester** — Pulls transcripts via yt-dlp and summarizes key experiments
+- **Hyperliquid Snapshot + Backtest** — 30-day data pulls with lightweight MA backtests
+- **DEX API Scout** — Finds free/low-cost DEX endpoints for low-fee chains
+- **Prompt Pack Builder** — Generates prompt packs for agency + website workflows
+- **AI/Security News Scan** — Tracks new tools/releases to upgrade Jarvis
+- **Business Suggestions Digest** — Summarizes opportunities tied to your work
+- **Directive Digest** — Keeps operating directives tight and actionable
 - **Self-Improvement Pulse** — Reviews provider errors + memory to prioritize upgrades
 
 ### 🔊 Offline Voice
@@ -133,8 +150,28 @@ Edit `lifeos/config/lifeos.config.json`:
     "wake_word": "jarvis",
     "chat_silence_limit": 60,
     "speak_responses": true,
-    "tts_engine": "piper",
-    "piper_model": "en_US-amy-low.onnx"
+    "tts_engine": "say",
+    "speech_voice": "Samantha"
+  },
+  "observer": {
+    "mode": "lite",
+    "flush_interval": 45
+  },
+  "actions": {
+    "allow_ui": false,
+    "require_confirm": true
+  },
+  "resource_monitor": {
+    "enabled": true,
+    "ram_free_gb_warn": 2.0,
+    "cpu_load_warn": 4.0
+  },
+  "network_monitor": {
+    "enabled": true
+  },
+  "process_guard": {
+    "enabled": true,
+    "auto_kill": false
   },
   "providers": {
     "gemini": { "enabled": true, "model": "gemini-2.5-pro" },

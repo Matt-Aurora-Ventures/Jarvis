@@ -13,14 +13,18 @@ from core import computer, guardian, config, state, notes_manager
 def _ui_allowed(action: str) -> bool:
     cfg = config.load_config()
     allow_cfg = bool(cfg.get("actions", {}).get("allow_ui", True))
+    require_confirm = bool(cfg.get("actions", {}).get("require_confirm", False))
     state_flag = state.read_state().get("ui_actions_enabled")
+    if require_confirm and not state.read_state().get("ui_actions_confirmed", False):
+        return False
     return allow_cfg and (state_flag is not False)
 
 
 def _ui_blocked_msg(action: str) -> Tuple[bool, str]:
     return False, (
         f"UI actions are disabled while autonomy tasks run (blocked: {action}). "
-        "Set actions.allow_ui=true and ui_actions_enabled=true to override."
+        "Set actions.allow_ui=true and ui_actions_enabled=true to override. "
+        "If actions.require_confirm=true, also set ui_actions_confirmed=true."
     )
 
 

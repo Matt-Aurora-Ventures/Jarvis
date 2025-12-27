@@ -1,15 +1,18 @@
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from core import (
     actions,
     config,
     context_loader,
+    context_manager,
     guardian,
     jarvis,
     memory,
     passive,
     providers,
     prompt_library,
+    research_engine,
+    safety,
 )
 
 
@@ -39,6 +42,19 @@ def _format_history(entries: List[Dict[str, str]]) -> str:
     return "\n".join(lines).strip()
 
 
+def _record_conversation_turn(user_text: str, assistant_text: str) -> None:
+    """Persist conversation turns for cross-session continuity."""
+    try:
+        ctx = safety.SafetyContext(apply=True, dry_run=False)
+        memory.append_entry(_truncate(user_text, 800), "voice_chat_user", ctx)
+        memory.append_entry(_truncate(assistant_text, 800), "voice_chat_assistant", ctx)
+        context_manager.add_conversation_message("user", user_text)
+        context_manager.add_conversation_message("assistant", assistant_text)
+    except Exception:
+        # Never block responses on memory persistence.
+        pass
+
+
 def _support_prompts(user_text: str) -> tuple[str, list[str]]:
     """Select prompt library snippets relevant to the current input."""
     lowered = user_text.lower()
@@ -58,6 +74,39 @@ def _support_prompts(user_text: str) -> tuple[str, list[str]]:
         inspirations.append(f"{prompt.title}: {prompt.body}")
         ids.append(prompt.id)
     return "\n".join(inspirations), ids
+
+
+def _is_research_request(user_text: str) -> bool:
+    lowered = user_text.lower()
+    triggers = [
+        "research",
+        "deep dive",
+        "investigate",
+        "look up",
+        "find sources",
+        "summarize sources",
+        "analyze sources",
+    ]
+    return any(trigger in lowered for trigger in triggers)
+
+
+def _format_research_response(result: Dict[str, Any]) -> str:
+    summary = result.get("summary", "").strip()
+    key_findings = result.get("key_findings", [])
+    sources = result.get("sources", [])
+    lines = []
+    if summary:
+        lines.append(summary)
+    if key_findings:
+        lines.append("\nKey findings:")
+        lines.extend(f"- {item}" for item in key_findings[:7])
+    if sources:
+        lines.append("\nSources:")
+        for source in sources[:5]:
+            title = source.get("title") or "Source"
+            url = source.get("url") or ""
+            lines.append(f"- {title}: {url}")
+    return "\n".join(lines).strip()
 
 
 def _fallback_response(user_text: str) -> str:
@@ -99,6 +148,7 @@ def generate_response(
             activity_summary = passive.summarize_activity(hours=2)
         except Exception as e:
             activity_summary = ""
+    context_summary = context_manager.get_context_summary()
 
     # Get mission context and safety rules
     safety_rules = guardian.get_safety_prompt()
@@ -106,6 +156,14 @@ def generate_response(
     
     # Available actions for computer control
     available_actions = actions.get_available_actions()
+
+    if _is_research_request(user_text) and cfg.get("research", {}).get("allow_web", False):
+        engine = research_engine.get_research_engine()
+        result = engine.research_topic(user_text, max_pages=5)
+        response = _format_research_response(result)
+        if response:
+            _record_conversation_turn(user_text, response)
+            return response + "\n"
 
     prompt = (
         f"{safety_rules}\n\n"
@@ -115,11 +173,14 @@ def generate_response(
         "Be warm, witty, and genuinely helpful. Use contractions. Show personality.\n"
         "You can joke around, be casual, and have real conversations - not just answer questions.\n"
         "Always act in the user's best interest. Help them make money and achieve their goals.\n"
-        "Be proactive - suggest ideas, point out opportunities, and anticipate needs.\n\n"
+        "Be proactive - suggest ideas, point out opportunities, and anticipate needs.\n"
+        "Avoid circular logic or repetition; if unsure, ask one clarifying question.\n"
+        "If the user requests research, summarize sources and give concrete next steps.\n\n"
         "CAPABILITIES: You can control this Mac computer. Available actions:\n"
         f"{', '.join(available_actions)}\n"
         "To execute: [ACTION: action_name(param=value)]\n"
         "Examples: [ACTION: google(query='topic')] or [ACTION: compose_email(to='x@y.com', subject='Hi', body='...')]\n\n"
+        "Only take UI actions (opening apps, browsing, clicking) if the user explicitly asks or you confirm first.\n\n"
         "Conversation so far:\n"
         f"{history}\n"
         "\n"
@@ -133,6 +194,9 @@ def generate_response(
         f"{screen_context}\n"
         "\n"
     )
+
+    if context_summary and "No context available" not in context_summary:
+        prompt += f"Cross-session context:\n{context_summary}\n\n"
 
     if activity_summary and "No recent activity" not in activity_summary:
         prompt += f"Recent Activity:\n{activity_summary}\n\n"
@@ -148,9 +212,12 @@ def generate_response(
         # Parse and execute any actions in the response
         result = _execute_actions_in_response(text)
         prompt_library.record_usage(inspiration_ids, success=True)
+        _record_conversation_turn(user_text, result.strip())
         return result.strip() + "\n"
     prompt_library.record_usage(inspiration_ids, success=False)
-    return _fallback_response(user_text)
+    fallback = _fallback_response(user_text)
+    _record_conversation_turn(user_text, fallback)
+    return fallback
 
 
 def _execute_actions_in_response(response: str) -> str:

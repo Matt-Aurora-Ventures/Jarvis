@@ -101,6 +101,13 @@ def get_recent_entries() -> List[Dict[str, Any]]:
     return _read_jsonl(RECENT_PATH)
 
 
+def fetch_recent_entries(limit: int = 10) -> List[Dict[str, Any]]:
+    entries = _read_jsonl(RECENT_PATH)
+    if limit <= 0:
+        return entries
+    return entries[-limit:]
+
+
 def get_pending_entries() -> List[Dict[str, Any]]:
     return _read_jsonl(PENDING_PATH)
 

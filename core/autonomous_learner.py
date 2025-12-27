@@ -341,11 +341,13 @@ def run_autonomous_learning_cycle(dry_run: bool = None) -> None:
                 })
             else:
                 # Apply improvement (or dry run)
-                success = evolution.apply_improvement(improvement, dry_run=dry_run)
-                mode = "dry_run" if dry_run else "applied"
+                result = evolution.apply_improvement(improvement, dry_run=dry_run)
+                status = result.get("status", "unknown")
+                mode = "dry_run" if dry_run else status
                 _log_autonomous_action(f"improvement_{mode}", {
                     "title": improvement.title,
-                    "success": success,
+                    "status": status,
+                    "message": result.get("message", ""),
                 })
         except Exception as e:
             _log_autonomous_action("improvement_error", {

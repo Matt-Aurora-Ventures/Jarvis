@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, providers, research_engine, browser_automation, storage_utils
+from core import config, providers, research_engine, storage_utils
 
 ROOT = Path(__file__).resolve().parents[1]
 RESEARCH_PATH = ROOT / "data" / "autonomous_research"
@@ -24,20 +24,56 @@ class AutonomousResearcher:
     def __init__(self):
         self.storage = storage_utils.get_storage(RESEARCH_PATH)
         self.md_storage = storage_utils.get_md_storage(MARKDOWN_PATH)
+        self.research_db = RESEARCH_PATH / "research_data.json"
         
-        # Research targets for newest free models
+        # Research targets for newest lightweight models
         self.research_targets = [
-            "llama 3.3 70b free model",
-            "qwen 2.5 free model",
-            "mistral free models",
-            "phi 3.5 microsoft free",
-            "gemma 2 google free",
-            "deepseek coder free",
-            "stable diffusion 3 free",
-            "claude 3.5 free alternatives",
-            "gpt 4 free alternatives",
-            "local llm benchmarks 2024"
+            "llama 3.2 1b 3b gguf",
+            "qwen 2.5 1.5b instruct",
+            "phi 3.5 mini instruct",
+            "gemma 2 2b",
+            "mistral 7b quantized",
+            "deepseek coder 1.3b",
+            "tinyllama 1.1b",
+            "minicpm latest small model",
+            "local llm benchmarks 2024",
+            "lightweight speech to text open source",
+            "lightweight tts piper voices",
+            "self hosted natural tts alternatives",
+            "youtube transcript mcp server",
+            "solana dex api documentation",
+            "base chain dex api",
+            "hyperliquid api data pull",
+            "prompt engineering for creative agencies",
+            "automation prompts for web design",
+            "macos network security monitoring",
+            "packet monitoring tools for mac",
+            "resource optimization for always-on agents",
         ]
+        self._load_research()
+
+    def _load_research(self) -> None:
+        """Load research state from disk."""
+        if self.research_db.exists():
+            try:
+                with open(self.research_db, "r", encoding="utf-8") as handle:
+                    self.research_data = json.load(handle)
+                return
+            except Exception:
+                pass
+        self.research_data = {
+            "models_discovered": [],
+            "research_sessions": [],
+            "latest_findings": {},
+            "markdown_docs": [],
+            "research_summary": ""
+        }
+
+    def _save_research(self) -> None:
+        """Persist research state to disk."""
+        self.research_db.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.research_db, "w", encoding="utf-8") as handle:
+            json.dump(self.research_data, handle, indent=2)
         
     def _log_research(self, action: str, details: Dict[str, Any]):
         """Log research activity."""
@@ -109,9 +145,21 @@ class AutonomousResearcher:
     def _extract_model_info(self, search_result: Dict[str, Any], target: str) -> Optional[Dict[str, Any]]:
         """Extract model information from search result."""
         try:
-            # Use browser automation to get detailed info
-            browser = browser_automation.get_browser_automation()
-            page_data = browser.extract_data_from_page(search_result["url"])
+            # Use browser automation when available, otherwise fall back to search snippets.
+            browser = None
+            try:
+                from core import browser_automation
+                browser = browser_automation.get_browser_automation()
+            except Exception as exc:
+                self._log_research("browser_automation_unavailable", {
+                    "url": search_result.get("url", ""),
+                    "error": str(exc)
+                })
+
+            if browser:
+                page_data = browser.extract_data_from_page(search_result["url"])
+            else:
+                page_data = {"data": search_result.get("snippet", ""), "error": "browser_unavailable"}
             
             if "error" not in page_data:
                 # Analyze the extracted data
@@ -144,6 +192,16 @@ Focus on newest free models that Jarvis could use."""
                     "analysis": analysis,
                     "discovered_at": datetime.now().isoformat()
                 }
+            # Lightweight fallback when browser automation is unavailable.
+            return {
+                "model_name": search_result.get("title", "Unknown Model"),
+                "url": search_result.get("url", ""),
+                "snippet": search_result.get("snippet", ""),
+                "research_target": target,
+                "extracted_data": "",
+                "analysis": search_result.get("snippet", ""),
+                "discovered_at": datetime.now().isoformat()
+            }
                 
         except Exception as e:
             self._log_research("model_extraction_error", {

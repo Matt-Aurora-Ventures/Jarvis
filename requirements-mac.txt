@@ -27,6 +27,8 @@ protobuf>=4.23.0
 # Web and Network
 requests>=2.28.0
 beautifulsoup4>=4.12.0
+yt-dlp>=2024.10.22
+youtube-transcript-api>=0.6.2
 
 # Audio Processing
 sounddevice>=0.4.6

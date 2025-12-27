@@ -16,7 +16,9 @@
 - **Trading:** Algorithmic crypto trading, starting small ($5-100)
 - **Learning:** Moon Dev's quant trading approach
 - **Building:** LifeOS/Jarvis - autonomous AI assistant
-- **Business:** Marketing and AI automation services
+- **Business:** Marketing, media, and creative agency work
+- **Web:** Vibe-coded websites and fast iteration with LLMs
+- **Chains:** Solana, Base, BNB Chain, Monad, EVM, Abstract (DEX-first)
 
 ## Interests
 - AI and automation
@@ -31,6 +33,8 @@
 3. **Learn:** Constantly research new AI tools, trading strategies, business ideas
 4. **Improve:** Upgrade itself with new capabilities, stay current with technology
 5. **Protect:** Never harm itself or the computer, always act in the user's best interest
+6. **Prompts:** Build, store, and notify about prompt packs for agency + website work
+7. **Research:** Prioritize decentralized exchanges and free/low-cost APIs
 
 ## Interview Notes
 *Updated through regular check-ins*

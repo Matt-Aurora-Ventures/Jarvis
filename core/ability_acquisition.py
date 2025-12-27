@@ -117,7 +117,9 @@ class AbilityAcquisition:
             "free AI research automation",
             "open source self-learning AI",
             "free crypto analysis tools",
-            "autonomous decision making AI"
+            "autonomous decision making AI",
+            "lightweight local LLM 1-3B open source",
+            "quantized GGUF models for local inference"
         ]
         
         engine = research_engine.get_research_engine()
@@ -399,24 +401,35 @@ Rate from 1-10 (10=perfect fit) and provide brief reasoning focusing on crypto t
         """Integrate researched ability as new prompts/capabilities."""
         # Create improvement proposal
         from core.evolution import ImprovementProposal
-        
+        from core import safety
+
+        ability_name = ability.get("name", "Unknown Ability")
         proposal = ImprovementProposal(
-            title=f"Integrate {ability['name']} capability",
-            description=f"Add new capability: {ability['details']}",
-            code_snippet=f"# New {ability['name']} capability\ndef implement_{ability['id'].replace('-', '_')}():\n    pass",
-            files_to_modify=["core/actions.py"],
+            category="skill",
+            title=f"{ability_name} ability",
+            description=f"Auto-integrated ability from {ability.get('source', 'research')}",
+            code_snippet=(
+                f"def run(context: dict, **kwargs) -> str:\n"
+                f"    \"\"\"Placeholder for {ability_name} integration.\"\"\"\n"
+                f"    return \"Ability '{ability_name}' is available for use.\"\n"
+            ),
+            source="ability_acquisition",
+            files_to_modify=[],
             rationale="Enhance Jarvis with new open-source capability",
             confidence=0.8
         )
         
         # Apply if safe
-        if guardian.validate_code_for_safety(proposal.code_snippet)[0]:
-            evolution.apply_improvement(proposal, dry_run=False)
+        if guardian.validate_code_for_safety(proposal.code_snippet or "")[0]:
+            result = evolution.apply_improvement(
+                proposal,
+                safety.SafetyContext(apply=True, dry_run=False),
+            )
             self._log_acquisition("ability_integrated", {
                 "ability_id": ability["id"],
                 "type": "code_integration"
             })
-            return True
+            return result.get("status") == "applied"
         
         return False
     
@@ -492,15 +505,16 @@ Rate from 1-10 (10=perfect fit) and provide brief reasoning focusing on crypto t
     
     def get_status(self) -> Dict[str, Any]:
         """Get acquisition system status."""
+        categories = {}
+        for cat, cap_list in self.abilities["categories"].items():
+            categories[cat] = len([
+                ability for ability in self.abilities["acquired"]
+                if any(cap in ability.get("capabilities", []) for cap in cap_list)
+            ])
         return {
             "total_abilities": len(self.abilities["acquired"]),
             "total_models": len(self.models["installed"]),
-            "categories": {
-                cat: len([a for a in self.abilities["acquired"] 
-                         if cap in a.get("capabilities", [])])
-                for cat, cap_list in self.abilities["categories"].items()
-                for cap in cap_list
-            },
+            "categories": categories,
             "recent_acquisitions": self.abilities["acquired"][-5:],
             "available_models": self.models["installed"]
         }

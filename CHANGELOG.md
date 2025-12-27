@@ -2,6 +2,29 @@
 
 All notable changes to Jarvis (LifeOS) will be documented in this file.
 
+# [0.8.0] - 2025-12-27
+
+### 🧠 Behavior + Context
+- Tightened conversational focus to avoid circular logic, added clearer research summaries with sources, and improved cross-session memory capture.
+- Added Jarvis superintelligence context directives and prompt pack support for agency + website workflows.
+
+### 📈 Trading + Research
+- Added Hyperliquid data ingestion (30-day snapshots) plus lightweight MA backtests and research notes.
+- Switched trading research to DEX-first, low-fee chains (Solana/Base/BNB/Monad/Abstract), with DEX API scouting missions.
+- Expanded autonomous research topics for security, network monitoring, and lightweight AI tools.
+
+### 🛡️ Resource + Security Monitoring
+- Always-on resource monitor with memory/CPU/disk alerts and periodic security scans.
+- Network throughput + packet rate monitoring with logs.
+- Process guard to flag heavy/abusive processes and optionally auto-terminate (opt-in).
+
+### 🧩 Missions + MCP
+- Added new idle missions: AI/security news scan, business suggestions, directive digest, and Hyperliquid backtest.
+- Added YouTube transcript MCP server and a local transcript API fallback for faster ingestion.
+
+### 🔧 Fixes
+- Fixed boot self-tests for memory pipeline and added lightweight guardrails to reduce UI automation spam.
+
 # [0.7.0] - 2025-12-26
 
 ### 🧩 MCP Autonomy Stack

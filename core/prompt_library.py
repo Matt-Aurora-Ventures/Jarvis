@@ -70,6 +70,36 @@ DEFAULT_PROMPTS: List[PromptRecord] = [
         ),
         tags=["social", "observation", "conversation"],
     ),
+    PromptRecord(
+        id="trading_bot_blueprint",
+        title="Trading Bot Blueprint",
+        body=(
+            "When asked about bots, produce a concise blueprint: data sources, "
+            "strategy logic, backtest plan, risk controls, and a small first experiment."
+        ),
+        tags=["crypto", "trading", "automation"],
+        quality_score=0.9,
+    ),
+    PromptRecord(
+        id="dex_api_focus",
+        title="DEX API Focus",
+        body=(
+            "Prioritize decentralized exchanges and free APIs on low-fee chains; "
+            "summarize exact endpoints, rate limits, and quick-start steps."
+        ),
+        tags=["crypto", "research", "dex"],
+        quality_score=0.88,
+    ),
+    PromptRecord(
+        id="agency_prompt_pack",
+        title="Agency Prompt Pack",
+        body=(
+            "Translate agency tasks into reusable prompt packs: discovery, "
+            "brand voice, ad copy, web structure, and delivery checklists."
+        ),
+        tags=["agency", "prompts", "web"],
+        quality_score=0.87,
+    ),
 ]
 
 

@@ -25,4 +25,5 @@ google-api-python-client>=2.0.0
 google-auth-httplib2>=0.1.0
 google-auth>=2.0.0
 yt-dlp>=2024.10.22
+youtube-transcript-api>=0.6.2
 piper-tts>=1.2.0

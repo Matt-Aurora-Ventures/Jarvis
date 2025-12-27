@@ -99,6 +99,17 @@
       }
     },
     {
+      "name": "youtube-transcript",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@sinco-lab/mcp-youtube-transcript"
+      ],
+      "env": {}
+    },
+    {
       "name": "sequential-thinking",
       "enabled": true,
       "autostart": true,

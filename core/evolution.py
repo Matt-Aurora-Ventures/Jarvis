@@ -7,7 +7,7 @@ Auto-upgrades on boot and continuously improves.
 import json
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -22,14 +22,31 @@ SKILLS_DIR = ROOT / "skills"
 
 @dataclass
 class ImprovementProposal:
-    id: str
     category: str  # skill, config, behavior, module
     title: str
-    description: str
-    code: Optional[str]
-    rationale: str
-    timestamp: float
-    status: str  # proposed, approved, applied, rejected
+    description: str = ""
+    rationale: str = ""
+    code: Optional[str] = None
+    code_snippet: Optional[str] = None
+    files_to_modify: List[str] = field(default_factory=list)
+    confidence: float = 0.5
+    priority: float = 0.5
+    source: str = "unknown"
+    id: str = ""
+    timestamp: float = 0.0
+    status: str = "proposed"  # proposed, approved, applied, rejected
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            self.id = f"{int(time.time())}_{_slugify(self.title)}"
+        if not self.timestamp:
+            self.timestamp = time.time()
+        if self.code is None and self.code_snippet:
+            self.code = self.code_snippet
+        if self.code_snippet is None and self.code:
+            self.code_snippet = self.code
+        if self.files_to_modify is None:
+            self.files_to_modify = []
 
 
 def _load_evolution_log() -> List[Dict[str, Any]]:
@@ -117,13 +134,14 @@ If no improvement is needed, output: {{"category": "none"}}"""
             return None
 
         proposal_id = f"{int(time.time())}_{_slugify(data.get('title', 'improvement'))}"
+        code_value = data.get("code") or data.get("code_snippet")
 
         return ImprovementProposal(
             id=proposal_id,
             category=data.get("category", "skill"),
             title=data.get("title", "Unnamed improvement"),
             description=data.get("description", ""),
-            code=data.get("code"),
+            code=code_value,
             rationale=data.get("rationale", ""),
             timestamp=time.time(),
             status="proposed",
@@ -167,13 +185,14 @@ For skills, the code MUST:
 
         data = json.loads(clean)
         proposal_id = f"{int(time.time())}_{_slugify(data.get('title', 'improvement'))}"
+        code_value = data.get("code") or data.get("code_snippet")
 
         return ImprovementProposal(
             id=proposal_id,
             category=data.get("category", "skill"),
             title=data.get("title", "Unnamed"),
             description=data.get("description", ""),
-            code=data.get("code"),
+            code=code_value,
             rationale=data.get("rationale", ""),
             timestamp=time.time(),
             status="proposed",
@@ -184,22 +203,39 @@ For skills, the code MUST:
 
 def apply_improvement(
     proposal: ImprovementProposal,
-    context: safety.SafetyContext,
+    context: Optional[safety.SafetyContext] = None,
+    dry_run: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Apply an approved improvement."""
+    if context is not None and dry_run is not None:
+        raise ValueError("Provide either context or dry_run, not both.")
+    if context is None:
+        if dry_run is None:
+            dry_run = True
+        context = safety.SafetyContext(apply=not dry_run, dry_run=dry_run)
+
     if context.dry_run:
         return {
             "status": "dry_run",
+            "success": False,
+            "applied": False,
             "proposal": proposal,
             "message": "Would apply improvement (dry-run mode)",
         }
 
-    if proposal.category == "skill" and proposal.code:
+    if proposal.category == "skill":
+        code = (proposal.code or proposal.code_snippet or "").strip()
+        if not code:
+            return {
+                "status": "missing_code",
+                "success": False,
+                "applied": False,
+                "message": "Skill improvement missing code.",
+            }
         skill_name = _slugify(proposal.title)
         skill_path = SKILLS_DIR / f"{skill_name}.py"
         SKILLS_DIR.mkdir(parents=True, exist_ok=True)
 
-        code = proposal.code.strip()
         if not code.startswith("SKILL_NAME"):
             code = f'SKILL_NAME = "{proposal.title}"\nDESCRIPTION = "{proposal.description}"\n\n{code}'
 
@@ -218,11 +254,13 @@ def apply_improvement(
 
         return {
             "status": "applied",
+            "success": True,
+            "applied": True,
             "path": str(skill_path),
             "message": f"Created skill: {skill_path.name}",
         }
 
-    elif proposal.category == "config":
+    if proposal.category == "config":
         IMPROVEMENTS_DIR.mkdir(parents=True, exist_ok=True)
         config_path = IMPROVEMENTS_DIR / f"{proposal.id}_config.json"
         config_path.write_text(
@@ -230,7 +268,7 @@ def apply_improvement(
                 "title": proposal.title,
                 "description": proposal.description,
                 "rationale": proposal.rationale,
-                "suggested_changes": proposal.code or proposal.description,
+                "suggested_changes": proposal.code or proposal.code_snippet or proposal.description,
             }, indent=2),
             encoding="utf-8",
         )
@@ -246,11 +284,13 @@ def apply_improvement(
 
         return {
             "status": "saved",
+            "success": True,
+            "applied": False,
             "path": str(config_path),
             "message": f"Saved config suggestion: {config_path.name}",
         }
 
-    elif proposal.category in ("behavior", "module"):
+    if proposal.category in ("behavior", "module"):
         IMPROVEMENTS_DIR.mkdir(parents=True, exist_ok=True)
         proposal_path = IMPROVEMENTS_DIR / f"{proposal.id}_proposal.md"
         proposal_path.write_text(
@@ -258,7 +298,7 @@ def apply_improvement(
             f"**Category:** {proposal.category}\n\n"
             f"**Description:** {proposal.description}\n\n"
             f"**Rationale:** {proposal.rationale}\n\n"
-            f"**Code/Details:**\n```\n{proposal.code or 'N/A'}\n```\n",
+            f"**Code/Details:**\n```\n{proposal.code or proposal.code_snippet or 'N/A'}\n```\n",
             encoding="utf-8",
         )
 
@@ -273,11 +313,18 @@ def apply_improvement(
 
         return {
             "status": "saved",
+            "success": True,
+            "applied": False,
             "path": str(proposal_path),
             "message": f"Saved proposal: {proposal_path.name}",
         }
 
-    return {"status": "unknown_category", "message": "Could not apply improvement"}
+    return {
+        "status": "unknown_category",
+        "success": False,
+        "applied": False,
+        "message": "Could not apply improvement",
+    }
 
 
 def get_evolution_stats() -> Dict[str, Any]:

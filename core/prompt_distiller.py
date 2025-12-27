@@ -240,9 +240,9 @@ Output as JSON with: name, category, template, description, example_usage"""
             # Create improvements from synthesis
             for technique in synthesis.get("techniques", []):
                 proposal = evolution.ImprovementProposal(
-                    category="skill",
-                    title=f"Implement {technique}",
-                    description=f"Add capability for {technique} based on research",
+                    category="behavior",
+                    title=f"Adopt technique: {technique}",
+                    description=f"Operational guidance for {technique} based on research",
                     source="research_distillation",
                     priority=0.8
                 )

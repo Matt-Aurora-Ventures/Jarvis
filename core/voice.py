@@ -17,6 +17,7 @@ from core import (
     config,
     conversation,
     evolution,
+    context_manager,
     memory,
     notes_manager,
     observation,
@@ -28,9 +29,9 @@ from core import (
 )
 
 VOICES_DIR = Path(__file__).resolve().parents[1] / "data" / "voices"
-DEFAULT_PIPER_MODEL = "en_US-amy-low.onnx"
+DEFAULT_PIPER_MODEL = "en_US-lessac-medium.onnx"
 DEFAULT_PIPER_URL = (
-    "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US-amy-low.onnx.gz"
+    "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US-lessac-medium.onnx.gz"
 )
 PIPER_BINARY = "piper"
 
@@ -67,6 +68,7 @@ def _voice_cfg() -> dict:
     voice_cfg = cfg.get("voice", {}).copy()
     voice_cfg.setdefault("tts_engine", "piper")
     voice_cfg.setdefault("speak_responses", True)
+    voice_cfg.setdefault("fallback_voices", ["Samantha", "Ava", "Allison", "Victoria", "Alex"])
     return voice_cfg
 
 
@@ -150,6 +152,10 @@ def _speak_with_say(text: str, voice_cfg: dict) -> bool:
     voice_name = str(voice_cfg.get("speech_voice", "")).strip()
     if voice_name.lower() == "morgan freeman":
         voice_name = "Reed (English (US))"
+    speech_rate = voice_cfg.get("speech_rate")
+    fallback_voices = voice_cfg.get("fallback_voices", [])
+    if isinstance(fallback_voices, str):
+        fallback_voices = [fallback_voices]
 
     def _test_voice(name: str) -> bool:
         result = subprocess.run(
@@ -165,8 +171,8 @@ def _speak_with_say(text: str, voice_cfg: dict) -> bool:
         cmd = ["say"]
         if name:
             cmd.extend(["-v", name])
-        if voice_name.lower() == "morgan freeman":
-            cmd.extend(["-r", "140"])
+        if isinstance(speech_rate, (int, float)) and speech_rate:
+            cmd.extend(["-r", str(int(speech_rate))])
         try:
             subprocess.run(
                 cmd,
@@ -181,10 +187,18 @@ def _speak_with_say(text: str, voice_cfg: dict) -> bool:
             return False
 
     try:
-        if voice_name and _test_voice(voice_name):
-            if _run_say(voice_name):
+        candidates = []
+        if voice_name:
+            candidates.append(voice_name)
+        for fallback in fallback_voices:
+            if fallback and fallback not in candidates:
+                candidates.append(fallback)
+
+        for candidate in candidates:
+            if _test_voice(candidate) and _run_say(candidate):
                 _set_voice_error("")
                 return True
+
         success = _run_say()
         if success:
             _set_voice_error("")
@@ -443,6 +457,17 @@ def _chat_response(
     return conversation.generate_response(user_text, screen_context, session_history)
 
 
+def _record_command_turn(user_text: str, assistant_text: str) -> None:
+    try:
+        ctx = safety_context(apply=True)
+        memory.append_entry(user_text, "voice_chat_user", ctx)
+        memory.append_entry(assistant_text, "voice_chat_assistant", ctx)
+        context_manager.add_conversation_message("user", user_text)
+        context_manager.add_conversation_message("assistant", assistant_text)
+    except Exception:
+        pass
+
+
 def chat_session() -> None:
     cfg = _load_config()
     voice_cfg = cfg.get("voice", {})
@@ -487,6 +512,7 @@ def chat_session() -> None:
             command = parse_command(text)
             if command:
                 response = handle_command(command)
+                _record_command_turn(text, response)
             else:
                 response = _chat_response(text, tracker, session_history)
             session_history.append({"source": "voice_chat_assistant", "text": response})
