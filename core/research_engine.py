@@ -290,6 +290,45 @@ class ResearchEngine:
                 
         except Exception as e:
             self._log_action("ddg_html_error", {"query": query, "error": str(e)})
+
+        # Method 2b: DuckDuckGo Lite (alternate HTML)
+        try:
+            import requests
+            from bs4 import BeautifulSoup
+
+            url = "https://lite.duckduckgo.com/lite/"
+            params = {"q": query}
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+            }
+            response = requests.post(url, data=params, headers=headers, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+
+            candidates = soup.select("a.result-link")
+            if not candidates:
+                candidates = soup.select("a[href^='http']")
+
+            for link in candidates[:max_results]:
+                href = link.get("href", "").strip()
+                title = link.get_text().strip()
+                if not href or not title:
+                    continue
+                results.append(
+                    {
+                        "title": title,
+                        "url": href,
+                        "snippet": title,
+                    }
+                )
+
+            if results:
+                self._log_action("search_completed", {"query": query, "results": len(results), "method": "ddg_lite"})
+                return results
+        except Exception as e:
+            self._log_action("ddg_lite_error", {"query": query, "error": str(e)})
         
         # Method 3: Use Brave Search API if available (free tier)
         try:
@@ -319,7 +358,7 @@ class ResearchEngine:
         except Exception as e:
             self._log_action("brave_error", {"query": query, "error": str(e)})
         
-        self._log_action("search_failed", {"query": query, "methods_tried": 3})
+        self._log_action("search_failed", {"query": query, "methods_tried": 4})
         return []
     
     def extract_content(self, url: str) -> Optional[str]:

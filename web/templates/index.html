@@ -3,353 +3,602 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jarvis Task Manager</title>
+    <title>Jarvis Control Deck</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Space+Grotesk:wght@400;600;700&display=swap');
+
+        :root {
+            --bg: #f6f1e8;
+            --ink: #1b1f26;
+            --muted: #5d6b75;
+            --card: #fffaf4;
+            --accent: #0f766e;
+            --accent-2: #c2410c;
+            --accent-3: #1d4ed8;
+            --line: #e2d7c8;
+            --shadow: rgba(30, 41, 59, 0.15);
+            --mono: "IBM Plex Mono", "Courier New", monospace;
+            --sans: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            color: #333;
+            font-family: var(--sans);
+            background: radial-gradient(circle at 20% 20%, #fff2dd, transparent 45%),
+                        radial-gradient(circle at 90% 10%, #dfe9ff, transparent 40%),
+                        linear-gradient(120deg, #f5efe6 0%, #f8f5f0 100%);
+            color: var(--ink);
+            min-height: 100vh;
         }
-        
-        .container {
+
+        .page {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 32px 20px 60px;
         }
-        
-        .header {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        
-        .header h1 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-        
-        .stats {
+
+        .hero {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 20px;
+            align-items: stretch;
         }
-        
-        .stat-card {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        
-        .stat-number {
-            font-size: 2em;
-            font-weight: bold;
-            color: #3498db;
-        }
-        
-        .stat-label {
-            color: #7f8c8d;
-            margin-top: 5px;
-        }
-        
-        .controls {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        
-        .controls form {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        
-        .controls input, .controls select, .controls button {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        
-        .controls input[type="text"] {
-            flex: 1;
-            min-width: 200px;
-        }
-        
-        .controls button {
-            background: #3498db;
-            color: white;
-            border: none;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        
-        .controls button:hover {
-            background: #2980b9;
-        }
-        
-        .filters {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        .task-list {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+        .hero-card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 18px 40px -30px var(--shadow);
+            position: relative;
             overflow: hidden;
         }
-        
-        .task-item {
-            padding: 15px 20px;
-            border-bottom: 1px solid #eee;
+
+        .hero-card::after {
+            content: "";
+            position: absolute;
+            top: -30px;
+            right: -40px;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: rgba(15, 118, 110, 0.1);
+        }
+
+        .hero h1 {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .hero p {
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .status-grid {
+            display: grid;
+            gap: 12px;
+        }
+
+        .status-pill {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            background: #f3ebe1;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: 14px;
         }
-        
-        .task-item:last-child {
+
+        .status-pill span {
+            font-weight: 600;
+            font-family: var(--mono);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 14px 30px -26px var(--shadow);
+        }
+
+        .card h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .stat-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+        }
+
+        .stat {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .stat .value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent-3);
+        }
+
+        .stat .label {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+
+        .control-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .btn {
+            border: none;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            color: #fff;
+            background: var(--accent);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn.secondary {
+            background: var(--accent-2);
+        }
+
+        .btn.ghost {
+            background: #1f2937;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px -10px var(--shadow);
+        }
+
+        .form-stack {
+            display: grid;
+            gap: 10px;
+        }
+
+        input, select, textarea {
+            font-family: var(--mono);
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            background: #fff;
+        }
+
+        textarea {
+            min-height: 90px;
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px dashed var(--line);
+            font-size: 14px;
+        }
+
+        .toggle-row:last-child {
             border-bottom: none;
         }
-        
-        .task-info {
-            flex: 1;
+
+        .toggle-row label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        
-        .task-title {
-            font-weight: 500;
-            margin-bottom: 5px;
+
+        .console {
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 14px;
+            padding: 12px;
+            font-family: var(--mono);
+            font-size: 12px;
+            min-height: 120px;
+            overflow: auto;
         }
-        
+
+        .task-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .task-item {
+            background: #fff;
+            border-radius: 12px;
+            padding: 12px 16px;
+            border: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
         .task-meta {
             font-size: 12px;
-            color: #7f8c8d;
-        }
-        
-        .task-actions {
+            color: var(--muted);
             display: flex;
-            gap: 5px;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
-        
-        .task-actions button {
-            padding: 5px 10px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
+
+        .pill {
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .pill.high { background: #fde68a; color: #92400e; }
+        .pill.medium { background: #bbf7d0; color: #166534; }
+        .pill.low { background: #e2e8f0; color: #475569; }
+        .pill.urgent { background: #fecaca; color: #7f1d1d; }
+
+        .pill.status { background: #dbeafe; color: #1e3a8a; }
+
+        .log-list {
+            list-style: none;
+            display: grid;
+            gap: 8px;
             font-size: 12px;
         }
-        
-        .btn-start {
-            background: #f39c12;
-            color: white;
+
+        .log-list li {
+            padding: 8px 10px;
+            border-radius: 10px;
+            background: #fff;
+            border: 1px solid var(--line);
         }
-        
-        .btn-complete {
-            background: #27ae60;
-            color: white;
-        }
-        
-        .btn-start:hover {
-            background: #e67e22;
-        }
-        
-        .btn-complete:hover {
-            background: #229954;
-        }
-        
-        .priority {
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        
-        .priority-urgent {
-            background: #e74c3c;
-            color: white;
-        }
-        
-        .priority-high {
-            background: #e67e22;
-            color: white;
-        }
-        
-        .priority-medium {
-            background: #f39c12;
-            color: white;
-        }
-        
-        .priority-low {
-            background: #95a5a6;
-            color: white;
-        }
-        
-        .status {
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 11px;
-            margin-left: 5px;
-        }
-        
-        .status-pending {
-            background: #ecf0f1;
-            color: #7f8c8d;
-        }
-        
-        .status-in_progress {
-            background: #3498db;
-            color: white;
-        }
-        
-        .status-completed {
-            background: #27ae60;
-            color: white;
-        }
-        
-        .no-tasks {
-            text-align: center;
-            padding: 40px;
-            color: #7f8c8d;
-        }
-        
-        .refresh {
-            float: right;
-            background: #95a5a6;
-            color: white;
-            padding: 8px 15px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        
-        .refresh:hover {
-            background: #7f8c8d;
+
+        @media (max-width: 900px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Jarvis Task Manager</h1>
-            <button class="refresh" onclick="loadTasks()">Refresh</button>
-            <div class="stats">
-                <div class="stat-card">
-                    <div class="stat-number" id="stat-total">{{ stats.total }}</div>
-                    <div class="stat-label">Total Tasks</div>
+    <div class="page">
+        <section class="hero">
+            <div class="hero-card">
+                <h1>Jarvis Control Deck</h1>
+                <p>Local mission control for trading, research, and system health. Run targeted actions, tune autonomy, and keep the agent focused while staying light on resources.</p>
+            </div>
+            <div class="hero-card status-grid">
+                <div class="status-pill">Daemon <span id="status-daemon">--</span></div>
+                <div class="status-pill">Voice <span id="status-voice">--</span></div>
+                <div class="status-pill">Missions <span id="status-missions">--</span></div>
+                <div class="status-pill">Observer <span id="status-observer">--</span></div>
+            </div>
+        </section>
+
+        <section class="grid">
+            <div class="card">
+                <h3>System Pulse</h3>
+                <div class="stat-row">
+                    <div class="stat">
+                        <div class="value" id="stat-cpu">--</div>
+                        <div class="label">CPU Load</div>
+                    </div>
+                    <div class="stat">
+                        <div class="value" id="stat-ram">--</div>
+                        <div class="label">RAM Free</div>
+                    </div>
+                    <div class="stat">
+                        <div class="value" id="stat-disk">--</div>
+                        <div class="label">Disk Free</div>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="stat-pending">{{ stats.pending }}</div>
-                    <div class="stat-label">Pending</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="stat-progress">{{ stats.in_progress }}</div>
-                    <div class="stat-label">In Progress</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="stat-completed">{{ stats.completed }}</div>
-                    <div class="stat-label">Completed</div>
+                <div class="stat-row" style="margin-top: 10px;">
+                    <div class="stat">
+                        <div class="value" id="stat-net">--</div>
+                        <div class="label">Net Mbps</div>
+                    </div>
+                    <div class="stat">
+                        <div class="value" id="stat-pps">--</div>
+                        <div class="label">Packets/s</div>
+                    </div>
                 </div>
             </div>
-        </div>
-        
-        <div class="controls">
-            <form id="add-task-form">
-                <input type="text" id="task-title" placeholder="Enter task title..." required>
-                <select id="task-priority">
-                    <option value="low">Low</option>
-                    <option value="medium" selected>Medium</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                </select>
-                <button type="submit">Add Task</button>
-            </form>
-            
-            <div class="filters">
-                <select id="status-filter" onchange="loadTasks()">
-                    <option value="">All Status</option>
-                    <option value="pending">Pending</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                </select>
-                <select id="priority-filter" onchange="loadTasks()">
-                    <option value="">All Priorities</option>
-                    <option value="urgent">Urgent</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                </select>
+            <div class="card">
+                <h3>Quick Actions</h3>
+                <div class="control-row">
+                    <button class="btn" onclick="runAction('hyperliquid_snapshot')">Hyperliquid Snapshot</button>
+                    <button class="btn" onclick="runAction('hyperliquid_backtest')">Hyperliquid Backtest</button>
+                    <button class="btn" onclick="runAction('dex_api_scout')">DEX API Scout</button>
+                    <button class="btn secondary" onclick="runAction('prompt_pack')">Prompt Pack</button>
+                    <button class="btn ghost" onclick="runAction('ai_news')">AI + Security News</button>
+                    <button class="btn ghost" onclick="runAction('business_suggestions')">Business Suggestions</button>
+                    <button class="btn ghost" onclick="runAction('directive_digest')">Directive Digest</button>
+                    <button class="btn secondary" onclick="runAction('self_tests')">Run Self Tests</button>
+                    <button class="btn secondary" onclick="runAction('diagnostics')">Diagnostics</button>
+                </div>
             </div>
-        </div>
-        
-        <div class="task-list" id="task-list">
-            <!-- Tasks will be loaded here -->
-        </div>
+            <div class="card">
+                <h3>Research Run</h3>
+                <div class="form-stack">
+                    <input id="research-topic" type="text" placeholder="Topic (e.g. Solana DEX bot quote APIs)">
+                    <input id="research-focus" type="text" placeholder="Focus (e.g. endpoints, rate limits, fees)">
+                    <select id="research-pages">
+                        <option value="3">3 pages</option>
+                        <option value="4" selected>4 pages</option>
+                        <option value="6">6 pages</option>
+                    </select>
+                    <button class="btn" onclick="runResearch()">Run Research</button>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Autonomy Toggles</h3>
+                <div class="toggle-row">
+                    <span>UI Actions Allowed</span>
+                    <label><input type="checkbox" id="toggle-ui" onchange="toggleConfig('actions.allow_ui', this.checked)"> Enable</label>
+                </div>
+                <div class="toggle-row">
+                    <span>Require UI Confirm</span>
+                    <label><input type="checkbox" id="toggle-ui-confirm" onchange="toggleConfig('actions.require_confirm', this.checked)"> Confirm</label>
+                </div>
+                <div class="toggle-row">
+                    <span>Observer Enabled</span>
+                    <label><input type="checkbox" id="toggle-observer" onchange="toggleConfig('observer.enabled', this.checked)"> On</label>
+                </div>
+                <div class="toggle-row">
+                    <span>Observer Mode (lite/full)</span>
+                    <select id="toggle-observer-mode" onchange="toggleConfig('observer.mode', this.value)">
+                        <option value="lite">lite</option>
+                        <option value="full">full</option>
+                    </select>
+                </div>
+                <div class="toggle-row">
+                    <span>Missions Enabled</span>
+                    <label><input type="checkbox" id="toggle-missions" onchange="toggleConfig('missions.enabled', this.checked)"> On</label>
+                </div>
+                <div class="toggle-row">
+                    <span>Idle Research</span>
+                    <label><input type="checkbox" id="toggle-idle" onchange="toggleConfig('idle_research.enabled', this.checked)"> On</label>
+                </div>
+                <div class="toggle-row">
+                    <span>Resource Monitor</span>
+                    <label><input type="checkbox" id="toggle-resource" onchange="toggleConfig('resource_monitor.enabled', this.checked)"> On</label>
+                </div>
+                <div class="toggle-row">
+                    <span>Network Monitor</span>
+                    <label><input type="checkbox" id="toggle-network" onchange="toggleConfig('network_monitor.enabled', this.checked)"> On</label>
+                </div>
+                <div class="toggle-row">
+                    <span>Process Auto-Kill</span>
+                    <label><input type="checkbox" id="toggle-autokill" onchange="toggleConfig('process_guard.auto_kill', this.checked)"> On</label>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid">
+            <div class="card">
+                <h3>Task Control</h3>
+                <form id="add-task-form" class="form-stack">
+                    <input type="text" id="task-title" placeholder="Enter task title..." required>
+                    <select id="task-priority">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                    <button type="submit" class="btn">Add Task</button>
+                </form>
+                <div class="control-row" style="margin-top: 12px;">
+                    <select id="status-filter" onchange="loadTasks()">
+                        <option value="">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                    <select id="priority-filter" onchange="loadTasks()">
+                        <option value="">All Priorities</option>
+                        <option value="urgent">Urgent</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                    <button class="btn ghost" type="button" onclick="loadTasks()">Refresh</button>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Task List</h3>
+                <div class="task-list" id="task-list"></div>
+            </div>
+            <div class="card">
+                <h3>Console</h3>
+                <div class="console" id="console-output">Ready.</div>
+            </div>
+        </section>
+
+        <section class="grid">
+            <div class="card">
+                <h3>Security & Network Log</h3>
+                <ul class="log-list" id="security-log"></ul>
+            </div>
+        </section>
     </div>
-    
+
     <script>
+        const consoleOutput = document.getElementById('console-output');
+
+        function logConsole(message) {
+            const ts = new Date().toISOString().slice(11, 19);
+            consoleOutput.textContent = `[${ts}] ${message}`;
+        }
+
+        async function loadStatus() {
+            const data = await fetch('/api/status').then(r => r.json());
+            document.getElementById('status-daemon').textContent = data.daemon_running ? 'running' : 'stopped';
+            document.getElementById('status-voice').textContent = data.voice_status || 'off';
+            document.getElementById('status-missions').textContent = data.missions_enabled ? 'on' : 'off';
+            document.getElementById('status-observer').textContent = data.observer_enabled ? 'on' : 'off';
+        }
+
+        async function loadResources() {
+            const data = await fetch('/api/resources').then(r => r.json());
+            document.getElementById('stat-cpu').textContent = (data.cpu_load || 0).toFixed(2);
+            document.getElementById('stat-ram').textContent = `${(data.ram_free_gb || 0).toFixed(1)} GB`;
+            document.getElementById('stat-disk').textContent = `${(data.disk_free_gb || 0).toFixed(1)} GB`;
+            const net = (data.net_rx_mbps || 0) + (data.net_tx_mbps || 0);
+            document.getElementById('stat-net').textContent = `${net.toFixed(2)}`;
+            document.getElementById('stat-pps').textContent = `${(data.net_packets_per_sec || 0).toFixed(0)}`;
+        }
+
+        async function loadConfig() {
+            const data = await fetch('/api/config').then(r => r.json());
+            document.getElementById('toggle-ui').checked = Boolean(data.actions && data.actions.allow_ui);
+            document.getElementById('toggle-ui-confirm').checked = Boolean(data.actions && data.actions.require_confirm);
+            document.getElementById('toggle-observer').checked = Boolean(data.observer && data.observer.enabled);
+            document.getElementById('toggle-observer-mode').value = (data.observer && data.observer.mode) || 'lite';
+            document.getElementById('toggle-missions').checked = Boolean(data.missions && data.missions.enabled);
+            document.getElementById('toggle-idle').checked = Boolean(data.idle_research && data.idle_research.enabled);
+            document.getElementById('toggle-resource').checked = Boolean(data.resource_monitor && data.resource_monitor.enabled);
+            document.getElementById('toggle-network').checked = Boolean(data.network_monitor && data.network_monitor.enabled);
+            document.getElementById('toggle-autokill').checked = Boolean(data.process_guard && data.process_guard.auto_kill);
+        }
+
+        async function loadSecurity() {
+            const data = await fetch('/api/security/recent').then(r => r.json());
+            const log = document.getElementById('security-log');
+            const events = data.events || [];
+            if (!events.length) {
+                log.innerHTML = '<li>No recent security events.</li>';
+                return;
+            }
+            log.innerHTML = events.slice(0, 8).map(entry => {
+                const ts = new Date(entry.timestamp * 1000).toISOString().slice(0, 19).replace('T', ' ');
+                const detail = entry.offenders ? `Offenders: ${entry.offenders.length}` : (entry.action || 'event');
+                return `<li>${ts} - ${detail}</li>`;
+            }).join('');
+        }
+
+        async function toggleConfig(path, value) {
+            const response = await fetch('/api/config/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path, value })
+            }).then(r => r.json());
+            if (response.error) {
+                logConsole(`Config update failed: ${response.error}`);
+                return;
+            }
+            logConsole(`Updated ${path} -> ${value}`);
+        }
+
+        async function runAction(action) {
+            logConsole(`Running ${action}...`);
+            const response = await fetch('/api/actions/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            }).then(r => r.json());
+            if (!response.success) {
+                logConsole(`Action failed: ${response.error || 'unknown error'}`);
+                return;
+            }
+            logConsole(`Action complete: ${action}`);
+        }
+
+        async function runResearch() {
+            const topic = document.getElementById('research-topic').value.trim();
+            const focus = document.getElementById('research-focus').value.trim();
+            const maxPages = document.getElementById('research-pages').value;
+            if (!topic) {
+                logConsole('Research topic required.');
+                return;
+            }
+            logConsole(`Researching: ${topic}`);
+            const response = await fetch('/api/research', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ topic, focus, max_pages: maxPages })
+            }).then(r => r.json());
+            if (response.error) {
+                logConsole(`Research failed: ${response.error}`);
+                return;
+            }
+            logConsole(`Research complete. Pages: ${response.pages_processed || 0}`);
+        }
+
         function loadTasks() {
             const statusFilter = document.getElementById('status-filter').value;
             const priorityFilter = document.getElementById('priority-filter').value;
-            
+
             let url = '/api/tasks?';
             if (statusFilter) url += 'status=' + statusFilter + '&';
             if (priorityFilter) url += 'priority=' + priorityFilter;
-            
+
             fetch(url)
                 .then(response => response.json())
                 .then(tasks => {
                     renderTasks(tasks);
-                    updateStats();
                 });
         }
-        
+
         function renderTasks(tasks) {
             const taskList = document.getElementById('task-list');
-            
-            if (tasks.length === 0) {
-                taskList.innerHTML = '<div class="no-tasks">No tasks found</div>';
+
+            if (!tasks.length) {
+                taskList.innerHTML = '<div class="task-item">No tasks found</div>';
                 return;
             }
-            
+
             taskList.innerHTML = tasks.map(task => `
                 <div class="task-item">
-                    <div class="task-info">
+                    <div>
                         <div class="task-title">${task.title}</div>
                         <div class="task-meta">
-                            <span class="priority priority-${task.priority}">${task.priority}</span>
-                            <span class="status status-${task.status}">${task.status.replace('_', ' ')}</span>
-                            <span>Created: ${task.created_str}</span>
+                            <span class="pill ${task.priority}">${task.priority}</span>
+                            <span class="pill status">${task.status.replace('_', ' ')}</span>
+                            <span>${task.created_str}</span>
                         </div>
                     </div>
-                    <div class="task-actions">
-                        ${task.status === 'pending' ? `<button class="btn-start" onclick="startTask('${task.id}')">Start</button>` : ''}
-                        ${task.status === 'in_progress' ? `<button class="btn-complete" onclick="completeTask('${task.id}')">Complete</button>` : ''}
+                    <div class="control-row">
+                        ${task.status === 'pending' ? `<button class="btn" onclick="startTask('${task.id}')">Start</button>` : ''}
+                        ${task.status === 'in_progress' ? `<button class="btn secondary" onclick="completeTask('${task.id}')">Complete</button>` : ''}
                     </div>
                 </div>
             `).join('');
         }
-        
+
         function addTask(title, priority) {
             fetch('/api/tasks', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title, priority })
             })
             .then(response => response.json())
@@ -358,47 +607,34 @@
                 loadTasks();
             });
         }
-        
+
         function startTask(taskId) {
-            fetch(`/api/tasks/${taskId}/start`, {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(() => loadTasks());
+            fetch(`/api/tasks/${taskId}/start`, { method: 'POST' })
+                .then(() => loadTasks());
         }
-        
+
         function completeTask(taskId) {
-            fetch(`/api/tasks/${taskId}/complete`, {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(() => loadTasks());
+            fetch(`/api/tasks/${taskId}/complete`, { method: 'POST' })
+                .then(() => loadTasks());
         }
-        
-        function updateStats() {
-            fetch('/api/stats')
-                .then(response => response.json())
-                .then(stats => {
-                    document.getElementById('stat-total').textContent = stats.total;
-                    document.getElementById('stat-pending').textContent = stats.pending;
-                    document.getElementById('stat-progress').textContent = stats.in_progress;
-                    document.getElementById('stat-completed').textContent = stats.completed;
-                });
-        }
-        
-        // Event listeners
+
         document.getElementById('add-task-form').addEventListener('submit', (e) => {
             e.preventDefault();
             const title = document.getElementById('task-title').value;
             const priority = document.getElementById('task-priority').value;
             addTask(title, priority);
         });
-        
-        // Auto-refresh every 10 seconds
-        setInterval(loadTasks, 10000);
-        
-        // Initial load
-        loadTasks();
+
+        function loadAll() {
+            loadStatus();
+            loadResources();
+            loadConfig();
+            loadSecurity();
+            loadTasks();
+        }
+
+        setInterval(loadAll, 15000);
+        loadAll();
     </script>
 </body>
 </html>

@@ -150,7 +150,7 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            response = conversation.generate_response(message)
+            response = conversation.generate_response(message, "")
             self._send_json({"response": response})
         except Exception as e:
             self._send_json({"response": f"Error: {str(e)}"}, 500)

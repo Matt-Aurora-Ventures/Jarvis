@@ -103,6 +103,7 @@
 - **Piper TTS** — Bundled model auto-downloads to `data/voices/`, works with no internet
 - **Voice fallback** — Seamlessly drops to macOS `say` only if local synthesis fails
 - **Configurable** — Customize `voice.tts_engine`, `piper_model`, and `speech_voice` in config
+- **Jarvis voice live** — macOS `say` is enabled by default for natural speech
 
 ## 📦 Quick Start
 
@@ -114,10 +115,13 @@ cd Jarvis
 # Set up environment
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
+
+# If you hit the macOS llvmlite/LLVM error, use the lite set:
+python -m pip install -r requirements-mac-lite.txt
 
 # Add your API key (Gemini, Groq, or OpenAI)
-echo '{"google_api_key": "YOUR_KEY", "groq_api_key": "YOUR_GROQ_KEY"}' > secrets/keys.json
+echo '{\"google_api_key\": \"YOUR_KEY\", \"groq_api_key\": \"YOUR_GROQ_KEY\", \"brave_api_key\": \"OPTIONAL_BRAVE_KEY\"}' > secrets/keys.json
 
 # Start Jarvis
 ./bin/lifeos on --apply
@@ -139,6 +143,16 @@ echo '{"google_api_key": "YOUR_KEY", "groq_api_key": "YOUR_GROQ_KEY"}' > secrets
 | `lifeos activity` | View productivity stats |
 | `lifeos jarvis research "topic"` | Run research project |
 | `lifeos jarvis discover` | System discovery |
+
+## 🖥️ Web Control Deck
+
+Run the local Flask dashboard for status, resources, missions, and research:
+
+```bash
+python3 web/task_web.py
+```
+
+Open `http://127.0.0.1:5000` in your browser.
 
 ## ⚙️ Configuration
 

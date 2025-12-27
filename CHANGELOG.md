@@ -8,6 +8,9 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 - Tightened conversational focus to avoid circular logic, added clearer research summaries with sources, and improved cross-session memory capture.
 - Added Jarvis superintelligence context directives and prompt pack support for agency + website workflows.
 
+### 🔊 Voice
+- New Jarvis voice is live (macOS `say` fallback configured).
+
 ### 📈 Trading + Research
 - Added Hyperliquid data ingestion (30-day snapshots) plus lightweight MA backtests and research notes.
 - Switched trading research to DEX-first, low-fee chains (Solana/Base/BNB/Monad/Abstract), with DEX API scouting missions.
@@ -22,8 +25,16 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 - Added new idle missions: AI/security news scan, business suggestions, directive digest, and Hyperliquid backtest.
 - Added YouTube transcript MCP server and a local transcript API fallback for faster ingestion.
 
+### 🌐 Control Deck
+- Rebuilt the local web UI as a control deck with system status, resource telemetry, mission triggers, research runs, and config toggles.
+- Added Flask to requirements and expanded server endpoints for status, security logs, and actions.
+
 ### 🔧 Fixes
 - Fixed boot self-tests for memory pipeline and added lightweight guardrails to reduce UI automation spam.
+- Added DuckDuckGo Lite fallback for research search and fixed API server chat invocation.
+
+### ✅ Testing
+- Preliminary testing on this build looks good so far.
 
 # [0.7.0] - 2025-12-26
 

@@ -47,3 +47,7 @@ def get_anthropic_key() -> str:
 
 def get_openai_key() -> str:
     return get_key("openai_api_key", "OPENAI_API_KEY")
+
+
+def get_brave_key() -> str:
+    return get_key("brave_api_key", "BRAVE_API_KEY")
