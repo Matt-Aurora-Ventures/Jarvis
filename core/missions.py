@@ -470,6 +470,154 @@ def _run_idle_deep_research() -> Optional[Dict[str, str]]:
     return {"doc_id": doc.doc_id, "summary": doc.summary}
 
 
+def _learn_mode_topics(cfg: Dict[str, object]) -> List[str]:
+    learn_cfg = cfg.get("learn_mode", {}) if isinstance(cfg.get("learn_mode"), dict) else {}
+    raw_topics = learn_cfg.get("topics", [])
+    topics = [str(item).strip() for item in raw_topics if str(item).strip()]
+    if not topics:
+        trading_cfg = cfg.get("trading", {}) if isinstance(cfg.get("trading"), dict) else {}
+        chains = trading_cfg.get("preferred_chains", []) or []
+        for chain in chains:
+            chain_name = str(chain).strip()
+            if not chain_name:
+                continue
+            topics.append(f"{chain_name} DEX trading bot APIs")
+            topics.append(f"{chain_name} DEX liquidity and routing")
+        topics.extend(
+            [
+                "Hyperliquid market data API usage",
+                "DEX-only backtesting strategies for small accounts",
+                "Self-hosted TTS voice models",
+                "Lightweight local LLM agents and context storage",
+            ]
+        )
+    if not topics:
+        engine = research_engine.get_research_engine()
+        topics = engine.queue.get("priority_topics", [])
+    seen = set()
+    deduped: List[str] = []
+    for topic in topics:
+        key = topic.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(topic)
+    return deduped
+
+
+def _pick_learn_mode_topic(topics: List[str]) -> Optional[str]:
+    if not topics:
+        return None
+    ctx = context_manager.load_master_context()
+    last_topic = str(ctx.preferences.get("learn_mode_last_topic", "")).strip()
+    if last_topic in topics:
+        idx = topics.index(last_topic)
+        return topics[(idx + 1) % len(topics)]
+    return topics[int(time.time()) % len(topics)]
+
+
+def _run_learn_mode() -> Optional[Dict[str, str]]:
+    cfg = config.load_config()
+    learn_cfg = cfg.get("learn_mode", {}) if isinstance(cfg.get("learn_mode"), dict) else {}
+    if not learn_cfg.get("enabled", True):
+        return None
+
+    topics = _learn_mode_topics(cfg)
+    topic = _pick_learn_mode_topic(topics)
+    if not topic:
+        return None
+
+    focus = str(learn_cfg.get("focus", "")).strip()
+    ctx_summary = context_manager.get_context_summary()
+    if ctx_summary:
+        focus = f"{focus} | Context: {ctx_summary}" if focus else f"Context: {ctx_summary}"
+    focus = focus[:500]
+
+    max_pages = int(learn_cfg.get("max_pages", 4))
+    engine = research_engine.get_research_engine()
+    result = engine.research_topic(topic, max_pages=max_pages, focus=focus)
+    summary = (result.get("summary") or "").strip()
+    if not summary:
+        return None
+
+    key_findings = result.get("key_findings", []) or []
+    sources = result.get("sources", []) or []
+    snippet_seed = "; ".join(key_findings[:3])
+    findings = [
+        {
+            "title": item.get("title", ""),
+            "url": item.get("url", ""),
+            "snippet": snippet_seed,
+        }
+        for item in sources[:8]
+    ]
+    report = _summarize_with_model(
+        "Learn Mode Digest",
+        findings,
+        "Condense takeaways relevant to the Jarvis mission with next steps.",
+    )
+    report_line = report.splitlines()[0] if report else summary.splitlines()[0]
+    sources_block = "\n".join(
+        f"- {item.get('title', '').strip()}: {item.get('url', '').strip()}"
+        for item in sources[:10]
+        if item.get("url")
+    )
+    findings_block = "\n".join(f"- {item}" for item in key_findings[:8] if item)
+
+    note_body = (
+        "# Learn Mode Digest\n\n"
+        f"## Topic\n{topic}\n\n"
+        f"## Focus\n{focus or 'Mission-aligned research'}\n\n"
+        "## High-Level Report\n"
+        f"{report}\n\n"
+        "## Summary\n"
+        f"{summary}\n\n"
+        "## Key Findings\n"
+        f"{findings_block or '- No key findings extracted.'}\n\n"
+        "## Sources\n"
+        f"{sources_block or '- No sources captured.'}\n"
+    )
+    note_path, _, _ = notes_manager.save_note(
+        topic="learn_mode",
+        content=note_body,
+        fmt="md",
+        tags=["learn", "research", "idle"],
+        source="mission.learn_mode",
+        metadata={
+            "topic": topic,
+            "pages_processed": result.get("pages_processed"),
+            "total_results": result.get("total_results"),
+        },
+    )
+
+    doc = context_manager.add_context_document(
+        title=f"Learn Mode: {topic}",
+        source="Mission Scheduler",
+        category="research",
+        summary=report_line,
+        content=summary,
+        tags=["learn", "research", "idle"],
+        monetization_angle="Turn idle research into actionable strategy updates.",
+        metadata={"note_path": str(note_path), "topic": topic},
+    )
+    ctx = context_manager.load_master_context()
+    ctx.preferences["learn_mode_last_topic"] = topic
+    context_manager.save_master_context(ctx)
+    state.update_state(
+        learn_mode_last_topic=topic,
+        learn_mode_last_report=str(note_path),
+        learn_mode_last_run=time.time(),
+    )
+    try:
+        import subprocess
+
+        script = 'display notification "Learn mode summary ready." with title "Jarvis"'
+        subprocess.run(["osascript", "-e", script], capture_output=True, timeout=5)
+    except Exception:
+        pass
+    return {"doc_id": doc.doc_id, "summary": doc.summary, "note_path": str(note_path)}
+
+
 def _run_ai_news_scan() -> Optional[Dict[str, str]]:
     queries = [
         "AI agents latest news 2025",
@@ -696,6 +844,9 @@ def _default_missions(state_map: Dict[str, float]) -> List[Mission]:
     cfg = config.load_config()
     idle_cfg = cfg.get("idle_research", {})
     idle_min_seconds = int(idle_cfg.get("min_idle_seconds", 1200))
+    learn_cfg = cfg.get("learn_mode", {}) if isinstance(cfg.get("learn_mode"), dict) else {}
+    learn_interval = int(learn_cfg.get("interval_minutes", 60))
+    learn_idle_seconds = int(learn_cfg.get("min_idle_seconds", 1200))
     missions = [
         Mission(
             mission_id="moondev_watcher",
@@ -744,6 +895,14 @@ def _default_missions(state_map: Dict[str, float]) -> List[Mission]:
             min_idle_seconds=600,
             runner=_run_prompt_pack_builder,
             tags=["prompts", "agency"],
+        ),
+        Mission(
+            mission_id="learn_mode",
+            name="Learn Mode Digest",
+            interval_minutes=learn_interval,
+            min_idle_seconds=learn_idle_seconds,
+            runner=_run_learn_mode,
+            tags=["learn", "research", "idle"],
         ),
         Mission(
             mission_id="idle_deep_research",

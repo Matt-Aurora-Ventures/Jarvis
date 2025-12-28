@@ -14,12 +14,22 @@ ROOT = Path(__file__).resolve().parents[1]
 MCP_CONFIG_PATH = ROOT / "lifeos" / "config" / "mcp.config.json"
 
 
+def _expand_config(value):
+    if isinstance(value, dict):
+        return {key: _expand_config(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_expand_config(item) for item in value]
+    if isinstance(value, str):
+        return os.path.expandvars(os.path.expanduser(value))
+    return value
+
+
 def _read_mcp_config() -> Dict:
     if not MCP_CONFIG_PATH.exists():
         return {"log_dir": "lifeos/logs/mcp", "servers": []}
 
     with open(MCP_CONFIG_PATH, "r", encoding="utf-8") as handle:
-        return json.load(handle)
+        return _expand_config(json.load(handle))
 
 
 class MCPServerProcess:

@@ -9,8 +9,8 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "/Users/burritoaccount/Desktop/LifeOS",
-        "/Users/burritoaccount/Documents/Jarvis context"
+        "${HOME}/Desktop/LifeOS",
+        "${HOME}/Documents/Jarvis context"
       ],
       "env": {}
     },
@@ -24,7 +24,7 @@
         "@modelcontextprotocol/server-memory"
       ],
       "env": {
-        "MEMORY_FILE_PATH": "/Users/burritoaccount/Documents/Jarvis context/memory/jarvis-memory.jsonl"
+        "MEMORY_FILE_PATH": "${HOME}/Documents/Jarvis context/memory/jarvis-memory.jsonl"
       }
     },
     {
@@ -33,17 +33,17 @@
       "autostart": true,
       "command": "node",
       "args": [
-        "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/obsidian-memory-mcp/dist/index.js"
+        "${HOME}/Documents/Jarvis context/mcp-servers/obsidian-memory-mcp/dist/index.js"
       ],
       "env": {
-        "MEMORY_DIR": "/Users/burritoaccount/Documents/Obsidian/LifeOSVault"
+        "MEMORY_DIR": "${HOME}/Documents/Obsidian/LifeOSVault"
       }
     },
     {
       "name": "mcp-obsidian",
       "enabled": true,
       "autostart": true,
-      "command": "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/mcp-obsidian/.venv/bin/python",
+      "command": "${HOME}/Documents/Jarvis context/mcp-servers/mcp-obsidian/.venv/bin/python",
       "args": [
         "-m",
         "mcp_obsidian.server"
@@ -52,7 +52,7 @@
         "OBSIDIAN_API_KEY": "SET_OBSIDIAN_API_KEY",
         "OBSIDIAN_HOST": "127.0.0.1",
         "OBSIDIAN_PORT": "27124",
-        "OBSIDIAN_VAULT_PATH": "/Users/burritoaccount/Documents/Obsidian/LifeOSVault"
+        "OBSIDIAN_VAULT_PATH": "${HOME}/Documents/Obsidian/LifeOSVault"
       }
     },
     {
@@ -61,9 +61,9 @@
       "autostart": true,
       "command": "node",
       "args": [
-        "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/sqlite-src/dist/sqlite/index.js",
+        "${HOME}/Documents/Jarvis context/mcp-servers/sqlite-src/dist/sqlite/index.js",
         "--db-path",
-        "/Users/burritoaccount/Documents/Jarvis context/data/sqlite/lifeos.db"
+        "${HOME}/Documents/Jarvis context/data/sqlite/lifeos.db"
       ],
       "env": {}
     },
@@ -71,7 +71,7 @@
       "name": "system-monitor",
       "enabled": true,
       "autostart": true,
-      "command": "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/mcp-monitor/bin/mcp-monitor",
+      "command": "${HOME}/Documents/Jarvis context/mcp-servers/mcp-monitor/bin/mcp-monitor",
       "args": [],
       "env": {}
     },
@@ -79,11 +79,11 @@
       "name": "shell",
       "enabled": true,
       "autostart": true,
-      "command": "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/mcp-shell/node_modules/.bin/mcp-shell-server",
+      "command": "${HOME}/Documents/Jarvis context/mcp-servers/mcp-shell/node_modules/.bin/mcp-shell-server",
       "args": [],
       "env": {
-        "MCP_ALLOWED_ROOT": "/Users/burritoaccount/Desktop/LifeOS",
-        "MCP_LOG_DIR": "/Users/burritoaccount/Documents/Jarvis context/logs/mcp-shell"
+        "MCP_ALLOWED_ROOT": "${HOME}/Desktop/LifeOS",
+        "MCP_LOG_DIR": "${HOME}/Documents/Jarvis context/logs/mcp-shell"
       }
     },
     {
@@ -92,10 +92,10 @@
       "autostart": true,
       "command": "node",
       "args": [
-        "/Users/burritoaccount/Documents/Jarvis context/mcp-servers/puppeteer/src/dist/index.js"
+        "${HOME}/Documents/Jarvis context/mcp-servers/puppeteer/src/dist/index.js"
       ],
       "env": {
-        "PUPPETEER_DATA_DIR": "/Users/burritoaccount/Documents/Jarvis context/browser-data"
+        "PUPPETEER_DATA_DIR": "${HOME}/Documents/Jarvis context/browser-data"
       }
     },
     {
@@ -124,12 +124,12 @@
       "name": "git",
       "enabled": true,
       "autostart": true,
-      "command": "/Users/burritoaccount/Documents/Jarvis context/venvs/mcp-git/bin/python",
+      "command": "${HOME}/Documents/Jarvis context/venvs/mcp-git/bin/python",
       "args": [
         "-m",
         "mcp_server_git",
         "--repository",
-        "/Users/burritoaccount/Desktop/LifeOS"
+        "${HOME}/Desktop/LifeOS"
       ],
       "env": {}
     }

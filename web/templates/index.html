@@ -340,6 +340,7 @@
                     <button class="btn" onclick="runAction('dex_api_scout')">DEX API Scout</button>
                     <button class="btn secondary" onclick="runAction('prompt_pack')">Prompt Pack</button>
                     <button class="btn ghost" onclick="runAction('ai_news')">AI + Security News</button>
+                    <button class="btn ghost" onclick="runAction('learn_mode')">Learn Mode Digest</button>
                     <button class="btn ghost" onclick="runAction('business_suggestions')">Business Suggestions</button>
                     <button class="btn ghost" onclick="runAction('directive_digest')">Directive Digest</button>
                     <button class="btn secondary" onclick="runAction('self_tests')">Run Self Tests</button>
@@ -383,6 +384,10 @@
                 <div class="toggle-row">
                     <span>Missions Enabled</span>
                     <label><input type="checkbox" id="toggle-missions" onchange="toggleConfig('missions.enabled', this.checked)"> On</label>
+                </div>
+                <div class="toggle-row">
+                    <span>Learn Mode</span>
+                    <label><input type="checkbox" id="toggle-learn" onchange="toggleConfig('learn_mode.enabled', this.checked)"> On</label>
                 </div>
                 <div class="toggle-row">
                     <span>Idle Research</span>
@@ -485,6 +490,7 @@
             document.getElementById('toggle-observer').checked = Boolean(data.observer && data.observer.enabled);
             document.getElementById('toggle-observer-mode').value = (data.observer && data.observer.mode) || 'lite';
             document.getElementById('toggle-missions').checked = Boolean(data.missions && data.missions.enabled);
+            document.getElementById('toggle-learn').checked = Boolean(data.learn_mode && data.learn_mode.enabled);
             document.getElementById('toggle-idle').checked = Boolean(data.idle_research && data.idle_research.enabled);
             document.getElementById('toggle-resource').checked = Boolean(data.resource_monitor && data.resource_monitor.enabled);
             document.getElementById('toggle-network').checked = Boolean(data.network_monitor && data.network_monitor.enabled);

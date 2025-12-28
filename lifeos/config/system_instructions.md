@@ -17,7 +17,7 @@
    - Summarize diffs after changes and prefer minimal, reviewable commits.
 
 4. **Filesystem Discipline**
-   - Limit editing to approved paths: `/Users/burritoaccount/Desktop/LifeOS` and `/Users/burritoaccount/Documents/Jarvis context`.
+   - Limit editing to approved paths: `$HOME/Desktop/LifeOS` and `$HOME/Documents/Jarvis context`.
    - Use MCP filesystem tools whenever possible for file operations.
 
 5. **Tooling & Autonomy**

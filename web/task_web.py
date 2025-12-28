@@ -35,6 +35,7 @@ ALLOWED_CONFIG_PATHS = {
     "observer.mode",
     "missions.enabled",
     "idle_research.enabled",
+    "learn_mode.enabled",
     "process_guard.auto_kill",
     "process_guard.force_kill",
     "network_monitor.enabled",
@@ -150,6 +151,7 @@ def api_get_config():
         "actions": cfg.get("actions", {}),
         "observer": cfg.get("observer", {}),
         "missions": cfg.get("missions", {}),
+        "learn_mode": cfg.get("learn_mode", {}),
         "idle_research": cfg.get("idle_research", {}),
         "resource_monitor": cfg.get("resource_monitor", {}),
         "network_monitor": cfg.get("network_monitor", {}),
@@ -183,6 +185,7 @@ def api_run_action():
         "ai_news": missions._run_ai_news_scan,
         "directive_digest": missions._run_directive_digest,
         "business_suggestions": missions._run_business_suggestions,
+        "learn_mode": missions._run_learn_mode,
         "self_tests": jarvis._run_self_tests,
         "diagnostics": diagnostics.run_diagnostics,
     }

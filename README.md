@@ -77,7 +77,7 @@
 
 ### 🧩 MCP Autonomy Stack
 - **Filesystem + Git MCP** — Safe read/write access to `LifeOS` and Jarvis context with enforced branch discipline.
-- **Dual Memory Layer** — JSONL knowledge graph (`server-memory`) plus Obsidian-native graph (`obsidian-memory`) stored in `/Users/burritoaccount/Documents/Obsidian/LifeOSVault`.
+- **Dual Memory Layer** — JSONL knowledge graph (`server-memory`) plus Obsidian-native graph (`obsidian-memory`) stored in `$HOME/Documents/Obsidian/LifeOSVault`.
 - **Knowledge Connectors** — Obsidian REST MCP enables Jarvis to search, edit, and append to vault notes with API-key protection.
 - **Systems Insight** — `mcp-monitor` streams CPU/GPU/RAM/network metrics for optimization cycles.
 - **Persistent Reasoning** — SQLite MCP hosts long-term structured data and queryable memories.

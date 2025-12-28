@@ -1,5 +1,5 @@
 {
-  "timezone": "America/Costa_Rica",
+  "timezone": "UTC",
   "reports": {
     "enabled": true,
     "schedule": {
@@ -53,7 +53,7 @@
     "fallback_mode": "push-to-talk",
     "engine": "openwakeword",
     "piper_model": "en_US-lessac-medium.onnx",
-    "piper_model_path": "/Users/burritoaccount/Desktop/LifeOS/data/voices/en_US-lessac-medium.onnx",
+    "piper_model_path": "data/voices/en_US-lessac-medium.onnx",
     "piper_download_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US-lessac-medium.onnx.gz",
     "wake_word": "jarvis",
     "wake_word_threshold": 0.6,
@@ -172,6 +172,14 @@
     "auto_commit_min_seconds": 10800,
     "max_cpu_load": 4.0,
     "min_free_ram_gb": 2.0
+  },
+  "learn_mode": {
+    "enabled": true,
+    "min_idle_seconds": 1200,
+    "interval_minutes": 20,
+    "max_pages": 4,
+    "focus": "Focus on low-fee decentralized trading bots, Hyperliquid data pipelines, and lightweight self-hosted AI/voice improvements for Jarvis.",
+    "topics": []
   },
   "idle_research": {
     "enabled": true,
