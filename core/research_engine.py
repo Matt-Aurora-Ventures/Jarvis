@@ -390,15 +390,17 @@ class ResearchEngine:
             response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
             
+            raw_html = response.text
+            
             # Try readability first
             try:
                 from readability import Document
-                doc = Document(response.content)
+                doc = Document(raw_html)
                 soup = BeautifulSoup(doc.summary(), "html.parser")
             except Exception as e:
                 # Fallback to manual extraction
                 self._log_action("readability_failed", {"url": url, "error": str(e)})
-                soup = BeautifulSoup(response.text, "html.parser")
+                soup = BeautifulSoup(raw_html, "html.parser")
                 
                 # Remove unwanted elements
                 for element in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'iframe', 'noscript']):

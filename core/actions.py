@@ -9,6 +9,28 @@ from typing import Any, Dict, Optional, Tuple
 
 from core import computer, guardian, config, state, notes_manager
 
+FIREFOX_APP = "Firefox Developer Edition"
+
+
+def _open_in_firefox(target: str = "") -> Tuple[bool, str]:
+    """Open Firefox Developer Edition optionally pointing at a URL."""
+    cmd = ["open", "-a", FIREFOX_APP]
+    if target:
+        cmd.append(target)
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        action_desc = f"Firefox opened to {target}" if target else "Firefox opened"
+        return True, action_desc
+    except subprocess.CalledProcessError as exc:
+        return False, f"Failed to open Firefox Developer Edition: {exc}"
+    except FileNotFoundError:
+        return False, "Firefox Developer Edition not found; please install it in /Applications"
+
 
 def _ui_allowed(action: str) -> bool:
     cfg = config.load_config()
@@ -65,22 +87,23 @@ def send_email_via_mailto(to: str, subject: str = "", body: str = "") -> Tuple[b
     return computer.open_url(url)
 
 
-def open_browser(url: str = "") -> Tuple[bool, str]:
-    """Open default browser, optionally to a URL."""
+def open_browser(url: str = "", param: str = "", **_: Any) -> Tuple[bool, str]:
+    """Open Firefox Developer Edition, optionally to a URL."""
     if not _ui_allowed("open_browser"):
         return _ui_blocked_msg("open_browser")
-    if url:
-        return computer.open_url(url)
-    return computer.open_app("Safari")
+    target = url or param
+    if target and not target.lower().startswith(("http://", "https://")):
+        target = f"https://{target}"
+    return _open_in_firefox(target or "")
 
 
-def google_search(query: str) -> Tuple[bool, str]:
+def google_search(query: str, **_: Any) -> Tuple[bool, str]:
     """Perform a Google search."""
     if not _ui_allowed("google_search"):
         return _ui_blocked_msg("google_search")
     import urllib.parse
     url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
-    return computer.open_url(url)
+    return _open_in_firefox(url)
 
 
 def open_finder(path: str = "~") -> Tuple[bool, str]:
@@ -99,7 +122,7 @@ def open_terminal() -> Tuple[bool, str]:
     return computer.open_app("Terminal")
 
 
-def open_notes(topic: str = "") -> Tuple[bool, str]:
+def open_notes(topic: str = "", app: str = "", **_: Any) -> Tuple[bool, str]:
     """Open local note folder for a topic."""
     if not _ui_allowed("open_notes"):
         return _ui_blocked_msg("open_notes")
@@ -243,12 +266,12 @@ def close_window() -> Tuple[bool, str]:
     return computer.press_key("w", ["command"])
 
 
-def new_window() -> Tuple[bool, str]:
+def new_window(app: str = "", **_: Any) -> Tuple[bool, str]:
     """Open a new window in current app."""
     return computer.press_key("n", ["command"])
 
 
-def new_tab() -> Tuple[bool, str]:
+def new_tab(app: str = "", **_: Any) -> Tuple[bool, str]:
     """Open a new tab in current app."""
     return computer.press_key("t", ["command"])
 

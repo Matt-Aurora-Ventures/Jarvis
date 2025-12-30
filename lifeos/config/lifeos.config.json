@@ -78,8 +78,8 @@
     "track_mouse": false
   },
   "actions": {
-    "allow_ui": false,
-    "require_confirm": true
+    "allow_ui": true,
+    "require_confirm": false
   },
   "hotkeys": {
     "enabled": true,

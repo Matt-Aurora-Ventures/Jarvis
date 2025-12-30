@@ -7,10 +7,12 @@ import sys
 import time
 import urllib.request
 import warnings
-from collections import deque
+import threading
 from dataclasses import asdict, dataclass, field
 from typing import Any, Deque, Dict, List, Optional
+from collections import deque
 
+import requests
 from core import config, secrets
 
 
@@ -28,6 +30,17 @@ def _safe_error_message(exc: Exception, limit: int = 300) -> str:
 
 
 _RETRY_IN_RE = re.compile(r"retry in ([0-9.]+)s", re.IGNORECASE)
+
+_GROQ_LOCK = threading.Lock()
+_GROQ_MIN_CALL_INTERVAL = 1.0  # seconds
+_LAST_GROQ_CALL = 0.0
+
+_OLLAMA_HEALTH: Dict[str, Any] = {
+    "base_url": "",
+    "available": False,
+    "checked_at": 0.0,
+    "ttl": 30.0,
+}
 
 
 def _retry_delay_seconds(exc: Exception, attempt: int) -> float:
@@ -230,12 +243,18 @@ def _ollama_generate_raw(
     return text
 
 
-def _ollama_generate(prompt: str, max_output_tokens: int, timeout: int = 120) -> Optional[str]:
+def _ollama_generate(
+    prompt: str,
+    max_output_tokens: int,
+    timeout: int = 120,
+) -> Optional[str]:
     cfg = config.load_config()
     if not _ollama_enabled(cfg):
         return None
     base_url = _ollama_base_url(cfg)
     if not base_url:
+        return None
+    if not _ollama_available(base_url):
         return None
     try:
         return _ollama_generate_raw(
@@ -491,28 +510,114 @@ def _groq_client():
         from groq import Groq
         return Groq(api_key=key)
     except ImportError:
-        return None
+        pass
     except Exception:
-        return None
+        pass
+    return {"api_key": key}  # Fallback handled in _ask_groq
 
 
 def _ask_groq(prompt: str, model: str, max_output_tokens: int = 512) -> Optional[str]:
     """Use Groq for ultra-fast inference."""
     client = _groq_client()
-    if not client:
+    if client is None:
         return None
     
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_output_tokens,
-            temperature=0.7,
-        )
-        return response.choices[0].message.content
-    except Exception:
-        return None
+    # If actual Groq SDK is available, client will have chat attribute
+    if hasattr(client, "chat"):
+        with _throttled_groq_call():
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=max_output_tokens,
+                    temperature=0.7,
+                )
+                return response.choices[0].message.content
+            except Exception as exc:
+                _log(f"⚠ Groq SDK call failed: {_safe_error_message(exc)}")
+                pass
+    
+    # HTTP fallback (works without groq SDK)
+    with _throttled_groq_call():
+        try:
+            api_key = (
+                client.get("api_key")
+                if isinstance(client, dict)
+                else os.environ.get("GROQ_API_KEY") or secrets.get_groq_key()
+            )
+            if not api_key:
+                return None
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": max_output_tokens,
+                "temperature": 0.7,
+            }
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=30,
+            )
+            if response.status_code == 429:
+                _log("⚠ Groq rate limited (429). Backing off for 3s.")
+                time.sleep(3)
+                return None
+            response.raise_for_status()
+            data = response.json()
+            choices = data.get("choices", [])
+            if choices:
+                return choices[0]["message"]["content"]
+        except Exception as exc:
+            _log(f"⚠ Groq HTTP call failed: {_safe_error_message(exc)}")
+            return None
 
+
+def _throttled_groq_call():
+    """Context manager to serialize Groq calls and honor minimum spacing."""
+    class _GroqThrottle:
+        def __enter__(self_inner):
+            global _LAST_GROQ_CALL
+            with _GROQ_LOCK:
+                now = time.time()
+                wait = _GROQ_MIN_CALL_INTERVAL - (now - _LAST_GROQ_CALL)
+                if wait > 0:
+                    time.sleep(wait)
+                _LAST_GROQ_CALL = time.time()
+            return self_inner
+
+        def __exit__(self_inner, exc_type, exc, tb):
+            return False
+
+    return _GroqThrottle()
+
+
+def _ollama_available(base_url: str) -> bool:
+    ttl = _OLLAMA_HEALTH["ttl"]
+    now = time.time()
+    if (
+        _OLLAMA_HEALTH["base_url"] == base_url
+        and now - _OLLAMA_HEALTH["checked_at"] < ttl
+    ):
+        return _OLLAMA_HEALTH["available"]
+
+    try:
+        request = urllib.request.Request(f"{base_url}/api/tags", method="GET")
+        with urllib.request.urlopen(request, timeout=3) as response:
+            available = response.status == 200
+    except Exception:
+        available = False
+
+    _OLLAMA_HEALTH.update(
+        {"base_url": base_url, "available": available, "checked_at": now}
+    )
+    if not available:
+        _log(f"⚠ Ollama at {base_url} unavailable; skipping local fallback.")
+    return available
 
 def get_ranked_providers(prefer_free: bool = True) -> list:
     """Get providers ranked by intelligence, with free models first if preferred."""
