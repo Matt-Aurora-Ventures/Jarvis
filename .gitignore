@@ -128,7 +128,6 @@ build/
 *.pyo
 
 # === TESTING ===
-test_*.py
 tests/__pycache__/
 .hypothesis/
 

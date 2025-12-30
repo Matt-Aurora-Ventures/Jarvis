@@ -695,3 +695,246 @@ def listen_once() -> str:
     response = handle_command(command)
     _speak(response)
     return response
+
+
+def check_voice_health() -> dict:
+    """Run comprehensive voice pipeline diagnostics.
+
+    Returns a dict with status for each component:
+    - microphone: Can we access the mic?
+    - wake_word: Is openwakeword available and working?
+    - stt: Speech-to-text engines status
+    - tts: Text-to-speech engines status
+    - audio_playback: Can we play audio?
+    """
+    results = {}
+
+    # 1. Microphone check
+    mic_status = {"ok": False, "error": None, "fix": None}
+    try:
+        import speech_recognition as sr
+        recognizer = sr.Recognizer()
+        with sr.Microphone() as source:
+            recognizer.adjust_for_ambient_noise(source, duration=0.2)
+        mic_status["ok"] = True
+    except ImportError:
+        mic_status["error"] = "speech_recognition not installed"
+        mic_status["fix"] = "pip install SpeechRecognition"
+    except OSError as e:
+        mic_status["error"] = f"Microphone unavailable: {e}"
+        mic_status["fix"] = "Check System Preferences > Security & Privacy > Microphone"
+    except Exception as e:
+        mic_status["error"] = str(e)
+        mic_status["fix"] = "Grant microphone access to Terminal/IDE"
+    results["microphone"] = mic_status
+
+    # 2. Wake word detection check
+    wake_status = {"ok": False, "error": None, "fix": None, "model": None}
+    try:
+        import openwakeword
+        import pyaudio
+
+        cfg = _load_config()
+        wake_word = cfg.get("voice", {}).get("wake_word", "jarvis")
+        model_name = _wake_word_model_name(wake_word)
+        wake_status["model"] = model_name
+
+        # Check if model exists
+        model_meta = openwakeword.MODELS.get(model_name, {})
+        model_path = model_meta.get("model_path")
+        if model_path and not Path(model_path).exists():
+            wake_status["error"] = f"Model '{model_name}' not downloaded"
+            wake_status["fix"] = f"python -c \"from openwakeword import utils; utils.download_models(['{model_name}'])\""
+        else:
+            # Try to initialize
+            try:
+                model = openwakeword.Model(wakeword_models=[model_name])
+                wake_status["ok"] = True
+            except Exception as e:
+                wake_status["error"] = f"Model init failed: {e}"
+                wake_status["fix"] = "pip install --upgrade openwakeword"
+    except ImportError as e:
+        missing = "openwakeword" if "openwakeword" in str(e) else "pyaudio"
+        wake_status["error"] = f"{missing} not installed"
+        if missing == "pyaudio":
+            wake_status["fix"] = "brew install portaudio && pip install pyaudio"
+        else:
+            wake_status["fix"] = "pip install openwakeword"
+    except Exception as e:
+        wake_status["error"] = str(e)
+    results["wake_word"] = wake_status
+
+    # 3. STT engines check
+    stt_status = {"engines": {}, "any_working": False}
+
+    # Gemini STT
+    gemini_key = secrets.get_gemini_key()
+    if gemini_key:
+        stt_status["engines"]["gemini"] = {"ok": True, "note": "API key configured"}
+        stt_status["any_working"] = True
+    else:
+        stt_status["engines"]["gemini"] = {"ok": False, "fix": "Set GEMINI_API_KEY env var (free tier available)"}
+
+    # OpenAI Whisper
+    openai_key = secrets.get_openai_key()
+    if openai_key:
+        try:
+            from openai import OpenAI
+            stt_status["engines"]["whisper"] = {"ok": True, "note": "API key configured"}
+            stt_status["any_working"] = True
+        except ImportError:
+            stt_status["engines"]["whisper"] = {"ok": False, "fix": "pip install openai"}
+    else:
+        stt_status["engines"]["whisper"] = {"ok": False, "fix": "Set OPENAI_API_KEY env var"}
+
+    # Google (free, no key needed)
+    try:
+        import speech_recognition as sr
+        stt_status["engines"]["google"] = {"ok": True, "note": "Free tier (no key needed)"}
+        stt_status["any_working"] = True
+    except ImportError:
+        stt_status["engines"]["google"] = {"ok": False, "fix": "pip install SpeechRecognition"}
+
+    # Sphinx (offline, last resort)
+    try:
+        import speech_recognition as sr
+        # Check if pocketsphinx is available
+        try:
+            import pocketsphinx
+            stt_status["engines"]["sphinx"] = {"ok": True, "note": "Offline fallback"}
+            stt_status["any_working"] = True
+        except ImportError:
+            stt_status["engines"]["sphinx"] = {"ok": False, "fix": "pip install pocketsphinx (offline fallback)"}
+    except ImportError:
+        pass
+
+    results["stt"] = stt_status
+
+    # 4. TTS engines check
+    tts_status = {"engines": {}, "any_working": False}
+    voice_cfg = _voice_cfg()
+
+    # Piper TTS
+    piper_ok = False
+    if shutil.which(PIPER_BINARY):
+        model_path = _ensure_piper_model(voice_cfg)
+        if model_path and model_path.exists():
+            tts_status["engines"]["piper"] = {"ok": True, "note": f"Model: {model_path.name}"}
+            piper_ok = True
+            tts_status["any_working"] = True
+        else:
+            tts_status["engines"]["piper"] = {"ok": False, "fix": "Model download failed; check network"}
+    else:
+        tts_status["engines"]["piper"] = {"ok": False, "fix": "brew install piper (or pip install piper-tts)"}
+
+    # macOS say (always available on macOS)
+    try:
+        result = subprocess.run(
+            ["say", "-v", "?"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            voice_count = len(result.stdout.strip().split("\n"))
+            tts_status["engines"]["macos_say"] = {"ok": True, "note": f"{voice_count} voices available"}
+            tts_status["any_working"] = True
+        else:
+            tts_status["engines"]["macos_say"] = {"ok": False, "error": "say command failed"}
+    except FileNotFoundError:
+        tts_status["engines"]["macos_say"] = {"ok": False, "note": "Not on macOS"}
+    except Exception as e:
+        tts_status["engines"]["macos_say"] = {"ok": False, "error": str(e)}
+
+    results["tts"] = tts_status
+
+    # 5. Audio playback check
+    playback_status = {"ok": False, "error": None}
+    try:
+        result = subprocess.run(
+            ["afplay", "--help"],
+            capture_output=True,
+            timeout=5,
+        )
+        # afplay returns 1 for --help but that's fine
+        playback_status["ok"] = True
+    except FileNotFoundError:
+        playback_status["error"] = "afplay not found (not on macOS?)"
+        playback_status["fix"] = "Use a different audio player or run on macOS"
+    except Exception as e:
+        playback_status["error"] = str(e)
+    results["audio_playback"] = playback_status
+
+    return results
+
+
+def get_voice_doctor_summary() -> str:
+    """Get human-readable voice pipeline health summary."""
+    results = check_voice_health()
+    lines = ["=== Voice Pipeline Health ===\n"]
+
+    # Microphone
+    mic = results.get("microphone", {})
+    if mic.get("ok"):
+        lines.append("✓ Microphone: Working")
+    else:
+        lines.append(f"✗ Microphone: {mic.get('error', 'Unknown error')}")
+        if mic.get("fix"):
+            lines.append(f"  Fix: {mic['fix']}")
+
+    # Wake word
+    wake = results.get("wake_word", {})
+    if wake.get("ok"):
+        lines.append(f"✓ Wake Word: Ready (model: {wake.get('model', 'unknown')})")
+    else:
+        lines.append(f"✗ Wake Word: {wake.get('error', 'Not configured')}")
+        if wake.get("fix"):
+            lines.append(f"  Fix: {wake['fix']}")
+
+    # STT
+    stt = results.get("stt", {})
+    if stt.get("any_working"):
+        working = [k for k, v in stt.get("engines", {}).items() if v.get("ok")]
+        lines.append(f"✓ Speech-to-Text: {', '.join(working)}")
+    else:
+        lines.append("✗ Speech-to-Text: No engines available")
+        for name, info in stt.get("engines", {}).items():
+            if not info.get("ok") and info.get("fix"):
+                lines.append(f"  - {name}: {info['fix']}")
+
+    # TTS
+    tts = results.get("tts", {})
+    if tts.get("any_working"):
+        working = [k for k, v in tts.get("engines", {}).items() if v.get("ok")]
+        lines.append(f"✓ Text-to-Speech: {', '.join(working)}")
+    else:
+        lines.append("✗ Text-to-Speech: No engines available")
+        for name, info in tts.get("engines", {}).items():
+            if not info.get("ok") and info.get("fix"):
+                lines.append(f"  - {name}: {info['fix']}")
+
+    # Audio playback
+    playback = results.get("audio_playback", {})
+    if playback.get("ok"):
+        lines.append("✓ Audio Playback: Working (afplay)")
+    else:
+        lines.append(f"✗ Audio Playback: {playback.get('error', 'Unknown error')}")
+        if playback.get("fix"):
+            lines.append(f"  Fix: {playback['fix']}")
+
+    # Overall verdict
+    lines.append("")
+    all_critical_ok = (
+        results.get("microphone", {}).get("ok") and
+        results.get("stt", {}).get("any_working") and
+        results.get("tts", {}).get("any_working")
+    )
+    if all_critical_ok:
+        if results.get("wake_word", {}).get("ok"):
+            lines.append("✓ Voice pipeline fully operational (wake word + push-to-talk)")
+        else:
+            lines.append("⚠ Voice pipeline operational (push-to-talk only, wake word needs setup)")
+    else:
+        lines.append("✗ Voice pipeline NOT operational - fix issues above")
+
+    return "\n".join(lines)

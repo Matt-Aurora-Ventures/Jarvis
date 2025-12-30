@@ -1028,6 +1028,16 @@ def cmd_jarvis(args: argparse.Namespace) -> None:
 
 def cmd_doctor(args: argparse.Namespace) -> None:
     """Run system health diagnostics with actionable fixes."""
+    # Voice-only mode
+    if getattr(args, "voice", False):
+        print("=" * 50)
+        print("LifeOS Voice Pipeline Diagnostics")
+        print("=" * 50)
+        print()
+        print(voice.get_voice_doctor_summary())
+        print("=" * 50)
+        return
+
     print("=" * 50)
     print("LifeOS Doctor - System Health Check")
     print("=" * 50)
@@ -1157,6 +1167,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor_parser = subparsers.add_parser("doctor")
     doctor_parser.add_argument("--test", action="store_true", help="Run quick provider test")
+    doctor_parser.add_argument("--voice", action="store_true", help="Run voice pipeline diagnostics")
 
     log_parser = subparsers.add_parser("log", parents=[mode_parser])
     log_parser.add_argument("text", nargs="?", default="")
