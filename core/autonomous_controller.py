@@ -218,25 +218,31 @@ class AutonomousController:
     
     def _apply_circular_logic_fix(self, issue: Dict):
         """Apply fixes for detected circular logic."""
+        # Use CycleGovernor to enforce blocks
+        self.cycle_governor.enforce_circular_logic_block(issue)
+
         if issue["type"] == "research_improvement_loop":
             # Add cooldown between research and improvement
             self.schedule["last_research"] = time.time()
             self.schedule["last_improvement"] = time.time()
-            self._log("Applied fix: Extended cooldown for research and improvement")
-            
+            self._log("Applied fix: Extended cooldown for research and improvement (10 min block)")
+
         elif issue["type"] == "self_evaluation_loop":
             # Disable self-evaluation for 1 hour
             self.schedule["last_self_evaluation"] = time.time() + 3600
             self._log("Applied fix: Disabled self-evaluation for 1 hour")
-            
+
         elif issue["type"] == "restart_loop":
             # Disable restart capability for 30 minutes
-            self.restart_manager.disable_restart(1800)
+            try:
+                self.restart_manager.disable_restart(1800)
+            except Exception:
+                pass  # Restart manager may not have disable_restart
             self._log("Applied fix: Disabled restarts for 30 minutes")
-            
+
         elif issue["type"] == "error_recovery_loop":
             # Increase error wait time
-            self._log("Applied fix: Increased error recovery wait time")
+            self._log("Applied fix: Blocked improvement cycles for 15 minutes")
     
     def _get_next_task(self) -> Optional[Dict[str, Any]]:
         """Get the next explicit task from task manager."""

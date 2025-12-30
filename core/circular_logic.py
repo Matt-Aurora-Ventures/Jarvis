@@ -231,16 +231,37 @@ class CycleGovernor:
             ts for ts in self.cycle_history[cycle_type] if ts > hour_ago
         ]
         
+    def block_cycle(self, cycle_type: str, duration_seconds: int = 1800):
+        """Explicitly block a cycle type for a duration (enforcement)."""
+        now = time.time()
+        # Set last_run to future time to simulate long cooldown
+        self.last_cycle_times[cycle_type] = now + duration_seconds - self.cycle_cooldowns.get(cycle_type, 60)
+
+    def enforce_circular_logic_block(self, detected_issue: Dict):
+        """Enforce blocks based on detected circular logic issue."""
+        issue_type = detected_issue.get("type", "")
+
+        if issue_type == "research_improvement_loop":
+            self.block_cycle("research", 600)  # 10 min block
+            self.block_cycle("improvement", 600)
+        elif issue_type == "self_evaluation_loop":
+            self.block_cycle("self_evaluation", 3600)  # 1 hour block
+        elif issue_type == "restart_loop":
+            self.block_cycle("restart", 1800)  # 30 min block
+        elif issue_type == "error_recovery_loop":
+            # Block any improvement-related cycles
+            self.block_cycle("improvement", 900)
+
     def get_governor_stats(self) -> Dict:
         """Get governor statistics."""
         now = time.time()
         stats = {}
-        
+
         for cycle_type in self.cycle_cooldowns.keys():
             last_run = self.last_cycle_times.get(cycle_type, 0)
             cooldown = self.cycle_cooldowns[cycle_type]
             can_run, reason = self.can_run_cycle(cycle_type)
-            
+
             stats[cycle_type] = {
                 "last_run": last_run,
                 "cooldown_remaining": max(0, cooldown - (now - last_run)),
@@ -248,5 +269,5 @@ class CycleGovernor:
                 "reason": reason,
                 "hourly_count": len(self.cycle_history.get(cycle_type, []))
             }
-            
+
         return stats

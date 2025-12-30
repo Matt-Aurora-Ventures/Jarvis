@@ -32,8 +32,8 @@
   "passive": {
     "enabled": true,
     "log_interval_seconds": 60,
-    "track_keyboard": true,
-    "track_mouse": true,
+    "track_keyboard": false,
+    "track_mouse": false,
     "track_apps": true,
     "capture_thumbnails": false,
     "thumbnail_interval_seconds": 300,
@@ -75,7 +75,7 @@
     "chat_greeting": "Hi, I'm Jarvis. What do you want me to do?",
     "chat_stop_phrase": "thank you goodbye for now",
     "chat_silence_limit": 60,
-    "track_mouse": true
+    "track_mouse": false
   },
   "actions": {
     "allow_ui": false,
@@ -108,6 +108,23 @@
       "base_url": "http://localhost:11434",
       "priority": 4
     }
+  },
+  "router": {
+    "provider": "ollama",
+    "fast_model": "qwen2.5:1.5b",
+    "deep_model": "qwen2.5:1.5b",
+    "fast_max_tokens": 256,
+    "deep_max_tokens": 900
+  },
+  "agent": {
+    "max_cycles": 2,
+    "max_step_retries": 1,
+    "execute_default": false
+  },
+  "vision": {
+    "enabled": false,
+    "base_url": "http://localhost:8001",
+    "timeout": 30
   },
   "diagnostics": {
     "top_processes": 5
@@ -157,8 +174,8 @@
   "observer": {
     "enabled": true,
     "mode": "lite",
-    "log_keys": true,
-    "log_mouse": true,
+    "log_keys": false,
+    "log_mouse": false,
     "flush_interval": 45,
     "mouse_move_interval": 4,
     "key_sample_rate": 1.0

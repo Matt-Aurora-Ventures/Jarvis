@@ -31,6 +31,10 @@ class IterativeImprover:
         self.min_success_rate = 0.8  # 80% success rate required
         self.min_test_coverage = 0.7  # 70% test coverage required
         self.max_regression_risk = 0.2  # 20% max regression risk
+
+        # Circuit breaker for circular improvements
+        self.cooldown_until = self.iterations.get("cooldown_until", 0)
+        self.cooldown_duration_seconds = 300  # 5 minute cooldown after circular detection
         
     def _ensure_directories(self):
         """Ensure data directories exist."""
@@ -176,7 +180,13 @@ class IterativeImprover:
     def generate_improvement_plan(self, gaps: List[Dict[str, Any]]) -> List[evolution.ImprovementProposal]:
         """Generate lightweight improvement proposals based on identified gaps."""
         proposals: List[evolution.ImprovementProposal] = []
+        max_proposals_per_cycle = 3  # Hard limit to prevent runaway improvements
+
         for gap in gaps:
+            # Hard limit on proposals per cycle
+            if len(proposals) >= max_proposals_per_cycle:
+                break
+
             severity = gap.get("severity", "medium")
             priority = 0.8 if severity == "high" else 0.6 if severity == "medium" else 0.4
             confidence = 0.8 if severity == "high" else 0.6 if severity == "medium" else 0.5
@@ -236,15 +246,27 @@ class IterativeImprover:
                     source="iterative_improver",
                 ))
             elif gap_type == "circular_improvement":
-                proposals.append(evolution.ImprovementProposal(
-                    category="behavior",
-                    title="Reduce circular improvement loops",
-                    description="Increase cooldowns and require stronger validation before retrying improvements.",
-                    rationale="Repeated validation failures suggest circular loops.",
-                    priority=priority,
-                    confidence=confidence,
-                    source="iterative_improver",
-                ))
+                # DO NOT generate an improvement proposal for circular improvement!
+                # This would create a meta-circular loop. Instead, take corrective action:
+                # 1. Clear old validation failures (keep only last 3)
+                # 2. Set cooldown timer
+                # 3. Skip generating a proposal
+                old_failures = self.iterations.get("validation_failures", [])
+                if len(old_failures) > 3:
+                    self.iterations["validation_failures"] = old_failures[-3:]
+
+                # Set cooldown to prevent rapid re-attempts
+                self.cooldown_until = time.time() + self.cooldown_duration_seconds
+                self.iterations["cooldown_until"] = self.cooldown_until
+                self._save_iterations()
+
+                self._log_iteration("circular_cooldown", {
+                    "action": "Entered cooldown mode - blocking improvements for 5 minutes",
+                    "cooldown_until": self.cooldown_until,
+                    "failures_cleared": len(old_failures) - 3 if len(old_failures) > 3 else 0,
+                })
+                # Don't add any proposal - continue to next gap
+                continue
             else:
                 proposals.append(evolution.ImprovementProposal(
                     category="behavior",
@@ -261,7 +283,20 @@ class IterativeImprover:
     def run_improvement_cycle(self) -> Dict[str, Any]:
         """Run a complete improvement cycle with validation."""
         cycle_start = time.time()
-        
+
+        # Check cooldown - don't run if we recently hit circular improvement
+        if time.time() < self.cooldown_until:
+            remaining = int(self.cooldown_until - time.time())
+            return {
+                "success": False,
+                "message": f"In cooldown mode - {remaining}s remaining (circular improvement detected)",
+                "gaps_found": 0,
+                "improvements_applied": [],
+                "improvements_validated": 0,
+                "improvements_failed": 0,
+                "cooldown_remaining": remaining,
+            }
+
         try:
             # Analyze performance gaps
             gaps = self.analyze_performance_gaps()

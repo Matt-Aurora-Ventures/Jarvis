@@ -318,8 +318,30 @@ def _status_payload() -> Dict[str, str]:
     }
 
 
-def cmd_status(_args: argparse.Namespace) -> None:
+def cmd_status(args: argparse.Namespace) -> None:
     print(capture_status_text())
+
+    # Show component status if verbose or if there are failures
+    if getattr(args, "verbose", False):
+        current = state.read_state()
+        component_status = current.get("component_status", {})
+        startup_ok = current.get("startup_ok", 0)
+        startup_failed = current.get("startup_failed", 0)
+
+        if component_status:
+            print("\n" + "=" * 40)
+            print("Component Status:")
+            print("=" * 40)
+            for name, status in component_status.items():
+                if status.get("ok"):
+                    print(f"  ✓ {name}: running")
+                elif status.get("error"):
+                    print(f"  ✗ {name}: FAILED - {status['error']}")
+                else:
+                    print(f"  ? {name}: unknown")
+            print(f"\nSummary: {startup_ok} OK, {startup_failed} failed")
+        else:
+            print("\n(No component status available - daemon may not have started yet)")
 
 
 def _resolve_mode(args: argparse.Namespace) -> safety.SafetyContext:
@@ -1161,7 +1183,8 @@ def build_parser() -> argparse.ArgumentParser:
     mode_parser.add_argument("--apply", action="store_true")
     mode_parser.add_argument("--dry-run", action="store_true")
 
-    subparsers.add_parser("status")
+    status_parser = subparsers.add_parser("status")
+    status_parser.add_argument("--verbose", "-v", action="store_true", help="Show component status details")
     subparsers.add_parser("on", parents=[mode_parser])
     subparsers.add_parser("off", parents=[mode_parser])
 

@@ -77,6 +77,19 @@ def run() -> None:
     log_path = logs_dir / "daemon.log"
     running = True
 
+    # Track component startup status
+    component_status = {
+        "mcp": {"ok": False, "error": None},
+        "jarvis": {"ok": False, "error": None},
+        "voice": {"ok": False, "error": None},
+        "hotkeys": {"ok": False, "error": None},
+        "passive": {"ok": False, "error": None},
+        "observer": {"ok": False, "error": None},
+        "resource_monitor": {"ok": False, "error": None},
+        "missions": {"ok": False, "error": None},
+        "proactive": {"ok": False, "error": None},
+    }
+
     voice_manager = voice.VoiceManager()
     hotkey_manager = hotkeys.HotkeyManager(voice.start_chat_session)
     mcp_manager = None
@@ -112,20 +125,22 @@ def run() -> None:
     # Start MCP servers
     try:
         mcp_manager = mcp_loader.start_mcp_servers()
+        component_status["mcp"]["ok"] = True
         _log_message(log_path, "MCP servers started.")
     except Exception as e:
-        _log_message(log_path, f"MCP loader warning: {str(e)[:100]}")
+        component_status["mcp"]["error"] = str(e)[:100]
+        _log_message(log_path, f"MCP loader FAILED: {str(e)[:100]}")
 
     # Run Jarvis boot sequence
     try:
         boot_result = jarvis.boot_sequence()
+        component_status["jarvis"]["ok"] = True
         _log_message(log_path, f"Jarvis boot #{boot_result['boot_count']} complete.")
         if boot_result.get("discoveries"):
             _log_message(log_path, f"Discovered resources: {', '.join(boot_result['discoveries'])}")
-        if boot_result.get("suggestions"):
-            _send_notification("Jarvis Ready", boot_result["suggestions"][0][:80] if boot_result["suggestions"] else "Ready to help!")
     except Exception as e:
-        _log_message(log_path, f"Jarvis boot warning: {str(e)[:100]}")
+        component_status["jarvis"]["error"] = str(e)[:100]
+        _log_message(log_path, f"Jarvis boot FAILED: {str(e)[:100]}")
 
     # Auto-evolve: check for and apply pending improvements
     try:
@@ -140,26 +155,64 @@ def run() -> None:
     try:
         from core import proactive
         proactive.start_monitoring(interval_minutes=15)
+        component_status["proactive"]["ok"] = True
         _log_message(log_path, "Proactive monitoring started (15 min intervals)")
     except Exception as e:
-        _log_message(log_path, f"Proactive monitor warning: {str(e)[:100]}")
+        component_status["proactive"]["error"] = str(e)[:100]
+        _log_message(log_path, f"Proactive monitor FAILED: {str(e)[:100]}")
 
-    voice_manager.start()
-    hotkey_manager.start()
+    # Start voice manager
+    try:
+        voice_manager.start()
+        component_status["voice"]["ok"] = True
+        _log_message(log_path, "Voice manager started.")
+    except Exception as e:
+        component_status["voice"]["error"] = str(e)[:100]
+        _log_message(log_path, f"Voice manager FAILED: {str(e)[:100]}")
+
+    # Start hotkey manager
+    try:
+        hotkey_manager.start()
+        component_status["hotkeys"]["ok"] = True
+        _log_message(log_path, "Hotkey manager started.")
+    except Exception as e:
+        component_status["hotkeys"]["error"] = str(e)[:100]
+        _log_message(log_path, f"Hotkey manager FAILED: {str(e)[:100]}")
 
     if passive_cfg.get("enabled", True):
-        passive_observer.start()
-        _log_message(log_path, "Passive observation started.")
+        try:
+            passive_observer.start()
+            component_status["passive"]["ok"] = True
+            _log_message(log_path, "Passive observation started.")
+        except Exception as e:
+            component_status["passive"]["error"] = str(e)[:100]
+            _log_message(log_path, f"Passive observer FAILED: {str(e)[:100]}")
+    else:
+        component_status["passive"]["ok"] = True  # Disabled is OK
 
     # Start deep observer for full activity logging
     if config.get("observer", {}).get("enabled", True):
-        deep_observer = observer.start_observer()
-        _log_message(log_path, "Deep observer started (logging all activity).")
+        try:
+            deep_observer = observer.start_observer()
+            component_status["observer"]["ok"] = True
+            _log_message(log_path, "Deep observer started (lite mode).")
+        except Exception as e:
+            component_status["observer"]["error"] = str(e)[:100]
+            _log_message(log_path, f"Deep observer FAILED: {str(e)[:100]}")
+    else:
+        component_status["observer"]["ok"] = True  # Disabled is OK
 
     # Start resource monitor
     if config.get("resource_monitor", {}).get("enabled", True):
-        resource_monitor.start_monitor()
-        _log_message(log_path, "Resource monitor started.")
+        try:
+            resource_monitor.start_monitor()
+            component_status["resource_monitor"]["ok"] = True
+            _log_message(log_path, "Resource monitor started.")
+        except Exception as e:
+            component_status["resource_monitor"]["error"] = str(e)[:100]
+            _log_message(log_path, f"Resource monitor FAILED: {str(e)[:100]}")
+    else:
+        component_status["resource_monitor"]["ok"] = True  # Disabled is OK
 
     mission_cfg = config.get("missions", {})
     mission_poll = int(mission_cfg.get("poll_seconds", 120))
@@ -167,9 +220,31 @@ def run() -> None:
     if mission_cfg.get("enabled", True):
         try:
             mission_scheduler = missions.start_scheduler(poll_seconds=mission_poll)
+            component_status["missions"]["ok"] = True
             _log_message(log_path, "Mission scheduler started.")
         except Exception as e:
-            _log_message(log_path, f"Mission scheduler warning: {str(e)[:120]}")
+            component_status["missions"]["error"] = str(e)[:100]
+            _log_message(log_path, f"Mission scheduler FAILED: {str(e)[:100]}")
+    else:
+        component_status["missions"]["ok"] = True  # Disabled is OK
+
+    # Summarize startup status
+    ok_count = sum(1 for c in component_status.values() if c["ok"])
+    fail_count = sum(1 for c in component_status.values() if c["error"])
+    failed_components = [name for name, status in component_status.items() if status["error"]]
+
+    state.update_state(
+        component_status=component_status,
+        startup_ok=ok_count,
+        startup_failed=fail_count,
+    )
+
+    if fail_count > 0:
+        _log_message(log_path, f"⚠ Startup: {ok_count} OK, {fail_count} FAILED: {', '.join(failed_components)}")
+        _send_notification("Jarvis Warning", f"{fail_count} component(s) failed: {', '.join(failed_components)}")
+    else:
+        _log_message(log_path, f"✓ Startup complete: {ok_count}/{len(component_status)} components OK")
+        _send_notification("Jarvis Ready", f"All {ok_count} components started successfully")
 
     while running:
         cfg = config_module.load_config()
