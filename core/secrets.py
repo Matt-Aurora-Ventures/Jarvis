@@ -51,3 +51,17 @@ def get_openai_key() -> str:
 
 def get_brave_key() -> str:
     return get_key("brave_api_key", "BRAVE_API_KEY")
+
+
+def list_configured_keys() -> Dict[str, bool]:
+    """List all API keys and whether they're configured.
+
+    Returns dict like: {"groq": True, "openai": False, ...}
+    """
+    return {
+        "groq": bool(get_groq_key()),
+        "gemini": bool(get_gemini_key()),
+        "openai": bool(get_openai_key()),
+        "anthropic": bool(get_anthropic_key()),
+        "brave": bool(get_brave_key()),
+    }

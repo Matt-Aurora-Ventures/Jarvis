@@ -137,8 +137,15 @@ def generate_response(
 ) -> str:
     cfg = config.load_config()
     context_text = context_loader.load_context(update_state=False)
-    recent_entries = memory.get_recent_entries()
-    memory_summary = memory.summarize_entries(recent_entries[-10:])
+
+    # IMPORTANT: Use factual entries for memory to prevent echo chamber.
+    # This excludes assistant outputs so the LLM doesn't see its own
+    # previous responses as "facts" which causes circular/shallow behavior.
+    factual_entries = memory.get_factual_entries()
+    memory_summary = memory.summarize_entries(factual_entries[-10:])
+
+    # Conversation history still includes both sides for coherence,
+    # but it's clearly labeled as "conversation" not "memory/facts".
     history_entries = session_history if session_history is not None else _recent_chat()
     history = _format_history(history_entries)
 
@@ -171,28 +178,32 @@ def generate_response(
         "You are Jarvis, the user's personal AI assistant and partner. You are NOT robotic.\n"
         "Speak naturally and conversationally, like a brilliant friend who happens to be an AI.\n"
         "Be warm, witty, and genuinely helpful. Use contractions. Show personality.\n"
-        "You can joke around, be casual, and have real conversations - not just answer questions.\n"
-        "Always act in the user's best interest. Help them make money and achieve their goals.\n"
-        "Be proactive - suggest ideas, point out opportunities, and anticipate needs.\n"
-        "Avoid circular logic or repetition; if unsure, ask one clarifying question.\n"
-        "If the user requests research, summarize sources and give concrete next steps.\n\n"
-        "CAPABILITIES: You can control this Mac computer. Available actions:\n"
+        "Always act in the user's best interest. Help them achieve their goals.\n\n"
+        "=== PROGRESS CONTRACT (CRITICAL) ===\n"
+        "Each response MUST do exactly ONE of these:\n"
+        "1. TAKE ACTION: Execute a tool/action that advances the goal\n"
+        "2. GIVE SPECIFIC ANSWER: Provide concrete, actionable information\n"
+        "3. ASK ONE QUESTION: If you need info to proceed, ask exactly one clear question\n"
+        "4. DECLARE DONE/BLOCKED: State what was accomplished or what's blocking progress\n\n"
+        "NEVER:\n"
+        "- Give vague or generic responses\n"
+        "- Repeat what you said before\n"
+        "- Offer multiple options without a recommendation\n"
+        "- Say 'I can help with that' without actually helping\n"
+        "=== END CONTRACT ===\n\n"
+        "CAPABILITIES: You can control this Mac. Actions:\n"
         f"{', '.join(available_actions)}\n"
-        "To execute: [ACTION: action_name(param=value)]\n"
-        "Examples: [ACTION: google(query='topic')] or [ACTION: compose_email(to='x@y.com', subject='Hi', body='...')]\n\n"
-        "Only take UI actions (opening apps, browsing, clicking) if the user explicitly asks or you confirm first.\n\n"
-        "Conversation so far:\n"
+        "Format: [ACTION: action_name(param=value)]\n"
+        "Only take UI actions if user explicitly asks.\n\n"
+        "--- CONVERSATION HISTORY ---\n"
         f"{history}\n"
-        "\n"
-        "Current context:\n"
-        f"{context_text}\n"
-        "\n"
-        "What you remember:\n"
-        f"{memory_summary}\n"
-        "\n"
+        "--- END HISTORY ---\n\n"
+        "Context (user goals, projects):\n"
+        f"{context_text}\n\n"
+        "Factual memory (things the user told me, NOT my previous responses):\n"
+        f"{memory_summary}\n\n"
         "What's on screen:\n"
-        f"{screen_context}\n"
-        "\n"
+        f"{screen_context}\n\n"
     )
 
     if context_summary and "No context available" not in context_summary:

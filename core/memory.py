@@ -101,6 +101,25 @@ def get_recent_entries() -> List[Dict[str, Any]]:
     return _read_jsonl(RECENT_PATH)
 
 
+def get_factual_entries() -> List[Dict[str, Any]]:
+    """Get memory entries excluding assistant responses.
+
+    This prevents the "echo chamber" effect where the LLM sees its own
+    previous responses as "facts" and reinforces shallow patterns.
+
+    Returns only:
+    - User inputs (voice_chat_user, cli_log, cli_capture)
+    - External data (research, discoveries, etc.)
+
+    Excludes:
+    - voice_chat_assistant (LLM responses)
+    """
+    entries = _read_jsonl(RECENT_PATH)
+    # Filter out assistant outputs to prevent echo chamber
+    assistant_sources = {"voice_chat_assistant"}
+    return [e for e in entries if e.get("source") not in assistant_sources]
+
+
 def fetch_recent_entries(limit: int = 10) -> List[Dict[str, Any]]:
     entries = _read_jsonl(RECENT_PATH)
     if limit <= 0:

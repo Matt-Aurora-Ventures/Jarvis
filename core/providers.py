@@ -265,6 +265,31 @@ def ask_ollama(prompt: str, max_output_tokens: int = 512, cfg: Optional[dict] = 
     )
 
 
+def ask_ollama_model(
+    prompt: str,
+    model: str,
+    max_output_tokens: int = 512,
+    cfg: Optional[dict] = None,
+    timeout: int = 180,
+) -> str:
+    cfg = cfg or config.load_config()
+    if not _ollama_enabled(cfg):
+        raise RuntimeError("Ollama is disabled in config")
+    base_url = _ollama_base_url(cfg)
+    if not base_url:
+        raise RuntimeError("Ollama base_url is not configured")
+    model = model.strip()
+    if not model:
+        raise RuntimeError("Ollama model is empty")
+    return _ollama_generate_raw(
+        base_url=base_url,
+        model=model,
+        prompt=prompt,
+        max_output_tokens=max_output_tokens,
+        timeout=timeout,
+    )
+
+
 def provider_status() -> dict:
     cfg = config.load_config()
     gemini_enabled = cfg.get("providers", {}).get("gemini", {}).get("enabled", True)
@@ -413,9 +438,11 @@ PROVIDER_RANKINGS = [
     {"name": "llama-3.1-8b-instant", "provider": "groq", "intelligence": 78, "free": True, "notes": "Groq instant"},
     
     # Rank 1: Local models (free, private, always available offline)
-    {"name": "qwen2.5:7b", "provider": "ollama", "intelligence": 80, "free": True, "notes": "Best local 7B"},
-    {"name": "llama3.1:8b", "provider": "ollama", "intelligence": 78, "free": True, "notes": "Good local"},
+    # Smaller/faster models first to reduce latency, larger models as fallback
     {"name": "qwen2.5:1.5b", "provider": "ollama", "intelligence": 65, "free": True, "notes": "Fast, lightweight"},
+    {"name": "llama3.2:3b", "provider": "ollama", "intelligence": 70, "free": True, "notes": "Compact model"},
+    {"name": "llama3.1:8b", "provider": "ollama", "intelligence": 78, "free": True, "notes": "Good local 8B"},
+    {"name": "qwen2.5:7b", "provider": "ollama", "intelligence": 80, "free": True, "notes": "Larger if available"},
     
     # Rank 2: Gemini (fallback - has been unreliable)
     {"name": "gemini-cli", "provider": "gemini-cli", "intelligence": 95, "free": True, "notes": "Gemini CLI - needs credits"},
@@ -670,3 +697,169 @@ def generate_text(
 def ask_jarvis(prompt: str, max_output_tokens: int = 512) -> Optional[str]:
     """Legacy function - now uses smart ranking."""
     return generate_text(prompt, max_output_tokens=max_output_tokens, prefer_free=True)
+
+
+def check_provider_health() -> Dict[str, Dict[str, Any]]:
+    """Check health of all AI providers with actionable diagnostics.
+
+    Returns dict like:
+    {
+        "groq": {"available": True, "status": "ok", "message": "Ready"},
+        "ollama": {"available": False, "status": "error", "message": "Not running at localhost:11434"},
+        ...
+    }
+    """
+    cfg = config.load_config()
+    results = {}
+
+    # Check Groq
+    groq_key = secrets.get_groq_key()
+    if groq_key:
+        client = _groq_client()
+        if client:
+            results["groq"] = {
+                "available": True,
+                "status": "ok",
+                "message": "Ready (primary provider)",
+                "fix": None,
+            }
+        else:
+            results["groq"] = {
+                "available": False,
+                "status": "error",
+                "message": "Key set but client failed to initialize",
+                "fix": "pip install groq",
+            }
+    else:
+        results["groq"] = {
+            "available": False,
+            "status": "missing_key",
+            "message": "API key not configured (PRIMARY provider - should be set)",
+            "fix": "export GROQ_API_KEY='your-key' or add groq_api_key to secrets/keys.json",
+        }
+
+    # Check Ollama
+    ollama_enabled = _ollama_enabled(cfg)
+    if ollama_enabled:
+        base_url = _ollama_base_url(cfg)
+        try:
+            request = urllib.request.Request(f"{base_url}/api/tags", method="GET")
+            with urllib.request.urlopen(request, timeout=5) as response:
+                if response.status == 200:
+                    results["ollama"] = {
+                        "available": True,
+                        "status": "ok",
+                        "message": f"Running at {base_url}",
+                        "fix": None,
+                    }
+                else:
+                    results["ollama"] = {
+                        "available": False,
+                        "status": "error",
+                        "message": f"Unexpected response from {base_url}",
+                        "fix": "Check Ollama logs",
+                    }
+        except Exception as e:
+            results["ollama"] = {
+                "available": False,
+                "status": "not_running",
+                "message": f"Cannot reach {base_url}",
+                "fix": "Run: ollama serve (or install from ollama.ai)",
+            }
+    else:
+        results["ollama"] = {
+            "available": False,
+            "status": "disabled",
+            "message": "Disabled in config",
+            "fix": "Set providers.ollama.enabled=true in config",
+        }
+
+    # Check Gemini (currently disabled in code)
+    gemini_key = secrets.get_gemini_key()
+    gemini_enabled = cfg.get("providers", {}).get("gemini", {}).get("enabled", False)
+    if gemini_key and gemini_enabled:
+        client = _gemini_client()
+        if client:
+            results["gemini"] = {
+                "available": True,
+                "status": "ok",
+                "message": "Ready (but currently disabled in code due to quota issues)",
+                "fix": None,
+            }
+        else:
+            results["gemini"] = {
+                "available": False,
+                "status": "error",
+                "message": "Key set but client failed",
+                "fix": "pip install google-generativeai",
+            }
+    elif gemini_key and not gemini_enabled:
+        results["gemini"] = {
+            "available": False,
+            "status": "disabled",
+            "message": "Key configured but provider disabled",
+            "fix": "Set providers.gemini.enabled=true (note: has quota issues)",
+        }
+    else:
+        results["gemini"] = {
+            "available": False,
+            "status": "missing_key",
+            "message": "API key not configured",
+            "fix": "export GEMINI_API_KEY='your-key' (optional - has quota issues)",
+        }
+
+    # Check OpenAI
+    openai_key = secrets.get_openai_key()
+    openai_enabled = cfg.get("providers", {}).get("openai", {}).get("enabled", "auto")
+    if openai_key:
+        client = _openai_client()
+        if client:
+            results["openai"] = {
+                "available": True,
+                "status": "ok",
+                "message": "Ready (paid fallback - will be charged)",
+                "fix": None,
+            }
+        else:
+            results["openai"] = {
+                "available": False,
+                "status": "error",
+                "message": "Key set but client failed",
+                "fix": "pip install openai",
+            }
+    else:
+        results["openai"] = {
+            "available": False,
+            "status": "not_configured",
+            "message": "Not configured (optional paid fallback)",
+            "fix": "export OPENAI_API_KEY='your-key' (optional - costs money)",
+        }
+
+    return results
+
+
+def get_provider_summary() -> str:
+    """Get human-readable provider status summary."""
+    health = check_provider_health()
+    lines = ["Provider Status:"]
+
+    for name, info in health.items():
+        status_icon = "✓" if info["available"] else "✗"
+        lines.append(f"  {status_icon} {name}: {info['message']}")
+        if info.get("fix") and not info["available"]:
+            lines.append(f"    Fix: {info['fix']}")
+
+    # Add recommendation
+    available = [k for k, v in health.items() if v["available"]]
+    if not available:
+        lines.append("")
+        lines.append("⚠ NO PROVIDERS AVAILABLE - Chat will not work!")
+        lines.append("Recommended: Set up Groq (free, fast):")
+        lines.append("  1. Get key at: https://console.groq.com")
+        lines.append("  2. Run: export GROQ_API_KEY='your-key'")
+    elif "groq" not in available:
+        lines.append("")
+        lines.append("⚠ Groq not available - using slower fallback")
+        lines.append("Recommended: Set up Groq for best performance")
+
+    return "\n".join(lines)

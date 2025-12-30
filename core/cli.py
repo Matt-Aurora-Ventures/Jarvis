@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from core import (
+    agent_graph,
     commands,
     config,
     context_router,
@@ -22,6 +23,7 @@ from core import (
     overnight,
     output,
     passive,
+    providers,
     reporting,
     research,
     safety,
@@ -936,6 +938,30 @@ def cmd_task(args):
         print(f"Low: {stats['by_priority']['low']}")
 
 
+def cmd_agent(args: argparse.Namespace) -> None:
+    goal = " ".join(args.goal).strip()
+    if not goal:
+        print("Goal is required.")
+        return
+    cfg = config.load_config()
+    agent_cfg = cfg.get("agent", {})
+    execute = bool(args.execute or agent_cfg.get("execute_default", False))
+    max_cycles = args.max_cycles if args.max_cycles is not None else int(agent_cfg.get("max_cycles", 2))
+    max_step_retries = (
+        args.max_step_retries
+        if args.max_step_retries is not None
+        else int(agent_cfg.get("max_step_retries", 1))
+    )
+    agent = agent_graph.GraphAgent()
+    result = agent.run(
+        goal=goal,
+        execute=execute,
+        max_cycles=max_cycles,
+        max_step_retries=max_step_retries,
+    )
+    print(json.dumps(result, indent=2))
+
+
 def cmd_jarvis(args: argparse.Namespace) -> None:
     """Jarvis commands - interview, discover, research, profile."""
     action = getattr(args, "action", "status")
@@ -1000,6 +1026,123 @@ def cmd_jarvis(args: argparse.Namespace) -> None:
         print(f"  lifeos jarvis suggest    - Get proactive suggestions")
 
 
+def cmd_doctor(args: argparse.Namespace) -> None:
+    """Run system health diagnostics with actionable fixes."""
+    print("=" * 50)
+    print("LifeOS Doctor - System Health Check")
+    print("=" * 50)
+    print()
+
+    # 1. Check Python version
+    py_version = sys.version_info
+    py_ok = py_version >= (3, 10)
+    print(f"Python Version: {py_version.major}.{py_version.minor}.{py_version.micro}")
+    if not py_ok:
+        print("  ⚠ Python 3.10+ recommended")
+    else:
+        print("  ✓ OK")
+    print()
+
+    # 2. Check providers
+    print(providers.get_provider_summary())
+    print()
+
+    # 3. Check config
+    print("Configuration:")
+    try:
+        cfg = config.load_config()
+        print("  ✓ Config loaded successfully")
+        voice_enabled = cfg.get("voice", {}).get("enabled", False)
+        print(f"  Voice enabled: {voice_enabled}")
+        observer_mode = cfg.get("observer", {}).get("mode", "lite")
+        print(f"  Observer mode: {observer_mode}")
+    except Exception as e:
+        print(f"  ✗ Config error: {e}")
+    print()
+
+    # 4. Check secrets
+    print("API Keys Configured:")
+    key_status = secrets.list_configured_keys()
+    for name, configured in key_status.items():
+        icon = "✓" if configured else "✗"
+        status = "set" if configured else "not set"
+        note = ""
+        if name == "groq" and not configured:
+            note = " (RECOMMENDED - free, fast)"
+        elif name == "openai" and not configured:
+            note = " (optional - paid)"
+        elif name == "gemini" and not configured:
+            note = " (optional - has quota issues)"
+        print(f"  {icon} {name}: {status}{note}")
+    print()
+
+    # 5. Check daemon state
+    print("Daemon Status:")
+    running = state.is_running()
+    current = state.read_state()
+    print(f"  Running: {'yes' if running else 'no'}")
+    if running:
+        print(f"  Voice mode: {current.get('voice_mode', 'unknown')}")
+        print(f"  Mic status: {current.get('mic_status', 'unknown')}")
+        voice_error = current.get('voice_error', '')
+        if voice_error and voice_error != 'none':
+            print(f"  Voice error: {voice_error}")
+    print()
+
+    # 6. Check required directories
+    print("Data Directories:")
+    dirs_to_check = [
+        ("Config", ROOT / "lifeos" / "config"),
+        ("Memory", ROOT / "lifeos" / "memory"),
+        ("Logs", ROOT / "lifeos" / "logs"),
+        ("Secrets", ROOT / "secrets"),
+        ("Data", ROOT / "data"),
+    ]
+    for name, path in dirs_to_check:
+        exists = path.exists()
+        icon = "✓" if exists else "✗"
+        print(f"  {icon} {name}: {path}")
+        if not exists:
+            print(f"    Create with: mkdir -p {path}")
+    print()
+
+    # 7. Quick test
+    if getattr(args, "test", False):
+        print("Running Quick Test...")
+        health = providers.check_provider_health()
+        available = [k for k, v in health.items() if v["available"]]
+        if available:
+            print(f"  Testing {available[0]}...")
+            try:
+                result = providers.generate_text("Say 'hello' in one word.", max_output_tokens=10)
+                if result:
+                    print(f"  ✓ Response: {result.strip()[:50]}")
+                else:
+                    print("  ✗ No response received")
+            except Exception as e:
+                print(f"  ✗ Test failed: {e}")
+        else:
+            print("  ⚠ No providers available to test")
+        print()
+
+    # Summary
+    print("=" * 50)
+    health = providers.check_provider_health()
+    available = [k for k, v in health.items() if v["available"]]
+    if available:
+        print(f"✓ System ready - {len(available)} provider(s) available")
+        print(f"  Primary: {available[0]}")
+    else:
+        print("✗ System NOT ready - no providers available!")
+        print()
+        print("Quick Fix (Groq - free, fast):")
+        print("  1. Go to: https://console.groq.com")
+        print("  2. Create account and get API key")
+        print("  3. Run: export GROQ_API_KEY='your-key-here'")
+        print("  4. Run: lifeos doctor --test")
+    print("=" * 50)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lifeos")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1011,6 +1154,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("status")
     subparsers.add_parser("on", parents=[mode_parser])
     subparsers.add_parser("off", parents=[mode_parser])
+
+    doctor_parser = subparsers.add_parser("doctor")
+    doctor_parser.add_argument("--test", action="store_true", help="Run quick provider test")
 
     log_parser = subparsers.add_parser("log", parents=[mode_parser])
     log_parser.add_argument("text", nargs="?", default="")
@@ -1049,6 +1195,12 @@ def build_parser() -> argparse.ArgumentParser:
     jarvis_parser = subparsers.add_parser("jarvis")
     jarvis_parser.add_argument("action", nargs="?", default="status",
                                choices=["status", "interview", "discover", "research", "profile", "suggest"])
+
+    agent_parser = subparsers.add_parser("agent")
+    agent_parser.add_argument("goal", nargs="+", help="Goal to plan or execute")
+    agent_parser.add_argument("--execute", action="store_true", help="Run the plan (default is plan-only)")
+    agent_parser.add_argument("--max-cycles", type=int, default=None)
+    agent_parser.add_argument("--max-step-retries", type=int, default=None)
 
     # Task management commands
     task_parser = subparsers.add_parser("task")
@@ -1092,6 +1244,9 @@ def main() -> None:
     if args.command == "off":
         cmd_off(args)
         return
+    if args.command == "doctor":
+        cmd_doctor(args)
+        return
     if args.command == "log":
         cmd_log(args)
         return
@@ -1133,6 +1288,9 @@ def main() -> None:
         return
     if args.command == "jarvis":
         cmd_jarvis(args)
+        return
+    if args.command == "agent":
+        cmd_agent(args)
         return
     if args.command == "task":
         cmd_task(args)

@@ -1,19 +1,140 @@
+# ============================================
+# Jarvis/LifeOS - Gitignore
+# CRITICAL: Never commit secrets or personal data
+# ============================================
+
+# === SECRETS & CREDENTIALS ===
 secrets/
-venv/
-__pycache__/
-*.pyc
-.DS_Store
+*.secret
+*.secrets
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+*_credentials.json
+oauth*.json
+token*.json
+.env
+.env.*
+.env.local
+.envrc
+
+# === API KEYS (common patterns) ===
+*api_key*
+*apikey*
+*API_KEY*
+
+# === LOCAL CONFIG ===
 lifeos/config/lifeos.config.local.json
+config.local.json
+*.local.json
+*.local.yaml
+*.local.yml
+
+# === RUNTIME DATA ===
 lifeos/logs/
 lifeos/models/
 lifeos/memory/
 lifeos/reports/
 data/
 *.log
-test_*.py
+*.log.*
+
+# === DATABASES ===
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# === BROWSER & SESSION DATA ===
+cookies/
+browser-data/
+.puppeteer/
+chrome-data/
+session/
+sessions/
+
+# === TRANSCRIPTS & PERSONAL DATA ===
+transcripts/
+recordings/
+*.wav
+*.mp3
+*.m4a
+*.transcript
+conversation_*.json
+
+# === PYTHON ===
+venv/
+.venv/
+env/
+.env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.eggs/
+*.egg-info/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# === NODE.JS ===
 node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/dist-electron/
-.env
-.env.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+
+# === OS FILES ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# === BUILD ARTIFACTS ===
+dist/
+build/
+*.pyc
+*.pyo
+
+# === TESTING ===
+test_*.py
+tests/__pycache__/
+.hypothesis/
+
+# === MISC ===
+*.bak
+*.tmp
+*.temp
+.cache/
+*.cache

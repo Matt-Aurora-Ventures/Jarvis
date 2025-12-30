@@ -267,13 +267,18 @@ class RestartMCPServerStrategy(RecoveryStrategy):
 
 
 class RetryWithBackoffStrategy(RecoveryStrategy):
-    """Recovery strategy for transient errors."""
+    """Recovery strategy for transient errors with circuit breaker.
+
+    Includes max_attempts to prevent infinite retry loops.
+    After max_attempts, stops retrying and lets the error propagate.
+    """
 
     def __init__(self):
         super().__init__("retry_with_backoff", priority=4)
         self.base_delay = 1.0
         self.max_delay = 60.0
         self.jitter = 0.2
+        self.max_attempts = 5  # Circuit breaker: stop after 5 attempts
 
     def can_handle(self, error_record: ErrorRecord) -> bool:
         return _is_transient_error(error_record.error)
@@ -281,6 +286,16 @@ class RetryWithBackoffStrategy(RecoveryStrategy):
     def attempt_recovery(self, error_record: ErrorRecord) -> bool:
         attempt = int(error_record.context.get("_retry_attempts", 0)) + 1
         error_record.context["_retry_attempts"] = attempt
+
+        # Circuit breaker: stop after max_attempts
+        if attempt > self.max_attempts:
+            error_record.context["should_retry"] = False
+            error_record.context["circuit_breaker_tripped"] = True
+            error_record.context["recovery_error"] = (
+                f"Max retries ({self.max_attempts}) exceeded. Giving up."
+            )
+            return False
+
         delay = min(self.max_delay, self.base_delay * (2 ** (attempt - 1)))
         if self.jitter:
             delay *= 1 + random.uniform(-self.jitter, self.jitter)
