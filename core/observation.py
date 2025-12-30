@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
+from core import input_broker
 
 def _run_osascript(script: str) -> str:
     try:
@@ -79,16 +80,18 @@ class MouseTracker:
         self._end: Optional[tuple[int, int]] = None
         self._min_pos: Optional[tuple[int, int]] = None
         self._max_pos: Optional[tuple[int, int]] = None
-        self._listener = None
+        self._broker = input_broker.get_input_broker()
+        self._subscription_id = None
         self._last_sample = 0.0
 
     def start(self) -> bool:
-        try:
-            from pynput import mouse
-        except Exception as e:
-            return False
+        if self._subscription_id is not None:
+            return True
 
-        def _on_move(x: int, y: int) -> None:
+        def _on_move(event_type: str, *args) -> None:
+            if event_type != "move":
+                return
+            x, y = args
             now = time.time()
             if now - self._last_sample < 0.05:
                 return
@@ -108,19 +111,13 @@ class MouseTracker:
                 else:
                     self._max_pos = (max(self._max_pos[0], pos[0]), max(self._max_pos[1], pos[1]))
 
-        try:
-            self._listener = mouse.Listener(on_move=_on_move)
-            self._listener.start()
-        except Exception as e:
-            return False
-        return True
+        self._subscription_id = self._broker.subscribe_mouse(_on_move)
+        return self._broker.ensure_mouse()
 
     def stop(self) -> None:
-        if self._listener:
-            try:
-                self._listener.stop()
-            except Exception as e:
-                pass
+        if self._subscription_id is not None:
+            self._broker.unsubscribe_mouse(self._subscription_id)
+            self._subscription_id = None
 
     def summary(self) -> MouseSummary:
         with self._lock:

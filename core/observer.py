@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional
 
-from core import config, guardian
+from core import config, guardian, input_broker
 
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVER_LOG_PATH = ROOT / "data" / "observer"
@@ -73,9 +73,10 @@ class DeepObserver(threading.Thread):
         self._mouse_move_interval = float(obs_cfg.get("mouse_move_interval", 2))
         self._key_sample_rate = float(obs_cfg.get("key_sample_rate", 1.0))
         
-        # Listeners
-        self._keyboard_listener = None
-        self._mouse_listener = None
+        # Input broker subscriptions
+        self._broker = input_broker.get_input_broker()
+        self._keyboard_subscription = None
+        self._mouse_subscription = None
         
         # Current context
         self._current_app = ""
@@ -126,12 +127,10 @@ class DeepObserver(threading.Thread):
         """Start capturing all keyboard input."""
         if not self._log_keys:
             return False
-        try:
-            from pynput import keyboard
-        except ImportError:
-            return False
 
-        def on_press(key):
+        def on_press(event_type, key):
+            if event_type != "press":
+                return
             if self._key_sample_rate < 1.0 and random.random() > self._key_sample_rate:
                 return
             self._current_app, self._current_window = self._get_frontmost_app()
@@ -152,56 +151,48 @@ class DeepObserver(threading.Thread):
             })
             self._total_keys += 1
 
-        try:
-            self._keyboard_listener = keyboard.Listener(on_press=on_press)
-            self._keyboard_listener.start()
-            return True
-        except Exception as e:
-            return False
+        self._keyboard_subscription = self._broker.subscribe_keyboard(on_press)
+        return self._broker.ensure_keyboard()
 
     def _start_mouse_listener(self) -> bool:
         """Start capturing mouse actions."""
         if not self._log_mouse:
             return False
-        try:
-            from pynput import mouse
-        except ImportError:
-            return False
 
         last_move_log = [0.0]  # Track last move log time
 
-        def on_click(x, y, button, pressed):
-            if pressed:
-                self._log_action("click", {
+        def on_mouse(event_type, *args):
+            if event_type == "click":
+                x, y, button, pressed = args
+                if pressed:
+                    self._log_action("click", {
+                        "x": x, "y": y,
+                        "button": str(button).split(".")[-1],
+                        "app": self._current_app,
+                    })
+                    self._total_clicks += 1
+                return
+
+            if event_type == "scroll":
+                x, y, dx, dy = args
+                self._log_action("scroll", {
                     "x": x, "y": y,
-                    "button": str(button).split(".")[-1],
-                    "app": self._current_app,
+                    "dx": dx, "dy": dy,
                 })
-                self._total_clicks += 1
+                return
 
-        def on_scroll(x, y, dx, dy):
-            self._log_action("scroll", {
-                "x": x, "y": y,
-                "dx": dx, "dy": dy,
-            })
+            if event_type != "move":
+                return
 
-        def on_move(x, y):
+            x, y = args
             # Only log moves every 2 seconds to stay lightweight
             now = time.time()
             if now - last_move_log[0] > self._mouse_move_interval:
                 self._log_action("move", {"x": x, "y": y})
                 last_move_log[0] = now
 
-        try:
-            self._mouse_listener = mouse.Listener(
-                on_click=on_click,
-                on_scroll=on_scroll,
-                on_move=on_move,
-            )
-            self._mouse_listener.start()
-            return True
-        except Exception as e:
-            return False
+        self._mouse_subscription = self._broker.subscribe_mouse(on_mouse)
+        return self._broker.ensure_mouse()
 
     def _flush_to_disk(self) -> None:
         """Write buffer to compressed log file."""
@@ -288,10 +279,10 @@ class DeepObserver(threading.Thread):
         # Final flush
         self._flush_to_disk()
 
-        if self._keyboard_listener:
-            self._keyboard_listener.stop()
-        if self._mouse_listener:
-            self._mouse_listener.stop()
+        if self._keyboard_subscription is not None:
+            self._broker.unsubscribe_keyboard(self._keyboard_subscription)
+        if self._mouse_subscription is not None:
+            self._broker.unsubscribe_mouse(self._mouse_subscription)
 
     def stop(self) -> None:
         """Stop the observer."""

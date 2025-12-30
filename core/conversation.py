@@ -1,4 +1,6 @@
 from typing import Any, Dict, List, Optional
+import re
+import urllib.parse
 
 from core import (
     actions,
@@ -102,11 +104,52 @@ def _format_research_response(result: Dict[str, Any]) -> str:
         lines.extend(f"- {item}" for item in key_findings[:7])
     if sources:
         lines.append("\nSources:")
-        for source in sources[:5]:
+        for source in sources[:3]:
             title = source.get("title") or "Source"
-            url = source.get("url") or ""
-            lines.append(f"- {title}: {url}")
+            domain = _domain_from_url(source.get("url", ""))
+            if domain:
+                lines.append(f"- {title} ({domain})")
+            else:
+                lines.append(f"- {title}")
     return "\n".join(lines).strip()
+
+
+def _domain_from_url(url: str) -> str:
+    if not url:
+        return ""
+    candidate = url if url.startswith(("http://", "https://")) else f"http://{url}"
+    parsed = urllib.parse.urlparse(candidate)
+    return parsed.netloc
+
+
+_URL_PATTERN = re.compile(r"\b(?:https?://|www\.)[^\s\])>]+", re.IGNORECASE)
+
+
+def _normalize_response_prefix(text: str) -> str:
+    if re.match(r"^\s*test\s*$", text, flags=re.IGNORECASE):
+        return "my response"
+    return re.sub(r"^\s*test(\s*[:\-])", r"my response\1", text, flags=re.IGNORECASE)
+
+
+def _strip_urls(text: str) -> str:
+    def _replace(match: re.Match) -> str:
+        url = match.group(0)
+        trimmed = url.rstrip(").,;:!?]")
+        suffix = url[len(trimmed):]
+        candidate = trimmed if trimmed.startswith(("http://", "https://")) else f"http://{trimmed}"
+        parsed = urllib.parse.urlparse(candidate)
+        domain = parsed.netloc
+        return f"{domain}{suffix}" if domain else ""
+
+    return _URL_PATTERN.sub(_replace, text)
+
+
+def _sanitize_response(text: str) -> str:
+    if not text:
+        return text
+    cleaned = _normalize_response_prefix(text)
+    cleaned = _strip_urls(cleaned)
+    return cleaned
 
 
 def _fallback_response(user_text: str) -> str:
@@ -167,7 +210,7 @@ def generate_response(
     if _is_research_request(user_text) and cfg.get("research", {}).get("allow_web", False):
         engine = research_engine.get_research_engine()
         result = engine.research_topic(user_text, max_pages=5)
-        response = _format_research_response(result)
+        response = _sanitize_response(_format_research_response(result))
         if response:
             _record_conversation_turn(user_text, response)
             return response + "\n"
@@ -222,11 +265,12 @@ def generate_response(
     if text:
         # Parse and execute any actions in the response
         result = _execute_actions_in_response(text)
+        result = _sanitize_response(result)
         prompt_library.record_usage(inspiration_ids, success=True)
         _record_conversation_turn(user_text, result.strip())
         return result.strip() + "\n"
     prompt_library.record_usage(inspiration_ids, success=False)
-    fallback = _fallback_response(user_text)
+    fallback = _sanitize_response(_fallback_response(user_text))
     _record_conversation_turn(user_text, fallback)
     return fallback
 

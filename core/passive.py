@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core import config, state
+from core import config, input_broker, state
 
 ROOT = Path(__file__).resolve().parents[1]
 ACTIVITY_LOG_PATH = ROOT / "data" / "activity_logs"
@@ -71,16 +71,17 @@ class KeyboardTracker:
         self._backspaces = 0
         self._enters = 0
         self._last_activity = 0.0
-        self._listener = None
+        self._broker = input_broker.get_input_broker()
+        self._subscription_id = None
         self._word_buffer = 0
 
     def start(self) -> bool:
-        try:
-            from pynput import keyboard
-        except Exception as e:
-            return False
+        if self._subscription_id is not None:
+            return True
 
-        def _on_press(key) -> None:
+        def _on_press(event_type, key) -> None:
+            if event_type != "press":
+                return
             now = time.time()
             with self._lock:
                 self._keystrokes += 1
@@ -105,19 +106,13 @@ class KeyboardTracker:
                 except Exception as e:
                     pass
 
-        try:
-            self._listener = keyboard.Listener(on_press=_on_press)
-            self._listener.start()
-            return True
-        except Exception as e:
-            return False
+        self._subscription_id = self._broker.subscribe_keyboard(_on_press)
+        return self._broker.ensure_keyboard()
 
     def stop(self) -> None:
-        if self._listener:
-            try:
-                self._listener.stop()
-            except Exception as e:
-                pass
+        if self._subscription_id is not None:
+            self._broker.unsubscribe_keyboard(self._subscription_id)
+            self._subscription_id = None
 
     def summary(self) -> KeyboardSummary:
         with self._lock:
@@ -325,34 +320,29 @@ class PassiveObserver(threading.Thread):
         self._idle_detector = IdleDetector()
         self._app_tracker = AppSwitchTracker()
         self._mouse_moves = 0
-        self._mouse_listener = None
+        self._broker = input_broker.get_input_broker()
+        self._mouse_subscription = None
 
     def stop(self) -> None:
         self._stop_event.set()
 
     def _start_mouse_tracking(self) -> bool:
-        try:
-            from pynput import mouse
-        except Exception as e:
-            return False
+        if self._mouse_subscription is not None:
+            return True
 
-        def _on_move(x, y) -> None:
+        def _on_mouse(event_type, *args) -> None:
+            if event_type != "move":
+                return
             self._mouse_moves += 1
             self._idle_detector.update_mouse(time.time())
 
-        try:
-            self._mouse_listener = mouse.Listener(on_move=_on_move)
-            self._mouse_listener.start()
-            return True
-        except Exception as e:
-            return False
+        self._mouse_subscription = self._broker.subscribe_mouse(_on_mouse)
+        return self._broker.ensure_mouse()
 
     def _stop_mouse_tracking(self) -> None:
-        if self._mouse_listener:
-            try:
-                self._mouse_listener.stop()
-            except Exception as e:
-                pass
+        if self._mouse_subscription is not None:
+            self._broker.unsubscribe_mouse(self._mouse_subscription)
+            self._mouse_subscription = None
 
     def _save_activity_log(self, snapshot: ActivitySnapshot) -> None:
         ACTIVITY_LOG_PATH.mkdir(parents=True, exist_ok=True)

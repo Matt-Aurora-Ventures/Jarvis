@@ -536,14 +536,27 @@ Output as JSON with keys: insights, applications, concepts, improvements, exampl
         if not sources:
             return ""
         focus_clause = f" Focus on: {focus}." if focus else ""
+        source_payload = [
+            {
+                "title": s.get("title", ""),
+                "insights": s.get("insights", []),
+                "applications": s.get("applications", []),
+            }
+            for s in sources
+        ]
         prompt = (
-            f"Create a concise, deep research summary about {topic}.{focus_clause}\n\n"
-            "Sources and insights:\n"
-            f"{json.dumps([{'title': s['title'], 'url': s['url'], 'insights': s.get('insights', [])} for s in sources], indent=2)}\n\n"
+            f"Create a concise, high-signal research summary about {topic}.{focus_clause}\n\n"
+            "Source insights (no URLs):\n"
+            f"{json.dumps(source_payload, indent=2)}\n\n"
+            "Requirements:\n"
+            "- Avoid generic claims; be specific and actionable.\n"
+            "- Prefer concrete details, named entities, or measurable points when possible.\n"
+            "- Do not list raw URLs.\n\n"
             "Provide:\n"
             "1. Executive summary (2 short paragraphs)\n"
-            "2. Key findings (5-7 bullets)\n"
-            "3. Open questions or risks\n"
+            "2. Key findings (5-7 bullets, each with a concrete detail)\n"
+            "3. Actionable next steps (3 bullets)\n"
+            "4. Open questions or risks (2-4 bullets)\n"
         )
         try:
             response = providers.ask_llm(prompt, max_output_tokens=700)

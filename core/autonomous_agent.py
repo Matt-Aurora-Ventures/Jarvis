@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, providers, browser_automation, ability_acquisition, storage_utils, self_healing
+from core import config, providers, browser_automation, ability_acquisition, storage_utils, self_healing, vision_client
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT_PATH = ROOT / "data" / "autonomous_agents"
@@ -46,7 +46,8 @@ class AutonomousAgent:
             "file_ops": self._file_ops_tool,
             "web_search": self._web_search_tool,
             "code_analysis": self._code_analysis_tool,
-            "ability_acquisition": self._ability_acquisition_tool
+            "ability_acquisition": self._ability_acquisition_tool,
+            "vision": self._vision_tool,
         }
         
     def _log_agent(self, action: str, details: Dict[str, Any]):
@@ -367,6 +368,12 @@ Example format:
                 return {"error": "Unknown ability task"}
         except Exception as e:
             return {"error": str(e)}
+
+    def _vision_tool(self, parameters: Dict[str, Any], context: Optional[Dict[str, Any]]) -> Any:
+        """Vision analysis tool with OCR fallback."""
+        question = parameters.get("question") or parameters.get("query") or "Describe the screen"
+        image_path = parameters.get("image_path")
+        return vision_client.analyze_screen(question=question, image_path=image_path)
     
     def _synthesize_results(self, goal: str, results: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Synthesize step results into final outcome."""
