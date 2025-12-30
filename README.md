@@ -120,8 +120,10 @@ python -m pip install -r requirements.txt
 # If you hit the macOS llvmlite/LLVM error, use the lite set:
 python -m pip install -r requirements-mac-lite.txt
 
-# Add your API key (Gemini, Groq, or OpenAI)
-echo '{\"google_api_key\": \"YOUR_KEY\", \"groq_api_key\": \"YOUR_GROQ_KEY\", \"brave_api_key\": \"OPTIONAL_BRAVE_KEY\"}' > secrets/keys.json
+# Add your API key (stored locally; never commit or share)
+cat > secrets/keys.json <<'JSON'
+{"google_api_key": "YOUR_KEY", "groq_api_key": "YOUR_GROQ_KEY", "brave_api_key": "OPTIONAL_BRAVE_KEY"}
+JSON
 
 # Start Jarvis
 ./bin/lifeos on --apply
@@ -221,6 +223,12 @@ Jarvis has built-in safety constraints:
 - **Guardian module** validates all generated code
 - **Protected paths** prevent dangerous operations
 - **All data local** — nothing sent to external servers (except AI APIs)
+
+## 🔐 Secrets Hygiene
+
+- Keep API keys in `secrets/keys.json` or environment variables; `secrets/` is gitignored.
+- Never paste keys into issues, logs, screenshots, or shared docs.
+- Rotate keys immediately if they leak or are accidentally shared.
 
 ## 🗺️ Roadmap
 

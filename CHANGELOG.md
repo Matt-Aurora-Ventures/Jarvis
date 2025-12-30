@@ -2,6 +2,11 @@
 
 All notable changes to Jarvis (LifeOS) will be documented in this file.
 
+# [0.8.1] - 2025-12-30
+
+### 📄 Docs
+- Clarified secrets handling in the README with local-only key storage and do-not-share guidance.
+
 # [0.8.0] - 2025-12-27
 
 ### 🧠 Behavior + Context
