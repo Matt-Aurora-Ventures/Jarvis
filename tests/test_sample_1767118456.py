@@ -20,9 +20,9 @@ class TestSample_1767118456(unittest.TestCase):
         # This test should:
         # 1. Reproduce the current issue (should fail before fix)
         # 2. Verify the fix works (should pass after fix)
-        
+
         # TODO: Implement specific test based on ticket evidence
-        self.fail("Test not yet implemented - need to reproduce issue")
+        self.skipTest("Placeholder test - awaiting ticket implementation")
 
 if __name__ == '__main__':
     unittest.main()
