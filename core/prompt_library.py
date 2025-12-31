@@ -124,8 +124,28 @@ def _load_raw() -> Dict[str, PromptRecord]:
         except TypeError:
             continue
     # Merge defaults if missing
+    touched = False
     for record in DEFAULT_PROMPTS:
-        records.setdefault(record.id, record)
+        existing = records.get(record.id)
+        if existing is None:
+            records[record.id] = record
+            touched = True
+            continue
+        if existing.source == "system":
+            if (
+                existing.title != record.title
+                or existing.body != record.body
+                or existing.tags != record.tags
+                or existing.quality_score != record.quality_score
+            ):
+                existing.title = record.title
+                existing.body = record.body
+                existing.tags = record.tags
+                existing.quality_score = record.quality_score
+                records[record.id] = existing
+                touched = True
+    if touched:
+        _save(records)
     return records
 
 

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import re
 import urllib.parse
 
@@ -123,6 +123,86 @@ def _domain_from_url(url: str) -> str:
 
 
 _URL_PATTERN = re.compile(r"\b(?:https?://|www\.)[^\s\])>]+", re.IGNORECASE)
+_DOMAIN_PATTERN = re.compile(r"\b[a-z0-9.-]+\.[a-z]{2,}\b", re.IGNORECASE)
+
+
+def _extract_url(text: str) -> str:
+    match = _URL_PATTERN.search(text)
+    if match:
+        return match.group(0)
+    match = _DOMAIN_PATTERN.search(text)
+    return match.group(0) if match else ""
+
+
+def _is_question_response(text: str) -> bool:
+    cleaned = text.strip()
+    return "?" in cleaned or cleaned.endswith("?")
+
+
+def _last_assistant_question(entries: List[Dict[str, str]]) -> bool:
+    for entry in reversed(entries):
+        source = entry.get("source")
+        if source in ("voice_chat_assistant", "assistant"):
+            return _is_question_response(entry.get("text", ""))
+    return False
+
+
+def _infer_direct_action(user_text: str) -> Optional[Tuple[str, Dict[str, str]]]:
+    lowered = user_text.lower().strip()
+    if not lowered:
+        return None
+
+    url = _extract_url(user_text)
+
+    if lowered.startswith(("open browser", "launch browser", "open firefox", "launch firefox")):
+        params = {"url": _normalize_url(url)} if url else {}
+        return "open_browser", params
+    if lowered.startswith(("open terminal", "launch terminal")):
+        return "open_terminal", {}
+    if lowered.startswith(("open mail", "open email", "launch mail", "launch email")):
+        return "open_mail", {}
+    if lowered.startswith(("open calendar", "launch calendar")):
+        return "open_calendar", {}
+    if lowered.startswith(("open messages", "launch messages")):
+        return "open_messages", {}
+    if lowered.startswith(("open notes", "launch notes", "open note", "launch note")):
+        topic = user_text.split("notes", 1)[-1].strip()
+        topic = topic or user_text.split("note", 1)[-1].strip()
+        params = {"topic": topic} if topic else {}
+        return "open_notes", params
+    if lowered.startswith(("open finder", "launch finder")):
+        path = user_text.split("finder", 1)[-1].strip()
+        return "open_finder", {"path": path} if path else {"path": "~"}
+    if lowered.startswith(("google ", "search ")):
+        query = re.sub(r"^(google|search)\s+", "", user_text, flags=re.IGNORECASE).strip()
+        if query:
+            return "google", {"query": query}
+    if lowered.startswith("search for "):
+        query = re.sub(r"^search for\s+", "", user_text, flags=re.IGNORECASE).strip()
+        if query:
+            return "google", {"query": query}
+    if lowered.startswith(("go to ", "open ")):
+        if url:
+            return "open_browser", {"url": _normalize_url(url)}
+    if lowered.startswith("set reminder "):
+        title = re.sub(r"^set reminder\s+", "", user_text, flags=re.IGNORECASE).strip()
+        if title:
+            return "set_reminder", {"title": title}
+    if lowered.startswith(("create note ", "make note ")):
+        body = re.sub(r"^(create|make)\s+note\s+", "", user_text, flags=re.IGNORECASE).strip()
+        if body:
+            title = body.split(".")[0].strip()[:60] or "Note"
+            return "create_note", {"title": title, "body": body}
+
+    return None
+
+
+def _normalize_url(candidate: str) -> str:
+    if not candidate:
+        return candidate
+    if candidate.startswith(("http://", "https://")):
+        return candidate
+    return f"https://{candidate}"
 
 
 def _normalize_response_prefix(text: str) -> str:
@@ -181,6 +261,15 @@ def generate_response(
     cfg = config.load_config()
     context_text = context_loader.load_context(update_state=False)
 
+    direct_action = _infer_direct_action(user_text)
+    if direct_action:
+        action_name, params = direct_action
+        success, output = actions.execute_action(action_name, **params)
+        context_manager.add_action_result(action_name, success, output)
+        response = f"{'Done' if success else 'Unable'}: {output}"
+        _record_conversation_turn(user_text, response)
+        return _sanitize_response(response).strip() + "\n"
+
     # IMPORTANT: Use factual entries for memory to prevent echo chamber.
     # This excludes assistant outputs so the LLM doesn't see its own
     # previous responses as "facts" which causes circular/shallow behavior.
@@ -230,6 +319,7 @@ def generate_response(
         "4. DECLARE DONE/BLOCKED: State what was accomplished or what's blocking progress\n\n"
         "EXECUTION BIAS:\n"
         "- If the user asks for a concrete task and required info is present, TAKE ACTION now.\n"
+        "- If the request matches an available action, use it immediately without follow-up questions.\n"
         "- Ask a question only when missing required info; never re-ask the same question.\n\n"
         "NEVER:\n"
         "- Give vague or generic responses\n"
@@ -266,6 +356,17 @@ def generate_response(
     prompt += f"User says: {user_text}\n"
 
     text = providers.generate_text(prompt, max_output_tokens=500)
+    if text and _is_question_response(text) and _last_assistant_question(history_entries):
+        override = (
+            "\n\nCRITICAL OVERRIDE:\n"
+            "You already asked a question in the last turn. "
+            "Do NOT ask another question. "
+            "Make reasonable assumptions and proceed with a concrete action or recommendation. "
+            "If a UI action is appropriate and allowed, emit exactly one [ACTION: ...] command.\n"
+        )
+        retry = providers.generate_text(prompt + override, max_output_tokens=500)
+        if retry:
+            text = retry
     if text:
         # Parse and execute any actions in the response
         result = _execute_actions_in_response(text)
