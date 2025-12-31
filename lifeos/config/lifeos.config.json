@@ -205,6 +205,23 @@
   },
   "trading": {
     "dex_only": true,
+    "strategy": "sma_cross",
+    "sma_fast": 5,
+    "sma_slow": 20,
+    "rsi_period": 14,
+    "rsi_lower": 30,
+    "rsi_upper": 70,
+    "fee_bps": 5.0,
+    "slippage_bps": 2.0,
+    "risk_per_trade": 0.02,
+    "stop_loss_pct": 0.03,
+    "take_profit_pct": 0.06,
+    "max_position_pct": 0.25,
+    "min_live_sharpe": 1.0,
+    "min_paper_days": 30,
+    "min_paper_trades": 10,
+    "min_paper_roi": 0.02,
+    "paper_capital_usd": 1000.0,
     "preferred_chains": [
       "Solana",
       "Base",
@@ -216,6 +233,53 @@
     ],
     "low_fee_focus": true
   },
+  "liquidation_bot": {
+    "order_usd_size": 10,
+    "leverage": 3,
+    "entry_offset_pct": 0.005,
+    "moondev_api_url": "http://api.moondev.com:8000",
+    "moondev_limit": 100000,
+    "moondev_api_key_env": "MOONDEV_API_KEY",
+    "symbol_col": 0,
+    "price_col": 5,
+    "time_col": -2,
+    "usd_col": -1,
+    "symbols": [
+      "WIF"
+    ],
+    "symbols_data": {
+      "BTC": {
+        "liquidations": 900000,
+        "time_window_mins": 24,
+        "sl": -2,
+        "tp": 1
+      },
+      "ETH": {
+        "liquidations": 500000,
+        "time_window_mins": 4,
+        "sl": -2,
+        "tp": 1
+      },
+      "SOL": {
+        "liquidations": 300000,
+        "time_window_mins": 4,
+        "sl": -2,
+        "tp": 1
+      },
+      "WIF": {
+        "liquidations": 10000,
+        "time_window_mins": 5,
+        "sl": -6,
+        "tp": 6
+      },
+      "kPEPE": {
+        "liquidations": 50000,
+        "time_window_mins": 4,
+        "sl": -1,
+        "tp": 2
+      }
+    }
+  },
   "hyperliquid": {
     "enabled": true,
     "lookback_days": 30,
@@ -226,6 +290,31 @@
       "SOL"
     ],
     "exchange": "hyperliquid"
+  },
+  "trading_youtube": {
+    "channels": [
+      "https://www.youtube.com/channel/UCN7D80fY9xMYu5mHhUhXEFw"
+    ],
+    "limit": 3,
+    "enqueue_backtests": true
+  },
+  "notion_ingest": {
+    "default_url": "https://wonderful-kick-36b.notion.site/Free-Algo-Trading-Roadmap-Resources-Discord-7fa3d54e7a3046cc87bc787694fdeaf6",
+    "max_links": 400,
+    "crawl_depth": 2,
+    "max_pages": 30,
+    "max_chunks": 60
+  },
+  "solana_scanner": {
+    "birdeye_api_key_env": "BIRDEYE_API_KEY",
+    "trending_limit": 200,
+    "new_token_hours": 3,
+    "top_trader_limit": 100,
+    "super_cycle_tokens": [
+      "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+      "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr"
+    ]
   },
   "safety": {
     "default_mode": "dry-run",

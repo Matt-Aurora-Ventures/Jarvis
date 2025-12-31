@@ -1,0 +1,12 @@
+{
+  "name": "voice_auto_action",
+  "description": "Voice agent should handle a request to open weather without UI action blocks.",
+  "turns": [
+    {
+      "user": "Jarvis, please get me the weather for San Jose today.",
+      "expected_keywords": ["weather", "San Jose"],
+      "max_latency_ms": 4000,
+      "screen_context": "Desktop idle"
+    }
+  ]
+}

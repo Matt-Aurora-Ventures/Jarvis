@@ -2,6 +2,87 @@
 
 All notable changes to Jarvis (LifeOS) will be documented in this file.
 
+---
+
+# [0.9.0] - 2025-12-30
+
+### 🤖 Claude + GPT Hybrid Collaboration
+
+This release represents a major milestone: **Claude Opus and GPT collaborated** to architect, implement, and refine Jarvis's trading research and autonomous capabilities. The hybrid approach combined Claude's deep reasoning with GPT's rapid iteration.
+
+### 📊 Notion Deep Extraction System
+
+- **New Module:** `core/notion_ingest.py` - API-based Notion page extraction with recursive block fetching
+- **New Module:** `core/notion_scraper.py` - Playwright-based headless scraper for full content expansion
+- **New Module:** `core/notion_tab_crawler.py` - Enhanced tab/toggle/database state-crawl for comprehensive extraction
+- **New Module:** `core/notion_deep_extractor.py` - Deep recursive block fetcher using Notion's public API
+- **Extracted 1,913 blocks** from Moon Dev's Algo Trading Roadmap
+- **Parsed 81 trading strategies** into structured JSON catalog
+- **Generated implementation plan** with architecture mapping and backtest checklist
+
+### 📈 Trading Pipeline Enhancements
+
+- **New Module:** `core/trading_pipeline.py` - End-to-end trading research pipeline
+- **New Module:** `core/trading_youtube.py` - YouTube channel monitoring for trading content
+- **New Module:** `core/trading_notion.py` - Notion-to-strategy extraction integration
+- **New Module:** `core/liquidation_bot.py` - Liquidation-based trading signals (Hyperliquid/Moon Dev API)
+- **New Module:** `core/solana_scanner.py` - Solana token scanner with Birdeye API integration
+- **Strategy categories:** Trend following, carry trades, mean reversion, momentum, breakout, HMM regime detection
+
+### 🧠 Agent Architecture
+
+- **New Module:** `core/agent_graph.py` - Multi-agent graph orchestration
+- **New Module:** `core/agent_router.py` - Intelligent routing between specialized agents
+- **New Module:** `core/agents/` - Directory for specialized agent implementations
+- **New Module:** `core/orchestrator.py` - High-level task orchestration
+- **New Module:** `core/input_broker.py` - Unified input handling across voice/CLI/API
+- **New Module:** `core/action_feedback.py` - Action result feedback loop
+
+### 🔬 Self-Improvement Engine
+
+- **New Module:** `core/self_improvement_engine.py` - Autonomous capability expansion
+- **New Module:** `core/memory_driven_behavior.py` - Memory-first decision making
+- **New Module:** `core/semantic_memory.py` - Semantic search over memory store
+- **New Module:** `core/conversation_backtest.py` - Conversation replay for testing
+- **New Module:** `core/enhanced_search_pipeline.py` - Multi-source research aggregation
+
+### 🏥 Diagnostics & Reliability
+
+- **New Module:** `core/mcp_doctor.py` - MCP server health diagnostics
+- **New Module:** `core/mcp_doctor_simple.py` - Lightweight MCP health check
+- **New Module:** `core/secret_hygiene.py` - Automated secrets scanning
+- **New Module:** `core/objectives.py` - Goal tracking and progress measurement
+- **New Module:** `core/vision_client.py` - Vision API integration for screen understanding
+- **Added `lifeos doctor`** command for provider and MCP health checks
+
+### 📚 Documentation
+
+- **New:** `docs/handoff_claude_opus.md` - Handoff brief for Claude Opus collaboration
+- **New:** `docs/HANDOFF_GPT5.md` - Future handoff template for GPT-5
+- **New:** `docs/notion_extraction_guide.md` - Notion extraction methodology
+- **Generated:** `data/notion_deep/strategy_catalog.json` - 81 strategies in structured format
+- **Generated:** `data/notion_deep/implementation_plan.md` - Architecture and backtest plan
+- **Generated:** `data/notion_deep/knowledge_base.md` - Master knowledge base
+
+### 🧪 Testing Infrastructure
+
+- **New:** `tests/test_trading_pipeline.py` - Trading pipeline tests
+- **New:** `tests/test_trading_youtube.py` - YouTube ingestion tests
+- **New:** `tests/test_liquidation_bot.py` - Liquidation bot tests
+- **New:** `tests/test_solana_scanner.py` - Solana scanner tests
+- **New:** `tests/test_conversation_backtest.py` - Conversation replay tests
+- **New:** `test_*.py` - Various integration and unit tests
+
+### 🔧 Fixes & Improvements
+
+- Improved UI actions to accept keyword arguments (voice chat compatibility)
+- Added Groq throttling and backoff to avoid rate limit storms
+- Ollama fallback now gated by health check
+- Readability extractor fixed for HTML decoding
+- Enhanced error recovery with circuit breaker pattern
+
+---
+
 # [0.8.1] - 2025-12-30
 
 ### 📄 Docs

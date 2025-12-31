@@ -14,6 +14,7 @@ from core import (
     jarvis,
     missions,
     observer,
+    orchestrator,
     passive,
     reporting,
     state,
@@ -79,6 +80,7 @@ def run() -> None:
 
     # Track component startup status
     component_status = {
+        "brain": {"ok": False, "error": None},  # P0: The orchestrator brain loop
         "mcp": {"ok": False, "error": None},
         "jarvis": {"ok": False, "error": None},
         "voice": {"ok": False, "error": None},
@@ -130,6 +132,17 @@ def run() -> None:
     except Exception as e:
         component_status["mcp"]["error"] = str(e)[:100]
         _log_message(log_path, f"MCP loader FAILED: {str(e)[:100]}")
+
+    # P0: Start the Brain (Orchestrator loop)
+    brain = None
+    try:
+        brain = orchestrator.get_orchestrator()
+        brain.start()
+        component_status["brain"]["ok"] = True
+        _log_message(log_path, "Brain (Orchestrator) started - single decision loop active.")
+    except Exception as e:
+        component_status["brain"]["error"] = str(e)[:100]
+        _log_message(log_path, f"Brain startup FAILED: {str(e)[:100]}")
 
     # Run Jarvis boot sequence
     try:
@@ -233,10 +246,19 @@ def run() -> None:
     fail_count = sum(1 for c in component_status.values() if c["error"])
     failed_components = [name for name, status in component_status.items() if status["error"]]
 
+    # Include brain status in state
+    brain_status = {}
+    if brain:
+        try:
+            brain_status = brain.get_state()
+        except Exception:
+            brain_status = {"error": "failed to get status"}
+
     state.update_state(
         component_status=component_status,
         startup_ok=ok_count,
         startup_failed=fail_count,
+        brain_status=brain_status,
     )
 
     if fail_count > 0:
@@ -280,6 +302,14 @@ def run() -> None:
         time.sleep(5)
 
     _log_message(log_path, "LifeOS daemon stopping...")
+
+    # Stop the brain first (graceful shutdown of decision loop)
+    if brain:
+        try:
+            brain.stop()
+            _log_message(log_path, "Brain (Orchestrator) stopped.")
+        except Exception as e:
+            _log_message(log_path, f"Brain shutdown warning: {str(e)[:100]}")
 
     passive_observer.stop()
     if passive_observer.is_alive():

@@ -27,6 +27,7 @@ from core import (
     research_engine,
     state,
     system_profiler,
+    trading_pipeline,
     youtube_ingest,
 )
 from core import memory
@@ -741,30 +742,54 @@ def _run_directive_digest() -> Optional[Dict[str, str]]:
 def _run_hyperliquid_backtest() -> Optional[Dict[str, str]]:
     cfg = config.load_config()
     hcfg = cfg.get("hyperliquid", {})
+    trading_cfg = cfg.get("trading", {})
     coins = hcfg.get("symbols", ["ETH"])
     interval = hcfg.get("interval", "1h")
+    lookback_days = int(hcfg.get("lookback_days", 30))
+    strategy_kind = trading_cfg.get("strategy", "sma_cross")
+    params: Dict[str, float] = {}
+    if strategy_kind == "rsi":
+        params = {
+            "period": trading_cfg.get("rsi_period", 14),
+            "lower": trading_cfg.get("rsi_lower", 30),
+            "upper": trading_cfg.get("rsi_upper", 70),
+        }
+    else:
+        params = {
+            "fast": trading_cfg.get("sma_fast", 5),
+            "slow": trading_cfg.get("sma_slow", 20),
+        }
+    strategy_cfg = trading_pipeline.StrategyConfig(
+        kind=strategy_kind,
+        params=params,
+        fee_bps=float(trading_cfg.get("fee_bps", 5.0)),
+        slippage_bps=float(trading_cfg.get("slippage_bps", 2.0)),
+        risk_per_trade=float(trading_cfg.get("risk_per_trade", 0.02)),
+        stop_loss_pct=float(trading_cfg.get("stop_loss_pct", 0.03)),
+        take_profit_pct=float(trading_cfg.get("take_profit_pct", 0.06)),
+        max_position_pct=float(trading_cfg.get("max_position_pct", 0.25)),
+        capital_usd=float(trading_cfg.get("paper_capital_usd", 1000.0)),
+    )
     for coin in coins:
-        path = hyperliquid.latest_snapshot_for_coin(coin, interval=interval)
-        if not path:
+        trading_pipeline.ensure_hyperliquid_snapshot(coin, interval, lookback_days)
+        candles = trading_pipeline.load_candles_for_symbol(coin, interval)
+        result = trading_pipeline.run_backtest(candles, coin, interval, strategy_cfg)
+        if result.error:
             continue
-        snapshot = hyperliquid.load_snapshot(str(path))
-        if not snapshot:
-            continue
-        candles = snapshot.get("candles", [])
-        result = hyperliquid.simple_ma_backtest(candles, fast=5, slow=20)
-        if result.get("error"):
-            continue
+        trading_pipeline.log_backtest_result(result)
         summary = (
-            f"{coin} {interval} MA(5/20) backtest: "
-            f"{result['trades']} trades, PnL {result['pnl']}, ROI {result['roi']}"
+            f"{coin} {interval} {strategy_cfg.kind} backtest: "
+            f"{result.total_trades} trades, ROI {result.roi:.3f}, "
+            f"Sharpe {result.sharpe_ratio:.2f}, "
+            f"Max DD {result.max_drawdown:.2%}"
         )
         notes_manager.save_note(
             topic="hyperliquid_backtest",
-            content=f"# Hyperliquid Backtest\n\n{summary}\n\nData: {path}\n",
+            content=f"# Hyperliquid Backtest\n\n{summary}\n",
             fmt="md",
             tags=["hyperliquid", "backtest", "trading"],
             source="mission.hyperliquid_backtest",
-            metadata={"coin": coin, "interval": interval, "path": str(path)},
+            metadata={"coin": coin, "interval": interval},
         )
         doc = context_manager.add_context_document(
             title=f"Hyperliquid Backtest ({coin})",

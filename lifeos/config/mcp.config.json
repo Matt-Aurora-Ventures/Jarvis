@@ -132,6 +132,17 @@
         "${HOME}/Desktop/LifeOS"
       ],
       "env": {}
+    },
+    {
+      "name": "notebooklm",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "notebooklm-mcp@latest"
+      ],
+      "env": {}
     }
   ]
 }

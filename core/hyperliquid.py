@@ -47,6 +47,31 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
+def fetch_mid_prices() -> Dict[str, float]:
+    """Fetch latest mid prices for all symbols."""
+    payload = {"type": "allMids"}
+    try:
+        response = _post(payload)
+        if isinstance(response, dict):
+            mids: Dict[str, float] = {}
+            for key, value in response.items():
+                try:
+                    mids[key] = float(value)
+                except (TypeError, ValueError):
+                    continue
+            return mids
+    except Exception:
+        pass
+    return {}
+
+
+def fetch_mid_price(symbol: str) -> Optional[float]:
+    """Fetch latest mid price for a symbol."""
+    symbol = symbol.upper()
+    mids = fetch_mid_prices()
+    return mids.get(symbol)
+
+
 def _chunk_ranges(start_ms: int, end_ms: int, chunk_days: int) -> List[Tuple[int, int]]:
     if chunk_days <= 0:
         return [(start_ms, end_ms)]

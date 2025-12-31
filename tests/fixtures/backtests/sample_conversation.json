@@ -1,0 +1,19 @@
+{
+  "name": "basic_productivity_flow",
+  "description": "Ensure Jarvis can answer a planning question and follow-up without exceeding latency and while mentioning required keywords.",
+  "tags": ["smoke", "productivity"],
+  "turns": [
+    {
+      "user": "Can you outline my top priorities for today based on what you know?",
+      "expected_keywords": ["priority", "plan"],
+      "max_latency_ms": 3500,
+      "screen_context": "VS Code with roadmap notes"
+    },
+    {
+      "user": "Great, what is the first concrete step?",
+      "expected_keywords": ["step"],
+      "max_latency_ms": 3000,
+      "screen_context": "Terminal open on project root"
+    }
+  ]
+}

@@ -58,10 +58,15 @@ def _fetch_transcript_api(video_url: str) -> Optional[Dict[str, str]]:
     if not video_id:
         return None
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["en"])
+        if hasattr(YouTubeTranscriptApi, "get_transcript"):
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["en"])
+            text = " ".join(item.get("text", "") for item in transcript if item.get("text"))
+        else:
+            api = YouTubeTranscriptApi()
+            fetched = api.fetch(video_id, languages=["en"])
+            text = " ".join(snippet.text for snippet in fetched if getattr(snippet, "text", ""))
     except Exception:
         return None
-    text = " ".join(item.get("text", "") for item in transcript if item.get("text"))
     if not text:
         return None
     raw_path = notes_manager.log_command_snapshot(
@@ -85,6 +90,8 @@ def list_latest_videos(channel_url: str, limit: int = 3) -> List[Dict[str, str]]
         "skip_download": True,
         "extract_flat": True,
         "playlistend": limit,
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+        "geo_bypass": True,
     }
     videos: List[Dict[str, str]] = []
     try:

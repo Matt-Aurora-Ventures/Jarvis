@@ -1,11 +1,17 @@
 """
 Actions module for LifeOS.
 High-level actions Jarvis can perform: emails, windows, browsing, etc.
+
+Every action is executed with discipline:
+- WHY: Explicit reason for the action
+- EXPECTED: What we expect to happen
+- ACTUAL: What actually happened
+- LEARN: Feed back into the learning loop
 """
 
 import subprocess
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from core import computer, guardian, config, state, notes_manager
 
@@ -348,42 +354,227 @@ ACTION_REGISTRY = {
 }
 
 
-def execute_action(action_name: str, **kwargs) -> Tuple[bool, str]:
-    """Execute a named action with parameters."""
+def execute_action(
+    action_name: str,
+    why: str = "",
+    expected_outcome: str = "",
+    **kwargs,
+) -> Tuple[bool, str]:
+    """
+    Execute a named action with parameters and discipline.
+
+    Args:
+        action_name: Name of the action to execute
+        why: Explicit reason for taking this action
+        expected_outcome: What we expect to happen
+        **kwargs: Parameters for the action
+
+    Returns:
+        Tuple of (success, output_message)
+
+    The action is tracked in the feedback loop for learning.
+    """
     if action_name not in ACTION_REGISTRY:
         return False, f"Unknown action: {action_name}"
-    
+
+    # Lazy import to avoid circular dependency
+    from core import action_feedback
+
+    # Default why/expected if not provided
+    if not why:
+        why = f"Executing {action_name} as requested"
+    if not expected_outcome:
+        expected_outcome = f"{action_name} completes successfully"
+
+    # Record intent BEFORE action
+    intent_id = action_feedback.record_action_intent(
+        action_name=action_name,
+        why=why,
+        expected_outcome=expected_outcome,
+        success_criteria=[f"{action_name}_completed"],
+        context={"params": str(kwargs)[:200]},
+    )
+
+    # Execute action
+    start_time = time.time()
     try:
         func = ACTION_REGISTRY[action_name]
-        return func(**kwargs)
+        success, output = func(**kwargs)
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        # Record outcome AFTER action
+        feedback = action_feedback.record_action_outcome(
+            intent_id=intent_id,
+            success=success,
+            actual_outcome=output,
+            duration_ms=duration_ms,
+            criteria_results={f"{action_name}_completed": success},
+        )
+
+        # Analyze for patterns
+        if feedback:
+            action_feedback.get_feedback_loop().analyze_feedback(feedback)
+
+        return success, output
+
     except Exception as e:
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        # Record failure
+        action_feedback.record_action_outcome(
+            intent_id=intent_id,
+            success=False,
+            actual_outcome="",
+            error=str(e)[:300],
+            duration_ms=duration_ms,
+        )
+
         return False, f"Action failed: {str(e)}"
 
 
-def execute_with_fallback(action_name: str, fallbacks: list = None, **kwargs) -> Tuple[bool, str]:
+def execute_with_fallback(
+    action_name: str,
+    fallbacks: list = None,
+    why: str = "",
+    expected_outcome: str = "",
+    **kwargs,
+) -> Tuple[bool, str]:
     """Execute an action with fallback alternatives if it fails."""
     # Try primary action
-    success, msg = execute_action(action_name, **kwargs)
+    success, msg = execute_action(
+        action_name,
+        why=why or f"Executing {action_name} with fallbacks",
+        expected_outcome=expected_outcome,
+        **kwargs,
+    )
     if success:
         return success, msg
-    
-    # Try fallbacks
+
+    # Try explicit fallbacks
     if fallbacks:
         for fallback in fallbacks:
             fb_name = fallback.get("action", "")
             fb_kwargs = fallback.get("params", {})
-            success, msg = execute_action(fb_name, **fb_kwargs)
+            success, msg = execute_action(
+                fb_name,
+                why=f"Fallback for failed {action_name}",
+                expected_outcome=expected_outcome,
+                **fb_kwargs,
+            )
             if success:
                 return success, f"Used fallback {fb_name}: {msg}"
-    
+
     # Try to find alternative automatically
     alternatives = get_alternative_actions(action_name)
     for alt in alternatives:
-        success, msg = execute_action(alt, **kwargs)
+        success, msg = execute_action(
+            alt,
+            why=f"Auto-alternative for failed {action_name}",
+            expected_outcome=expected_outcome,
+            **kwargs,
+        )
         if success:
             return success, f"Used alternative {alt}: {msg}"
-    
+
     return False, f"All attempts failed for {action_name}"
+
+
+def execute_with_discipline(
+    action_name: str,
+    why: str,
+    expected_outcome: str,
+    success_criteria: Optional[List[str]] = None,
+    objective_id: Optional[str] = None,
+    **kwargs,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Execute an action with full discipline and return detailed feedback.
+
+    This is the preferred way to execute actions from the orchestrator
+    or any code that needs explicit tracking of intent and outcome.
+
+    Args:
+        action_name: Name of the action to execute
+        why: Explicit reason for taking this action
+        expected_outcome: What we expect to happen
+        success_criteria: List of criteria that define success
+        objective_id: Optional objective this action serves
+        **kwargs: Parameters for the action
+
+    Returns:
+        Tuple of (success, output, feedback_dict)
+    """
+    if action_name not in ACTION_REGISTRY:
+        return False, f"Unknown action: {action_name}", {}
+
+    from core import action_feedback
+
+    # Record intent
+    intent_id = action_feedback.record_action_intent(
+        action_name=action_name,
+        why=why,
+        expected_outcome=expected_outcome,
+        success_criteria=success_criteria or [f"{action_name}_completed"],
+        objective_id=objective_id,
+        context={"params": str(kwargs)[:200]},
+    )
+
+    # Check for known issues
+    recommendations = action_feedback.get_action_recommendations(action_name)
+    if recommendations:
+        # Log but don't block - could integrate with orchestrator decisions
+        pass
+
+    # Execute
+    start_time = time.time()
+    try:
+        func = ACTION_REGISTRY[action_name]
+        success, output = func(**kwargs)
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        # Evaluate criteria
+        criteria_results = {c: success for c in (success_criteria or [])}
+
+        # Record outcome
+        feedback = action_feedback.record_action_outcome(
+            intent_id=intent_id,
+            success=success,
+            actual_outcome=output,
+            duration_ms=duration_ms,
+            criteria_results=criteria_results,
+        )
+
+        # Analyze
+        if feedback:
+            action_feedback.get_feedback_loop().analyze_feedback(feedback)
+
+        feedback_dict = {
+            "intent_id": intent_id,
+            "success": success,
+            "duration_ms": duration_ms,
+            "criteria_met": criteria_results,
+            "recommendations": recommendations,
+        }
+
+        return success, output, feedback_dict
+
+    except Exception as e:
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        action_feedback.record_action_outcome(
+            intent_id=intent_id,
+            success=False,
+            actual_outcome="",
+            error=str(e)[:300],
+            duration_ms=duration_ms,
+        )
+
+        return False, f"Action failed: {str(e)}", {
+            "intent_id": intent_id,
+            "success": False,
+            "error": str(e)[:300],
+            "duration_ms": duration_ms,
+        }
 
 
 def get_alternative_actions(action_name: str) -> list:

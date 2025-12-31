@@ -137,3 +137,23 @@ tests/__pycache__/
 *.temp
 .cache/
 *.cache
+
+# === NOTION EXTRACTION DATA ===
+# Generated data from Notion extractions (large JSON files)
+data/notion_deep/
+data/notion/
+lifeos/data/notion_scrapes/
+
+# === TRADING DATA ===
+# Downloaded market data and backtest results
+data/trader/
+data/hyperliquid/
+data/youtube/
+
+# === JUNK DIRECTORIES ===
+# Temporary/orphan directories
+\#/
+already/
+exists/
+if/
+skip/

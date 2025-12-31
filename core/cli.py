@@ -4,10 +4,12 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Dict, Optional
 
 from core import (
+    action_feedback,
     agent_graph,
     commands,
     config,
@@ -18,8 +20,12 @@ from core import (
     guardian,
     interview,
     jarvis,
+    mcp_doctor_simple,
     memory,
     notes_manager,
+    notion_ingest,
+    objectives,
+    orchestrator,
     overnight,
     output,
     passive,
@@ -28,10 +34,16 @@ from core import (
     research,
     safety,
     secrets,
+    solana_scanner,
     state,
     task_manager,
+    trading_notion,
+    trading_youtube,
     voice,
 )
+from core.agents.registry import get_registry, initialize_agents
+from core.agents.base import AgentRole, AgentTask
+from core.economics import get_cost_tracker, get_revenue_tracker, get_economics_db, EconomicsDashboard
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -1050,6 +1062,22 @@ def cmd_jarvis(args: argparse.Namespace) -> None:
 
 def cmd_doctor(args: argparse.Namespace) -> None:
     """Run system health diagnostics with actionable fixes."""
+    # MCP-only mode
+    if getattr(args, "mcp", False):
+        print("=" * 60)
+        print("MCP DOCTOR - COMPREHENSIVE SERVER DIAGNOSTICS")
+        print("=" * 60)
+        print()
+        
+        results = mcp_doctor_simple.run_all_tests()
+        mcp_doctor_simple.print_summary(results)
+        
+        # Exit with appropriate code for scripting
+        all_healthy = all(r.passed for r in results.values())
+        if not all_healthy:
+            print("\nFor detailed MCP troubleshooting, see MCP_DOCTOR.md")
+        return
+        
     # Voice-only mode
     if getattr(args, "voice", False):
         print("=" * 50)
@@ -1079,7 +1107,24 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     print(providers.get_provider_summary())
     print()
 
-    # 3. Check config
+    # 3. Check MCP servers
+    print("MCP Servers:")
+    try:
+        mcp_results = mcp_doctor_simple.run_all_tests()
+        mcp_healthy_count = sum(1 for r in mcp_results.values() if r.passed)
+        mcp_total_count = len(mcp_results)
+        print(f"  Overall: {mcp_healthy_count}/{mcp_total_count} servers healthy")
+        
+        for server_name, result in mcp_results.items():
+            status = "✓" if result.passed else "✗"
+            print(f"  {status} {server_name}")
+            if not result.passed:
+                print(f"    Error: {result.error}")
+    except Exception as e:
+        print(f"  ✗ MCP testing failed: {e}")
+    print()
+
+    # 4. Check config
     print("Configuration:")
     try:
         cfg = config.load_config()
@@ -1175,6 +1220,730 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     print("=" * 50)
 
 
+def cmd_brain(args: argparse.Namespace) -> None:
+    """Brain/Orchestrator status and control."""
+    action = args.action
+
+    if action == "status":
+        # Get brain status from running daemon or direct
+        current_state = state.read_state()
+        brain_status = current_state.get("brain_status", {})
+
+        print("=" * 50)
+        print("JARVIS BRAIN STATUS")
+        print("=" * 50)
+
+        if not brain_status:
+            print("Brain status not available (daemon may not be running)")
+            print("Run 'lifeos on' to start the daemon with brain loop")
+        else:
+            print(f"Running: {brain_status.get('running', False)}")
+            print(f"Phase: {brain_status.get('phase', 'unknown')}")
+            print(f"Cycle count: {brain_status.get('cycle_count', 0)}")
+            print(f"Current objective: {brain_status.get('current_objective', 'none')}")
+            print(f"Errors in row: {brain_status.get('errors_in_row', 0)}")
+
+        # Show objective summary
+        print()
+        print("OBJECTIVE QUEUE:")
+        obj_manager = objectives.get_manager()
+        active = obj_manager.get_active()
+        queue = obj_manager.get_queue(limit=5)
+        summary = obj_manager.status_summary()
+
+        if active:
+            print(f"  [ACTIVE] {active.id}: {active.description[:50]}")
+            print(f"           Priority: {active.priority}, Attempts: {active.attempts}")
+        else:
+            print("  No active objective")
+
+        print(f"  Queue size: {summary['queue_size']}")
+        print(f"  Completed: {summary['completed_count']}, Failed: {summary['failed_count']}")
+        print(f"  Success rate: {summary['success_rate']:.0%}")
+
+        print("=" * 50)
+
+    elif action == "inject":
+        # Inject user input into the brain
+        text = args.text
+        if not text:
+            print("Error: --text required for inject")
+            return
+
+        orch = orchestrator.get_orchestrator()
+        orch.inject_user_input(text)
+        print(f"Injected into brain: {text[:100]}...")
+
+    elif action == "history":
+        # Show recent brain activity
+        from pathlib import Path
+        brain_log = Path(__file__).resolve().parents[1] / "data" / "brain" / "loop_log.jsonl"
+        if not brain_log.exists():
+            print("No brain history yet")
+            return
+
+        print("RECENT BRAIN ACTIVITY:")
+        print("-" * 50)
+        with open(brain_log, "r") as f:
+            lines = f.readlines()[-20:]  # Last 20 entries
+            for line in lines:
+                try:
+                    entry = json.loads(line)
+                    event = entry.get("event", "?")
+                    cycle = entry.get("cycle", 0)
+                    print(f"[{cycle}] {event}: {json.dumps({k: v for k, v in entry.items() if k not in ['event', 'cycle', 'timestamp', 'phase']})[:80]}")
+                except json.JSONDecodeError:
+                    continue
+
+
+def cmd_objective(args: argparse.Namespace) -> None:
+    """Objective management commands."""
+    action = args.objective_action
+    obj_manager = objectives.get_manager()
+
+    if action == "add":
+        # Create new objective
+        description = args.description
+        priority = int(args.priority) if args.priority else 5
+
+        # Parse success criteria
+        criteria = []
+        if args.criteria:
+            for c in args.criteria.split(","):
+                criteria.append({
+                    "description": c.strip(),
+                    "metric": "completed",
+                    "target": True,
+                })
+        else:
+            criteria = [{
+                "description": "objective completed",
+                "metric": "completed",
+                "target": True,
+            }]
+
+        obj = obj_manager.create_objective(
+            description=description,
+            success_criteria=criteria,
+            priority=priority,
+            source=objectives.ObjectiveSource.USER,
+        )
+        print(f"Created objective: {obj.id}")
+        print(f"  Description: {obj.description}")
+        print(f"  Priority: {obj.priority}")
+        print(f"  Criteria: {len(obj.success_criteria)}")
+
+    elif action == "list":
+        print("OBJECTIVE QUEUE:")
+        print("-" * 50)
+
+        active = obj_manager.get_active()
+        if active:
+            status = "ACTIVE"
+            print(f"[{status}] {active.id}: {active.description}")
+            print(f"        Priority: {active.priority}, Attempts: {active.attempts}")
+            if active.started_at:
+                duration = int((time.time() - active.started_at))
+                print(f"        Running for: {duration}s")
+            print()
+
+        queue = obj_manager.get_queue(limit=args.limit if hasattr(args, 'limit') else 10)
+        if queue:
+            print("PENDING:")
+            for obj in queue:
+                print(f"  [{obj.priority}] {obj.id}: {obj.description[:60]}")
+        else:
+            print("  (no pending objectives)")
+
+    elif action == "complete":
+        obj_id = args.objective_id
+        outcome = args.outcome or "Completed via CLI"
+
+        success = obj_manager.complete(obj_id, outcome)
+        if success:
+            print(f"Completed objective: {obj_id}")
+        else:
+            print(f"Error: Could not complete {obj_id} (not active?)")
+
+    elif action == "fail":
+        obj_id = args.objective_id
+        reason = args.reason or "Failed via CLI"
+        requeue = args.requeue if hasattr(args, 'requeue') else False
+
+        success = obj_manager.fail(obj_id, reason, requeue=requeue)
+        if success:
+            action_taken = "requeued" if requeue else "failed"
+            print(f"Objective {obj_id} {action_taken}: {reason}")
+        else:
+            print(f"Error: Could not fail {obj_id}")
+
+    elif action == "history":
+        print("OBJECTIVE HISTORY:")
+        print("-" * 50)
+        history = obj_manager.get_history(limit=args.limit if hasattr(args, 'limit') else 20)
+        for obj in reversed(history):
+            status_icon = "✓" if obj.status == objectives.ObjectiveStatus.COMPLETED else "✗"
+            print(f"  {status_icon} {obj.id}: {obj.description[:50]}")
+            if obj.outcome:
+                print(f"      Outcome: {obj.outcome[:60]}")
+            if obj.failure_reason:
+                print(f"      Failed: {obj.failure_reason[:60]}")
+
+
+def cmd_feedback(args: argparse.Namespace) -> None:
+    """Action feedback and learning status."""
+    action = args.feedback_action
+    loop = action_feedback.get_feedback_loop()
+
+    if action == "metrics":
+        metrics = loop.get_metrics()
+        print("ACTION METRICS:")
+        print("-" * 50)
+        if not metrics:
+            print("  No action metrics yet")
+            return
+
+        for name, m in sorted(metrics.items(), key=lambda x: -x[1].get("total_calls", 0)):
+            print(f"  {name}:")
+            print(f"    Calls: {m.get('total_calls', 0)}, Success: {m.get('success_rate', 0):.0%}")
+            print(f"    Avg duration: {m.get('avg_duration_ms', 0):.0f}ms")
+            if m.get("common_errors"):
+                print(f"    Common errors: {m['common_errors'][:2]}")
+
+    elif action == "patterns":
+        patterns = loop.get_patterns()
+        print("LEARNED PATTERNS:")
+        print("-" * 50)
+        if not patterns:
+            print("  No patterns learned yet")
+            return
+
+        for p in patterns:
+            print(f"  [{p.get('pattern_type')}] {p.get('action_name')}")
+            print(f"    {p.get('description')}")
+            print(f"    Frequency: {p.get('frequency', 1)}")
+
+    elif action == "recommend":
+        action_name = args.action_name
+        recs = action_feedback.get_action_recommendations(action_name)
+        print(f"RECOMMENDATIONS FOR '{action_name}':")
+        print("-" * 50)
+        if not recs:
+            print("  No recommendations (action performing well)")
+        else:
+            for r in recs:
+                print(f"  - {r}")
+
+
+def cmd_agents(args: argparse.Namespace) -> None:
+    """Multi-agent system management."""
+    action = args.agents_action
+
+    # Initialize registry
+    try:
+        registry = initialize_agents()
+    except Exception as e:
+        print(f"Error initializing agents: {e}")
+        return
+
+    if action == "status":
+        print("=" * 60)
+        print("JARVIS MULTI-AGENT SYSTEM")
+        print("=" * 60)
+
+        # Check self-sufficiency
+        self_status = registry.get_self_sufficient_status()
+        if self_status["self_sufficient"]:
+            print(f"Status: SELF-SUFFICIENT (local: {self_status['local_provider']})")
+        else:
+            print("Status: CLOUD-DEPENDENT (install Ollama for self-sufficiency)")
+
+        print()
+        print("AGENTS:")
+        print("-" * 60)
+
+        for agent in registry.get_all():
+            status = registry.get_status(agent.role)
+            availability = agent.check_provider_availability()
+
+            # Provider status
+            providers_str = ", ".join(
+                f"{p}{'*' if v else ''}"
+                for p, v in availability.items()
+            )
+
+            print(f"  [{agent.role.value.upper()}]")
+            print(f"    Capabilities: {[c.value for c in agent.capabilities]}")
+            print(f"    Providers: {providers_str}")
+            print(f"    Tasks: {status.get('total_tasks', 0)}, "
+                  f"Success: {status.get('success_rate', 1.0):.0%}")
+            print()
+
+        print("Cloud Transformers (optional boosters):")
+        for role, cloud in self_status.get("cloud_transformers", {}).items():
+            available = [p for p, v in cloud.items() if v]
+            if available:
+                print(f"  {role}: {', '.join(available)}")
+
+        print("=" * 60)
+
+    elif action == "run":
+        role_str = args.role
+        task_desc = args.task
+
+        try:
+            role = AgentRole(role_str)
+        except ValueError:
+            print(f"Unknown role: {role_str}")
+            print(f"Available: {[r.value for r in AgentRole]}")
+            return
+
+        agent = registry.get(role)
+        if not agent:
+            print(f"Agent {role_str} not registered")
+            return
+
+        print(f"Running {role_str} agent...")
+        print("-" * 40)
+
+        task = AgentTask(
+            id=f"cli_{int(time.time())}",
+            objective_id="cli",
+            description=task_desc,
+            max_steps=10,
+            timeout_seconds=120,
+        )
+
+        result = registry.execute_with_role(role, task)
+
+        if result.success:
+            print(f"SUCCESS ({result.duration_ms}ms, {result.steps_taken} steps)")
+            print()
+            print(result.output)
+        else:
+            print(f"FAILED: {result.error}")
+
+    elif action == "research":
+        query = args.query
+        print(f"Researching: {query}")
+        print("-" * 40)
+
+        researcher = registry.get(AgentRole.RESEARCHER)
+        if researcher:
+            output = researcher.quick_research(query)
+            print(output)
+        else:
+            print("Researcher agent not available")
+
+    elif action == "trade":
+        task_desc = args.task or "Analyze crypto market opportunities"
+        print(f"Trading task: {task_desc}")
+        print("-" * 40)
+
+        task = AgentTask(
+            id=f"trade_{int(time.time())}",
+            objective_id="trade",
+            description=task_desc,
+            max_steps=5,
+        )
+
+        result = registry.execute_with_role(AgentRole.TRADER, task)
+        if result.success:
+            print(result.output)
+        else:
+            print(f"Failed: {result.error}")
+
+    elif action == "improve":
+        target = args.target or "Suggest improvements for the codebase"
+        print(f"Architecture task: {target}")
+        print("-" * 40)
+
+        task = AgentTask(
+            id=f"arch_{int(time.time())}",
+            objective_id="improve",
+            description=target,
+            max_steps=5,
+        )
+
+        result = registry.execute_with_role(AgentRole.ARCHITECT, task)
+        if result.success:
+            print(result.output)
+        else:
+            print(f"Failed: {result.error}")
+
+    elif action == "providers":
+        print("PROVIDER AVAILABILITY:")
+        print("-" * 50)
+
+        availability = registry.check_all_availability()
+        for role, providers in availability.items():
+            print(f"  {role}:")
+            for provider, available in providers.items():
+                icon = "+" if available else "-"
+                print(f"    [{icon}] {provider}")
+            print()
+
+
+def cmd_economics(args: argparse.Namespace) -> None:
+    """Economics dashboard and P&L tracking."""
+    action = args.economics_action
+
+    if action == "status":
+        dashboard = EconomicsDashboard()
+        status = dashboard.get_status()
+
+        print("=" * 60)
+        print("JARVIS ECONOMIC STATUS")
+        print("=" * 60)
+
+        # Summary
+        status_icon = "+" if status.is_profitable else "-"
+        print(f"[{status_icon}] {status.status_message}")
+        print()
+
+        # Today
+        print("TODAY:")
+        print(f"  Costs: ${status.costs_today:.2f}")
+        print(f"  Revenue: ${status.revenue_today:.2f}")
+        print(f"  Net P&L: ${status.net_pnl_today:+.2f}")
+        print(f"  API Calls: {status.api_calls_today}")
+        print(f"  Tokens: {status.tokens_today:,}")
+        print()
+
+        # 30-Day
+        print("30-DAY:")
+        print(f"  Net P&L: ${status.net_pnl_30d:+.2f}")
+        print(f"  ROI: {status.roi_30d_percent:+.1f}%")
+        print()
+
+        # Revenue breakdown
+        print("REVENUE SOURCES:")
+        print(f"  Trading P&L: ${status.trading_pnl:.2f}")
+        print(f"  Time Saved: ${status.time_saved_value:.2f}")
+        print()
+
+        # Alerts
+        if status.alerts:
+            print("ALERTS:")
+            for alert in status.alerts:
+                print(f"  ! {alert}")
+        else:
+            print("✓ No alerts")
+
+        print("=" * 60)
+
+    elif action == "report":
+        dashboard = EconomicsDashboard()
+        days = args.days if hasattr(args, 'days') else 30
+        report = dashboard.generate_report(days=days)
+        print(report)
+
+    elif action == "costs":
+        tracker = get_cost_tracker()
+        days = args.days if hasattr(args, 'days') else 7
+        summary = tracker.get_summary(days=days)
+
+        print(f"COSTS (Last {days} days):")
+        print("-" * 50)
+        print(f"  Total: ${summary.total_usd:.4f}")
+        print(f"  API Calls: {summary.api_calls}")
+        print(f"  Tokens: {summary.total_tokens:,}")
+        print()
+
+        if summary.by_provider:
+            print("  By Provider:")
+            for provider, cost in sorted(summary.by_provider.items(), key=lambda x: -x[1]):
+                print(f"    {provider}: ${cost:.4f}")
+        print()
+
+        if summary.by_category:
+            print("  By Category:")
+            for category, cost in sorted(summary.by_category.items(), key=lambda x: -x[1]):
+                print(f"    {category}: ${cost:.4f}")
+
+    elif action == "revenue":
+        tracker = get_revenue_tracker()
+        days = args.days if hasattr(args, 'days') else 7
+        summary = tracker.get_summary(days=days)
+
+        print(f"REVENUE (Last {days} days):")
+        print("-" * 50)
+        print(f"  Total: ${summary.total_usd:.2f}")
+        print(f"  Verified: ${summary.verified_revenue:.2f}")
+        print(f"  Estimated: ${summary.estimated_value:.2f}")
+        print()
+
+        print("  Breakdown:")
+        print(f"    Trading P&L: ${summary.trading_pnl:.2f}")
+        print(f"    Time Saved: ${summary.time_saved_hours:.1f} hours")
+        print()
+
+        if summary.by_category:
+            print("  By Category:")
+            for category, amount in sorted(summary.by_category.items(), key=lambda x: -x[1]):
+                print(f"    {category}: ${amount:.2f}")
+
+    elif action == "alerts":
+        dashboard = EconomicsDashboard()
+        alerts = dashboard.check_alerts()
+        db = get_economics_db()
+        unacked = db.get_unacknowledged_alerts()
+
+        print("ECONOMIC ALERTS:")
+        print("-" * 50)
+
+        if not alerts and not unacked:
+            print("  ✓ No active alerts")
+            return
+
+        # Current alerts
+        if alerts:
+            print("  Current:")
+            for alert in alerts:
+                print(f"    ! {alert}")
+
+        # Historical unacknowledged
+        if unacked:
+            print()
+            print("  Unacknowledged:")
+            for a in unacked[:10]:
+                print(f"    [{a['id']}] {a['message']}")
+                print(f"         Severity: {a['severity']}")
+
+        print()
+        print("  Use 'lifeos economics ack <id>' to acknowledge alerts")
+
+    elif action == "ack":
+        alert_id = args.alert_id
+        db = get_economics_db()
+        db.acknowledge_alert(int(alert_id))
+        print(f"Acknowledged alert {alert_id}")
+
+    elif action == "trend":
+        dashboard = EconomicsDashboard()
+        days = args.days if hasattr(args, 'days') else 7
+        trend = dashboard.get_trend(days=days)
+
+        print(f"P&L TREND (Last {days} days):")
+        print("-" * 50)
+
+        if not trend.get("dates"):
+            print("  No data yet")
+            return
+
+        for i, date in enumerate(trend["dates"]):
+            cost = trend["costs"][i]
+            revenue = trend["revenue"][i]
+            net = trend["net_pnl"][i]
+            trading = trend["trading"][i]
+
+            icon = "+" if net >= 0 else "-"
+            print(f"  {date}: [{icon}] ${net:+.2f}  (costs: ${cost:.2f}, rev: ${revenue:.2f})")
+
+    elif action == "log-time":
+        # Log time saved manually
+        minutes = float(args.minutes)
+        task = args.task
+
+        tracker = get_revenue_tracker()
+        value = tracker.log_time_saved(minutes, task)
+        print(f"Logged {minutes} minutes saved on '{task}'")
+        print(f"Value: ${value:.2f}")
+
+    elif action == "log-trade":
+        # Log trading profit/loss manually
+        amount = float(args.amount)
+        symbol = args.symbol or "UNKNOWN"
+        paper = not args.live
+
+        tracker = get_revenue_tracker()
+        tracker.log_trading_profit(amount, symbol=symbol, paper=paper)
+        mode = "live" if not paper else "paper"
+        print(f"Logged {mode} trade: {symbol} ${amount:+.2f}")
+
+
+def cmd_trading_youtube(args: argparse.Namespace) -> None:
+    """YouTube trading channel ingestion."""
+    action = args.trading_youtube_action
+    cfg = config.load_config()
+    yt_cfg = cfg.get("trading_youtube", {})
+
+    if action == "scan":
+        channel = args.channel
+        limit = args.limit if args.limit is not None else int(yt_cfg.get("limit", 3))
+        enqueue = not args.no_enqueue if hasattr(args, "no_enqueue") else bool(yt_cfg.get("enqueue_backtests", True))
+
+        channels = [channel] if channel else yt_cfg.get("channels", [])
+        if not channels:
+            print("No YouTube channels configured.")
+            return
+
+        for channel_url in channels:
+            result = trading_youtube.compile_channel_digest(
+                channel_url=channel_url,
+                limit=limit,
+                enqueue_backtests=enqueue,
+            )
+            print(f"Scanned: {channel_url}")
+            if result.get("error"):
+                print(f"  Error: {result.get('error')}")
+                continue
+            print(f"  Videos: {result.get('video_count', 0)}")
+            print(f"  Digest: {result.get('note_path')}")
+            if enqueue:
+                print("  Backtests: queued")
+
+    elif action == "queue":
+        queue = trading_youtube.load_queue()
+        print(f"Queued backtests: {len(queue)}")
+        for entry in queue[:5]:
+            print(f"  - {entry.get('symbol')} {entry.get('interval')} {entry.get('strategy')}")
+
+    elif action == "compile":
+        channel = args.channel
+        limit = args.limit if args.limit is not None else 50
+        enqueue = not args.no_enqueue if hasattr(args, "no_enqueue") else True
+        channels = [channel] if channel else yt_cfg.get("channels", [])
+        if not channels:
+            print("No YouTube channels configured.")
+            return
+
+        for channel_url in channels:
+            result = trading_youtube.compile_channel_strategies(
+                channel_url=channel_url,
+                limit=limit,
+                enqueue_backtests=enqueue,
+            )
+            print(f"Compiled: {channel_url}")
+            if result.get("error"):
+                print(f"  Error: {result.get('error')}")
+                continue
+            print(f"  Videos: {result.get('video_count', 0)}")
+            print(f"  Strategies: {result.get('strategies_added', 0)}")
+            print(f"  Actions: {result.get('actions_added', 0)}")
+            print(f"  Digest: {result.get('digest_path')}")
+            print(f"  Strategies file: {result.get('strategies_path')}")
+            print(f"  Actions file: {result.get('actions_path')}")
+
+    elif action == "backtest":
+        limit = args.limit if args.limit is not None else 3
+        results = trading_youtube.run_backtest_queue(limit=limit)
+        if not results:
+            print("No backtests executed (queue empty or data missing).")
+            return
+        print(f"Executed {len(results)} backtests:")
+        for result in results:
+            job = result.get("job", {})
+            metrics = result.get("result", {})
+            print(
+                f"  - {job.get('symbol')} {job.get('interval')} {job.get('strategy')} "
+                f"ROI {metrics.get('roi', 0.0)*100:.2f}% Sharpe {metrics.get('sharpe_ratio', 0.0):.2f}"
+            )
+
+
+def cmd_trading_notion(args: argparse.Namespace) -> None:
+    """Ingest Notion resources and compile strategies."""
+    action = args.trading_notion_action
+    cfg = config.load_config()
+    notion_cfg = cfg.get("notion_ingest", {})
+
+    if action == "ingest":
+        url = args.url or notion_cfg.get("default_url")
+        if not url:
+            print("No Notion URL provided.")
+            return
+        
+        # Check if using headless scraper
+        use_headless = getattr(args, 'headless', False)
+        notebooklm_summary = getattr(args, 'notebooklm', False)
+        
+        if use_headless:
+            print("Using headless scraper for full content expansion...")
+            if notebooklm_summary:
+                print("YouTube videos will be summarized with NotebookLM...")
+        
+        result = notion_ingest.ingest_notion_page(
+            url=url,
+            crawl_links=True,
+            max_links=int(args.max_links),
+            crawl_depth=int(args.crawl_depth),
+            max_pages=int(args.max_pages),
+            max_chunks=int(args.max_chunks),
+            use_headless=use_headless,
+            notebooklm_summary=notebooklm_summary,
+        )
+        if result.get("error"):
+            print(f"Notion ingest failed: {result['error']}")
+            return
+        print("Notion ingest complete:")
+        print(f"- Title: {result.get('title')}")
+        print(f"- Method: {result.get('method', 'api')}")
+        print(f"- Links: {result.get('links')}")
+        print(f"- YouTube links: {result.get('youtube_links')}")
+        if notebooklm_summary:
+            print(f"- YouTube summaries: {result.get('youtube_summaries', 0)}")
+        print(f"- Code blocks: {result.get('code_blocks')}")
+        print(f"- Action items: {result.get('action_items')}")
+        print(f"- Resources crawled: {result.get('resources')}")
+        print(f"- Exec: {result.get('exec_path')}")
+        print(f"- Note: {result.get('note_path')}")
+        if result.get('scraped_files'):
+            print("- Scraped files:")
+            for key, path in result['scraped_files'].items():
+                if path:
+                    print(f"  {key}: {path}")
+
+    elif action == "compile":
+        exec_path = args.exec_path
+        seed_trader = not args.no_seed
+        result = trading_notion.compile_notion_strategies(exec_path=exec_path, seed_trader=seed_trader)
+        if result.get("error"):
+            print(f"Notion compile failed: {result['error']}")
+            return
+        print("Notion strategies compiled:")
+        print(f"- Strategies added: {result.get('strategies_added', 0)}")
+        print(f"- Shortlist: {result.get('shortlist', 0)}")
+        print(f"- Actions: {result.get('actions', 0)}")
+        print(f"- Strategies file: {result.get('strategies_path')}")
+        print(f"- Actions file: {result.get('actions_path')}")
+        print(f"- Digest: {result.get('note_path')}")
+
+
+def cmd_solana_scan(args: argparse.Namespace) -> None:
+    """Run the Solana meme coin scanner and seed strategies."""
+    action = args.solana_action
+
+    if action == "run":
+        result = solana_scanner.scan_all(
+            trending_limit=int(args.trending_limit),
+            new_token_hours=int(args.new_token_hours),
+            top_trader_limit=int(args.top_trader_limit),
+        )
+        if result.get("error"):
+            print(f"Solana scan failed: {result['error']}")
+            return
+        if not args.no_seed:
+            solana_scanner.seed_scanner_strategies()
+        print("Solana scan complete:")
+        print(f"- Trending tokens: {result.get('trending', 0)}")
+        print(f"- New listings: {result.get('new_tokens', 0)}")
+        print(f"- Top traders: {result.get('top_traders', 0)}")
+        print(f"- Trending CSV: {result.get('trending_csv')}")
+        print(f"- New tokens CSV: {result.get('new_tokens_csv')}")
+        print(f"- Top traders CSV: {result.get('top_traders_csv')}")
+        print(f"- Digest: {result.get('note_path')}")
+
+    elif action == "shortlist":
+        shortlist = solana_scanner.compile_strategy_shortlist()
+        print("Solana strategy shortlist:")
+        for item in shortlist:
+            print(f"- {item['rank']}. {item['name']} ({item['id']}): {item['why']}")
+
+    elif action == "seed":
+        result = solana_scanner.seed_scanner_strategies()
+        print(f"Seeded {result.get('strategies_added', 0)} strategies into trading engine.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lifeos")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1191,6 +1960,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_parser = subparsers.add_parser("doctor")
     doctor_parser.add_argument("--test", action="store_true", help="Run quick provider test")
     doctor_parser.add_argument("--voice", action="store_true", help="Run voice pipeline diagnostics")
+    doctor_parser.add_argument("--mcp", action="store_true", help="Run comprehensive MCP server diagnostics")
 
     log_parser = subparsers.add_parser("log", parents=[mode_parser])
     log_parser.add_argument("text", nargs="?", default="")
@@ -1262,6 +2032,187 @@ def build_parser() -> argparse.ArgumentParser:
     # task status
     task_status_parser = task_subparsers.add_parser("status")
 
+    # P0: Brain/Orchestrator commands
+    brain_parser = subparsers.add_parser("brain", help="Brain/Orchestrator status and control")
+    brain_parser.add_argument("action", nargs="?", default="status",
+                              choices=["status", "inject", "history"])
+    brain_parser.add_argument("--text", help="Text to inject (for inject action)")
+
+    # P0: Objective management commands
+    objective_parser = subparsers.add_parser("objective", help="Manage objectives")
+    objective_subparsers = objective_parser.add_subparsers(dest="objective_action", required=True)
+
+    # objective add
+    obj_add_parser = objective_subparsers.add_parser("add")
+    obj_add_parser.add_argument("description", help="Objective description")
+    obj_add_parser.add_argument("--priority", default="5", help="Priority 1-10 (default 5)")
+    obj_add_parser.add_argument("--criteria", help="Comma-separated success criteria")
+
+    # objective list
+    obj_list_parser = objective_subparsers.add_parser("list")
+    obj_list_parser.add_argument("--limit", type=int, default=10)
+
+    # objective complete
+    obj_complete_parser = objective_subparsers.add_parser("complete")
+    obj_complete_parser.add_argument("objective_id", help="Objective ID")
+    obj_complete_parser.add_argument("--outcome", help="Outcome description")
+
+    # objective fail
+    obj_fail_parser = objective_subparsers.add_parser("fail")
+    obj_fail_parser.add_argument("objective_id", help="Objective ID")
+    obj_fail_parser.add_argument("--reason", help="Failure reason")
+    obj_fail_parser.add_argument("--requeue", action="store_true", help="Re-add to queue")
+
+    # objective history
+    obj_history_parser = objective_subparsers.add_parser("history")
+    obj_history_parser.add_argument("--limit", type=int, default=20)
+
+    # P0: Action feedback commands
+    feedback_parser = subparsers.add_parser("feedback", help="Action feedback and learning")
+    feedback_subparsers = feedback_parser.add_subparsers(dest="feedback_action", required=True)
+
+    # feedback metrics
+    feedback_subparsers.add_parser("metrics")
+
+    # feedback patterns
+    feedback_subparsers.add_parser("patterns")
+
+    # feedback recommend
+    feedback_rec_parser = feedback_subparsers.add_parser("recommend")
+    feedback_rec_parser.add_argument("action_name", help="Action to get recommendations for")
+
+    # P1: Multi-Agent System commands
+    agents_parser = subparsers.add_parser("agents", help="Multi-agent system management")
+    agents_subparsers = agents_parser.add_subparsers(dest="agents_action", required=True)
+
+    # agents status
+    agents_subparsers.add_parser("status", help="Show agent system status")
+
+    # agents run <role> <task>
+    agents_run_parser = agents_subparsers.add_parser("run", help="Run specific agent")
+    agents_run_parser.add_argument("role", choices=["researcher", "operator", "trader", "architect"])
+    agents_run_parser.add_argument("task", help="Task for the agent to execute")
+
+    # agents research <query>
+    agents_research_parser = agents_subparsers.add_parser("research", help="Quick research")
+    agents_research_parser.add_argument("query", help="What to research")
+
+    # agents trade [task]
+    agents_trade_parser = agents_subparsers.add_parser("trade", help="Trading analysis")
+    agents_trade_parser.add_argument("--task", help="Trading task")
+
+    # agents improve [target]
+    agents_improve_parser = agents_subparsers.add_parser("improve", help="Architecture improvement")
+    agents_improve_parser.add_argument("--target", help="What to improve")
+
+    # agents providers
+    agents_subparsers.add_parser("providers", help="Show provider availability")
+
+    # P2: Economics commands
+    economics_parser = subparsers.add_parser("economics", help="Economic dashboard and P&L tracking")
+    economics_subparsers = economics_parser.add_subparsers(dest="economics_action", required=True)
+
+    # economics status
+    economics_subparsers.add_parser("status", help="Show current economic status")
+
+    # economics report
+    econ_report_parser = economics_subparsers.add_parser("report", help="Generate full P&L report")
+    econ_report_parser.add_argument("--days", type=int, default=30, help="Days to include")
+
+    # economics costs
+    econ_costs_parser = economics_subparsers.add_parser("costs", help="Show cost breakdown")
+    econ_costs_parser.add_argument("--days", type=int, default=7, help="Days to include")
+
+    # economics revenue
+    econ_revenue_parser = economics_subparsers.add_parser("revenue", help="Show revenue breakdown")
+    econ_revenue_parser.add_argument("--days", type=int, default=7, help="Days to include")
+
+    # economics alerts
+    economics_subparsers.add_parser("alerts", help="Show economic alerts")
+
+    # economics ack <id>
+    econ_ack_parser = economics_subparsers.add_parser("ack", help="Acknowledge an alert")
+    econ_ack_parser.add_argument("alert_id", help="Alert ID to acknowledge")
+
+    # economics trend
+    econ_trend_parser = economics_subparsers.add_parser("trend", help="Show P&L trend")
+    econ_trend_parser.add_argument("--days", type=int, default=7, help="Days to show")
+
+    # economics log-time <minutes> <task>
+    econ_logtime_parser = economics_subparsers.add_parser("log-time", help="Log time saved")
+    econ_logtime_parser.add_argument("minutes", type=float, help="Minutes saved")
+    econ_logtime_parser.add_argument("task", help="Task description")
+
+    # economics log-trade <amount> [--symbol] [--live]
+    econ_logtrade_parser = economics_subparsers.add_parser("log-trade", help="Log trading profit/loss")
+    econ_logtrade_parser.add_argument("amount", type=float, help="Profit/loss amount in USD")
+    econ_logtrade_parser.add_argument("--symbol", help="Trading symbol (e.g., BTC)")
+    econ_logtrade_parser.add_argument("--live", action="store_true", help="Mark as live trade (default: paper)")
+
+    trading_youtube_parser = subparsers.add_parser(
+        "trading-youtube",
+        help="Ingest YouTube trading channels and queue backtests",
+    )
+    trading_youtube_subparsers = trading_youtube_parser.add_subparsers(
+        dest="trading_youtube_action",
+        required=True,
+    )
+    # trading-youtube scan
+    ty_scan_parser = trading_youtube_subparsers.add_parser("scan", help="Scan a channel")
+    ty_scan_parser.add_argument("--channel", help="YouTube channel URL")
+    ty_scan_parser.add_argument("--limit", type=int, help="Max videos to scan")
+    ty_scan_parser.add_argument("--no-enqueue", action="store_true", help="Do not queue backtests")
+
+    # trading-youtube compile
+    ty_compile_parser = trading_youtube_subparsers.add_parser("compile", help="Compile strategies from videos")
+    ty_compile_parser.add_argument("--channel", help="YouTube channel URL")
+    ty_compile_parser.add_argument("--limit", type=int, help="Max videos to scan (default 50)")
+    ty_compile_parser.add_argument("--no-enqueue", action="store_true", help="Do not queue backtests")
+
+    # trading-youtube queue
+    trading_youtube_subparsers.add_parser("queue", help="Show queued backtests")
+
+    # trading-youtube backtest
+    ty_backtest_parser = trading_youtube_subparsers.add_parser("backtest", help="Run queued backtests")
+    ty_backtest_parser.add_argument("--limit", type=int, help="Max backtests to run")
+
+    trading_notion_parser = subparsers.add_parser(
+        "trading-notion",
+        help="Ingest Notion resources and compile strategies",
+    )
+    trading_notion_subparsers = trading_notion_parser.add_subparsers(
+        dest="trading_notion_action",
+        required=True,
+    )
+    tn_ingest_parser = trading_notion_subparsers.add_parser("ingest", help="Ingest Notion page")
+    tn_ingest_parser.add_argument("--url", help="Notion page URL")
+    tn_ingest_parser.add_argument("--crawl-depth", type=int, default=2, help="Link crawl depth")
+    tn_ingest_parser.add_argument("--max-links", type=int, default=400, help="Max links to crawl")
+    tn_ingest_parser.add_argument("--max-pages", type=int, default=30, help="Max nested pages to ingest")
+    tn_ingest_parser.add_argument("--max-chunks", type=int, default=60, help="Max chunks per page")
+    tn_ingest_parser.add_argument("--headless", action="store_true", help="Use Playwright headless scraper for full content")
+    tn_ingest_parser.add_argument("--notebooklm", action="store_true", help="Use NotebookLM to summarize YouTube videos")
+
+    tn_compile_parser = trading_notion_subparsers.add_parser("compile", help="Compile strategies from Notion ingest")
+    tn_compile_parser.add_argument("--exec-path", help="Override execution JSON path")
+    tn_compile_parser.add_argument("--no-seed", action="store_true", help="Do not seed strategies into engine")
+
+    solana_parser = subparsers.add_parser(
+        "solana-scan",
+        help="Scan Solana meme coins via BirdEye",
+    )
+    solana_subparsers = solana_parser.add_subparsers(
+        dest="solana_action",
+        required=True,
+    )
+    solana_run_parser = solana_subparsers.add_parser("run", help="Run scanner and write CSVs")
+    solana_run_parser.add_argument("--trending-limit", type=int, default=200)
+    solana_run_parser.add_argument("--new-token-hours", type=int, default=3)
+    solana_run_parser.add_argument("--top-trader-limit", type=int, default=100)
+    solana_run_parser.add_argument("--no-seed", action="store_true")
+    solana_subparsers.add_parser("shortlist", help="Show strategy shortlist")
+    solana_subparsers.add_parser("seed", help="Seed scanner strategies into engine")
+
     return parser
 
 
@@ -1328,6 +2279,30 @@ def main() -> None:
         return
     if args.command == "task":
         cmd_task(args)
+        return
+    if args.command == "brain":
+        cmd_brain(args)
+        return
+    if args.command == "objective":
+        cmd_objective(args)
+        return
+    if args.command == "feedback":
+        cmd_feedback(args)
+        return
+    if args.command == "agents":
+        cmd_agents(args)
+        return
+    if args.command == "economics":
+        cmd_economics(args)
+        return
+    if args.command == "trading-youtube":
+        cmd_trading_youtube(args)
+        return
+    if args.command == "trading-notion":
+        cmd_trading_notion(args)
+        return
+    if args.command == "solana-scan":
+        cmd_solana_scan(args)
         return
 
     parser.print_help()
