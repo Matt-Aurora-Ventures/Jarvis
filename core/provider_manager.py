@@ -26,20 +26,22 @@ class ProviderManager:
         self.provider_status = {
             "gemini": {"available": True, "last_error": None, "error_count": 0, "last_used": None},
             "groq": {"available": True, "last_error": None, "error_count": 0, "last_used": None},
+            "grok": {"available": True, "last_error": None, "error_count": 0, "last_used": None},
             "ollama": {"available": True, "last_error": None, "error_count": 0, "last_used": None},
             "openai": {"available": True, "last_error": None, "error_count": 0, "last_used": None}
         }
-        
+
         # Rate limiting
         self.rate_limits = {
             "gemini": {"requests_per_minute": 15, "requests": deque()},
             "groq": {"requests_per_minute": 30, "requests": deque()},
+            "grok": {"requests_per_minute": 50, "requests": deque()},
             "openai": {"requests_per_minute": 60, "requests": deque()},
             "ollama": {"requests_per_minute": 100, "requests": deque()}
         }
-        
+
         # Fallback chain
-        self.fallback_chain = ["gemini", "groq", "openai", "ollama"]
+        self.fallback_chain = ["gemini", "groq", "grok", "openai", "ollama"]
         
         # Load saved status
         self._load_provider_status()
@@ -140,6 +142,8 @@ class ProviderManager:
                     text = self._try_gemini(prompt, max_output_tokens)
                 elif provider == "groq":
                     text = self._try_groq(prompt, max_output_tokens)
+                elif provider == "grok":
+                    text = self._try_grok(prompt, max_output_tokens)
                 elif provider == "openai":
                     text = self._try_openai(prompt, max_output_tokens)
                 elif provider == "ollama":
@@ -185,7 +189,26 @@ class ProviderManager:
                 raise Exception("Groq not available")
         except Exception as e:
             raise Exception(f"Groq error: {e}")
-    
+
+    def _try_grok(self, prompt: str, max_tokens: int) -> str:
+        """Try Grok (X.AI) provider."""
+        try:
+            # Check if Grok is available in providers
+            if hasattr(providers, '_grok_client'):
+                client = providers._grok_client()
+                if client:
+                    # Try with the configured model from config
+                    from core import config
+                    cfg = config.load_config()
+                    model = cfg.get("providers", {}).get("grok", {}).get("model", "grok-beta")
+                    return providers._ask_grok(prompt, model, max_tokens)
+                else:
+                    raise Exception("Grok client unavailable")
+            else:
+                raise Exception("Grok not available")
+        except Exception as e:
+            raise Exception(f"Grok error: {e}")
+
     def _try_openai(self, prompt: str, max_tokens: int) -> str:
         """Try OpenAI provider."""
         try:

@@ -91,22 +91,29 @@
       "model": "llama-3.3-70b-versatile",
       "priority": 1
     },
+    "grok": {
+      "enabled": false,
+      "model": "grok-beta",
+      "priority": 2,
+      "sentiment_analysis": true,
+      "x_integration": true
+    },
     "gemini": {
       "enabled": false,
       "model": "gemini-2.5-flash",
       "free_tier": true,
-      "priority": 2
+      "priority": 3
     },
     "openai": {
       "enabled": "auto",
       "model": "gpt-4o-mini",
-      "priority": 3
+      "priority": 4
     },
     "ollama": {
       "enabled": true,
       "model": "qwen2.5:1.5b",
       "base_url": "http://localhost:11434",
-      "priority": 4
+      "priority": 5
     }
   },
   "router": {

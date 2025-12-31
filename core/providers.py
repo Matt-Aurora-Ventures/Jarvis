@@ -104,7 +104,7 @@ class ProviderAttempt:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-_LAST_PROVIDER_ERRORS: Dict[str, str] = {"gemini": "", "ollama": "", "groq": "", "openai": ""}
+_LAST_PROVIDER_ERRORS: Dict[str, str] = {"gemini": "", "ollama": "", "groq": "", "grok": "", "openai": ""}
 _ATTEMPT_HISTORY: Deque[ProviderAttempt] = deque(maxlen=25)
 
 
@@ -455,19 +455,23 @@ PROVIDER_RANKINGS = [
     {"name": "llama-3.3-70b-versatile", "provider": "groq", "intelligence": 90, "free": True, "notes": "PRIMARY - Groq ultra fast"},
     {"name": "mixtral-8x7b-32768", "provider": "groq", "intelligence": 85, "free": True, "notes": "Groq Mixtral - fast"},
     {"name": "llama-3.1-8b-instant", "provider": "groq", "intelligence": 78, "free": True, "notes": "Groq instant"},
-    
+
+    # Rank 0.5: Grok (X.AI - strong for sentiment analysis, X.com integration)
+    {"name": "grok-beta", "provider": "grok", "intelligence": 92, "free": False, "notes": "Grok - X.com sentiment analysis, paid"},
+    {"name": "grok-2-latest", "provider": "grok", "intelligence": 95, "free": False, "notes": "Grok 2 - advanced reasoning, paid"},
+
     # Rank 1: Local models (free, private, always available offline)
     # Smaller/faster models first to reduce latency, larger models as fallback
     {"name": "qwen2.5:1.5b", "provider": "ollama", "intelligence": 65, "free": True, "notes": "Fast, lightweight"},
     {"name": "llama3.2:3b", "provider": "ollama", "intelligence": 70, "free": True, "notes": "Compact model"},
     {"name": "llama3.1:8b", "provider": "ollama", "intelligence": 78, "free": True, "notes": "Good local 8B"},
     {"name": "qwen2.5:7b", "provider": "ollama", "intelligence": 80, "free": True, "notes": "Larger if available"},
-    
+
     # Rank 2: Gemini (fallback - has been unreliable)
     {"name": "gemini-cli", "provider": "gemini-cli", "intelligence": 95, "free": True, "notes": "Gemini CLI - needs credits"},
     {"name": "gemini-2.5-flash", "provider": "gemini", "intelligence": 92, "free": True, "notes": "May fail without credits"},
     {"name": "gemini-2.5-pro", "provider": "gemini", "intelligence": 95, "free": True, "notes": "May fail without credits"},
-    
+
     # Rank 3: Paid fallbacks (only if free exhausted)
     {"name": "gpt-4o-mini", "provider": "openai", "intelligence": 88, "free": False, "notes": "Paid fallback"},
 ]
@@ -514,6 +518,25 @@ def _groq_client():
     except Exception:
         pass
     return {"api_key": key}  # Fallback handled in _ask_groq
+
+
+def _grok_client():
+    """Get X.AI Grok client if available."""
+    key = os.environ.get("XAI_API_KEY") or secrets.get_grok_key()
+    if not key:
+        return None
+    # X.AI uses OpenAI-compatible API, so we can use the OpenAI client
+    try:
+        from openai import OpenAI
+        return OpenAI(
+            api_key=key,
+            base_url="https://api.x.ai/v1"
+        )
+    except ImportError:
+        pass
+    except Exception:
+        pass
+    return {"api_key": key}  # Fallback handled in _ask_grok
 
 
 def _ask_groq(prompt: str, model: str, max_output_tokens: int = 512) -> Optional[str]:
@@ -596,6 +619,65 @@ def _throttled_groq_call():
     return _GroqThrottle()
 
 
+def _ask_grok(prompt: str, model: str, max_output_tokens: int = 512) -> Optional[str]:
+    """Use X.AI Grok for inference with sentiment analysis capabilities."""
+    client = _grok_client()
+    if client is None:
+        return None
+
+    # If actual OpenAI client is available (X.AI uses OpenAI-compatible API)
+    if hasattr(client, "chat"):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_output_tokens,
+                temperature=0.7,
+            )
+            return response.choices[0].message.content
+        except Exception as exc:
+            _log(f"⚠ Grok SDK call failed: {_safe_error_message(exc)}")
+            return None
+
+    # HTTP fallback for X.AI API
+    try:
+        api_key = (
+            client.get("api_key")
+            if isinstance(client, dict)
+            else os.environ.get("XAI_API_KEY") or secrets.get_grok_key()
+        )
+        if not api_key:
+            return None
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_output_tokens,
+            "temperature": 0.7,
+        }
+        response = requests.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        if response.status_code == 429:
+            _log("⚠ Grok rate limited (429). Backing off for 3s.")
+            time.sleep(3)
+            return None
+        response.raise_for_status()
+        data = response.json()
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0]["message"]["content"]
+    except Exception as exc:
+        _log(f"⚠ Grok HTTP call failed: {_safe_error_message(exc)}")
+        return None
+
+
 def _ollama_available(base_url: str) -> bool:
     ttl = _OLLAMA_HEALTH["ttl"]
     now = time.time()
@@ -623,7 +705,7 @@ def get_ranked_providers(prefer_free: bool = True) -> list:
     """Get providers ranked by intelligence, with free models first if preferred."""
     cfg = config.load_config()
     available = []
-    
+
     for provider in PROVIDER_RANKINGS:
         if provider["provider"] == "gemini-cli":
             # Disable Gemini-cli due to quota issues
@@ -636,20 +718,23 @@ def get_ranked_providers(prefer_free: bool = True) -> list:
         elif provider["provider"] == "groq":
             if _groq_client():
                 available.append(provider)
+        elif provider["provider"] == "grok":
+            if _grok_client() and cfg.get("providers", {}).get("grok", {}).get("enabled", False):
+                available.append(provider)
         elif provider["provider"] == "ollama":
             if _ollama_enabled(cfg):
                 available.append(provider)
         elif provider["provider"] == "openai":
             if _openai_client() and cfg.get("providers", {}).get("openai", {}).get("enabled", "auto") != False:
                 available.append(provider)
-    
+
     if prefer_free:
         # Sort: free first, then by intelligence
         available.sort(key=lambda x: (not x["free"], -x["intelligence"]))
     else:
         # Sort purely by intelligence
         available.sort(key=lambda x: -x["intelligence"])
-    
+
     return available
 
 
@@ -684,6 +769,11 @@ def _try_provider(
             text = _ask_groq(prompt, name, max_output_tokens)
             if text:
                 success_log = f"✓ Using Groq {name} (intelligence: {provider['intelligence']}) - FAST"
+
+        elif ptype == "grok":
+            text = _ask_grok(prompt, name, max_output_tokens)
+            if text:
+                success_log = f"✓ Using Grok {name} (intelligence: {provider['intelligence']}) - X.AI sentiment"
 
         elif ptype == "gemini":
             # Use specific model
@@ -841,6 +931,40 @@ def check_provider_health() -> Dict[str, Dict[str, Any]]:
             "status": "missing_key",
             "message": "API key not configured (PRIMARY provider - should be set)",
             "fix": "export GROQ_API_KEY='your-key' or add groq_api_key to secrets/keys.json",
+        }
+
+    # Check Grok (X.AI)
+    grok_key = secrets.get_grok_key()
+    grok_enabled = cfg.get("providers", {}).get("grok", {}).get("enabled", False)
+    if grok_key and grok_enabled:
+        client = _grok_client()
+        if client:
+            results["grok"] = {
+                "available": True,
+                "status": "ok",
+                "message": "Ready (X.AI Grok - sentiment analysis, paid)",
+                "fix": None,
+            }
+        else:
+            results["grok"] = {
+                "available": False,
+                "status": "error",
+                "message": "Key set but client failed",
+                "fix": "Check XAI_API_KEY or pip install openai",
+            }
+    elif grok_key and not grok_enabled:
+        results["grok"] = {
+            "available": False,
+            "status": "disabled",
+            "message": "Key configured but provider disabled",
+            "fix": "Set providers.grok.enabled=true in lifeos.config.json",
+        }
+    else:
+        results["grok"] = {
+            "available": False,
+            "status": "not_configured",
+            "message": "Not configured (optional - sentiment analysis, paid)",
+            "fix": "export XAI_API_KEY='your-key' and enable in config (optional)",
         }
 
     # Check Ollama

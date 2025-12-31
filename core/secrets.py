@@ -41,6 +41,11 @@ def get_groq_key() -> str:
     return get_key("groq_api_key", "GROQ_API_KEY")
 
 
+def get_grok_key() -> str:
+    """Get X.AI Grok API key (optional - for sentiment analysis)."""
+    return get_key("xai_api_key", "XAI_API_KEY")
+
+
 def get_anthropic_key() -> str:
     return get_key("anthropic_api_key", "ANTHROPIC_API_KEY")
 
@@ -60,6 +65,7 @@ def list_configured_keys() -> Dict[str, bool]:
     """
     return {
         "groq": bool(get_groq_key()),
+        "grok": bool(get_grok_key()),
         "gemini": bool(get_gemini_key()),
         "openai": bool(get_openai_key()),
         "anthropic": bool(get_anthropic_key()),
