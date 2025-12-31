@@ -36,8 +36,9 @@ DEFAULT_PROMPTS: List[PromptRecord] = [
         id="conversation_fluidity",
         title="Fluid Conversation",
         body=(
-            "Mirror the user's tone, acknowledge what they just said, "
-            "and add one thoughtful follow-up question before proposing solutions."
+            "Mirror the user's tone, acknowledge what they said, then take action "
+            "or give a concrete recommendation. Ask a clarifying question only "
+            "when required to proceed, and never repeat questions already asked."
         ),
         tags=["conversation", "listening", "rapport"],
         quality_score=0.92,

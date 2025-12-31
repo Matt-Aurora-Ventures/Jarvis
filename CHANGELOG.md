@@ -4,6 +4,26 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [0.9.1] - 2025-12-31
+
+### 🔊 Voice + TTS
+- Added barge-in support so Jarvis keeps listening while speaking and can be interrupted mid-response.
+- Added self-echo suppression to stop the mic from re-feeding Jarvis's own TTS.
+- Added local voice-clone engine (XTTS-v2) with optional Morgan Freeman reference support.
+- Expanded Morgan Freeman voice handling with candidate selection and rate overrides.
+
+### 🧠 Conversation Behavior
+- Tightened execution bias and removed redundant follow-up prompts.
+- Updated default conversation prompt guidance to avoid repeated questions.
+
+### ⚙️ Providers + Config
+- Removed deprecated Groq models and added `llama-3.3-70b-specdec` fallback.
+- Updated local model ordering to match installed availability.
+- Added barge-in and voice-clone settings to the main config.
+
+### 📚 Docs
+- Updated README with barge-in controls and local voice-cloning setup.
+
 # [0.9.0] - 2025-12-30
 
 ### 🤖 Claude + GPT Hybrid Collaboration

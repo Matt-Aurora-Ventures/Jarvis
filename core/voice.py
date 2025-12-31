@@ -1,3 +1,4 @@
+import difflib
 import gzip
 import io
 import os
@@ -9,7 +10,7 @@ import time
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import requests
 
@@ -34,6 +35,13 @@ DEFAULT_PIPER_URL = (
     "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US-lessac-medium.onnx.gz"
 )
 PIPER_BINARY = "piper"
+
+_LAST_SPOKEN_AT = 0.0
+_LAST_SPOKEN_TEXT = ""
+_LAST_SPOKEN_LOCK = threading.Lock()
+_ACTIVE_SPEECH_PROCESS: Optional[subprocess.Popen] = None
+_ACTIVE_SPEECH_CLEANUP: Optional[Callable[[], None]] = None
+_ACTIVE_SPEECH_LOCK = threading.Lock()
 
 
 @dataclass
@@ -69,12 +77,274 @@ def _voice_cfg() -> dict:
     voice_cfg.setdefault("tts_engine", "piper")
     voice_cfg.setdefault("speak_responses", True)
     voice_cfg.setdefault("fallback_voices", ["Samantha", "Ava", "Allison", "Victoria", "Alex"])
+    voice_cfg.setdefault("barge_in_enabled", True)
+    voice_cfg.setdefault("barge_in_timeout_seconds", 3)
+    voice_cfg.setdefault("barge_in_phrase_time_limit", 3)
+    voice_cfg.setdefault("voice_clone_enabled", False)
+    voice_cfg.setdefault("voice_clone_language", "en")
+    voice_cfg.setdefault(
+        "morgan_freeman_voice_candidates",
+        ["Reed (English (US))", "Ralph", "Fred", "Eddy (English (US))", "Daniel"],
+    )
+    voice_cfg.setdefault("echo_window_seconds", 8.0)
+    voice_cfg.setdefault("echo_similarity_threshold", 0.78)
+    voice_cfg.setdefault("echo_min_chars", 12)
     return voice_cfg
 
 
 def _set_voice_error(message: str) -> None:
     """Persist the latest voice error so CLI/status can surface it."""
     state.update_state(voice_error=message[:160])
+
+
+def _stop_active_speech() -> None:
+    global _ACTIVE_SPEECH_PROCESS, _ACTIVE_SPEECH_CLEANUP
+    with _ACTIVE_SPEECH_LOCK:
+        proc = _ACTIVE_SPEECH_PROCESS
+        cleanup = _ACTIVE_SPEECH_CLEANUP
+        _ACTIVE_SPEECH_PROCESS = None
+        _ACTIVE_SPEECH_CLEANUP = None
+    if proc and proc.poll() is None:
+        try:
+            proc.terminate()
+            proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        except Exception:
+            pass
+    if cleanup:
+        try:
+            cleanup()
+        except Exception:
+            pass
+
+
+def _set_active_speech(proc: subprocess.Popen, cleanup: Optional[Callable[[], None]] = None) -> None:
+    _stop_active_speech()
+    global _ACTIVE_SPEECH_PROCESS, _ACTIVE_SPEECH_CLEANUP
+    with _ACTIVE_SPEECH_LOCK:
+        _ACTIVE_SPEECH_PROCESS = proc
+        _ACTIVE_SPEECH_CLEANUP = cleanup
+
+
+def _clear_active_speech() -> None:
+    global _ACTIVE_SPEECH_PROCESS, _ACTIVE_SPEECH_CLEANUP
+    with _ACTIVE_SPEECH_LOCK:
+        cleanup = _ACTIVE_SPEECH_CLEANUP
+        _ACTIVE_SPEECH_PROCESS = None
+        _ACTIVE_SPEECH_CLEANUP = None
+    if cleanup:
+        try:
+            cleanup()
+        except Exception:
+            pass
+
+
+def _normalize_transcript(text: str) -> str:
+    return " ".join(text.lower().strip().split())
+
+
+def _remember_spoken(text: str) -> None:
+    global _LAST_SPOKEN_AT, _LAST_SPOKEN_TEXT
+    cleaned = " ".join(text.strip().split())
+    if not cleaned:
+        return
+    with _LAST_SPOKEN_LOCK:
+        _LAST_SPOKEN_AT = time.time()
+        _LAST_SPOKEN_TEXT = cleaned[:2000]
+
+
+def _last_spoken() -> tuple[float, str]:
+    with _LAST_SPOKEN_LOCK:
+        return _LAST_SPOKEN_AT, _LAST_SPOKEN_TEXT
+
+
+def _is_self_echo(text: str, voice_cfg: dict) -> bool:
+    normalized = _normalize_transcript(text)
+    min_chars = int(voice_cfg.get("echo_min_chars", 12))
+    if len(normalized) < min_chars:
+        return False
+
+    last_at, last_text = _last_spoken()
+    if not last_text:
+        return False
+    window = float(voice_cfg.get("echo_window_seconds", 8.0))
+    if window and (time.time() - last_at) > window:
+        return False
+
+    last_norm = _normalize_transcript(last_text)
+    if not last_norm:
+        return False
+
+    if normalized in last_norm or last_norm in normalized:
+        return True
+
+    threshold = float(voice_cfg.get("echo_similarity_threshold", 0.78))
+    similarity = difflib.SequenceMatcher(None, normalized, last_norm).ratio()
+    return similarity >= threshold
+
+
+def _speech_rate_for_voice(voice_cfg: dict) -> Optional[int]:
+    rate = voice_cfg.get("speech_rate")
+    voice_name = str(voice_cfg.get("speech_voice", "")).strip().lower()
+    if voice_name == "morgan freeman":
+        mf_rate = voice_cfg.get("morgan_freeman_rate")
+        if isinstance(mf_rate, (int, float)) and mf_rate:
+            rate = mf_rate
+    if isinstance(rate, (int, float)) and rate:
+        return int(rate)
+    return None
+
+
+def _test_say_voice(name: str) -> bool:
+    result = subprocess.run(
+        ["say", "-v", name, "test"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0 and "not found" not in result.stderr.lower()
+
+
+def _say_voice_candidates(voice_cfg: dict) -> list[str]:
+    voice_name = str(voice_cfg.get("speech_voice", "")).strip()
+    fallback_voices = voice_cfg.get("fallback_voices", [])
+    if isinstance(fallback_voices, str):
+        fallback_voices = [fallback_voices]
+
+    candidates: list[str] = []
+    seen = set()
+
+    def _add(name: str) -> None:
+        cleaned = str(name).strip()
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            candidates.append(cleaned)
+
+    if voice_name:
+        if voice_name.lower() == "morgan freeman":
+            preferred = str(voice_cfg.get("morgan_freeman_voice", "")).strip()
+            if preferred:
+                _add(preferred)
+            mf_candidates = voice_cfg.get("morgan_freeman_voice_candidates", [])
+            if isinstance(mf_candidates, str):
+                mf_candidates = [mf_candidates]
+            for candidate in mf_candidates:
+                _add(candidate)
+        else:
+            _add(voice_name)
+
+    for fallback in fallback_voices:
+        _add(fallback)
+
+    return candidates
+
+
+def _select_say_voice(voice_cfg: dict) -> str:
+    for candidate in _say_voice_candidates(voice_cfg):
+        if _test_say_voice(candidate):
+            return candidate
+    return ""
+
+
+def _start_say_process(text: str, voice_cfg: dict) -> Optional[subprocess.Popen]:
+    try:
+        voice_name = _select_say_voice(voice_cfg)
+        cmd = ["say"]
+        if voice_name:
+            cmd.extend(["-v", voice_name])
+        speech_rate = _speech_rate_for_voice(voice_cfg)
+        if speech_rate:
+            cmd.extend(["-r", str(speech_rate)])
+        cmd.append(text)
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        _set_active_speech(proc)
+        return proc
+    except Exception as exc:
+        _set_voice_error(f"macOS say failed: {exc}")
+        return None
+
+
+def _voice_clone_configured(voice_cfg: dict) -> bool:
+    engine = str(voice_cfg.get("tts_engine", "")).lower()
+    if engine in ("voice_clone", "xtts", "clone"):
+        return True
+    if not voice_cfg.get("voice_clone_enabled", False):
+        return False
+    if str(voice_cfg.get("voice_clone_voice", "")).strip():
+        return True
+    return str(voice_cfg.get("speech_voice", "")).strip().lower() == "morgan freeman"
+
+
+def _voice_clone_voice_name(voice_cfg: dict) -> str:
+    configured = str(voice_cfg.get("voice_clone_voice", "")).strip()
+    if configured:
+        return configured
+    if str(voice_cfg.get("speech_voice", "")).strip().lower() == "morgan freeman":
+        return "morgan_freeman"
+    return ""
+
+
+def _start_voice_clone_process(text: str, voice_cfg: dict) -> Optional[subprocess.Popen]:
+    if not _voice_clone_configured(voice_cfg):
+        return None
+    voice_name = _voice_clone_voice_name(voice_cfg)
+    if not voice_name:
+        _set_voice_error("Voice clone enabled but no reference voice configured.")
+        return None
+    try:
+        from core import voice_clone
+    except Exception as exc:
+        _set_voice_error(f"Voice clone unavailable: {exc}")
+        return None
+
+    reference = voice_clone.get_reference_audio(voice_name)
+    if reference is None:
+        _set_voice_error(f"Voice clone reference not found: {voice_name}")
+        return None
+
+    output_path = Path(tempfile.mkstemp(suffix=".wav")[1])
+    language = str(voice_cfg.get("voice_clone_language", "en")).strip() or "en"
+    result = voice_clone.clone_voice_tts(
+        text=text,
+        reference_audio=reference,
+        output_path=output_path,
+        language=language,
+    )
+    if not result or not Path(result).exists():
+        _set_voice_error("Voice clone generation failed.")
+        output_path.unlink(missing_ok=True)
+        return None
+
+    try:
+        proc = subprocess.Popen(
+            ["afplay", str(result)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        _set_voice_error(f"Audio playback failed: {exc}")
+        Path(result).unlink(missing_ok=True)
+        return None
+
+    _set_active_speech(proc, cleanup=lambda: Path(result).unlink(missing_ok=True))
+    return proc
+
+
+def _speak_with_voice_clone(text: str, voice_cfg: dict) -> bool:
+    proc = _start_voice_clone_process(text, voice_cfg)
+    if not proc:
+        return False
+    try:
+        proc.wait()
+    finally:
+        _clear_active_speech()
+    return proc.returncode == 0
 
 
 def _ensure_piper_model(voice_cfg: dict) -> Optional[Path]:
@@ -148,31 +418,62 @@ def _speak_with_piper(text: str, voice_cfg: dict) -> bool:
             tmp_wav.unlink(missing_ok=True)
 
 
-def _speak_with_say(text: str, voice_cfg: dict) -> bool:
-    voice_name = str(voice_cfg.get("speech_voice", "")).strip()
-    if voice_name.lower() == "morgan freeman":
-        voice_name = "Reed (English (US))"
-    speech_rate = voice_cfg.get("speech_rate")
-    fallback_voices = voice_cfg.get("fallback_voices", [])
-    if isinstance(fallback_voices, str):
-        fallback_voices = [fallback_voices]
-
-    def _test_voice(name: str) -> bool:
-        result = subprocess.run(
-            ["say", "-v", name, "test"],
+def _start_piper_process(text: str, voice_cfg: dict) -> Optional[subprocess.Popen]:
+    model_path = _ensure_piper_model(voice_cfg)
+    if not model_path:
+        _set_voice_error("Missing Piper model; falling back to macOS say.")
+        return None
+    if shutil.which(PIPER_BINARY) is None:
+        _set_voice_error("Piper binary not found in PATH; install piper.")
+        return None
+    tmp_wav = Path(tempfile.mkstemp(suffix=".wav")[1])
+    cmd = [
+        PIPER_BINARY,
+        "--model",
+        str(model_path),
+        "--output_file",
+        str(tmp_wav),
+    ]
+    speaker = voice_cfg.get("piper_speaker")
+    if speaker:
+        cmd.extend(["--speaker", str(speaker)])
+    try:
+        subprocess.run(
+            cmd,
+            input=text.encode("utf-8"),
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
+            stderr=subprocess.DEVNULL,
+            check=True,
         )
-        return result.returncode == 0 and "not found" not in result.stderr.lower()
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        _set_voice_error(f"Piper TTS failed: {exc}")
+        tmp_wav.unlink(missing_ok=True)
+        return None
+
+    try:
+        proc = subprocess.Popen(
+            ["afplay", str(tmp_wav)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        _set_voice_error(f"Audio playback failed: {exc}")
+        tmp_wav.unlink(missing_ok=True)
+        return None
+
+    _set_active_speech(proc, cleanup=lambda: tmp_wav.unlink(missing_ok=True))
+    return proc
+
+
+def _speak_with_say(text: str, voice_cfg: dict) -> bool:
+    speech_rate = _speech_rate_for_voice(voice_cfg)
 
     def _run_say(name: str = "") -> bool:
         cmd = ["say"]
         if name:
             cmd.extend(["-v", name])
-        if isinstance(speech_rate, (int, float)) and speech_rate:
-            cmd.extend(["-r", str(int(speech_rate))])
+        if speech_rate:
+            cmd.extend(["-r", str(speech_rate)])
         try:
             subprocess.run(
                 cmd,
@@ -187,15 +488,9 @@ def _speak_with_say(text: str, voice_cfg: dict) -> bool:
             return False
 
     try:
-        candidates = []
-        if voice_name:
-            candidates.append(voice_name)
-        for fallback in fallback_voices:
-            if fallback and fallback not in candidates:
-                candidates.append(fallback)
-
+        candidates = _say_voice_candidates(voice_cfg)
         for candidate in candidates:
-            if _test_voice(candidate) and _run_say(candidate):
+            if _test_say_voice(candidate) and _run_say(candidate):
                 _set_voice_error("")
                 return True
 
@@ -212,9 +507,18 @@ def _speak(text: str) -> None:
     voice_cfg = _voice_cfg()
     if not voice_cfg.get("speak_responses", False):
         return
+    _stop_active_speech()
 
     engine = str(voice_cfg.get("tts_engine", "piper")).lower()
+    clone_engine = engine in ("voice_clone", "xtts", "clone")
     spoke = False
+    if _voice_clone_configured(voice_cfg):
+        spoke = _speak_with_voice_clone(text, voice_cfg)
+        if spoke:
+            _remember_spoken(text)
+            return
+        if clone_engine:
+            engine = "say"
     if engine == "piper":
         spoke = _speak_with_piper(text, voice_cfg)
     elif engine == "say":
@@ -223,7 +527,60 @@ def _speak(text: str) -> None:
         _set_voice_error(f"Unsupported TTS engine '{engine}', falling back to say().")
     if not spoke:
         # Final fallback
-        _speak_with_say(text, voice_cfg)
+        spoke = _speak_with_say(text, voice_cfg)
+    if spoke:
+        _remember_spoken(text)
+
+
+def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
+    if not voice_cfg.get("speak_responses", False):
+        return None
+    if not voice_cfg.get("barge_in_enabled", True):
+        _speak(text)
+        return None
+
+    engine = str(voice_cfg.get("tts_engine", "piper")).lower()
+    clone_engine = engine in ("voice_clone", "xtts", "clone")
+    proc: Optional[subprocess.Popen] = None
+    if _voice_clone_configured(voice_cfg):
+        proc = _start_voice_clone_process(text, voice_cfg)
+        if proc:
+            _remember_spoken(text)
+        elif clone_engine:
+            engine = "say"
+    if not proc and engine == "piper":
+        proc = _start_piper_process(text, voice_cfg)
+    elif not proc and engine == "say":
+        proc = _start_say_process(text, voice_cfg)
+    elif not proc:
+        _set_voice_error(f"Unsupported TTS engine '{engine}', falling back to say().")
+        _speak(text)
+        return None
+
+    if not proc:
+        _speak(text)
+        return None
+
+    _remember_spoken(text)
+    barge_timeout = int(voice_cfg.get("barge_in_timeout_seconds", 3))
+    barge_phrase = int(voice_cfg.get("barge_in_phrase_time_limit", 3))
+    barge_timeout = max(1, barge_timeout)
+    barge_phrase = max(1, barge_phrase)
+
+    try:
+        while proc.poll() is None:
+            interrupt = _transcribe_once(timeout=barge_timeout, phrase_time_limit=barge_phrase)
+            if interrupt:
+                if _is_self_echo(interrupt, voice_cfg):
+                    continue
+                _stop_active_speech()
+                return interrupt
+    finally:
+        if proc.poll() is None:
+            _stop_active_speech()
+        else:
+            _clear_active_speech()
+    return None
 
 
 def _transcribe_once(timeout: int, phrase_time_limit: int) -> str:
@@ -469,8 +826,7 @@ def _record_command_turn(user_text: str, assistant_text: str) -> None:
 
 
 def chat_session() -> None:
-    cfg = _load_config()
-    voice_cfg = cfg.get("voice", {})
+    voice_cfg = _voice_cfg()
     greeting = voice_cfg.get(
         "chat_greeting", "Hi, I'm here. What do you want me to do?"
     )
@@ -490,11 +846,24 @@ def chat_session() -> None:
         tracker.start()
 
     silence_count = 0
+    pending_text: Optional[str] = None
     session_history: list[dict] = []
     try:
         while True:
-            text = _transcribe_once(timeout=timeout, phrase_time_limit=phrase_limit)
-            if not text:
+            if pending_text is None:
+                text = _transcribe_once(timeout=timeout, phrase_time_limit=phrase_limit)
+                if not text:
+                    silence_count += 1
+                    if silence_count >= silence_limit:
+                        farewell = "Ending chat due to silence."
+                        _speak(farewell)
+                        print(farewell)
+                        break
+                    continue
+            else:
+                text = pending_text
+                pending_text = None
+            if _is_self_echo(text, voice_cfg):
                 silence_count += 1
                 if silence_count >= silence_limit:
                     farewell = "Ending chat due to silence."
@@ -516,8 +885,10 @@ def chat_session() -> None:
             else:
                 response = _chat_response(text, tracker, session_history)
             session_history.append({"source": "voice_chat_assistant", "text": response})
-            _speak(response)
+            interrupt_text = _speak_with_barge_in(response, voice_cfg)
             print(response)
+            if interrupt_text:
+                pending_text = interrupt_text
     finally:
         if tracker:
             tracker.stop()

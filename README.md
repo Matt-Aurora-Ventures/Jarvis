@@ -160,6 +160,7 @@ jarvis/
 │   ├── solana_scanner.py   # Solana token scanner
 │   ├── trading_*.py        # Trading pipeline modules
 │   ├── voice.py            # Voice control
+│   ├── voice_clone.py      # Local voice cloning (XTTS-v2)
 │   └── youtube_ingest.py   # YouTube transcript extraction
 ├── lifeos/
 │   └── config/
@@ -252,7 +253,14 @@ EOF
     "chat_silence_limit": 60,
     "speak_responses": true,
     "tts_engine": "say",
-    "speech_voice": "Samantha"
+    "speech_voice": "Samantha",
+    "barge_in_enabled": true,
+    "barge_in_timeout_seconds": 3,
+    "barge_in_phrase_time_limit": 3,
+    "voice_clone_enabled": false,
+    "voice_clone_language": "en",
+    "morgan_freeman_voice": "Ralph",
+    "morgan_freeman_rate": 135
   },
   "providers": {
     "groq": { "enabled": true, "priority": 1 },
@@ -274,6 +282,26 @@ EOF
   }
 }
 ```
+
+### Voice (Barge-In + Local Cloning)
+
+- Barge-in lets you interrupt Jarvis while it's speaking. Tune with `barge_in_*` in the voice config.
+- For a closer Morgan Freeman voice, you can use the free local voice-clone engine (XTTS-v2).
+
+Quick setup (local, free):
+
+```bash
+# Place a 6-15s reference sample here
+data/voices/clones/morgan_freeman.wav
+
+# Verify setup / prompt for next steps
+python3 core/voice_clone.py --setup
+
+# Test voice cloning
+python3 core/voice_clone.py --speak "Hello. I am Jarvis."
+```
+
+Note: XTTS-v2 downloads a large model on first use and runs locally. Use audio you have rights to.
 
 ### System Instructions
 
