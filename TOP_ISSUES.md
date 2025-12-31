@@ -358,6 +358,23 @@ If all free providers fail, OpenAI is used without user confirmation.
 
 ---
 
+### P2-6: Voice Clone Test On Hold (Python 3.11 Needed)
+
+**Status**: On hold
+
+**Symptom**: Local XTTS voice clone test can't run on Python 3.12.
+
+**Root Cause**: Coqui TTS requires Python < 3.12; system only has 3.12.
+
+**Reminder**:
+1. Install Python 3.11 + Command Line Tools
+2. Create venv and install `TTS==0.22.0`
+3. Run `python3.11 core/voice_clone.py --speak "Hello. I am Jarvis."`
+
+**Files to Modify**: None (environment setup only)
+
+---
+
 ## Summary: Immediate P0 Fix Order
 
 1. **P0-2**: Add Groq API key check with clear setup error → Makes chat work
