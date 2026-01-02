@@ -448,25 +448,29 @@ def transcribe_audio_gemini(audio_path: str) -> Optional[str]:
 
 # === INTELLIGENT PROVIDER RANKING ===
 # Ranked by: Intelligence, Free tier availability, Resource efficiency
-# Priority: Best free models first, then paid as fallback
+# Priority: OpenRouter (no limits) → Groq (fast but limited) → Local
+# Updated Jan 2026: Removed decommissioned llama-3.3-70b-specdec
 
 PROVIDER_RANKINGS = [
-    # Rank 0: Groq (PRIMARY - ultra fast, free, reliable)
-    # Updated Dec 2024: removed deprecated mixtral, gemma2 models
-    {"name": "llama-3.3-70b-versatile", "provider": "groq", "intelligence": 90, "free": True, "notes": "PRIMARY - Groq ultra fast"},
-    {"name": "llama-3.3-70b-specdec", "provider": "groq", "intelligence": 90, "free": True, "notes": "Groq speculative decoding - very fast"},
-    {"name": "llama-3.1-8b-instant", "provider": "groq", "intelligence": 78, "free": True, "notes": "Groq 8B instant - lightweight fallback"},
+    # Rank 0: OpenRouter with Minimax (PRIMARY - no rate limits, high quality)
+    {" name": "deepseek/deepseek-r1", "provider": "openrouter", "intelligence": 95, "free": False, "notes": "PRIMARY - DeepSeek R1 reasoning via OpenRouter"},
+    {"name": "google/gemini-2.0-flash-exp:free", "provider": "openrouter", "intelligence": 92, "free": True, "notes": "OpenRouter free Gemini 2.0"},
+    {"name": "meta-llama/llama-3.3-70b-instruct", "provider": "openrouter", "intelligence": 90, "free": False, "notes": "Llama 3.3 70B via OpenRouter"},
+    
+    # Rank 1: Groq (fast, free, but rate limited)
+    {"name": "llama-3.3-70b-versatile", "provider": "groq", "intelligence": 90, "free": True, "notes": "Groq ultra fast (rate limited)"},
+    {"name": "llama-3.1-8b-instant", "provider": "groq", "intelligence": 78, "free": True, "notes": "Groq 8B instant fallback"},
 
-    # Rank 0.5: Grok (X.AI - strong for sentiment analysis, X.com integration)
+    # Rank 2: Grok (X.AI - strong for sentiment analysis, X.com integration)
     {"name": "grok-beta", "provider": "grok", "intelligence": 92, "free": False, "notes": "Grok - X.com sentiment analysis, paid"},
     {"name": "grok-2-latest", "provider": "grok", "intelligence": 95, "free": False, "notes": "Grok 2 - advanced reasoning, paid"},
 
-    # Rank 1: Local models (free, private, always available offline)
+    # Rank 3: Local models (free, private, always available offline)
     # Only include models that are actually installed
     {"name": "llama3.1:8b", "provider": "ollama", "intelligence": 78, "free": True, "notes": "Good local 8B"},
     {"name": "qwen2.5:1.5b", "provider": "ollama", "intelligence": 65, "free": True, "notes": "Fast, lightweight fallback"},
 
-    # Rank 2: Gemini (fallback - has been unreliable)
+    # Rank 4: Gemini (fallback - has been unreliable)
     {"name": "gemini-cli", "provider": "gemini-cli", "intelligence": 95, "free": True, "notes": "Gemini CLI - needs credits"},
     {"name": "gemini-2.5-flash", "provider": "gemini", "intelligence": 92, "free": True, "notes": "May fail without credits"},
     {"name": "gemini-2.5-pro", "provider": "gemini", "intelligence": 95, "free": True, "notes": "May fail without credits"},
