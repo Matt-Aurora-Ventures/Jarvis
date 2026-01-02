@@ -49,7 +49,35 @@
 
 **Result:** Jarvis gets measurably smarter every day without human intervention.
 
-### ⚔️ Paper-Trading Coliseum (Auto-Backtesting)
+### 🔍 Observational Daemon (Always-On Learning)
+
+**Continuous pattern detection running 24/7 - Not batch, real-time.**
+
+Unlike the Mirror Test (nightly reflection), the Observational Daemon learns from your behavior **as it happens**:
+
+**The Silent Loop:**
+1. **Observe** - Monitors keystrokes, commands, errors, and workflows in real-time
+2. **Hypothesize** - Uses Groq (FREE) to generate improvement ideas every 60 seconds
+3. **Validate** - Guardian safety checks + confidence scoring (0.0-1.0)
+4. **Execute** - High confidence (≥0.7) → auto-deploy silently with rollback
+5. **Learn** - Tracks success, adjusts thresholds, feeds to Mirror Test
+
+**Examples of Auto-Improvements:**
+- Types `git status && git pull` 5x → Creates alias `gsp` automatically
+- Hits `ModuleNotFoundError` → Auto-installs package next time
+- Switches Terminal→Browser→VSCode 10x/hour → Suggests workspace template
+
+**Information Sessions (When Uncertain):**
+- Medium confidence (0.5-0.7) → Queues for daily check-in
+- Only triggers when: Scheduled time (9am) OR user idle 10+ minutes
+- Never interrupts: Active coding, communication apps, meetings
+- Learns from approvals: 90% approval rate → lowers threshold (auto-execute more)
+
+**Resource Footprint:** <2% CPU, <50MB RAM, FREE Groq API calls
+
+**Philosophy:** *"The best assistant is invisible until you realize how much easier your work has become."*
+
+
 
 **81 Extracted Strategies** → **Minimax-Powered Simulation** → **Self-Pruning**
 
@@ -109,6 +137,9 @@ jarvis/
 │   ├── intelligent_provider_router.py   # Minimax-first routing
 │   ├── action_verifier.py               # 3-step verify loops
 │   ├── streaming_consciousness.py       # Continuous context mode
+│   ├── observation_daemon.py            # 24/7 pattern detection
+│   ├── background_improver.py           # Silent improvement executor
+│   ├── information_session.py           # User alignment protocol
 │   ├── evolution/
 │   │   ├── gym/
 │   │   │   ├── mirror_test.py           # Nightly self-correction
@@ -119,6 +150,11 @@ jarvis/
 │   │   └── diffs/                        # Generated improvements
 │   └── trading_coliseum.py               # Auto-backtest + pruning
 ├── data/
+│   ├── observation/                      # Observational Daemon data
+│   │   ├── patterns.json                 # Pattern database
+│   │   ├── hypotheses.jsonl              # Generated hypotheses
+│   │   ├── improvements.jsonl            # Executed improvements
+│   │   └── rollbacks/                    # Auto-rollback snapshots
 │   └── trading/
 │       ├── coliseum/
 │       │   ├── arena_results.db          # Backtest performance
