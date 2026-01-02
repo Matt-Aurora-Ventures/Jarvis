@@ -304,7 +304,7 @@ def _scanner_strategies() -> List[Dict[str, Any]]:
 
 def _resolve_api_key(scanner_cfg: Dict[str, Any]) -> Optional[str]:
     key_env = scanner_cfg.get("birdeye_api_key_env", "BIRDEYE_API_KEY")
-    return config.getenv(key_env)
+    return os.getenv(key_env)
 
 
 def _normalize_trending_token(token: Dict[str, Any]) -> Dict[str, Any]:
