@@ -578,7 +578,9 @@ def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
         while proc.poll() is None:
             interrupt = _transcribe_once(timeout=barge_timeout, phrase_time_limit=barge_phrase)
             if interrupt:
+                # Check for self-echo first
                 if _is_self_echo(interrupt, voice_cfg):
+                    print(f"[Ignored self-echo: '{interrupt[:30]}...']")
                     continue
                 
                 # Check if interrupt starts with wake word
@@ -587,6 +589,7 @@ def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
                 
                 if any(interrupt_lower.startswith(w) for w in wake_words):
                     # Valid barge-in - stop speaking
+                    print(f"[Barge-in detected: '{interrupt}']")
                     _stop_active_speech()
                     # Return the command part (remove wake word)
                     for w in wake_words:
@@ -594,6 +597,9 @@ def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
                             command = interrupt[len(w):].strip()
                             return command if command else interrupt
                     return interrupt
+                else:
+                    # Not a wake word - ignore and keep playing
+                    print(f"[Ignored non-wake-word: '{interrupt[:30]}']")
                 # Else: ignore non-wake-word speech, keep playing
     finally:
         if proc.poll() is None:

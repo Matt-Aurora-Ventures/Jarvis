@@ -67,8 +67,11 @@
     "speech_voice": "Samantha",
     "speech_rate": 175,
     "barge_in_enabled": true,
-    "barge_in_timeout_seconds": 1,
+    "barge_in_timeout_seconds": 2,
     "barge_in_phrase_time_limit": 2,
+    "echo_window_seconds": 8.0,
+    "echo_similarity_threshold": 0.75,
+    "echo_min_chars": 12,
     "voice_clone_enabled": false,
     "voice_clone_language": "en",
     "morgan_freeman_voice_candidates": [
