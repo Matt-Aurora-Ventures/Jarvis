@@ -329,14 +329,13 @@
   },
   "solana_scanner": {
     "birdeye_api_key_env": "BIRDEYE_API_KEY",
-    "trending_limit": 200,
+    "trending_limit": 50,
     "new_token_hours": 3,
-    "top_trader_limit": 100,
-    "super_cycle_tokens": [
-      "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
-      "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
-      "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr"
-    ]
+    "top_trader_limit": 50,
+    "backtest_count": 50,
+    "min_volume_24h_usd": 100000,
+    "sort_by": "volume24hUSD",
+    "super_cycle_tokens": []
   },
   "safety": {
     "default_mode": "dry-run",
