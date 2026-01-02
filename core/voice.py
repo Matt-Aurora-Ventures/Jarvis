@@ -566,6 +566,10 @@ def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
     barge_phrase = int(voice_cfg.get("barge_in_phrase_time_limit", 3))
     barge_timeout = max(1, barge_timeout)
     barge_phrase = max(1, barge_phrase)
+    
+    # Get wake word for barge-in detection
+    cfg = _load_config()
+    wake_word = cfg.get("voice", {}).get("wake_word", "jarvis").lower()
 
     try:
         while proc.poll() is None:
@@ -573,8 +577,21 @@ def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
             if interrupt:
                 if _is_self_echo(interrupt, voice_cfg):
                     continue
-                _stop_active_speech()
-                return interrupt
+                
+                # Check if interrupt starts with wake word
+                interrupt_lower = interrupt.lower().strip()
+                wake_words = [wake_word, "jarvis", "hey jarvis"]  # Common variants
+                
+                if any(interrupt_lower.startswith(w) for w in wake_words):
+                    # Valid barge-in - stop speaking
+                    _stop_active_speech()
+                    # Return the command part (remove wake word)
+                    for w in wake_words:
+                        if interrupt_lower.startswith(w):
+                            command = interrupt[len(w):].strip()
+                            return command if command else interrupt
+                    return interrupt
+                # Else: ignore non-wake-word speech, keep playing
     finally:
         if proc.poll() is None:
             _stop_active_speech()
