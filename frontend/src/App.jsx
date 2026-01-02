@@ -5,6 +5,8 @@ import Dashboard from './pages/Dashboard'
 import Settings from './pages/Settings'
 import Chat from './pages/Chat'
 import Research from './pages/Research'
+import VoiceControl from './pages/VoiceControl'
+import Trading from './pages/Trading'
 
 function App() {
   return (
@@ -13,6 +15,8 @@ function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="voice" element={<VoiceControl />} />
+          <Route path="trading" element={<Trading />} />
           <Route path="settings" element={<Settings />} />
           <Route path="research" element={<Research />} />
         </Route>

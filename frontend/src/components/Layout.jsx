@@ -1,6 +1,6 @@
 import React from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { Home, MessageCircle, Settings, Search, Mic, MicOff } from 'lucide-react'
+import { Home, MessageCircle, Settings, Search, Mic, TrendingUp } from 'lucide-react'
 import useJarvisStore from '../stores/jarvisStore'
 import VoiceOrb from './VoiceOrb'
 
@@ -16,7 +16,7 @@ function Layout() {
             <span className="text-white font-bold text-xl">J</span>
           </div>
         </div>
-        
+
         <nav className="flex-1 flex flex-col gap-4">
           <NavLink
             to="/"
@@ -35,10 +35,29 @@ function Layout() {
             <MessageCircle size={24} />
           </NavLink>
           <NavLink
+            to="/voice"
+            className={({ isActive }) =>
+              `p-3 rounded-xl transition-all ${isActive ? 'bg-jarvis-primary text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`
+            }
+            title="Voice Control"
+          >
+            <Mic size={24} />
+          </NavLink>
+          <NavLink
+            to="/trading"
+            className={({ isActive }) =>
+              `p-3 rounded-xl transition-all ${isActive ? 'bg-jarvis-primary text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`
+            }
+            title="Trading"
+          >
+            <TrendingUp size={24} />
+          </NavLink>
+          <NavLink
             to="/research"
             className={({ isActive }) =>
               `p-3 rounded-xl transition-all ${isActive ? 'bg-jarvis-primary text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`
             }
+            title="Research"
           >
             <Search size={24} />
           </NavLink>
@@ -47,6 +66,7 @@ function Layout() {
             className={({ isActive }) =>
               `p-3 rounded-xl transition-all ${isActive ? 'bg-jarvis-primary text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`
             }
+            title="Settings"
           >
             <Settings size={24} />
           </NavLink>
@@ -54,10 +74,10 @@ function Layout() {
 
         {/* Status indicators */}
         <div className="mt-auto flex flex-col gap-2 items-center">
-          <div className={`w-3 h-3 rounded-full ${status.daemon === 'running' ? 'bg-green-500' : 'bg-red-500'}`} 
-               title={`Daemon: ${status.daemon}`} />
+          <div className={`w-3 h-3 rounded-full ${status.daemon === 'running' ? 'bg-green-500' : 'bg-red-500'}`}
+            title={`Daemon: ${status.daemon}`} />
           <div className={`w-3 h-3 rounded-full ${isListening ? 'bg-jarvis-primary animate-pulse' : 'bg-slate-600'}`}
-               title={isListening ? 'Listening' : 'Not listening'} />
+            title={isListening ? 'Listening' : 'Not listening'} />
         </div>
       </aside>
 
