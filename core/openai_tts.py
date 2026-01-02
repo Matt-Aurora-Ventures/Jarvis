@@ -59,6 +59,13 @@ def speak_openai_tts(text: str, voice: str = "alloy", model: str = "tts-1") -> b
         
         response.stream_to_file(temp_path)
         
+        # Log usage for cost tracking
+        try:
+            from scripts.monitor_tts_costs import log_tts_usage
+            log_tts_usage(text, voice, model)
+        except:
+            pass  # Don't fail if logging fails
+        
         # Play audio
         subprocess.run(
             ["afplay", temp_path],
