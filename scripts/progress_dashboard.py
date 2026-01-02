@@ -270,14 +270,28 @@ HTML_TEMPLATE = """
                 const res = await fetch('/api/security');
                 const data = await res.json();
                 
-                document.getElementById('conn-count').textContent = data.connections;
-                const feed = document.getElementById('security-feed');
-                feed.innerHTML = data.processes.map(p => `
-                    <div class="sec-item">
-                        <span>${p.name} [${p.pid}]</span>
-                        <span class="${p.cpu > 10 ? 'sec-alert' : 'sec-ok'}">${p.cpu.toFixed(1)}% CPU</span>
+                // Update Traffic Stats
+                document.getElementById('conn-count').innerHTML = `
+                    <div style="font-size:12px">ACTIVE: ${data.net_stats.total_conns}</div>
+                    <div style="font-size:10px; color:var(--secondary)">
+                        TX: ${data.net_stats.sent_sec} | RX: ${data.net_stats.recv_sec}
                     </div>
-                `).join('');
+                `;
+                
+                // Update Event Feed
+                const feed = document.getElementById('security-feed');
+                feed.innerHTML = data.events.map(e => {
+                    let color = 'sec-ok';
+                    if(e.level === 'warning') color = 'sec-alert';
+                    
+                    return `
+                    <div class="sec-item">
+                        <span style="color:var(--text-dim)">[${e.time}]</span>
+                        <span style="font-weight:bold; color:var(--primary)">${e.type}</span>
+                        <span class="${color}">${e.msg}</span>
+                    </div>
+                    `;
+                }).join('');
             } catch(e) {}
         }
 
@@ -358,33 +372,108 @@ def get_progress():
         "elapsed_seconds": 0, "current_task": "Connecting..."
     })
 
+# SECURITY INTELLIGENCE
+class SecurityMonitor:
+    def __init__(self):
+        self.known_pids = set()
+        self.known_conns = set()
+        self.events = []
+        self.last_net_io = psutil.net_io_counters()
+        self.last_check = time.time()
+        
+        # Initialize baselines
+        for p in psutil.process_iter(['pid']):
+            self.known_pids.add(p.info['pid'])
+            
+    def scan(self):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        alerts = []
+        
+        # 1. PROCESS MONITORING (New Spawns)
+        current_pids = set()
+        for p in psutil.process_iter(['pid', 'name', 'username']):
+            pid = p.info['pid']
+            current_pids.add(pid)
+            if pid not in self.known_pids:
+                alerts.append({
+                    "type": "PROCESS", 
+                    "msg": f"New Process: {p.info['name']} ({pid})",
+                    "level": "info"
+                })
+        self.known_pids = current_pids
+
+        # 2. NETWORK TRAFFIC ANALYSIS (Packet/Byte Flow)
+        net_io = psutil.net_io_counters()
+        bytes_sent = net_io.bytes_sent - self.last_net_io.bytes_sent
+        bytes_recv = net_io.bytes_recv - self.last_net_io.bytes_recv
+        self.last_net_io = net_io
+        
+        # Detect Anomalous Traffic Spikes (> 5MB/s)
+        if bytes_recv > 5_000_000:
+            alerts.append({
+                "type": "NET_SPIKE",
+                "msg": f"High Inbound Traffic: {bytes_recv/1024/1024:.1f} MB/s",
+                "level": "warning"
+            })
+            
+        # 3. CONNECTION TRACKING (Active Packet Flows)
+        current_conns = set()
+        try:
+            # Need permissions for all connections, this covers user-owned
+            for c in psutil.net_connections(kind='inet'):
+                if c.status == 'ESTABLISHED':
+                    key = f"{c.laddr.ip}:{c.laddr.port}->{c.raddr.ip}:{c.raddr.port}" if c.raddr else str(c)
+                    current_conns.add(key)
+                    
+                    if key not in self.known_conns:
+                        # Flag suspicious ports (Basic Heuristic)
+                        port = c.raddr.port if c.raddr else 0
+                        level = "info"
+                        if port not in [80, 443, 53, 22]:
+                             level = "warning" # Non-standard web ports
+                        
+                        r_ip = c.raddr.ip if c.raddr else "unknown"
+                        alerts.append({
+                            "type": "CONNECTION",
+                            "msg": f"New Conn: {r_ip}:{port}",
+                            "level": level
+                        })
+        except: pass
+        self.known_conns = current_conns
+
+        # Add alerts to event feed
+        for alert in alerts:
+            self.events.insert(0, {
+                "time": timestamp,
+                "type": alert['type'],
+                "msg": alert['msg'],
+                "level": alert['level']
+            })
+            
+        # Keep last 50 events
+        self.events = self.events[:50]
+        
+        return {
+            "events": self.events,
+            "net_stats": {
+                "sent_sec": f"{bytes_sent/1024:.1f} KB/s",
+                "recv_sec": f"{bytes_recv/1024:.1f} KB/s",
+                "total_conns": len(current_conns)
+            }
+        }
+
+monitor = SecurityMonitor()
+
 @app.route('/api/security')
 def get_security():
-    try:
-        # Top 10 CPU processes
-        procs = []
-        for p in psutil.process_iter(['pid', 'name', 'cpu_percent']):
-            try:
-                p.cpu_percent() # Initialize
-            except: pass
-            
-        # Wait a tiny bit for CPU stats if needed, or just return basic info
-        # For responsiveness, we just get what we have
-        procs = sorted(
-            [p.info for p in psutil.process_iter(['pid', 'name', 'cpu_percent'])],
-            key=lambda x: x['cpu_percent'] or 0,
-            reverse=True
-        )[:15]
-        
-        conns = len(psutil.net_connections())
-        return jsonify({"processes": procs, "connections": conns})
-    except:
-        return jsonify({"processes": [], "connections": 0})
+    data = monitor.scan()
+    return jsonify(data)
+
+# ... (Logs and Message routes remain unchanged) ...
 
 @app.route('/api/logs')
 def get_logs():
     logs = []
-    # Combine pipeline log and system log
     try:
         if LOG_FILE.exists():
             with open(LOG_FILE) as f:
@@ -415,10 +504,7 @@ def handle_messages():
         if text.startswith('/exec '):
             cmd = text[6:]
             response_text = f"Executing: {cmd}..."
-            # In a real agent, we would emit an event. 
-            # Here we just log it for the agent to pick up, or run simple safe commands.
             try:
-                # Security note: In production, do not allow arbitrary shell exec
                 import subprocess
                 subprocess.Popen(cmd, shell=True)
                 response_text = f"🚀 Executed: {cmd}"
@@ -426,11 +512,10 @@ def handle_messages():
                 response_text = f"❌ Execution failed: {str(e)}"
                 
         elif text == '/scan':
-            response_text = "Starting security scan..."
-            # Trigger security logic here
+            monitor.known_pids = set() # Reset baseline to re-scan
+            response_text = "🔄 Security baseline reset. Re-scanning..."
             
         elif text.startswith('/log '):
-            # User manually logging an error/instruction
             entry = text[5:]
             with open(SYSTEM_LOG, 'a') as f:
                 f.write(f"[MANUAL USER ENTRY] {entry}\n")
@@ -451,4 +536,6 @@ def handle_messages():
 
 if __name__ == '__main__':
     print("ECOSYSTEM DASHBOARD STARTING ON PORT 5001...")
+    # Refresh connection baseline on start
+    monitor.scan()
     app.run(host='0.0.0.0', port=5001, debug=False)
