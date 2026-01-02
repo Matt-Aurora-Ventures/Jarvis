@@ -570,6 +570,9 @@ def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
     # Get wake word for barge-in detection
     cfg = _load_config()
     wake_word = cfg.get("voice", {}).get("wake_word", "jarvis").lower()
+    
+    # Print barge-in status for debugging
+    print(f"[Barge-in active - say '{wake_word}' to interrupt]")
 
     try:
         while proc.poll() is None:
