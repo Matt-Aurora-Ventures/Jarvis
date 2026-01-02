@@ -451,9 +451,11 @@ def transcribe_audio_gemini(audio_path: str) -> Optional[str]:
 # Priority: OpenRouter (no limits) → Groq (fast but limited) → Local
 # Updated Jan 2026: Removed decommissioned llama-3.3-70b-specdec
 
-PROVIDER_RANKINGS = [
+    # Rank 0: Native MiniMax (Direct, low latency, high quality)
+    {"name": "minimax-latest", "provider": "minimax", "intelligence": 96, "free": False, "notes": "Direct MiniMax (abab6.5-chat)"},
+
     # Rank 0: OpenRouter with Minimax (PRIMARY - no rate limits, high quality)
-    {" name": "deepseek/deepseek-r1", "provider": "openrouter", "intelligence": 95, "free": False, "notes": "PRIMARY - DeepSeek R1 reasoning via OpenRouter"},
+    {"name": "deepseek/deepseek-r1", "provider": "openrouter", "intelligence": 95, "free": False, "notes": "PRIMARY - DeepSeek R1 reasoning via OpenRouter"},
     {"name": "google/gemini-2.0-flash-exp:free", "provider": "openrouter", "intelligence": 92, "free": True, "notes": "OpenRouter free Gemini 2.0"},
     {"name": "meta-llama/llama-3.3-70b-instruct", "provider": "openrouter", "intelligence": 90, "free": False, "notes": "Llama 3.3 70B via OpenRouter"},
     
@@ -540,6 +542,61 @@ def _grok_client():
     except Exception:
         pass
     return {"api_key": key}  # Fallback handled in _ask_grok
+
+
+def _ask_minimax(prompt: str, model: str, max_output_tokens: int = 2048) -> Optional[str]:
+    """Call MiniMax API directly."""
+    api_key = secrets.get_minimax_key()
+    if not api_key:
+        return None
+
+    # MiniMax API endpoint (Abab6.5 assumed for M2.1 equivalent)
+    url = "https://api.minimax.chat/v1/text/chatcompletion_v2"
+    
+    # Map friendly names to actual MiniMax model IDs if needed
+    if model in ("minimax-2.1", "minimax-latest", "minimax"):
+        model = "abab6.5-chat"
+
+    messages = [{"sender_type": "USER", "sender_name": "User", "text": prompt}]
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "tokens_to_generate": max_output_tokens,
+        "temperature": 0.7,
+        "stream": False,
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
+        
+        # Handle rate limits
+        if response.status_code == 429:
+             _log("⚠ MiniMax rate limited (429).")
+             return None
+             
+        response.raise_for_status()
+        body = response.json()
+        
+        choices = body.get("choices", [])
+        if choices:
+            text = choices[0].get("message", {}).get("text", "")
+            if not text:
+                 text = choices[0].get("text", "") # Fallback
+            return text
+            
+        if "base_resp" in body and body["base_resp"].get("status_msg"):
+             _log(f"⚠ MiniMax Error: {body['base_resp']['status_msg']}")
+             
+    except Exception as e:
+        _log(f"⚠ MiniMax call failed: {_safe_error_message(e)}")
+        
+    return None
 
 
 def _ask_groq(prompt: str, model: str, max_output_tokens: int = 512) -> Optional[str]:
@@ -809,6 +866,14 @@ def _try_provider(
                 if text:
                     success_log = f"✓ Using {name} locally (intelligence: {provider['intelligence']})"
 
+                if text:
+                    success_log = f"✓ Using {name} (intelligence: {provider['intelligence']})"
+
+        elif ptype == "minimax":
+            text = _ask_minimax(prompt, name, max_output_tokens)
+            if text:
+                 success_log = f"✓ Using MiniMax {name} (intelligence: {provider['intelligence']}) - DIRECT"
+                 
         elif ptype == "openai":
             client = _openai_client()
             if not client:
