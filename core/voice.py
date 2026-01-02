@@ -207,6 +207,43 @@ def _test_say_voice(name: str) -> bool:
     return result.returncode == 0 and "not found" not in result.stderr.lower()
 
 
+def _speak_with_openai_tts(text: str, voice_cfg: dict) -> bool:
+    """Speak using OpenAI TTS."""
+    try:
+        from core import openai_tts
+        
+        voice = voice_cfg.get("openai_tts_voice", "alloy")
+        model = voice_cfg.get("openai_tts_model", "tts-1")
+        
+        return openai_tts.speak_openai_tts(text, voice=voice, model=model)
+    except Exception as e:
+        _set_voice_error(f"OpenAI TTS failed: {e}")
+        return False
+
+
+def _start_openai_tts_process(text: str, voice_cfg: dict) -> Optional[subprocess.Popen]:
+    """Start OpenAI TTS as subprocess for barge-in."""
+    try:
+        from core import openai_tts
+        
+        voice = voice_cfg.get("openai_tts_voice", "alloy")
+        model = voice_cfg.get("openai_tts_model", "tts-1")
+        
+        result = openai_tts.speak_openai_tts_process(text, voice=voice, model=model)
+        if not result or result[0] is None:
+            return None
+        
+        proc, temp_path = result
+        
+        # Set active speech with cleanup callback
+        _set_active_speech(proc, cleanup=lambda: Path(temp_path).unlink(missing_ok=True))
+        return proc
+        
+    except Exception as e:
+        _set_voice_error(f"OpenAI TTS process failed: {e}")
+        return None
+
+
 def _say_voice_candidates(voice_cfg: dict) -> list[str]:
     voice_name = str(voice_cfg.get("speech_voice", "")).strip()
     fallback_voices = voice_cfg.get("fallback_voices", [])
@@ -512,6 +549,15 @@ def _speak(text: str) -> None:
     engine = str(voice_cfg.get("tts_engine", "piper")).lower()
     clone_engine = engine in ("voice_clone", "xtts", "clone")
     spoke = False
+    
+    # Try OpenAI TTS first if configured
+    if engine == "openai_tts":
+        spoke = _speak_with_openai_tts(text, voice_cfg)
+        if spoke:
+            _remember_spoken(text)
+            return
+    
+    # Try voice clone
     if _voice_clone_configured(voice_cfg):
         spoke = _speak_with_voice_clone(text, voice_cfg)
         if spoke:
@@ -519,6 +565,8 @@ def _speak(text: str) -> None:
             return
         if clone_engine:
             engine = "say"
+    
+    # Fallback engines
     if engine == "piper":
         spoke = _speak_with_piper(text, voice_cfg)
     elif engine == "say":
@@ -542,12 +590,22 @@ def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
     engine = str(voice_cfg.get("tts_engine", "piper")).lower()
     clone_engine = engine in ("voice_clone", "xtts", "clone")
     proc: Optional[subprocess.Popen] = None
-    if _voice_clone_configured(voice_cfg):
+    
+    # Try OpenAI TTS first if configured
+    if engine == "openai_tts":
+        proc = _start_openai_tts_process(text, voice_cfg)
+        if proc:
+            _remember_spoken(text)
+    
+    # Try voice clone
+    if not proc and _voice_clone_configured(voice_cfg):
         proc = _start_voice_clone_process(text, voice_cfg)
         if proc:
             _remember_spoken(text)
         elif clone_engine:
             engine = "say"
+    
+    # Fallback engines
     if not proc and engine == "piper":
         proc = _start_piper_process(text, voice_cfg)
     elif not proc and engine == "say":
