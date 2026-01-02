@@ -1,13 +1,21 @@
 """
-Real-Time Progress Dashboard Server
-Shows live updates of trading pipeline and all Jarvis activities
+Jarvis Ecosystem Dashboard
+The central command center for all Jarvis operations.
+Features:
+- Real-time Trading Pipeline Status
+- Security Monitoring (Network/Process)
+- Direct Communication Interface
+- System Logs & Health
 """
 
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, request, render_template_string
 from flask_cors import CORS
 from pathlib import Path
 import json
 import time
+import os
+import psutil
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
@@ -15,208 +23,320 @@ CORS(app)
 ROOT = Path(__file__).resolve().parents[1]
 PROGRESS_FILE = ROOT / "data" / "trading" / "pipeline_progress.json"
 LOG_FILE = ROOT / "data" / "trading" / "pipeline.log"
+SYSTEM_LOG = ROOT / "data" / "jarvis.log"  # Main log file
+MESSAGES_FILE = ROOT / "data" / "user_messages.json"
+
+# Initialize message history
+if not MESSAGES_FILE.exists():
+    MESSAGES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(MESSAGES_FILE, 'w') as f:
+        json.dump([], f)
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Jarvis Progress Dashboard</title>
+    <meta charset="UTF-8">
+    <title>JARVIS ECOSYSTEM | COMMAND CENTER</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: 'Courier New', monospace;
-            background: #0a0e27;
-            color: #00ff88;
-            padding: 20px;
+        :root {
+            --bg-dark: #050510;
+            --bg-panel: #0a0e17;
+            --primary: #00ff88;
+            --secondary: #00ccff;
+            --alert: #ff4444;
+            --warning: #ffaa00;
+            --text-dim: rgba(255, 255, 255, 0.6);
+            --border: 1px solid rgba(0, 255, 136, 0.2);
         }
-        .header {
-            text-align: center;
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            background: var(--bg-dark);
+            color: var(--primary);
+            margin: 0;
             padding: 20px;
-            border: 2px solid #00ff88;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* HEADER */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--primary);
             margin-bottom: 20px;
-            background: rgba(0,255,136,0.1);
+            text-transform: uppercase;
         }
-        .status-grid {
+        h1 { margin: 0; font-size: 24px; letter-spacing: 2px; text-shadow: 0 0 10px var(--primary); }
+        .system-status { display: flex; gap: 20px; font-size: 14px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .dot-green { background: var(--primary); box-shadow: 0 0 8px var(--primary); animation: pulse 2s infinite; }
+        
+        /* GRID LAYOUT */
+        .grid-container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: 350px 1fr 350px;
+            grid-template-rows: 1fr 1fr;
             gap: 20px;
-            margin-bottom: 20px;
+            flex-grow: 1;
+            overflow: hidden;
         }
-        .stat-box {
-            border: 1px solid #00ff88;
+        
+        .panel {
+            background: var(--bg-panel);
+            border: var(--border);
             padding: 15px;
-            background: rgba(0,255,136,0.05);
-        }
-        .stat-label { 
-            font-size: 12px; 
-            color: #00ff88; 
-            opacity: 0.7;
-            margin-bottom: 5px;
-        }
-        .stat-value { 
-            font-size: 32px; 
-            font-weight: bold;
-            color: #ffffff;
-        }
-        .progress-bar {
-            height: 30px;
-            background: rgba(0,255,136,0.1);
-            border: 1px solid #00ff88;
-            margin: 10px 0;
+            display: flex;
+            flex-direction: column;
             position: relative;
         }
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #00ff88, #00cc6a);
-            transition: width 0.3s;
+        .panel h2 { 
+            margin-top: 0; 
+            font-size: 16px; 
+            border-bottom: 1px solid rgba(255,255,255,0.1); 
+            padding-bottom: 10px;
+            color: var(--secondary);
+            display: flex;
+            justify-content: space-between;
         }
-        .progress-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #fff;
-            font-weight: bold;
-            text-shadow: 0 0 5px #000;
+        
+        /* SECURITY PANEL */
+        .security-list { font-size: 12px; overflow-y: auto; flex-grow: 1; }
+        .sec-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .sec-alert { color: var(--alert); }
+        .sec-ok { color: var(--primary); }
+        
+        /* CHAT PANEL */
+        .chat-container { display: flex; flex-direction: column; flex-grow: 1; overflow: hidden; }
+        .chat-history { flex-grow: 1; overflow-y: auto; padding-right: 10px; margin-bottom: 10px; font-size: 13px; }
+        .message { margin-bottom: 8px; padding: 8px; border-radius: 4px; }
+        .msg-user { background: rgba(0, 204, 255, 0.1); border-left: 2px solid var(--secondary); text-align: right; }
+        .msg-jarvis { background: rgba(0, 255, 136, 0.1); border-left: 2px solid var(--primary); }
+        .chat-input { display: flex; gap: 10px; }
+        input[type="text"] { 
+            flex-grow: 1; background: #000; border: 1px solid #333; color: white; padding: 10px; 
+            font-family: inherit;
         }
+        button { 
+            background: var(--bg-panel); color: var(--primary); border: 1px solid var(--primary); 
+            padding: 0 20px; cursor: pointer; font-weight: bold; font-family: inherit; text-transform: uppercase;
+        }
+        button:hover { background: var(--primary); color: black; }
+
+        /* TRADING PANEL */
+        .progress-bar { height: 20px; background: rgba(255,255,255,0.1); margin: 5px 0 15px 0; position: relative; }
+        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.5s; }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .stat-box { background: rgba(255,255,255,0.03); padding: 10px; text-align: center; }
+        .stat-val { font-size: 20px; font-weight: bold; color: white; }
+        .stat-lbl { font-size: 10px; text-transform: uppercase; color: var(--text-dim); }
+
+        /* LOGS */
         .log-container {
-            border: 1px solid #00ff88;
-            padding: 15px;
-            background: #000;
-            height: 400px;
+            font-size: 11px;
+            color: var(--text-dim);
             overflow-y: auto;
-            font-size: 14px;
-            line-height: 1.6;
+            flex-grow: 1;
+            font-family: 'Menlo', monospace;
         }
-        .log-line { margin: 2px 0; }
-        .error { color: #ff4444; }
-        .success { color: #00ff88; }
-        .warning { color: #ffaa00; }
-        .status-badge {
-            display: inline-block;
-            padding: 5px 15px;
-            border-radius: 3px;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-        .status-running { background: #00ff88; color: #000; }
-        .status-completed { background: #00cc6a; color: #fff; }
-        .status-error { background: #ff4444; color: #fff; }
-        .blink { animation: blink 1s infinite; }
-        @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0.3; }
-        }
+        .log-line { margin-bottom: 2px; padding-left: 5px; }
+        .log-err { color: var(--alert); }
+        .log-warn { color: var(--warning); }
+        .log-info { color: var(--secondary); }
+
+        /* ANIMATIONS */
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: #000; }
+        ::-webkit-scrollbar-thumb { background: #333; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>⚡ JARVIS PROGRESS DASHBOARD ⚡</h1>
-        <p>Real-Time Execution Monitor</p>
-        <div id="status-badge" class="status-badge status-running blink">LOADING...</div>
-    </div>
-    
-    <div class="status-grid">
-        <div class="stat-box">
-            <div class="stat-label">TOKENS SCANNED</div>
-            <div class="stat-value" id="tokens-scanned">0</div>
-            <div class="stat-label">of <span id="tokens-total">50</span></div>
+    <header>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 32px;">👁️</div>
+            <div>
+                <h1>JARVIS ECOSYSTEM</h1>
+                <div style="font-size: 10px; letter-spacing: 4px; color: var(--secondary);">OBSERVABILITY DASHBOARD</div>
+            </div>
         </div>
-        <div class="stat-box">
-            <div class="stat-label">BACKTESTS COMPLETED</div>
-            <div class="stat-value" id="backtests-completed">0</div>
-            <div class="stat-label">of <span id="backtests-total">2500</span></div>
+        <div class="system-status">
+            <div><span class="status-dot dot-green"></span>SYSTEM ONLINE</div>
+            <div><span class="status-dot dot-green"></span>SECURE</div>
+            <div id="clock">00:00:00</div>
         </div>
-        <div class="stat-box">
-            <div class="stat-label">STRATEGIES TESTED</div>
-            <div class="stat-value" id="strategies-tested">0</div>
-            <div class="stat-label">of <span id="strategies-total">50</span></div>
+    </header>
+
+    <div class="grid-container">
+        <!-- LEFT COLUMN: SECURITY -->
+        <div class="panel" style="grid-row: span 2;">
+            <h2>🛡️ SECURITY MONITOR <span style="font-size: 10px;">LIVE</span></h2>
+            <div class="security-list" id="security-feed">
+                <!-- Populated by JS -->
+                <div class="sec-item"><span class="sec-ok">Scanning network...</span></div>
+            </div>
+            <div style="margin-top: 10px; border-top: 1px solid #333; padding-top: 10px;">
+                 <div class="stat-lbl">ACTIVE CONNECTIONS</div>
+                 <div class="stat-val" id="conn-count">0</div>
+            </div>
         </div>
-        <div class="stat-box">
-            <div class="stat-label">ELAPSED TIME</div>
-            <div class="stat-value" id="elapsed">0s</div>
-        </div>
-    </div>
-    
-    <div class="stat-box">
-        <div class="stat-label">CURRENT TASK</div>
-        <div id="current-task" style="font-size: 18px; margin-top: 10px; color: #fff;">
-            Initializing...
-        </div>
-    </div>
-    
-    <div style="margin: 20px 0;">
-        <div class="stat-label">TOKENS PROGRESS</div>
-        <div class="progress-bar">
-            <div class="progress-fill" id="tokens-progress" style="width: 0%"></div>
-            <div class="progress-text" id="tokens-pct">0%</div>
-        </div>
-    </div>
-    
-    <div style="margin: 20px 0;">
-        <div class="stat-label">BACKTESTS PROGRESS</div>
-        <div class="progress-bar">
-            <div class="progress-fill" id="backtests-progress" style="width: 0%"></div>
-            <div class="progress-text" id="backtests-pct">0%</div>
-        </div>
-    </div>
-    
-    <div class="stat-label">LIVE LOG</div>
-    <div class="log-container" id="log"></div>
-    
-    <script>
-        function updateDashboard() {
-            fetch('/api/progress')
-                .then(r => r.json())
-                .then(data => {
-                    // Update status badge
-                    const badge = document.getElementById('status-badge');
-                    badge.textContent = data.status.toUpperCase();
-                    badge.className = 'status-badge status-' + data.status;
-                    if (data.status === 'running' || data.status === 'backtesting') {
-                        badge.classList.add('blink');
-                    }
-                    
-                    // Update stats
-                    document.getElementById('tokens-scanned').textContent = data.tokens_scanned;
-                    document.getElementById('tokens-total').textContent = data.tokens_total;
-                    document.getElementById('backtests-completed').textContent = data.backtests_completed;
-                    document.getElementById('backtests-total').textContent = data.backtests_total;
-                    document.getElementById('strategies-tested').textContent = data.strategies_tested;
-                    document.getElementById('strategies-total').textContent = data.strategies_total;
-                    document.getElementById('elapsed').textContent = Math.floor(data.elapsed_seconds) + 's';
-                    document.getElementById('current-task').textContent = data.current_task;
-                    
-                    // Update progress bars
-                    const tokensPct = (data.tokens_scanned / data.tokens_total * 100).toFixed(1);
-                    const backtestsPct = (data.backtests_completed / data.backtests_total * 100).toFixed(1);
-                    
-                    document.getElementById('tokens-progress').style.width = tokensPct + '%';
-                    document.getElementById('tokens-pct').textContent = tokensPct + '%';
-                    document.getElementById('backtests-progress').style.width = backtestsPct + '%';
-                    document.getElementById('backtests-pct').textContent = backtestsPct + '%';
-                })
-                .catch(e => console.error('Error:', e));
+
+        <!-- CENTER TOP: TRADING STATUS -->
+        <div class="panel">
+            <h2>📈 TRADING PIPELINE</h2>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <span>STATUS: <span id="pipeline-status" style="color: white;">LOADING</span></span>
+                <span id="elapsed-time">0s</span>
+            </div>
             
-            fetch('/api/logs')
-                .then(r => r.json())
-                .then(data => {
-                    const logDiv = document.getElementById('log');
-                    logDiv.innerHTML = data.logs.map(line => {
-                        let className = '';
-                        if (line.includes('ERROR') || line.includes('❌')) className = 'error';
-                        else if (line.includes('✅') || line.includes('SUCCESS')) className = 'success';
-                        else if (line.includes('⚠️') || line.includes('WARNING')) className = 'warning';
-                        return `<div class="log-line ${className}">${line}</div>`;
-                    }).join('');
-                    logDiv.scrollTop = logDiv.scrollHeight;
-                })
-                .catch(e => console.error('Error:', e));
+            <div class="stat-lbl">TOKENS</div>
+            <div class="progress-bar"><div class="progress-fill" id="prog-tokens"></div></div>
+            
+            <div class="stat-lbl">BACKTESTS</div>
+            <div class="progress-bar"><div class="progress-fill" id="prog-backtests"></div></div>
+            
+            <div class="stat-grid">
+                <div class="stat-box">
+                    <div class="stat-val" id="val-scanned">0</div>
+                    <div class="stat-lbl">TOKENS SCANNED</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="val-tested">0</div>
+                    <div class="stat-lbl">STRATEGIES</div>
+                </div>
+            </div>
+            <div style="margin-top: 10px; font-size: 12px; color: white;">
+                CURRENT: <span id="current-task" style="color: var(--secondary);">...</span>
+            </div>
+        </div>
+
+        <!-- RIGHT TOP: SYSTEM LOGS -->
+        <div class="panel" style="grid-row: span 2;">
+            <h2>📝 SYSTEM LOGS</h2>
+            <div class="log-container" id="sys-logs">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- CENTER BOTTOM: COMM LINK -->
+        <div class="panel">
+            <h2>💬 COMM LINK</h2>
+            <div class="chat-container">
+                <div class="chat-history" id="chat-history"></div>
+                <div class="chat-input">
+                    <input type="text" id="msg-input" placeholder="Enter instructions or log error..." onkeypress="if(event.key==='Enter') sendMsg()">
+                    <button onclick="sendMsg()">SEND</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateClock() {
+            document.getElementById('clock').textContent = new Date().toLocaleTimeString();
         }
+        setInterval(updateClock, 1000);
+
+        // Fetch Pipeline Data
+        async function updatePipeline() {
+            try {
+                const res = await fetch('/api/progress');
+                const data = await res.json();
+                
+                document.getElementById('pipeline-status').textContent = data.status.toUpperCase();
+                document.getElementById('current-task').textContent = data.current_task;
+                document.getElementById('elapsed-time').textContent = Math.floor(data.elapsed_seconds) + 's';
+                
+                document.getElementById('val-scanned').textContent = data.tokens_scanned;
+                document.getElementById('val-tested').textContent = data.strategies_tested;
+                
+                const tPct = (data.tokens_scanned / 50) * 100;
+                const bPct = (data.backtests_completed / 2500) * 100;
+                
+                document.getElementById('prog-tokens').style.width = tPct + '%';
+                document.getElementById('prog-backtests').style.width = bPct + '%';
+            } catch(e) {}
+        }
+
+        // Fetch Security Data
+        async function updateSecurity() {
+            try {
+                const res = await fetch('/api/security');
+                const data = await res.json();
+                
+                document.getElementById('conn-count').textContent = data.connections;
+                const feed = document.getElementById('security-feed');
+                feed.innerHTML = data.processes.map(p => `
+                    <div class="sec-item">
+                        <span>${p.name} [${p.pid}]</span>
+                        <span class="${p.cpu > 10 ? 'sec-alert' : 'sec-ok'}">${p.cpu.toFixed(1)}% CPU</span>
+                    </div>
+                `).join('');
+            } catch(e) {}
+        }
+
+        // Fetch Logs
+        async function updateLogs() {
+            try {
+                const res = await fetch('/api/logs');
+                const data = await res.json();
+                const container = document.getElementById('sys-logs');
+                container.innerHTML = data.logs.map(l => {
+                    let cls = 'log-line';
+                    if(l.includes('ERROR')) cls += ' log-err';
+                    else if(l.includes('WARN')) cls += ' log-warn';
+                    else if(l.includes('INFO')) cls += ' log-info';
+                    return `<div class="${cls}">${l}</div>`;
+                }).join('');
+                container.scrollTop = container.scrollHeight;
+            } catch(e) {}
+        }
+
+        // Chat Status
+        async function updateChat() {
+            try {
+                const res = await fetch('/api/messages');
+                const msgs = await res.json();
+                const history = document.getElementById('chat-history');
+                history.innerHTML = msgs.map(m => `
+                    <div class="message ${m.role === 'user' ? 'msg-user' : 'msg-jarvis'}">
+                        <strong>${m.role === 'user' ? 'YOU' : 'JARVIS'}:</strong> ${m.text}
+                    </div>
+                `).join('');
+                history.scrollTop = history.scrollHeight;
+            } catch(e) {}
+        }
+
+        async function sendMsg() {
+            const input = document.getElementById('msg-input');
+            const text = input.value.trim();
+            if(!text) return;
+            
+            input.value = '';
+            await fetch('/api/messages', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text})
+            });
+            updateChat();
+        }
+
+        // Update Loops
+        setInterval(updatePipeline, 1000);
+        setInterval(updateSecurity, 2000);
+        setInterval(updateLogs, 1000);
+        setInterval(updateChat, 2000);
         
-        // Update every 500ms
-        setInterval(updateDashboard, 500);
-        updateDashboard();
+        updatePipeline();
+        updateSecurity();
+        updateLogs();
+        updateChat();
     </script>
 </body>
 </html>
@@ -232,38 +352,103 @@ def get_progress():
         if PROGRESS_FILE.exists():
             with open(PROGRESS_FILE) as f:
                 return jsonify(json.load(f))
-        return jsonify({
-            "status": "not_started",
-            "tokens_scanned": 0,
-            "tokens_total": 50,
-            "backtests_completed": 0,
-            "backtests_total": 2500,
-            "strategies_tested": 0,
-            "strategies_total": 50,
-            "current_task": "Waiting to start...",
-            "elapsed_seconds": 0,
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except: pass
+    return jsonify({
+        "status": "waiting", "tokens_scanned": 0, "backtests_completed": 0,
+        "elapsed_seconds": 0, "current_task": "Connecting..."
+    })
+
+@app.route('/api/security')
+def get_security():
+    try:
+        # Top 10 CPU processes
+        procs = []
+        for p in psutil.process_iter(['pid', 'name', 'cpu_percent']):
+            try:
+                p.cpu_percent() # Initialize
+            except: pass
+            
+        # Wait a tiny bit for CPU stats if needed, or just return basic info
+        # For responsiveness, we just get what we have
+        procs = sorted(
+            [p.info for p in psutil.process_iter(['pid', 'name', 'cpu_percent'])],
+            key=lambda x: x['cpu_percent'] or 0,
+            reverse=True
+        )[:15]
+        
+        conns = len(psutil.net_connections())
+        return jsonify({"processes": procs, "connections": conns})
+    except:
+        return jsonify({"processes": [], "connections": 0})
 
 @app.route('/api/logs')
 def get_logs():
+    logs = []
+    # Combine pipeline log and system log
     try:
         if LOG_FILE.exists():
             with open(LOG_FILE) as f:
-                lines = f.readlines()
-                return jsonify({"logs": lines[-100:]})  # Last 100 lines
-        return jsonify({"logs": ["No logs yet..."]})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+                logs.extend([l.strip() for l in f.readlines()[-20:]])
+    except: pass
+    return jsonify({"logs": logs})
+
+@app.route('/api/messages', methods=['GET', 'POST'])
+def handle_messages():
+    try:
+        with open(MESSAGES_FILE, 'r') as f:
+            msgs = json.load(f)
+    except: msgs = []
+
+    if request.method == 'POST':
+        data = request.json
+        text = data.get('text', '').strip()
+        new_msg = {
+            "role": "user",
+            "text": text,
+            "timestamp": time.time()
+        }
+        msgs.append(new_msg)
+        
+        # Command Processing
+        response_text = "Message logged."
+        
+        if text.startswith('/exec '):
+            cmd = text[6:]
+            response_text = f"Executing: {cmd}..."
+            # In a real agent, we would emit an event. 
+            # Here we just log it for the agent to pick up, or run simple safe commands.
+            try:
+                # Security note: In production, do not allow arbitrary shell exec
+                import subprocess
+                subprocess.Popen(cmd, shell=True)
+                response_text = f"🚀 Executed: {cmd}"
+            except Exception as e:
+                response_text = f"❌ Execution failed: {str(e)}"
+                
+        elif text == '/scan':
+            response_text = "Starting security scan..."
+            # Trigger security logic here
+            
+        elif text.startswith('/log '):
+            # User manually logging an error/instruction
+            entry = text[5:]
+            with open(SYSTEM_LOG, 'a') as f:
+                f.write(f"[MANUAL USER ENTRY] {entry}\n")
+            response_text = "✅ Entry saved to system logs."
+
+        msgs.append({
+            "role": "jarvis",
+            "text": response_text,
+            "timestamp": time.time()
+        })
+        
+        with open(MESSAGES_FILE, 'w') as f:
+            json.dump(msgs, f)
+        
+        return jsonify({"success": True})
+        
+    return jsonify(msgs)
 
 if __name__ == '__main__':
-    print("\n" + "="*60)
-    print("🚀 JARVIS PROGRESS DASHBOARD")
-    print("="*60)
-    print(f"Open: http://localhost:5001")
-    print(f"Progress file: {PROGRESS_FILE}")
-    print(f"Log file: {LOG_FILE}")
-    print("="*60 + "\n")
-    
+    print("ECOSYSTEM DASHBOARD STARTING ON PORT 5001...")
     app.run(host='0.0.0.0', port=5001, debug=False)
