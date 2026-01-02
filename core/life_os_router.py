@@ -34,6 +34,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from core import secrets
 
 # Lazy imports to avoid circular dependencies
 if TYPE_CHECKING:
@@ -250,6 +251,88 @@ class MiniMaxRouter:
             cost_usd=cost_usd,
             fallback_used=False,
         )
+
+    def _call_minimax_direct(
+        self,
+        prompt: str,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+        system_prompt: Optional[str] = None,
+    ) -> RouterResponse:
+        """Call MiniMax API directly."""
+        start_time = time.time()
+        api_key = secrets.get_minimax_key()
+        
+        if not api_key:
+            raise RuntimeError("MiniMax Direct selected but no key found.")
+
+        # MiniMax API endpoint (Abab6.5 assumed for M2.1 equivalent)
+        url = "https://api.minimax.chat/v1/text/chatcompletion_v2"
+        model = "abab6.5-chat" 
+        
+        messages = []
+        if system_prompt:
+            messages.append({"sender_type": "BOT", "sender_name": "MM Intelligent Assistant", "text": system_prompt})
+        messages.append({"sender_type": "USER", "sender_name": "User", "text": prompt})
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "tokens_to_generate": max_tokens,
+            "temperature": temperature,
+            "stream": False,
+        }
+
+        data = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        }
+        
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8") if e.fp else ""
+            raise RuntimeError(f"MiniMax API error {e.code}: {error_body[:200]}")
+            
+        # Parse MiniMax response
+        # Structure varies, but usually: check 'choices' or 'reply'
+        choices = body.get("choices", [])
+        if not choices:
+            # Check for error msg
+            if "base_resp" in body and body["base_resp"].get("status_msg"):
+                 raise RuntimeError(f"MiniMax Error: {body['base_resp']['status_msg']}")
+            raise RuntimeError("Empty response from MiniMax")
+            
+        text = choices[0].get("message", {}).get("text", "")
+        if not text:
+             # Try alternate structure just in case
+             text = choices[0].get("text", "")
+        
+        usage = body.get("usage", {})
+        input_tokens = usage.get("total_tokens", len(prompt)//4) # This might be total?
+        # MiniMax usage structure is sometimes different, fallback to safe estimate
+        
+        # Approximate if needed
+        output_tokens = len(text) // 4
+        
+        self.stats.add_usage(input_tokens, output_tokens)
+        cost_usd = (input_tokens / 1_000_000 * 0.30) + (output_tokens / 1_000_000 * 1.20) # Approx M2.1 pricing
+        latency_ms = int((time.time() - start_time) * 1000)
+
+        return RouterResponse(
+            text=text,
+            provider="minimax_direct",
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            latency_ms=latency_ms,
+            cost_usd=cost_usd,
+            fallback_used=False,
+        )
     
     def _call_ollama(
         self,
@@ -332,6 +415,11 @@ class MiniMaxRouter:
         if not use_fallback:
             # Try cloud first
             try:
+                # Check for Direct MiniMax Key first
+                if secrets.get_minimax_key():
+                    return self._call_minimax_direct(prompt, max_tokens, temperature, system_prompt)
+                
+                # Fallback to OpenRouter
                 return self._call_openrouter(prompt, max_tokens, temperature, system_prompt)
             except Exception as e:
                 _log(f"⚠ Cloud failed: {e}. Falling back to local...")
@@ -341,14 +429,15 @@ class MiniMaxRouter:
         if self._check_ollama_available():
             return self._call_ollama(prompt, max_tokens)
         
-        raise RuntimeError("No available inference providers. Check OPENROUTER_API_KEY or Ollama status.")
+        raise RuntimeError("No available inference providers. Check OPENROUTER_API_KEY, MINIMAX_API_KEY, or Ollama.")
     
     def get_status(self) -> Dict[str, Any]:
         """Get current router status and stats."""
         self.stats.reset_if_new_day()
         return {
             "mode": self.mode,
-            "cloud_configured": bool(OPENROUTER_API_KEY),
+            "cloud_configured": bool(OPENROUTER_API_KEY) or bool(secrets.get_minimax_key()),
+            "direct_minimax": bool(secrets.get_minimax_key()),
             "ollama_available": self._check_ollama_available(),
             "daily_stats": {
                 "date": self.stats.date,

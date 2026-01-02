@@ -58,6 +58,12 @@ def get_brave_key() -> str:
     return get_key("brave_api_key", "BRAVE_API_KEY")
 
 
+def get_minimax_key() -> str:
+    """Get standalone Minimax API key."""
+    # Also check openrouter key as fallback if mapped there, but this is specific
+    return get_key("minimax_api_key", "MINIMAX_API_KEY")
+
+
 def list_configured_keys() -> Dict[str, bool]:
     """List all API keys and whether they're configured.
 
@@ -70,4 +76,5 @@ def list_configured_keys() -> Dict[str, bool]:
         "openai": bool(get_openai_key()),
         "anthropic": bool(get_anthropic_key()),
         "brave": bool(get_brave_key()),
+        "minimax": bool(get_minimax_key()),
     }
