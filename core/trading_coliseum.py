@@ -1,7 +1,7 @@
 """
 Paper-Trading Coliseum - Automated Strategy Backtesting
 
-Runs 81 extracted strategies through 10 randomized 30-day simulations.
+Runs 81 extracted strategies through 10 randomized 90-day simulations.
 Auto-prunes strategies that fail 5+ tests.
 Promotes high-performing strategies to live candidates.
 """
@@ -49,7 +49,7 @@ class TradingColiseum:
     
     Lifecycle:
     1. Load strategy from catalog
-    2. Run 10 randomized 30-day simulations
+    2. Run 10 randomized 90-day simulations (3 months each)
     3. Auto-prune on 5 failures
     4. Promote on Sharpe >1.5 across all tests
     """
@@ -198,15 +198,15 @@ class TradingColiseum:
     
     def _run_strategy_backtests(self, strategy: Dict[str, Any]) -> List[BacktestResult]:
         """
-        Run 10 randomized 30-day backtests for a strategy.
+        Run 10 randomized 90-day backtests for a strategy.
         
         Uses Minimax 2.1 to simulate trading logic rapidly.
         """
         results = []
         strategy_id = strategy["strategy_id"]
         
-        # Generate 10 random 30-day windows from last 2 years
-        windows = self._generate_random_windows(count=10, days=30)
+        # Generate 10 random 90-day windows from last 2 years
+        windows = self._generate_random_windows(count=10, days=90)
         
         for i, (start, end) in enumerate(windows):
             print(f"   🔄 Run {i+1}/10: {start} to {end}")

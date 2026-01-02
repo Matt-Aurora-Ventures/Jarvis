@@ -41,21 +41,37 @@ def _ensure_dirs() -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+_tts_install_attempted = False
+_tts_install_success = False
+
 def _install_tts() -> bool:
     """Install Coqui TTS if not present."""
+    global _tts_install_attempted, _tts_install_success
+    
     try:
         import TTS
+        _tts_install_success = True
         return True
     except ImportError:
+        # Only try to install once per session
+        if _tts_install_attempted:
+            return _tts_install_success
+        
+        _tts_install_attempted = True
         print("Installing Coqui TTS (this may take a few minutes)...")
+        
         try:
+            # Try without version constraint for better compatibility
             subprocess.check_call([
                 sys.executable, "-m", "pip", "install",
-                "TTS>=0.22.0", "--quiet"
+                "TTS", "--quiet"
             ])
+            _tts_install_success = True
             return True
         except subprocess.CalledProcessError as e:
             print(f"Failed to install TTS: {e}")
+            print("TTS voice cloning unavailable - falling back to system voice")
+            _tts_install_success = False
             return False
 
 
