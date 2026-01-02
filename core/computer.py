@@ -40,9 +40,10 @@ def type_text(text: str) -> Tuple[bool, str]:
     if not is_safe:
         return False, f"Blocked: {reason}"
     
+    escaped_text = text.replace('"', '\\"')
     script = f'''
     tell application "System Events"
-        keystroke "{text.replace('"', '\\"')}"
+        keystroke "{escaped_text}"
     end tell
     '''
     return _run_applescript(script)

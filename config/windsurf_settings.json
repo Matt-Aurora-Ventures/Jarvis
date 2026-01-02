@@ -1,0 +1,51 @@
+{
+  "//": "MiniMax M2.1 Configuration for Windsurf IDE",
+  "//": "Copy the relevant sections into your Windsurf settings.json",
+  
+  "ai.customModels": [
+    {
+      "id": "minimax-m2.1",
+      "name": "MiniMax M2.1 (via OpenRouter)",
+      "provider": "openai-compatible",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "model": "minimax/minimax-m2.1",
+      "apiKeyEnvVar": "OPENROUTER_API_KEY",
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "supportsStreaming": true
+    },
+    {
+      "id": "minimax-text-01",
+      "name": "MiniMax-Text-01 (via OpenRouter)",
+      "provider": "openai-compatible",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "model": "minimax/minimax-text-01",
+      "apiKeyEnvVar": "OPENROUTER_API_KEY",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 16384,
+      "supportsStreaming": true
+    }
+  ],
+  
+  "ai.defaultModel": "minimax-m2.1",
+  
+  "//": "=== ALTERNATIVE: Direct MiniMax API (if preferred over OpenRouter) ===",
+  "ai.customModels.direct": [
+    {
+      "id": "minimax-m2.1-direct",
+      "name": "MiniMax M2.1 (Direct API)",
+      "provider": "openai-compatible",
+      "baseUrl": "https://api.minimax.chat/v1",
+      "model": "MiniMax-M2",
+      "apiKeyEnvVar": "MINIMAX_API_KEY",
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "supportsStreaming": true
+    }
+  ],
+  
+  "//": "=== ENVIRONMENT VARIABLES REQUIRED ===",
+  "//": "export OPENROUTER_API_KEY='your-openrouter-api-key'",
+  "//": "OR for direct API:",
+  "//": "export MINIMAX_API_KEY='your-minimax-api-key'"
+}

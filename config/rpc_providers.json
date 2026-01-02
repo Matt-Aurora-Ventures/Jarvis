@@ -1,0 +1,125 @@
+{
+    "version": "1.0",
+    "description": "RPC provider configurations for Life OS Trading Bot",
+    "solana": {
+        "primary": {
+            "name": "helius",
+            "url": "https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}",
+            "websocket": "wss://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}",
+            "features": [
+                "enhanced_transactions",
+                "token_metadata",
+                "priority_fees"
+            ],
+            "rate_limit": 100,
+            "timeout_ms": 30000
+        },
+        "fallback": [
+            {
+                "name": "alchemy_solana",
+                "url": "https://solana-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}",
+                "rate_limit": 50
+            },
+            {
+                "name": "public_solana",
+                "url": "https://api.mainnet-beta.solana.com",
+                "rate_limit": 10,
+                "note": "Rate limited, use only as last resort"
+            }
+        ]
+    },
+    "ethereum": {
+        "primary": {
+            "name": "alchemy_eth",
+            "url": "https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}",
+            "websocket": "wss://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}",
+            "chain_id": 1,
+            "rate_limit": 100,
+            "timeout_ms": 30000
+        },
+        "fallback": [
+            {
+                "name": "ankr_eth",
+                "url": "https://rpc.ankr.com/eth/${ANKR_API_KEY}",
+                "chain_id": 1
+            },
+            {
+                "name": "public_eth",
+                "url": "https://ethereum.publicnode.com",
+                "chain_id": 1,
+                "rate_limit": 5
+            }
+        ]
+    },
+    "polygon": {
+        "primary": {
+            "name": "alchemy_polygon",
+            "url": "https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}",
+            "chain_id": 137,
+            "rate_limit": 100
+        },
+        "fallback": [
+            {
+                "name": "public_polygon",
+                "url": "https://polygon-rpc.com",
+                "chain_id": 137,
+                "rate_limit": 10
+            }
+        ]
+    },
+    "arbitrum": {
+        "primary": {
+            "name": "alchemy_arbitrum",
+            "url": "https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}",
+            "chain_id": 42161,
+            "rate_limit": 100
+        },
+        "fallback": [
+            {
+                "name": "public_arbitrum",
+                "url": "https://arb1.arbitrum.io/rpc",
+                "chain_id": 42161,
+                "rate_limit": 10
+            }
+        ]
+    },
+    "base": {
+        "primary": {
+            "name": "alchemy_base",
+            "url": "https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}",
+            "chain_id": 8453,
+            "rate_limit": 100
+        }
+    },
+    "dex_aggregators": {
+        "solana": {
+            "jupiter": {
+                "quote_api": "https://quote-api.jup.ag/v6",
+                "swap_api": "https://quote-api.jup.ag/v6/swap",
+                "price_api": "https://price.jup.ag/v6/price"
+            }
+        },
+        "ethereum": {
+            "1inch": {
+                "api": "https://api.1inch.dev/swap/v6.0/1",
+                "requires_key": true
+            },
+            "0x": {
+                "api": "https://api.0x.org",
+                "requires_key": true
+            }
+        }
+    },
+    "pricing": {
+        "helius": {
+            "free_tier": "Limited requests",
+            "developer": "$49/month (500K credits)",
+            "business": "$499/month (5M credits)"
+        },
+        "alchemy": {
+            "free_tier": "30M compute units/month",
+            "growth": "$49/month (400M CU)",
+            "overage": "$0.40 per 1M CU"
+        }
+    }
+}

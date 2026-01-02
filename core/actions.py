@@ -67,13 +67,15 @@ def compose_email(to: str = "", subject: str = "", body: str = "") -> Tuple[bool
     """Open a new email composition window with pre-filled fields."""
     if not _ui_allowed("compose_email"):
         return _ui_blocked_msg("compose_email")
+    escaped_subject = subject.replace('"', '\\"')
+    escaped_body = body.replace('"', '\\"').replace(chr(10), '\\n')
     script = f'''
     tell application "Mail"
         activate
         set newMessage to make new outgoing message with properties {{visible:true}}
         tell newMessage
-            set subject to "{subject.replace('"', '\\"')}"
-            set content to "{body.replace('"', '\\"').replace(chr(10), '\\n')}"
+            set subject to "{escaped_subject}"
+            set content to "{escaped_body}"
             if "{to}" is not "" then
                 make new to recipient at end of to recipients with properties {{address:"{to}"}}
             end if
@@ -179,13 +181,14 @@ def create_calendar_event(title: str, date: str, time_str: str = "09:00", durati
     """Create a calendar event."""
     if not _ui_allowed("create_calendar_event"):
         return _ui_blocked_msg("create_calendar_event")
+    escaped_title = title.replace('"', '\\"')
     script = f'''
     tell application "Calendar"
         activate
         tell calendar "Calendar"
             set startDate to date "{date} {time_str}"
             set endDate to startDate + ({duration_hours} * hours)
-            make new event with properties {{summary:"{title.replace('"', '\\"')}", start date:startDate, end date:endDate}}
+            make new event with properties {{summary:"{escaped_title}", start date:startDate, end date:endDate}}
         end tell
     end tell
     '''
@@ -203,11 +206,12 @@ def send_imessage(to: str, message: str) -> Tuple[bool, str]:
     """Send an iMessage."""
     if not _ui_allowed("send_imessage"):
         return _ui_blocked_msg("send_imessage")
+    escaped_message = message.replace('"', '\\"')
     script = f'''
     tell application "Messages"
         set targetService to 1st account whose service type = iMessage
         set targetBuddy to participant "{to}" of targetService
-        send "{message.replace('"', '\\"')}" to targetBuddy
+        send "{escaped_message}" to targetBuddy
     end tell
     '''
     return computer._run_applescript(script)
@@ -217,16 +221,17 @@ def set_reminder(title: str, due_date: str = "") -> Tuple[bool, str]:
     """Create a reminder."""
     if not _ui_allowed("set_reminder"):
         return _ui_blocked_msg("set_reminder")
+    escaped_title = title.replace('"', '\\"')
     if due_date:
         script = f'''
         tell application "Reminders"
-            make new reminder with properties {{name:"{title.replace('"', '\\"')}", due date:date "{due_date}"}}
+            make new reminder with properties {{name:"{escaped_title}", due date:date "{due_date}"}}
         end tell
         '''
     else:
         script = f'''
         tell application "Reminders"
-            make new reminder with properties {{name:"{title.replace('"', '\\"')}"}}
+            make new reminder with properties {{name:"{escaped_title}"}}
         end tell
         '''
     return computer._run_applescript(script)

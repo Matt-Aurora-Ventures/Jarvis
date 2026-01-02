@@ -499,14 +499,8 @@ Rate from 1-10 and provide brief reasoning."""
                         integration_results["details"].append({
                             "expansion": expansion["title"],
                             "status": "integrated",
-                            "validation": validation["overall_status"]
+                            "validation": validation.get("overall_status", "not_applicable") if 'validation' in dir() else "not_applicable"
                         })
-                    else:
-                        integration_results["details"].append({
-                            "expansion": expansion["title"],
-                            "status": "integrated",
-                                "validation": "not_applicable"
-                            })
                     else:
                         integration_results["failed"] += 1
                         self.expansions["failed"].append({

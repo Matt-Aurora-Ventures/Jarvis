@@ -92,6 +92,172 @@ def _is_research_request(user_text: str) -> bool:
     return any(trigger in lowered for trigger in triggers)
 
 
+# ============================================================================
+# Enhanced Input Synthesis
+# ============================================================================
+
+def _extract_entities(user_text: str) -> Dict[str, List[str]]:
+    """
+    Extract key entities from user input for better context linking.
+    
+    Returns dict with entity types: people, tools, projects, actions, topics
+    """
+    entities: Dict[str, List[str]] = {
+        "people": [],
+        "tools": [],
+        "projects": [],
+        "actions": [],
+        "topics": [],
+    }
+    
+    lowered = user_text.lower()
+    
+    # Tool mentions
+    tools = ["python", "git", "docker", "npm", "ollama", "cursor", "windsurf", 
+             "vscode", "terminal", "browser", "firefox", "chrome", "notion", "obsidian"]
+    entities["tools"] = [t for t in tools if t in lowered]
+    
+    # Action verbs (what user wants done)
+    action_patterns = [
+        (r"\b(create|make|build|generate)\b", "create"),
+        (r"\b(fix|repair|debug|solve)\b", "fix"),
+        (r"\b(improve|enhance|optimize|upgrade)\b", "improve"),
+        (r"\b(analyze|research|investigate|study)\b", "analyze"),
+        (r"\b(delete|remove|clear|clean)\b", "delete"),
+        (r"\b(open|launch|start|run)\b", "open"),
+        (r"\b(send|share|post|publish)\b", "send"),
+        (r"\b(find|search|look for|locate)\b", "find"),
+    ]
+    for pattern, action in action_patterns:
+        if re.search(pattern, lowered):
+            entities["actions"].append(action)
+    
+    # Topic detection
+    topic_keywords = {
+        "crypto": ["trading", "crypto", "bitcoin", "ethereum", "solana", "defi", "wallet"],
+        "development": ["code", "programming", "development", "api", "function", "module"],
+        "business": ["revenue", "sales", "marketing", "client", "customer", "project"],
+        "personal": ["health", "fitness", "habits", "goals", "schedule", "calendar"],
+    }
+    for topic, keywords in topic_keywords.items():
+        if any(kw in lowered for kw in keywords):
+            entities["topics"].append(topic)
+    
+    return entities
+
+
+def _classify_intent(user_text: str, history: List[Dict[str, str]]) -> Dict[str, Any]:
+    """
+    Classify the user's intent to guide response generation.
+    
+    Returns dict with:
+    - primary_intent: main classification
+    - confidence: 0.0-1.0
+    - requires_action: bool
+    - requires_memory: bool
+    - is_followup: bool
+    """
+    lowered = user_text.lower().strip()
+    
+    # Check if this is a follow-up to previous conversation
+    is_followup = False
+    if history:
+        last_assistant = None
+        for entry in reversed(history):
+            if entry.get("source") in ("voice_chat_assistant", "assistant"):
+                last_assistant = entry.get("text", "")
+                break
+        
+        # Follow-up indicators
+        followup_starters = ["yes", "no", "sure", "okay", "ok", "yeah", "nope", 
+                            "that", "this", "it", "do it", "go ahead", "please"]
+        if any(lowered.startswith(f) for f in followup_starters):
+            is_followup = True
+        
+        # Pronoun references to previous topic
+        if re.match(r"^(what about|how about|and|also|but)", lowered):
+            is_followup = True
+    
+    # Intent classification
+    intents = {
+        "command": 0.0,      # Direct action request
+        "question": 0.0,     # Information seeking
+        "clarification": 0.0, # Clarifying previous topic
+        "feedback": 0.0,     # Providing feedback/opinion
+        "greeting": 0.0,     # Social greeting
+        "status": 0.0,       # Status check
+    }
+    
+    # Command detection
+    command_patterns = [
+        r"^(open|launch|start|run|create|make|build|send|post)\b",
+        r"\b(please|can you|could you|would you)\s+\w+",
+        r"^(set|add|remove|delete|clear|fix|update)\b",
+    ]
+    for pattern in command_patterns:
+        if re.search(pattern, lowered):
+            intents["command"] = max(intents["command"], 0.8)
+    
+    # Question detection
+    if "?" in user_text or lowered.startswith(("what", "how", "why", "when", "where", "who", "which", "is", "are", "can", "could", "should", "would", "do", "does")):
+        intents["question"] = 0.8
+    
+    # Greeting detection  
+    greetings = ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "howdy", "yo"]
+    if any(g in lowered.split() for g in greetings) or lowered in greetings:
+        intents["greeting"] = 0.9
+    
+    # Status check
+    if any(w in lowered for w in ["status", "what's happening", "update me", "how's it going", "what's new"]):
+        intents["status"] = 0.85
+    
+    # Find primary intent
+    primary_intent = max(intents, key=intents.get)
+    confidence = intents[primary_intent]
+    
+    return {
+        "primary_intent": primary_intent,
+        "confidence": confidence,
+        "requires_action": primary_intent == "command",
+        "requires_memory": primary_intent in ("question", "clarification"),
+        "is_followup": is_followup,
+        "all_intents": intents,
+    }
+
+
+def _synthesize_input(user_text: str, history: List[Dict[str, str]]) -> Dict[str, Any]:
+    """
+    Comprehensive input synthesis combining entity extraction and intent classification.
+    
+    This is the main entry point for understanding user input.
+    """
+    entities = _extract_entities(user_text)
+    intent = _classify_intent(user_text, history)
+    
+    # Build synthesis result
+    synthesis = {
+        "original_text": user_text,
+        "entities": entities,
+        "intent": intent,
+        "word_count": len(user_text.split()),
+        "has_url": bool(_extract_url(user_text)),
+        "is_short_response": len(user_text.split()) <= 3,
+    }
+    
+    # Compute context relevance hints
+    relevance_hints = []
+    if entities["tools"]:
+        relevance_hints.append(f"tools: {', '.join(entities['tools'])}")
+    if entities["topics"]:
+        relevance_hints.append(f"topics: {', '.join(entities['topics'])}")
+    if intent["is_followup"]:
+        relevance_hints.append("continuation of previous topic")
+    
+    synthesis["relevance_hints"] = relevance_hints
+    
+    return synthesis
+
+
 def _format_research_response(result: Dict[str, Any]) -> str:
     summary = result.get("summary", "").strip()
     key_findings = result.get("key_findings", [])
@@ -261,6 +427,11 @@ def generate_response(
     cfg = config.load_config()
     context_text = context_loader.load_context(update_state=False)
 
+    # ===== ENHANCED INPUT SYNTHESIS =====
+    history_entries = session_history if session_history is not None else _recent_chat()
+    input_synthesis = _synthesize_input(user_text, history_entries)
+    
+    # Use synthesis for smarter direct action detection
     direct_action = _infer_direct_action(user_text)
     if direct_action:
         action_name, params = direct_action
@@ -278,7 +449,6 @@ def generate_response(
 
     # Conversation history still includes both sides for coherence,
     # but it's clearly labeled as "conversation" not "memory/facts".
-    history_entries = session_history if session_history is not None else _recent_chat()
     history = _format_history(history_entries)
 
     activity_summary = ""
