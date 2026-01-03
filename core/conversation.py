@@ -553,7 +553,19 @@ def generate_response(
 def _execute_actions_in_response(response: str) -> str:
     """Parse and execute [ACTION: ...] commands in the response."""
     import re
-    
+
+    default_param_keys = {
+        "google": "query",
+        "search": "query",
+        "open_browser": "url",
+        "open_finder": "path",
+        "open_notes": "topic",
+        "spotlight": "query",
+        "speak": "text",
+        "switch_app": "app_name",
+        "set_reminder": "title",
+    }
+
     action_pattern = r'\[ACTION:\s*(\w+)\(([^)]*)\)\]'
     matches = re.findall(action_pattern, response)
     
@@ -565,12 +577,25 @@ def _execute_actions_in_response(response: str) -> str:
         try:
             # Parse parameters
             kwargs = {}
-            if params_str.strip():
+            params_raw = params_str.strip()
+            if params_raw:
                 # Simple param parsing: key='value' or key="value"
                 param_pattern = r"(\w+)\s*=\s*['\"]([^'\"]*)['\"]"
-                param_matches = re.findall(param_pattern, params_str)
+                param_matches = re.findall(param_pattern, params_raw)
                 for key, value in param_matches:
                     kwargs[key] = value
+                if not kwargs:
+                    default_key = default_param_keys.get(action_name)
+                    if default_key:
+                        cleaned = params_raw
+                        if (
+                            len(cleaned) >= 2
+                            and cleaned[0] in ("'", '"')
+                            and cleaned[-1] == cleaned[0]
+                        ):
+                            cleaned = cleaned[1:-1]
+                        if cleaned:
+                            kwargs[default_key] = cleaned
             
             # Execute the action
             success, msg = actions.execute_action(action_name, **kwargs)

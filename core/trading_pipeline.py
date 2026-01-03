@@ -213,6 +213,117 @@ def run_backtest(
     )
 
 
+def walk_forward_backtest(
+    candles: List[Dict[str, Any]],
+    symbol: str,
+    interval: str,
+    strategy: StrategyConfig,
+    n_splits: int = 5,
+    train_pct: float = 0.8,
+) -> List[BacktestResult]:
+    """
+    Walk-forward validation with anchored train/test splits.
+    
+    Prevents overfitting by testing on multiple out-of-sample periods.
+    This is the industry standard for time-series backtesting.
+    
+    Args:
+        candles: Full historical data
+        symbol: Trading pair
+        interval: Candle interval
+        strategy: Strategy configuration
+        n_splits: Number of validation folds
+        train_pct: Fraction of each fold for training
+    
+    Returns:
+        List of BacktestResult, one per out-of-sample fold
+    """
+    results: List[BacktestResult] = []
+    n = len(candles)
+    
+    if n < 50:  # Minimum data requirement
+        return [BacktestResult(
+            symbol=symbol,
+            interval=interval,
+            strategy=strategy.kind,
+            params=strategy.params,
+            period_start=None,
+            period_end=None,
+            total_trades=0,
+            win_rate=0.0,
+            profit_factor=0.0,
+            max_drawdown=0.0,
+            sharpe_ratio=0.0,
+            expectancy=0.0,
+            net_pnl=0.0,
+            roi=0.0,
+            equity_start=strategy.capital_usd,
+            equity_end=strategy.capital_usd,
+            trades=[],
+            notes="Walk-forward validation",
+            error="Insufficient data for walk-forward validation (need 50+ candles)"
+        )]
+    
+    fold_size = n // n_splits
+    
+    for i in range(n_splits):
+        # Anchored: train always starts at 0
+        train_end = int((i + 1) * fold_size * train_pct)
+        test_start = train_end
+        test_end = min((i + 2) * fold_size, n)
+        
+        if test_start >= test_end or test_end - test_start < 20:
+            continue
+        
+        # Test on out-of-sample only
+        test_candles = candles[test_start:test_end]
+        
+        result = run_backtest(test_candles, symbol, interval, strategy)
+        result.notes = f"Walk-forward fold {i+1}/{n_splits}, OOS period [{test_start}:{test_end}]"
+        results.append(result)
+    
+    return results
+
+
+def summarize_walk_forward(results: List[BacktestResult]) -> Dict[str, Any]:
+    """Summarize walk-forward validation results."""
+    if not results:
+        return {"error": "No results to summarize"}
+    
+    # Filter out errored results
+    valid = [r for r in results if not r.error]
+    if not valid:
+        return {"error": "All folds failed", "fold_count": len(results)}
+    
+    # Aggregated metrics
+    avg_sharpe = sum(r.sharpe_ratio for r in valid) / len(valid)
+    avg_win_rate = sum(r.win_rate for r in valid) / len(valid)
+    avg_drawdown = sum(r.max_drawdown for r in valid) / len(valid)
+    total_pnl = sum(r.net_pnl for r in valid)
+    
+    # Count passing folds
+    SHARPE_THRESHOLD = 1.0
+    DD_THRESHOLD = 0.20  # 20%
+    WIN_THRESHOLD = 0.40  # 40%
+    
+    passing = [r for r in valid if 
+               r.sharpe_ratio >= SHARPE_THRESHOLD and 
+               r.max_drawdown <= DD_THRESHOLD and
+               r.win_rate >= WIN_THRESHOLD]
+    
+    return {
+        "fold_count": len(results),
+        "valid_folds": len(valid),
+        "passing_folds": len(passing),
+        "pass_rate": len(passing) / len(valid) if valid else 0.0,
+        "avg_sharpe": round(avg_sharpe, 3),
+        "avg_win_rate": round(avg_win_rate, 3),
+        "avg_max_drawdown": round(avg_drawdown, 3),
+        "total_net_pnl": round(total_pnl, 2),
+        "recommendation": "PROMOTE" if len(passing) >= 3 else "REVIEW" if len(passing) >= 1 else "REJECT"
+    }
+
+
 def format_backtest_summary(result: BacktestResult) -> str:
     """Create a readable backtest summary."""
     if result.error:

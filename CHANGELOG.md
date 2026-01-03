@@ -4,6 +4,89 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [2.2.0] - 2026-01-03
+
+### 🛡️ **MAJOR RELEASE: Trading Safety & Optimization**
+
+This release focuses on production-ready trading safety with human approval gates, walk-forward validation to prevent overfitting, and DSPy-based strategy optimization.
+
+### 🚨 Human Approval Gate
+
+- **New Module:** `core/approval_gate.py` (340 lines)
+  - **Pre-Trade Approval**: No live trade executes without explicit human confirmation
+  - **Pending Queue**: Trade proposals with configurable expiry (default 5 minutes)
+  - **Kill Switch**: Emergency `kill_switch()` cancels all pending trades
+  - **macOS Notifications**: Real-time approval alerts with trade details
+  - **Audit Trail**: Complete history logged to `data/trading/approvals/history.jsonl`
+  - **CLI Interface**: `python core/approval_gate.py [submit|list|approve|reject|kill|status]`
+
+### 📊 Walk-Forward Validation
+
+- **Enhanced:** `core/trading_pipeline.py` (+111 lines)
+  - **`walk_forward_backtest()`**: Time-series cross-validation with anchored splits
+  - **`summarize_walk_forward()`**: Aggregates metrics across 5 out-of-sample folds
+  - **Overfitting Prevention**: Tests strategies on multiple unseen time periods
+  - **Promotion Rules**: Requires avg Sharpe > 1.0, Max DD < 20%, 3/5 passing folds
+  - **Industry Standard**: Prevents fantasy PnL from curve-fitting
+
+### 🤖 DSPy Strategy Optimization
+
+- **New Module:** `core/dspy_classifier.py` (440 lines)
+  - **ClassifyStrategy Signature**: Auto-categorize trading strategies
+  - **AnalyzeStrategyRisk Signature**: Identify failure modes and controls
+  - **ProposePatch Signature**: AI-generated code improvements
+  - **GenerateTestCase Signature**: Pytest test generation
+  - **Local LLM Support**: Ollama integration (qwen2.5:7b) for privacy
+  - **BootstrapFewShot Optimizer**: Prompt optimization with 8 training examples
+  - **Graceful Fallback**: Works without DSPy installed, optional `pip install dspy-ai`
+
+### 🔍 Comprehensive System Audit
+
+- **New Document:** `COMPREHENSIVE_AUDIT_2026-01-03.md` (750+ lines)
+  - **Repo Map**: Functional boundaries (Trading, Autonomy, Risk, Data, Memory)
+  - **Risk Register**: 10 prioritized risks (R1-R10) with mitigation plans
+  - **Architecture vNext**: Mermaid diagrams, interface contracts, 5-phase migration
+  - **Strategy Classification**: Updated schema with 12 strategies mapped
+  - **Backtesting Plan**: Walk-forward implementation, Coliseum promotion rules
+  - **Security Hardening**: Key migration, pre-commit hooks, process isolation
+  - **DSPy Integration**: Signatures for classification, risk, patches
+
+### 🐛 Bug Fixes
+
+- **Fixed:** `core/providers.py` - Missing `PROVIDER_RANKINGS = [` declaration
+  - Was blocking all core module imports with "unmatched ]" syntax error
+  - Added proper list initialization at line 454
+
+### ✅ Verification & Testing
+
+- **All patches tested end-to-end:**
+  - Walk-forward: 5 folds, avg Sharpe 3.7, Total PnL $18.10
+  - Approval gate: Submit → Approve → Kill switch ✓
+  - Cycle governor: Cooldown enforcement (299s) ✓
+  - Error recovery: max_attempts=5 verified ✓
+  - Observer mode: Already set to "lite" ✓
+
+### 🎯 Configuration Updates
+
+- **Observer mode**: Confirmed `"mode": "lite"` for privacy (no keystroke logging)
+- **Error recovery**: Circuit breaker enforces max 5 retry attempts
+- **Circular logic**: CycleGovernor blocks detected loops
+
+### 📦 Dependencies
+
+```bash
+# Optional for DSPy optimization
+pip install dspy-ai
+```
+
+### 🔗 Related Work
+
+- Builds on v2.1.0 Quantitative Trading Infrastructure
+- Addresses top issues from AUDIT_REPORT.md and TOP_ISSUES.md
+- Implements recommendations from SELF_IMPROVEMENT.md
+
+---
+
 # [2.1.0] - 2026-01-03
 
 ### 🚀 **MAJOR RELEASE: Quantitative Trading Infrastructure**

@@ -4,7 +4,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-venv_python = ROOT / "venv" / "bin" / "python"
+venv311 = ROOT / "venv311" / "bin" / "python"
+venv_python = venv311 if venv311.exists() else (ROOT / "venv" / "bin" / "python")
 if venv_python.exists():
     in_venv = getattr(sys, "base_prefix", sys.prefix) != sys.prefix
     # Re-exec inside venv for consistent deps when available.

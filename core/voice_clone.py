@@ -47,6 +47,9 @@ _tts_install_success = False
 def _install_tts() -> bool:
     """Install Coqui TTS if not present."""
     global _tts_install_attempted, _tts_install_success
+
+    min_version = (3, 9)
+    max_version = (3, 12)
     
     try:
         import TTS
@@ -56,6 +59,16 @@ def _install_tts() -> bool:
         # Only try to install once per session
         if _tts_install_attempted:
             return _tts_install_success
+
+        if not (min_version <= sys.version_info[:2] < max_version):
+            print(
+                "Coqui TTS requires Python 3.9-3.11. "
+                f"Current: {sys.version_info.major}.{sys.version_info.minor}. "
+                "Use a Python 3.11 venv or switch to Piper/macOS say."
+            )
+            _tts_install_success = False
+            _tts_install_attempted = True
+            return False
         
         _tts_install_attempted = True
         print("Installing Coqui TTS (this may take a few minutes)...")

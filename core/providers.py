@@ -451,6 +451,7 @@ def transcribe_audio_gemini(audio_path: str) -> Optional[str]:
 # Priority: OpenRouter (no limits) → Groq (fast but limited) → Local
 # Updated Jan 2026: Removed decommissioned llama-3.3-70b-specdec
 
+PROVIDER_RANKINGS = [
     # Rank 0: Native MiniMax (Direct, low latency, high quality)
     {"name": "minimax-latest", "provider": "minimax", "intelligence": 96, "free": False, "notes": "Direct MiniMax (abab6.5-chat)"},
 

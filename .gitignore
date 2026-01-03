@@ -68,6 +68,7 @@ conversation_*.json
 
 # === PYTHON ===
 venv/
+venv311/
 .venv/
 env/
 .env/

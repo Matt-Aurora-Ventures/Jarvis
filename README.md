@@ -42,7 +42,7 @@ At `http://localhost:5001`, Jarvis provides a SOC-style command center:
 
 - **📈 Trading Pipeline**
   - Live Backtesting Progress (50 Tokens × 50 Strategies)
-  - Solana Token Scanning (BirdEye Integration)
+  - Solana Token Scanning (BirdEye + Jupiter cache + DexScreener)
   - Strategy Performance Tracking
 
 - **💬 Communication Link**
@@ -98,6 +98,29 @@ At `http://localhost:5001`, Jarvis provides a SOC-style command center:
 - **Encrypted Key Storage**: Fernet encryption with PBKDF2 key derivation
 - **IP Whitelisting**: Per-key access control (lessons from 3Commas breach)
 - **Secrets Scanner**: Codebase audit for leaked credentials
+- **Slippage Tolerance**: Order rejection on excessive slippage
+
+**Human Approval Gate** (`core/approval_gate.py`) - **NEW v2.2**:
+- **Pre-Trade Approval**: No live trade executes without explicit human approval
+- **Pending Queue**: Trade proposals with 5-minute expiry
+- **Kill Switch**: Emergency cancellation of all pending trades
+- **macOS Notifications**: Real-time alerts for approval requests
+- **Audit Trail**: Full history of approved/rejected/killed trades
+
+**Walk-Forward Validation** (`core/trading_pipeline.py`) - **NEW v2.2**:
+- **Time-Series Cross-Validation**: Industry-standard out-of-sample testing
+- **Anchored Splits**: 5-fold validation with expanding training window
+- **Overfitting Prevention**: Tests strategies on multiple unseen periods
+- **Pass/Fail Metrics**: Sharpe > 1.0, Drawdown < 20%, Win Rate > 40%
+- **Promotion Rules**: Requires 3/5 passing folds before live deployment
+
+**DSPy Strategy Optimization** (`core/dspy_classifier.py`) - **NEW v2.2**:
+- **Strategy Classification**: Auto-categorize strategies (arbitrage, momentum, mean reversion, etc.)
+- **Risk Analysis**: Identify failure modes and recommend controls
+- **Patch Proposals**: AI-generated code improvements with risk scoring
+- **Local LLM Support**: Works with Ollama (qwen2.5:7b) for privacy
+- **BootstrapFewShot**: Optimizes prompts using 8 hand-crafted training examples
+
 - **Slippage Tolerance**: Order rejection when execution deviates beyond threshold
 
 *Full documentation: `docs/QUANT_TRADING_GUIDE.md`*
@@ -107,6 +130,7 @@ At `http://localhost:5001`, Jarvis provides a SOC-style command center:
 - **Natural conversation**: Chat like you would with a person
 - **Hotkey**: Ctrl+Shift+Up for instant access
 - **Barge-in capable**: Interrupt mid-response
+- **Coqui XTTS voice clone (optional)**: Local voice cloning with 6–15s reference audio (Python 3.11 + ~2GB model download)
 - **Streaming consciousness**: Ring buffer context with intent prediction
 - **Cost-optimized**: Smart routing between Minimax and Whisper
 
@@ -145,6 +169,8 @@ At `http://localhost:5001`, Jarvis provides a SOC-style command center:
 ### 🔊 Offline Voice
 - **Piper TTS**: Bundled model auto-downloads to `data/voices/`, works with no internet
 - **Voice fallback**: Seamlessly drops to macOS `say` only if local synthesis fails
+- **Voice clone**: Optional Coqui XTTS local cloning; enable via `lifeos/config/lifeos.config.local.json`
+- **Voice doctor**: `./bin/lifeos doctor --voice` for full mic/STT/TTS diagnostics
 - **Configurable**: Customize `voice.tts_engine`, `piper_model`, and `speech_voice` in config
 
 ---
@@ -182,6 +208,38 @@ EOF
 
 # Check system health
 ./bin/lifeos doctor
+```
+
+### Optional: Coqui Voice Clone (Python 3.11)
+
+Coqui XTTS voice cloning requires Python 3.11. If you want the local clone voice,
+create a dedicated venv (`venv311`) and install the full macOS stack plus TTS.
+`./bin/lifeos` auto-detects `venv311` when it exists.
+
+```bash
+# Install Python 3.11 (macOS)
+brew install python@3.11
+
+# Create a dedicated venv for voice cloning
+/usr/local/bin/python3.11 -m venv venv311
+source venv311/bin/activate
+
+# Install macOS deps + Coqui TTS
+pip install -r requirements-mac.txt
+pip install TTS
+```
+
+If you hit `llvmlite` build errors on macOS, pin known-good versions first:
+
+```bash
+cat > constraints-voice.txt <<'EOF'
+numpy==1.26.4
+numba==0.60.0
+llvmlite==0.43.0
+EOF
+
+pip install -r requirements-mac.txt -c constraints-voice.txt
+pip install TTS -c constraints-voice.txt
 ```
 
 ### Launch the Ecosystem Dashboard
