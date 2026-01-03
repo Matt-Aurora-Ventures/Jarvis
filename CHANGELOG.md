@@ -4,6 +4,82 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [2.1.0] - 2026-01-03
+
+### 🚀 **MAJOR RELEASE: Quantitative Trading Infrastructure**
+
+This release transforms Jarvis's trading capabilities with advanced algorithmic strategies, real-time data ingestion, ML-based regime detection, and MEV execution on Solana.
+
+### 📊 Advanced Trading Strategies
+
+- **New Module:** `core/trading_strategies_advanced.py` (~700 lines)
+  - **TriangularArbitrage**: Cross-rate exploitation (BTC→ETH→USDT→BTC) with flash loan support
+  - **GridTrader**: Range-bound strategy for sideways markets with auto-level configuration
+  - **BreakoutTrader**: Support/resistance detection with volume confirmation
+  - **MarketMaker**: Bid-ask spread capture with inventory management and volatility scaling
+
+### 📡 Data Ingestion Layer
+
+- **New Module:** `core/data_ingestion.py` (~650 lines)
+  - **WebSocket Handlers**: Real-time streaming from Binance and Kraken
+  - **CCXT Integration**: Unified interface across 100+ exchanges
+  - **TickBuffer**: Ring buffer for tick-level data with OHLCV aggregation
+  - **Multi-Exchange Prices**: Spatial arbitrage detection across venues
+
+### 🧠 ML Volatility Regime Detection
+
+- **New Module:** `core/ml_regime_detector.py` (~700 lines)
+  - **VolatilityRegimeDetector**: Random Forest/Gradient Boosting classifiers
+  - **Feature Extraction**: RSI, Bollinger position, volatility metrics, momentum indicators
+  - **Regime Classification**: Low/Medium/High/Extreme volatility states
+  - **AdaptiveStrategySwitcher**: Auto-switch between Grid, Mean Reversion, Trend Following
+
+### ⚡ MEV Execution (Solana)
+
+- **New Module:** `core/jito_executor.py` (~550 lines)
+  - **JitoBundleClient**: Bundle submission with simulation via Jito Block Engine
+  - **JitoExecutor**: High-level interface with tip calculation and retry logic
+  - **MEVScanner**: Sandwich opportunity detection in pending transactions
+  - **SmartOrderRouter (SOR)**: Order splitting across DEXs to minimize market impact
+
+### 🔒 Security Hardening
+
+- **New Module:** `core/security_hardening.py` (~600 lines)
+  - **SecureKeyManager**: Fernet encryption with PBKDF2 key derivation
+  - **IP Whitelisting**: Per-key access control (lessons from 3Commas breach)
+  - **SecurityAuditor**: Codebase scanning for leaked credentials
+  - **SlippageChecker**: Order rejection when execution deviates beyond tolerance
+
+### 📚 Documentation
+
+- **New:** `docs/QUANT_TRADING_GUIDE.md` - Comprehensive guide covering:
+  - Strategy categories (Arbitrage, MEV, Grid, Momentum, AI/Sentiment)
+  - Static vs Adaptive bots comparison
+  - Flashbots vs Jito Block Engine infrastructure analysis
+  - Risk assessment (Mean Reversion limitations, Market Making inventory risk)
+  - Architecture overview and quick start examples
+
+### 📈 README Enhancements
+
+- Added Quantitative Trading Infrastructure (v2.1) section
+- Expanded roadmap with 5-phase detailed next steps plan through Q4 2026
+- Added long-term vision for autonomous trading
+
+### 🔧 Dependencies (Optional)
+
+```bash
+pip install ccxt websockets scikit-learn numpy aiohttp cryptography
+# For Solana MEV: pip install solders
+```
+
+### ✅ Verification
+
+- All 5 new modules compile successfully
+- Each module includes runnable demo code at bottom
+- Graceful degradation when optional dependencies missing
+
+---
+
 # [1.0.0] - 2026-01-01
 
 ### 🚀 **MAJOR RELEASE: Minimax 2.1 Integration & Self-Evolving Architecture**
