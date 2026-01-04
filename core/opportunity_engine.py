@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 from core import config as config_module
+from core import fee_model, tokenized_equities_universe, event_catalyst
 from core import sentiment_trading
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -234,14 +235,81 @@ def _fetch_xstocks() -> Tuple[List[Dict[str, Any]], List[str]]:
     return _parse_xstocks(resp.text)
 
 
+def _extract_equity_items(payload: Any, *, source: str) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            keys = {str(k).lower() for k in node.keys()}
+            mint = node.get("mint") or node.get("mint_address") or node.get("solanaMint") or node.get("solana_address")
+            symbol = node.get("symbol") or node.get("ticker")
+            if mint and symbol:
+                items.append(
+                    {
+                        "symbol": str(symbol).upper(),
+                        "underlying_ticker": str(node.get("underlying") or symbol).upper(),
+                        "mint_address": mint,
+                        "issuer": source,
+                        "venues": node.get("venues") or ["solana_dex"],
+                        "verified": bool(node.get("verified")) if node.get("verified") is not None else False,
+                        "notes": node.get("name") or node.get("description") or "",
+                        "source": source,
+                    }
+                )
+            for value in node.values():
+                _walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                _walk(value)
+
+    _walk(payload)
+    return items
+
+
 def _fetch_backed() -> Tuple[List[Dict[str, Any]], List[str]]:
-    warnings = ["backed: no public token list discovered; provide official endpoint or token list"]
-    return [], warnings
+    warnings: List[str] = []
+    try:
+        resp = requests.get("https://backed.fi", timeout=20)
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        return [], [f"backed: request failed ({exc})"]
+
+    text = resp.text
+    match = re.search(r'__NEXT_DATA__\" type=\"application/json\">(.*?)</script>', text, re.DOTALL)
+    if not match:
+        return [], ["backed: __NEXT_DATA__ not found"]
+    try:
+        payload = json.loads(match.group(1))
+    except json.JSONDecodeError as exc:
+        return [], [f"backed: failed to parse __NEXT_DATA__ ({exc})"]
+
+    items = _extract_equity_items(payload, source="backed")
+    if not items:
+        warnings.append("backed: no solana mints found")
+    return items, warnings
 
 
 def _fetch_prestocks() -> Tuple[List[Dict[str, Any]], List[str]]:
-    warnings = ["prestocks: no public token list discovered; provide official endpoint or token list"]
-    return [], warnings
+    warnings: List[str] = []
+    try:
+        resp = requests.get("https://prestocks.com", timeout=20)
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        return [], [f"prestocks: request failed ({exc})"]
+
+    text = resp.text
+    match = re.search(r'__NEXT_DATA__\" type=\"application/json\">(.*?)</script>', text, re.DOTALL)
+    if not match:
+        return [], ["prestocks: __NEXT_DATA__ not found"]
+    try:
+        payload = json.loads(match.group(1))
+    except json.JSONDecodeError as exc:
+        return [], [f"prestocks: failed to parse __NEXT_DATA__ ({exc})"]
+
+    items = _extract_equity_items(payload, source="prestocks")
+    if not items:
+        warnings.append("prestocks: no solana mints found")
+    return items, warnings
 
 
 def _normalize_crypto_item(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -277,8 +345,9 @@ def get_tokenized_equities_universe(
     elif isinstance(cached, list):
         items.extend(cached)
 
-    if refresh and eq_cfg.get("allow_network") and eq_cfg.get("sources"):
-        for source in eq_cfg.get("sources", []):
+    sources = eq_cfg.get("sources") or engine_cfg.get("tokenized_equity_sources", [])
+    if refresh and eq_cfg.get("allow_network") and sources:
+        for source in sources:
             source_str = str(source)
             try:
                 if "xstocks.fi" in source_str:
@@ -534,6 +603,31 @@ def _required_edge_ratio(
     return base
 
 
+def _probabilistic_scores(
+    *,
+    sentiment_score: float,
+    confidence: float,
+    liquidity_score: float,
+    expected_edge_pct: float,
+    cost_pct: float,
+    engine_cfg: Dict[str, Any],
+) -> Dict[str, Any]:
+    prob_win = min(0.85, max(0.05, (sentiment_score * 0.45) + (confidence * 0.25) + (liquidity_score * 0.30)))
+    expected_return = expected_edge_pct - cost_pct
+    expected_drawdown = float(engine_cfg.get("risk_off_mode_trigger", {}).get("sol_volatility_pct", 8.0)) / 100
+    edge_to_cost = expected_edge_pct / cost_pct if cost_pct else None
+    timeframe = engine_cfg.get("signal_timeframe", "1h")
+    uncertainty = max(0.0, min(1.0, 1.0 - ((confidence * 0.6) + (liquidity_score * 0.4))))
+    return {
+        "prob_win": prob_win,
+        "expected_return_pct": expected_return,
+        "expected_drawdown_pct": expected_drawdown,
+        "edge_to_cost_ratio": edge_to_cost,
+        "time_to_resolution": timeframe,
+        "uncertainty": uncertainty,
+    }
+
+
 def _load_backtest_summary() -> Optional[Dict[str, Any]]:
     path = ROOT / "data" / "trader" / "solana_dex_one_day" / "summary.json"
     summary = _load_json(path)
@@ -564,7 +658,9 @@ def run_engine(
 ) -> Dict[str, Any]:
     engine_cfg = load_engine_config()
     state, state_path = load_engine_state(engine_cfg)
-    equities_snapshot = get_tokenized_equities_universe(engine_cfg, refresh=refresh_equities)
+    equities_snapshot = tokenized_equities_universe.load_universe()
+    if refresh_equities:
+        equities_snapshot = tokenized_equities_universe.refresh_universe()
     equities_universe = equities_snapshot.get("items", [])
     crypto_universe = load_crypto_universe(engine_cfg)
 
@@ -576,6 +672,24 @@ def run_engine(
             raw_signals = []
     else:
         raw_signals = [s.to_dict() for s in sentiment_trading.load_recent_signals()]
+
+    catalyst_scores: Dict[str, float] = {}
+    catalyst_horizons: Dict[str, str] = {}
+    for signal in raw_signals:
+        text = signal.get("text") if isinstance(signal, dict) else None
+        if not text:
+            continue
+        events = event_catalyst.extract_events(text)
+        if not events:
+            continue
+        mapped = event_catalyst.map_events_to_universe(events, equities_universe)
+        for entry in mapped:
+            asset = entry.get("asset", {})
+            symbol = str(asset.get("symbol") or asset.get("underlying_ticker") or "").upper()
+            if not symbol:
+                continue
+            catalyst_scores[symbol] = max(catalyst_scores.get(symbol, 0.0), float(entry.get("catalyst_score", 0.7)))
+            catalyst_horizons[symbol] = entry.get("horizon", "hours")
 
     candidates: List[Dict[str, Any]] = []
     for signal in raw_signals:
@@ -592,27 +706,27 @@ def run_engine(
 
     if not equities_universe:
         analysis_complete = False
-        blocking_issues.append(
-            "tokenized_equities_universe_empty: populate data/trader/tokenized_equities_universe.json or sources"
-        )
+        blocking_issues.append("tokenized_equities_universe_empty")
 
     ranked: List[Dict[str, Any]] = []
     rejections: List[Dict[str, Any]] = []
 
     for candidate in candidates:
         signal = candidate.get("signal", {})
-        sentiment_score, _ = _signal_strength(signal)
+        sentiment_score, confidence = _signal_strength(signal)
         momentum_score = float(signal.get("momentum_score", sentiment_score))
+        candidate_symbol = str(candidate.get("symbol") or "").upper()
         catalyst_score = float(signal.get("catalyst_score", 0.0))
+        if candidate_symbol in catalyst_scores:
+            catalyst_score = max(catalyst_score, catalyst_scores[candidate_symbol])
         liquidity_score = _score_liquidity(
             candidate.get("liquidity_usd", 0.0), candidate.get("volume_24h_usd", 0.0)
         )
 
-        cost = estimate_all_in_cost(
-            candidate,
-            size_usd=capital_usd,
-            venue=(candidate.get("venues") or ["dex"])[0],
-            cost_cfg=cost_cfg,
+        cost = fee_model.estimate_costs(
+            notional_usd=capital_usd,
+            asset_type="tokenized_equity" if candidate.get("asset_type") == "tokenized_equity" else "crypto",
+            issuer=candidate.get("issuer", ""),
         )
         cost_efficiency = _score_cost_efficiency(cost["total_pct"], max_cost_pct)
         expected_edge_pct, edge_note = _estimate_expected_edge(signal, engine_cfg)
@@ -657,6 +771,17 @@ def run_engine(
         )
         score *= weight
 
+        probabilistic = _probabilistic_scores(
+            sentiment_score=sentiment_score,
+            confidence=confidence,
+            liquidity_score=liquidity_score,
+            expected_edge_pct=expected_edge_pct,
+            cost_pct=cost["total_pct"],
+            engine_cfg=engine_cfg,
+        )
+        if candidate_symbol in catalyst_horizons:
+            probabilistic["time_to_resolution"] = catalyst_horizons[candidate_symbol]
+
         ranked.append(
             {
                 "asset_type": candidate.get("asset_type"),
@@ -676,6 +801,7 @@ def run_engine(
                 "costs": cost,
                 "expected_edge_pct": expected_edge_pct,
                 "edge_to_cost_ratio": edge_to_cost,
+                "probabilistic": probabilistic,
                 "signal": signal,
             }
         )
@@ -718,6 +844,9 @@ def run_engine(
                 "stop_loss_pct": item["signal"].get("stop_loss_pct"),
                 "notes": "configure in execution layer",
             },
+            "edge_to_cost_ratio": item.get("edge_to_cost_ratio"),
+            "liquidity_exit_risk": item["scores"].get("liquidity", 0.0) < 0.35,
+            "compliance_unknown": compliance_status.get("eligible") in ("unknown", False),
             "risk_notes": item["signal"].get("risk_notes", []),
         }
         trade_intents.append(trade_intent)
@@ -742,6 +871,18 @@ def run_engine(
         },
     )
 
+    catalysts: List[Dict[str, Any]] = []
+    for signal in raw_signals:
+        text = signal.get("text") if isinstance(signal, dict) else None
+        if not text:
+            continue
+        events = event_catalyst.extract_events(text)
+        if not events:
+            continue
+        catalysts.extend(event_catalyst.map_events_to_universe(events, equities_universe))
+
+    unified_ranked = ranked
+
     return {
         "as_of": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "engine": {
@@ -751,7 +892,7 @@ def run_engine(
             "capital_usd": capital_usd,
         },
         "analysis_complete": analysis_complete,
-        "blocking_issues": blocking_issues,
+        "blocking_reasons": blocking_issues,
         "universe": {
             "crypto": crypto_universe,
             "tokenized_equities": equities_snapshot,
@@ -762,9 +903,11 @@ def run_engine(
             "tokenized_equities": equity_candidates,
         },
         "ranked": ranked,
+        "unified_ranked": unified_ranked,
         "trade_intents": trade_intents,
         "execution_plans": execution_plans,
         "cost_models": cost_models,
+        "catalysts": catalysts,
         "validation_summary": validation_summary,
         "risk_model": {
             "max_equities_exposure_pct": engine_cfg.get("max_equities_exposure_pct"),

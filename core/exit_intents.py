@@ -448,7 +448,11 @@ def _load_all_intents() -> Dict[str, Dict[str, Any]]:
             fcntl.flock(f.fileno(), fcntl.LOCK_SH)
             data = json.load(f)
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-            return data
+            if isinstance(data, list):
+                return {str(item.get("id") or idx): item for idx, item in enumerate(data)}
+            if isinstance(data, dict):
+                return data
+            return {}
     except (json.JSONDecodeError, IOError):
         return {}
 
@@ -692,15 +696,119 @@ def execute_action(
 
         return result
 
-    else:
-        # Live execution would go here
+    # Live execution path
+    try:
+        import asyncio
+        from core import solana_execution, solana_tokens, solana_wallet
+    except Exception as exc:
         return ExecutionResult(
             success=False,
             action=action.value,
             price=current_price,
             quantity=quantity,
-            error="Live execution not implemented",
+            error=f"Live execution unavailable: {exc}",
         )
+
+    keypair = solana_wallet.load_keypair()
+    if not keypair:
+        return ExecutionResult(
+            success=False,
+            action=action.value,
+            price=current_price,
+            quantity=quantity,
+            error="Live execution blocked: no Solana keypair found",
+        )
+
+    if solana_execution.VersionedTransaction is None:
+        return ExecutionResult(
+            success=False,
+            action=action.value,
+            price=current_price,
+            quantity=quantity,
+            error="Live execution blocked: solana SDK unavailable",
+        )
+
+    input_mint = intent.token_mint
+    output_mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"  # USDC
+    decimals = solana_tokens.get_token_decimals(input_mint, fallback=9)
+    amount_base_units = int(quantity * (10**decimals))
+    endpoints = solana_execution.load_solana_rpc_endpoints()
+
+    async def _run_swap():
+        quote = await solana_execution.get_swap_quote(
+            input_mint,
+            output_mint,
+            amount_base_units,
+            slippage_bps=200,
+        )
+        if not quote:
+            return solana_execution.SwapExecutionResult(success=False, error="quote_failed")
+        swap_tx = await solana_execution.get_swap_transaction(quote, str(keypair.pubkey()))
+        if not swap_tx:
+            return solana_execution.SwapExecutionResult(success=False, error="swap_tx_failed")
+        signed = solana_execution.VersionedTransaction.from_bytes(
+            __import__("base64").b64decode(swap_tx)
+        )
+        signed_tx = solana_execution.VersionedTransaction(signed.message, [keypair])
+        return await solana_execution.execute_swap_transaction(
+            signed_tx,
+            endpoints,
+            simulate=True,
+            commitment="confirmed",
+        )
+
+    try:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            result = asyncio.run(_run_swap())
+        else:
+            result = asyncio.run_coroutine_threadsafe(_run_swap(), loop).result()
+    except Exception as exc:
+        return ExecutionResult(
+            success=False,
+            action=action.value,
+            price=current_price,
+            quantity=quantity,
+            error=f"Live execution failed: {exc}",
+        )
+
+    if not result.success:
+        return ExecutionResult(
+            success=False,
+            action=action.value,
+            price=current_price,
+            quantity=quantity,
+            error=result.error or "execution_failed",
+        )
+
+    intent.remaining_quantity -= quantity
+    if intent.remaining_quantity <= 0.001:
+        intent.status = IntentStatus.COMPLETED.value
+        intent.remaining_quantity = 0
+    elif any(tp.filled for tp in intent.take_profits):
+        intent.status = IntentStatus.PARTIAL.value
+    persist_intent(intent)
+    _record_execution(
+        ExecutionResult(
+            success=True,
+            action=action.value,
+            price=current_price,
+            quantity=quantity,
+            pnl_usd=pnl_usd - fees_usd,
+            pnl_pct=pnl_pct,
+            fees_usd=fees_usd,
+        )
+    )
+    return ExecutionResult(
+        success=True,
+        action=action.value,
+        price=current_price,
+        quantity=quantity,
+        pnl_usd=pnl_usd - fees_usd,
+        pnl_pct=pnl_pct,
+        fees_usd=fees_usd,
+    )
 
 
 # ============================================================================

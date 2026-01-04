@@ -51,11 +51,15 @@ def _load_config() -> Dict[str, Any]:
     price_sources = daemon_cfg.get("price_sources", ["birdeye", "geckoterminal", "dexscreener"])
     log_path = _resolve_path(daemon_cfg.get("log_path"), DEFAULT_LOG_PATH)
     symbol_map_path = _resolve_path(daemon_cfg.get("symbol_map_path"), DEFAULT_SYMBOL_MAP)
+    reconcile_on_start = bool(daemon_cfg.get("reconcile_on_start", True))
+    auto_create_intents = bool(daemon_cfg.get("auto_create_intents", False))
     return {
         "poll_seconds": max(poll_seconds, 5),
         "price_sources": price_sources,
         "log_path": log_path,
         "symbol_map_path": symbol_map_path,
+        "reconcile_on_start": reconcile_on_start,
+        "auto_create_intents": auto_create_intents,
     }
 
 
@@ -257,8 +261,22 @@ def run() -> None:
     symbol_map_path = cfg["symbol_map_path"]
     poll_seconds = cfg["poll_seconds"]
     price_sources = cfg["price_sources"]
+    reconcile_on_start = cfg["reconcile_on_start"]
+    auto_create_intents = cfg["auto_create_intents"]
 
     logger.info("Trading daemon started. Poll=%ss sources=%s", poll_seconds, ",".join(price_sources))
+
+    if reconcile_on_start:
+        try:
+            from core import position_reconciler
+
+            report = position_reconciler.reconcile_positions(auto_create_intents=auto_create_intents)
+            missing = report.get("missing_intents", [])
+            if missing:
+                logger.warning("Reconcile found %d holdings without intents.", len(missing))
+            logger.info("Reconcile report written: %s", position_reconciler.RECONCILE_REPORT)
+        except Exception as exc:
+            logger.error("Reconcile failed: %s", str(exc)[:120])
 
     running = True
 

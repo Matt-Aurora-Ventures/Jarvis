@@ -13,7 +13,7 @@ from typing import Any, Deque, Dict, List, Optional
 from collections import deque
 
 import requests
-from core import config, secrets
+from core import config, secrets, state as state_module
 
 # Trading context injection for backup LLMs
 _TRADING_CONTEXT_ENABLED = True  # Enable trading knowledge for all LLMs
@@ -135,6 +135,15 @@ def _record_success_attempt(
     )
     _set_provider_error(provider_type, "")
     _record_attempt(attempt, diagnostics)
+    try:
+        state_module.update_state(
+            last_llm_provider=provider,
+            last_llm_model=metadata.get("model", ""),
+            last_llm_latency_ms=attempt.latency_ms,
+            last_llm_timestamp=time.time(),
+        )
+    except Exception:
+        pass
 
 
 def last_generation_attempts(limit: int = 10) -> List[Dict[str, Any]]:
@@ -907,6 +916,31 @@ def get_ranked_providers(prefer_free: bool = True) -> list:
     return available
 
 
+def _apply_routing_override(available: List[Dict[str, Any]], cfg: dict) -> List[Dict[str, Any]]:
+    override_model = os.environ.get("LIFEOS_MODEL_OVERRIDE") or cfg.get("router", {}).get("override_model")
+    override_provider = os.environ.get("LIFEOS_PROVIDER_OVERRIDE") or cfg.get("router", {}).get("override_provider")
+    if not override_model and not override_provider:
+        return available
+
+    def _matches(entry: Dict[str, Any]) -> bool:
+        if override_model and entry.get("name") != override_model:
+            return False
+        if override_provider and entry.get("provider") != override_provider:
+            return False
+        return True
+
+    override = None
+    for entry in available:
+        if _matches(entry):
+            override = entry
+            break
+    if not override:
+        return available
+
+    reordered = [override] + [entry for entry in available if entry is not override]
+    return reordered
+
+
 def _try_provider(
     provider: dict,
     prompt: str,
@@ -1049,6 +1083,7 @@ def generate_text(
     """
     cfg = config.load_config()
     ranked = get_ranked_providers(prefer_free=prefer_free)
+    ranked = _apply_routing_override(ranked, cfg)
     
     if not ranked:
         _log("No AI providers available")

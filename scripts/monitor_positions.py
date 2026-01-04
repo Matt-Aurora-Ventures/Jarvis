@@ -37,7 +37,10 @@ def load_intents():
     if not EXIT_FILE.exists():
         return []
     try:
-        return json.loads(EXIT_FILE.read_text())
+        data = json.loads(EXIT_FILE.read_text())
+        if isinstance(data, dict):
+            return list(data.values())
+        return data
     except Exception:
         return []
 

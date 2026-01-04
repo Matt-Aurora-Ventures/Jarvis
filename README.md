@@ -125,6 +125,36 @@ At `http://localhost:5001`, Jarvis provides a SOC-style command center:
 
 *Full documentation: `docs/QUANT_TRADING_GUIDE.md`*
 
+### 🧬 Self-Evolving Intelligence (Minimax 2.1 Core)
+- **Primary Routing**: Minimax 2.1 via OpenRouter with Groq + Ollama fallback
+- **Self-Correction Loop**: Nightly evaluation and patch proposals (Mirror Test)
+- **Action Verification**: Execute → verify → log, with audit trail
+- **Cost-Aware Routing**: Provider chain with health checks and spend controls
+
+### 🧾 Tokenized Equities (xStocks + PreStocks)
+- **Unified Universe**: Tokenized equities ingested alongside crypto candidates
+- **Solana Mints**: Verified SPL mint extraction from issuer sources
+- **Compliance Flags**: Default unknown gating with explicit opt-in
+- **Cost Controls**: Fee model + spread/slippage estimates with edge gating
+- **Event Catalysts**: X/Twitter signals mapped to equity tokens and horizons
+
+### 💸 Fee Model + Edge Gating
+- **All-in Cost Modeling**: Network fee + AMM fee + slippage + spread + issuer fees
+- **Edge-to-Cost Ratio**: Enforced minimums (>=2.0, >=3.0 thin liquidity)
+- **Conservative Defaults**: Safe fallback when issuer fees are unknown
+- **Persistent Profiles**: Stored in `data/trader/knowledge/fee_profiles.json`
+
+### 🛰️ Solana Execution Reliability
+- **RPC Failover**: Primary + fallback endpoints with health checks
+- **Simulation First**: Pre-flight sim before send
+- **Confirmation Loop**: Confirmed/finalized status checks
+- **Reconciliation**: On-chain balances reconciled with local intents
+
+### 🧪 Audit Suite (Run-All)
+- **One Command**: `python3 -m core.audit run_all`
+- **Coverage**: RPC health, Jupiter quote/sim, sentiment caching, equities ingestion, fee model, catalyst mapping
+- **Reports**: JSON output in `data/trader/audit_reports/`
+
 ### 🎯 LUT Micro-Alpha Trading Module (v2.3) - **NEW**
 
 High-risk trending token subsystem designed for the **$20 → $1,000,000 Challenge**.
@@ -198,6 +228,32 @@ High-conviction leveraged perpetuals for accelerated capital growth.
 - TP1: 50% @ +4% (or +1.5R)
 - TP2: 30% @ +8% (or +2.5R)
 - Runner: 20% with trailing stop
+
+---
+
+## 🔁 Mirror Test + Self-Correction (README_v2 Highlights)
+
+Every night Jarvis can:
+1. Replay the last 24 hours using Minimax 2.1
+2. Score its own performance (latency, accuracy, user satisfaction)
+3. Propose refactors and patches
+4. Dry-run changes on historical scenarios
+5. Auto-apply if confidence threshold is met
+
+## ⚔️ Paper-Trading Coliseum (README_v2 Highlights)
+- 81 extracted strategies
+- 10 randomized backtests per strategy
+- Auto-prune after repeated failures
+- Promotion only with strong Sharpe + drawdown metrics
+
+## 🎙️ Streaming Consciousness Voice (README_v2 Highlights)
+- Barge-in prediction and interruption handling
+- Ring-buffered context for low-latency responses
+- Pre-cached likely intents for instant replies
+
+## 🔐 Action Verification Loop (README_v2 Highlights)
+- Execute → verify → log
+- Audit trail for actions and follow-up checks
 - Time Stop: 60 minutes
 
 **Promotion Requirements**:

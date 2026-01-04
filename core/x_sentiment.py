@@ -6,12 +6,20 @@ native integration with X.com data and understanding of social media context.
 """
 
 import json
+import logging
 import re
-from typing import Dict, List, Optional, Any
+import time
+from hashlib import sha256
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
 
 from core import providers, config
 
+ROOT = Path(__file__).resolve().parents[1]
+CACHE_PATH = ROOT / "data" / "trader" / "grok_cache.json"
+USAGE_PATH = ROOT / "data" / "trader" / "grok_usage.json"
+logger = logging.getLogger(__name__)
 
 @dataclass
 class SentimentResult:
@@ -46,6 +54,116 @@ def _is_grok_available() -> bool:
     return client is not None
 
 
+def _load_json(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+        return data if isinstance(data, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _write_json(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2))
+
+
+def _budget_config() -> Dict[str, Any]:
+    cfg = config.load_config()
+    policy = cfg.get("sentiment_spend_policy", {})
+    return {
+        "enabled": bool(policy.get("enabled", True)),
+        "daily_budget_usd": float(policy.get("daily_budget_usd", 3.0)),
+        "warn_at_usd": float(policy.get("warn_at_usd", 3.0)),
+        "per_request_cost_usd": float(policy.get("per_request_cost_usd", 0.05)),
+        "per_cycle_cap": int(policy.get("per_cycle_cap", 5)),
+        "ttl_seconds": int(policy.get("ttl_seconds", 3600)),
+    }
+
+
+def _usage_key() -> str:
+    return time.strftime("%Y-%m-%d")
+
+
+def _check_budget(requests_needed: int = 1) -> Tuple[bool, Dict[str, Any]]:
+    policy = _budget_config()
+    if not policy["enabled"]:
+        return True, policy
+    usage = _load_json(USAGE_PATH)
+    day_key = _usage_key()
+    daily = usage.get(day_key, {"requests": 0, "cost_usd": 0.0})
+    projected_cost = daily["cost_usd"] + (requests_needed * policy["per_request_cost_usd"])
+    if projected_cost > policy["daily_budget_usd"]:
+        return False, policy
+    return True, policy
+
+
+def _record_usage(requests_used: int) -> None:
+    policy = _budget_config()
+    if not policy["enabled"]:
+        return
+    usage = _load_json(USAGE_PATH)
+    day_key = _usage_key()
+    daily = usage.get(day_key, {"requests": 0, "cost_usd": 0.0})
+    daily["requests"] = int(daily.get("requests", 0)) + requests_used
+    daily["cost_usd"] = float(daily.get("cost_usd", 0.0)) + (requests_used * policy["per_request_cost_usd"])
+    usage[day_key] = daily
+    _write_json(USAGE_PATH, usage)
+    if daily["cost_usd"] >= policy["warn_at_usd"]:
+        logger.warning("Grok spend warning: $%.2f >= $%.2f", daily["cost_usd"], policy["warn_at_usd"])
+
+
+def _cache_key(text: str, focus: str) -> str:
+    payload = f"{focus}::{text}".encode("utf-8")
+    return sha256(payload).hexdigest()
+
+
+def _cache_get(text: str, focus: str) -> Optional[Dict[str, Any]]:
+    policy = _budget_config()
+    cache = _load_json(CACHE_PATH)
+    key = _cache_key(text, focus)
+    entry = cache.get(key)
+    if not entry:
+        return None
+    if time.time() - float(entry.get("timestamp", 0)) > policy["ttl_seconds"]:
+        return None
+    return entry.get("payload")
+
+
+def _cache_set(text: str, focus: str, payload: Dict[str, Any]) -> None:
+    cache = _load_json(CACHE_PATH)
+    cache[_cache_key(text, focus)] = {
+        "timestamp": time.time(),
+        "payload": payload,
+    }
+    _write_json(CACHE_PATH, cache)
+
+
+def _heuristic_sentiment(text: str) -> SentimentResult:
+    lowered = text.lower()
+    score = 0
+    for word in ("bull", "bullish", "pump", "moon", "breakout", "strong"):
+        if word in lowered:
+            score += 1
+    for word in ("bear", "bearish", "dump", "rug", "weak", "scam"):
+        if word in lowered:
+            score -= 1
+    sentiment = "neutral"
+    if score >= 2:
+        sentiment = "positive"
+    elif score <= -2:
+        sentiment = "negative"
+    return SentimentResult(
+        text=text,
+        sentiment=sentiment,
+        confidence=0.35,
+        key_topics=[],
+        emotional_tone="heuristic",
+        market_relevance=None,
+    )
+
+
 def analyze_sentiment(
     text: str,
     context: Optional[str] = None,
@@ -62,8 +180,16 @@ def analyze_sentiment(
     Returns:
         SentimentResult or None if Grok unavailable
     """
+    cached = _cache_get(text, focus)
+    if cached:
+        return SentimentResult(**cached)
+
+    allowed, policy = _check_budget(1)
+    if not allowed:
+        return _heuristic_sentiment(text)
+
     if not _is_grok_available():
-        return None
+        return _heuristic_sentiment(text)
 
     cfg = config.load_config()
     model = cfg.get("providers", {}).get("grok", {}).get("model", "grok-beta")
@@ -94,7 +220,7 @@ Respond with ONLY valid JSON, no other text."""
     try:
         response = providers._ask_grok(prompt, model, max_output_tokens=800)
         if not response:
-            return None
+            return _heuristic_sentiment(text)
 
         # Extract JSON from response
         json_match = re.search(r'\{.*\}', response, re.DOTALL)
@@ -103,7 +229,7 @@ Respond with ONLY valid JSON, no other text."""
 
         data = json.loads(json_match.group())
 
-        return SentimentResult(
+        result = SentimentResult(
             text=text,
             sentiment=data.get("sentiment", "neutral"),
             confidence=float(data.get("confidence", 0.5)),
@@ -111,8 +237,11 @@ Respond with ONLY valid JSON, no other text."""
             emotional_tone=data.get("emotional_tone", "neutral"),
             market_relevance=data.get("market_relevance")
         )
+        _cache_set(text, focus, asdict(result))
+        _record_usage(1)
+        return result
     except Exception as e:
-        return None
+        return _heuristic_sentiment(text)
 
 
 def analyze_trend(
@@ -129,6 +258,10 @@ def analyze_trend(
     Returns:
         TrendAnalysis or None if Grok unavailable
     """
+    allowed, policy = _check_budget(1)
+    if not allowed:
+        return None
+
     if not _is_grok_available():
         return None
 
@@ -160,7 +293,7 @@ Respond with ONLY valid JSON, no other text."""
 
         data = json.loads(json_match.group())
 
-        return TrendAnalysis(
+        result = TrendAnalysis(
             topic=data.get("topic", topic),
             sentiment=data.get("sentiment", "neutral"),
             volume=data.get("volume", "medium"),
@@ -168,6 +301,8 @@ Respond with ONLY valid JSON, no other text."""
             notable_voices=data.get("notable_voices", []),
             market_impact=data.get("market_impact")
         )
+        _record_usage(1)
+        return result
     except Exception as e:
         return None
 
@@ -186,10 +321,84 @@ def batch_sentiment_analysis(
     Returns:
         List of SentimentResults (None for failed analyses)
     """
-    results = []
-    for text in texts:
-        result = analyze_sentiment(text, focus=focus)
-        results.append(result)
+    if not texts:
+        return []
+
+    cached_results: Dict[int, SentimentResult] = {}
+    uncached: List[str] = []
+    uncached_indexes: List[int] = []
+    for idx, text in enumerate(texts):
+        cached = _cache_get(text, focus)
+        if cached:
+            cached_results[idx] = SentimentResult(**cached)
+        else:
+            uncached.append(text)
+            uncached_indexes.append(idx)
+
+    results: List[Optional[SentimentResult]] = [None] * len(texts)
+    for idx, result in cached_results.items():
+        results[idx] = result
+
+    if not uncached:
+        return results
+
+    policy = _budget_config()
+    if len(uncached) > policy["per_cycle_cap"]:
+        uncached = uncached[: policy["per_cycle_cap"]]
+        uncached_indexes = uncached_indexes[: policy["per_cycle_cap"]]
+
+    allowed, policy = _check_budget(requests_needed=1)
+    if not allowed or not _is_grok_available():
+        for idx in uncached_indexes:
+            results[idx] = _heuristic_sentiment(texts[idx])
+        return results
+
+    model = config.load_config().get("providers", {}).get("grok", {}).get("model", "grok-beta")
+    prompt = {
+        "focus": focus,
+        "items": uncached,
+    }
+    batch_prompt = (
+        "Analyze sentiment for the following items and return JSON array with "
+        "sentiment, confidence, key_topics, emotional_tone, market_relevance.\n"
+        f"Payload:\n{json.dumps(prompt, indent=2)}\n"
+        "Respond with ONLY valid JSON."
+    )
+    response = providers._ask_grok(batch_prompt, model, max_output_tokens=1200)
+    if not response:
+        for idx in uncached_indexes:
+            results[idx] = _heuristic_sentiment(texts[idx])
+        return results
+
+    try:
+        json_match = re.search(r'\[.*\]', response, re.DOTALL)
+        if not json_match:
+            raise ValueError("batch_json_missing")
+        data = json.loads(json_match.group())
+    except Exception:
+        for idx in uncached_indexes:
+            results[idx] = _heuristic_sentiment(texts[idx])
+        return results
+
+    for local_idx, item in enumerate(data):
+        if local_idx >= len(uncached_indexes):
+            break
+        text = uncached[local_idx]
+        result = SentimentResult(
+            text=text,
+            sentiment=item.get("sentiment", "neutral"),
+            confidence=float(item.get("confidence", 0.5)),
+            key_topics=item.get("key_topics", []),
+            emotional_tone=item.get("emotional_tone", "neutral"),
+            market_relevance=item.get("market_relevance"),
+        )
+        results[uncached_indexes[local_idx]] = result
+        _cache_set(text, focus, asdict(result))
+
+    _record_usage(1)
+    for idx in uncached_indexes:
+        if results[idx] is None:
+            results[idx] = _heuristic_sentiment(texts[idx])
     return results
 
 

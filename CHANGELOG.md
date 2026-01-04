@@ -4,6 +4,41 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [2.3.0] - 2026-01-04
+
+### ⚙️ Tokenized Equities + Execution Reliability
+
+- **New Universe Ingestion:** `core/tokenized_equities_universe.py`
+  - xStocks products ingestion via Next.js data endpoint
+  - PreStocks products + sitemap scraping with Solana mint extraction
+  - Cached universe stored in `data/trader/universe/tokenized_equities.json`
+
+- **Fee Model:** `core/fee_model.py`
+  - Network + AMM + slippage + spread + issuer fee modeling
+  - Edge-to-cost ratio gating enforced in opportunity engine
+  - Persisted profiles in `data/trader/knowledge/fee_profiles.json`
+
+- **Event/Catalyst Mapping:** `core/event_catalyst.py`
+  - Extracts catalysts from X/Twitter sentiment text
+  - Maps company names/tickers to tokenized equities
+  - Adjusts scoring horizon for catalyst windows
+
+- **Execution Reliability:** `core/solana_execution.py`
+  - RPC failover, simulation before send, confirmation loop
+  - Shared wallet loader (`core/solana_wallet.py`) + token metadata (`core/solana_tokens.py`)
+
+- **Exit Enforcement + Reconciliation:**
+  - Live exit intents can execute swaps when enabled
+  - On-chain reconciliation on daemon boot with optional auto intent creation
+
+- **Audit Suite Expanded:** `python3 -m core.audit run_all`
+  - Includes equities ingestion, fee model, catalysts, and Grok caching tests
+
+- **Grok Spend Controls:** `core/x_sentiment.py`
+  - TTL caching, batching, daily budget caps with warnings
+
+---
+
 # [2.2.0] - 2026-01-03
 
 ### 🛡️ **MAJOR RELEASE: Trading Safety & Optimization**

@@ -402,6 +402,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-locked-pct", type=float, default=50.0)
     parser.add_argument("--min-locked-usd", type=float, default=0.0)
     parser.add_argument("--stop-on-hit", action="store_true")
+    parser.add_argument("--include-tokenized-equities", action="store_true")
+    parser.add_argument("--refresh-tokenized-equities", action="store_true")
     return parser.parse_args()
 
 
@@ -480,7 +482,7 @@ def load_tokens(args: argparse.Namespace) -> List[Dict[str, Any]]:
             pass
 
     if args.source == "dexscreener":
-        return collect_token_universe_dexscreener(
+        tokens = collect_token_universe_dexscreener(
             limit_tokens=args.limit_tokens,
             token_scan_limit=args.token_scan_limit,
             min_liquidity_usd=args.min_liquidity_usd,
@@ -490,8 +492,9 @@ def load_tokens(args: argparse.Namespace) -> List[Dict[str, Any]]:
             cache_hours=args.token_cache_hours,
             sample_seed=args.token_sample_seed,
         )
+        return _extend_with_tokenized_equities(tokens, args)
     if args.source == "geckoterminal":
-        return collect_token_universe_geckoterminal(
+        tokens = collect_token_universe_geckoterminal(
             limit_tokens=args.limit_tokens,
             pages=args.pages,
             sort=args.sort,
@@ -499,8 +502,9 @@ def load_tokens(args: argparse.Namespace) -> List[Dict[str, Any]]:
             min_volume_usd=args.min_volume_usd,
             sleep_seconds=args.sleep_seconds,
         )
+        return _extend_with_tokenized_equities(tokens, args)
     if args.source == "birdeye":
-        return collect_token_universe_birdeye(
+        tokens = collect_token_universe_birdeye(
             limit_tokens=args.limit_tokens,
             token_scan_limit=args.token_scan_limit,
             min_liquidity_usd=args.min_liquidity_usd,
@@ -510,8 +514,9 @@ def load_tokens(args: argparse.Namespace) -> List[Dict[str, Any]]:
             cache_hours=args.token_cache_hours,
             sample_seed=args.token_sample_seed,
         )
+        return _extend_with_tokenized_equities(tokens, args)
     if args.source == "phantom":
-        return collect_token_universe_phantom(
+        tokens = collect_token_universe_phantom(
             limit_tokens=args.limit_tokens,
             token_scan_limit=args.token_scan_limit,
             min_liquidity_usd=args.min_liquidity_usd,
@@ -522,7 +527,8 @@ def load_tokens(args: argparse.Namespace) -> List[Dict[str, Any]]:
             token_list_path=Path(args.phantom_token_list),
             token_list_url=args.phantom_token_url,
         )
-    return collect_token_universe_multi(
+        return _extend_with_tokenized_equities(tokens, args)
+    tokens = collect_token_universe_multi(
         limit_tokens=args.limit_tokens,
         pages=args.pages,
         sort=args.sort,
@@ -536,6 +542,47 @@ def load_tokens(args: argparse.Namespace) -> List[Dict[str, Any]]:
         phantom_token_list=Path(args.phantom_token_list),
         phantom_token_url=args.phantom_token_url,
     )
+    return _extend_with_tokenized_equities(tokens, args)
+
+
+def _extend_with_tokenized_equities(
+    tokens: List[Dict[str, Any]],
+    args: argparse.Namespace,
+) -> List[Dict[str, Any]]:
+    if not args.include_tokenized_equities:
+        return tokens
+    try:
+        from core import tokenized_equities_universe
+    except Exception:
+        return tokens
+
+    if args.refresh_tokenized_equities:
+        snapshot = tokenized_equities_universe.refresh_universe()
+    else:
+        snapshot = tokenized_equities_universe.load_universe()
+    equities = snapshot.get("items", []) or []
+    merged = list(tokens)
+    for item in equities:
+        mint = item.get("mint_address")
+        if not mint:
+            continue
+        merged.append(
+            {
+                "symbol": item.get("symbol") or mint[:6],
+                "name": item.get("underlying_ticker") or item.get("symbol") or mint,
+                "address": mint,
+                "quote_symbol": "USDC",
+                "quote_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                "pool_address": None,
+                "pool_name": "tokenized_equity",
+                "pool_id": f"tokenized_equity:{mint}",
+                "dex": "solana",
+                "volume_24h": float(item.get("volume_24h_usd") or 0.0),
+                "reserve_usd": float(item.get("liquidity_usd") or 0.0),
+                "sources": ["tokenized_equity"],
+            }
+        )
+    return merged
 
 
 def _resolve_token_address(token: Dict[str, Any]) -> Optional[str]:

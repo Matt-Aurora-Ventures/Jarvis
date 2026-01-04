@@ -26,9 +26,7 @@ import argparse
 import asyncio
 import base64
 import json
-import os
 import sys
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -46,10 +44,7 @@ except ImportError:
 try:
     from solders.keypair import Keypair
     from solders.transaction import VersionedTransaction
-    from solders.message import to_bytes_versioned
     from solana.rpc.async_api import AsyncClient
-    from solana.rpc.commitment import Confirmed
-    import base58
     HAS_SOLANA = True
 except ImportError:
     HAS_SOLANA = False
@@ -119,120 +114,15 @@ class SwapResult:
 # ============================================================================
 
 def load_keypair(path: Optional[str] = None) -> Optional[Keypair]:
-    """
-    Load Solana keypair from file.
-    
-    Tries (in order):
-    1. Provided path
-    2. ~/.config/solana/id.json (Solana CLI default)
-    3. secrets/keys.json (LifeOS format)
-    4. SOLANA_PRIVATE_KEY env var
-    """
-    if not HAS_SOLANA:
-        print("❌ Solana SDK not installed")
-        return None
-    
-    # Try provided path
-    if path:
-        return _load_keypair_from_file(Path(path))
-    
-    # Try Solana CLI default
-    solana_default = Path.home() / ".config" / "solana" / "id.json"
-    if solana_default.exists():
-        kp = _load_keypair_from_file(solana_default)
-        if kp:
-            print(f"✅ Loaded keypair from {solana_default}")
-            return kp
-    
-    # Try LifeOS wallets directory
-    lifeos_wallets = Path.home() / ".lifeos" / "wallets"
-    if lifeos_wallets.exists():
-        # Try JSON format first
-        json_wallet = lifeos_wallets / "phantom_trading_wallet.json"
-        if json_wallet.exists():
-            kp = _load_keypair_from_file(json_wallet)
-            if kp:
-                print(f"✅ Loaded keypair from {json_wallet}")
-                return kp
-        
-        # Try base58 format
-        base58_wallet = lifeos_wallets / "phantom_trading_wallet.base58"
-        if base58_wallet.exists():
-            try:
-                key_str = base58_wallet.read_text().strip()
-                secret_bytes = base58.b58decode(key_str)
-                kp = Keypair.from_bytes(secret_bytes)
-                print(f"✅ Loaded keypair from {base58_wallet}")
-                return kp
-            except Exception as e:
-                print(f"⚠️  Failed to load from base58 wallet: {e}")
-    
-    # Try LifeOS secrets
-    lifeos_secrets = Path(__file__).parent.parent / "secrets" / "keys.json"
-    if lifeos_secrets.exists():
-        kp = _load_keypair_from_lifeos_secrets(lifeos_secrets)
-        if kp:
-            print(f"✅ Loaded keypair from LifeOS secrets")
-            return kp
-    
-    # Try env var
-    env_key = os.environ.get("SOLANA_PRIVATE_KEY")
-    if env_key:
-        try:
-            secret_bytes = base58.b58decode(env_key)
-            kp = Keypair.from_bytes(secret_bytes)
-            print("✅ Loaded keypair from SOLANA_PRIVATE_KEY env var")
-            return kp
-        except Exception as e:
-            print(f"⚠️  Failed to load from env var: {e}")
-    
-    print("❌ No keypair found. Options:")
-    print("   1. Run: solana-keygen new")
-    print("   2. Set SOLANA_PRIVATE_KEY env var")
-    print("   3. Add solana_private_key to secrets/keys.json")
-    return None
+    from core import solana_wallet
 
-
-def _load_keypair_from_file(path: Path) -> Optional[Keypair]:
-    """Load keypair from JSON array file (Solana CLI format)."""
-    try:
-        data = json.loads(path.read_text())
-        if isinstance(data, list):
-            secret_bytes = bytes(data)
-            return Keypair.from_bytes(secret_bytes)
-    except Exception as e:
-        print(f"⚠️  Failed to load keypair from {path}: {e}")
-    return None
-
-
-def _load_keypair_from_lifeos_secrets(path: Path) -> Optional[Keypair]:
-    """Load keypair from LifeOS secrets format."""
-    try:
-        data = json.loads(path.read_text())
-        
-        # Try different key names
-        for key_name in ["solana_private_key", "solana_key", "private_key", "wallet_key"]:
-            if key_name in data:
-                key_value = data[key_name]
-                
-                # Try base58 decode
-                try:
-                    secret_bytes = base58.b58decode(key_value)
-                    return Keypair.from_bytes(secret_bytes)
-                except:
-                    pass
-                
-                # Try JSON array
-                try:
-                    if isinstance(key_value, list):
-                        secret_bytes = bytes(key_value)
-                        return Keypair.from_bytes(secret_bytes)
-                except:
-                    pass
-                
-    except Exception as e:
-        print(f"⚠️  Failed to load from LifeOS secrets: {e}")
-    return None
+    keypair = solana_wallet.load_keypair(path)
+    if not keypair:
+        print("❌ No keypair found. Options:")
+        print("   1. Run: solana-keygen new")
+        print("   2. Set SOLANA_PRIVATE_KEY env var")
+        print("   3. Add solana_private_key to secrets/keys.json")
+    return keypair
 
 
 # ============================================================================
@@ -330,7 +220,11 @@ async def execute_swap(
         output_mint = output_token
     
     # Calculate amount in smallest units
-    input_decimals = DECIMALS.get(input_token.upper(), 6)
+    from core import solana_tokens
+
+    input_decimals = DECIMALS.get(input_token.upper())
+    if input_decimals is None:
+        input_decimals = solana_tokens.get_token_decimals(input_mint, fallback=6)
     amount_lamports = int(amount_usd * (10 ** input_decimals))
     
     print(f"\n🔄 Swapping {amount_usd} {input_token} → {output_token}")
@@ -345,7 +239,9 @@ async def execute_swap(
         return SwapResult(success=False, error="Failed to get quote")
     
     out_amount_raw = int(quote.get("outAmount", 0))
-    output_decimals = DECIMALS.get(output_token.upper(), 9)
+    output_decimals = DECIMALS.get(output_token.upper())
+    if output_decimals is None:
+        output_decimals = solana_tokens.get_token_decimals(output_mint, fallback=9)
     out_amount = out_amount_raw / (10 ** output_decimals)
     price_impact = float(quote.get("priceImpactPct", 0)) * 100
     
@@ -356,49 +252,42 @@ async def execute_swap(
     print("🔧 Building transaction...")
     user_pubkey = str(keypair.pubkey())
     swap_tx_b64 = await get_swap_transaction(quote, user_pubkey)
-    
+
     if not swap_tx_b64:
         return SwapResult(success=False, error="Failed to get swap transaction")
-    
-    # Deserialize, sign, and send
+
+    # Deserialize, sign, and send via reliable executor
     print("✍️  Signing transaction...")
     try:
+        from core import solana_execution
+
         tx_bytes = base64.b64decode(swap_tx_b64)
-        
-        # Parse the versioned transaction
-        from solders.transaction import VersionedTransaction as VTx
-        tx = VTx.from_bytes(tx_bytes)
-        
-        # Create a new signed transaction with our keypair
-        # The transaction from Jupiter has a placeholder signature that we replace
-        signed_tx = VTx(tx.message, [keypair])
-        
-        # Send to Solana
-        print("📤 Sending to Solana...")
-        async with AsyncClient(SOLANA_RPC) as client:
-            # Use send_transaction with skip_preflight for faster execution
-            from solana.rpc.types import TxOpts
-            result = await client.send_transaction(
-                signed_tx,
-                opts=TxOpts(skip_preflight=True, max_retries=3),
+        tx = VersionedTransaction.from_bytes(tx_bytes)
+        signed_tx = VersionedTransaction(tx.message, [keypair])
+
+        print("📤 Sending to Solana (RPC failover + confirm)...")
+        endpoints = solana_execution.load_solana_rpc_endpoints()
+        result = await solana_execution.execute_swap_transaction(
+            signed_tx,
+            endpoints,
+            simulate=True,
+            commitment="confirmed",
+        )
+
+        if result.success and result.signature:
+            sig_str = result.signature
+            print(f"\n✅ SWAP EXECUTED!")
+            print(f"   Signature: {sig_str}")
+            print(f"   Explorer: https://solscan.io/tx/{sig_str}")
+
+            return SwapResult(
+                success=True,
+                signature=sig_str,
+                input_amount=amount_usd,
+                output_amount=out_amount,
+                price_impact=price_impact,
             )
-            
-            if result.value:
-                sig_str = str(result.value)
-                print(f"\n✅ SWAP EXECUTED!")
-                print(f"   Signature: {sig_str}")
-                print(f"   Explorer: https://solscan.io/tx/{sig_str}")
-                
-                return SwapResult(
-                    success=True,
-                    signature=sig_str,
-                    input_amount=amount_usd,
-                    output_amount=out_amount,
-                    price_impact=price_impact,
-                )
-            else:
-                return SwapResult(success=False, error="No signature returned")
-                
+        return SwapResult(success=False, error=result.error or "Execution failed")
     except Exception as e:
         return SwapResult(success=False, error=str(e))
 
@@ -412,71 +301,32 @@ def create_exit_intent(
     token: str,
     entry_price: float,
     quantity: float,
-) -> Dict[str, Any]:
+):
     """Create exit intent for a new position."""
-    now = time.time()
-    
-    intent = {
-        "id": position_id[:8],
-        "position_id": position_id,
-        "position_type": "spot",
-        "token_mint": TOKENS.get(token.upper(), token),
-        "symbol": token.upper(),
-        "entry_price": entry_price,
-        "entry_timestamp": now,
-        "original_quantity": quantity,
-        "remaining_quantity": quantity,
-        "status": "active",
-        "take_profits": [
-            {"level": 1, "price": entry_price * 1.30, "size_pct": 60, "filled": False},
-            {"level": 2, "price": entry_price * 1.60, "size_pct": 25, "filled": False},
-            {"level": 3, "price": entry_price * 2.00, "size_pct": 15, "filled": False},
-        ],
-        "stop_loss": {
-            "price": entry_price * 0.88,
-            "size_pct": 100.0,
-            "adjusted": False,
-            "original_price": entry_price * 0.88,
-        },
-        "time_stop": {
-            "deadline_timestamp": now + (90 * 60),
-            "action": "exit_fully",
-            "triggered": False,
-        },
-        "trailing_stop": {
-            "active": False,
-            "trail_pct": 0.20,
-            "highest_price": entry_price,
-            "current_stop": 0.0,
-        },
-        "is_paper": False,
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-    }
-    
-    return intent
+    from core import exit_intents
+
+    token_mint = TOKENS.get(token.upper(), token)
+    return exit_intents.create_spot_intent(
+        position_id=position_id,
+        token_mint=token_mint,
+        symbol=token.upper(),
+        entry_price=entry_price,
+        quantity=quantity,
+        is_paper=False,
+    )
 
 
-def persist_exit_intent(intent: Dict[str, Any]) -> bool:
+def persist_exit_intent(intent) -> bool:
     """Persist exit intent to disk."""
-    trading_dir = Path.home() / ".lifeos" / "trading"
-    trading_dir.mkdir(parents=True, exist_ok=True)
-    intents_file = trading_dir / "exit_intents.json"
-    
-    intents = []
-    if intents_file.exists():
-        try:
-            data = json.loads(intents_file.read_text())
-            if isinstance(data, list):
-                intents = data
-            else:
-                intents = [data]
-        except:
-            intents = []
-    
-    intents.append(intent)
-    intents_file.write_text(json.dumps(intents, indent=2))
-    print(f"✅ Exit intent saved to {intents_file}")
-    return True
+    from core import exit_intents
+
+    try:
+        exit_intents.persist_intent(intent)
+        print(f"✅ Exit intent saved to {exit_intents.INTENTS_FILE}")
+        return True
+    except Exception as exc:
+        print(f"❌ Failed to save exit intent: {exc}")
+        return False
 
 
 # ============================================================================
@@ -534,7 +384,9 @@ Examples:
     if args.status:
         print("\n📊 Wallet Status")
         print("-" * 40)
-        async with AsyncClient(SOLANA_RPC) as client:
+        from core import solana_execution
+        endpoints = solana_execution.load_solana_rpc_endpoints()
+        async with AsyncClient(endpoints[0].url) as client:
             balance = await client.get_balance(keypair.pubkey())
             sol_balance = balance.value / 1e9
             print(f"   SOL: {sol_balance:.4f}")
@@ -563,6 +415,16 @@ Examples:
                 print(f"   Would receive: {out_amount:,.4f} {output_token}")
             return
         
+        # Check SOL balance for fees
+        from core import solana_execution
+        endpoints = solana_execution.load_solana_rpc_endpoints()
+        async with AsyncClient(endpoints[0].url) as client:
+            balance = await client.get_balance(keypair.pubkey())
+            sol_balance = balance.value / 1e9
+            if sol_balance <= 0.005:
+                print("❌ Insufficient SOL for fees. Top up before trading.")
+                return
+
         # Execute swap
         result = await execute_swap(
             input_token=input_token,
@@ -597,8 +459,48 @@ Examples:
     
     # Sell flow
     elif args.sell:
-        print("❌ Sell flow not yet implemented")
-        print("   Use Jupiter directly: https://jup.ag")
+        token = args.sell
+        percent = args.percent or 100.0
+        if percent <= 0:
+            print("❌ --percent must be > 0")
+            return
+
+        mint = TOKENS.get(token.upper(), token)
+        from core import solana_tokens
+
+        from core import solana_execution
+        endpoints = solana_execution.load_solana_rpc_endpoints()
+        async with AsyncClient(endpoints[0].url) as client:
+            resp = await client.get_token_accounts_by_owner(
+                keypair.pubkey(),
+                {"mint": mint},
+            )
+            if not resp.value:
+                print(f"❌ No token accounts found for {token}")
+                return
+            balance = 0.0
+            for item in resp.value:
+                amount = float(item.account.data.parsed["info"]["tokenAmount"]["uiAmount"] or 0.0)
+                balance += amount
+            if balance <= 0:
+                print(f"❌ Zero balance for {token}")
+                return
+
+        sell_amount = balance * (percent / 100.0)
+        print(f"\n🔄 Selling {sell_amount:.6f} {token} ({percent:.1f}% of balance)")
+
+        result = await execute_swap(
+            input_token=token,
+            output_token=args.to_token,
+            amount_usd=sell_amount,
+            keypair=keypair,
+            slippage_bps=args.slippage,
+        )
+
+        if result.success:
+            print(f"\n✅ SELL COMPLETE! Signature: {result.signature}")
+        else:
+            print(f"\n❌ Sell failed: {result.error}")
     
     else:
         parser.print_help()
