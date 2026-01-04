@@ -852,7 +852,48 @@ def my_skill(param1: str) -> str:
 
 ---
 
-## 🗺️ Roadmap
+## �️ Recent Fixes & Improvements (January 2026)
+
+### Terminal Execution Reliability
+- **Shell Executor Bypass**: Created `core/shell_executor.py` to bypass VS Code terminal hangs
+- **Timeout Protection**: All subprocess calls now have aggressive 10-30s timeouts
+- **Command Watchdog**: Background monitor kills stuck processes automatically (`core/command_watchdog.py`)
+- **Git Lock Cleanup**: Auto-removes stale `.git/index.lock` files from hung operations
+- **Command Validator**: Blocks dangerous command patterns that cause hangs (`core/command_validator.py`)
+
+### Trading Infrastructure
+- **Position Monitoring**: `scripts/monitor_positions.py` with async timeout protection
+- **Exit Intent System**: Auto-tracking of TP ladders and stop losses
+- **X/Twitter Sentiment**: Grok-4 integration for real-time sentiment analysis via xAI API
+- **DexScreener Integration**: Live price feeds with buy/sell transaction analysis
+
+### RPC & API Configuration
+- **Multi-Provider Setup**: Helius (primary) + Alchemy + public fallback for Solana
+- **Jupiter v6 API**: Quote and swap functionality with caching
+- **BirdEye Scanner**: Top token and whale tracking
+
+### MCP Server Status
+| Server | Status | Notes |
+|--------|--------|-------|
+| Git Server | ✅ Working | Commit, status, log operations |
+| System Monitor | ✅ Working | CPU, memory, network stats |
+| Obsidian Memory | ✅ Working | Knowledge graph operations |
+| Shell Server | ⚠️ Limited | Use shell_executor.py as bypass |
+
+### Configuration Requirements
+```bash
+# Required API keys in secrets/keys.json:
+{
+  "xai": {"api_key": "..."}, # For X/Twitter sentiment
+  "birdeye": {"api_key": "..."}, # For Solana token scanning
+  "helius": {"api_key": "..."}, # For Solana RPC (recommended)
+  "groq_api_key": "...", # For LLM calls
+}
+```
+
+---
+
+## �🗺️ Roadmap
 
 ### Completed ✓
 
