@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, providers, browser_automation, ability_acquisition, storage_utils, self_healing, vision_client
+from core import config, providers, browser_automation, ability_acquisition, storage_utils, self_healing, vision_client, safe_subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT_PATH = ROOT / "data" / "autonomous_agents"
@@ -270,26 +270,34 @@ Example format:
             return {"error": "No valid browser action specified"}
     
     def _terminal_tool(self, parameters: Dict[str, Any], context: Optional[Dict[str, Any]]) -> Any:
-        """Terminal execution tool."""
+        """Terminal execution tool with aggressive timeout protection."""
         command = parameters.get("command", "")
         if not command:
             return {"error": "No command specified"}
         
         try:
-            result = subprocess.run(
+            # Use safe_subprocess with auto-timeout detection
+            result = safe_subprocess.run_command_safe(
                 command,
+                timeout=parameters.get("timeout"),  # Auto-determined if None
                 shell=True,
                 capture_output=True,
-                text=True,
-                timeout=30
             )
+            
+            if result["timed_out"]:
+                return {
+                    "error": f"Command timed out after {result['timeout']}s and was killed",
+                    "timeout": result["timeout"],
+                    "stdout": result["stdout"],
+                    "stderr": result["stderr"],
+                }
+            
             return {
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "returncode": result.returncode
+                "stdout": result["stdout"],
+                "stderr": result["stderr"],
+                "returncode": result["returncode"],
+                "timeout": result["timeout"],
             }
-        except subprocess.TimeoutExpired:
-            return {"error": "Command timed out"}
         except Exception as e:
             return {"error": str(e)}
     

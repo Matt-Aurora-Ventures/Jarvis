@@ -32,14 +32,13 @@ EXCLUDE_PREFIXES = (
 )
 
 
-def _run_git(args: List[str], capture: bool = True, check: bool = True) -> subprocess.CompletedProcess:
+def _run_git(args: List[str], capture: bool = True, check: bool = True, timeout: int = 30) -> subprocess.CompletedProcess:
     """Run a git command within the repo root."""
-    result = subprocess.run(
+    from core import safe_subprocess
+    result = safe_subprocess.run_command_safe(
         ["git", *args],
         cwd=str(ROOT),
-        capture_output=capture,
-        text=True,
-        check=False,
+        timeout=timeout,
     )
     if check and result.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr.strip()}")

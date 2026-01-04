@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import providers, storage_utils
+from core import config, guardian, providers, storage_utils, safe_subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 HEALING_PATH = ROOT / "data" / "self_healing"

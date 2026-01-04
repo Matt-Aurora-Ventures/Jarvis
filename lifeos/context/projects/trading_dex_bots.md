@@ -27,6 +27,13 @@
 4. Execution module (quotes -> tx build -> send).
 5. Logging + metrics (PnL, win rate, slippage, fees).
 
+## Solana Edge + Safety Protocol
+- Solana's fast finality enables tight spreads but increases the need for strict pre-trade checks.
+- Pre-trade safety: SPL token program only, mint/freeze authority revoked, LP locked, and sell-route check via Jupiter.
+- If using Telegram bots, always use a burner wallet funded only with trading capital.
+- Regime mapping: low volatility → grid, medium volatility → mean reversion (RSI), high volatility → trend.
+- For copy trading, screen wallets for win rate, hold time, and drawdown before mirroring.
+
 ## Low-Capital Strategy Starters
 - Simple MA cross on liquid pairs with strict fee threshold.
 - Mean reversion on stable pairs (avoid deep slippage).
@@ -68,6 +75,15 @@
 - 0x API: https://0x.org/docs
 - 1inch API: https://portal.1inch.dev/documentation
 - Hyperliquid API: https://hyperliquid.xyz
+
+## Solana DEX 100-Token Backtest (Free Data)
+- Run `venv311/bin/python scripts/solana_dex_backtest.py --limit-tokens 100`.
+- Pulls GeckoTerminal OHLC (no key) in 30-day windows for a 90-day backtest.
+- Filters by liquidity + volume; ranks tokens by avg 30-day ROI with drawdown penalty.
+- Outputs: `data/trader/solana_dex/token_universe.json`, `backtest_results.json`, `top5.json`, `top5.md`.
+- Generates paper bot configs for top 5 in `data/trader/solana_dex/bots/`.
+- Paper run: `venv311/bin/python scripts/solana_dex_paper_bots.py --lookback 400`.
+- Live trading requires a Solana RPC URL + wallet keypair; use Jupiter quote/swap APIs.
 
 ## Next Actions for Jarvis
 - Scout free API endpoints and log rate limits per chain.

@@ -5,6 +5,7 @@
 
 # === SECRETS & CREDENTIALS ===
 secrets/
+secrets/keys.json
 *.secret
 *.secrets
 *.pem

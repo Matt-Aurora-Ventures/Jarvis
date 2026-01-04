@@ -42,6 +42,7 @@ _LAST_SPOKEN_LOCK = threading.Lock()
 _ACTIVE_SPEECH_PROCESS: Optional[subprocess.Popen] = None
 _ACTIVE_SPEECH_CLEANUP: Optional[Callable[[], None]] = None
 _ACTIVE_SPEECH_LOCK = threading.Lock()
+_CHAT_LOCK_PATH = state.LOGS_DIR / "voice_chat.lock"
 
 
 @dataclass
@@ -982,16 +983,70 @@ def chat_session() -> None:
 _chat_lock = threading.Lock()
 
 
+def _process_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def _acquire_chat_file_lock() -> bool:
+    """Prevent concurrent voice chat sessions across processes."""
+    _CHAT_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(_CHAT_LOCK_PATH, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        with os.fdopen(fd, "w") as handle:
+            handle.write(f"{os.getpid()}:{int(time.time())}")
+        return True
+    except FileExistsError:
+        try:
+            raw = _CHAT_LOCK_PATH.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            return _acquire_chat_file_lock()
+        pid = None
+        if raw:
+            try:
+                pid = int(raw.split(":", 1)[0])
+            except (ValueError, IndexError):
+                pid = None
+        if pid and _process_alive(pid):
+            return False
+        try:
+            _CHAT_LOCK_PATH.unlink()
+        except FileNotFoundError:
+            pass
+        return _acquire_chat_file_lock()
+
+
+def _release_chat_file_lock() -> None:
+    try:
+        raw = _CHAT_LOCK_PATH.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return
+    if raw.startswith(f"{os.getpid()}:"):
+        try:
+            _CHAT_LOCK_PATH.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def start_chat_session() -> None:
     if state.read_state().get("chat_active"):
         return
     if not _chat_lock.acquire(blocking=False):
+        return
+    if not _acquire_chat_file_lock():
+        _chat_lock.release()
         return
 
     def _run() -> None:
         try:
             chat_session()
         finally:
+            _release_chat_file_lock()
             _chat_lock.release()
 
     thread = threading.Thread(target=_run, daemon=True)

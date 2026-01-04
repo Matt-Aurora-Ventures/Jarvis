@@ -28,6 +28,7 @@ from core import (
     orchestrator,
     overnight,
     output,
+    opportunity_engine,
     passive,
     providers,
     reporting,
@@ -53,6 +54,50 @@ def _daemon_python() -> str:
     if venv_python.exists():
         return str(venv_python)
     return sys.executable
+
+
+def _resolve_user_path(value: Optional[str], fallback: Path) -> Path:
+    if not value:
+        return fallback
+    expanded = Path(os.path.expanduser(value))
+    if expanded.is_absolute():
+        return expanded
+    return (ROOT / expanded).resolve()
+
+
+def _trading_symbol_map_path() -> Path:
+    cfg = config.load_config()
+    daemon_cfg = cfg.get("trading_daemon", {})
+    return _resolve_user_path(
+        daemon_cfg.get("symbol_map_path"),
+        Path.home() / ".lifeos" / "trading" / "symbol_map.json",
+    )
+
+
+def _load_symbol_map(path: Path) -> Dict[str, str]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+    if isinstance(data, dict):
+        return {str(k): str(v) for k, v in data.items()}
+    return {}
+
+
+def _save_symbol_map(path: Path, data: Dict[str, str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2))
+
+
+def _looks_like_solana_address(value: str) -> bool:
+    if not value:
+        return False
+    if not (32 <= len(value) <= 44):
+        return False
+    base58_chars = set("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+    return all(char in base58_chars for char in value)
 
 
 def _render(
@@ -1944,6 +1989,116 @@ def cmd_solana_scan(args: argparse.Namespace) -> None:
         print(f"Seeded {result.get('strategies_added', 0)} strategies into trading engine.")
 
 
+def cmd_trading_positions(args: argparse.Namespace) -> None:
+    from core.risk_manager import get_risk_manager
+
+    rm = get_risk_manager()
+    action = args.trading_positions_action
+    symbol_map_path = _trading_symbol_map_path()
+
+    if action == "list":
+        open_trades = rm.get_open_trades()
+        if not open_trades:
+            print("No open positions.")
+            return
+        print(f"Open positions: {len(open_trades)}")
+        for trade in open_trades:
+            print(
+                f"{trade['id']} | {trade['symbol']} | "
+                f"{trade['action']} @ {trade['entry_price']} | "
+                f"qty {trade['quantity']} | "
+                f"SL {trade.get('stop_loss')} | TP {trade.get('take_profit')}"
+            )
+        return
+
+    if action == "status":
+        stats = rm.get_stats()
+        print(json.dumps(stats, indent=2))
+        return
+
+    if action == "map":
+        symbol_map = _load_symbol_map(symbol_map_path)
+        symbol_map[args.symbol] = args.address
+        _save_symbol_map(symbol_map_path, symbol_map)
+        print(f"Mapped {args.symbol} -> {args.address}")
+        print(f"Symbol map: {symbol_map_path}")
+        return
+
+    if action == "add":
+        symbol = args.symbol
+        if args.address:
+            symbol_map = _load_symbol_map(symbol_map_path)
+            symbol_map[symbol] = args.address
+            _save_symbol_map(symbol_map_path, symbol_map)
+
+        entry = float(args.entry)
+        stop_loss = args.stop_loss
+        take_profit = args.take_profit
+        if stop_loss is None and args.stop_loss_pct:
+            stop_loss = entry * (1 - (args.stop_loss_pct / 100))
+        if take_profit is None and args.take_profit_pct:
+            take_profit = entry * (1 + (args.take_profit_pct / 100))
+
+        quantity = args.quantity
+        if quantity is None:
+            if args.capital is None:
+                raise SystemExit("Quantity not provided. Use --quantity or --capital with stop-loss.")
+            if stop_loss is None:
+                raise SystemExit("Stop-loss required when sizing from capital.")
+            sizing = rm.sizer.calculate_position(
+                capital=args.capital,
+                entry_price=entry,
+                stop_loss_price=stop_loss,
+                risk_pct=args.risk_pct,
+            )
+            if "quantity" not in sizing:
+                raise SystemExit("Failed to size position.")
+            quantity = sizing["quantity"]
+            print(f"Sized quantity: {quantity} (position ${sizing.get('position_value')})")
+
+        trade = rm.record_trade(
+            symbol=symbol,
+            action=args.action,
+            entry_price=entry,
+            quantity=quantity,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            strategy=args.strategy or "manual",
+        )
+        if not _looks_like_solana_address(symbol) and not args.address:
+            print("Warning: symbol is not a mint address and no mapping was provided.")
+        print(f"Recorded trade {trade.id} for {trade.symbol}")
+        return
+
+    if action == "close":
+        trade = rm.close_trade(
+            args.trade_id,
+            exit_price=float(args.exit_price),
+            reason=args.reason,
+        )
+        if not trade:
+            print("Trade not found or already closed.")
+            return
+        print(f"Closed {trade.id} at {trade.exit_price} ({trade.status})")
+        return
+
+
+def cmd_trading_opportunities(args: argparse.Namespace) -> None:
+    signals_path = Path(args.signals) if args.signals else None
+    payload = opportunity_engine.run_engine(
+        signals_path=signals_path,
+        refresh_equities=args.refresh_equities,
+        capital_usd=float(args.capital_usd),
+    )
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(payload, indent=2))
+        print(f"Wrote opportunities JSON to {output_path}")
+        return
+    print(json.dumps(payload, indent=2))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lifeos")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -2213,6 +2368,53 @@ def build_parser() -> argparse.ArgumentParser:
     solana_subparsers.add_parser("shortlist", help="Show strategy shortlist")
     solana_subparsers.add_parser("seed", help="Seed scanner strategies into engine")
 
+    trading_positions_parser = subparsers.add_parser(
+        "trading-positions",
+        help="Manage trading positions and symbol mappings",
+    )
+    trading_positions_subparsers = trading_positions_parser.add_subparsers(
+        dest="trading_positions_action",
+        required=True,
+    )
+    trading_positions_subparsers.add_parser("list", help="List open positions")
+    trading_positions_subparsers.add_parser("status", help="Show risk manager stats")
+
+    positions_add_parser = trading_positions_subparsers.add_parser("add", help="Record a new position")
+    positions_add_parser.add_argument("--symbol", required=True, help="Token symbol or mint address")
+    positions_add_parser.add_argument("--entry", type=float, required=True, help="Entry price")
+    positions_add_parser.add_argument("--quantity", type=float, help="Quantity to buy/sell")
+    positions_add_parser.add_argument("--action", choices=["BUY", "SELL"], default="BUY")
+    positions_add_parser.add_argument("--stop-loss", type=float)
+    positions_add_parser.add_argument("--take-profit", type=float)
+    positions_add_parser.add_argument("--stop-loss-pct", type=float, help="Stop-loss percent (if price not provided)")
+    positions_add_parser.add_argument("--take-profit-pct", type=float, help="Take-profit percent (if price not provided)")
+    positions_add_parser.add_argument("--capital", type=float, help="Capital for sizing if quantity omitted")
+    positions_add_parser.add_argument("--risk-pct", type=float, help="Risk percent for sizing (default from limits)")
+    positions_add_parser.add_argument("--strategy", help="Strategy label")
+    positions_add_parser.add_argument("--address", help="Mint address to map to symbol")
+
+    positions_close_parser = trading_positions_subparsers.add_parser("close", help="Close an open position")
+    positions_close_parser.add_argument("--trade-id", required=True)
+    positions_close_parser.add_argument("--exit-price", type=float, required=True)
+    positions_close_parser.add_argument(
+        "--reason",
+        choices=["CLOSED", "STOPPED_OUT", "TOOK_PROFIT"],
+        default="CLOSED",
+    )
+
+    positions_map_parser = trading_positions_subparsers.add_parser("map", help="Map symbol to mint address")
+    positions_map_parser.add_argument("--symbol", required=True)
+    positions_map_parser.add_argument("--address", required=True)
+
+    trading_opportunities_parser = subparsers.add_parser(
+        "trading-opportunities",
+        help="Generate unified crypto + tokenized equity opportunities JSON",
+    )
+    trading_opportunities_parser.add_argument("--signals", help="Path to sentiment signals JSON/JSONL")
+    trading_opportunities_parser.add_argument("--refresh-equities", action="store_true")
+    trading_opportunities_parser.add_argument("--capital-usd", type=float, default=20.0)
+    trading_opportunities_parser.add_argument("--output", help="Write JSON output to file")
+
     return parser
 
 
@@ -2303,6 +2505,12 @@ def main() -> None:
         return
     if args.command == "solana-scan":
         cmd_solana_scan(args)
+        return
+    if args.command == "trading-positions":
+        cmd_trading_positions(args)
+        return
+    if args.command == "trading-opportunities":
+        cmd_trading_opportunities(args)
         return
 
     parser.print_help()

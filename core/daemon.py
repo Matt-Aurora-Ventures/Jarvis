@@ -59,11 +59,10 @@ def _should_run_report(
 def _send_notification(title: str, message: str) -> None:
     """Send a macOS notification."""
     try:
+        from core import safe_subprocess
         script = f'display notification "{message}" with title "{title}"'
-        subprocess.run(
+        safe_subprocess.run_command_safe(
             ["osascript", "-e", script],
-            capture_output=True,
-            check=False,
             timeout=5,
         )
     except Exception as e:

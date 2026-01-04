@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import guardian
+from core import guardian, safe_subprocess
 
 
 @dataclass
@@ -22,10 +22,8 @@ class ControlAction:
 def _run_applescript(script: str, timeout: int = 10) -> Tuple[bool, str]:
     """Run AppleScript and return success status and output."""
     try:
-        result = subprocess.run(
+        result = safe_subprocess.run_command_safe(
             ["osascript", "-e", script],
-            capture_output=True,
-            text=True,
             timeout=timeout,
         )
         return result.returncode == 0, result.stdout.strip() or result.stderr.strip()
@@ -143,7 +141,7 @@ def close_app(app_name: str) -> Tuple[bool, str]:
 def open_url(url: str) -> Tuple[bool, str]:
     """Open a URL in default browser."""
     try:
-        subprocess.run(["open", url], check=True, timeout=5)
+        safe_subprocess.run_command_safe(["open", url], timeout=5)
         return True, f"Opened {url}"
     except Exception as e:
         return False, str(e)
@@ -163,24 +161,27 @@ def open_file(path: str) -> Tuple[bool, str]:
         return False, str(e)
 
 
-def run_shell(command: str, cwd: str = None, timeout: int = 30) -> Tuple[bool, str]:
-    """Run a shell command (with safety checks)."""
+def run_shell(command: str, cwd: str = None, timeout: int = None) -> Tuple[bool, str]:
+    """Run a shell command (with safety checks and aggressive timeout protection)."""
     # Safety check
     is_dangerous, reason = guardian.is_command_dangerous(command)
     if is_dangerous:
         return False, f"Blocked dangerous command: {reason}"
     
     try:
-        result = subprocess.run(
+        result = safe_subprocess.run_command_safe(
             command,
+            timeout=timeout,
             shell=True,
             capture_output=True,
-            text=True,
             cwd=cwd,
-            timeout=timeout,
         )
-        output = result.stdout or result.stderr
-        return result.returncode == 0, output[:1000]
+        
+        if result["timed_out"]:
+            return False, f"Command timed out after {result['timeout']}s"
+        
+        output = result["stdout"] or result["stderr"]
+        return result["returncode"] == 0, output[:1000]
     except Exception as e:
         return False, str(e)
 

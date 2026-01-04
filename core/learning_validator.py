@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import config, providers, evolution, guardian
+from core import config, evolution, guardian, providers, storage_utils, safe_subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATION_PATH = ROOT / "data" / "validations"
@@ -141,20 +141,27 @@ if __name__ == "__main__":
             return {"success": False, "error": "No test file found"}
         
         try:
-            # Run tests
-            result = subprocess.run(
-                [sys.executable, str(test_file)],
+            # Run tests with aggressive timeout protection
+            result = safe_subprocess.run_command_safe(
+                f"{sys.executable} {test_file}",
+                timeout=30,
+                shell=True,
                 capture_output=True,
-                text=True,
-                timeout=30
             )
+            
+            if result["timed_out"]:
+                return {
+                    "success": False,
+                    "error": f"Test timed out after {result['timeout']}s",
+                    "killed": True
+                }
             
             test_result = {
                 "function": function_name,
-                "exit_code": result.returncode,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "success": result.returncode == 0,
+                "exit_code": result["returncode"],
+                "stdout": result["stdout"],
+                "stderr": result["stderr"],
+                "success": result["returncode"] == 0,
                 "timestamp": datetime.now().isoformat()
             }
             
@@ -165,8 +172,6 @@ if __name__ == "__main__":
             
             return test_result
             
-        except subprocess.TimeoutExpired:
-            return {"success": False, "error": "Test timeout"}
         except Exception as e:
             return {"success": False, "error": str(e)}
     
