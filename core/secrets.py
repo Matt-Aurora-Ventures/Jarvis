@@ -1,28 +1,45 @@
 import json
 import os
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Any
 
 ROOT = Path(__file__).resolve().parents[1]
 KEYS_PATH = ROOT / "secrets" / "keys.json"
 
 
-def _load_keys() -> Dict[str, str]:
+def _load_keys() -> Dict[str, Any]:
     try:
         with open(KEYS_PATH, "r", encoding="utf-8") as handle:
             data = json.load(handle)
         if isinstance(data, dict):
-            return {str(k): str(v) for k, v in data.items()}
+            return data
         return {}
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
 
 def get_key(name: str, env_name: str) -> str:
+    """Get API key from secrets file or environment.
+    
+    Supports both flat format: {"groq_api_key": "xxx"}
+    And nested format: {"groq": {"api_key": "xxx"}}
+    """
     keys = _load_keys()
+    
+    # Try flat format first
     value = keys.get(name, "")
-    if value:
+    if value and isinstance(value, str):
         return value
+    
+    # Try nested format: extract base name and look for dict
+    base_name = name.replace("_api_key", "").replace("_key", "")
+    nested = keys.get(base_name, {})
+    if isinstance(nested, dict):
+        value = nested.get("api_key", "") or nested.get("key", "")
+        if value:
+            return str(value)
+    
+    # Fall back to environment variable
     return os.getenv(env_name, "")
 
 

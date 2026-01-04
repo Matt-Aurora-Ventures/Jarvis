@@ -25,6 +25,26 @@
 - Pull 30-day snapshots from Hyperliquid for analysis.
 - Learn from MoonDev algo trading YouTube content.
 
+## Trading Intelligence (All LLMs Must Know This)
+When asked about trading, positions, or market analysis:
+1. Check positions file: `~/.lifeos/trading/exit_intents.json`
+2. Fetch prices via DexScreener API (no key needed)
+3. Get sentiment via Grok if available
+4. Make recommendations: HOLD, SELL, or ACCUMULATE
+
+**Current Holdings to Monitor:**
+- FARTCOIN, OIL (Solana meme tokens)
+
+**Available Scripts:**
+- `scripts/monitor_positions.py` - Position monitor daemon
+- `scripts/grok_sentiment.py` - X/Twitter sentiment check
+- `core/trading_knowledge.py` - Full trading knowledge base
+
+**APIs to Use:**
+- DexScreener: Free, no key, real-time prices
+- Jupiter: Free, swap quotes
+- Grok: Requires xai key, sentiment analysis
+
 ## Creative Agency + Website Work
 - The user runs a media/creative agency and builds websites.
 - Study their workflows and LLM usage to produce prompt packs.

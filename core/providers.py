@@ -15,6 +15,9 @@ from collections import deque
 import requests
 from core import config, secrets
 
+# Trading context injection for backup LLMs
+_TRADING_CONTEXT_ENABLED = True  # Enable trading knowledge for all LLMs
+
 
 def _log(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
@@ -958,9 +961,58 @@ def generate_text(
     return None
 
 
+def generate_text_with_trading(
+    prompt: str,
+    max_output_tokens: int = 512,
+    prefer_free: bool = True,
+    include_positions: bool = True,
+    diagnostics: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[str]:
+    """Generate text with full trading context injected.
+    
+    This teaches backup LLMs (Groq, Ollama) about the trading system
+    so they can answer trading questions intelligently.
+    
+    Args:
+        prompt: User's prompt
+        max_output_tokens: Max response tokens
+        prefer_free: Prefer free providers
+        include_positions: Include current position data
+        diagnostics: Optional diagnostics list
+        
+    Returns:
+        Generated text with trading awareness
+    """
+    if not _TRADING_CONTEXT_ENABLED:
+        return generate_text(prompt, max_output_tokens, prefer_free, diagnostics)
+    
+    try:
+        from core.trading_knowledge import inject_trading_context
+        enhanced_prompt = inject_trading_context(prompt, include_positions=include_positions)
+        # Increase token budget for context
+        adjusted_tokens = min(max_output_tokens + 200, 2048)
+        return generate_text(enhanced_prompt, adjusted_tokens, prefer_free, diagnostics)
+    except ImportError:
+        _log("Trading knowledge module not available, using base prompt")
+        return generate_text(prompt, max_output_tokens, prefer_free, diagnostics)
+    except Exception as e:
+        _log(f"Trading context injection failed: {e}")
+        return generate_text(prompt, max_output_tokens, prefer_free, diagnostics)
+
+
 def ask_jarvis(prompt: str, max_output_tokens: int = 512) -> Optional[str]:
     """Legacy function - now uses smart ranking."""
     return generate_text(prompt, max_output_tokens=max_output_tokens, prefer_free=True)
+
+
+def ask_jarvis_trading(prompt: str, max_output_tokens: int = 1024) -> Optional[str]:
+    """Ask Jarvis with full trading context - use for trading questions."""
+    return generate_text_with_trading(
+        prompt, 
+        max_output_tokens=max_output_tokens, 
+        prefer_free=True,
+        include_positions=True
+    )
 
 
 def check_provider_health() -> Dict[str, Dict[str, Any]]:

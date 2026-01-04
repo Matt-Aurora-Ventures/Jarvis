@@ -85,8 +85,39 @@
 - Paper run: `venv311/bin/python scripts/solana_dex_paper_bots.py --lookback 400`.
 - Live trading requires a Solana RPC URL + wallet keypair; use Jupiter quote/swap APIs.
 
+## Current Positions (Live)
+Check `~/.lifeos/trading/exit_intents.json` for active positions.
+
+**Known Holdings:**
+- FARTCOIN (9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump)
+- OIL (5LS3ips7jWxfuVHzoMzKzp3cCwjH9zmrtYXmYBVGpump)
+
+## Trading Commands (For Voice/Chat)
+| Command | Action |
+|---------|--------|
+| "check positions" | Show current P&L on all positions |
+| "price of [TOKEN]" | Fetch live price from DexScreener |
+| "sentiment on [TOKEN]" | Get X/Twitter sentiment via Grok |
+| "should I sell [TOKEN]" | Full analysis with recommendation |
+| "monitor positions" | Run continuous position monitor |
+
+## API Quick Reference
+- **DexScreener**: `https://api.dexscreener.com/latest/dex/tokens/{mint}` (free)
+- **Jupiter Quote**: `https://quote-api.jup.ag/v6/quote` (free)
+- **Jupiter Price**: `https://price.jup.ag/v6/price?ids={mint}` (free)
+- **BirdEye**: Requires API key from secrets/keys.json
+- **Grok Sentiment**: `https://api.x.ai/v1/responses` with x_search tool
+
+## Risk Parameters
+- Max position: 2-3% of portfolio
+- Stop loss: -9% to -15%
+- Take profits: +8% (50%), +18% (30%), +40% (20%)
+- Time stop: 90 min without TP1
+- Min liquidity: $100K for safe exits
+
 ## Next Actions for Jarvis
 - Scout free API endpoints and log rate limits per chain.
 - Pull 30-day Hyperliquid data and run a baseline backtest.
 - Build a minimal Solana bot using Jupiter quotes + dry-run execution.
 - Summarize DEX fees and slippage thresholds for each chain.
+- Monitor active positions and alert on TP/SL triggers.
