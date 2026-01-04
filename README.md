@@ -125,6 +125,83 @@ At `http://localhost:5001`, Jarvis provides a SOC-style command center:
 
 *Full documentation: `docs/QUANT_TRADING_GUIDE.md`*
 
+### 🎯 LUT Micro-Alpha Trading Module (v2.3) - **NEW**
+
+High-risk trending token subsystem designed for the **$20 → $1,000,000 Challenge**.
+
+**Core Architecture** (`core/lut_micro_alpha.py`):
+- **Multi-Source Trending**: Aggregates from Birdeye + GeckoTerminal + DexScreener
+- **Velocity Tracking**: Monitors rank velocity (rising/falling trends)
+- **Phase-Based Scaling**: Conservative Phase 0 (2% trades) → Scaled Phase 2 (3% trades)
+- **Immediate Exit Planning**: TP ladder + SL persisted to disk on entry
+
+**Trending Aggregator** (`core/trending_aggregator.py`):
+- **Source Weights**: Birdeye (45%), GeckoTerminal (35%), DexScreener (20%)
+- **Composite Ranking**: Multi-source confirmation improves rank
+- **Historical Velocity**: Tracks rank changes over 15m/1h/4h windows
+- **Rising Filter**: Isolates tokens with positive velocity
+
+**Exit Intent System** (`core/exit_intents.py`):
+- **TP Ladder**: TP1 @ +8% (60%), TP2 @ +18% (25%), TP3 @ +40% (15% runner)
+- **Stop Loss**: -9% with breakeven adjustment after TP1
+- **Time Stop**: 90-minute invalidation if TP1 not hit
+- **Trailing Stop**: Activates after TP1, 5% trail
+- **Sentiment Exit**: Immediate exit on xAI sentiment reversal
+
+**Phase Configuration**:
+| Phase | Module Weight | Max Trade | Max Exposure | Edge/Cost Min |
+|-------|---------------|-----------|--------------|---------------|
+| 0 (Trial) | 0.33 | 2% NAV | 10% NAV | 2.0x |
+| 1 (Validated) | 0.50 | 2.5% NAV | 15% NAV | 2.5x |
+| 2 (Scaled) | 0.75 | 3% NAV | 20% NAV | 3.0x |
+
+**Promotion Requirements** (Phase 0 → 1):
+- NetPnL > 0
+- ProfitFactor ≥ 1.25
+- MaxDrawdown ≤ 40% of module budget
+- Enforcement Reliability ≥ 95%
+- ≤ 1 catastrophic event
+
+**Redundant Daemon Enforcement**:
+- `core/trading_daemon.py`: Primary intent enforcement
+- `core/lut_daemon.py`: Backup enforcement (run in parallel)
+- File locking for concurrent access safety
+
+### ⚡ Jupiter Perps Acceleration Layer (v2.3) - **NEW**
+
+High-conviction leveraged perpetuals for accelerated capital growth.
+
+**Core Module** (`core/jupiter_perps.py`):
+- **Eligible Assets**: SOL, BTC, ETH (high liquidity only)
+- **Max Leverage**: 2x Phase 0, 3x Phase 1 (never exceeds 5x)
+- **Funding Awareness**: Rejects trades with adverse funding rates
+- **Liquidation Safety**: Stop loss always before liquidation price
+
+**Perps TP Ladder**:
+- TP1: 50% @ +4% (or +1.5R)
+- TP2: 30% @ +8% (or +2.5R)
+- Runner: 20% with trailing stop
+- Time Stop: 60 minutes
+
+**Risk Constraints (Phase 0)**:
+| Constraint | Value |
+|------------|-------|
+| Max Trades/Day | 2 |
+| Max Concurrent | 1 |
+| Max Margin | 35% wallet |
+| Max Leverage | 2x |
+| Risk Per Trade | 5% |
+| SOL Reserve | 0.05 SOL |
+
+**Promotion to Phase 1 requires**:
+- 10 completed trades
+- ProfitFactor ≥ 1.25
+- MaxDrawdown ≤ 15%
+- Zero liquidation events
+- Enforcement reliability ≥ 97%
+
+*State files: `~/.lifeos/trading/{lut_module_state,perps_state,exit_intents,execution_reliability}.json`*
+
 ### 🎤 Voice Control
 - **Wake word**: "Hey Jarvis" activates listening
 - **Natural conversation**: Chat like you would with a person
@@ -803,6 +880,15 @@ def my_skill(param1: str) -> str:
   - [x] Smart Order Routing (SOR)
   - [x] Encrypted API key storage
   - [x] Slippage tolerance checks
+- [x] **v2.3 LUT Micro-Alpha + Jupiter Perps** (Jan 2026)
+  - [x] Multi-source trending aggregator (Birdeye + Gecko + DexScreener)
+  - [x] Velocity-based token ranking
+  - [x] Exit intent system with TP ladder + SL + time stops
+  - [x] Phase-based scaling (Trial → Validated → Scaled)
+  - [x] Jupiter Perps acceleration layer
+  - [x] Redundant daemon enforcement (dual daemons)
+  - [x] Execution reliability tracking
+  - [x] Jupyter cell bundle generation for trade monitoring
 
 ### In Progress 🚧
 
