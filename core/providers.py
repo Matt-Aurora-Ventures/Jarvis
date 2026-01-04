@@ -107,7 +107,7 @@ class ProviderAttempt:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-_LAST_PROVIDER_ERRORS: Dict[str, str] = {"gemini": "", "ollama": "", "groq": "", "grok": "", "openai": ""}
+_LAST_PROVIDER_ERRORS: Dict[str, str] = {"openrouter": "", "gemini": "", "ollama": "", "groq": "", "grok": "", "openai": "", "minimax": ""}
 _ATTEMPT_HISTORY: Deque[ProviderAttempt] = deque(maxlen=25)
 
 
@@ -313,15 +313,35 @@ def ask_ollama_model(
 
 
 def provider_status() -> dict:
+    """Get status of all providers including the PRIMARY (OpenRouter/MiniMax)."""
     cfg = config.load_config()
     gemini_enabled = cfg.get("providers", {}).get("gemini", {}).get("enabled", True)
     openai_enabled = cfg.get("providers", {}).get("openai", {}).get("enabled", "auto")
     ollama_enabled = _ollama_enabled(cfg)
     return {
-        "gemini_available": bool(_gemini_client()) and bool(gemini_enabled),
-        "openai_available": bool(_openai_client())
-        and (openai_enabled in (True, "auto")),
+        "openrouter_available": bool(_openrouter_client()),  # PRIMARY
+        "groq_available": bool(_groq_client()),
+        "grok_available": bool(_grok_client()),
         "ollama_available": bool(ollama_enabled),
+        "gemini_available": bool(_gemini_client()) and bool(gemini_enabled),
+        "openai_available": bool(_openai_client()) and (openai_enabled in (True, "auto")),
+        "minimax_direct_available": bool(secrets.get_minimax_key()),
+    }
+
+
+def provider_health_check() -> dict:
+    """Run health check on all providers - used for self-healing diagnostics."""
+    status = provider_status()
+    ranked = get_ranked_providers(prefer_free=False)
+    
+    return {
+        "primary_provider": ranked[0]["name"] if ranked else None,
+        "primary_type": ranked[0]["provider"] if ranked else None,
+        "available_providers": [p["name"] for p in ranked],
+        "total_available": len(ranked),
+        "status": status,
+        "last_errors": dict(_LAST_PROVIDER_ERRORS),
+        "healthy": len(ranked) >= 2,  # At least 2 providers for redundancy
     }
 
 
@@ -451,37 +471,39 @@ def transcribe_audio_gemini(audio_path: str) -> Optional[str]:
 
 # === INTELLIGENT PROVIDER RANKING ===
 # Ranked by: Intelligence, Free tier availability, Resource efficiency
-# Priority: OpenRouter (no limits) → Groq (fast but limited) → Local
-# Updated Jan 2026: Removed decommissioned llama-3.3-70b-specdec
+# Priority: OpenRouter/MiniMax (PRIMARY) → Groq (backup) → Ollama (local fallback)
+# Updated Jan 2026: MiniMax 2.1 via OpenRouter as default conversational engine
 
 PROVIDER_RANKINGS = [
-    # Rank 0: Native MiniMax (Direct, low latency, high quality)
-    {"name": "minimax-latest", "provider": "minimax", "intelligence": 96, "free": False, "notes": "Direct MiniMax (abab6.5-chat)"},
-
-    # Rank 0: OpenRouter with Minimax (PRIMARY - no rate limits, high quality)
-    {"name": "deepseek/deepseek-r1", "provider": "openrouter", "intelligence": 95, "free": False, "notes": "PRIMARY - DeepSeek R1 reasoning via OpenRouter"},
+    # Rank 0: OpenRouter with MiniMax 2.1 (PRIMARY - default for voice/chat)
+    {"name": "minimax/minimax-01", "provider": "openrouter", "intelligence": 96, "free": False, "notes": "PRIMARY - MiniMax 2.1 via OpenRouter"},
+    
+    # Rank 1: OpenRouter alternatives (if MiniMax fails)
+    {"name": "deepseek/deepseek-r1", "provider": "openrouter", "intelligence": 95, "free": False, "notes": "DeepSeek R1 reasoning fallback"},
     {"name": "google/gemini-2.0-flash-exp:free", "provider": "openrouter", "intelligence": 92, "free": True, "notes": "OpenRouter free Gemini 2.0"},
     {"name": "meta-llama/llama-3.3-70b-instruct", "provider": "openrouter", "intelligence": 90, "free": False, "notes": "Llama 3.3 70B via OpenRouter"},
     
-    # Rank 1: Groq (fast, free, but rate limited)
+    # Rank 2: Groq (BACKUP - fast, free, but rate limited)
     {"name": "llama-3.3-70b-versatile", "provider": "groq", "intelligence": 90, "free": True, "notes": "Groq ultra fast (rate limited)"},
     {"name": "llama-3.1-8b-instant", "provider": "groq", "intelligence": 78, "free": True, "notes": "Groq 8B instant fallback"},
 
-    # Rank 2: Grok (X.AI - strong for sentiment analysis, X.com integration)
-    {"name": "grok-beta", "provider": "grok", "intelligence": 92, "free": False, "notes": "Grok - X.com sentiment analysis, paid"},
-    {"name": "grok-2-latest", "provider": "grok", "intelligence": 95, "free": False, "notes": "Grok 2 - advanced reasoning, paid"},
+    # Rank 3: Grok (X.AI - for sentiment analysis when needed)
+    {"name": "grok-beta", "provider": "grok", "intelligence": 92, "free": False, "notes": "Grok - X.com sentiment analysis"},
+    {"name": "grok-2-latest", "provider": "grok", "intelligence": 95, "free": False, "notes": "Grok 2 - advanced reasoning"},
 
-    # Rank 3: Local models (free, private, always available offline)
-    # Only include models that are actually installed
-    {"name": "llama3.1:8b", "provider": "ollama", "intelligence": 78, "free": True, "notes": "Good local 8B"},
-    {"name": "qwen2.5:1.5b", "provider": "ollama", "intelligence": 65, "free": True, "notes": "Fast, lightweight fallback"},
+    # Rank 4: Local Ollama (FALLBACK - always available offline)
+    {"name": "llama3.1:8b", "provider": "ollama", "intelligence": 78, "free": True, "notes": "Local 8B - offline fallback"},
+    {"name": "qwen2.5:1.5b", "provider": "ollama", "intelligence": 65, "free": True, "notes": "Fast lightweight local"},
 
-    # Rank 4: Gemini (fallback - has been unreliable)
+    # Rank 5: Native MiniMax (if direct key configured)
+    {"name": "minimax-latest", "provider": "minimax", "intelligence": 96, "free": False, "notes": "Direct MiniMax API"},
+
+    # Rank 6: Gemini (disabled by default due to quota issues)
     {"name": "gemini-cli", "provider": "gemini-cli", "intelligence": 95, "free": True, "notes": "Gemini CLI - needs credits"},
     {"name": "gemini-2.5-flash", "provider": "gemini", "intelligence": 92, "free": True, "notes": "May fail without credits"},
     {"name": "gemini-2.5-pro", "provider": "gemini", "intelligence": 95, "free": True, "notes": "May fail without credits"},
 
-    # Rank 3: Paid fallbacks (only if free exhausted)
+    # Rank 7: Paid fallbacks (only if all else fails)
     {"name": "gpt-4o-mini", "provider": "openai", "intelligence": 88, "free": False, "notes": "Paid fallback"},
 ]
 
@@ -599,6 +621,76 @@ def _ask_minimax(prompt: str, model: str, max_output_tokens: int = 2048) -> Opti
              
     except Exception as e:
         _log(f"⚠ MiniMax call failed: {_safe_error_message(e)}")
+        
+    return None
+
+
+def _openrouter_client():
+    """Get OpenRouter API key if available."""
+    key = os.environ.get("OPENROUTER_API_KEY") or secrets.get_openrouter_key()
+    if not key:
+        return None
+    return {"api_key": key}
+
+
+def _ask_openrouter(prompt: str, model: str, max_output_tokens: int = 2048) -> Optional[str]:
+    """Call OpenRouter API - supports MiniMax, DeepSeek, Llama, etc.
+    
+    OpenRouter is the PRIMARY provider because:
+    - No rate limits with credits
+    - Access to MiniMax 2.1 (minimax/minimax-01)
+    - High quality, low cost
+    - Self-healing: automatic fallback to other models
+    """
+    client = _openrouter_client()
+    if not client:
+        return None
+    
+    api_key = client["api_key"]
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": "https://github.com/lifeos",
+        "X-Title": "LifeOS Jarvis",
+    }
+    
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_output_tokens,
+        "temperature": 0.7,
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
+        
+        if response.status_code == 429:
+            _log("⚠ OpenRouter rate limited (429)")
+            return None
+        if response.status_code == 402:
+            _log("⚠ OpenRouter insufficient credits (402)")
+            return None
+            
+        response.raise_for_status()
+        body = response.json()
+        
+        choices = body.get("choices", [])
+        if choices:
+            message = choices[0].get("message", {})
+            text = message.get("content", "")
+            if text:
+                return text.strip()
+                
+        # Check for error
+        if "error" in body:
+            _log(f"⚠ OpenRouter error: {body['error']}")
+            
+    except requests.exceptions.Timeout:
+        _log("⚠ OpenRouter timeout")
+    except Exception as e:
+        _log(f"⚠ OpenRouter call failed: {_safe_error_message(e)}")
         
     return None
 
@@ -766,12 +858,22 @@ def _ollama_available(base_url: str) -> bool:
     return available
 
 def get_ranked_providers(prefer_free: bool = True) -> list:
-    """Get providers ranked by intelligence, with free models first if preferred."""
+    """Get providers ranked by intelligence, with free models first if preferred.
+    
+    Priority order:
+    1. OpenRouter (MiniMax 2.1 PRIMARY) - no rate limits with credits
+    2. Groq (backup) - fast but rate limited
+    3. Ollama (local fallback) - always available offline
+    """
     cfg = config.load_config()
     available = []
 
     for provider in PROVIDER_RANKINGS:
-        if provider["provider"] == "gemini-cli":
+        if provider["provider"] == "openrouter":
+            # OpenRouter is PRIMARY if key is available
+            if _openrouter_client():
+                available.append(provider)
+        elif provider["provider"] == "gemini-cli":
             # Disable Gemini-cli due to quota issues
             if False and _gemini_cli_available():
                 available.append(provider)
@@ -787,6 +889,9 @@ def get_ranked_providers(prefer_free: bool = True) -> list:
                 available.append(provider)
         elif provider["provider"] == "ollama":
             if _ollama_enabled(cfg):
+                available.append(provider)
+        elif provider["provider"] == "minimax":
+            if secrets.get_minimax_key():
                 available.append(provider)
         elif provider["provider"] == "openai":
             if _openai_client() and cfg.get("providers", {}).get("openai", {}).get("enabled", "auto") != False:
@@ -833,6 +938,11 @@ def _try_provider(
             text = _ask_groq(prompt, name, max_output_tokens)
             if text:
                 success_log = f"✓ Using Groq {name} (intelligence: {provider['intelligence']}) - FAST"
+
+        elif ptype == "openrouter":
+            text = _ask_openrouter(prompt, name, max_output_tokens)
+            if text:
+                success_log = f"✓ Using OpenRouter {name} (intelligence: {provider['intelligence']}) - PRIMARY"
 
         elif ptype == "grok":
             text = _ask_grok(prompt, name, max_output_tokens)

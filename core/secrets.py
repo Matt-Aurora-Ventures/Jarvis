@@ -81,12 +81,23 @@ def get_minimax_key() -> str:
     return get_key("minimax_api_key", "MINIMAX_API_KEY")
 
 
+def get_openrouter_key() -> str:
+    """Get OpenRouter API key (PRIMARY provider for MiniMax 2.1)."""
+    return get_key("openrouter_api_key", "OPENROUTER_API_KEY")
+
+
+def get_birdeye_key() -> str:
+    """Get BirdEye API key for token discovery."""
+    return get_key("birdeye_api_key", "BIRDEYE_API_KEY")
+
+
 def list_configured_keys() -> Dict[str, bool]:
     """List all API keys and whether they're configured.
 
     Returns dict like: {"groq": True, "openai": False, ...}
     """
     return {
+        "openrouter": bool(get_openrouter_key()),
         "groq": bool(get_groq_key()),
         "grok": bool(get_grok_key()),
         "gemini": bool(get_gemini_key()),
@@ -94,4 +105,5 @@ def list_configured_keys() -> Dict[str, bool]:
         "anthropic": bool(get_anthropic_key()),
         "brave": bool(get_brave_key()),
         "minimax": bool(get_minimax_key()),
+        "birdeye": bool(get_birdeye_key()),
     }

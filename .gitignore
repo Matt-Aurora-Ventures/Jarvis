@@ -159,3 +159,11 @@ already/
 exists/
 if/
 skip/
+
+# API Keys and Secrets
+secrets/
+*.key
+api_keys.json
+keys.json
+.env
+.env.*
