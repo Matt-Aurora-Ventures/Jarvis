@@ -1,20 +1,25 @@
 """
-Jupiter Perps Acceleration Layer
-================================
+Jupiter Perps Acceleration Layer - SAVAGE MODE v2.3.1
+======================================================
 
 High-conviction leveraged perpetuals via Jupiter Perps for accelerated capital growth.
 Part of the $20 → $1M challenge system.
 
 Core Principles:
-- Conservative leverage (max 2x Phase 0, max 3x Phase 1+)
+- Phase-based leverage scaling (5x → 15x → 30x SAVAGE MODE)
 - Immediate exit planning (SL + TP ladder)
-- Never risk liquidation
+- Ultra-tight stop loss for high leverage (1-1.5% for 30x)
 - Only trade high-liquidity assets (SOL, BTC, ETH)
+
+Phase Config:
+- Phase 0 (Trial): 5x max leverage, 2 trades/day
+- Phase 1 (Validated): 15x max leverage, 5 trades/day  
+- Phase 2 (SAVAGE): 30x max leverage, 10 trades/day, conviction > 0.9 required
 
 Usage:
     from core.jupiter_perps import evaluate_perps_opportunity, execute_perps_entry
 
-    opp = evaluate_perps_opportunity("SOL", "long", sentiment_score=0.8)
+    opp = evaluate_perps_opportunity("SOL", "long", sentiment_score=0.95)
     if opp.is_valid:
         result = execute_perps_entry(opp, wallet_usd=100)
 """
@@ -55,7 +60,7 @@ PERPS_PHASE_CONFIG = {
         "max_trades_per_day": 2,
         "max_concurrent_positions": 1,
         "max_margin_pct": 0.35,        # 35% of wallet
-        "max_leverage": 2.0,           # Start conservative
+        "max_leverage": 5.0,           # 5x leverage (Savage Mode upgrade)
         "risk_per_trade_pct": 0.05,    # 5% max loss per trade
         "min_sol_reserve": 0.05,       # Keep for fees
         "trial_trades": 10,
@@ -63,13 +68,24 @@ PERPS_PHASE_CONFIG = {
     },
     1: {  # Validated
         "name": "Validated",
-        "max_trades_per_day": 3,
-        "max_concurrent_positions": 2,
-        "max_margin_pct": 0.45,
-        "max_leverage": 3.0,
+        "max_trades_per_day": 5,
+        "max_concurrent_positions": 3,
+        "max_margin_pct": 0.55,
+        "max_leverage": 15.0,          # 15x leverage (Savage Mode upgrade)
         "risk_per_trade_pct": 0.06,
         "min_sol_reserve": 0.05,
         "edge_to_cost_min": 2.5,
+    },
+    2: {  # SAVAGE MODE 🔥
+        "name": "Savage",
+        "max_trades_per_day": 10,
+        "max_concurrent_positions": 5,
+        "max_margin_pct": 0.75,        # 75% of wallet (high risk)
+        "max_leverage": 30.0,          # 30x SAVAGE leverage
+        "risk_per_trade_pct": 0.03,    # Tighter risk with extreme leverage
+        "min_sol_reserve": 0.10,       # Keep more for fees at high frequency
+        "min_conviction": 0.9,          # Only trade on high conviction
+        "edge_to_cost_min": 3.0,
     },
 }
 
@@ -368,28 +384,62 @@ def evaluate_perps_opportunity(
     state = load_perps_state()
     config = PERPS_PHASE_CONFIG.get(state.phase, PERPS_PHASE_CONFIG[0])
 
-    # Determine leverage based on conditions
-    base_leverage = 1.5
-
-    # Adjust for sentiment + momentum
+    # Calculate conviction score
     conviction = (sentiment_score + momentum_score) / 2
-    if conviction > 0.7:
-        base_leverage = 2.0
-    elif conviction < 0.4:
-        base_leverage = 1.2
+    
+    # Check conviction requirements for Phase 2 (Savage Mode)
+    min_conviction = config.get("min_conviction", 0.0)
+    if conviction < min_conviction:
+        opp.is_valid = False
+        opp.rejection_reason = f"conviction_too_low: {conviction:.2f} < {min_conviction}"
+        return opp
+
+    # Determine leverage based on conditions - SAVAGE MODE SCALING
+    max_leverage = config["max_leverage"]
+    
+    if conviction > 0.9 and max_leverage >= 30.0:
+        # SAVAGE MODE: 30x for ultra-high conviction
+        base_leverage = 30.0
+        logger.info(f"[jupiter_perps] 🔥 SAVAGE MODE ACTIVATED: 30x leverage (conviction={conviction:.2f})")
+    elif conviction > 0.8 and max_leverage >= 15.0:
+        # High conviction: up to 15x
+        base_leverage = min(15.0, max_leverage)
+    elif conviction > 0.7:
+        # Good conviction: up to 10x
+        base_leverage = min(10.0, max_leverage)
+    elif conviction > 0.5:
+        # Moderate conviction: up to 5x
+        base_leverage = min(5.0, max_leverage)
+    else:
+        # Low conviction: conservative 2x
+        base_leverage = min(2.0, max_leverage)
 
     # Adjust for volatility
     if volatility_regime == "high":
-        base_leverage *= 0.7
+        base_leverage *= 0.6  # More conservative in high vol
     elif volatility_regime == "low":
         base_leverage *= 1.1
 
     # Cap at phase limit
-    opp.recommended_leverage = min(base_leverage, config["max_leverage"])
+    opp.recommended_leverage = min(base_leverage, max_leverage)
 
-    # Calculate stop loss (tighter for higher leverage)
-    base_sl_pct = 0.03  # 3% base
-    opp.stop_loss_pct = base_sl_pct / opp.recommended_leverage * 2
+    # Calculate stop loss - ULTRA-TIGHT FOR HIGH LEVERAGE
+    # At 30x: liquidation at ~3.3%, so stop must be 1-1.5%
+    if opp.recommended_leverage >= 25.0:
+        # SAVAGE MODE: Ultra-tight stop loss (1-1.5%)
+        opp.stop_loss_pct = 0.012  # 1.2% stop loss for 30x
+    elif opp.recommended_leverage >= 15.0:
+        # High leverage: tight stop (2%)
+        opp.stop_loss_pct = 0.02
+    elif opp.recommended_leverage >= 10.0:
+        # Medium-high: 2.5% stop
+        opp.stop_loss_pct = 0.025
+    elif opp.recommended_leverage >= 5.0:
+        # Medium: 3% stop
+        opp.stop_loss_pct = 0.03
+    else:
+        # Conservative: 4% stop
+        opp.stop_loss_pct = 0.04
 
     # Calculate margin allocation
     opp.recommended_margin_pct = min(
@@ -400,12 +450,13 @@ def evaluate_perps_opportunity(
     # Calculate liquidation distance
     # Liquidation happens when loss = margin
     # With leverage L, price move of 1/L causes 100% loss
-    opp.liquidation_distance_pct = 1.0 / opp.recommended_leverage - 0.02  # Safety buffer
+    opp.liquidation_distance_pct = 1.0 / opp.recommended_leverage - 0.005  # Tighter safety buffer for high leverage
 
-    # Ensure stop loss is before liquidation
-    if opp.stop_loss_pct >= opp.liquidation_distance_pct * 0.8:
+    # Ensure stop loss is WELL before liquidation (critical for 30x)
+    liquidation_safety_margin = 0.7 if opp.recommended_leverage >= 20.0 else 0.8
+    if opp.stop_loss_pct >= opp.liquidation_distance_pct * liquidation_safety_margin:
         opp.is_valid = False
-        opp.rejection_reason = "stop_too_close_to_liquidation"
+        opp.rejection_reason = f"stop_too_close_to_liquidation: SL={opp.stop_loss_pct:.2%}, Liq={opp.liquidation_distance_pct:.2%}"
         return opp
 
     # Estimate edge

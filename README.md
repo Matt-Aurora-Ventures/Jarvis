@@ -167,15 +167,32 @@ High-risk trending token subsystem designed for the **$20 → $1,000,000 Challen
 - `core/lut_daemon.py`: Backup enforcement (run in parallel)
 - File locking for concurrent access safety
 
-### ⚡ Jupiter Perps Acceleration Layer (v2.3) - **NEW**
+### ⚡ Jupiter Perps Acceleration Layer (v2.3.1) - **SAVAGE MODE** 🔥 
 
 High-conviction leveraged perpetuals for accelerated capital growth.
 
 **Core Module** (`core/jupiter_perps.py`):
 - **Eligible Assets**: SOL, BTC, ETH (high liquidity only)
-- **Max Leverage**: 2x Phase 0, 3x Phase 1 (never exceeds 5x)
+- **Max Leverage**: 5x Phase 0, 15x Phase 1, **30x Phase 2 (SAVAGE MODE)**
+- **Conviction-Based Scaling**: 30x requires conviction > 0.9
+- **Ultra-Tight Stop Loss**: 1.2% stop for 30x (liquidation safety)
 - **Funding Awareness**: Rejects trades with adverse funding rates
-- **Liquidation Safety**: Stop loss always before liquidation price
+
+**Phase Configuration - SAVAGE SCALING**:
+| Phase | Name | Max Leverage | Max Trades/Day | Max Margin | Min Conviction |
+|-------|------|--------------|----------------|------------|----------------|
+| 0 | Trial | 5x | 2 | 35% | - |
+| 1 | Validated | 15x | 5 | 55% | - |
+| 2 | **SAVAGE** | **30x** | **10** | **75%** | **0.9** |
+
+**Stop Loss Scaling (Liquidation Protection)**:
+| Leverage | Stop Loss | Liquidation Distance |
+|----------|-----------|---------------------|
+| ≥25x | 1.2% | ~3.3% |
+| ≥15x | 2.0% | ~6.7% |
+| ≥10x | 2.5% | ~10% |
+| ≥5x | 3.0% | ~20% |
+| <5x | 4.0% | >20% |
 
 **Perps TP Ladder**:
 - TP1: 50% @ +4% (or +1.5R)
@@ -183,22 +200,9 @@ High-conviction leveraged perpetuals for accelerated capital growth.
 - Runner: 20% with trailing stop
 - Time Stop: 60 minutes
 
-**Risk Constraints (Phase 0)**:
-| Constraint | Value |
-|------------|-------|
-| Max Trades/Day | 2 |
-| Max Concurrent | 1 |
-| Max Margin | 35% wallet |
-| Max Leverage | 2x |
-| Risk Per Trade | 5% |
-| SOL Reserve | 0.05 SOL |
-
-**Promotion to Phase 1 requires**:
-- 10 completed trades
-- ProfitFactor ≥ 1.25
-- MaxDrawdown ≤ 15%
-- Zero liquidation events
-- Enforcement reliability ≥ 97%
+**Promotion Requirements**:
+- **Phase 0 → 1**: 10 trades, PF ≥ 1.25, MaxDD ≤ 15%, 0 liquidations
+- **Phase 1 → 2**: 25 trades, PF ≥ 1.5, MaxDD ≤ 10%, 97%+ enforcement reliability
 
 *State files: `~/.lifeos/trading/{lut_module_state,perps_state,exit_intents,execution_reliability}.json`*
 
