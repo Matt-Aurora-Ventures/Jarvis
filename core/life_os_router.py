@@ -582,6 +582,7 @@ timeframe, suitable_markets[], backtesting_params{}."""
                 StrategyEnsemble, create_default_ensemble
             )
             from core.risk_manager import get_risk_manager
+            from core.trading_strategies_advanced import MarketMaker
         except ImportError as e:
             return {"error": f"Strategy modules not available: {e}"}
         
@@ -592,6 +593,8 @@ timeframe, suitable_markets[], backtesting_params{}."""
             strategy = MeanReversion()
         elif strategy_name == "dca":
             strategy = DCABot()
+        elif strategy_name in {"market_maker", "marketmaker"}:
+            strategy = MarketMaker()
         else:
             strategy = create_default_ensemble()
         

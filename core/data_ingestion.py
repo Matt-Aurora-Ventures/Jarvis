@@ -278,11 +278,18 @@ class BinanceWSHandler:
         url = f"{self.WS_URL}/{'/'.join(streams)}"
         
         self._running = True
+        retry_delay = 1.0
+        heartbeat_timeout = 30.0
         while self._running:
             try:
-                async with websockets.connect(url) as ws:
+                async with websockets.connect(
+                    url,
+                    ping_interval=10,
+                    ping_timeout=10,
+                ) as ws:
                     self._ws = ws
                     logger.info(f"Connected to Binance WS: {len(streams)} streams")
+                    retry_delay = 1.0
                     
                     # Subscribe to streams
                     subscribe_msg = {
@@ -292,15 +299,24 @@ class BinanceWSHandler:
                     }
                     await ws.send(json.dumps(subscribe_msg))
                     
-                    async for message in ws:
-                        if not self._running:
+                    while self._running:
+                        try:
+                            message = await asyncio.wait_for(ws.recv(), timeout=heartbeat_timeout)
+                        except asyncio.TimeoutError:
+                            logger.warning("Binance WS heartbeat timeout; forcing reconnect")
+                            break
+                        except Exception as exc:
+                            logger.error(f"Binance WS recv error: {exc}")
                             break
                         await self._handle_message(message)
                         
             except Exception as e:
                 logger.error(f"Binance WS error: {e}")
-                if self._running:
-                    await asyncio.sleep(5)  # Reconnect delay
+            
+            if self._running:
+                logger.warning("Binance WS disconnected; reconnecting in %.1fs", retry_delay)
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 30.0)
     
     async def _handle_message(self, message: str):
         """Parse Binance trade message."""
@@ -364,11 +380,18 @@ class KrakenWSHandler:
             return
         
         self._running = True
+        retry_delay = 1.0
+        heartbeat_timeout = 30.0
         while self._running:
             try:
-                async with websockets.connect(self.WS_URL) as ws:
+                async with websockets.connect(
+                    self.WS_URL,
+                    ping_interval=10,
+                    ping_timeout=10,
+                ) as ws:
                     self._ws = ws
                     logger.info(f"Connected to Kraken WS")
+                    retry_delay = 1.0
                     
                     # Subscribe to trades
                     pairs = [self._symbol_to_kraken(s) for s in self.symbols]
@@ -379,15 +402,24 @@ class KrakenWSHandler:
                     }
                     await ws.send(json.dumps(subscribe_msg))
                     
-                    async for message in ws:
-                        if not self._running:
+                    while self._running:
+                        try:
+                            message = await asyncio.wait_for(ws.recv(), timeout=heartbeat_timeout)
+                        except asyncio.TimeoutError:
+                            logger.warning("Kraken WS heartbeat timeout; forcing reconnect")
+                            break
+                        except Exception as exc:
+                            logger.error(f"Kraken WS recv error: {exc}")
                             break
                         await self._handle_message(message)
                         
             except Exception as e:
                 logger.error(f"Kraken WS error: {e}")
-                if self._running:
-                    await asyncio.sleep(5)
+            
+            if self._running:
+                logger.warning("Kraken WS disconnected; reconnecting in %.1fs", retry_delay)
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 30.0)
     
     async def _handle_message(self, message: str):
         """Parse Kraken trade message."""

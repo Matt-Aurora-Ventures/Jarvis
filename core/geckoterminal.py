@@ -17,6 +17,10 @@ BASE_URL = "https://api.geckoterminal.com/api/v2"
 USER_AGENT = "LifeOS/1.0 (Jarvis GeckoTerminal Client)"
 
 
+def _backoff_delay(base: float, attempt: int, max_delay: float = 30.0) -> float:
+    return min(max_delay, base * (2 ** attempt))
+
+
 def fetch_pools(
     network: str,
     *,
@@ -122,8 +126,8 @@ def _get_json(
     for attempt in range(retries):
         try:
             resp = requests.get(url, headers=headers, params=params, timeout=timeout)
-            if resp.status_code == 429:
-                time.sleep(backoff_seconds * (attempt + 1))
+            if resp.status_code in (429, 503):
+                time.sleep(_backoff_delay(backoff_seconds, attempt))
                 continue
             resp.raise_for_status()
             payload = resp.json()
@@ -132,7 +136,7 @@ def _get_json(
             return payload
         except requests.RequestException as exc:
             last_error = str(exc)
-            time.sleep(backoff_seconds * (attempt + 1))
+            time.sleep(_backoff_delay(backoff_seconds, attempt))
 
     if last_error:
         print(f"[geckoterminal] request failed: {last_error}")

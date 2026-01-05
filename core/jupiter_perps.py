@@ -39,6 +39,7 @@ import requests
 
 from core import exit_intents
 from core import jupiter
+from core.transaction_guard import require_poly_gnosis_safe
 
 logger = logging.getLogger(__name__)
 
@@ -582,6 +583,12 @@ def execute_perps_entry(
     if not can_trade:
         logger.warning(f"[jupiter_perps] Cannot trade: {reason}")
         return None
+
+    if not paper_mode:
+        ok, error = require_poly_gnosis_safe("jupiter_perps_entry")
+        if not ok:
+            logger.error(f"[jupiter_perps] Safe enforcement failed: {error}")
+            return None
 
     state = load_perps_state()
     config = PERPS_PHASE_CONFIG.get(state.phase, PERPS_PHASE_CONFIG[0])

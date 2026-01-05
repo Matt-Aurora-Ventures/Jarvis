@@ -10,6 +10,7 @@ This is a CRITICAL safety component - no trade executes without approval.
 
 import json
 import logging
+import os
 import subprocess
 import time
 import uuid
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[1]
 APPROVALS_DIR = ROOT / "data" / "trading" / "approvals"
+KILL_SWITCH_ENV = "LIFEOS_KILL_SWITCH"
 
 
 class ApprovalStatus(Enum):
@@ -107,6 +109,7 @@ class ApprovalGate:
         self._pending: Dict[str, TradeProposal] = {}
         self._load_pending()
         self._kill_switch_active = False
+        self._sync_kill_switch_from_env()
     
     def _load_pending(self):
         """Load pending proposals from disk."""
@@ -136,6 +139,7 @@ class ApprovalGate:
         
         Returns the proposal ID.
         """
+        self._sync_kill_switch_from_env()
         if self._kill_switch_active:
             proposal.status = ApprovalStatus.KILLED
             proposal.rejection_reason = "Kill switch active"
@@ -171,6 +175,7 @@ class ApprovalGate:
     
     def approve(self, proposal_id: str, approved_by: str = "user") -> bool:
         """Approve a pending trade."""
+        self._sync_kill_switch_from_env()
         if proposal_id not in self._pending:
             log.warning(f"Proposal {proposal_id} not found in pending")
             return False
@@ -202,6 +207,7 @@ class ApprovalGate:
     
     def reject(self, proposal_id: str, reason: str = "") -> bool:
         """Reject a pending trade."""
+        self._sync_kill_switch_from_env()
         if proposal_id not in self._pending:
             log.warning(f"Proposal {proposal_id} not found in pending")
             return False
@@ -250,6 +256,14 @@ class ApprovalGate:
             pass
         
         return count
+
+    def _sync_kill_switch_from_env(self) -> None:
+        env_value = os.getenv(KILL_SWITCH_ENV) or os.getenv("KILL_SWITCH")
+        if not env_value:
+            return
+        if str(env_value).strip().lower() in {"1", "true", "yes", "on"}:
+            if not self._kill_switch_active:
+                self.kill_switch()
     
     def reset_kill_switch(self, confirm: str = "") -> bool:
         """Reset the kill switch. Requires confirmation."""

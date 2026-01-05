@@ -4,6 +4,19 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [1.1.0] - Institutional Hardening
+
+### 🔒 Audit Hardening
+
+- **Gnosis Safe Enforcement:** Added `core/transaction_guard.py` and enforced `POLY_GNOSIS_SAFE=2` in Solana swap + Jito bundle execution.
+- **WebSocket Resilience:** Heartbeat timeouts + exponential reconnect backoff for Binance/Kraken streams (`core/data_ingestion.py`).
+- **API 503/429 Backoff:** Exponential backoff across Birdeye, GeckoTerminal, DexScreener, Jupiter, RugCheck, and Jupiter swap endpoints.
+- **Fee-Aware Market Making:** Spread guardrails after fees in `core/trading_strategies_advanced.py::MarketMaker`.
+- **JSON Logging:** Structured logging toggle for trading daemon (`LIFEOS_LOG_JSON=1`).
+- **Kill Switch Env:** `LIFEOS_KILL_SWITCH` activates emergency trade shutdown (`core/approval_gate.py`).
+- **Blockhash Drift Hook:** Optional re-sign callback for Solana swaps to recover stale blockhash.
+- **TWAP Schedule Builder:** Time-sliced, venue-split execution via `SmartOrderRouter.build_twap_schedule`.
+
 # [2.3.0] - 2026-01-04
 
 ### ⚙️ Tokenized Equities + Execution Reliability

@@ -39,6 +39,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.transaction_guard import require_poly_gnosis_safe
+
 # Optional Solana imports
 try:
     from solders.keypair import Keypair
@@ -197,6 +199,10 @@ class JitoBundleClient:
         Returns:
             BundleResult with success status
         """
+        ok, error = require_poly_gnosis_safe("jito_send_bundle")
+        if not ok:
+            return BundleResult(success=False, error=error)
+
         if len(transactions) > 5:
             return BundleResult(
                 success=False,
@@ -674,6 +680,41 @@ class SmartOrderRouter:
             orders[0]["warning"] = "Exceeds max order size for venue"
         
         return orders
+
+    def build_twap_schedule(
+        self,
+        total_amount: int,
+        available_liquidity: Dict[str, int],
+        *,
+        duration_seconds: int,
+        slice_seconds: Optional[int] = None,
+        max_slippage_bps: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """
+        Build a TWAP schedule that splits size across time slices + venues.
+        """
+        slice_seconds = slice_seconds or self.time_slice_seconds
+        if slice_seconds <= 0:
+            slice_seconds = self.time_slice_seconds
+
+        slices = max(1, int(duration_seconds / slice_seconds))
+        base_amount = total_amount // slices
+        remainder = total_amount % slices
+        schedule = []
+
+        for idx in range(slices):
+            slice_amount = base_amount + (1 if idx < remainder else 0)
+            schedule.append({
+                "slice": idx + 1,
+                "execute_after_seconds": idx * slice_seconds,
+                "orders": self.split_order(
+                    slice_amount,
+                    available_liquidity,
+                    max_slippage_bps=max_slippage_bps,
+                ),
+            })
+
+        return schedule
     
     def _estimate_slippage(self, amount: int, liquidity: int) -> int:
         """Estimate slippage in basis points."""

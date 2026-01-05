@@ -8,7 +8,9 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+
+from core.transaction_guard import require_poly_gnosis_safe
 
 try:
     import aiohttp
@@ -34,6 +36,53 @@ JUPITER_QUOTE_API = "https://public.jupiterapi.com/quote"
 JUPITER_SWAP_API = "https://public.jupiterapi.com/swap"
 SOL_MINT = "So11111111111111111111111111111111111111112"
 USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+
+
+def _backoff_delay(base: float, attempt: int, max_delay: float = 30.0) -> float:
+    return min(max_delay, base * (2 ** attempt))
+
+
+async def _request_json(
+    method: str,
+    url: str,
+    *,
+    params: Optional[Dict[str, Any]] = None,
+    json_payload: Optional[Dict[str, Any]] = None,
+    retries: int = 3,
+    backoff_seconds: float = 0.5,
+    timeout_seconds: int = 20,
+) -> Optional[Dict[str, Any]]:
+    if not HAS_AIOHTTP:
+        return None
+    timeout = aiohttp.ClientTimeout(total=timeout_seconds)
+    for attempt in range(retries):
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                if method == "GET":
+                    async with session.get(url, params=params) as resp:
+                        if resp.status in (429, 503):
+                            await asyncio.sleep(_backoff_delay(backoff_seconds, attempt))
+                            continue
+                        if resp.status != 200:
+                            return None
+                        return await resp.json()
+                async with session.post(url, json=json_payload) as resp:
+                    if resp.status in (429, 503):
+                        await asyncio.sleep(_backoff_delay(backoff_seconds, attempt))
+                        continue
+                    if resp.status != 200:
+                        return None
+                    return await resp.json()
+        except Exception:
+            await asyncio.sleep(_backoff_delay(backoff_seconds, attempt))
+    return None
+
+
+def _is_blockhash_expired(error: Optional[str]) -> bool:
+    if not error:
+        return False
+    lower = error.lower()
+    return "blockhash" in lower or "blockhashnotfound" in lower or "blockhash not found" in lower
 
 
 @dataclass
@@ -146,11 +195,7 @@ async def get_swap_quote(
         "amount": str(amount),
         "slippageBps": slippage_bps,
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.get(JUPITER_QUOTE_API, params=params) as resp:
-            if resp.status != 200:
-                return None
-            return await resp.json()
+    return await _request_json("GET", JUPITER_QUOTE_API, params=params)
 
 
 async def get_swap_transaction(
@@ -166,12 +211,10 @@ async def get_swap_transaction(
         "dynamicComputeUnitLimit": True,
         "prioritizationFeeLamports": "auto",
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(JUPITER_SWAP_API, json=payload) as resp:
-            if resp.status != 200:
-                return None
-            data = await resp.json()
-            return data.get("swapTransaction")
+    data = await _request_json("POST", JUPITER_SWAP_API, json_payload=payload)
+    if not data:
+        return None
+    return data.get("swapTransaction")
 
 
 async def _confirm_signature(
@@ -205,18 +248,25 @@ async def execute_swap_transaction(
     *,
     simulate: bool = True,
     commitment: str = "confirmed",
+    refresh_signed_tx: Optional[Callable[[], "VersionedTransaction"]] = None,
 ) -> SwapExecutionResult:
     if not HAS_SOLANA:
         return SwapExecutionResult(success=False, error="solana_sdk_missing")
 
+    ok, error = require_poly_gnosis_safe("solana_swap_execute")
+    if not ok:
+        return SwapExecutionResult(success=False, error=error)
+
     healthy = await get_healthy_endpoints(endpoints)
     last_error = None
+    refreshed = False
+    current_tx = signed_tx
 
     for endpoint in healthy:
         try:
             async with AsyncClient(endpoint.url) as client:
                 if simulate:
-                    sim = await client.simulate_transaction(signed_tx)
+                    sim = await client.simulate_transaction(current_tx)
                     if sim.value and sim.value.err:
                         return SwapExecutionResult(
                             success=False,
@@ -226,7 +276,7 @@ async def execute_swap_transaction(
                         )
 
                 opts = TxOpts(skip_preflight=False, max_retries=3, preflight_commitment=commitment)
-                send_resp = await client.send_transaction(signed_tx, opts=opts)
+                send_resp = await client.send_transaction(current_tx, opts=opts)
                 if not send_resp.value:
                     last_error = "send_failed"
                     continue
@@ -239,8 +289,22 @@ async def execute_swap_transaction(
                         endpoint=endpoint.name,
                     )
                 last_error = err or "confirmation_failed"
+                if refresh_signed_tx and not refreshed and _is_blockhash_expired(last_error):
+                    try:
+                        current_tx = refresh_signed_tx()
+                        refreshed = True
+                        continue
+                    except Exception as refresh_exc:
+                        last_error = str(refresh_exc)
         except Exception as exc:
             last_error = str(exc)
+            if refresh_signed_tx and not refreshed and _is_blockhash_expired(last_error):
+                try:
+                    current_tx = refresh_signed_tx()
+                    refreshed = True
+                    continue
+                except Exception as refresh_exc:
+                    last_error = str(refresh_exc)
             continue
 
     return SwapExecutionResult(success=False, error=last_error or "rpc_failed")

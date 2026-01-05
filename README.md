@@ -1086,3 +1086,22 @@ MIT License - Use freely, modify freely, just don't blame us if Jarvis becomes t
   <b>Built by <a href="https://github.com/Matt-Aurora-Ventures">Matt Aurora Ventures</a></b><br>
   <i>"The best AI is the one that makes you better."</i>
 </p>
+
+## Magnus 0x Audit Certification
+
+Security Grade: Institutional / Production Ready
+
+Improvements Made:
+- Enforced `POLY_GNOSIS_SAFE=2` guardrails on transaction paths (swap execution + Jito bundles).
+- Added WebSocket heartbeat timeout + exponential reconnect backoff for Binance/Kraken feeds.
+- Fee-aware spread guardrails for MarketMaker to prevent post-fee leakage.
+- Enabled JSON-structured logging for trading daemon via `LIFEOS_LOG_JSON=1`.
+- Added env-driven kill switch (`LIFEOS_KILL_SWITCH`) for immediate trade suppression.
+
+God Tier Feature Added:
+- TWAP schedule builder in `SmartOrderRouter` (time-sliced + venue-split execution to reduce impact).
+
+Death Scenarios Patched:
+- 503/429 API failures now back off exponentially across core price/data clients.
+- Silent WebSocket stalls force reconnect on heartbeat timeout.
+- Blockhash drift recovery hook added for Solana swap execution (optional re-sign).

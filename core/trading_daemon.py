@@ -8,6 +8,7 @@ Enhanced to support:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import signal
@@ -53,6 +54,9 @@ def _load_config() -> Dict[str, Any]:
     symbol_map_path = _resolve_path(daemon_cfg.get("symbol_map_path"), DEFAULT_SYMBOL_MAP)
     reconcile_on_start = bool(daemon_cfg.get("reconcile_on_start", True))
     auto_create_intents = bool(daemon_cfg.get("auto_create_intents", False))
+    json_logging = bool(daemon_cfg.get("json_logging", False))
+    if os.getenv("LIFEOS_LOG_JSON", "").strip().lower() in {"1", "true", "yes", "on"}:
+        json_logging = True
     return {
         "poll_seconds": max(poll_seconds, 5),
         "price_sources": price_sources,
@@ -60,16 +64,30 @@ def _load_config() -> Dict[str, Any]:
         "symbol_map_path": symbol_map_path,
         "reconcile_on_start": reconcile_on_start,
         "auto_create_intents": auto_create_intents,
+        "json_logging": json_logging,
     }
 
 
-def _setup_logger(log_path: Path) -> logging.Logger:
+class _JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(record.created)),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload)
+
+
+def _setup_logger(log_path: Path, *, json_logging: bool = False) -> logging.Logger:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("lifeos.trading_daemon")
     if logger.handlers:
         return logger
     logger.setLevel(logging.INFO)
-    formatter = logging.Formatter("[%(asctime)s] %(levelname)s %(message)s")
+    formatter = _JsonFormatter() if json_logging else logging.Formatter("[%(asctime)s] %(levelname)s %(message)s")
     file_handler = logging.FileHandler(log_path)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
@@ -256,7 +274,7 @@ def _check_lut_perps_intents(
 
 def run() -> None:
     cfg = _load_config()
-    logger = _setup_logger(cfg["log_path"])
+    logger = _setup_logger(cfg["log_path"], json_logging=cfg["json_logging"])
     rm = get_risk_manager()
     symbol_map_path = cfg["symbol_map_path"]
     poll_seconds = cfg["poll_seconds"]

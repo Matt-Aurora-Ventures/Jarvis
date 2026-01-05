@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # Import base classes from existing trading strategies
 from core.trading_strategies import BaseStrategy, TradeSignal
+from core import fee_model
 
 
 # ============================================================================
@@ -637,11 +638,17 @@ class MarketMaker(BaseStrategy):
         max_inventory: float = 1000.0,  # Max position in quote currency
         inventory_skew_factor: float = 0.5,  # How much to skew on imbalance
         volatility_multiplier: float = 2.0,  # Spread multiplier in high vol
+        min_spread_bps: Optional[float] = None,  # Guardrail after fees
+        asset_type: str = "crypto",
+        issuer: str = "",
     ):
         self.base_spread_pct = base_spread_pct
         self.max_inventory = max_inventory
         self.inventory_skew_factor = inventory_skew_factor
         self.volatility_multiplier = volatility_multiplier
+        self.min_spread_bps = min_spread_bps
+        self.asset_type = asset_type
+        self.issuer = issuer
         self.current_inventory: float = 0.0  # Positive = long, negative = short
     
     def analyze(self, prices: List[float], symbol: str = "UNKNOWN") -> TradeSignal:
@@ -671,6 +678,22 @@ class MarketMaker(BaseStrategy):
         spread_pct = self.base_spread_pct
         if volatility > 0.03:  # High volatility threshold
             spread_pct *= self.volatility_multiplier
+
+        # Fee-aware guardrail to prevent negative spread after fees
+        min_spread_bps = self.min_spread_bps
+        if min_spread_bps is None:
+            profile = fee_model.get_fee_profile(self.asset_type, self.issuer)
+            roundtrip_fee_bps = (
+                profile.amm_fee_bps
+                + profile.aggregator_fee_bps
+                + profile.issuer_fee_bps
+                + profile.conversion_bps
+            ) * 2
+            min_spread_bps = roundtrip_fee_bps
+        spread_bps = spread_pct * 100
+        if spread_bps < min_spread_bps:
+            spread_bps = min_spread_bps
+            spread_pct = spread_bps / 100
         
         half_spread = spread_pct / 2 / 100
         
@@ -720,6 +743,9 @@ class MarketMaker(BaseStrategy):
                 "bid": round(bid_price, 4),
                 "ask": round(ask_price, 4),
                 "spread_pct": round(spread_pct, 4),
+                "spread_bps": round(spread_bps, 2),
+                "min_spread_bps": round(min_spread_bps, 2),
+                "spread_after_fees_bps": round(spread_bps - min_spread_bps, 2),
                 "inventory": self.current_inventory,
                 "volatility": round(volatility, 4),
                 "reason": "Quoting both sides",

@@ -229,6 +229,9 @@
     "min_idle_seconds": 1200,
     "max_pages": 5
   },
+  "gnosis_safe": {
+    "polygon_safe_id": 2
+  },
   "trading": {
     "dex_only": true,
     "strategy": "sma_cross",
