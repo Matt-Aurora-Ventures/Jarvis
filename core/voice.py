@@ -46,6 +46,8 @@ _ACTIVE_SPEECH_LOCK = threading.Lock()
 _CHAT_LOCK_PATH = state.LOGS_DIR / "voice_chat.lock"
 _SAY_VOICES_CACHE: Optional[set[str]] = None
 _SAY_VOICES_LOCK = threading.Lock()
+_FASTER_WHISPER_MODEL = None
+_FASTER_WHISPER_LOCK = threading.Lock()
 
 
 @dataclass
@@ -88,6 +90,17 @@ def _voice_cfg() -> dict:
     voice_cfg.setdefault("voice_clone_enabled", False)
     voice_cfg.setdefault("voice_clone_language", "en")
     voice_cfg.setdefault("allow_cloud_stt", True)
+    voice_cfg.setdefault("local_stt_enabled", True)
+    voice_cfg.setdefault("local_stt_engine", "faster_whisper")
+    voice_cfg.setdefault("local_stt_language", "en")
+    voice_cfg.setdefault("local_whisper_model", "base.en")
+    voice_cfg.setdefault("local_stt_device", "cpu")
+    voice_cfg.setdefault("local_stt_compute_type", "int8")
+    voice_cfg.setdefault("local_stt_vad_filter", True)
+    voice_cfg.setdefault("vad_enabled", True)
+    voice_cfg.setdefault("vad_aggressiveness", 2)
+    voice_cfg.setdefault("vad_frame_ms", 30)
+    voice_cfg.setdefault("vad_speech_ratio", 0.1)
     voice_cfg.setdefault(
         "morgan_freeman_voice_candidates",
         ["Reed (English (US))", "Ralph", "Fred", "Eddy (English (US))", "Daniel"],
@@ -293,6 +306,95 @@ def _match_wake_word(text: str, wake_words: list[str], max_offset_words: int) ->
                 command_tokens = tokens[end:]
                 return " ".join(command_tokens).strip()
     return None
+
+
+def _load_faster_whisper(voice_cfg: dict):
+    global _FASTER_WHISPER_MODEL
+    with _FASTER_WHISPER_LOCK:
+        if _FASTER_WHISPER_MODEL is not None:
+            return _FASTER_WHISPER_MODEL
+        try:
+            from faster_whisper import WhisperModel
+        except Exception:
+            return None
+        model_name = str(voice_cfg.get("local_whisper_model", "base.en")).strip() or "base.en"
+        device = str(voice_cfg.get("local_stt_device", "cpu")).strip() or "cpu"
+        compute = str(voice_cfg.get("local_stt_compute_type", "int8")).strip() or "int8"
+        try:
+            _FASTER_WHISPER_MODEL = WhisperModel(model_name, device=device, compute_type=compute)
+            return _FASTER_WHISPER_MODEL
+        except Exception as exc:
+            _set_voice_error(f"faster-whisper init failed: {exc}")
+            return None
+
+
+def _transcribe_with_faster_whisper(audio, voice_cfg: dict) -> str:
+    model = _load_faster_whisper(voice_cfg)
+    if model is None:
+        return ""
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(audio.get_wav_data(convert_rate=16000, convert_width=2))
+            temp_path = f.name
+        language = str(voice_cfg.get("local_stt_language", "en")).strip() or "en"
+        vad_filter = bool(voice_cfg.get("local_stt_vad_filter", True))
+        segments, _ = model.transcribe(
+            temp_path,
+            language=language,
+            vad_filter=vad_filter,
+        )
+        text = " ".join(seg.text.strip() for seg in segments if seg.text.strip())
+        return text.strip()
+    except Exception as exc:
+        _set_voice_error(f"faster-whisper failed: {exc}")
+        return ""
+    finally:
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+
+
+def _has_speech_vad(audio, voice_cfg: dict) -> bool:
+    if not bool(voice_cfg.get("vad_enabled", True)):
+        return True
+    try:
+        import webrtcvad
+    except Exception:
+        return True
+
+    aggressiveness = int(voice_cfg.get("vad_aggressiveness", 2))
+    aggressiveness = max(0, min(3, aggressiveness))
+    frame_ms = int(voice_cfg.get("vad_frame_ms", 30))
+    if frame_ms not in (10, 20, 30):
+        frame_ms = 30
+    speech_ratio = float(voice_cfg.get("vad_speech_ratio", 0.1))
+    speech_ratio = max(0.0, min(1.0, speech_ratio))
+
+    sample_rate = 16000
+    raw = audio.get_raw_data(convert_rate=sample_rate, convert_width=2)
+    if not raw:
+        return True
+    frame_bytes = int(sample_rate * (frame_ms / 1000.0) * 2)
+    if frame_bytes <= 0:
+        return True
+
+    vad = webrtcvad.Vad(aggressiveness)
+    speech_frames = 0
+    total_frames = 0
+    for i in range(0, len(raw) - frame_bytes + 1, frame_bytes):
+        frame = raw[i : i + frame_bytes]
+        if len(frame) < frame_bytes:
+            continue
+        total_frames += 1
+        if vad.is_speech(frame, sample_rate):
+            speech_frames += 1
+
+    if total_frames == 0:
+        return True
+    return (speech_frames / total_frames) >= speech_ratio
 
 
 def _speak_with_openai_tts(text: str, voice_cfg: dict) -> bool:
@@ -766,6 +868,16 @@ def _transcribe_once(timeout: int, phrase_time_limit: int) -> str:
         return ""
 
     voice_cfg = _voice_cfg()
+    if not _has_speech_vad(audio, voice_cfg):
+        return ""
+
+    local_enabled = bool(voice_cfg.get("local_stt_enabled", True))
+    local_engine = str(voice_cfg.get("local_stt_engine", "faster_whisper")).strip().lower()
+    if local_enabled and local_engine == "faster_whisper":
+        local_text = _transcribe_with_faster_whisper(audio, voice_cfg)
+        if local_text:
+            return local_text
+
     allow_cloud = bool(voice_cfg.get("allow_cloud_stt", True))
 
     if allow_cloud:
@@ -806,10 +918,11 @@ def _transcribe_once(timeout: int, phrase_time_limit: int) -> str:
                 pass
 
     # Fallback to Google
-    try:
-        return recognizer.recognize_google(audio)
-    except Exception as e:
-        pass
+    if allow_cloud:
+        try:
+            return recognizer.recognize_google(audio)
+        except Exception:
+            pass
 
     # Fallback to Sphinx (Last resort)
     try:
