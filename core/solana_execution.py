@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,6 +84,34 @@ def _is_blockhash_expired(error: Optional[str]) -> bool:
         return False
     lower = error.lower()
     return "blockhash" in lower or "blockhashnotfound" in lower or "blockhash not found" in lower
+
+
+def describe_simulation_error(error: Optional[str]) -> Optional[str]:
+    """Return a short, human-readable hint for common Solana simulation errors."""
+    if not error:
+        return None
+
+    lower = error.lower()
+    if "alreadyprocessed" in lower:
+        return "Transaction already processed; likely duplicate or replayed."
+    if "blockhash" in lower:
+        return "Blockhash expired; rebuild and re-sign the transaction."
+    if "accountinuse" in lower:
+        return "Account in use; retry with backoff."
+    if "insufficientfunds" in lower:
+        return "Insufficient funds for fee or transfer."
+    if "invalidaccountdata" in lower:
+        return "Invalid account data; verify mint/account ownership."
+    if "uninitializedaccount" in lower:
+        return "Account not initialized; create associated token account."
+    if "signatureverificationfailed" in lower:
+        return "Signature verification failed; ensure signer and recent blockhash match."
+
+    match = re.search(r"InstructionErrorCustom\((\d+)\)", error)
+    if match:
+        code = match.group(1)
+        return f"Custom program error {code}; program-specific constraint failed."
+    return None
 
 
 @dataclass

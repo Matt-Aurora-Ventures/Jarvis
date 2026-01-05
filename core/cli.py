@@ -32,6 +32,7 @@ from core import (
     providers,
     reporting,
     research,
+    rpc_diagnostics,
     safety,
     secrets,
     solana_scanner,
@@ -719,6 +720,34 @@ def cmd_report(args: argparse.Namespace) -> None:
 def cmd_diagnostics(args: argparse.Namespace) -> None:
     _ = args
     print(capture_diagnostics_text(dry_run=True))
+
+
+def cmd_rpc_diagnostics(args: argparse.Namespace) -> None:
+    payload = rpc_diagnostics.run_solana_rpc_diagnostics(
+        include_simulation=not args.no_sim,
+    )
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return
+
+    endpoints = payload.get("endpoints", [])
+    print("Solana RPC Diagnostics:")
+    for endpoint in endpoints:
+        name = endpoint.get("name", "unknown")
+        health_ok = endpoint.get("health_ok")
+        health_ms = endpoint.get("health_ms")
+        blockhash_ms = endpoint.get("blockhash_ms")
+        simulate_ok = endpoint.get("simulate_ok")
+        simulate_error = endpoint.get("simulate_error")
+        simulate_hint = endpoint.get("simulate_hint")
+        print(
+            f"- {name}: health={health_ok} ({health_ms}ms), "
+            f"blockhash={blockhash_ms}ms, simulate={simulate_ok}"
+        )
+        if simulate_error and simulate_error not in {"skipped", "simulation_unavailable"}:
+            print(f"  simulate_error: {simulate_error}")
+        if simulate_hint:
+            print(f"  simulate_hint: {simulate_hint}")
 
 
 def cmd_overnight(args: argparse.Namespace) -> None:
@@ -2176,6 +2205,12 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("overnight", parents=[mode_parser])
 
     subparsers.add_parser("diagnostics", parents=[mode_parser])
+    rpc_diag_parser = subparsers.add_parser(
+        "rpc-diagnostics",
+        help="Probe Solana RPC endpoints and simulation health",
+    )
+    rpc_diag_parser.add_argument("--no-sim", action="store_true", help="Skip simulation probe")
+    rpc_diag_parser.add_argument("--json", action="store_true", help="Output JSON")
 
     subparsers.add_parser("talk")
     subparsers.add_parser("chat")
@@ -2509,6 +2544,9 @@ def main() -> None:
         return
     if args.command == "diagnostics":
         cmd_diagnostics(args)
+        return
+    if args.command == "rpc-diagnostics":
+        cmd_rpc_diagnostics(args)
         return
     if args.command == "talk":
         cmd_talk(args)

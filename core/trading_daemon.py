@@ -55,6 +55,11 @@ def _load_config() -> Dict[str, Any]:
     reconcile_on_start = bool(daemon_cfg.get("reconcile_on_start", True))
     auto_create_intents = bool(daemon_cfg.get("auto_create_intents", False))
     json_logging = bool(daemon_cfg.get("json_logging", False))
+    mirror_only = daemon_cfg.get("mirror_only_strategies", ["exit_intent_mirror"])
+    if isinstance(mirror_only, str):
+        mirror_only = [mirror_only]
+    if not isinstance(mirror_only, list):
+        mirror_only = ["exit_intent_mirror"]
     if os.getenv("LIFEOS_LOG_JSON", "").strip().lower() in {"1", "true", "yes", "on"}:
         json_logging = True
     return {
@@ -65,6 +70,7 @@ def _load_config() -> Dict[str, Any]:
         "reconcile_on_start": reconcile_on_start,
         "auto_create_intents": auto_create_intents,
         "json_logging": json_logging,
+        "mirror_only_strategies": [str(item) for item in mirror_only if item],
     }
 
 
@@ -249,6 +255,14 @@ def _check_lut_perps_intents(
 
                 record_price = params.get("price", current_price)
                 error = result.error if not result.success else None
+                error_hint = None
+                if error:
+                    try:
+                        from core import solana_execution
+
+                        error_hint = solana_execution.describe_simulation_error(error)
+                    except Exception:
+                        error_hint = None
                 action_record = {
                     "intent_id": intent.id,
                     "symbol": intent.symbol,
@@ -258,6 +272,7 @@ def _check_lut_perps_intents(
                     "pnl_pct": result.pnl_pct,
                     "success": result.success,
                     "error": error,
+                    "error_hint": error_hint,
                 }
                 actions_taken.append(action_record)
 
@@ -271,10 +286,11 @@ def _check_lut_perps_intents(
                 )
                 if error:
                     logger.warning(
-                        "LUT/Perps action failed: %s %s error=%s",
+                        "LUT/Perps action failed: %s %s error=%s hint=%s",
                         action.value,
                         intent.symbol,
                         error,
+                        error_hint,
                     )
 
             # Update intent with tracking
@@ -295,8 +311,11 @@ def run() -> None:
     price_sources = cfg["price_sources"]
     reconcile_on_start = cfg["reconcile_on_start"]
     auto_create_intents = cfg["auto_create_intents"]
+    mirror_only_strategies = cfg["mirror_only_strategies"]
 
     logger.info("Trading daemon started. Poll=%ss sources=%s", poll_seconds, ",".join(price_sources))
+    if mirror_only_strategies:
+        logger.info("Mirror-only strategies: %s", ",".join(mirror_only_strategies))
 
     if reconcile_on_start:
         try:
@@ -348,7 +367,7 @@ def run() -> None:
             current_prices[symbol] = price
 
         if current_prices:
-            closed = rm.check_stops(current_prices)
+            closed = rm.check_stops(current_prices, ignore_strategies=mirror_only_strategies)
             for trade in closed:
                 logger.info(
                     "Closed %s (%s) at %.6f status=%s pnl=%.4f",

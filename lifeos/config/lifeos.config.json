@@ -282,6 +282,11 @@
     ],
     "low_fee_focus": true
   },
+  "trading_daemon": {
+    "mirror_only_strategies": [
+      "exit_intent_mirror"
+    ]
+  },
   "strategy_scores": {
     "min_score": 50.0,
     "loss_streak_limit": 3,

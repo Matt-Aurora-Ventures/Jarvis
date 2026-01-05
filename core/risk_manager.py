@@ -28,7 +28,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 
 # Default data directory
@@ -405,7 +405,12 @@ class RiskManager:
         
         return None
     
-    def check_stops(self, current_prices: Dict[str, float]) -> List[Trade]:
+    def check_stops(
+        self,
+        current_prices: Dict[str, float],
+        *,
+        ignore_strategies: Optional[Iterable[str]] = None,
+    ) -> List[Trade]:
         """
         Check all open trades against current prices for stop-loss/take-profit.
         
@@ -417,8 +422,12 @@ class RiskManager:
         """
         to_close = []
         
+        ignore = {s.lower() for s in ignore_strategies or [] if s}
         for trade in self._trades:
             if trade.status != "OPEN":
+                continue
+
+            if trade.strategy and trade.strategy.lower() in ignore:
                 continue
             
             price = current_prices.get(trade.symbol)
