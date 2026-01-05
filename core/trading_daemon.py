@@ -248,6 +248,7 @@ def _check_lut_perps_intents(
                 )
 
                 record_price = params.get("price", current_price)
+                error = result.error if not result.success else None
                 action_record = {
                     "intent_id": intent.id,
                     "symbol": intent.symbol,
@@ -256,6 +257,7 @@ def _check_lut_perps_intents(
                     "pnl_usd": result.pnl_usd,
                     "pnl_pct": result.pnl_pct,
                     "success": result.success,
+                    "error": error,
                 }
                 actions_taken.append(action_record)
 
@@ -267,6 +269,13 @@ def _check_lut_perps_intents(
                     result.pnl_usd,
                     result.pnl_pct,
                 )
+                if error:
+                    logger.warning(
+                        "LUT/Perps action failed: %s %s error=%s",
+                        action.value,
+                        intent.symbol,
+                        error,
+                    )
 
             # Update intent with tracking
             exit_intents.update_intent(intent)

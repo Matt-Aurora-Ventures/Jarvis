@@ -16,6 +16,18 @@
         },
         "fallback": [
             {
+                "name": "publicnode_solana",
+                "url": "https://solana.publicnode.com",
+                "rate_limit": 20,
+                "timeout_ms": 20000
+            },
+            {
+                "name": "ankr_solana",
+                "url": "https://rpc.ankr.com/solana",
+                "rate_limit": 30,
+                "timeout_ms": 20000
+            },
+            {
                 "name": "alchemy_solana",
                 "url": "https://solana-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}",
                 "rate_limit": 50
