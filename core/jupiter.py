@@ -15,6 +15,7 @@ CACHE_DIR = ROOT / "data" / "trader" / "jupiter_cache"
 QUOTE_URL = "https://quote-api.jup.ag/v6/quote"
 PRICE_URL = "https://price.jup.ag/v6/price"
 TOKEN_LIST_URL = "https://token.jup.ag/all"
+TOKEN_LIST_FALLBACK_URL = "https://cdn.jsdelivr.net/gh/solana-labs/token-list@main/src/tokens/solana.tokenlist.json"
 USER_AGENT = "LifeOS/1.0 (Jarvis Jupiter Client)"
 
 # Common token mints
@@ -25,6 +26,16 @@ USDT_MINT = "Es9vMFrzaCER3EJmqvQC2Uo9qowWP1h1xFh3Le7YpR1V"
 
 def _backoff_delay(base: float, attempt: int, max_delay: float = 30.0) -> float:
     return min(max_delay, base * (2 ** attempt))
+
+
+def _extract_token_list(payload: Any) -> List[Dict[str, Any]]:
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        tokens = payload.get("tokens")
+        if isinstance(tokens, list):
+            return tokens
+    return []
 
 
 def get_quote(
@@ -129,8 +140,14 @@ def get_token_price_in_usd(
 def fetch_token_list(*, cache_ttl_seconds: int = 3600) -> List[Dict[str, Any]]:
     """Fetch the full Jupiter token list."""
     result = _get_json(TOKEN_LIST_URL, cache_ttl_seconds=cache_ttl_seconds)
-    if isinstance(result, list):
-        return result
+    tokens = _extract_token_list(result)
+    if tokens:
+        return tokens
+
+    fallback = _get_json(TOKEN_LIST_FALLBACK_URL, cache_ttl_seconds=cache_ttl_seconds)
+    tokens = _extract_token_list(fallback)
+    if tokens:
+        return tokens
     return []
 
 

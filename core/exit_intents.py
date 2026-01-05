@@ -825,7 +825,10 @@ def execute_action(
         return _fail_execution(f"live_execution_failed:{exc}")
 
     if not result.success:
-        return _fail_execution(result.error or "execution_failed")
+        error = result.error or "execution_failed"
+        if result.simulation_error:
+            error = f"{error}:{result.simulation_error}"
+        return _fail_execution(error)
 
     intent.remaining_quantity -= quantity
     if intent.remaining_quantity <= 0.001:
