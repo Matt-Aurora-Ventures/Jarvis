@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import json
 import os
+import time
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
 
+from core import config
+
 ROOT = Path(__file__).resolve().parents[1]
 SECRETS_PATH = ROOT / "secrets" / "keys.json"
 CACHE_DIR = ROOT / "data" / "trader" / "xai_cache"
+CACHE_PATH = CACHE_DIR / "xai_twitter_cache.json"
+USAGE_PATH = ROOT / "data" / "trader" / "grok_usage.json"
 
 
 def load_api_key() -> Optional[str]:
@@ -25,6 +31,86 @@ def load_api_key() -> Optional[str]:
         return None
 
 
+def _load_json(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+        return data if isinstance(data, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _write_json(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2))
+
+
+def _budget_config() -> Dict[str, Any]:
+    cfg = config.load_config()
+    policy = cfg.get("sentiment_spend_policy", {})
+    return {
+        "enabled": bool(policy.get("enabled", True)),
+        "daily_budget_usd": float(policy.get("daily_budget_usd", 3.0)),
+        "warn_at_usd": float(policy.get("warn_at_usd", 3.0)),
+        "per_request_cost_usd": float(policy.get("per_request_cost_usd", 0.05)),
+        "ttl_seconds": int(policy.get("ttl_seconds", 3600)),
+    }
+
+
+def _usage_key() -> str:
+    return time.strftime("%Y-%m-%d")
+
+
+def _check_budget(requests_needed: int = 1) -> bool:
+    policy = _budget_config()
+    if not policy["enabled"]:
+        return True
+    usage = _load_json(USAGE_PATH)
+    day_key = _usage_key()
+    daily = usage.get(day_key, {"requests": 0, "cost_usd": 0.0})
+    projected_cost = daily["cost_usd"] + (requests_needed * policy["per_request_cost_usd"])
+    return projected_cost <= policy["daily_budget_usd"]
+
+
+def _record_usage(requests_used: int) -> None:
+    policy = _budget_config()
+    if not policy["enabled"]:
+        return
+    usage = _load_json(USAGE_PATH)
+    day_key = _usage_key()
+    daily = usage.get(day_key, {"requests": 0, "cost_usd": 0.0})
+    daily["requests"] = int(daily.get("requests", 0)) + requests_used
+    daily["cost_usd"] = float(daily.get("cost_usd", 0.0)) + (requests_used * policy["per_request_cost_usd"])
+    usage[day_key] = daily
+    _write_json(USAGE_PATH, usage)
+
+
+def _cache_key(*parts: str) -> str:
+    payload = "::".join(parts).encode("utf-8")
+    return sha256(payload).hexdigest()
+
+
+def _cache_get(key: str) -> Optional[Dict[str, Any]]:
+    policy = _budget_config()
+    cache = _load_json(CACHE_PATH)
+    entry = cache.get(key)
+    if not entry:
+        return None
+    if time.time() - float(entry.get("timestamp", 0)) > policy["ttl_seconds"]:
+        return None
+    return entry.get("payload")
+
+
+def _cache_set(key: str, payload: Dict[str, Any]) -> None:
+    cache = _load_json(CACHE_PATH)
+    cache[key] = {
+        "timestamp": time.time(),
+        "payload": payload,
+    }
+    _write_json(CACHE_PATH, cache)
+
+
 def analyze_trader_tweets(
     handle: str,
     *,
@@ -36,11 +122,18 @@ def analyze_trader_tweets(
     
     Returns analysis of win/loss ratio based on historical calls.
     """
+    cache_key = _cache_key("analysis", handle.lower(), str(max_results), focus)
+    cached = _cache_get(cache_key)
+    if cached:
+        cached["cached"] = True
+        return cached
+
+    if not _check_budget(1):
+        return {"error": "XAI budget exceeded", "cached": False}
+
     api_key = load_api_key()
     if not api_key:
         return {"error": "XAI API key not found in secrets/keys.json"}
-    
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     
     # Use Grok with live search to analyze the trader's history
     prompt = f"""Analyze the X/Twitter account @{handle} for crypto trading performance.
@@ -118,12 +211,15 @@ Return a structured analysis with concrete numbers where possible."""
                     elif item_type == "text":
                         content += item.get("text", "")
         
-        return {
+        payload = {
             "handle": handle,
             "analysis": content,
             "model": payload["model"],
             "raw_response": result,
         }
+        _cache_set(cache_key, payload)
+        _record_usage(1)
+        return payload
         
     except requests.HTTPError as e:
         error_body = ""
@@ -138,6 +234,15 @@ Return a structured analysis with concrete numbers where possible."""
 
 def quick_sentiment_check(handle: str) -> Dict[str, Any]:
     """Quick check of a trader's recent sentiment (uses fewer API credits)."""
+    cache_key = _cache_key("quick", handle.lower())
+    cached = _cache_get(cache_key)
+    if cached:
+        cached["cached"] = True
+        return cached
+
+    if not _check_budget(1):
+        return {"error": "XAI budget exceeded", "cached": False}
+
     api_key = load_api_key()
     if not api_key:
         return {"error": "XAI API key not found"}
@@ -189,7 +294,10 @@ Keep response brief and actionable."""
                                 content += c.get("text", "")
                     elif item_type == "text":
                         content += item.get("text", "")
-        return {"handle": handle, "sentiment": content}
+        payload = {"handle": handle, "sentiment": content}
+        _cache_set(cache_key, payload)
+        _record_usage(1)
+        return payload
     except requests.RequestException as e:
         return {"error": str(e)}
 

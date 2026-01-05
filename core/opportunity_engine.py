@@ -83,6 +83,11 @@ DEFAULT_ENGINE_CONFIG: Dict[str, Any] = {
         "min": 0.01,
         "max": 0.15,
     },
+    "open_position_policy": {
+        "block_open_symbols": False,
+        "score_penalty": 0.25,
+        "include_exit_intents": True,
+    },
     "compliance": {
         "jurisdiction": "unknown",
         "kyc_required": "unknown",
@@ -658,6 +663,43 @@ def run_engine(
 ) -> Dict[str, Any]:
     engine_cfg = load_engine_config()
     state, state_path = load_engine_state(engine_cfg)
+    open_position_policy = engine_cfg.get("open_position_policy", {})
+    block_open_symbols = bool(open_position_policy.get("block_open_symbols", False))
+    open_penalty = float(open_position_policy.get("score_penalty", 0.0))
+    include_exit_intents = bool(open_position_policy.get("include_exit_intents", True))
+
+    portfolio_context: Dict[str, Any] = {
+        "open_trades": [],
+        "open_intents": [],
+        "open_symbols": [],
+        "risk_status": None,
+        "risk_error": None,
+    }
+    open_symbols: set[str] = set()
+    try:
+        from core.risk_manager import get_risk_manager
+
+        rm = get_risk_manager()
+        open_trades = rm.get_open_trades()
+        portfolio_context["open_trades"] = open_trades
+        open_symbols.update(
+            {str(t.get("symbol")).upper() for t in open_trades if t.get("symbol")}
+        )
+        portfolio_context["risk_status"] = rm.can_trade()
+    except Exception as exc:
+        portfolio_context["risk_error"] = str(exc)
+
+    if include_exit_intents:
+        try:
+            from core import exit_intents
+
+            intents = exit_intents.load_active_intents()
+            portfolio_context["open_intents"] = [i.to_dict() for i in intents]
+            open_symbols.update({i.symbol.upper() for i in intents if i.symbol})
+        except Exception as exc:
+            portfolio_context["risk_error"] = portfolio_context["risk_error"] or str(exc)
+
+    portfolio_context["open_symbols"] = sorted(open_symbols)
     equities_snapshot = tokenized_equities_universe.load_universe()
     if refresh_equities:
         equities_snapshot = tokenized_equities_universe.refresh_universe()
@@ -704,6 +746,10 @@ def run_engine(
     analysis_complete = True
     blocking_issues: List[str] = []
 
+    risk_status = portfolio_context.get("risk_status") if isinstance(portfolio_context, dict) else None
+    if isinstance(risk_status, dict) and not risk_status.get("allowed", True):
+        blocking_issues.append("risk_manager_blocked")
+
     if not equities_universe:
         analysis_complete = False
         blocking_issues.append("tokenized_equities_universe_empty")
@@ -716,12 +762,23 @@ def run_engine(
         sentiment_score, confidence = _signal_strength(signal)
         momentum_score = float(signal.get("momentum_score", sentiment_score))
         candidate_symbol = str(candidate.get("symbol") or "").upper()
+        open_conflict = candidate_symbol in open_symbols if candidate_symbol else False
         catalyst_score = float(signal.get("catalyst_score", 0.0))
         if candidate_symbol in catalyst_scores:
             catalyst_score = max(catalyst_score, catalyst_scores[candidate_symbol])
         liquidity_score = _score_liquidity(
             candidate.get("liquidity_usd", 0.0), candidate.get("volume_24h_usd", 0.0)
         )
+
+        if open_conflict and block_open_symbols:
+            rejections.append(
+                {
+                    "candidate": candidate,
+                    "reason": "open_position_conflict",
+                    "symbol": candidate_symbol,
+                }
+            )
+            continue
 
         cost = fee_model.estimate_costs(
             notional_usd=capital_usd,
@@ -770,6 +827,8 @@ def run_engine(
             )
         )
         score *= weight
+        if open_conflict and open_penalty > 0:
+            score *= max(0.0, 1.0 - open_penalty)
 
         probabilistic = _probabilistic_scores(
             sentiment_score=sentiment_score,
@@ -797,12 +856,14 @@ def run_engine(
                     "catalyst": catalyst_score,
                     "liquidity": liquidity_score,
                     "cost_efficiency": cost_efficiency,
+                    "open_conflict": float(open_conflict),
                 },
                 "costs": cost,
                 "expected_edge_pct": expected_edge_pct,
                 "edge_to_cost_ratio": edge_to_cost,
                 "probabilistic": probabilistic,
                 "signal": signal,
+                "open_position_conflict": open_conflict,
             }
         )
 
@@ -891,6 +952,7 @@ def run_engine(
             "state_path": str(state_path),
             "capital_usd": capital_usd,
         },
+        "portfolio_context": portfolio_context,
         "analysis_complete": analysis_complete,
         "blocking_reasons": blocking_issues,
         "universe": {
