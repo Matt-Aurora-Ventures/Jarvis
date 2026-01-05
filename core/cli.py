@@ -10,7 +10,6 @@ from typing import Dict, Optional
 
 from core import (
     action_feedback,
-    agent_graph,
     commands,
     config,
     context_router,
@@ -1022,6 +1021,11 @@ def cmd_agent(args: argparse.Namespace) -> None:
     goal = " ".join(args.goal).strip()
     if not goal:
         print("Goal is required.")
+        return
+    try:
+        from core import agent_graph
+    except Exception as exc:
+        print(f"Agent module unavailable: {exc}")
         return
     cfg = config.load_config()
     agent_cfg = cfg.get("agent", {})
