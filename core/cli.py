@@ -50,6 +50,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _daemon_python() -> str:
+    venv311 = ROOT / "venv311" / "bin" / "python"
+    if venv311.exists():
+        return str(venv311)
     venv_python = ROOT / "venv" / "bin" / "python"
     if venv_python.exists():
         return str(venv_python)
