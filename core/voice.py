@@ -2,6 +2,7 @@ import difflib
 import gzip
 import io
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -43,6 +44,8 @@ _ACTIVE_SPEECH_PROCESS: Optional[subprocess.Popen] = None
 _ACTIVE_SPEECH_CLEANUP: Optional[Callable[[], None]] = None
 _ACTIVE_SPEECH_LOCK = threading.Lock()
 _CHAT_LOCK_PATH = state.LOGS_DIR / "voice_chat.lock"
+_SAY_VOICES_CACHE: Optional[set[str]] = None
+_SAY_VOICES_LOCK = threading.Lock()
 
 
 @dataclass
@@ -81,12 +84,16 @@ def _voice_cfg() -> dict:
     voice_cfg.setdefault("barge_in_enabled", True)
     voice_cfg.setdefault("barge_in_timeout_seconds", 3)
     voice_cfg.setdefault("barge_in_phrase_time_limit", 3)
+    voice_cfg.setdefault("barge_in_wake_window_words", 1)
     voice_cfg.setdefault("voice_clone_enabled", False)
     voice_cfg.setdefault("voice_clone_language", "en")
+    voice_cfg.setdefault("allow_cloud_stt", True)
     voice_cfg.setdefault(
         "morgan_freeman_voice_candidates",
         ["Reed (English (US))", "Ralph", "Fred", "Eddy (English (US))", "Daniel"],
     )
+    voice_cfg.setdefault("voice_max_chars", 280)
+    voice_cfg.setdefault("voice_max_sentences", 2)
     voice_cfg.setdefault("echo_window_seconds", 8.0)
     voice_cfg.setdefault("echo_similarity_threshold", 0.78)
     voice_cfg.setdefault("echo_min_chars", 12)
@@ -197,15 +204,95 @@ def _speech_rate_for_voice(voice_cfg: dict) -> Optional[int]:
     return None
 
 
+def _available_say_voices() -> set[str]:
+    global _SAY_VOICES_CACHE
+    with _SAY_VOICES_LOCK:
+        if _SAY_VOICES_CACHE is not None:
+            return _SAY_VOICES_CACHE
+        try:
+            result = subprocess.run(
+                ["say", "-v", "?"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=3,
+            )
+        except (subprocess.TimeoutExpired, Exception):
+            _SAY_VOICES_CACHE = set()
+            return _SAY_VOICES_CACHE
+
+        voices = set()
+        for line in (result.stdout or "").splitlines():
+            parts = line.strip().split()
+            if parts:
+                voices.add(parts[0])
+        _SAY_VOICES_CACHE = voices
+        return voices
+
+
 def _test_say_voice(name: str) -> bool:
-    result = subprocess.run(
-        ["say", "-v", name, "test"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=False,
-    )
-    return result.returncode == 0 and "not found" not in result.stderr.lower()
+    try:
+        result = subprocess.run(
+            ["say", "-v", name, "test"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            timeout=3,
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    lowered = (result.stderr or "").lower()
+    if result.returncode != 0:
+        return False
+    if "not found" in lowered or "not available" in lowered or "voice wasn" in lowered:
+        return False
+    return True
+
+
+def _trim_voice_output(text: str, voice_cfg: dict) -> str:
+    if not text:
+        return text
+    max_chars = int(voice_cfg.get("voice_max_chars", 280))
+    max_sentences = int(voice_cfg.get("voice_max_sentences", 2))
+
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    if max_sentences > 0:
+        parts = parts[:max_sentences]
+    cleaned = " ".join(parts).strip()
+    if max_chars > 0 and len(cleaned) > max_chars:
+        cleaned = cleaned[:max_chars].rsplit(" ", 1)[0].rstrip() + "..."
+    return cleaned
+
+
+def _normalize_wake_text(text: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9\\s]", " ", text.lower())
+    return " ".join(cleaned.split())
+
+
+def _match_wake_word(text: str, wake_words: list[str], max_offset_words: int) -> Optional[str]:
+    normalized = _normalize_wake_text(text)
+    if not normalized:
+        return None
+    tokens = normalized.split()
+    if not tokens:
+        return None
+    max_offset = max(0, min(max_offset_words, len(tokens)))
+    for wake_word in wake_words:
+        wake_norm = _normalize_wake_text(wake_word)
+        if not wake_norm:
+            continue
+        wake_tokens = wake_norm.split()
+        if not wake_tokens:
+            continue
+        for idx in range(0, max_offset + 1):
+            end = idx + len(wake_tokens)
+            if end > len(tokens):
+                continue
+            if tokens[idx:end] == wake_tokens:
+                command_tokens = tokens[end:]
+                return " ".join(command_tokens).strip()
+    return None
 
 
 def _speak_with_openai_tts(text: str, voice_cfg: dict) -> bool:
@@ -280,8 +367,11 @@ def _say_voice_candidates(voice_cfg: dict) -> list[str]:
 
 
 def _select_say_voice(voice_cfg: dict) -> str:
+    available = _available_say_voices()
     for candidate in _say_voice_candidates(voice_cfg):
-        if _test_say_voice(candidate):
+        if available and candidate in available:
+            return candidate
+        if not available and _test_say_voice(candidate):
             return candidate
     return ""
 
@@ -629,6 +719,7 @@ def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
     # Get wake word for barge-in detection
     cfg = _load_config()
     wake_word = cfg.get("voice", {}).get("wake_word", "jarvis").lower()
+    max_wake_offset = int(voice_cfg.get("barge_in_wake_window_words", 1))
     
     # Print barge-in status for debugging
     print(f"[Barge-in active - say '{wake_word}' to interrupt]")
@@ -637,28 +728,18 @@ def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
         while proc.poll() is None:
             interrupt = _transcribe_once(timeout=barge_timeout, phrase_time_limit=barge_phrase)
             if interrupt:
-                # Check for self-echo first
+                wake_words = [wake_word, "jarvis", "hey jarvis"]
+                command_text = _match_wake_word(interrupt, wake_words, max_wake_offset)
+                if command_text is not None:
+                    print(f"[Barge-in detected: '{interrupt}']")
+                    _stop_active_speech()
+                    return command_text or None
+
                 if _is_self_echo(interrupt, voice_cfg):
                     print(f"[Ignored self-echo: '{interrupt[:30]}...']")
                     continue
-                
-                # Check if interrupt starts with wake word
-                interrupt_lower = interrupt.lower().strip()
-                wake_words = [wake_word, "jarvis", "hey jarvis"]  # Common variants
-                
-                if any(interrupt_lower.startswith(w) for w in wake_words):
-                    # Valid barge-in - stop speaking
-                    print(f"[Barge-in detected: '{interrupt}']")
-                    _stop_active_speech()
-                    # Return the command part (remove wake word)
-                    for w in wake_words:
-                        if interrupt_lower.startswith(w):
-                            command = interrupt[len(w):].strip()
-                            return command if command else interrupt
-                    return interrupt
-                else:
-                    # Not a wake word - ignore and keep playing
-                    print(f"[Ignored non-wake-word: '{interrupt[:30]}']")
+
+                print(f"[Ignored non-wake-word: '{interrupt[:30]}']")
                 # Else: ignore non-wake-word speech, keep playing
     finally:
         if proc.poll() is None:
@@ -684,41 +765,45 @@ def _transcribe_once(timeout: int, phrase_time_limit: int) -> str:
     except Exception as e:
         return ""
 
-    # Try Gemini STT (Multimodal)
-    gemini_key = secrets.get_gemini_key()
-    if gemini_key:
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                f.write(audio.get_wav_data())
-                temp_path = f.name
-            
-            transcript = providers.transcribe_audio_gemini(temp_path)
-            os.unlink(temp_path)
-            if transcript:
-                return transcript
-        except Exception as e:
-            pass
+    voice_cfg = _voice_cfg()
+    allow_cloud = bool(voice_cfg.get("allow_cloud_stt", True))
 
-    # Try OpenAI Whisper
-    openai_key = secrets.get_openai_key()
-    if openai_key:
-        try:
-            from openai import OpenAI
-            client = OpenAI(api_key=openai_key)
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                f.write(audio.get_wav_data())
-                temp_path = f.name
-            
-            with open(temp_path, "rb") as audio_file:
-                transcript = client.audio.transcriptions.create(
-                    model="whisper-1", 
-                    file=audio_file
-                )
-            os.unlink(temp_path)
-            if transcript.text:
-                return transcript.text
-        except Exception as e:
-            pass
+    if allow_cloud:
+        # Try Gemini STT (Multimodal)
+        gemini_key = secrets.get_gemini_key()
+        if gemini_key:
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                    f.write(audio.get_wav_data())
+                    temp_path = f.name
+                
+                transcript = providers.transcribe_audio_gemini(temp_path)
+                os.unlink(temp_path)
+                if transcript:
+                    return transcript
+            except Exception:
+                pass
+
+        # Try OpenAI Whisper
+        openai_key = secrets.get_openai_key()
+        if openai_key:
+            try:
+                from openai import OpenAI
+                client = OpenAI(api_key=openai_key)
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                    f.write(audio.get_wav_data())
+                    temp_path = f.name
+                
+                with open(temp_path, "rb") as audio_file:
+                    transcript = client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file
+                    )
+                os.unlink(temp_path)
+                if transcript.text:
+                    return transcript.text
+            except Exception:
+                pass
 
     # Fallback to Google
     try:
@@ -740,6 +825,8 @@ def parse_command(text: str) -> Optional[VoiceCommand]:
     lower = text.strip().lower()
     if not lower:
         return None
+    if "help" in lower or "commands" in lower or "what can you do" in lower:
+        return VoiceCommand(action="help", payload="")
     if "stop listening" in lower:
         return VoiceCommand(action="listening_off", payload="")
     if "start listening" in lower:
@@ -763,6 +850,26 @@ def parse_command(text: str) -> Optional[VoiceCommand]:
     if lower.startswith("log"):
         payload = lower.replace("log", "", 1).strip()
         return VoiceCommand(action="log", payload=payload)
+    if lower.startswith("research") or lower.startswith("learn about"):
+        payload = lower.replace("research", "", 1).strip()
+        if lower.startswith("learn about"):
+            payload = lower.replace("learn about", "", 1).strip()
+        if payload.startswith("on "):
+            payload = payload[3:].strip()
+        if payload.startswith("about "):
+            payload = payload[6:].strip()
+        return VoiceCommand(action="research", payload=payload)
+    if lower.startswith("search") or lower.startswith("look up") or lower.startswith("lookup"):
+        payload = lower
+        for prefix in ("search", "look up", "lookup"):
+            if payload.startswith(prefix):
+                payload = payload.replace(prefix, "", 1).strip()
+                break
+        if payload.startswith("for "):
+            payload = payload[4:].strip()
+        return VoiceCommand(action="web_search", payload=payload)
+    if "context" in lower or "what's on screen" in lower or "what is on screen" in lower:
+        return VoiceCommand(action="context", payload="")
     if (
         "improve yourself" in lower
         or "modify your code" in lower
@@ -770,6 +877,10 @@ def parse_command(text: str) -> Optional[VoiceCommand]:
         or "add ability" in lower
         or "add skill" in lower
         or "build skill" in lower
+        or "self improve" in lower
+        or "self-improve" in lower
+        or "upgrade yourself" in lower
+        or "optimize yourself" in lower
     ):
         return VoiceCommand(action="evolve", payload=text)
     # Shutdown commands
@@ -793,6 +904,13 @@ def _confirm_apply() -> bool:
 
 def handle_command(command: VoiceCommand) -> str:
     from core import cli
+
+    if command.action == "help":
+        return (
+            "You can say status, diagnostics, report morning or afternoon, summarize, log a note, "
+            "research a topic, search the web, improve yourself, or stop listening. "
+            "Say Jarvis to interrupt me mid-sentence."
+        )
 
     if command.action == "listening_off":
         state.update_state(voice_enabled=False, mic_status="off")
@@ -851,6 +969,52 @@ def handle_command(command: VoiceCommand) -> str:
             f"({note_path}) and summary ({summary_path})\n"
             "- Risks/constraints: None.\n"
         )
+
+    if command.action == "context":
+        summary = context_manager.get_context_summary()
+        if not summary:
+            summary = "No context available."
+        return f"Context summary: {summary}"
+
+    if command.action == "web_search":
+        if not command.payload:
+            return "Tell me what you want me to search for."
+        cfg = _load_config()
+        if not cfg.get("research", {}).get("allow_web", False):
+            return "Web access is disabled right now."
+        try:
+            from core import research_engine
+
+            engine = research_engine.get_research_engine()
+            results = engine.search_web(command.payload, max_results=5)
+        except Exception as exc:
+            return f"I could not search the web: {exc}"
+        if not results:
+            return "I couldn't find any results."
+        top = results[:3]
+        formatted = "; ".join(
+            f"{item.get('title', 'Untitled')}" for item in top if item.get("title")
+        )
+        return f"Top results: {formatted}."
+
+    if command.action == "research":
+        if not command.payload:
+            return "Tell me what you want me to research."
+        cfg = _load_config()
+        if not cfg.get("research", {}).get("allow_web", False):
+            return "Web research is disabled right now."
+        try:
+            from core import research_engine
+
+            engine = research_engine.get_research_engine()
+            result = engine.research_topic(command.payload, max_pages=3)
+        except Exception as exc:
+            return f"I could not run research: {exc}"
+        if not result or not result.get("success"):
+            error = result.get("error") if isinstance(result, dict) else "unknown error"
+            return f"I could not complete research: {error}."
+        summary = result.get("summary") or "I completed the research but did not get a summary."
+        return f"Research summary: {summary}"
 
     if command.action == "evolve":
         if not _confirm_apply():
@@ -971,6 +1135,7 @@ def chat_session() -> None:
                 response = _chat_response(text, tracker, session_history)
             session_history.append({"source": "voice_chat_assistant", "text": response})
             voice_ready = conversation.sanitize_for_voice(response)
+            voice_ready = _trim_voice_output(voice_ready, voice_cfg)
             interrupt_text = _speak_with_barge_in(voice_ready, voice_cfg)
             print(response)
             if interrupt_text:
@@ -1142,10 +1307,25 @@ class VoiceManager(threading.Thread):
                             cfg.get("voice", {}).get("phrase_time_limit", 6)
                         ),
                     )
+                    if not text:
+                        state.update_state(mic_status="listening")
+                        continue
                     command = parse_command(text)
                     if command:
                         response = handle_command(command)
-                        _speak(response)
+                        _record_command_turn(text, response)
+                        voice_cfg = _voice_cfg()
+                        voice_ready = conversation.sanitize_for_voice(response)
+                        voice_ready = _trim_voice_output(voice_ready, voice_cfg)
+                        _speak(voice_ready)
+                    else:
+                        screen_context = _capture_screen_context(None)
+                        response = conversation.generate_response(
+                            text, screen_context, None, channel="voice"
+                        )
+                        voice_cfg = _voice_cfg()
+                        voice_ready = _trim_voice_output(response, voice_cfg)
+                        _speak(voice_ready)
                     state.update_state(mic_status="listening")
         finally:
             stream.stop_stream()
@@ -1204,7 +1384,10 @@ def listen_once() -> str:
     if not command:
         return "Plain English:\n- What I did: I did not catch a valid command.\n- Why I did it: The audio was unclear or unsupported.\n- What happens next: Try again and speak clearly.\n- What I need from you: A supported command.\n\nTechnical Notes:\n- Modules/files involved: core/voice.py\n- Key concepts/terms: Speech recognition\n- Commands executed (or would execute in dry-run): None\n- Risks/constraints: No changes made.\n"
     response = handle_command(command)
-    _speak(response)
+    voice_cfg = _voice_cfg()
+    voice_ready = conversation.sanitize_for_voice(response)
+    voice_ready = _trim_voice_output(voice_ready, voice_cfg)
+    _speak(voice_ready)
     return response
 
 

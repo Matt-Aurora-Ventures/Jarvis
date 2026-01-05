@@ -410,10 +410,11 @@ def _voice_friendly_text(text: str) -> str:
     if not text:
         return text
     cleaned = text
-    if "Plain English:" in cleaned:
-        cleaned = cleaned.split("Plain English:", 1)[1]
-        if "Technical Notes:" in cleaned:
-            cleaned = cleaned.split("Technical Notes:", 1)[0]
+    plain_parts = re.split(r"plain english:", cleaned, flags=re.IGNORECASE, maxsplit=1)
+    if len(plain_parts) > 1:
+        cleaned = plain_parts[1]
+    cleaned = re.split(r"technical notes:", cleaned, flags=re.IGNORECASE, maxsplit=1)[0]
+    cleaned = re.split(r"glossary:", cleaned, flags=re.IGNORECASE, maxsplit=1)[0]
     cleaned = re.sub(r"```.*?```", "", cleaned, flags=re.DOTALL)
     lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
     flattened = []
@@ -637,7 +638,9 @@ def generate_response(
     prompt += f"User says: {user_text}\n"
 
     response_text = ""
-    decision_text = providers.generate_text(prompt, max_output_tokens=400)
+    decision_tokens = 180 if channel == "voice" else 400
+    response_tokens = 220 if channel == "voice" else 500
+    decision_text = providers.generate_text(prompt, max_output_tokens=decision_tokens)
     decision = _parse_json_payload(decision_text)
 
     if decision:
@@ -691,7 +694,7 @@ def generate_response(
         if inspirations_text:
             response_prompt += f"Prompt inspirations:\n{inspirations_text}\n\n"
         response_prompt += f"User says: {user_text}\n"
-        response_text = providers.generate_text(response_prompt, max_output_tokens=500) or ""
+        response_text = providers.generate_text(response_prompt, max_output_tokens=response_tokens) or ""
 
     if response_text:
         result = _sanitize_response(response_text)
