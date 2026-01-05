@@ -114,6 +114,31 @@ def describe_simulation_error(error: Optional[str]) -> Optional[str]:
     return None
 
 
+def classify_simulation_error(error: Optional[str]) -> str:
+    """Classify simulation errors to reduce noisy retries."""
+    if not error:
+        return "unknown"
+
+    lower = error.lower()
+    if "alreadyprocessed" in lower:
+        return "permanent"
+    if "blockhash" in lower:
+        return "retryable"
+    if "accountinuse" in lower:
+        return "retryable"
+    if "timeout" in lower or "timed out" in lower:
+        return "retryable"
+    if "insufficientfunds" in lower:
+        return "permanent"
+    if "invalidaccountdata" in lower or "uninitializedaccount" in lower:
+        return "permanent"
+    if "signatureverificationfailed" in lower:
+        return "permanent"
+    if "instructionerrorcustom" in lower or "custom program error" in lower:
+        return "permanent"
+    return "unknown"
+
+
 @dataclass
 class RpcEndpoint:
     name: str

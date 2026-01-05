@@ -33,6 +33,8 @@ DEFAULT_DATA_DIR = Path.home() / ".lifeos" / "trading"
 DEFAULT_LOG_PATH = DEFAULT_DATA_DIR / "daemon.log"
 DEFAULT_SYMBOL_MAP = DEFAULT_DATA_DIR / "symbol_map.json"
 BASE58_ALPHABET = set("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+ERROR_LOG_THROTTLE_SECONDS = 300
+_ERROR_LOG_TIMES: Dict[Tuple[str, str, str], float] = {}
 
 
 def _resolve_path(value: Optional[str], fallback: Path) -> Path:
@@ -141,6 +143,18 @@ def _to_float(value: Any) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _should_log_error(intent_id: str, action: str, error: str, error_class: Optional[str]) -> bool:
+    if error_class != "permanent":
+        return True
+    key = (intent_id, action, error)
+    now = time.time()
+    last = _ERROR_LOG_TIMES.get(key)
+    if last and (now - last) < ERROR_LOG_THROTTLE_SECONDS:
+        return False
+    _ERROR_LOG_TIMES[key] = now
+    return True
 
 
 def _fetch_price_birdeye(address: str) -> Optional[float]:
@@ -256,11 +270,13 @@ def _check_lut_perps_intents(
                 record_price = params.get("price", current_price)
                 error = result.error if not result.success else None
                 error_hint = None
+                error_class = None
                 if error:
                     try:
                         from core import solana_execution
 
                         error_hint = solana_execution.describe_simulation_error(error)
+                        error_class = solana_execution.classify_simulation_error(error)
                     except Exception:
                         error_hint = None
                 action_record = {
@@ -273,6 +289,7 @@ def _check_lut_perps_intents(
                     "success": result.success,
                     "error": error,
                     "error_hint": error_hint,
+                    "error_class": error_class,
                 }
                 actions_taken.append(action_record)
 
@@ -284,13 +301,14 @@ def _check_lut_perps_intents(
                     result.pnl_usd,
                     result.pnl_pct,
                 )
-                if error:
+                if error and _should_log_error(intent.id, action.value, error, error_class):
                     logger.warning(
-                        "LUT/Perps action failed: %s %s error=%s hint=%s",
+                        "LUT/Perps action failed: %s %s error=%s hint=%s class=%s",
                         action.value,
                         intent.symbol,
                         error,
                         error_hint,
+                        error_class,
                     )
 
             # Update intent with tracking

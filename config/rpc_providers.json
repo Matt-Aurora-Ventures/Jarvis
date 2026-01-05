@@ -3,23 +3,23 @@
     "description": "RPC provider configurations for Life OS Trading Bot",
     "solana": {
         "primary": {
-            "name": "helius",
-            "url": "https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}",
-            "websocket": "wss://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}",
-            "features": [
-                "enhanced_transactions",
-                "token_metadata",
-                "priority_fees"
-            ],
-            "rate_limit": 100,
-            "timeout_ms": 30000
+            "name": "publicnode_solana",
+            "url": "https://solana.publicnode.com",
+            "rate_limit": 20,
+            "timeout_ms": 20000
         },
         "fallback": [
             {
-                "name": "publicnode_solana",
-                "url": "https://solana.publicnode.com",
-                "rate_limit": 20,
-                "timeout_ms": 20000
+                "name": "helius",
+                "url": "https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}",
+                "websocket": "wss://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}",
+                "features": [
+                    "enhanced_transactions",
+                    "token_metadata",
+                    "priority_fees"
+                ],
+                "rate_limit": 100,
+                "timeout_ms": 30000
             },
             {
                 "name": "ankr_solana",

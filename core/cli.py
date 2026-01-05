@@ -38,6 +38,7 @@ from core import (
     solana_scanner,
     strategy_scores,
     state,
+    swap_simulator,
     task_manager,
     trading_notion,
     trading_youtube,
@@ -748,6 +749,43 @@ def cmd_rpc_diagnostics(args: argparse.Namespace) -> None:
             print(f"  simulate_error: {simulate_error}")
         if simulate_hint:
             print(f"  simulate_hint: {simulate_hint}")
+
+
+def cmd_simulate_exit(args: argparse.Namespace) -> None:
+    payload = swap_simulator.simulate_exit_intent(
+        intent_id=args.intent_id,
+        symbol=args.symbol,
+        size_pct=args.size_pct,
+        endpoint=args.endpoint,
+        write_report=not args.no_report,
+    )
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return
+    if payload.get("error"):
+        print(f"Simulation failed: {payload['error']}")
+        return
+
+    report_path = payload.get("report_path")
+    print("Swap Simulation:")
+    print(
+        f"- Intent: {payload.get('intent_id')} {payload.get('symbol')} "
+        f"{payload.get('size_pct')}% qty"
+    )
+    if report_path:
+        print(f"- Report: {report_path}")
+    results = payload.get("results") or []
+    for result in results:
+        endpoint = result.get("endpoint")
+        success = result.get("success")
+        error = result.get("error")
+        error_hint = result.get("error_hint")
+        error_class = result.get("error_class")
+        print(f"- {endpoint}: success={success} class={error_class}")
+        if error:
+            print(f"  error: {error}")
+        if error_hint:
+            print(f"  hint: {error_hint}")
 
 
 def cmd_overnight(args: argparse.Namespace) -> None:
@@ -2212,6 +2250,17 @@ def build_parser() -> argparse.ArgumentParser:
     rpc_diag_parser.add_argument("--no-sim", action="store_true", help="Skip simulation probe")
     rpc_diag_parser.add_argument("--json", action="store_true", help="Output JSON")
 
+    simulate_exit_parser = subparsers.add_parser(
+        "simulate-exit",
+        help="Simulate a Jupiter exit swap for an intent",
+    )
+    simulate_exit_parser.add_argument("--intent-id", type=str, help="Exit intent id")
+    simulate_exit_parser.add_argument("--symbol", type=str, help="Symbol fallback if no intent id")
+    simulate_exit_parser.add_argument("--size-pct", type=float, default=100.0, help="Percent of remaining qty")
+    simulate_exit_parser.add_argument("--endpoint", type=str, help="RPC endpoint name to target")
+    simulate_exit_parser.add_argument("--no-report", action="store_true", help="Skip report file")
+    simulate_exit_parser.add_argument("--json", action="store_true", help="Output JSON")
+
     subparsers.add_parser("talk")
     subparsers.add_parser("chat")
 
@@ -2547,6 +2596,9 @@ def main() -> None:
         return
     if args.command == "rpc-diagnostics":
         cmd_rpc_diagnostics(args)
+        return
+    if args.command == "simulate-exit":
+        cmd_simulate_exit(args)
         return
     if args.command == "talk":
         cmd_talk(args)
