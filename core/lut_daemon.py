@@ -163,18 +163,20 @@ def process_intent(
     if current_price is None:
         logger.warning(f"[lut_daemon] Could not fetch price for {intent.symbol} ({intent.token_mint})")
         intent.enforcement_failures += 1
-        exit_intents.update_intent(intent)
-        return []
-
-    # Check sentiment reversal
-    sentiment_reversed = check_sentiment_reversal(intent.token_mint)
-
-    # Check triggers
-    triggers = exit_intents.check_intent_triggers(
-        intent,
-        current_price,
-        sentiment_reversed=sentiment_reversed,
-    )
+        fallback_price = intent.last_check_price or intent.entry_price
+        triggers = exit_intents.check_time_stop(intent, fallback_price)
+        if not triggers:
+            exit_intents.update_intent(intent)
+            return []
+        sentiment_reversed = False
+    else:
+        fallback_price = current_price
+        sentiment_reversed = check_sentiment_reversal(intent.token_mint)
+        triggers = exit_intents.check_intent_triggers(
+            intent,
+            current_price,
+            sentiment_reversed=sentiment_reversed,
+        )
 
     for action, params in triggers:
         if dry_run:

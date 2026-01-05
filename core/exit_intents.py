@@ -564,18 +564,14 @@ def check_intent_triggers(
             return actions
 
     # 3. Check time stop
-    if not intent.time_stop.triggered and now >= intent.time_stop.deadline_timestamp:
+    if now >= intent.time_stop.deadline_timestamp and intent.remaining_quantity > 0:
         intent.time_stop.triggered = True
-
-        # Check if TP1 was hit
-        tp1_hit = intent.take_profits[0].filled if intent.take_profits else False
-
-        if not tp1_hit:
-            actions.append((ExitAction.TRIGGER_TIME_STOP, {
-                "action": intent.time_stop.action,
-                "size_pct": 100.0 if intent.time_stop.action == "exit_fully" else 85.0,
-            }))
-            return actions
+        actions.append((ExitAction.TRIGGER_TIME_STOP, {
+            "action": intent.time_stop.action,
+            "size_pct": 100.0 if intent.time_stop.action == "exit_fully" else 85.0,
+            "price": current_price,
+        }))
+        return actions
 
     # 4. Check take profits (in order)
     for tp in intent.take_profits:
@@ -619,6 +615,15 @@ def check_intent_triggers(
                 tp.fill_price = current_price
                 tp.fill_timestamp = now
 
+    if not intent.trailing_stop.active and intent.remaining_quantity > 0:
+        if any(tp.filled for tp in intent.take_profits):
+            intent.trailing_stop.active = True
+            intent.trailing_stop.highest_price = current_price
+            if is_long:
+                intent.trailing_stop.current_stop = current_price * (1 - intent.trailing_stop.trail_pct)
+            else:
+                intent.trailing_stop.current_stop = current_price * (1 + intent.trailing_stop.trail_pct)
+
     # 5. Check trailing stop (if active)
     if intent.trailing_stop.active:
         if is_long:
@@ -648,6 +653,27 @@ def check_intent_triggers(
                     "trailing": True,
                 }))
 
+    return actions
+
+
+def check_time_stop(
+    intent: ExitIntent,
+    fallback_price: float,
+) -> List[Tuple[ExitAction, Dict[str, Any]]]:
+    """Check time stop using a fallback price when market data is unavailable."""
+    actions: List[Tuple[ExitAction, Dict[str, Any]]] = []
+    now = time.time()
+    intent.last_check_timestamp = now
+    intent.last_check_price = fallback_price
+    intent.enforcement_attempts += 1
+
+    if now >= intent.time_stop.deadline_timestamp and intent.remaining_quantity > 0:
+        intent.time_stop.triggered = True
+        actions.append((ExitAction.TRIGGER_TIME_STOP, {
+            "action": intent.time_stop.action,
+            "size_pct": 100.0 if intent.time_stop.action == "exit_fully" else 85.0,
+            "price": fallback_price,
+        }))
     return actions
 
 

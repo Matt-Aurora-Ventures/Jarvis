@@ -225,14 +225,18 @@ def _check_lut_perps_intents(
 
             if current_price is None:
                 logger.debug(f"Could not fetch price for {intent.symbol}")
-                continue
-
-            # Check triggers
-            triggers = exit_intents.check_intent_triggers(
-                intent,
-                current_price,
-                sentiment_reversed=False,  # TODO: integrate xAI sentiment check
-            )
+                intent.enforcement_failures += 1
+                fallback_price = intent.last_check_price or intent.entry_price
+                triggers = exit_intents.check_time_stop(intent, fallback_price)
+                if not triggers:
+                    exit_intents.update_intent(intent)
+                    continue
+            else:
+                triggers = exit_intents.check_intent_triggers(
+                    intent,
+                    current_price,
+                    sentiment_reversed=False,  # TODO: integrate xAI sentiment check
+                )
 
             for action, params in triggers:
                 # Execute the action
@@ -243,11 +247,12 @@ def _check_lut_perps_intents(
                     paper_mode=intent.is_paper,
                 )
 
+                record_price = params.get("price", current_price)
                 action_record = {
                     "intent_id": intent.id,
                     "symbol": intent.symbol,
                     "action": action.value,
-                    "price": current_price,
+                    "price": record_price,
                     "pnl_usd": result.pnl_usd,
                     "pnl_pct": result.pnl_pct,
                     "success": result.success,
@@ -258,7 +263,7 @@ def _check_lut_perps_intents(
                     "LUT/Perps: %s %s at %.6f PnL=%.2f (%.2f%%)",
                     action.value,
                     intent.symbol,
-                    current_price,
+                    record_price or 0.0,
                     result.pnl_usd,
                     result.pnl_pct,
                 )
