@@ -30,6 +30,7 @@ from __future__ import annotations
 import fcntl
 import json
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
@@ -37,7 +38,36 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from core import strategy_scores
+
 logger = logging.getLogger(__name__)
+
+
+def _merge_notes(*parts: str) -> str:
+    cleaned = [part.strip() for part in parts if part and part.strip()]
+    return "; ".join(cleaned)
+
+
+def _extract_strategy_id(notes: str) -> Optional[str]:
+    if not notes:
+        return None
+    match = re.search(r"strategy=([A-Za-z0-9_-]+)", notes)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _record_strategy_execution_failure(intent: "ExitIntent", error: str) -> None:
+    strategy_id = _extract_strategy_id(intent.notes)
+    if not strategy_id:
+        return
+    strategy_scores.update_score(
+        strategy_id,
+        0.0,
+        execution_error=True,
+        reason=error,
+        metadata={"symbol": intent.symbol, "position_id": intent.position_id},
+    )
 
 # State file locations
 TRADING_DIR = Path.home() / ".lifeos" / "trading"
@@ -224,6 +254,8 @@ def create_spot_intent(
     quantity: float,
     *,
     is_paper: bool = True,
+    strategy_id: str = "",
+    notes: str = "",
     # Default TP ladder: 60% @ +8%, 25% @ +18%, 15% @ +40%
     tp1_pct: float = 0.08,
     tp1_size: float = 0.60,
@@ -286,6 +318,7 @@ def create_spot_intent(
         time_stop=time_stop,
         trailing_stop=trailing_stop,
         is_paper=is_paper,
+        notes=_merge_notes(f"strategy={strategy_id}" if strategy_id else "", notes),
     )
 
 
@@ -299,6 +332,8 @@ def create_perps_intent(
     liquidation_price: float,
     *,
     is_paper: bool = True,
+    strategy_id: str = "",
+    notes: str = "",
     # Perps TP ladder: 50% @ +4%, 30% @ +8%, 20% runner
     tp1_pct: float = 0.04,
     tp1_size: float = 0.50,
@@ -371,7 +406,11 @@ def create_perps_intent(
         is_paper=is_paper,
     )
 
-    intent.notes = f"leverage={leverage}x, liq_price={liquidation_price:.2f}, direction={direction}"
+    intent.notes = _merge_notes(
+        f"strategy={strategy_id}" if strategy_id else "",
+        notes,
+        f"leverage={leverage}x, liq_price={liquidation_price:.2f}, direction={direction}",
+    )
 
     return intent
 
@@ -697,36 +736,28 @@ def execute_action(
         return result
 
     # Live execution path
+    def _fail_execution(error: str) -> ExecutionResult:
+        _record_strategy_execution_failure(intent, error)
+        return ExecutionResult(
+            success=False,
+            action=action.value,
+            price=current_price,
+            quantity=quantity,
+            error=error,
+        )
+
     try:
         import asyncio
         from core import solana_execution, solana_tokens, solana_wallet
     except Exception as exc:
-        return ExecutionResult(
-            success=False,
-            action=action.value,
-            price=current_price,
-            quantity=quantity,
-            error=f"Live execution unavailable: {exc}",
-        )
+        return _fail_execution(f"live_execution_unavailable:{exc}")
 
     keypair = solana_wallet.load_keypair()
     if not keypair:
-        return ExecutionResult(
-            success=False,
-            action=action.value,
-            price=current_price,
-            quantity=quantity,
-            error="Live execution blocked: no Solana keypair found",
-        )
+        return _fail_execution("live_execution_blocked:no_keypair")
 
     if solana_execution.VersionedTransaction is None:
-        return ExecutionResult(
-            success=False,
-            action=action.value,
-            price=current_price,
-            quantity=quantity,
-            error="Live execution blocked: solana SDK unavailable",
-        )
+        return _fail_execution("live_execution_blocked:solana_sdk_unavailable")
 
     input_mint = intent.token_mint
     output_mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"  # USDC
@@ -765,22 +796,10 @@ def execute_action(
         else:
             result = asyncio.run_coroutine_threadsafe(_run_swap(), loop).result()
     except Exception as exc:
-        return ExecutionResult(
-            success=False,
-            action=action.value,
-            price=current_price,
-            quantity=quantity,
-            error=f"Live execution failed: {exc}",
-        )
+        return _fail_execution(f"live_execution_failed:{exc}")
 
     if not result.success:
-        return ExecutionResult(
-            success=False,
-            action=action.value,
-            price=current_price,
-            quantity=quantity,
-            error=result.error or "execution_failed",
-        )
+        return _fail_execution(result.error or "execution_failed")
 
     intent.remaining_quantity -= quantity
     if intent.remaining_quantity <= 0.001:

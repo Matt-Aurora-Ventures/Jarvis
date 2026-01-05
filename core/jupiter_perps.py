@@ -650,6 +650,7 @@ def execute_perps_entry(
         leverage=position.leverage,
         liquidation_price=position.liquidation_price,
         is_paper=paper_mode,
+        strategy_id="jupiter_perps",
     )
 
     # CRITICAL: Persist intent

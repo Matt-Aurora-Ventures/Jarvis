@@ -282,6 +282,21 @@
     ],
     "low_fee_focus": true
   },
+  "strategy_scores": {
+    "min_score": 50.0,
+    "loss_streak_limit": 3,
+    "win_reward": 5.0,
+    "loss_penalty": 10.0,
+    "max_score": 200.0
+  },
+  "solana_network_guard": {
+    "enabled": true,
+    "min_tps": 1500.0,
+    "max_priority_fee_lamports": 8000,
+    "performance_sample_limit": 2,
+    "rpc_timeout_seconds": 8,
+    "block_on_unknown": false
+  },
   "liquidation_bot": {
     "order_usd_size": 10,
     "leverage": 3,

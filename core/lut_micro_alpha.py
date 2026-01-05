@@ -685,6 +685,7 @@ def run_cycle(
             entry_price=entry["fill_price"],
             quantity=entry["quantity"],
             is_paper=paper_mode,
+            strategy_id="lut_micro_alpha",
         )
 
         # CRITICAL: Persist intent before anything else
