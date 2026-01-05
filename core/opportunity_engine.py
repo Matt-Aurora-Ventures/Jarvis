@@ -13,7 +13,7 @@ import requests
 
 from core import config as config_module
 from core import fee_model, tokenized_equities_universe, event_catalyst
-from core import sentiment_trading
+from core import sentiment_trading, sentiment_registry
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -87,6 +87,18 @@ DEFAULT_ENGINE_CONFIG: Dict[str, Any] = {
         "block_open_symbols": False,
         "score_penalty": 0.25,
         "include_exit_intents": True,
+    },
+    "sentiment_registry": {
+        "enabled": True,
+    },
+    "cooldown_policy": {
+        "enabled": True,
+        "lookback_days": 7,
+        "loss_threshold": 2,
+        "cooldown_hours": 6,
+        "block_on_cooldown": True,
+        "score_penalty": 0.4,
+        "use_strategy_scores": True,
     },
     "compliance": {
         "jurisdiction": "unknown",
@@ -567,6 +579,12 @@ def _score_liquidity(liquidity_usd: float, volume_usd: float) -> float:
     return max(liquidity_score, volume_score)
 
 
+def _score_volume(volume_usd: float) -> float:
+    if volume_usd <= 0:
+        return 0.0
+    return min(1.0, math.log10(max(volume_usd, 1.0)) / 6.0)
+
+
 def _score_cost_efficiency(cost_pct: float, max_cost_pct: float) -> float:
     if max_cost_pct <= 0:
         return 0.0
@@ -641,6 +659,99 @@ def _load_backtest_summary() -> Optional[Dict[str, Any]]:
     return None
 
 
+def _load_trade_journal() -> List[Dict[str, Any]]:
+    try:
+        from core import risk_manager
+
+        path = risk_manager.DATA_DIR / "trades.json"
+    except Exception:
+        return []
+
+    payload = _load_json(path)
+    if isinstance(payload, list):
+        return [t for t in payload if isinstance(t, dict)]
+    return []
+
+
+def _compute_symbol_cooldowns(engine_cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    policy = engine_cfg.get("cooldown_policy", {})
+    if not bool(policy.get("enabled", True)):
+        return {}
+
+    trades = _load_trade_journal()
+    if not trades:
+        return {}
+
+    now = time.time()
+    lookback_days = float(policy.get("lookback_days", 7))
+    loss_threshold = int(policy.get("loss_threshold", 2))
+    cooldown_seconds = float(policy.get("cooldown_hours", 6)) * 3600
+    use_strategy_scores = bool(policy.get("use_strategy_scores", True))
+    cutoff = now - max(0.0, lookback_days * 86400)
+
+    symbol_stats: Dict[str, Dict[str, Any]] = {}
+    for trade in trades:
+        symbol = str(trade.get("symbol") or "").upper()
+        if not symbol:
+            continue
+        status = str(trade.get("status") or "")
+        if status == "OPEN":
+            continue
+        timestamp = float(trade.get("exit_timestamp") or trade.get("timestamp") or 0.0)
+        if timestamp <= 0 or timestamp < cutoff:
+            continue
+        pnl = float(trade.get("pnl") or 0.0)
+        if pnl >= 0:
+            continue
+
+        entry = symbol_stats.setdefault(
+            symbol,
+            {"losses": 0, "last_loss_ts": 0.0, "strategies": set()},
+        )
+        entry["losses"] += 1
+        entry["last_loss_ts"] = max(entry["last_loss_ts"], timestamp)
+        strategy_id = trade.get("strategy")
+        if strategy_id:
+            entry["strategies"].add(str(strategy_id))
+
+    if not symbol_stats:
+        return {}
+
+    cooldowns: Dict[str, Dict[str, Any]] = {}
+    for symbol, stats in symbol_stats.items():
+        reasons: List[str] = []
+        if stats["losses"] >= loss_threshold:
+            reasons.append(f"loss_threshold:{stats['losses']}")
+
+        if use_strategy_scores and stats["strategies"]:
+            try:
+                from core import strategy_scores
+
+                for strategy_id in sorted(stats["strategies"]):
+                    allowed, reason = strategy_scores.allow_strategy(strategy_id)
+                    if not allowed:
+                        reasons.append(f"strategy_block:{strategy_id}:{reason}")
+            except Exception as exc:
+                reasons.append(f"strategy_score_error:{exc}")
+
+        if not reasons:
+            continue
+
+        cooldown_until = float(stats["last_loss_ts"] or now) + cooldown_seconds
+        if cooldown_until <= now:
+            continue
+
+        cooldowns[symbol] = {
+            "losses": stats["losses"],
+            "last_loss_ts": stats["last_loss_ts"],
+            "cooldown_until": cooldown_until,
+            "reasons": reasons,
+            "strategies": sorted(stats["strategies"]),
+        }
+
+    return cooldowns
+
+
 def _build_execution_plan(asset: Dict[str, Any]) -> Dict[str, Any]:
     if asset.get("asset_type") == "tokenized_equity":
         return {
@@ -667,6 +778,12 @@ def run_engine(
     block_open_symbols = bool(open_position_policy.get("block_open_symbols", False))
     open_penalty = float(open_position_policy.get("score_penalty", 0.0))
     include_exit_intents = bool(open_position_policy.get("include_exit_intents", True))
+    registry_cfg = engine_cfg.get("sentiment_registry", {})
+    registry_enabled = bool(registry_cfg.get("enabled", True))
+    registry = sentiment_registry.get_registry() if registry_enabled else None
+    cooldown_policy = engine_cfg.get("cooldown_policy", {})
+    cooldown_block = bool(cooldown_policy.get("block_on_cooldown", True))
+    cooldown_penalty = float(cooldown_policy.get("score_penalty", 0.0))
 
     portfolio_context: Dict[str, Any] = {
         "open_trades": [],
@@ -674,6 +791,7 @@ def run_engine(
         "open_symbols": [],
         "risk_status": None,
         "risk_error": None,
+        "cooldowns": [],
     }
     open_symbols: set[str] = set()
     try:
@@ -700,6 +818,11 @@ def run_engine(
             portfolio_context["risk_error"] = portfolio_context["risk_error"] or str(exc)
 
     portfolio_context["open_symbols"] = sorted(open_symbols)
+    cooldowns = _compute_symbol_cooldowns(engine_cfg)
+    if cooldowns:
+        portfolio_context["cooldowns"] = [
+            {"symbol": symbol, **details} for symbol, details in sorted(cooldowns.items())
+        ]
     equities_snapshot = tokenized_equities_universe.load_universe()
     if refresh_equities:
         equities_snapshot = tokenized_equities_universe.refresh_universe()
@@ -760,15 +883,38 @@ def run_engine(
     for candidate in candidates:
         signal = candidate.get("signal", {})
         sentiment_score, confidence = _signal_strength(signal)
+        sentiment_base = sentiment_score
         momentum_score = float(signal.get("momentum_score", sentiment_score))
         candidate_symbol = str(candidate.get("symbol") or "").upper()
         open_conflict = candidate_symbol in open_symbols if candidate_symbol else False
+        cooldown = cooldowns.get(candidate_symbol) if candidate_symbol else None
         catalyst_score = float(signal.get("catalyst_score", 0.0))
         if candidate_symbol in catalyst_scores:
             catalyst_score = max(catalyst_score, catalyst_scores[candidate_symbol])
         liquidity_score = _score_liquidity(
             candidate.get("liquidity_usd", 0.0), candidate.get("volume_24h_usd", 0.0)
         )
+        volume_score = _score_volume(candidate.get("volume_24h_usd", 0.0))
+
+        registry_result = None
+        if registry and candidate_symbol:
+            handle = None
+            for key in ("handle", "source_handle", "author", "user"):
+                value = signal.get(key)
+                if isinstance(value, str) and value:
+                    handle = value
+                    break
+            registry_result = registry.score_candidate(
+                symbol=candidate_symbol,
+                base_score=sentiment_score,
+                text=signal.get("text") if isinstance(signal.get("text"), str) else None,
+                handle=handle,
+                momentum_score=momentum_score,
+                liquidity_score=liquidity_score,
+                volume_score=volume_score,
+            )
+            if registry_result:
+                sentiment_score = registry_result.score
 
         if open_conflict and block_open_symbols:
             rejections.append(
@@ -776,6 +922,18 @@ def run_engine(
                     "candidate": candidate,
                     "reason": "open_position_conflict",
                     "symbol": candidate_symbol,
+                }
+            )
+            continue
+
+        if cooldown and cooldown_block:
+            rejections.append(
+                {
+                    "candidate": candidate,
+                    "reason": "cooldown_active",
+                    "symbol": candidate_symbol,
+                    "cooldown_until": cooldown.get("cooldown_until"),
+                    "cooldown_reasons": cooldown.get("reasons", []),
                 }
             )
             continue
@@ -829,6 +987,8 @@ def run_engine(
         score *= weight
         if open_conflict and open_penalty > 0:
             score *= max(0.0, 1.0 - open_penalty)
+        if cooldown and not cooldown_block and cooldown_penalty > 0:
+            score *= max(0.0, 1.0 - cooldown_penalty)
 
         probabilistic = _probabilistic_scores(
             sentiment_score=sentiment_score,
@@ -852,11 +1012,13 @@ def run_engine(
                 "scores": {
                     "opportunity": score,
                     "sentiment": sentiment_score,
+                    "sentiment_base": sentiment_base,
                     "momentum": momentum_score,
                     "catalyst": catalyst_score,
                     "liquidity": liquidity_score,
                     "cost_efficiency": cost_efficiency,
                     "open_conflict": float(open_conflict),
+                    "cooldown_active": float(bool(cooldown)),
                 },
                 "costs": cost,
                 "expected_edge_pct": expected_edge_pct,
@@ -864,6 +1026,8 @@ def run_engine(
                 "probabilistic": probabilistic,
                 "signal": signal,
                 "open_position_conflict": open_conflict,
+                "cooldown": cooldown,
+                "sentiment_registry": registry_result.to_dict() if registry_result else None,
             }
         )
 

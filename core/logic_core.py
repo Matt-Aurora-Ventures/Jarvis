@@ -35,6 +35,9 @@ class LogicCoreConfig:
     risk_reward: float = 3.0
     execute_on_pass: bool = False
     default_expected_time_minutes: float = 45.0
+    include_portfolio_context: bool = True
+    include_exit_intents: bool = True
+    max_portfolio_symbols: int = 6
 
 
 @dataclass
@@ -134,6 +137,7 @@ class LogicCore:
         if gate.allowed and best:
             plan = self._build_plan(snapshot, best, regime)
 
+        portfolio_context = self._load_portfolio_context()
         decision = LogicDecision(
             strategy=strategy,
             sentiment=sentiment_label,
@@ -146,6 +150,7 @@ class LogicCore:
                 "regime": regime,
                 "trend_score": round(trend_score, 3),
                 "signal": signal.to_dict() if signal else None,
+                "portfolio_context": portfolio_context,
             },
         )
 
@@ -172,6 +177,44 @@ class LogicCore:
             chat_id_env=str(telegram_cfg.get("chat_id_env", "TELEGRAM_CHAT_ID")),
             timeout_seconds=int(telegram_cfg.get("timeout_seconds", 10)),
         )
+
+    def _load_portfolio_context(self) -> Dict[str, Any]:
+        context: Dict[str, Any] = {
+            "open_trades": [],
+            "open_intents": [],
+            "open_symbols": [],
+            "risk_status": None,
+            "errors": [],
+        }
+        if not self.config.include_portfolio_context:
+            return context
+
+        open_symbols = set()
+        try:
+            from core.risk_manager import get_risk_manager
+
+            rm = get_risk_manager()
+            open_trades = rm.get_open_trades()
+            context["open_trades"] = open_trades
+            open_symbols.update(
+                {str(t.get("symbol")).upper() for t in open_trades if t.get("symbol")}
+            )
+            context["risk_status"] = rm.can_trade()
+        except Exception as exc:
+            context["errors"].append(str(exc))
+
+        if self.config.include_exit_intents:
+            try:
+                from core import exit_intents
+
+                intents = exit_intents.load_active_intents()
+                context["open_intents"] = [i.to_dict() for i in intents]
+                open_symbols.update({i.symbol.upper() for i in intents if i.symbol})
+            except Exception as exc:
+                context["errors"].append(str(exc))
+
+        context["open_symbols"] = sorted(open_symbols)
+        return context
 
     def _classify_sentiment(self, snapshot: MarketSnapshot) -> Tuple[str, float]:
         prices = snapshot.prices
@@ -357,6 +400,41 @@ class LogicCore:
             status = "Met" if ok else "Fail"
             logic_lines.append(f"- {name}: {status} ({detail})")
 
+        portfolio_lines: List[str] = []
+        portfolio_context = decision.metrics.get("portfolio_context") if isinstance(decision.metrics, dict) else None
+        if isinstance(portfolio_context, dict) and self.config.include_portfolio_context:
+            open_symbols = portfolio_context.get("open_symbols") or []
+            if not isinstance(open_symbols, list):
+                open_symbols = []
+            max_symbols = max(1, int(self.config.max_portfolio_symbols))
+            open_count = len(open_symbols)
+            if open_count:
+                display = ", ".join(open_symbols[:max_symbols])
+                if open_count > max_symbols:
+                    display = f"{display} +{open_count - max_symbols} more"
+            else:
+                display = "none"
+            portfolio_lines.append(f"- Open positions: {open_count} ({display})")
+
+            open_intents = portfolio_context.get("open_intents") or []
+            if not isinstance(open_intents, list):
+                open_intents = []
+            portfolio_lines.append(f"- Exit intents: {len(open_intents)}")
+
+            risk_status = portfolio_context.get("risk_status")
+            if isinstance(risk_status, dict):
+                allowed = risk_status.get("allowed", True)
+                if allowed:
+                    portfolio_lines.append("- Risk status: allowed")
+                else:
+                    issues = risk_status.get("issues") or []
+                    issue_text = ", ".join(str(i) for i in issues) if issues else "blocked"
+                    portfolio_lines.append(f"- Risk status: blocked ({issue_text})")
+
+            errors = portfolio_context.get("errors") or []
+            if errors:
+                portfolio_lines.append(f"- Context errors: {errors[0]}")
+
         execution_lines = ["- Entry: N/A", "- Stop: N/A", "- TP Target: N/A"]
         if plan:
             execution_lines = [
@@ -385,6 +463,15 @@ class LogicCore:
                 f"- Risk/Reward: {rr}",
                 f"- ROI/Time: {roi} @ {velocity}",
                 "",
+                *(
+                    [
+                        "📂 PORTFOLIO CONTEXT:",
+                        *portfolio_lines,
+                        "",
+                    ]
+                    if portfolio_lines
+                    else []
+                ),
                 "📉 EXECUTION:",
                 *execution_lines,
             ]
