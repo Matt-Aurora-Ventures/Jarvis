@@ -21,6 +21,7 @@ MAX_SCORE = 200.0
 WIN_REWARD = 5.0
 LOSS_PENALTY = 10.0
 LOSS_STREAK_LIMIT = 3
+SORT_KEYS = {"score", "wins", "losses", "loss_streak", "execution_errors", "last_update"}
 
 
 def _load_scores() -> Dict[str, Dict[str, Any]]:
@@ -67,6 +68,36 @@ def get_record(strategy_id: str) -> Dict[str, Any]:
         scores[strategy_id] = record
         _save_scores(scores)
     return record
+
+
+def list_scores(
+    *,
+    limit: int = 20,
+    min_score: Optional[float] = None,
+    sort_key: str = "score",
+    descending: bool = True,
+) -> list[Dict[str, Any]]:
+    scores = _load_scores()
+    records: list[Dict[str, Any]] = []
+    for key, record in scores.items():
+        if not isinstance(record, dict):
+            continue
+        record.setdefault("strategy_id", key)
+        record.setdefault("score", DEFAULT_SCORE)
+        record.setdefault("wins", 0)
+        record.setdefault("losses", 0)
+        record.setdefault("loss_streak", 0)
+        record.setdefault("execution_errors", 0)
+        record.setdefault("last_update", 0)
+        if min_score is not None and float(record.get("score", 0.0)) < min_score:
+            continue
+        records.append(record)
+
+    key = sort_key if sort_key in SORT_KEYS else "score"
+    records.sort(key=lambda item: float(item.get(key, 0.0)), reverse=descending)
+    if limit and limit > 0:
+        return records[:limit]
+    return records
 
 
 def update_score(

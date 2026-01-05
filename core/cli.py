@@ -36,6 +36,7 @@ from core import (
     safety,
     secrets,
     solana_scanner,
+    strategy_scores,
     state,
     task_manager,
     trading_notion,
@@ -2099,6 +2100,42 @@ def cmd_trading_opportunities(args: argparse.Namespace) -> None:
     print(json.dumps(payload, indent=2))
 
 
+def cmd_strategy_scores(args: argparse.Namespace) -> None:
+    records = strategy_scores.list_scores(
+        limit=int(args.limit),
+        min_score=args.min_score,
+        sort_key=args.sort,
+        descending=not args.asc,
+    )
+    if args.json:
+        print(json.dumps({"scores": records}, indent=2))
+        return
+    if not records:
+        print("No strategy scores recorded yet.")
+        return
+
+    print("strategy | score | win% | wins | losses | streak | exec_err | status | gate | updated | reason")
+    for record in records:
+        strategy_id = str(record.get("strategy_id", "unknown"))
+        score = float(record.get("score", 0.0))
+        wins = int(record.get("wins", 0))
+        losses = int(record.get("losses", 0))
+        streak = int(record.get("loss_streak", 0))
+        exec_err = int(record.get("execution_errors", 0))
+        total = wins + losses
+        win_rate = (wins / total * 100.0) if total else 0.0
+        allowed, gate_reason = strategy_scores.allow_strategy(strategy_id)
+        status = "allowed" if allowed else "blocked"
+        gate = gate_reason[:30]
+        last_update = record.get("last_update", 0.0) or 0.0
+        updated = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_update)) if last_update else "n/a"
+        reason = str(record.get("last_reason", ""))[:30]
+        print(
+            f"{strategy_id} | {score:.1f} | {win_rate:5.1f} | {wins:4d} | {losses:6d} | "
+            f"{streak:6d} | {exec_err:8d} | {status:7s} | {gate:30s} | {updated} | {reason}"
+        )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lifeos")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -2415,6 +2452,20 @@ def build_parser() -> argparse.ArgumentParser:
     trading_opportunities_parser.add_argument("--capital-usd", type=float, default=20.0)
     trading_opportunities_parser.add_argument("--output", help="Write JSON output to file")
 
+    strategy_scores_parser = subparsers.add_parser(
+        "strategy-scores",
+        help="Show strategy performance scores",
+    )
+    strategy_scores_parser.add_argument("--limit", type=int, default=20)
+    strategy_scores_parser.add_argument("--min-score", type=float)
+    strategy_scores_parser.add_argument(
+        "--sort",
+        choices=["score", "wins", "losses", "loss_streak", "execution_errors", "last_update"],
+        default="score",
+    )
+    strategy_scores_parser.add_argument("--asc", action="store_true", help="Sort ascending")
+    strategy_scores_parser.add_argument("--json", action="store_true", help="Output JSON")
+
     return parser
 
 
@@ -2511,6 +2562,9 @@ def main() -> None:
         return
     if args.command == "trading-opportunities":
         cmd_trading_opportunities(args)
+        return
+    if args.command == "strategy-scores":
+        cmd_strategy_scores(args)
         return
 
     parser.print_help()
