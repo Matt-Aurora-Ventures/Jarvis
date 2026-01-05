@@ -70,15 +70,22 @@ Be thorough but concise. Prioritize accuracy over speculation.""",
 Available actions:
 {available_actions}
 
-Plan the best sequence of actions to accomplish this goal.
-If the primary approach might fail, suggest alternatives.
+Return ONLY JSON with an ordered list of actions.
+Each action must include name, params, why, and expected_outcome.
 
-Output format:
-1. Primary action: [ACTION: action_name(params)]
-2. If that fails, try: [ACTION: alternative(params)]
-3. Fallback: [ACTION: fallback(params)]
+Output JSON:
+{
+  "actions": [
+    {
+      "name": "action_name",
+      "params": {"param": "value"},
+      "why": "short reason",
+      "expected_outcome": "what should happen"
+    }
+  ]
+}
 
-Explain briefly why this approach works.""",
+Explain briefly why this approach works inside the JSON as "rationale" if needed.""",
         "description": "Plan and execute computer actions with fallbacks",
     },
     

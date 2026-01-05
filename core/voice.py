@@ -896,7 +896,7 @@ def _chat_response(
     session_history: list[dict],
 ) -> str:
     screen_context = _capture_screen_context(tracker)
-    return conversation.generate_response(user_text, screen_context, session_history)
+    return conversation.generate_response(user_text, screen_context, session_history, channel="voice")
 
 
 def _record_command_turn(user_text: str, assistant_text: str) -> None:
@@ -970,7 +970,8 @@ def chat_session() -> None:
             else:
                 response = _chat_response(text, tracker, session_history)
             session_history.append({"source": "voice_chat_assistant", "text": response})
-            interrupt_text = _speak_with_barge_in(response, voice_cfg)
+            voice_ready = conversation.sanitize_for_voice(response)
+            interrupt_text = _speak_with_barge_in(voice_ready, voice_cfg)
             print(response)
             if interrupt_text:
                 pending_text = interrupt_text

@@ -142,6 +142,19 @@ class GraphAgent:
                         "parameters": step.get("parameters", {}),
                     }
 
+                tool_name = result.get("tool") or step.get("tool", "unknown")
+                state.context.setdefault("tool_results", []).append(result)
+                state.context["last_result"] = result
+                if result.get("status") in {"success", "healed_success"}:
+                    state.context.pop("last_error", None)
+                else:
+                    state.context["last_error"] = result.get("error", "step_failed")
+                context_manager.add_action_result(
+                    f"tool:{tool_name}",
+                    result.get("status") in {"success", "healed_success"},
+                    self._summarize_result(result),
+                )
+
                 state.results.append(result)
                 if result.get("status") in {"success", "healed_success"}:
                     break
@@ -210,18 +223,44 @@ class GraphAgent:
             self._error_manager.handle_error(exc, {"phase": "summarize", "goal": state.goal})
             return "Summary unavailable."
 
+    @staticmethod
+    def _summarize_result(result: Dict[str, Any]) -> str:
+        payload = result.get("error") or result.get("result") or ""
+        if not payload:
+            payload = result
+        if isinstance(payload, (dict, list)):
+            return json.dumps(payload)[:200]
+        return str(payload)[:200]
+
     def _parse_json(self, text: str) -> Optional[Any]:
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             pass
 
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if match:
+        payload = self._extract_json_object(text)
+        if payload:
             try:
-                return json.loads(match.group())
+                return json.loads(payload)
             except json.JSONDecodeError:
                 return None
+        return None
+
+    @staticmethod
+    def _extract_json_object(text: str) -> Optional[str]:
+        if not text:
+            return None
+        start = text.find("{")
+        if start == -1:
+            return None
+        depth = 0
+        for idx in range(start, len(text)):
+            if text[idx] == "{":
+                depth += 1
+            elif text[idx] == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : idx + 1]
         return None
 
 

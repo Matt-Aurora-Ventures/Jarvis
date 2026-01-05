@@ -232,6 +232,26 @@
   "gnosis_safe": {
     "polygon_safe_id": 2
   },
+  "telegram": {
+    "enabled": true,
+    "bot_token_env": "TELEGRAM_BOT_TOKEN",
+    "chat_id_env": "TELEGRAM_CHAT_ID",
+    "timeout_seconds": 10
+  },
+  "logic_core": {
+    "max_loss_pct": 0.02,
+    "position_size_pct": 0.08,
+    "min_velocity_per_hour": 0.25,
+    "min_confidence": 0.55,
+    "min_roi_pct": 0.015,
+    "top_percentile": 0.01,
+    "entry_offset_pct": 0.001,
+    "atr_period": 14,
+    "atr_multiplier": 1.5,
+    "risk_reward": 3.0,
+    "execute_on_pass": false,
+    "default_expected_time_minutes": 45.0
+  },
   "trading": {
     "dex_only": true,
     "strategy": "sma_cross",

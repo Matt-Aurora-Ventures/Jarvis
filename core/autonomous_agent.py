@@ -11,7 +11,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, providers, browser_automation, ability_acquisition, storage_utils, self_healing, vision_client, safe_subprocess
+from core import (
+    ability_acquisition,
+    browser_automation,
+    config,
+    providers,
+    research_engine,
+    safe_subprocess,
+    self_healing,
+    storage_utils,
+    vision_client,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT_PATH = ROOT / "data" / "autonomous_agents"
@@ -330,10 +340,9 @@ Example format:
             return {"error": "No search query specified"}
         
         try:
-            # Use providers to search
-            search_prompt = f"Search for: {query}. Provide top 5 results with URLs and brief descriptions."
-            response = providers.generate_text(search_prompt, max_output_tokens=400)
-            return {"results": response}
+            engine = research_engine.get_research_engine()
+            results = engine.search_web(query, max_results=5)
+            return {"results": results}
         except Exception as e:
             return {"error": str(e)}
     

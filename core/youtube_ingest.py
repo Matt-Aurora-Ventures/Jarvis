@@ -12,7 +12,12 @@ import urllib.parse
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from yt_dlp import YoutubeDL  # type: ignore
+try:
+    from yt_dlp import YoutubeDL  # type: ignore
+    HAS_YTDLP = True
+except Exception:
+    YoutubeDL = None
+    HAS_YTDLP = False
 
 from core import notes_manager
 
@@ -85,6 +90,8 @@ def _fetch_transcript_api(video_url: str) -> Optional[Dict[str, str]]:
 
 def list_latest_videos(channel_url: str, limit: int = 3) -> List[Dict[str, str]]:
     """Return metadata for the latest videos on a channel."""
+    if not HAS_YTDLP or YoutubeDL is None:
+        return []
     opts = {
         "quiet": True,
         "skip_download": True,
@@ -130,6 +137,8 @@ def fetch_transcript(video_url: str, label: str = "youtube") -> Optional[Dict[st
     api_result = _fetch_transcript_api(video_url)
     if api_result:
         return api_result
+    if not HAS_YTDLP or YoutubeDL is None:
+        return None
     tmp_dir = tempfile.TemporaryDirectory()
     tmp_path = Path(tmp_dir.name)
     ydl_opts = {

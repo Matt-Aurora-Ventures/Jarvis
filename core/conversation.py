@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional, Tuple
+import json
 import re
 import urllib.parse
 
@@ -394,8 +395,101 @@ def _sanitize_response(text: str) -> str:
     if not text:
         return text
     cleaned = _normalize_response_prefix(text)
+    cleaned = _strip_action_tokens(cleaned)
     cleaned = _strip_urls(cleaned)
     return cleaned
+
+
+def _strip_action_tokens(text: str) -> str:
+    cleaned = re.sub(r"\[ACTION:[^\]]+\]", "", text)
+    cleaned = re.sub(r"\n+--- Actions Executed ---\n.*", "", cleaned, flags=re.DOTALL)
+    return cleaned.strip()
+
+
+def _voice_friendly_text(text: str) -> str:
+    if not text:
+        return text
+    cleaned = text
+    if "Plain English:" in cleaned:
+        cleaned = cleaned.split("Plain English:", 1)[1]
+        if "Technical Notes:" in cleaned:
+            cleaned = cleaned.split("Technical Notes:", 1)[0]
+    cleaned = re.sub(r"```.*?```", "", cleaned, flags=re.DOTALL)
+    lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
+    flattened = []
+    for line in lines:
+        if re.match(r"^[-*]\s+", line) or re.match(r"^\d+\.\s+", line):
+            line = re.sub(r"^([-*]|\d+\.)\s+", "", line)
+        flattened.append(line)
+    cleaned = " ".join(flattened)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def sanitize_for_voice(text: str) -> str:
+    return _voice_friendly_text(_sanitize_response(text))
+
+
+def _extract_json_payload(text: str) -> Optional[str]:
+    if not text:
+        return None
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for idx in range(start, len(text)):
+        if text[idx] == "{":
+            depth += 1
+        elif text[idx] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : idx + 1]
+    return None
+
+
+def _parse_json_payload(text: str) -> Optional[Dict[str, Any]]:
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+    payload = _extract_json_payload(text)
+    if not payload:
+        return None
+    try:
+        parsed = json.loads(payload)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        return None
+    return None
+
+
+def _format_action_history(limit: int = 3) -> str:
+    ctx = context_manager.load_conversation_context()
+    if not ctx.action_history:
+        return "None"
+    history = ctx.action_history[-limit:]
+    lines = []
+    for item in history:
+        action = item.get("action", "unknown")
+        status = "ok" if item.get("success") else "fail"
+        result = item.get("result", "")
+        lines.append(f"- {action} ({status}): {result}")
+    return "\n".join(lines)
+
+
+def _format_action_response(action_name: str, success: bool, output: str, channel: str) -> str:
+    summary = output.strip() if output else ""
+    if not summary:
+        summary = action_name.replace("_", " ")
+    response = f"{'Done' if success else 'Unable'}: {summary}"
+    if channel == "voice":
+        return _voice_friendly_text(response)
+    return response
 
 
 def _fallback_response(user_text: str) -> str:
@@ -422,7 +516,10 @@ def _fallback_response(user_text: str) -> str:
 
 
 def generate_response(
-    user_text: str, screen_context: str, session_history: Optional[List[Dict[str, str]]] = None
+    user_text: str,
+    screen_context: str,
+    session_history: Optional[List[Dict[str, str]]] = None,
+    channel: str = "chat",
 ) -> str:
     cfg = config.load_config()
     context_text = context_loader.load_context(update_state=False)
@@ -437,9 +534,12 @@ def generate_response(
         action_name, params = direct_action
         success, output = actions.execute_action(action_name, **params)
         context_manager.add_action_result(action_name, success, output)
-        response = f"{'Done' if success else 'Unable'}: {output}"
+        response = _format_action_response(action_name, success, output, channel)
         _record_conversation_turn(user_text, response)
-        return _sanitize_response(response).strip() + "\n"
+        response = _sanitize_response(response)
+        if channel == "voice":
+            response = _voice_friendly_text(response)
+        return response.strip() + "\n"
 
     # IMPORTANT: Use factual entries for memory to prevent echo chamber.
     # This excludes assistant outputs so the LLM doesn't see its own
@@ -472,7 +572,17 @@ def generate_response(
         response = _sanitize_response(_format_research_response(result))
         if response:
             _record_conversation_turn(user_text, response)
+            if channel == "voice":
+                response = _voice_friendly_text(response)
             return response + "\n"
+
+    channel_rules = (
+        "VOICE MODE: Respond in 1-3 short sentences. No lists, no code, no markdown."
+        if channel == "voice"
+        else "CHAT MODE: Respond naturally. No tool syntax or JSON."
+    )
+
+    action_history = _format_action_history(limit=3)
 
     prompt = (
         f"{safety_rules}\n\n"
@@ -481,27 +591,27 @@ def generate_response(
         "Speak naturally and conversationally, like a brilliant friend who happens to be an AI.\n"
         "Be warm, witty, and genuinely helpful. Use contractions. Show personality.\n"
         "Always act in the user's best interest. Help them achieve their goals.\n\n"
-        "=== PROGRESS CONTRACT (CRITICAL) ===\n"
-        "Each response MUST do exactly ONE of these:\n"
-        "1. TAKE ACTION: Execute a tool/action that advances the goal\n"
-        "2. GIVE SPECIFIC ANSWER: Provide concrete, actionable information\n"
-        "3. ASK ONE QUESTION: If you need info to proceed, ask exactly one clear question\n"
-        "4. DECLARE DONE/BLOCKED: State what was accomplished or what's blocking progress\n\n"
-        "EXECUTION BIAS:\n"
-        "- If the user asks for a concrete task and required info is present, TAKE ACTION now.\n"
-        "- If the request matches an available action, use it immediately without follow-up questions.\n"
-        "- Ask a question only when missing required info; never re-ask the same question.\n\n"
-        "NEVER:\n"
-        "- Give vague or generic responses\n"
-        "- Repeat what you said before\n"
-        "- Offer multiple options without a recommendation\n"
-        "- Say 'I can help with that' without actually helping\n"
-        "- Ask redundant follow-up questions\n"
-        "=== END CONTRACT ===\n\n"
-        "CAPABILITIES: You can control this Mac. Actions:\n"
+        "Return ONLY valid JSON.\n"
+        "Schema:\n"
+        "{\n"
+        '  "decision": "action|respond|question",\n'
+        '  "action": {\n'
+        '    "name": "action_name",\n'
+        '    "params": {"param": "value"},\n'
+        '    "why": "short reason",\n'
+        '    "expected_outcome": "what should happen"\n'
+        "  },\n"
+        '  "response": "natural language response"\n'
+        "}\n"
+        "Rules:\n"
+        "- If an explicit user request matches an available action, choose decision=action.\n"
+        "- Otherwise choose respond or question. Ask at most ONE question.\n"
+        "- Do NOT include markdown, code fences, or tool syntax.\n"
+        f"- {channel_rules}\n\n"
+        "Available actions:\n"
         f"{', '.join(available_actions)}\n"
-        "Format: [ACTION: action_name(param=value)]\n"
-        "Only take UI actions if user explicitly asks.\n\n"
+        "Recent action history:\n"
+        f"{action_history}\n\n"
         "--- CONVERSATION HISTORY ---\n"
         f"{history}\n"
         "--- END HISTORY ---\n\n"
@@ -523,29 +633,78 @@ def generate_response(
     if inspirations_text:
         prompt += f"Prompt inspirations:\n{inspirations_text}\n\n"
 
+    prompt += f"Input synthesis:\n{json.dumps(input_synthesis, indent=2)[:1200]}\n\n"
     prompt += f"User says: {user_text}\n"
 
-    text = providers.generate_text(prompt, max_output_tokens=500)
-    if text and _is_question_response(text) and _last_assistant_question(history_entries):
-        override = (
-            "\n\nCRITICAL OVERRIDE:\n"
-            "You already asked a question in the last turn. "
-            "Do NOT ask another question. "
-            "Make reasonable assumptions and proceed with a concrete action or recommendation. "
-            "If a UI action is appropriate and allowed, emit exactly one [ACTION: ...] command.\n"
+    response_text = ""
+    decision_text = providers.generate_text(prompt, max_output_tokens=400)
+    decision = _parse_json_payload(decision_text)
+
+    if decision:
+        decision_type = str(decision.get("decision", "")).lower()
+        if decision_type == "action":
+            action_payload = decision.get("action") or {}
+            action_name = action_payload.get("name") or decision.get("action_name")
+            params = action_payload.get("params") or {}
+            why = action_payload.get("why", "")
+            expected_outcome = action_payload.get("expected_outcome", "")
+            if action_name in available_actions:
+                if not isinstance(params, dict):
+                    params = {}
+                success, output = actions.execute_action(
+                    action_name,
+                    why=why,
+                    expected_outcome=expected_outcome,
+                    **params,
+                )
+                context_manager.add_action_result(action_name, success, output)
+                response_text = _format_action_response(action_name, success, output, channel)
+            else:
+                response_text = decision.get("response", "")
+        elif decision_type in {"respond", "question"}:
+            response_text = decision.get("response", "")
+
+        if decision_type == "question" and _last_assistant_question(history_entries):
+            response_text = ""
+
+    if not response_text:
+        response_prompt = (
+            f"{safety_rules}\n\n"
+            f"{mission_context}\n\n"
+            "You are Jarvis, the user's personal AI assistant and partner. You are NOT robotic.\n"
+            "Speak naturally and conversationally. Avoid tool syntax or JSON.\n"
+            f"{channel_rules}\n\n"
+            "--- CONVERSATION HISTORY ---\n"
+            f"{history}\n"
+            "--- END HISTORY ---\n\n"
+            "Context (user goals, projects):\n"
+            f"{context_text}\n\n"
+            "Factual memory (things the user told me, NOT my previous responses):\n"
+            f"{memory_summary}\n\n"
+            "What's on screen:\n"
+            f"{screen_context}\n\n"
         )
-        retry = providers.generate_text(prompt + override, max_output_tokens=500)
-        if retry:
-            text = retry
-    if text:
-        # Parse and execute any actions in the response
-        result = _execute_actions_in_response(text)
-        result = _sanitize_response(result)
+        if context_summary and "No context available" not in context_summary:
+            response_prompt += f"Cross-session context:\n{context_summary}\n\n"
+        if activity_summary and "No recent activity" not in activity_summary:
+            response_prompt += f"Recent Activity:\n{activity_summary}\n\n"
+        if inspirations_text:
+            response_prompt += f"Prompt inspirations:\n{inspirations_text}\n\n"
+        response_prompt += f"User says: {user_text}\n"
+        response_text = providers.generate_text(response_prompt, max_output_tokens=500) or ""
+
+    if response_text:
+        result = _sanitize_response(response_text)
+        if channel == "voice":
+            result = _voice_friendly_text(result)
         prompt_library.record_usage(inspiration_ids, success=True)
         _record_conversation_turn(user_text, result.strip())
         return result.strip() + "\n"
+
     prompt_library.record_usage(inspiration_ids, success=False)
     fallback = _sanitize_response(_fallback_response(user_text))
+    if channel == "voice":
+        fallback = _voice_friendly_text(fallback)
     _record_conversation_turn(user_text, fallback)
     return fallback
 
