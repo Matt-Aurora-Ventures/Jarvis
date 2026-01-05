@@ -39,6 +39,7 @@ import requests
 
 from core import exit_intents
 from core import jupiter
+from core import solana_network_guard
 from core.transaction_guard import require_poly_gnosis_safe
 
 logger = logging.getLogger(__name__)
@@ -538,6 +539,10 @@ def can_trade_perps(wallet_usd: float) -> Tuple[bool, str]:
     if state.cooldown_until and time.time() < state.cooldown_until:
         remaining = int(state.cooldown_until - time.time())
         return False, f"cooldown: {remaining}s remaining"
+
+    network_status = solana_network_guard.assess_network_health()
+    if not network_status.get("ok", True):
+        return False, f"network_guard:{network_status.get('reason', 'unknown')}"
 
     today = time.strftime("%Y-%m-%d")
     if state.last_trade_date != today:

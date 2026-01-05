@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import config, hyperliquid
+from core import config, hyperliquid, strategy_scores
 from core.economics.revenue import get_revenue_tracker
 
 
@@ -367,6 +367,7 @@ def paper_trade_cycle(
 
     closed_trade = None
     opened_trade = None
+    blocked_reason = None
 
     if position:
         exit_reason = _check_exit(position, price, signal)
@@ -376,17 +377,29 @@ def paper_trade_cycle(
             positions.pop(symbol, None)
             _log_paper_trade(closed_trade, event="close")
             _log_revenue(closed_trade, symbol=symbol, paper=True)
+            strategy_scores.update_score(
+                strategy.kind,
+                closed_trade.get("pnl", 0.0),
+                execution_error=False,
+                reason=exit_reason,
+                metadata={"symbol": symbol, "interval": interval},
+            )
 
     if position is None and signal == "enter":
-        opened_trade = _open_position(
-            symbol,
-            price,
-            timestamp,
-            strategy,
-            capital_usd=state.get("equity_usd", strategy.capital_usd),
-        )
-        positions[symbol] = opened_trade
-        _log_paper_trade(opened_trade, event="open")
+        allowed, reason = strategy_scores.allow_strategy(strategy.kind)
+        if not allowed:
+            blocked_reason = reason
+            signal = "blocked"
+        else:
+            opened_trade = _open_position(
+                symbol,
+                price,
+                timestamp,
+                strategy,
+                capital_usd=state.get("equity_usd", strategy.capital_usd),
+            )
+            positions[symbol] = opened_trade
+            _log_paper_trade(opened_trade, event="open")
 
     state["positions"] = positions
     state["last_update"] = datetime.now(timezone.utc).isoformat()
@@ -399,6 +412,7 @@ def paper_trade_cycle(
         "price": price,
         "opened_trade": opened_trade,
         "closed_trade": closed_trade,
+        "blocked_reason": blocked_reason,
         "equity_usd": state.get("equity_usd", strategy.capital_usd),
         "positions": positions,
     }
@@ -430,7 +444,11 @@ def format_paper_summary(result: Dict[str, Any]) -> str:
         )
 
     if not closed_trade and not opened_trade:
-        lines.append("No position change")
+        blocked_reason = result.get("blocked_reason")
+        if blocked_reason:
+            lines.append(f"Entry blocked: {blocked_reason}")
+        else:
+            lines.append("No position change")
 
     return "\n".join(lines)
 

@@ -31,10 +31,11 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import trending_aggregator
+from core import birdeye
 from core import exit_intents
 from core import rugcheck
-from core import birdeye
+from core import solana_network_guard
+from core import trending_aggregator
 
 logger = logging.getLogger(__name__)
 
@@ -559,6 +560,13 @@ def run_cycle(
     if not can_trade:
         result.skipped = True
         result.skip_reason = reason
+        save_module_state(state)
+        return result
+
+    network_status = solana_network_guard.assess_network_health()
+    if not network_status.get("ok", True):
+        result.skipped = True
+        result.skip_reason = f"network_guard:{network_status.get('reason', 'unknown')}"
         save_module_state(state)
         return result
 
