@@ -30,6 +30,32 @@
 
 ---
 
+## 🎨 Trading Dashboard V2 - Ultra-Clean UI
+
+**NEW**: Premium trading command center at `http://localhost:5173/trading`
+
+### Design Philosophy
+- **Airbnb-Style Aesthetic**: Ultra-clean white knight design with generous spacing
+- **Premium Typography**: Inter font family with perfect hierarchy
+- **Soft Shadows**: No harsh borders, subtle depth with elevation
+- **Intuitive Navigation**: Icon-based sidebar, persistent top bar
+- **Real-Time Updates**: Live position monitoring (5s), wallet data (10s)
+
+### Core Features
+- **📊 Live Position Card**: Real-time P&L, visual TP/SL bars, one-click exit
+- **🛠️ Token Scanner**: Instant lookup, rug check (0-100 risk score), liquidity analysis
+- **💬 Floating Chat**: Jarvis AI assistant with expandable panel
+- **📈 Stats Grid**: Portfolio value, win rate, total trades, P&L tracking
+- **🔄 Auto-Refresh**: Background polling, skeleton loading states
+
+### Tech Stack
+- React + Vite + TailwindCSS
+- 14 REST API endpoints
+- Custom design system (780 lines of CSS)
+- Mobile-responsive grid layout
+
+---
+
 ## 🖥️ The Ecosystem Dashboard
 
 At `http://localhost:5001`, Jarvis provides a SOC-style command center:
