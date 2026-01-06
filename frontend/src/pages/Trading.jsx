@@ -3,10 +3,19 @@ import {
     Wallet, TrendingUp, Activity, Send, Bot, Cpu, RefreshCw, Play, Pause,
     DollarSign, BarChart2, Clock, Zap, AlertTriangle, MessageSquare,
     Target, XCircle, Search, Shield, ExternalLink, Home, Settings,
-    LineChart, Tool, ChevronRight, ArrowUpRight, ArrowDownRight
+    LineChart, Wrench, ChevronRight, ArrowUpRight, ArrowDownRight, Layers
 } from 'lucide-react'
+import TradingChart from '../components/TradingChart'
+import OrderPanel from '../components/OrderPanel'
 
 const API_BASE = ''
+
+// Default token (SOL)
+const DEFAULT_TOKEN = {
+    mint: 'So11111111111111111111111111111111111111112',
+    symbol: 'SOL',
+    name: 'Solana'
+}
 
 // =============================================================================
 // V2 Components - Ultra-Clean White Knight Aesthetic
@@ -46,7 +55,7 @@ function Sidebar({ activeView, setActiveView }) {
     const navItems = [
         { id: 'overview', icon: Home, label: 'Overview' },
         { id: 'trading', icon: LineChart, label: 'Trading' },
-        { id: 'tools', icon: Tool, label: 'Tools' },
+        { id: 'tools', icon: Wrench, label: 'Tools' },
         { id: 'analytics', icon: BarChart2, label: 'Analytics' },
         { id: 'settings', icon: Settings, label: 'Settings' },
     ]
@@ -204,11 +213,21 @@ function LivePositionCard({ position, onExit, onRefresh }) {
 }
 
 // Tools Hub
-function ToolsHub() {
+function ToolsHub({ onTokenSelect }) {
     const [searchMint, setSearchMint] = useState('')
     const [tokenData, setTokenData] = useState(null)
     const [rugData, setRugData] = useState(null)
     const [isSearching, setIsSearching] = useState(false)
+
+    const handleLoadChart = () => {
+        if (tokenData && searchMint) {
+            onTokenSelect?.({
+                mint: searchMint.trim(),
+                symbol: tokenData.symbol || '???',
+                name: tokenData.name || 'Unknown'
+            })
+        }
+    }
 
     const searchToken = async () => {
         if (!searchMint.trim()) return
@@ -299,16 +318,26 @@ function ToolsHub() {
                         </div>
 
                         {tokenData.pair_address && (
-                            <a
-                                href={`https://dexscreener.com/solana/${tokenData.pair_address}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn btn-secondary btn-sm"
-                                style={{ width: '100%', marginTop: '1rem' }}
-                            >
-                                <ExternalLink size={14} />
-                                View on DexScreener
-                            </a>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '1rem' }}>
+                                <button
+                                    onClick={handleLoadChart}
+                                    className="btn btn-primary btn-sm"
+                                    style={{ flex: 1 }}
+                                >
+                                    <LineChart size={14} />
+                                    Load Chart
+                                </button>
+                                <a
+                                    href={`https://dexscreener.com/solana/${tokenData.pair_address}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ flex: 1 }}
+                                >
+                                    <ExternalLink size={14} />
+                                    DexScreener
+                                </a>
+                            </div>
                         )}
                     </div>
                 )}
@@ -451,6 +480,8 @@ function Trading() {
     const [sniperData, setSniperData] = useState(null)
     const [jarvisStatus, setJarvisStatus] = useState(null)
     const [activePosition, setActivePosition] = useState(null)
+    const [selectedToken, setSelectedToken] = useState(DEFAULT_TOKEN)
+    const [currentPrice, setCurrentPrice] = useState(0)
 
     // Fetch functions
     const fetchWallet = async () => {
@@ -525,13 +556,29 @@ function Trading() {
 
                     <StatsGrid walletData={walletData} sniperData={sniperData} />
 
+                    {/* Chart + Order Panel Row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginBottom: '24px' }}>
+                        <TradingChart
+                            mint={selectedToken.mint}
+                            symbol={selectedToken.symbol}
+                            onPriceUpdate={setCurrentPrice}
+                        />
+                        <OrderPanel
+                            mint={selectedToken.mint}
+                            symbol={selectedToken.symbol}
+                            currentPrice={currentPrice}
+                            walletBalance={walletData?.balance_sol || 0}
+                        />
+                    </div>
+
+                    {/* Position + Tools Row */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
                         <LivePositionCard
                             position={activePosition}
                             onExit={exitPosition}
                             onRefresh={fetchPosition}
                         />
-                        <ToolsHub />
+                        <ToolsHub onTokenSelect={(token) => setSelectedToken(token)} />
                     </div>
                 </div>
             </div>

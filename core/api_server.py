@@ -303,6 +303,14 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
         elif path.startswith("/api/tools/rugcheck/"):
             mint = path.split("/api/tools/rugcheck/")[1]
             self._handle_tools_rugcheck(mint)
+        # Phase 1: Chart data
+        elif path.startswith("/api/chart/"):
+            parts = path.split("/api/chart/")[1].split("/")
+            mint = parts[0] if parts else ""
+            self._handle_chart(mint)
+        # Phase 1: Strategies list
+        elif path == "/api/strategies/list":
+            self._handle_strategies_list()
         else:
             self._send_json({"error": "Not found"}, 404)
 
@@ -338,6 +346,9 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
         # Phase 1 Enhancement: Position Exit
         elif path == "/api/position/exit":
             self._handle_position_exit()
+        # Phase 1: Trade execution
+        elif path == "/api/trade":
+            self._handle_trade()
         else:
             self._send_json({"error": "Not found"}, 404)
 
@@ -1633,6 +1644,166 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
                 rug_data["error"] = str(e)
             
             self._send_json(rug_data)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_chart(self, mint: str):
+        """Get OHLCV chart data for a token."""
+        try:
+            from urllib.parse import parse_qs, urlparse
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query)
+            
+            timeframe = params.get("timeframe", ["15m"])[0]
+            limit = int(params.get("limit", ["100"])[0])
+            
+            # Try BirdEye first
+            try:
+                from core import birdeye
+                ohlcv = birdeye.fetch_ohlcv(mint, timeframe=timeframe, limit=limit)
+                if ohlcv:
+                    candles = birdeye.normalize_ohlcv(ohlcv)
+                    self._send_json({
+                        "success": True,
+                        "mint": mint,
+                        "timeframe": timeframe,
+                        "candles": candles,
+                        "source": "birdeye"
+                    })
+                    return
+            except Exception as e:
+                logger.warning(f"BirdEye OHLCV failed: {e}")
+            
+            # Fallback to DexScreener for price history
+            try:
+                import urllib.request
+                url = f"https://api.dexscreener.com/latest/dex/tokens/{mint}"
+                req = urllib.request.Request(url, headers={"User-Agent": "Jarvis/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = json.loads(resp.read().decode())
+                    pairs = data.get("pairs", [])
+                    if pairs:
+                        pair = pairs[0]
+                        # DexScreener doesn't provide full OHLCV, generate synthetic
+                        current_price = float(pair.get("priceUsd", 0))
+                        price_change = float(pair.get("priceChange", {}).get("h24", 0))
+                        
+                        # Generate synthetic candles based on price change
+                        import time as time_module
+                        now = int(time_module.time())
+                        candles = []
+                        
+                        # Simple model: linear interpolation from 24h ago
+                        old_price = current_price / (1 + price_change / 100) if price_change != -100 else current_price
+                        
+                        for i in range(min(limit, 96)):  # Max 96 15-min candles (24h)
+                            t = now - (i * 900)  # 15 min intervals
+                            progress = i / 96
+                            price = old_price + (current_price - old_price) * (1 - progress)
+                            variance = price * 0.002  # 0.2% variance
+                            import random
+                            candles.append({
+                                "timestamp": t,
+                                "open": price + random.uniform(-variance, variance),
+                                "high": price + random.uniform(0, variance * 2),
+                                "low": price - random.uniform(0, variance * 2),
+                                "close": price + random.uniform(-variance, variance),
+                                "volume": 0
+                            })
+                        
+                        candles.reverse()
+                        self._send_json({
+                            "success": True,
+                            "mint": mint,
+                            "timeframe": timeframe,
+                            "candles": candles,
+                            "source": "dexscreener_synthetic"
+                        })
+                        return
+            except Exception as e:
+                logger.warning(f"DexScreener fallback failed: {e}")
+            
+            self._send_json({"success": False, "error": "No chart data available"})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_strategies_list(self):
+        """Get list of all 81 trading strategies."""
+        try:
+            strategies = []
+            catalog_path = ROOT / "data" / "notion_deep" / "strategy_catalog.json"
+            
+            if catalog_path.exists():
+                with open(catalog_path) as f:
+                    catalog = json.load(f)
+                    strategies = catalog.get("strategies", [])
+            else:
+                # Return sample strategies if catalog doesn't exist
+                strategies = [
+                    {"id": "STRAT-001", "name": "200-Day MA Long", "category": "Trend Following", "status": "active"},
+                    {"id": "STRAT-002", "name": "RSI Mean Reversion", "category": "Mean Reversion", "status": "testing"},
+                    {"id": "STRAT-003", "name": "Funding Rate Arb", "category": "Carry", "status": "active"},
+                    {"id": "STRAT-004", "name": "Breakout Volume", "category": "Breakout", "status": "testing"},
+                    {"id": "STRAT-005", "name": "Momentum Rankings", "category": "Cross-Sectional", "status": "pending"},
+                ]
+            
+            self._send_json({"strategies": strategies, "count": len(strategies)})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_trade(self):
+        """Execute a trade with TP/SL."""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(content_length)) if content_length else {}
+            
+            mint = body.get("mint")
+            side = body.get("side", "buy")  # buy or sell
+            amount_sol = body.get("amount_sol", 0)
+            tp_pct = body.get("tp_pct", 20)  # Take profit %
+            sl_pct = body.get("sl_pct", 10)  # Stop loss %
+            
+            if not mint or amount_sol <= 0:
+                self._send_json({"error": "Invalid trade parameters"}, 400)
+                return
+            
+            # For now, simulate the trade (paper trading)
+            import time as time_module
+            trade_id = f"TRADE-{int(time_module.time())}"
+            
+            # Get current price
+            current_price = 0
+            try:
+                import urllib.request
+                url = f"https://api.dexscreener.com/latest/dex/tokens/{mint}"
+                req = urllib.request.Request(url, headers={"User-Agent": "Jarvis/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = json.loads(resp.read().decode())
+                    pairs = data.get("pairs", [])
+                    if pairs:
+                        current_price = float(pairs[0].get("priceUsd", 0))
+            except Exception:
+                pass
+            
+            tp_price = current_price * (1 + tp_pct / 100)
+            sl_price = current_price * (1 - sl_pct / 100)
+            
+            result = {
+                "success": True,
+                "trade_id": trade_id,
+                "side": side,
+                "mint": mint,
+                "amount_sol": amount_sol,
+                "entry_price": current_price,
+                "tp_price": tp_price,
+                "sl_price": sl_price,
+                "tp_pct": tp_pct,
+                "sl_pct": sl_pct,
+                "status": "paper",
+                "message": "Trade simulated (paper mode)"
+            }
+            
+            self._send_json(result)
         except Exception as e:
             self._send_json({"error": str(e)}, 500)
 
