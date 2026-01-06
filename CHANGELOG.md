@@ -4,6 +4,89 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [2.4.0] - 2026-01-05
+
+### 🚀 **MAJOR RELEASE: Multi-Source Data Aggregation & Execution Hardening**
+
+This release adds comprehensive data source integration, Grok sentiment analysis, stop loss/take profit orders, and redundant execution fallbacks.
+
+### 📊 Multi-Source Data Integration
+
+- **Lute.gg Momentum Tracker** (`core/lute_momentum.py`) - NEW
+  - Token call tracking from X/Twitter lute.gg links
+  - Conviction-based scoring (low/medium/high)
+  - Multi-caller aggregation for momentum signals
+  - Sentiment validation of calls via Grok
+
+- **GMGN.ai Token Metrics** (`core/gmgn_metrics.py`) - NEW
+  - Smart money wallet tracking (insiders, snipers, whales)
+  - Token security analysis (honeypot, LP burned, mintable)
+  - First 70 buyers PnL analysis
+  - Fallback to RugCheck when GMGN unavailable
+
+- **DexTools Integration** (`core/dextools.py`) - NEW
+  - Hot pairs tracking with DexTools hot level
+  - Token audit scores and security data
+  - Automatic DexScreener fallback
+  - Rate limiting and caching
+
+- **Unified Signal Aggregator** (`core/signal_aggregator.py`) - NEW
+  - Combines all sources: DexScreener, BirdEye, GeckoTerminal, DexTools, GMGN, Lute
+  - Grok sentiment integration for signal scoring
+  - Aggregated signal strength (STRONG_BUY to AVOID)
+  - Momentum opportunity discovery
+
+### 🎯 Jupiter Order Management
+
+- **Jupiter Orders** (`core/jupiter_orders.py`) - NEW
+  - Stop Loss orders with automatic execution
+  - Take Profit orders with trigger monitoring
+  - TP Ladder support (default: +8%/+18%/+40%)
+  - Trailing stops with dynamic trigger adjustment
+  - Time stops for position expiry
+  - Breakeven SL adjustment after TP1
+  - Persistent order storage (survives restarts)
+  - Order history logging
+
+### 🔄 Execution Fallback System
+
+- **Execution Fallback** (`core/execution_fallback.py`) - NEW
+  - Multi-venue execution: Jupiter → Raydium → Orca
+  - Quote comparison for best price
+  - Circuit breaker per venue (3 failures → 2min cooldown)
+  - Automatic failover on execution failure
+  - Unified result format
+
+### 🛠️ Solana Execution Improvements
+
+- **Enhanced RPC Failover** (`core/solana_execution.py`)
+  - Circuit breaker pattern (3 failures → 60s recovery)
+  - Health caching (10s TTL) reduces redundant checks
+  - Exponential backoff with jitter
+  - Better error classification (retryable vs permanent)
+
+- **Fortified DexScreener** (`core/dexscreener.py`)
+  - TokenPair dataclass with 20+ fields
+  - Momentum token detection
+  - Rate limiting infrastructure (300 req/min)
+  - Safe fetch functions with Result wrapper
+
+- **Improved BirdEye/GeckoTerminal**
+  - Rate limiting across all API clients
+  - Unified Result dataclasses
+  - Safe fetch functions with error handling
+  - API status monitoring
+
+### 📈 Grok Sentiment Integration
+
+- **Signal-Weighted Sentiment**
+  - Sentiment analysis integrated into signal scoring
+  - Positive sentiment boosts signal (+8 to +15)
+  - Negative sentiment reduces signal (-8 to -15)
+  - Confidence-weighted scoring
+
+---
+
 # [1.1.0] - Institutional Hardening
 
 ### 🔒 Audit Hardening

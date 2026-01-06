@@ -146,9 +146,81 @@ At `http://localhost:5001`, Jarvis provides a SOC-style command center:
 
 ### 🛰️ Solana Execution Reliability
 - **RPC Failover**: Primary + fallback endpoints with health checks
+- **Circuit Breaker**: Endpoints temporarily disabled after 3 failures (60s recovery)
 - **Simulation First**: Pre-flight sim before send
 - **Confirmation Loop**: Confirmed/finalized status checks
 - **Reconciliation**: On-chain balances reconciled with local intents
+
+### 📊 Multi-Source Data Aggregation (v2.4) - **NEW**
+
+Unified token data from multiple sources with automatic failover:
+
+**Data Sources** (`core/signal_aggregator.py`):
+- **DexScreener**: Primary price/volume data, momentum detection
+- **BirdEye**: Solana token data, OHLCV charts
+- **GeckoTerminal**: Pool data, alternative charts
+- **DexTools**: Hot pairs, audit scores, token security
+- **GMGN.ai**: Smart money tracking, insider activity, honeypot detection
+- **Lute.gg**: Momentum calls, social trading signals
+
+**Grok Sentiment Integration**:
+- Real-time X/Twitter sentiment analysis via Grok
+- Sentiment-weighted signal scoring
+- Automatic sentiment exit triggers
+- Budget controls and caching
+
+**Smart Money Tracking** (`core/gmgn_metrics.py`):
+- Insider trader activity monitoring
+- Sniper wallet detection
+- First 70 buyers PnL analysis
+- Whale accumulation patterns
+- Token security scoring (honeypot, LP burned, mintable)
+
+**Momentum Signals** (`core/lute_momentum.py`):
+- Lute.gg call tracking from X/Twitter
+- Conviction-based scoring (low/medium/high)
+- Multi-caller aggregation
+- Sentiment validation of calls
+
+### 🎯 Jupiter Order Management (v2.4) - **NEW**
+
+Stop loss and take profit execution via Jupiter swaps:
+
+**Core Module** (`core/jupiter_orders.py`):
+- **Stop Loss**: Automatic sell when price drops below trigger
+- **Take Profit**: Automatic sell when price exceeds target
+- **TP Ladder**: Multi-level exits (default: +8%/+18%/+40%)
+- **Trailing Stop**: Dynamic SL that follows price up
+- **Time Stop**: Auto-exit after configurable period
+
+**Order Types**:
+| Type | Trigger | Default |
+|------|---------|---------|
+| Stop Loss | Price ≤ trigger | -9% |
+| Take Profit | Price ≥ trigger | +20% |
+| Trailing Stop | Price ≤ highest - trail% | 5% trail |
+| Time Stop | Time > expiry | 90 minutes |
+
+**Features**:
+- Persistent orders (survives restarts)
+- Breakeven adjustment after TP1
+- Order history logging
+- Daemon integration for monitoring
+
+### 🔄 Execution Fallback System (v2.4) - **NEW**
+
+Redundant trade execution with automatic venue failover:
+
+**Execution Priority** (`core/execution_fallback.py`):
+1. **Jupiter** (primary) - Best aggregation, most routes
+2. **Raydium** (backup) - Major Solana DEX
+3. **Orca** (backup) - Concentrated liquidity pools
+
+**Features**:
+- Quote comparison across venues for best price
+- Circuit breaker per venue (3 failures → 2min cooldown)
+- Automatic failover on execution failure
+- Unified result format across venues
 
 ### 🧪 Audit Suite (Run-All)
 - **One Command**: `python3 -m core.audit run_all`
