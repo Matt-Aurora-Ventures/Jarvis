@@ -12,11 +12,14 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Trading Dashboard - Standalone (V3 White Knight Design) */}
+        <Route path="/trading" element={<Trading />} />
+
+        {/* Other pages with Layout (Dark Design) */}
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="chat" element={<Chat />} />
           <Route path="voice" element={<VoiceControl />} />
-          <Route path="trading" element={<Trading />} />
           <Route path="settings" element={<Settings />} />
           <Route path="research" element={<Research />} />
         </Route>
