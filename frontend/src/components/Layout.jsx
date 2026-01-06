@@ -1,93 +1,116 @@
 import React from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { Home, MessageCircle, Settings, Search, Mic, TrendingUp } from 'lucide-react'
+import { Home, MessageCircle, Settings, Search, Mic, TrendingUp, Bot } from 'lucide-react'
 import useJarvisStore from '../stores/jarvisStore'
-import VoiceOrb from './VoiceOrb'
 
 function Layout() {
   const { isListening, status } = useJarvisStore()
 
   return (
-    <div className="flex h-screen bg-jarvis-darker">
-      {/* Sidebar */}
-      <aside className="w-20 bg-jarvis-dark border-r border-slate-700 flex flex-col items-center py-6">
-        <div className="mb-8">
-          <div className="w-12 h-12 rounded-full bg-jarvis-primary flex items-center justify-center">
-            <span className="text-white font-bold text-xl">J</span>
-          </div>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
+      {/* Top Navigation - V3 White Knight Style */}
+      <div className="top-nav">
+        <div className="nav-brand">
+          <Bot size={24} />
+          <span>Jarvis LifeOS</span>
         </div>
 
-        <nav className="flex-1 flex flex-col gap-4">
+        <nav style={{ display: 'flex', gap: '8px', flex: 1, justifyContent: 'center' }}>
           <NavLink
             to="/"
             className={({ isActive }) =>
-              `p-3 rounded-xl transition-all ${isActive ? 'bg-jarvis-primary text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`
+              `btn ${isActive ? 'btn-primary' : 'btn-ghost'}`
             }
           >
-            <Home size={24} />
+            <Home size={18} />
+            Dashboard
           </NavLink>
           <NavLink
             to="/chat"
             className={({ isActive }) =>
-              `p-3 rounded-xl transition-all ${isActive ? 'bg-jarvis-primary text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`
+              `btn ${isActive ? 'btn-primary' : 'btn-ghost'}`
             }
           >
-            <MessageCircle size={24} />
+            <MessageCircle size={18} />
+            Chat
           </NavLink>
           <NavLink
             to="/voice"
             className={({ isActive }) =>
-              `p-3 rounded-xl transition-all ${isActive ? 'bg-jarvis-primary text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`
+              `btn ${isActive ? 'btn-primary' : 'btn-ghost'}`
             }
-            title="Voice Control"
           >
-            <Mic size={24} />
+            <Mic size={18} />
+            Voice
           </NavLink>
           <NavLink
             to="/trading"
             className={({ isActive }) =>
-              `p-3 rounded-xl transition-all ${isActive ? 'bg-jarvis-primary text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`
+              `btn ${isActive ? 'btn-primary' : 'btn-ghost'}`
             }
-            title="Trading"
           >
-            <TrendingUp size={24} />
+            <TrendingUp size={18} />
+            Trading
           </NavLink>
           <NavLink
             to="/research"
             className={({ isActive }) =>
-              `p-3 rounded-xl transition-all ${isActive ? 'bg-jarvis-primary text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`
+              `btn ${isActive ? 'btn-primary' : 'btn-ghost'}`
             }
-            title="Research"
           >
-            <Search size={24} />
+            <Search size={18} />
+            Research
           </NavLink>
           <NavLink
             to="/settings"
             className={({ isActive }) =>
-              `p-3 rounded-xl transition-all ${isActive ? 'bg-jarvis-primary text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-white'}`
+              `btn ${isActive ? 'btn-primary' : 'btn-ghost'}`
             }
-            title="Settings"
           >
-            <Settings size={24} />
+            <Settings size={18} />
+            Settings
           </NavLink>
         </nav>
 
-        {/* Status indicators */}
-        <div className="mt-auto flex flex-col gap-2 items-center">
-          <div className={`w-3 h-3 rounded-full ${status.daemon === 'running' ? 'bg-green-500' : 'bg-red-500'}`}
-            title={`Daemon: ${status.daemon}`} />
-          <div className={`w-3 h-3 rounded-full ${isListening ? 'bg-jarvis-primary animate-pulse' : 'bg-slate-600'}`}
-            title={isListening ? 'Listening' : 'Not listening'} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Status indicators */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+            <div
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: status.daemon === 'running' ? 'var(--success)' : 'var(--danger)'
+              }}
+              title={`Daemon: ${status.daemon}`}
+            />
+            <span>System {status.daemon === 'running' ? 'Online' : 'Offline'}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+            <div
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: isListening ? 'var(--primary)' : 'var(--gray-300)',
+                animation: isListening ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none'
+              }}
+              title={isListening ? 'Listening' : 'Not listening'}
+            />
+            <span>{isListening ? 'Listening' : 'Idle'}</span>
+          </div>
         </div>
-      </aside>
+      </div>
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main style={{
+        maxWidth: '1400px',
+        margin: '0 auto',
+        padding: 'var(--spacing-xl)',
+        minHeight: 'calc(100vh - 64px)'
+      }}>
         <Outlet />
       </main>
-
-      {/* Floating Voice Orb */}
-      <VoiceOrb />
     </div>
   )
 }
