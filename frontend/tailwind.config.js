@@ -8,11 +8,11 @@ export default {
     extend: {
       colors: {
         jarvis: {
-          primary: '#3B82F6',
-          secondary: '#10B981',
-          accent: '#8B5CF6',
-          dark: '#1E293B',
-          darker: '#0F172A',
+          primary: '#6366F1',    // Indigo (matches V3)
+          secondary: '#10B981', // Green success
+          accent: '#8B5CF6',    // Purple
+          dark: '#F9FAFB',      // Light gray (was dark #1E293B)
+          darker: '#FFFFFF',    // White (was dark blue #0F172A)
         }
       },
       animation: {
