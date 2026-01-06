@@ -180,6 +180,27 @@ def _last_spoken() -> tuple[float, str]:
         return _LAST_SPOKEN_AT, _LAST_SPOKEN_TEXT
 
 
+def get_voice_runtime_status() -> dict:
+    """Return runtime voice status for UI/diagnostics."""
+    with _ACTIVE_SPEECH_LOCK:
+        proc = _ACTIVE_SPEECH_PROCESS
+    speaking = bool(proc and proc.poll() is None)
+    last_at, last_text = _last_spoken()
+    return {
+        "speaking": speaking,
+        "last_spoken_at": last_at,
+        "last_spoken_text": last_text,
+    }
+
+
+def speak_text(text: str) -> bool:
+    """Speak text using the configured TTS engine."""
+    if not text:
+        return False
+    _speak(text)
+    return True
+
+
 def _is_self_echo(text: str, voice_cfg: dict) -> bool:
     normalized = _normalize_transcript(text)
     min_chars = int(voice_cfg.get("echo_min_chars", 12))
@@ -476,6 +497,15 @@ def _select_say_voice(voice_cfg: dict) -> str:
         if not available and _test_say_voice(candidate):
             return candidate
     return ""
+
+
+def resolve_say_voice(requested: str = "") -> str:
+    """Pick a valid macOS say() voice or return empty for default."""
+    voice_cfg = _voice_cfg()
+    if requested:
+        voice_cfg = dict(voice_cfg)
+        voice_cfg["speech_voice"] = requested
+    return _select_say_voice(voice_cfg)
 
 
 def _start_say_process(text: str, voice_cfg: dict) -> Optional[subprocess.Popen]:

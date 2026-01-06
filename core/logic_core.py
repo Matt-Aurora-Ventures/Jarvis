@@ -265,6 +265,27 @@ class LogicCore:
         return "chopping", trend_score
 
     def _select_strategy(self, snapshot: MarketSnapshot, regime: str) -> str:
+        # Try decision matrix first for unified strategy selection
+        try:
+            from core.trading_decision_matrix import get_decision_matrix
+            matrix = get_decision_matrix()
+            definition = matrix.select_strategy_for_regime(regime, snapshot)
+            if definition:
+                self.log.debug(f"DecisionMatrix selected: {definition.name}")
+                # Map decision matrix names to legacy names
+                name_map = {
+                    "TrendFollower": "Momentum",
+                    "MeanReversion": "MeanReversion",
+                    "ArbitrageScanner": "Arbitrage",
+                    "TriangularArbitrage": "Arbitrage",
+                }
+                return name_map.get(definition.name, definition.name)
+        except ImportError:
+            pass
+        except Exception as e:
+            self.log.warning(f"DecisionMatrix fallback: {e}")
+        
+        # Fallback to original logic
         if snapshot.news_event:
             return "Arbitrage"
         if regime == "trending":

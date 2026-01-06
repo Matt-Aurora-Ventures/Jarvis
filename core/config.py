@@ -39,6 +39,22 @@ def load_config() -> Dict[str, Any]:
     return base
 
 
+def save_local_config(config_data: Dict[str, Any]) -> None:
+    """Persist overrides to the local config file."""
+    LOCAL_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOCAL_CONFIG, "w", encoding="utf-8") as handle:
+        json.dump(config_data, handle, indent=2, sort_keys=True)
+
+
+def update_local_config(updates: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge updates into local config and return the merged config."""
+    current = _load_json(LOCAL_CONFIG)
+    merged = _deep_merge(current, updates)
+    save_local_config(merged)
+    base = _load_json(BASE_CONFIG)
+    return _deep_merge(base, merged)
+
+
 def resolve_path(path_value: str) -> Path:
     path = Path(path_value)
     if not path.is_absolute():

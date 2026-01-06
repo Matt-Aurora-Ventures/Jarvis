@@ -28,28 +28,30 @@
   --gray-800: #1F2937;
   --gray-900: #111827;
 
-  /* Brand Colors */
-  --primary: #6366F1;
-  --primary-light: #818CF8;
-  --primary-dark: #4F46E5;
+  /* Brand Colors - Pure White Airbnb Aesthetic */
+  --primary: #111827;
+  --primary-light: #374151;
+  --primary-dark: #000000;
 
   --success: #10B981;
   --success-light: #34D399;
   --warning: #F59E0B;
   --danger: #EF4444;
+  --accent: #FF385C;
+  /* Airbnb red */
 
-  /* Semantic Colors */
+  /* Semantic Colors - Pure White */
   --bg-primary: #FFFFFF;
-  --bg-secondary: #F9FAFB;
-  --bg-tertiary: #F3F4F6;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #FAFAFA;
 
   --text-primary: #111827;
-  --text-secondary: #6B7280;
-  --text-tertiary: #9CA3AF;
+  --text-secondary: #717171;
+  --text-tertiary: #B0B0B0;
 
-  --border-light: #F3F4F6;
-  --border-default: #E5E7EB;
-  --border-strong: #D1D5DB;
+  --border-light: #EBEBEB;
+  --border-default: #DDDDDD;
+  --border-strong: #C6C6C6;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);

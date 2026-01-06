@@ -240,7 +240,14 @@ def set_reminder(title: str, due_date: str = "") -> Tuple[bool, str]:
 def speak(text: str, voice: str = "Alex") -> Tuple[bool, str]:
     """Make the computer speak."""
     try:
-        subprocess.run(["say", "-v", voice, text], check=True, timeout=30)
+        from core import voice as voice_module
+
+        voice_name = voice_module.resolve_say_voice(voice)
+        cmd = ["say"]
+        if voice_name:
+            cmd.extend(["-v", voice_name])
+        cmd.append(text)
+        subprocess.run(cmd, check=True, timeout=30)
         return True, f"Spoke: {text[:50]}..."
     except Exception as e:
         return False, str(e)

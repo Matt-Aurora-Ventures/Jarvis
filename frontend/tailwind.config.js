@@ -8,11 +8,11 @@ export default {
     extend: {
       colors: {
         jarvis: {
-          primary: '#6366F1',    // Indigo (matches V3)
-          secondary: '#10B981', // Green success
-          accent: '#8B5CF6',    // Purple
-          dark: '#F9FAFB',      // Light gray (was dark #1E293B)
-          darker: '#FFFFFF',    // White (was dark blue #0F172A)
+          primary: '#111827',    // Pure dark text (Airbnb style)
+          secondary: '#FF385C', // Airbnb red accent
+          accent: '#717171',    // Neutral gray
+          dark: '#FFFFFF',      // Pure white
+          darker: '#FFFFFF',    // Pure white
         }
       },
       animation: {
@@ -21,8 +21,8 @@ export default {
       },
       keyframes: {
         glow: {
-          '0%': { boxShadow: '0 0 5px #3B82F6, 0 0 10px #3B82F6' },
-          '100%': { boxShadow: '0 0 20px #3B82F6, 0 0 30px #3B82F6' },
+          '0%': { boxShadow: '0 0 5px rgba(0,0,0,0.05), 0 0 10px rgba(0,0,0,0.02)' },
+          '100%': { boxShadow: '0 0 10px rgba(0,0,0,0.08), 0 0 20px rgba(0,0,0,0.04)' },
         }
       }
     },

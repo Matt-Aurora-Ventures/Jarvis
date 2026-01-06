@@ -10,6 +10,12 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 This release represents a complete UI/UX transformation with an ultra-clean Airbnb-style design, integrated TradingView charts, advanced order panel, and a comprehensive 6-phase roadmap for the ultimate trading command center.
 
+### 🎨 Dashboard V3 - Pure White Aesthetic
+- Switched to "White Knight" pure white design system (Airbnb inspired).
+- Fixed invisible text issues in Dashboard.jsx.
+- Backend port aligned to 8765.
+- **KNOWN ISSUE**: Frontend API endpoints (`/api/wallet/status`, etc.) are currently glitching/returning 404s. Fix impending.
+
 ### 🎨 Trading Dashboard V2 - Ultra-Clean White Knight UI
 
 - **Complete Design System Overhaul** (`frontend/src/index.css` +780 lines)

@@ -55,6 +55,7 @@ except ImportError:
 # Configuration
 # ============================================================================
 
+# Jupiter API - public.jupiterapi.com is the only working endpoint
 JUPITER_QUOTE_API = "https://public.jupiterapi.com/quote"
 JUPITER_SWAP_API = "https://public.jupiterapi.com/swap"
 SOLANA_RPC = "https://api.mainnet-beta.solana.com"
@@ -270,7 +271,7 @@ async def execute_swap(
         result = await solana_execution.execute_swap_transaction(
             signed_tx,
             endpoints,
-            simulate=True,
+            simulate=False,  # Execute for real, don't just simulate
             commitment="confirmed",
         )
 
