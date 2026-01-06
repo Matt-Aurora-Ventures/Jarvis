@@ -7,8 +7,10 @@
 </p>
 
 ![Status](https://img.shields.io/badge/Status-ONLINE-success)
-![Dashboard](https://img.shields.io/badge/Dashboard-v2.0-blue)
+![Dashboard](https://img.shields.io/badge/Dashboard-v3.0-blue)
 ![Security](https://img.shields.io/badge/Security-IDS_ACTIVE-red)
+
+**[📋 View CHANGELOG](CHANGELOG.md)** | **[🛣️ Roadmap](#-ultimate-dashboard-roadmap)**
 
 ---
 
