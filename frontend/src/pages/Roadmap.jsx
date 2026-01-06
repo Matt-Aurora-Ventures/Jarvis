@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { 
-  ChartCandlestick, 
+  CandlestickChart, 
   Shield, 
   Brain, 
   Mic, 
@@ -15,7 +15,7 @@ const PHASES = [
   {
     id: 1,
     title: 'Trading Core',
-    icon: ChartCandlestick,
+    icon: CandlestickChart,
     status: 'in-progress',
     features: [
       { name: 'Charts', description: 'TradingView with real-time candles', done: true },

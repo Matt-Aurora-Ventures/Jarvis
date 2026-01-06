@@ -41,6 +41,7 @@ lifeos/reports/
 data/
 *.log
 *.log.*
+*.pid
 
 # === DATABASES ===
 *.db

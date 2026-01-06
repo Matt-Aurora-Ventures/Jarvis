@@ -1,30 +1,12 @@
 /* =============================================================================
    LifeOS Design System - V2 White Knight
    Main stylesheet entry point
-   
-   Architecture:
-   1. Tailwind base/components/utilities
-   2. Design tokens (CSS variables)
-   3. Base reset styles
-   4. Layout (nav, sidebar, containers)
-   5. Component styles (cards, buttons, inputs)
-   6. Trading-specific styles
-   7. Chat styles
-   8. Animations
-   9. Utility classes
    ============================================================================= */
+
+/* Google Fonts - must be first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 /* Tailwind layers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Design System Modules */
-@import './styles/tokens.css';
-@import './styles/base.css';
-@import './styles/layout.css';
-@import './styles/components.css';
-@import './styles/trading.css';
-@import './styles/chat.css';
-@import './styles/animations.css';
-@import './styles/utilities.css';

@@ -10,8 +10,10 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 This release wires in the previously created modular components, ensuring the refactored architecture is actually used in production.
 
+**Note**: The UI is a working baseline and we’re just getting started — expect ongoing UX/UI polish and refinements.
+
 ### ⚠️ Critical Fix: Wiring Refactored Files
-- **main.jsx**: Now imports `styles.css` (modular CSS entry) instead of monolithic `index.css`
+- **main.jsx**: Startup wiring stabilized; CSS entry may be adjusted during ongoing frontend hardening
 - **App.jsx**: Now imports refactored pages (`DashboardNew`, `ChatNew`, `TradingNew`) instead of legacy versions
 - **Layout.jsx**: Added Roadmap navigation link
 

@@ -36,6 +36,8 @@
 
 **NEW**: Premium trading command center at `http://localhost:5173/trading`
 
+**Note**: The UI is a working baseline and we’re just getting started — expect ongoing UX/UI polish and refinements.
+
 ### Design Philosophy
 - **Airbnb-Style Aesthetic**: Ultra-clean white knight design with generous spacing
 - **Premium Typography**: Inter font family with perfect hierarchy

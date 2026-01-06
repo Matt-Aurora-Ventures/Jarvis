@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 
 /**
  * useInterval - setInterval hook with auto cleanup
@@ -35,8 +35,6 @@ export function useDebounce(value, delay) {
 
   return debouncedValue
 }
-
-import { useState } from 'react'
 
 /**
  * useToggle - Simple boolean toggle
