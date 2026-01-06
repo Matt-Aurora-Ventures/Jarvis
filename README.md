@@ -56,7 +56,60 @@
 
 ---
 
-## 🖥️ The Ecosystem Dashboard
+## 🛣️ Ultimate Dashboard Roadmap
+
+> **"An edge for the little guy"** - Democratizing institutional-grade trading tools.
+
+### 📊 Phase 1: Trading Core (Next)
+| Feature | Description |
+|---------|-------------|
+| **Charts** | TradingView (lightweight-charts) with real-time candles |
+| **Order Panel** | Buy/Sell with TP/SL, position sizing calculator |
+| **Order Book** | Live depth, whale alerts, spread indicator |
+
+### 🛡️ Phase 2: Sentinel Mode
+| Feature | Description |
+|---------|-------------|
+| **Auto-Trading** | Master toggle, phase indicator (Trial→Savage) |
+| **Coliseum** | 81 strategies grid with live backtest results |
+| **Approval Gate** | Pending trades queue, one-click approve/reject |
+| **Kill Switch** | Emergency cancel all trades |
+
+### 📈 Phase 3: Intelligence Layer
+| Feature | Description |
+|---------|-------------|
+| **Signal Aggregator** | Multi-source trending (Birdeye + Gecko + DexScreener) |
+| **Smart Money** | GMGN insider tracking, whale patterns |
+| **Sentiment** | Real-time X/Twitter via Grok |
+| **ML Regime** | Volatility prediction, strategy switching |
+
+### 🎙️ Phase 4: LifeOS Integration
+| Feature | Description |
+|---------|-------------|
+| **Voice Trading** | "Buy $50 of SOL" natural language |
+| **Mirror Test** | Self-correction dashboard, improvement history |
+| **Knowledge** | Notes search, research viewer, trading journal |
+
+### 🔬 Phase 5: Advanced Tools
+| Feature | Description |
+|---------|-------------|
+| **MEV Dashboard** | Jito bundles, sandwich scanner, SOR visualizer |
+| **Perps** | Jupiter perps, 30x leverage, funding rates |
+| **Multi-DEX** | Quote comparison (Jupiter/Raydium/Orca) |
+| **Analytics** | Equity curve, trade heatmap, drawdown analysis |
+
+### 🎨 Phase 6: Polish & Scale
+| Feature | Description |
+|---------|-------------|
+| **Performance** | WebSocket, code splitting, virtual scroll |
+| **Mobile** | PWA, push notifications, touch charts |
+| **Themes** | Dark/light toggle, accent colors |
+| **Onboarding** | Interactive tutorial, tooltips |
+
+**Timeline**: ~19 days for complete implementation
+**API Endpoints**: 45 total (14 current + 31 new)
+
+---
 
 At `http://localhost:5001`, Jarvis provides a SOC-style command center:
 
