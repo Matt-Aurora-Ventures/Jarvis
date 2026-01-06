@@ -58,49 +58,116 @@ MAX_PRICE_IMPACT_PCT = 5.0
 # Wallet Helpers
 # =============================================================================
 
+def _get_sol_price() -> float:
+    """Get current SOL price from CoinGecko."""
+    try:
+        import requests
+        resp = requests.get(
+            "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return resp.json().get("solana", {}).get("usd", 200.0)
+    except Exception:
+        pass
+    return 200.0
+
+
+def _get_token_price(mint: str) -> float:
+    """Get token price from DexScreener."""
+    if mint == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v":
+        return 1.0  # USDC
+    try:
+        import requests
+        resp = requests.get(
+            f"https://api.dexscreener.com/latest/dex/tokens/{mint}",
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            pairs = resp.json().get("pairs", [])
+            if pairs:
+                return float(pairs[0].get("priceUsd", 0) or 0)
+    except Exception:
+        pass
+    return 0.0
+
+
 async def get_wallet_status() -> Dict[str, Any]:
-    """Get current wallet balances."""
+    """Get current wallet balances including all tokens."""
     try:
         from solders.keypair import Keypair
         from solana.rpc.async_api import AsyncClient
+        from solana.rpc.types import TokenAccountOpts
+        from solana.rpc.commitment import Confirmed
+        from solders.pubkey import Pubkey
         from core import solana_wallet, solana_execution
         
         keypair = solana_wallet.load_keypair()
         if not keypair:
             return {"error": "No keypair found"}
         
-        pubkey = str(keypair.pubkey())
+        pubkey = keypair.pubkey()
         endpoints = solana_execution.load_solana_rpc_endpoints()
+        sol_price = _get_sol_price()
         
         async with AsyncClient(endpoints[0].url) as client:
             # Get SOL balance
-            balance = await client.get_balance(keypair.pubkey())
+            balance = await client.get_balance(pubkey)
             sol_balance = balance.value / 1e9
+            sol_usd = sol_balance * sol_price
             
-            # Get USDC balance
-            usdc_mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+            # Get all token accounts
+            total_token_usd = 0.0
             usdc_balance = 0.0
+            token_holdings = []
+            
             try:
-                resp = await client.get_token_accounts_by_owner(
-                    keypair.pubkey(),
-                    {"mint": usdc_mint},
+                resp = await client.get_token_accounts_by_owner_json_parsed(
+                    pubkey,
+                    TokenAccountOpts(
+                        program_id=Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+                    ),
+                    Confirmed,
                 )
-                if resp.value:
-                    for item in resp.value:
-                        usdc_balance += float(
-                            item.account.data.parsed["info"]["tokenAmount"]["uiAmount"] or 0
-                        )
-            except Exception:
-                pass
+                
+                for ta in resp.value:
+                    info = ta.account.data.parsed["info"]
+                    mint = info["mint"]
+                    amount = float(info["tokenAmount"]["uiAmount"] or 0)
+                    
+                    if amount <= 0:
+                        continue
+                    
+                    price = _get_token_price(mint)
+                    usd_value = amount * price
+                    total_token_usd += usd_value
+                    
+                    if mint == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v":
+                        usdc_balance = amount
+                    
+                    token_holdings.append({
+                        "mint": mint,
+                        "amount": amount,
+                        "price": price,
+                        "usd": usd_value,
+                    })
+            except Exception as e:
+                print(f"⚠️  Token fetch error: {e}")
+            
+            total_usd = sol_usd + total_token_usd
+            available_usd = total_usd - (MIN_SOL_RESERVE * sol_price)
             
             return {
-                "pubkey": pubkey,
+                "pubkey": str(pubkey),
                 "sol_balance": sol_balance,
-                "sol_usd": sol_balance * 140,  # Approximate SOL price
+                "sol_price": sol_price,
+                "sol_usd": sol_usd,
                 "usdc_balance": usdc_balance,
-                "total_liquid_usd": (sol_balance * 140) + usdc_balance,
-                "available_for_trade_usd": usdc_balance + max(0, (sol_balance - MIN_SOL_RESERVE) * 140),
+                "total_token_usd": total_token_usd,
+                "total_usd": total_usd,
+                "available_for_trade_usd": max(0, available_usd),
                 "sol_reserve_ok": sol_balance >= MIN_SOL_RESERVE,
+                "token_holdings": token_holdings,
             }
     except Exception as e:
         return {"error": str(e)}
@@ -368,6 +435,11 @@ async def run_scan_loop(
         print(f"  Score: {best.composite_score:.2f}")
         print(f"  Price: ${best.price_usd:.8f}")
         print(f"  Liquidity: ${best.liquidity_usd:,.0f}")
+        if best.sentiment:
+            sentiment_emoji = {"positive": "🟢", "negative": "🔴", "neutral": "⚪", "mixed": "🟡"}.get(best.sentiment, "⚪")
+            print(f"  Sentiment: {sentiment_emoji} {best.sentiment} (conf={best.sentiment_confidence:.0%})")
+            if best.sentiment_market_relevance:
+                print(f"  Market: {best.sentiment_market_relevance[:60]}...")
         
         # Check if we should enter
         should_enter, reason = sniper.should_enter(best)
@@ -432,9 +504,15 @@ async def main():
             print(f"❌ Error: {wallet['error']}")
         else:
             print(f"  Pubkey: {wallet['pubkey'][:20]}...")
-            print(f"  SOL: {wallet['sol_balance']:.4f} (~${wallet['sol_usd']:.2f})")
+            print(f"  SOL: {wallet['sol_balance']:.4f} @ ${wallet.get('sol_price', 200):.2f} = ${wallet['sol_usd']:.2f}")
             print(f"  USDC: ${wallet['usdc_balance']:.2f}")
-            print(f"  Available: ${wallet['available_for_trade_usd']:.2f}")
+            if wallet.get('token_holdings'):
+                for th in wallet['token_holdings']:
+                    if th['mint'] != "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" and th['usd'] > 0.01:
+                        print(f"  Token: {th['amount']:.2f} @ ${th['price']:.6f} = ${th['usd']:.2f}")
+            print(f"  ─────────────────────────")
+            print(f"  💵 Total: ${wallet.get('total_usd', 0):.2f}")
+            print(f"  📈 Available: ${wallet['available_for_trade_usd']:.2f}")
             print(f"  SOL reserve OK: {'✅' if wallet['sol_reserve_ok'] else '❌'}")
         
         print("\n📈 Sniper Status")
@@ -449,7 +527,11 @@ async def main():
         candidates = await discover_best_tokens(limit=10)
         print(f"\nFound {len(candidates)} candidates:")
         for i, c in enumerate(candidates[:10], 1):
-            print(f"{i}. {c.symbol} - Score: {c.composite_score:.2f}, Vol: ${c.volume_24h_usd:,.0f}")
+            sentiment_emoji = {"positive": "🟢", "negative": "🔴", "neutral": "⚪", "mixed": "🟡"}.get(c.sentiment, "")
+            sentiment_str = f" {sentiment_emoji}{c.sentiment}" if c.sentiment else ""
+            print(f"{i}. {c.symbol} - Score: {c.composite_score:.2f}, Vol: ${c.volume_24h_usd:,.0f}{sentiment_str}")
+            if c.sentiment_market_relevance:
+                print(f"   └─ {c.sentiment_market_relevance[:70]}...")
         return
     
     if args.live:

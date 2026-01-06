@@ -1,6 +1,6 @@
 import React from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { Home, MessageCircle, Settings, Search, Mic, TrendingUp, Bot } from 'lucide-react'
+import { Home, MessageCircle, Settings, Search, Mic, TrendingUp, Bot, Map } from 'lucide-react'
 import useJarvisStore from '../stores/jarvisStore'
 
 function Layout() {
@@ -60,6 +60,15 @@ function Layout() {
           >
             <Search size={18} />
             Research
+          </NavLink>
+          <NavLink
+            to="/roadmap"
+            className={({ isActive }) =>
+              `btn ${isActive ? 'btn-primary' : 'btn-ghost'}`
+            }
+          >
+            <Map size={18} />
+            Roadmap
           </NavLink>
           <NavLink
             to="/settings"

@@ -176,7 +176,9 @@ def fetch_trending_all_sources(
 def _fetch_birdeye_trending(limit: int, cache_ttl: int) -> List[Dict[str, Any]]:
     """Fetch trending from Birdeye API."""
     try:
-        data = birdeye.fetch_trending_tokens(limit=limit, cache_ttl_seconds=cache_ttl)
+        # BirdEye API max limit is 20 for trending
+        safe_limit = min(limit, 20)
+        data = birdeye.fetch_trending_tokens(limit=safe_limit, cache_ttl_seconds=cache_ttl)
         if not data:
             return []
 

@@ -285,9 +285,9 @@ def fetch_token_overview(
 def fetch_trending_tokens(
     *,
     chain: str = "solana",
-    sort_by: Optional[str] = "rank",
-    sort_type: Optional[str] = "asc",
-    limit: int = 20,
+    sort_by: Optional[str] = None,  # Removed default - API doesn't always accept it
+    sort_type: Optional[str] = None,
+    limit: int = 20,  # API max is 20
     cache_ttl_seconds: int = 300,
 ) -> Optional[Dict[str, Any]]:
     """Fetch trending tokens."""
@@ -298,10 +298,14 @@ def fetch_trending_tokens(
     headers = {"X-API-KEY": api_key} if api_key else {}
     headers["x-chain"] = chain
 
+    # BirdEye API limit is 1-20 for trending endpoint
+    safe_limit = min(max(1, limit), 20)
+    
     params: Dict[str, Any] = {
         "offset": 0,
-        "limit": limit,
+        "limit": safe_limit,
     }
+    # Only add sort params if explicitly requested (API may reject them)
     if sort_by:
         params["sort_by"] = sort_by
     if sort_type:
@@ -319,7 +323,7 @@ def fetch_trending_tokens(
         logger.debug("Retrying trending without sort params")
         result = _get_json(
             f"{BASE_URL}/defi/token_trending",
-            params={"offset": 0, "limit": limit},
+            params={"offset": 0, "limit": safe_limit},
             headers=headers,
             cache_ttl_seconds=cache_ttl_seconds,
         )

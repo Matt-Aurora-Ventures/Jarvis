@@ -71,45 +71,53 @@ function Settings() {
   }
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
-        <p className="text-slate-400">Manage your API keys and integrations</p>
+    <div style={{ flex: 1, padding: 'var(--space-xl)', overflowY: 'auto' }}>
+      <header style={{ marginBottom: 'var(--space-xl)' }}>
+        <h1 style={{ fontSize: '1.875rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-xs)' }}>Settings</h1>
+        <p style={{ color: 'var(--text-secondary)' }}>Manage your API keys and integrations</p>
       </header>
 
       {/* API Keys Section */}
-      <section className="mb-8">
-        <div className="flex items-center gap-3 mb-6">
-          <Key className="text-jarvis-primary" />
-          <h2 className="text-xl font-semibold text-white">API Keys</h2>
+      <section style={{ marginBottom: 'var(--space-xl)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)' }}>
+          <Key size={20} style={{ color: 'var(--primary)' }} />
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>API Keys</h2>
         </div>
 
-        <div className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
           {API_KEY_PROVIDERS.map((provider) => (
-            <div
-              key={provider.id}
-              className="bg-jarvis-dark rounded-2xl p-6 border border-slate-700"
-            >
-              <div className="flex justify-between items-start mb-4">
+            <div key={provider.id} className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-md)' }}>
                 <div>
-                  <h3 className="text-lg font-medium text-white">{provider.name}</h3>
-                  <p className="text-sm text-slate-400">{provider.description}</p>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--text-primary)' }}>{provider.name}</h3>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{provider.description}</p>
                 </div>
                 <StatusBadge status={saveStatus[provider.id]} />
               </div>
 
-              <div className="flex gap-3">
-                <div className="flex-1 relative">
+              <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                <div style={{ flex: 1, position: 'relative' }}>
                   <input
                     type={showKeys[provider.id] ? 'text' : 'password'}
                     value={localKeys[provider.id] || ''}
                     onChange={(e) => handleKeyChange(provider.id, e.target.value)}
                     placeholder={`Enter your ${provider.name} API key`}
-                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-jarvis-primary"
+                    className="input"
+                    style={{ width: '100%', paddingRight: '2.5rem' }}
                   />
                   <button
                     onClick={() => toggleShowKey(provider.id)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    style={{ 
+                      position: 'absolute', 
+                      right: 'var(--space-sm)', 
+                      top: '50%', 
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--text-tertiary)',
+                      padding: 'var(--space-xs)'
+                    }}
                   >
                     {showKeys[provider.id] ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
@@ -117,7 +125,8 @@ function Settings() {
                 <button
                   onClick={() => saveKey(provider.id)}
                   disabled={!localKeys[provider.id] || saveStatus[provider.id] === 'saving'}
-                  className="px-6 py-3 bg-jarvis-primary text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}
                 >
                   <Save size={18} />
                   Save
@@ -129,9 +138,9 @@ function Settings() {
       </section>
 
       {/* Voice Settings */}
-      <section className="mb-8">
-        <h2 className="text-xl font-semibold text-white mb-6">Voice Settings</h2>
-        <div className="bg-jarvis-dark rounded-2xl p-6 border border-slate-700 space-y-4">
+      <section style={{ marginBottom: 'var(--space-xl)' }}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-lg)' }}>Voice Settings</h2>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
           <ToggleSetting
             label="Voice Responses"
             description="Jarvis speaks responses aloud"
@@ -152,8 +161,8 @@ function Settings() {
 
       {/* Integrations */}
       <section>
-        <h2 className="text-xl font-semibold text-white mb-6">Integrations</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-lg)' }}>Integrations</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 'var(--space-md)' }}>
           <IntegrationCard name="Trello" connected={!!localKeys.trello} />
           <IntegrationCard name="Gmail" connected={false} />
           <IntegrationCard name="Google Calendar" connected={false} />
@@ -168,10 +177,10 @@ function StatusBadge({ status }) {
   if (!status) return null
   
   const styles = {
-    unsaved: 'bg-yellow-500/20 text-yellow-400',
-    saving: 'bg-blue-500/20 text-blue-400',
-    saved: 'bg-green-500/20 text-green-400',
-    error: 'bg-red-500/20 text-red-400',
+    unsaved: { background: 'rgba(234, 179, 8, 0.1)', color: 'var(--warning)' },
+    saving: { background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)' },
+    saved: { background: 'rgba(34, 197, 94, 0.1)', color: 'var(--success)' },
+    error: { background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)' },
   }
 
   const icons = {
@@ -180,7 +189,15 @@ function StatusBadge({ status }) {
   }
 
   return (
-    <span className={`px-2 py-1 rounded-full text-xs flex items-center gap-1 ${styles[status]}`}>
+    <span style={{ 
+      ...styles[status],
+      padding: 'var(--space-xs) var(--space-sm)', 
+      borderRadius: 'var(--radius-full)', 
+      fontSize: '0.75rem',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 'var(--space-xs)'
+    }}>
       {icons[status]}
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
@@ -191,16 +208,35 @@ function ToggleSetting({ label, description, defaultChecked }) {
   const [checked, setChecked] = useState(defaultChecked)
 
   return (
-    <div className="flex justify-between items-center">
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <div>
-        <p className="text-white font-medium">{label}</p>
-        <p className="text-sm text-slate-400">{description}</p>
+        <p style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{label}</p>
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{description}</p>
       </div>
       <button
         onClick={() => setChecked(!checked)}
-        className={`w-12 h-6 rounded-full transition-colors ${checked ? 'bg-jarvis-primary' : 'bg-slate-600'}`}
+        style={{
+          width: '3rem',
+          height: '1.5rem',
+          borderRadius: 'var(--radius-full)',
+          background: checked ? 'var(--primary)' : 'var(--gray-300)',
+          border: 'none',
+          cursor: 'pointer',
+          position: 'relative',
+          transition: 'background 0.2s ease'
+        }}
       >
-        <div className={`w-5 h-5 rounded-full bg-white transform transition-transform ${checked ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        <div style={{
+          width: '1.25rem',
+          height: '1.25rem',
+          borderRadius: '50%',
+          background: 'white',
+          position: 'absolute',
+          top: '50%',
+          transform: `translateY(-50%) translateX(${checked ? '1.625rem' : '0.125rem'})`,
+          transition: 'transform 0.2s ease',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+        }} />
       </button>
     </div>
   )
@@ -208,9 +244,15 @@ function ToggleSetting({ label, description, defaultChecked }) {
 
 function IntegrationCard({ name, connected }) {
   return (
-    <div className="bg-jarvis-dark rounded-2xl p-4 border border-slate-700 flex justify-between items-center">
-      <span className="text-white">{name}</span>
-      <span className={`px-3 py-1 rounded-full text-sm ${connected ? 'bg-green-500/20 text-green-400' : 'bg-slate-600 text-slate-300'}`}>
+    <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{name}</span>
+      <span style={{ 
+        padding: 'var(--space-xs) var(--space-sm)', 
+        borderRadius: 'var(--radius-full)', 
+        fontSize: '0.875rem',
+        background: connected ? 'rgba(34, 197, 94, 0.1)' : 'var(--bg-secondary)',
+        color: connected ? 'var(--success)' : 'var(--text-tertiary)'
+      }}>
         {connected ? 'Connected' : 'Not connected'}
       </span>
     </div>

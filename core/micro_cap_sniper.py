@@ -46,12 +46,85 @@ TRADE_LOG = SNIPER_DIR / "trade_log.jsonl"
 # Configuration
 # =============================================================================
 
+def get_wallet_capital() -> float:
+    """Get available trading capital from wallet (sync call)."""
+    try:
+        import requests
+        import json
+        from pathlib import Path
+        from solders.keypair import Keypair
+        from solana.rpc.api import Client
+        from solana.rpc.types import TokenAccountOpts
+        from solders.pubkey import Pubkey
+        
+        # Load wallet
+        wallet_path = Path.home() / ".lifeos" / "wallets" / "phantom_trading_wallet.json"
+        if not wallet_path.exists():
+            return 4.0  # Default
+        
+        data = json.loads(wallet_path.read_text())
+        kp = Keypair.from_bytes(bytes(data))
+        pubkey = kp.pubkey()
+        
+        # Get SOL price
+        try:
+            resp = requests.get(
+                "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+                timeout=5,
+            )
+            sol_price = resp.json().get("solana", {}).get("usd", 200.0) if resp.ok else 200.0
+        except Exception:
+            sol_price = 200.0
+        
+        # Get balances (sync client)
+        client = Client("https://api.mainnet-beta.solana.com")
+        
+        # SOL balance
+        sol_balance = client.get_balance(pubkey).value / 1e9
+        total = sol_balance * sol_price
+        
+        # Token balances
+        try:
+            resp = client.get_token_accounts_by_owner_json_parsed(
+                pubkey,
+                TokenAccountOpts(
+                    program_id=Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+                ),
+            )
+            for ta in resp.value:
+                info = ta.account.data.parsed["info"]
+                mint = info["mint"]
+                amount = float(info["tokenAmount"]["uiAmount"] or 0)
+                if amount > 0:
+                    if mint == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v":
+                        total += amount  # USDC
+                    else:
+                        # Get price from DexScreener
+                        try:
+                            r = requests.get(f"https://api.dexscreener.com/latest/dex/tokens/{mint}", timeout=5)
+                            if r.ok:
+                                pairs = r.json().get("pairs", [])
+                                if pairs:
+                                    total += amount * float(pairs[0].get("priceUsd", 0) or 0)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        
+        # Reserve 0.01 SOL for fees
+        available = max(0, total - (0.01 * sol_price))
+        return round(available, 2)
+    except Exception as e:
+        logger.warning(f"Failed to get wallet capital: {e}")
+        return 4.0  # Default
+
+
 @dataclass
 class SniperConfig:
     """Configuration for micro-cap sniper strategy."""
     
-    # Capital
-    starting_capital_usd: float = 4.0
+    # Capital (will be synced from wallet)
+    starting_capital_usd: float = 15.0  # Updated default
     target_capital_usd: float = 1000.0
     
     # Trade Parameters
@@ -59,12 +132,12 @@ class SniperConfig:
     stop_loss_pct: float = 0.12        # 12% SL (2:1 R:R)
     max_hold_minutes: int = 90         # Time stop: 90 min
     
-    # Token Filters
-    min_liquidity_usd: float = 50_000
-    max_liquidity_usd: float = 2_000_000  # Avoid too established
-    min_volume_24h_usd: float = 100_000
-    max_token_age_hours: int = 24
-    min_price_change_1h: float = 0.05  # 5% pump in last hour
+    # Token Filters (relaxed for better discovery)
+    min_liquidity_usd: float = 10_000  # Lower minimum for new tokens
+    max_liquidity_usd: float = 200_000_000  # Allow larger established tokens
+    min_volume_24h_usd: float = 10_000  # Lower minimum (volume data often incomplete)
+    max_token_age_hours: int = 168  # 7 days for broader discovery
+    min_price_change_1h: float = 0.0  # Don't require momentum (sentiment will weight)
     
     # Entry Signals
     volume_spike_multiplier: float = 2.0  # Volume 2x average
@@ -115,6 +188,13 @@ class TokenCandidate:
     risk_score: float = 0.0
     composite_score: float = 0.0
     
+    # Sentiment (Grok)
+    sentiment: str = ""  # positive, negative, neutral, mixed
+    sentiment_confidence: float = 0.0
+    sentiment_score: float = 0.0  # -1 to +1
+    sentiment_topics: List[str] = field(default_factory=list)
+    sentiment_market_relevance: str = ""
+    
     # Metadata
     age_hours: float = 0.0
     holder_count: int = 0
@@ -132,6 +212,11 @@ class TokenCandidate:
             "price_change_1h": self.price_change_1h,
             "momentum_score": self.momentum_score,
             "composite_score": self.composite_score,
+            "sentiment": self.sentiment,
+            "sentiment_confidence": self.sentiment_confidence,
+            "sentiment_score": self.sentiment_score,
+            "sentiment_topics": self.sentiment_topics,
+            "sentiment_market_relevance": self.sentiment_market_relevance,
             "age_hours": self.age_hours,
         }
 
@@ -291,7 +376,12 @@ class MicroCapSniper:
         
         # Filter and score candidates
         filtered = self._filter_candidates(candidates)
-        scored = self._score_candidates(filtered)
+        
+        # Enrich with Grok sentiment (budget-aware)
+        enriched = self._enrich_with_sentiment(filtered)
+        
+        # Score with sentiment
+        scored = self._score_candidates(enriched)
         
         return sorted(scored, key=lambda c: c.composite_score, reverse=True)
     
@@ -303,53 +393,112 @@ class MicroCapSniper:
         filtered = []
         
         for c in candidates:
+            # Skip empty symbols
+            if not c.symbol or not c.symbol.strip():
+                continue
+            
             # Liquidity filter
             if c.liquidity_usd < self.config.min_liquidity_usd:
                 continue
             if c.liquidity_usd > self.config.max_liquidity_usd:
                 continue
             
-            # Volume filter  
-            if c.volume_24h_usd < self.config.min_volume_24h_usd:
+            # Volume filter (skip if 0 as data may be incomplete)
+            if c.volume_24h_usd > 0 and c.volume_24h_usd < self.config.min_volume_24h_usd:
                 continue
             
             # Age filter (if available)
             if c.age_hours > 0 and c.age_hours > self.config.max_token_age_hours:
                 continue
             
-            # Momentum filter
-            if c.price_change_1h < self.config.min_price_change_1h:
-                # Allow if 24h change is strong
-                if c.price_change_24h < 0.20:  # 20%
-                    continue
+            # Momentum filter (skip if min is 0)
+            if self.config.min_price_change_1h > 0:
+                if c.price_change_1h < self.config.min_price_change_1h:
+                    # Allow if 24h change is strong
+                    if c.price_change_24h < 0.20:  # 20%
+                        continue
             
             filtered.append(c)
         
         return filtered
     
+    def _enrich_with_sentiment(
+        self,
+        candidates: List[TokenCandidate]
+    ) -> List[TokenCandidate]:
+        """Enrich candidates with Grok sentiment analysis."""
+        if not candidates:
+            return candidates
+        
+        try:
+            from core import x_sentiment
+            
+            # Build text prompts for sentiment analysis
+            texts = []
+            for c in candidates:
+                text = f"${c.symbol} ({c.name}) - Solana memecoin trading"
+                if c.price_change_24h:
+                    text += f" +{c.price_change_24h*100:.0f}% today"
+                texts.append(text)
+            
+            # Batch sentiment analysis (budget-aware)
+            results = x_sentiment.batch_sentiment_analysis(texts, focus="trading")
+            
+            for i, result in enumerate(results):
+                if i >= len(candidates):
+                    break
+                if result:
+                    candidates[i].sentiment = result.sentiment
+                    candidates[i].sentiment_confidence = result.confidence
+                    candidates[i].sentiment_topics = result.key_topics
+                    candidates[i].sentiment_market_relevance = result.market_relevance or ""
+                    
+                    # Convert sentiment to score (-1 to +1)
+                    sentiment_map = {
+                        "positive": 1.0,
+                        "mixed": 0.3,
+                        "neutral": 0.0,
+                        "negative": -1.0,
+                    }
+                    base_score = sentiment_map.get(result.sentiment, 0.0)
+                    candidates[i].sentiment_score = base_score * result.confidence
+                    
+                    logger.info(
+                        f"Sentiment for {candidates[i].symbol}: {result.sentiment} "
+                        f"(conf={result.confidence:.2f})"
+                    )
+        except Exception as e:
+            logger.warning(f"Sentiment enrichment failed: {e}")
+        
+        return candidates
+    
     def _score_candidates(
         self, 
         candidates: List[TokenCandidate]
     ) -> List[TokenCandidate]:
-        """Score candidates for ranking."""
+        """Score candidates for ranking (includes sentiment weight)."""
         for c in candidates:
-            # Momentum score (40%)
-            momentum = min(c.price_change_1h / 0.10, 1.0) * 0.4  # Normalize to 10%
+            # Momentum score (30%)
+            momentum = min(c.price_change_1h / 0.10, 1.0) * 0.30  # Normalize to 10%
             
-            # Volume/Liquidity ratio (30%) - higher = more active
+            # Volume/Liquidity ratio (25%) - higher = more active
             if c.liquidity_usd > 0:
                 vol_ratio = min(c.volume_24h_usd / c.liquidity_usd, 5.0) / 5.0
             else:
                 vol_ratio = 0
-            volume = vol_ratio * 0.3
+            volume = vol_ratio * 0.25
             
-            # Freshness score (30%) - newer = better
+            # Freshness score (20%) - newer = better
             if c.age_hours > 0:
-                freshness = max(0, 1 - c.age_hours / 24) * 0.3
+                freshness = max(0, 1 - c.age_hours / 24) * 0.20
             else:
-                freshness = 0.15  # Default if unknown
+                freshness = 0.10  # Default if unknown
             
-            c.composite_score = momentum + volume + freshness
+            # Sentiment score (25%) - Grok X sentiment
+            # sentiment_score is -1 to +1, normalize to 0-0.25
+            sentiment_contrib = ((c.sentiment_score + 1) / 2) * 0.25
+            
+            c.composite_score = momentum + volume + freshness + sentiment_contrib
             c.momentum_score = momentum
         
         return candidates
@@ -550,8 +699,15 @@ class MicroCapSniper:
         
         return result
     
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self, sync_wallet: bool = True) -> Dict[str, Any]:
         """Get current sniper status."""
+        # Optionally sync with actual wallet balance
+        if sync_wallet:
+            wallet_capital = get_wallet_capital()
+            if wallet_capital > self.state.current_capital_usd:
+                self.state.current_capital_usd = wallet_capital
+                self._save_state()
+        
         progress = self.state.current_capital_usd / self.config.target_capital_usd
         trades_needed = 0
         if self.state.current_capital_usd < self.config.target_capital_usd:

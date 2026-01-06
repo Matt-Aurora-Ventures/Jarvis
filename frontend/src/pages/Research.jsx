@@ -39,29 +39,31 @@ function Research() {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <header className="p-6 border-b border-slate-700">
-        <h1 className="text-2xl font-bold text-white">Research</h1>
-        <p className="text-slate-400">Let Jarvis research any topic for you</p>
+      <header style={{ padding: 'var(--space-lg)', borderBottom: '1px solid var(--border-color)' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-xs)' }}>Research</h1>
+        <p style={{ color: 'var(--text-secondary)' }}>Let Jarvis research any topic for you</p>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-lg)' }}>
         {/* Search Form */}
-        <div className="bg-jarvis-dark rounded-2xl p-6 border border-slate-700 mb-6">
-          <div className="flex gap-4 mb-4">
-            <div className="flex-1">
+        <div className="card" style={{ marginBottom: 'var(--space-lg)' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
+            <div style={{ flex: 1 }}>
               <input
                 type="text"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
                 placeholder="Enter a topic to research..."
-                className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-jarvis-primary"
+                className="input"
+                style={{ width: '100%' }}
                 onKeyPress={(e) => e.key === 'Enter' && handleResearch()}
               />
             </div>
             <select
               value={depth}
               onChange={(e) => setDepth(e.target.value)}
-              className="bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-jarvis-primary"
+              className="input"
+              style={{ width: 'auto' }}
             >
               <option value="quick">Quick (1 search)</option>
               <option value="medium">Medium (3 searches)</option>
@@ -70,7 +72,8 @@ function Research() {
             <button
               onClick={handleResearch}
               disabled={!topic.trim() || isResearching}
-              className="px-6 py-3 bg-jarvis-primary text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}
             >
               {isResearching ? (
                 <>
@@ -87,12 +90,13 @@ function Research() {
           </div>
 
           {/* Quick Topics */}
-          <div className="flex flex-wrap gap-2">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-xs)' }}>
             {['AI trends 2025', 'Crypto trading strategies', 'Best free software', 'Productivity hacks'].map((t) => (
               <button
                 key={t}
                 onClick={() => setTopic(t)}
-                className="px-3 py-1 bg-slate-700 rounded-full text-sm text-slate-300 hover:bg-slate-600"
+                className="btn btn-ghost"
+                style={{ fontSize: '0.875rem', padding: 'var(--space-xs) var(--space-sm)' }}
               >
                 {t}
               </button>
@@ -100,49 +104,58 @@ function Research() {
           </div>
         </div>
 
-        {/* Results */}
+        {/* Results - Loading State */}
         {isResearching && (
-          <div className="bg-jarvis-dark rounded-2xl p-8 border border-slate-700 text-center">
-            <Loader2 className="animate-spin mx-auto mb-4 text-jarvis-primary" size={48} />
-            <p className="text-white font-medium">Researching "{topic}"...</p>
-            <p className="text-slate-400 text-sm">This may take a moment</p>
+          <div className="card" style={{ textAlign: 'center', padding: 'var(--space-2xl)' }}>
+            <Loader2 className="animate-spin" size={48} style={{ margin: '0 auto var(--space-md)', color: 'var(--primary)' }} />
+            <p style={{ color: 'var(--text-primary)', fontWeight: 500 }}>Researching "{topic}"...</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>This may take a moment</p>
           </div>
         )}
 
+        {/* Results - Completed */}
         {results && !isResearching && (
-          <div className="bg-jarvis-dark rounded-2xl p-6 border border-slate-700">
+          <div className="card">
             {results.error ? (
-              <p className="text-red-400">{results.error}</p>
+              <p style={{ color: 'var(--danger)' }}>{results.error}</p>
             ) : (
               <>
-                <div className="flex justify-between items-start mb-4">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-md)' }}>
                   <div>
-                    <h2 className="text-xl font-semibold text-white">{results.topic}</h2>
-                    <p className="text-slate-400 text-sm">
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>{results.topic}</h2>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
                       Researched at {new Date(results.timestamp).toLocaleString()}
                     </p>
                   </div>
                   {results.document_path && (
-                    <button className="px-4 py-2 bg-jarvis-secondary text-white rounded-xl flex items-center gap-2 hover:bg-green-600">
+                    <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
                       <Download size={18} />
                       Download
                     </button>
                   )}
                 </div>
 
-                <div className="prose prose-invert max-w-none">
-                  <div className="bg-slate-800/50 rounded-xl p-4 whitespace-pre-wrap text-slate-200">
-                    {results.summary}
-                  </div>
+                <div style={{ 
+                  background: 'var(--bg-secondary)', 
+                  borderRadius: 'var(--radius-md)', 
+                  padding: 'var(--space-md)', 
+                  whiteSpace: 'pre-wrap',
+                  color: 'var(--text-primary)'
+                }}>
+                  {results.summary}
                 </div>
 
                 {results.searches && results.searches.length > 0 && (
-                  <div className="mt-6">
-                    <h3 className="text-lg font-medium text-white mb-3">Search Queries Used</h3>
-                    <div className="space-y-2">
+                  <div style={{ marginTop: 'var(--space-lg)' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--text-primary)', marginBottom: 'var(--space-sm)' }}>Search Queries Used</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)' }}>
                       {results.searches.map((search, index) => (
-                        <div key={index} className="p-3 bg-slate-800/30 rounded-lg">
-                          <p className="text-jarvis-primary font-medium">{search.query}</p>
+                        <div key={index} style={{ 
+                          padding: 'var(--space-sm)', 
+                          background: 'var(--bg-secondary)', 
+                          borderRadius: 'var(--radius-sm)'
+                        }}>
+                          <p style={{ color: 'var(--primary)', fontWeight: 500 }}>{search.query}</p>
                         </div>
                       ))}
                     </div>
@@ -156,24 +169,31 @@ function Research() {
         {/* History */}
         {history.length > 0 && !results && !isResearching && (
           <div>
-            <h2 className="text-lg font-semibold text-white mb-4">Recent Research</h2>
-            <div className="space-y-3">
+            <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-md)' }}>Recent Research</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
               {history.map((item, index) => (
                 <div
                   key={index}
-                  className="bg-jarvis-dark rounded-xl p-4 border border-slate-700 flex justify-between items-center cursor-pointer hover:border-jarvis-primary"
+                  className="card hover-lift"
+                  style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    cursor: 'pointer',
+                    transition: 'border-color 0.2s ease'
+                  }}
                   onClick={() => setResults(item)}
                 >
-                  <div className="flex items-center gap-3">
-                    <FileText className="text-jarvis-primary" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                    <FileText size={20} style={{ color: 'var(--primary)' }} />
                     <div>
-                      <p className="text-white font-medium">{item.topic}</p>
-                      <p className="text-slate-400 text-sm">
+                      <p style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{item.topic}</p>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
                         {new Date(item.timestamp).toLocaleDateString()} • {item.depth}
                       </p>
                     </div>
                   </div>
-                  <ExternalLink className="text-slate-400" size={18} />
+                  <ExternalLink size={18} style={{ color: 'var(--text-tertiary)' }} />
                 </div>
               ))}
             </div>

@@ -20,7 +20,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#0f172a',
+    backgroundColor: '#FFFFFF',  // Match V2 White Knight theme
     show: false,
   })
 
@@ -44,26 +44,38 @@ function createWindow() {
 }
 
 function createTray() {
-  // For now, use a simple text icon. In production, use an actual icon file
-  tray = new Tray(path.join(__dirname, '../public/jarvis-tray.png'))
+  const fs = require('fs')
+  const trayIconPath = path.join(__dirname, '../public/jarvis-tray.png')
   
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Open Jarvis', click: () => mainWindow.show() },
-    { type: 'separator' },
-    { label: 'Start Listening', click: () => startListening() },
-    { label: 'Stop Listening', click: () => stopListening() },
-    { type: 'separator' },
-    { label: 'Settings', click: () => { mainWindow.show(); mainWindow.webContents.send('navigate', '/settings') } },
-    { type: 'separator' },
-    { label: 'Quit Jarvis', click: () => { app.isQuitting = true; app.quit() } },
-  ])
+  // Check if tray icon exists, skip tray creation if not
+  if (!fs.existsSync(trayIconPath)) {
+    console.log('Tray icon not found, skipping tray creation')
+    return
+  }
+  
+  try {
+    tray = new Tray(trayIconPath)
+    
+    const contextMenu = Menu.buildFromTemplate([
+      { label: 'Open Jarvis', click: () => mainWindow.show() },
+      { type: 'separator' },
+      { label: 'Start Listening', click: () => startListening() },
+      { label: 'Stop Listening', click: () => stopListening() },
+      { type: 'separator' },
+      { label: 'Settings', click: () => { mainWindow.show(); mainWindow.webContents.send('navigate', '/settings') } },
+      { type: 'separator' },
+      { label: 'Quit Jarvis', click: () => { app.isQuitting = true; app.quit() } },
+    ])
 
-  tray.setToolTip('Jarvis AI Assistant')
-  tray.setContextMenu(contextMenu)
+    tray.setToolTip('Jarvis AI Assistant')
+    tray.setContextMenu(contextMenu)
 
-  tray.on('click', () => {
-    mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show()
-  })
+    tray.on('click', () => {
+      mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show()
+    })
+  } catch (err) {
+    console.error('Failed to create tray:', err)
+  }
 }
 
 function startJarvisBackend() {

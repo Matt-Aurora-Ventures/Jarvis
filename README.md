@@ -51,10 +51,66 @@
 - **🔄 Auto-Refresh**: Background polling, skeleton loading states
 
 ### Tech Stack
-- React + Vite + TailwindCSS
-- 14 REST API endpoints
-- Custom design system (780 lines of CSS)
+- React 18 + Vite 5 + TailwindCSS 3.3
+- Zustand 4.4 for state management
+- lightweight-charts for TradingView-style charts
+- 14 REST API endpoints (45 planned)
+- Modular CSS architecture (8 files, ~800 lines)
 - Mobile-responsive grid layout
+
+### 📁 Frontend Architecture (V2 Refactor - 2025-01)
+
+```
+frontend/src/
+├── main.jsx              # Entry point → imports styles.css
+├── App.jsx               # Router with refactored pages
+├── styles.css            # CSS entry (imports all modules)
+├── styles/               # Modular CSS
+│   ├── tokens.css        # Design tokens (colors, spacing, typography)
+│   ├── base.css          # Reset and body styles
+│   ├── layout.css        # Nav, sidebar, grid containers
+│   ├── components.css    # Buttons, cards, inputs, badges
+│   ├── trading.css       # Position cards, scanner, charts
+│   ├── chat.css          # Message bubbles, floating chat
+│   ├── animations.css    # Keyframes, transitions
+│   └── utilities.css     # Helper classes
+├── components/
+│   ├── ui/               # Button, Card, Badge, Input, Skeleton
+│   ├── common/           # LoadingSpinner, ErrorState, EmptyState, Toast
+│   ├── layout/           # TopNav, Sidebar
+│   ├── trading/          # StatsGrid, PositionCard, TokenScanner
+│   └── chat/             # FloatingChat
+├── hooks/                # useApi, useWallet, useSniper, useCapabilities
+├── lib/                  # api.js, format.js, constants.js, utils.js
+├── stores/               # Zustand stores (jarvisStore, tradingStore)
+└── pages/
+    ├── DashboardNew.jsx  # ✅ Wired - main dashboard
+    ├── ChatNew.jsx       # ✅ Wired - AI chat interface
+    ├── TradingNew.jsx    # ✅ Wired - trading command center
+    ├── Roadmap.jsx       # ✅ Wired - interactive roadmap
+    ├── Research.jsx      # ✅ Refactored to white theme
+    ├── Settings.jsx      # ✅ Refactored to white theme
+    └── VoiceControl.jsx  # ✅ Refactored to white theme
+```
+
+### 🎯 What's Live Now
+| Route | Page | Description |
+|-------|------|-------------|
+| `/` | Dashboard | Portfolio overview, quick stats, activity feed |
+| `/chat` | Chat | Jarvis AI assistant with context awareness |
+| `/trading` | Trading | Charts, positions, token scanner, order panel |
+| `/voice` | Voice | Voice command interface with orb visualization |
+| `/research` | Research | Web research with source citations |
+| `/roadmap` | Roadmap | Interactive progress tracker with phases |
+| `/settings` | Settings | API keys, preferences, system config |
+
+### 🔌 Capability Detection
+The `useCapabilities` hook probes API endpoints on load:
+```javascript
+import { useCapabilities } from '@/hooks'
+const { capabilities, loading, refresh } = useCapabilities()
+// capabilities.chat: 'available' | 'unavailable' | 'timeout'
+```
 
 ---
 

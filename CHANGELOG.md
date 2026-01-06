@@ -4,6 +4,46 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [3.1.0] - 2026-01-06
+
+### 🔧 **Frontend Refactor: Modular Architecture & Premium Polish**
+
+This release wires in the previously created modular components, ensuring the refactored architecture is actually used in production.
+
+### ⚠️ Critical Fix: Wiring Refactored Files
+- **main.jsx**: Now imports `styles.css` (modular CSS entry) instead of monolithic `index.css`
+- **App.jsx**: Now imports refactored pages (`DashboardNew`, `ChatNew`, `TradingNew`) instead of legacy versions
+- **Layout.jsx**: Added Roadmap navigation link
+
+### 🆕 New Features
+- **useCapabilities Hook**: Probes API endpoints on load to detect available features
+  - Caches results in sessionStorage (5-minute TTL)
+  - Returns `{ capabilities, loading, refresh }`
+- **Roadmap Page**: Interactive 6-phase progress tracker
+  - Accordion-style phase expansion
+  - Feature status badges (✅ done, ⚠️ in-progress, ❌ not started)
+  - Overall completion percentage
+
+### 🎨 White Theme Applied
+- **Research.jsx**: Refactored to white theme with proper CSS classes
+- **Settings.jsx**: Refactored to white theme with card-based layout
+- **VoiceControl.jsx**: Refactored to white theme with voice orb
+
+### 📁 Barrel Exports Created
+- **components/index.js**: Root-level export for all components
+- **lib/index.js**: Root-level export for all utilities
+
+### 🐛 CSS Fixes
+- Added `appearance: button` for cross-browser compatibility
+- Removed conflicting `vertical-align` on block elements
+
+### 📝 Documentation
+- **README.md**: Added "Frontend Architecture V2" section with file tree
+- **README.md**: Added "What's Live Now" route table
+- **README.md**: Added "Capability Detection" usage example
+
+---
+
 # [3.0.0] - 2026-01-05
 
 ### 🚀 **MAJOR RELEASE: Ultimate Trading Dashboard V3**
