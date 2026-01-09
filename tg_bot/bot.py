@@ -128,6 +128,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /signals - 🚀 MASTER SIGNAL REPORT (Top 10 with everything!)
 /analyze <token> - Full analysis with Grok sentiment
 /digest - Generate hourly digest now
+/brain - 🧠 Self-improving brain stats
 /reload - Reload configuration
 
 """
@@ -658,6 +659,7 @@ def main():
     app.add_handler(CommandHandler("analyze", analyze))
     app.add_handler(CommandHandler("digest", digest))
     app.add_handler(CommandHandler("reload", reload))
+    app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CallbackQueryHandler(button_callback))
 
     # Error handler
