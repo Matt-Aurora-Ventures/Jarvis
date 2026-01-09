@@ -113,35 +113,39 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admin_status = "Admin" if is_admin else "User"
 
     message = f"""
-*Welcome to Jarvis Trading Bot*
+*Welcome to Jarvis Trading Bot* 🤖
 
 *Your Status:* {admin_status}
 
-*Public Commands:*
-/status - Check bot and API status
-/trending - View trending tokens (free)
-/costs - View API cost report
-
+_Use the buttons below for quick access:_
 """
+
+    # Build keyboard based on user role
+    keyboard = [
+        [
+            InlineKeyboardButton("📈 Trending", callback_data="menu_trending"),
+            InlineKeyboardButton("📊 Status", callback_data="menu_status"),
+        ],
+        [
+            InlineKeyboardButton("💰 Costs", callback_data="menu_costs"),
+            InlineKeyboardButton("❓ Help", callback_data="menu_help"),
+        ],
+    ]
+
     if is_admin:
-        message += """*Admin Commands:*
-/signals - 🚀 MASTER SIGNAL REPORT (Top 10 with everything!)
-/analyze <token> - Full analysis with Grok sentiment
-/digest - Generate hourly digest now
-/brain - 🧠 Self-improving brain stats
-/reload - Reload configuration
-
-"""
-
-    message += """_Hourly digests are sent automatically to admins._
-_Sentiment analysis is rate-limited to control costs._
-
-[Documentation](https://github.com/Matt-Aurora-Ventures/Jarvis)
-"""
+        keyboard.insert(0, [
+            InlineKeyboardButton("🚀 SIGNALS", callback_data="menu_signals"),
+            InlineKeyboardButton("📋 Digest", callback_data="menu_digest"),
+        ])
+        keyboard.append([
+            InlineKeyboardButton("🧠 Brain Stats", callback_data="menu_brain"),
+            InlineKeyboardButton("🔄 Reload", callback_data="menu_reload"),
+        ])
 
     await update.message.reply_text(
         message.strip(),
         parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard),
         disable_web_page_preview=True,
     )
 
@@ -516,7 +520,118 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     config = get_config()
     user_id = update.effective_user.id
 
-    # Admin-only callbacks
+    # Menu navigation callbacks
+    if data == "menu_trending":
+        update.message = query.message
+        context.args = []
+        await _handle_trending_inline(query)
+        return
+
+    if data == "menu_status":
+        update.message = query.message
+        await _handle_status_inline(query)
+        return
+
+    if data == "menu_costs":
+        message = fmt.format_cost_report()
+        keyboard = [[InlineKeyboardButton("🏠 Back to Menu", callback_data="menu_back")]]
+        await query.message.reply_text(
+            message,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    if data == "menu_help":
+        help_text = """
+*Jarvis Bot Commands*
+
+*Public:*
+/trending - Top 5 trending tokens (free)
+/status - Check API status
+/costs - View daily costs
+
+*Admin Only:*
+/signals - 🚀 Master Signal Report
+/analyze <token> - Full analysis
+/digest - Generate digest
+/brain - AI brain stats
+"""
+        keyboard = [[InlineKeyboardButton("🏠 Back to Menu", callback_data="menu_back")]]
+        await query.message.reply_text(
+            help_text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    if data == "menu_back":
+        # Re-send main menu
+        is_admin = config.is_admin(user_id)
+        keyboard = [
+            [
+                InlineKeyboardButton("📈 Trending", callback_data="menu_trending"),
+                InlineKeyboardButton("📊 Status", callback_data="menu_status"),
+            ],
+            [
+                InlineKeyboardButton("💰 Costs", callback_data="menu_costs"),
+                InlineKeyboardButton("❓ Help", callback_data="menu_help"),
+            ],
+        ]
+        if is_admin:
+            keyboard.insert(0, [
+                InlineKeyboardButton("🚀 SIGNALS", callback_data="menu_signals"),
+                InlineKeyboardButton("📋 Digest", callback_data="menu_digest"),
+            ])
+            keyboard.append([
+                InlineKeyboardButton("🧠 Brain Stats", callback_data="menu_brain"),
+                InlineKeyboardButton("🔄 Reload", callback_data="menu_reload"),
+            ])
+        await query.message.reply_text(
+            "*Jarvis Trading Bot* 🤖\n\n_Select an option:_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    # Admin-only menu callbacks
+    if data == "menu_signals":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await signals(update, context)
+        return
+
+    if data == "menu_digest":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await digest(update, context)
+        return
+
+    if data == "menu_brain":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await brain(update, context)
+        return
+
+    if data == "menu_reload":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await reload(update, context)
+        return
+
+    # Token-specific callbacks
     if data.startswith("analyze_"):
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
@@ -526,6 +641,81 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.args = [token]
         update.message = query.message
         await analyze(update, context)
+        return
+
+    if data == "refresh_trending":
+        await _handle_trending_inline(query)
+        return
+
+
+async def _handle_trending_inline(query):
+    """Handle trending request from inline keyboard."""
+    await query.message.reply_text(
+        "_Fetching trending tokens..._",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+    service = get_signal_service()
+    signals_list = await service.get_trending_tokens(limit=5)
+
+    if not signals_list:
+        await query.message.reply_text(
+            fmt.format_error("Could not fetch trending tokens.", "Check /status for availability."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    lines = [
+        "=" * 25,
+        "*TRENDING TOKENS*",
+        f"_{datetime.now(timezone.utc).strftime('%H:%M')} UTC_",
+        "=" * 25,
+        "",
+    ]
+
+    for i, sig in enumerate(signals_list, 1):
+        emoji = fmt.SIGNAL_EMOJI.get(sig.signal, "")
+        lines.append(f"*{i}. {sig.symbol}* {emoji}")
+        lines.append(f"   {fmt.format_price(sig.price_usd)} ({fmt.format_change(sig.price_change_1h)})")
+        lines.append(f"   Vol: {fmt.format_volume(sig.volume_24h)} | Liq: {fmt.format_volume(sig.liquidity_usd)}")
+        lines.append("")
+
+    # Add inline buttons for quick actions
+    keyboard = [
+        [
+            InlineKeyboardButton(f"📊 Analyze {signals_list[0].symbol}", callback_data=f"analyze_{signals_list[0].symbol}"),
+        ],
+        [
+            InlineKeyboardButton("🔄 Refresh", callback_data="refresh_trending"),
+            InlineKeyboardButton("🏠 Menu", callback_data="menu_back"),
+        ],
+    ]
+
+    await query.message.reply_text(
+        "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        disable_web_page_preview=True,
+    )
+
+
+async def _handle_status_inline(query):
+    """Handle status request from inline keyboard."""
+    config = get_config()
+    service = get_signal_service()
+
+    available = service.get_available_sources()
+    missing = config.get_optional_missing()
+
+    message = fmt.format_status(available, missing)
+
+    keyboard = [[InlineKeyboardButton("🏠 Back to Menu", callback_data="menu_back")]]
+
+    await query.message.reply_text(
+        message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
 
 
 # =============================================================================
