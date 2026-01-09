@@ -23,6 +23,13 @@ from core import (
     resource_monitor,
 )
 
+# Self-improving integration (optional)
+try:
+    from core.self_improving import integration as self_improving
+    SELF_IMPROVING_AVAILABLE = True
+except ImportError:
+    SELF_IMPROVING_AVAILABLE = False
+
 
 def _timestamp() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
@@ -92,6 +99,7 @@ def run() -> None:
         "resource_monitor": {"ok": False, "error": None},
         "missions": {"ok": False, "error": None},
         "proactive": {"ok": False, "error": None},
+        "self_improving": {"ok": False, "error": None},  # Reflexion-based learning
     }
 
     voice_manager = voice.VoiceManager()
@@ -175,6 +183,20 @@ def run() -> None:
     except Exception as e:
         component_status["proactive"]["error"] = str(e)[:100]
         _log_message(log_path, f"Proactive monitor FAILED: {str(e)[:100]}")
+
+    # Start self-improving scheduler (nightly reflection at 3am)
+    si_scheduler = None
+    if SELF_IMPROVING_AVAILABLE:
+        try:
+            si_scheduler = self_improving.start_scheduler()
+            component_status["self_improving"]["ok"] = True
+            _log_message(log_path, "Self-improving scheduler started (3am nightly reflection)")
+        except Exception as e:
+            component_status["self_improving"]["error"] = str(e)[:100]
+            _log_message(log_path, f"Self-improving scheduler FAILED: {str(e)[:100]}")
+    else:
+        component_status["self_improving"]["ok"] = True  # Not available is OK
+        _log_message(log_path, "Self-improving module not available (optional)")
 
     # Start voice manager
     try:
@@ -332,6 +354,15 @@ def run() -> None:
             _log_message(log_path, "MCP servers stopped.")
         except Exception as e:
             _log_message(log_path, f"MCP shutdown warning: {str(e)[:100]}")
+
+    # Stop self-improving scheduler
+    if si_scheduler and SELF_IMPROVING_AVAILABLE:
+        try:
+            self_improving.stop_scheduler()
+            self_improving.close()
+            _log_message(log_path, "Self-improving scheduler stopped.")
+        except Exception as e:
+            _log_message(log_path, f"Self-improving shutdown warning: {str(e)[:100]}")
 
     resource_monitor.stop_monitor()
 

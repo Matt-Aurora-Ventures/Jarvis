@@ -16,6 +16,13 @@ from urllib.parse import parse_qs, urlparse
 
 from core import config, conversation, passive, providers, proactive, secrets, state, autonomous_learner, autonomous_controller, research_engine, prompt_distiller, service_discovery, google_integration, google_manager, ability_acquisition
 
+# Self-improving integration (optional)
+try:
+    from core.self_improving import integration as self_improving
+    SELF_IMPROVING_AVAILABLE = True
+except ImportError:
+    SELF_IMPROVING_AVAILABLE = False
+
 ROOT = Path(__file__).resolve().parents[1]
 PORT = 8765
 
@@ -311,6 +318,13 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
         # Phase 1: Strategies list
         elif path == "/api/strategies/list":
             self._handle_strategies_list()
+        # Self-Improving Core endpoints
+        elif path == "/api/brain/stats":
+            self._handle_brain_stats()
+        elif path == "/api/brain/health":
+            self._handle_brain_health()
+        elif path == "/api/brain/trust":
+            self._handle_brain_trust()
         else:
             self._send_json({"error": "Not found"}, 404)
 
@@ -1008,6 +1022,50 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Suppress default logging
         pass
+
+    # =========================================================================
+    # Self-Improving Brain Handlers
+    # =========================================================================
+
+    def _handle_brain_stats(self):
+        """Get self-improving brain statistics."""
+        if not SELF_IMPROVING_AVAILABLE:
+            self._send_json({"error": "Self-improving module not available"}, 501)
+            return
+
+        try:
+            stats = self_improving.get_stats()
+            self._send_json(stats)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_brain_health(self):
+        """Get self-improving brain health status."""
+        if not SELF_IMPROVING_AVAILABLE:
+            self._send_json({"error": "Self-improving module not available"}, 501)
+            return
+
+        try:
+            health = self_improving.health_check()
+            self._send_json(health)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_brain_trust(self):
+        """Get trust levels across all domains."""
+        if not SELF_IMPROVING_AVAILABLE:
+            self._send_json({"error": "Self-improving module not available"}, 501)
+            return
+
+        try:
+            orch = self_improving.get_self_improving()
+            summary = orch.get_trust_summary()
+            self._send_json({
+                "trust_levels": summary,
+                "available_actions": orch.get_available_actions(),
+            })
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
 
     # =========================================================================
     # Enhanced Trading Dashboard Handlers

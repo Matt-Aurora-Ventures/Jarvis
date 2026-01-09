@@ -18,6 +18,13 @@ from core import (
     safety,
 )
 
+# Self-improving integration (optional, graceful fallback)
+try:
+    from core.self_improving import integration as self_improving
+    SELF_IMPROVING_ENABLED = True
+except ImportError:
+    SELF_IMPROVING_ENABLED = False
+
 
 def _truncate(text: str, limit: int = 800) -> str:
     if len(text) <= limit:
@@ -45,7 +52,11 @@ def _format_history(entries: List[Dict[str, str]]) -> str:
     return "\n".join(lines).strip()
 
 
-def _record_conversation_turn(user_text: str, assistant_text: str) -> None:
+def _record_conversation_turn(
+    user_text: str,
+    assistant_text: str,
+    session_id: str = None,
+) -> None:
     """Persist conversation turns for cross-session continuity."""
     try:
         ctx = safety.SafetyContext(apply=True, dry_run=False)
@@ -53,6 +64,15 @@ def _record_conversation_turn(user_text: str, assistant_text: str) -> None:
         memory.append_entry(_truncate(assistant_text, 800), "voice_chat_assistant", ctx)
         context_manager.add_conversation_message("user", user_text)
         context_manager.add_conversation_message("assistant", assistant_text)
+
+        # Also record to self-improving memory
+        if SELF_IMPROVING_ENABLED:
+            self_improving.record_conversation(
+                user_input=user_text,
+                assistant_response=assistant_text,
+                session_id=session_id,
+                extract_learnings=False,
+            )
     except Exception:
         # Never block responses on memory persistence.
         pass
@@ -542,6 +562,16 @@ def generate_response(
             response = _voice_friendly_text(response)
         return response.strip() + "\n"
 
+    # ===== SELF-IMPROVING CONTEXT =====
+    # Inject lessons learned from past reflections and relevant facts
+    self_improving_context = ""
+    if SELF_IMPROVING_ENABLED:
+        try:
+            si_context = self_improving.enrich_context(user_text)
+            self_improving_context = self_improving.format_context_for_prompt(si_context)
+        except Exception:
+            pass  # Graceful fallback - don't block on self-improving errors
+
     # IMPORTANT: Use factual entries for memory to prevent echo chamber.
     # This excludes assistant outputs so the LLM doesn't see its own
     # previous responses as "facts" which causes circular/shallow behavior.
@@ -629,6 +659,10 @@ def generate_response(
 
     if activity_summary and "No recent activity" not in activity_summary:
         prompt += f"Recent Activity:\n{activity_summary}\n\n"
+
+    # Self-improving lessons (what I learned from past mistakes)
+    if self_improving_context:
+        prompt += f"Self-improvement context:\n{self_improving_context}\n\n"
 
     inspirations_text, inspiration_ids = _support_prompts(user_text)
     if inspirations_text:

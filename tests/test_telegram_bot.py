@@ -36,12 +36,14 @@ class TestBotConfig:
         """Config should validate required fields."""
         from tg_bot.config import BotConfig
 
-        # Without env vars
+        # Test with empty token - should be invalid
         config = BotConfig()
+        config.telegram_token = ""  # Force empty
+        config.admin_ids = set()  # Force empty
         assert not config.is_valid()
         missing = config.get_missing()
         assert "TELEGRAM_BOT_TOKEN" in missing
-        assert "ANTHROPIC_API_KEY" in missing
+        assert "TELEGRAM_ADMIN_IDS" in missing
 
     def test_config_with_env(self):
         """Config should read from environment."""
@@ -62,7 +64,7 @@ class TestBotConfig:
         config = BotConfig()
 
         assert config.claude_model == "claude-sonnet-4-20250514"
-        assert config.sentiment_cooldown_seconds == 30
+        assert config.sentiment_interval_seconds == 3600  # 1 hour
         assert config.paper_starting_balance == 100.0
 
 
@@ -260,8 +262,8 @@ class TestBotHandlers:
         assert start is not None
 
     @pytest.mark.asyncio
-    async def test_sentiment_requires_token(self):
-        """Sentiment should require token argument."""
+    async def test_analyze_function_exists(self):
+        """Analyze command should exist in bot."""
         pytest.importorskip("telegram")
-        from tg_bot.bot import sentiment
-        assert sentiment is not None
+        from tg_bot.bot import analyze
+        assert analyze is not None

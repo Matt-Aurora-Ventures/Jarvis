@@ -39,6 +39,13 @@ from tg_bot.services.signal_service import get_signal_service
 from tg_bot.services.cost_tracker import get_tracker
 from tg_bot.services import digest_formatter as fmt
 
+# Self-improving integration (optional)
+try:
+    from core.self_improving import integration as self_improving
+    SELF_IMPROVING_AVAILABLE = True
+except ImportError:
+    SELF_IMPROVING_AVAILABLE = False
+
 # Configure logging (NO API RESPONSES - security)
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -426,6 +433,73 @@ async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Configuration reloaded from environment.",
         parse_mode=ParseMode.MARKDOWN,
     )
+
+
+@admin_only
+async def brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /brain command - show self-improving system stats (admin only)."""
+    if not SELF_IMPROVING_AVAILABLE:
+        await update.message.reply_text(
+            "Self-improving module not installed.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    try:
+        stats = self_improving.get_stats()
+        health = self_improving.health_check()
+
+        # Format trust levels
+        trust_info = stats.get("trust", {})
+        trust_lines = []
+        for domain, data in trust_info.items():
+            if isinstance(data, dict):
+                level = data.get("level", 0)
+                level_names = ["STRANGER", "ACQUAINTANCE", "COLLEAGUE", "PARTNER", "OPERATOR"]
+                level_name = level_names[level] if 0 <= level < len(level_names) else "UNKNOWN"
+                trust_lines.append(f"  • {domain}: {level_name} ({level})")
+
+        # Format memory stats
+        memory = stats.get("memory", {})
+
+        # Format message
+        lines = [
+            "*🧠 Self-Improving Brain Status*",
+            "",
+            f"*Uptime:* {stats.get('uptime_hours', 0):.1f} hours",
+            f"*Sessions:* {stats.get('sessions', 0)}",
+            f"*Last Reflection:* {stats.get('last_reflection', 'Never')}",
+            "",
+            "*Trust Levels:*",
+        ]
+        lines.extend(trust_lines if trust_lines else ["  No domains tracked yet"])
+
+        lines.extend([
+            "",
+            "*Memory:*",
+            f"  • Facts: {memory.get('facts_count', 0)}",
+            f"  • Reflections: {memory.get('reflections_count', 0)}",
+            f"  • Interactions: {memory.get('interactions_count', 0)}",
+            f"  • Predictions: {memory.get('predictions_count', 0)}",
+            "",
+            "*Health:*",
+            f"  • Memory: {'OK' if health.get('memory') else 'FAIL'}",
+            f"  • Trust: {'OK' if health.get('trust') else 'FAIL'}",
+            f"  • Reflexion: {'OK' if health.get('reflexion') else 'FAIL'}",
+            f"  • LLM Client: {'OK' if health.get('llm_client') else 'Not Set'}",
+        ])
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+    except Exception as e:
+        logger.error(f"Brain stats failed: {e}")
+        await update.message.reply_text(
+            f"Failed to get brain stats: {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
 # =============================================================================
