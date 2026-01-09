@@ -508,6 +508,162 @@ async def brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =============================================================================
+# Paper Trading Commands
+# =============================================================================
+
+@admin_only
+async def paper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Paper trading commands: /paper [wallet|buy|sell|reset|history]"""
+    try:
+        from core import paper_trading
+
+        args = context.args or []
+        subcommand = args[0].lower() if args else "wallet"
+
+        if subcommand == "wallet" or subcommand == "status":
+            performance = paper_trading.get_performance()
+            wallet = paper_trading.get_wallet()
+
+            roi = performance["roi_pct"]
+            roi_emoji = "📈" if roi >= 0 else "📉"
+
+            lines = [
+                "*💰 Paper Trading Wallet*",
+                "",
+                f"*Balance:* ${performance['balance_usd']:.2f}",
+                f"*Initial:* ${performance['initial_balance']:.2f}",
+                f"*P&L:* ${performance['total_pnl']:+.2f}",
+                f"*ROI:* {roi_emoji} {roi:+.2f}%",
+                "",
+                f"*Trades:* {performance['total_trades']}",
+                f"*Wins:* {performance['winning_trades']} | *Losses:* {performance['losing_trades']}",
+                f"*Win Rate:* {performance['win_rate']:.1f}%",
+                f"*Fees Paid:* ${performance['total_fees_paid']:.2f}",
+            ]
+
+            if performance["has_position"]:
+                pos = performance["current_position"]
+                lines.extend([
+                    "",
+                    "*Current Position:*",
+                    f"  {pos['symbol']} @ ${pos['entry_price']:.8f}",
+                    f"  Size: ${pos['position_usd']:.2f}",
+                ])
+
+            await update.message.reply_text(
+                "\n".join(lines),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+        elif subcommand == "buy":
+            # /paper buy <symbol> <mint> <price> [size_usd]
+            if len(args) < 4:
+                await update.message.reply_text(
+                    "Usage: `/paper buy <symbol> <mint> <price> [size_usd]`",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+
+            symbol = args[1].upper()
+            mint = args[2]
+            price = float(args[3])
+            size_usd = float(args[4]) if len(args) > 4 else None
+
+            trade = paper_trading.open_position(
+                symbol=symbol,
+                mint=mint,
+                price=price,
+                position_usd=size_usd,
+            )
+
+            await update.message.reply_text(
+                f"*✅ Paper Buy Executed*\n\n"
+                f"*Symbol:* {trade.symbol}\n"
+                f"*Entry:* ${trade.entry_price:.8f}\n"
+                f"*Size:* ${trade.position_usd:.2f}\n"
+                f"*Quantity:* {trade.quantity:.4f}\n"
+                f"*Fee:* ${trade.fee_usd:.2f}",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+        elif subcommand == "sell":
+            # /paper sell <price> [reason]
+            if len(args) < 2:
+                await update.message.reply_text(
+                    "Usage: `/paper sell <price> [reason]`",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+
+            price = float(args[1])
+            reason = " ".join(args[2:]) if len(args) > 2 else "MANUAL_EXIT"
+
+            trade = paper_trading.close_position(price, reason)
+
+            if trade:
+                pnl_emoji = "🟢" if trade.pnl_usd >= 0 else "🔴"
+                await update.message.reply_text(
+                    f"*✅ Paper Sell Executed*\n\n"
+                    f"*Symbol:* {trade.symbol}\n"
+                    f"*Exit:* ${trade.exit_price:.8f}\n"
+                    f"*P&L:* {pnl_emoji} ${trade.pnl_usd:+.2f} ({trade.pnl_pct:+.2f}%)\n"
+                    f"*Reason:* {trade.exit_reason}",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            else:
+                await update.message.reply_text("No open position to close.")
+
+        elif subcommand == "reset":
+            # /paper reset [initial_balance]
+            initial = float(args[1]) if len(args) > 1 else 1000.0
+            paper_trading.reset_wallet(initial)
+            await update.message.reply_text(
+                f"*🔄 Wallet Reset*\n\nNew balance: ${initial:.2f}",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+        elif subcommand == "history":
+            engine = paper_trading.get_engine()
+            trades = engine.get_trade_history(limit=10)
+
+            if not trades:
+                await update.message.reply_text("No trade history yet.")
+                return
+
+            lines = ["*📜 Recent Paper Trades*", ""]
+            for t in trades:
+                if t.status == "closed":
+                    pnl_emoji = "🟢" if t.pnl_usd >= 0 else "🔴"
+                    lines.append(
+                        f"{pnl_emoji} {t.symbol}: ${t.pnl_usd:+.2f} ({t.pnl_pct:+.1f}%)"
+                    )
+                else:
+                    lines.append(f"⏳ {t.symbol}: Open @ ${t.entry_price:.8f}")
+
+            await update.message.reply_text(
+                "\n".join(lines),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+        else:
+            await update.message.reply_text(
+                "*Paper Trading Commands:*\n"
+                "`/paper` - View wallet status\n"
+                "`/paper buy <symbol> <mint> <price> [size]` - Open position\n"
+                "`/paper sell <price> [reason]` - Close position\n"
+                "`/paper history` - View trade history\n"
+                "`/paper reset [balance]` - Reset wallet",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+    except ValueError as e:
+        await update.message.reply_text(f"Error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Paper trading error: {e}")
+        await update.message.reply_text(f"Paper trading error: {str(e)[:100]}")
+
+
+# =============================================================================
 # Callback Query Handler
 # =============================================================================
 
@@ -850,6 +1006,7 @@ def main():
     app.add_handler(CommandHandler("digest", digest))
     app.add_handler(CommandHandler("reload", reload))
     app.add_handler(CommandHandler("brain", brain))
+    app.add_handler(CommandHandler("paper", paper))
     app.add_handler(CallbackQueryHandler(button_callback))
 
     # Error handler

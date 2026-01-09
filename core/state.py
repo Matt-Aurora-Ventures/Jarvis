@@ -34,13 +34,37 @@ def clear_pid() -> None:
 
 
 def _is_process_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
+    """Check if a process with given PID is alive. Cross-platform."""
+    import sys
+    if sys.platform == "win32":
+        # Windows: use psutil if available, fallback to ctypes
+        try:
+            import psutil
+            return psutil.pid_exists(pid)
+        except ImportError:
+            pass
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if handle:
+                kernel32.CloseHandle(handle)
+                return True
+            return False
+        except Exception:
+            return False
+    else:
+        # Unix: use os.kill with signal 0
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        except OSError:
+            return False
 
 
 def is_running() -> bool:
