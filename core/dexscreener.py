@@ -229,6 +229,129 @@ def get_pair_by_address(
     )
 
 
+def get_boosted_tokens(
+    *,
+    chain: str = "solana",
+    limit: int = 50,
+    cache_ttl_seconds: int = 120,
+) -> List[TokenPair]:
+    """
+    Get top boosted tokens from DexScreener.
+
+    Uses the token-boosts/top/v1 endpoint which returns actively
+    promoted tokens with high visibility.
+
+    Args:
+        chain: Chain to filter (default: solana)
+        limit: Max number of tokens to return
+        cache_ttl_seconds: Cache TTL
+
+    Returns:
+        List of TokenPair objects
+    """
+    result = _get_json(
+        f"{BASE_URL}/token-boosts/top/v1",
+        cache_ttl_seconds=cache_ttl_seconds,
+    )
+
+    if not result.success:
+        logger.warning(f"Failed to fetch boosted tokens: {result.error}")
+        return []
+
+    # API returns list directly, not wrapped in pairs
+    tokens = result.data if isinstance(result.data, list) else []
+    filtered: List[TokenPair] = []
+    seen_addresses = set()
+
+    for token_data in tokens:
+        if token_data.get("chainId") != chain:
+            continue
+
+        token_addr = token_data.get("tokenAddress", "")
+        if token_addr in seen_addresses:
+            continue
+        seen_addresses.add(token_addr)
+
+        try:
+            # Boosted tokens API has different format, normalize it
+            pair = TokenPair(
+                chain_id=token_data.get("chainId", ""),
+                dex_id="dexscreener",
+                pair_address=token_data.get("url", "").split("/")[-1] if token_data.get("url") else "",
+                base_token_address=token_addr,
+                base_token_symbol=token_data.get("symbol", token_data.get("name", "")[:6]),
+                base_token_name=token_data.get("name", ""),
+                quote_token_address="",
+                quote_token_symbol="",
+                price_usd=0.0,  # Need to fetch separately
+                price_native=0.0,
+                liquidity_usd=0.0,
+                volume_24h=0.0,
+                volume_6h=0.0,
+                volume_1h=0.0,
+                price_change_24h=0.0,
+                price_change_6h=0.0,
+                price_change_1h=0.0,
+                price_change_5m=0.0,
+                txns_24h_buys=0,
+                txns_24h_sells=0,
+            )
+            filtered.append(pair)
+
+            if len(filtered) >= limit:
+                break
+
+        except Exception as e:
+            logger.debug(f"Failed to parse boosted token: {e}")
+            continue
+
+    logger.info(f"Found {len(filtered)} boosted {chain} tokens")
+    return filtered
+
+
+def get_boosted_tokens_with_data(
+    *,
+    chain: str = "solana",
+    limit: int = 20,
+    cache_ttl_seconds: int = 120,
+) -> List[TokenPair]:
+    """
+    Get boosted tokens with full price/volume data.
+
+    Fetches boosted tokens and enriches each with full pair data.
+    More API calls but complete information.
+
+    Args:
+        chain: Chain to filter
+        limit: Max tokens to return
+        cache_ttl_seconds: Cache TTL
+
+    Returns:
+        List of fully populated TokenPair objects
+    """
+    boosted = get_boosted_tokens(chain=chain, limit=limit, cache_ttl_seconds=cache_ttl_seconds)
+
+    enriched: List[TokenPair] = []
+    for token in boosted:
+        if not token.base_token_address:
+            continue
+
+        # Fetch full pair data for this token
+        result = get_pairs_by_token(token.base_token_address, cache_ttl_seconds=cache_ttl_seconds)
+        if result.success and result.data:
+            pairs = result.data.get("pairs", [])
+            if pairs:
+                # Use the highest liquidity pair
+                pairs.sort(key=lambda p: _safe_float(p.get("liquidity", {}).get("usd", 0)), reverse=True)
+                enriched.append(TokenPair.from_api(pairs[0]))
+
+        if len(enriched) >= limit:
+            break
+
+    logger.info(f"Enriched {len(enriched)} boosted {chain} tokens with full data")
+    return enriched
+
+
 def get_solana_trending(
     *,
     min_liquidity: float = 10_000,
@@ -239,39 +362,59 @@ def get_solana_trending(
 ) -> List[TokenPair]:
     """
     Get trending Solana tokens with momentum.
+
+    First tries boosted tokens endpoint (most relevant trending),
+    then falls back to search.
     """
+    # Try boosted tokens first - these are actually trending
+    enriched = get_boosted_tokens_with_data(chain="solana", limit=limit * 2, cache_ttl_seconds=cache_ttl_seconds)
+
+    if enriched:
+        # Filter by criteria
+        filtered = [
+            p for p in enriched
+            if p.liquidity_usd >= min_liquidity
+            and p.liquidity_usd <= max_liquidity
+            and p.volume_24h >= min_volume_24h
+        ]
+        if filtered:
+            filtered.sort(key=lambda p: p.volume_24h, reverse=True)
+            logger.info(f"Found {len(filtered[:limit])} trending Solana pairs from boosted tokens")
+            return filtered[:limit]
+
+    # Fallback to search
     result = search_pairs("SOL", cache_ttl_seconds=cache_ttl_seconds)
-    
+
     if not result.success:
         logger.warning(f"Failed to fetch Solana trending: {result.error}")
         return []
-    
+
     pairs = result.data.get("pairs", []) if result.data else []
     filtered: List[TokenPair] = []
-    
+
     for pair_data in pairs:
         if pair_data.get("chainId") != "solana":
             continue
-        
+
         try:
             pair = TokenPair.from_api(pair_data)
-            
+
             if pair.liquidity_usd < min_liquidity:
                 continue
             if pair.liquidity_usd > max_liquidity:
                 continue
             if pair.volume_24h < min_volume_24h:
                 continue
-            
+
             filtered.append(pair)
-            
+
             if len(filtered) >= limit:
                 break
-                
+
         except Exception as e:
             logger.debug(f"Failed to parse pair: {e}")
             continue
-    
+
     filtered.sort(key=lambda p: p.volume_24h, reverse=True)
     logger.info(f"Found {len(filtered)} trending Solana pairs")
     return filtered
@@ -280,59 +423,96 @@ def get_solana_trending(
 def get_momentum_tokens(
     *,
     min_liquidity: float = 10_000,
-    min_volume_24h: float = 100_000,
+    min_volume_24h: float = 50_000,
     min_momentum: float = 0.02,
     limit: int = 20,
     cache_ttl_seconds: int = 120,
 ) -> List[TokenPair]:
     """
     Get Solana tokens showing momentum (recent price movement).
+
+    Uses boosted tokens endpoint first for better trending data,
+    then calculates momentum scores.
     """
+    # Get enriched boosted tokens first
+    enriched = get_boosted_tokens_with_data(chain="solana", limit=limit * 3, cache_ttl_seconds=cache_ttl_seconds)
+
+    momentum_pairs: List[Tuple[TokenPair, float]] = []
+
+    for pair in enriched:
+        if pair.liquidity_usd < min_liquidity:
+            continue
+        if pair.volume_24h < min_volume_24h:
+            continue
+
+        momentum_score = (
+            abs(pair.price_change_5m) * 0.4 +
+            abs(pair.price_change_1h) * 0.3 +
+            abs(pair.price_change_6h) * 0.2 +
+            abs(pair.price_change_24h) * 0.1
+        )
+
+        has_momentum = (
+            abs(pair.price_change_5m) > min_momentum * 100 or
+            abs(pair.price_change_1h) > min_momentum * 100 * 5 or
+            abs(pair.price_change_6h) > min_momentum * 100 * 10
+        )
+
+        if has_momentum or momentum_score > 1:  # Include if any momentum
+            momentum_pairs.append((pair, momentum_score))
+
+    # If we got results from boosted tokens, return them
+    if momentum_pairs:
+        momentum_pairs.sort(key=lambda x: x[1], reverse=True)
+        result_pairs = [pair for pair, _ in momentum_pairs[:limit]]
+        logger.info(f"Found {len(result_pairs)} momentum Solana pairs from boosted tokens")
+        return result_pairs
+
+    # Fallback to search
     result = search_pairs("SOL", cache_ttl_seconds=cache_ttl_seconds)
-    
+
     if not result.success:
         logger.warning(f"Failed to fetch momentum tokens: {result.error}")
         return []
-    
+
     pairs = result.data.get("pairs", []) if result.data else []
-    momentum_pairs: List[Tuple[TokenPair, float]] = []
-    
+
     for pair_data in pairs:
         if pair_data.get("chainId") != "solana":
             continue
-        
+
         try:
             pair = TokenPair.from_api(pair_data)
-            
+
             if pair.liquidity_usd < min_liquidity:
                 continue
             if pair.volume_24h < min_volume_24h:
                 continue
-            
+
             momentum_score = (
                 abs(pair.price_change_5m) * 0.4 +
                 abs(pair.price_change_1h) * 0.3 +
                 abs(pair.price_change_6h) * 0.2 +
                 abs(pair.price_change_24h) * 0.1
             )
-            
+
             has_momentum = (
                 abs(pair.price_change_5m) > min_momentum * 100 or
                 abs(pair.price_change_1h) > min_momentum * 100 * 5 or
                 abs(pair.price_change_6h) > min_momentum * 100 * 10
             )
-            
+
             if not has_momentum:
                 continue
-            
+
             momentum_pairs.append((pair, momentum_score))
-            
+
         except Exception as e:
             logger.debug(f"Failed to parse pair: {e}")
             continue
-    
+
     momentum_pairs.sort(key=lambda x: x[1], reverse=True)
-    
+
     result_pairs = [pair for pair, _ in momentum_pairs[:limit]]
     logger.info(f"Found {len(result_pairs)} momentum Solana pairs")
     return result_pairs

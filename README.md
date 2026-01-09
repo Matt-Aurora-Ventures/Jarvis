@@ -7,7 +7,7 @@
 </p>
 
 ![Status](https://img.shields.io/badge/Status-ONLINE-success)
-![Version](https://img.shields.io/badge/Version-3.3.0-blue)
+![Version](https://img.shields.io/badge/Version-3.4.0-blue)
 ![Dashboard](https://img.shields.io/badge/Dashboard-v3.0-blue)
 ![Tests](https://img.shields.io/badge/Tests-180%2B%20Passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/Coverage-25%25-yellow)
@@ -34,6 +34,87 @@
 | Algorithmic trading | ✅ | ❌ |
 | Cross-platform | ✅ | N/A |
 | Free to run | ✅ (with Ollama/Groq) | ❌ |
+
+---
+
+## 📱 Telegram Bot (v1.0) - Production Ready
+
+**Jarvis Telegram Bot** delivers AI-powered trading signals with Grok sentiment analysis directly to your phone.
+
+### Quick Start
+```bash
+cd tg_bot
+pip install -r requirements.txt
+
+# Create .env file
+cat > .env <<EOF
+TELEGRAM_BOT_TOKEN=your-bot-token
+XAI_API_KEY=your-grok-key
+TELEGRAM_ADMIN_IDS=your-telegram-id
+BIRDEYE_API_KEY=your-birdeye-key
+EOF
+
+python bot.py
+```
+
+### Commands
+| Command | Description | Access |
+|---------|-------------|--------|
+| `/start` | Welcome message and command list | Public |
+| `/status` | Check bot and API status | Public |
+| `/trending` | Top 5 trending tokens (free, no sentiment) | Public |
+| `/costs` | View API usage and daily costs | Public |
+| `/signals` | **Master Signal Report** - Top 10 with everything | Admin |
+| `/analyze <token>` | Full analysis with Grok sentiment | Admin |
+| `/digest` | Generate comprehensive digest now | Admin |
+| `/help` | Show all available commands | Public |
+
+### Master Signal Report (`/signals`)
+The flagship feature returns top 10 trending Solana tokens with:
+- **Clickable Contracts**: Copy-paste ready addresses
+- **Entry Recommendations**: Scalp, day trade, or long-term based on liquidity
+- **Leverage Suggestions**: 1x-5x based on volatility and risk
+- **Grok Sentiment**: AI analysis on top 3 tokens (bullish/bearish/neutral)
+- **Risk Assessment**: Signal score from -100 to +100
+- **Direct Links**: DexScreener, Birdeye, Solscan for each token
+
+### Features
+- **Grok AI Sentiment**: Real-time X/Twitter sentiment via xAI API
+- **DexScreener Boosted Tokens**: 20+ actual trending Solana tokens
+- **Multi-Source Signals**: DexScreener + GMGN + Birdeye + DexTools + Lute
+- **Admin Security**: Expensive API calls restricted to whitelisted IDs
+- **Rate Limiting**: 1 sentiment/hour, 24/day max, $1/day cost cap
+- **Cost Tracking**: SQLite-based daily API usage reports
+- **Hourly Digests**: Scheduled reports at 8:00, 14:00, 20:00 UTC
+
+### Architecture
+```
+tg_bot/
+├── bot.py                    # Main bot with admin decorators
+├── config.py                 # Secure config with .env loading
+├── cli.py                    # CLI control (start, status, test)
+├── .env                      # API keys (gitignored)
+├── services/
+│   ├── signal_service.py     # Comprehensive signal aggregation
+│   ├── cost_tracker.py       # API usage tracking (SQLite)
+│   └── digest_formatter.py   # Beautiful Telegram formatting
+├── handlers/                 # Command handlers
+├── models/                   # Data models
+└── utils/                    # Utility functions
+```
+
+### Signal Scoring Algorithm
+Signals are scored from -100 to +100 using weighted factors:
+| Factor | Weight | Source |
+|--------|--------|--------|
+| Price Momentum | 25% | DexScreener |
+| Volume | 15% | DexScreener |
+| Liquidity | 10% | DexScreener |
+| Security | 25% | GMGN |
+| Smart Money | 15% | GMGN |
+| Sentiment | 15% | Grok |
+
+**Signal Levels**: STRONG_BUY (≥40), BUY (≥20), NEUTRAL, SELL (≤-20), STRONG_SELL (≤-40), AVOID (honeypot)
 
 ---
 

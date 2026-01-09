@@ -1,0 +1,20 @@
+# Jarvis Telegram Bot Requirements
+
+# Telegram
+python-telegram-bot>=20.0
+
+# Anthropic Claude API
+anthropic>=0.18.0
+
+# HTTP client
+aiohttp>=3.9.0
+requests>=2.31.0
+
+# Scheduler for hourly digests
+apscheduler>=3.10.0
+
+# Database
+# (uses built-in sqlite3)
+
+# Optional: For type checking
+typing-extensions>=4.0.0

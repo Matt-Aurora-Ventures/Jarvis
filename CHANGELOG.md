@@ -4,6 +4,89 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [3.4.0] - 2026-01-09
+
+### 🤖 **Telegram Bot v1.0: Production Signal Bot with Grok Sentiment**
+
+This release delivers a fully functional Telegram trading signal bot with real-time Grok AI sentiment analysis, proper DexScreener integration, and comprehensive admin security controls.
+
+### 🆕 New Features
+
+**Telegram Signal Bot** (`tg_bot/`):
+- **Master Signal Report**: `/signals` command returns top 10 trending Solana tokens with:
+  - Clickable contract addresses
+  - Entry recommendations (scalp/day trade/long term)
+  - Leverage suggestions based on liquidity
+  - Full Grok sentiment analysis on top 3 tokens
+  - Risk assessment and signal scores (-100 to +100)
+  - Direct links to DexScreener, Birdeye, Solscan
+- **Admin-Only Commands**: Expensive API calls restricted to whitelisted Telegram IDs
+- **Rate Limiting**: Configurable limits (1 sentiment/hour, 24/day, $1/day cost cap)
+- **Cost Tracking**: SQLite-based API usage tracking with daily reports
+
+**DexScreener Boosted Tokens API** (`core/dexscreener.py`):
+- **`get_boosted_tokens()`**: Fetch trending tokens from `token-boosts/top/v1` endpoint
+- **`get_boosted_tokens_with_data()`**: Enriched tokens with full price/volume/liquidity data
+- **Updated `get_solana_trending()`**: Now uses boosted tokens (20+ real trending tokens)
+- **Updated `get_momentum_tokens()`**: Momentum scoring with boosted tokens fallback
+
+**Grok Sentiment Integration**:
+- Enabled Grok provider in local config (`lifeos/config/lifeos.config.local.json`)
+- Model: `grok-3-mini` for cost-effective sentiment analysis
+- Budget controls: $1/day limit, 5 requests per cycle, 1-hour cache TTL
+- Fallback: Heuristic keyword-based sentiment when API unavailable
+
+**Signal Service** (`tg_bot/services/signal_service.py`):
+- Comprehensive token signals combining DexScreener + GMGN + Grok
+- Signal scoring algorithm: momentum (25%), volume (15%), liquidity (10%), security (25%), smart money (15%), sentiment (15%)
+- Signal levels: STRONG_BUY, BUY, NEUTRAL, SELL, STRONG_SELL, AVOID
+
+**Beautiful Digest Formatter** (`tg_bot/services/digest_formatter.py`):
+- Telegram-optimized markdown formatting
+- Entry recommendations based on signal strength and liquidity
+- Leverage suggestions (1x-5x) based on risk profile
+- All links clickable in Telegram
+
+### 🔧 Configuration
+
+**New Environment Variables** (in `tg_bot/.env`):
+```
+TELEGRAM_BOT_TOKEN=your-bot-token
+XAI_API_KEY=your-grok-key
+TELEGRAM_ADMIN_IDS=your-telegram-id
+BIRDEYE_API_KEY=your-birdeye-key
+```
+
+**Core Config Override** (`lifeos/config/lifeos.config.local.json`):
+```json
+{
+  "providers": { "grok": { "enabled": true, "model": "grok-3-mini" } },
+  "sentiment_spend_policy": { "daily_budget_usd": 1.0 }
+}
+```
+
+### 📁 New Files
+
+| File | Description |
+|------|-------------|
+| `tg_bot/bot.py` | Main bot with admin-only decorators and rate limiting |
+| `tg_bot/config.py` | Secure config with .env loading and admin whitelist |
+| `tg_bot/cli.py` | CLI for bot control (start, status, test, costs) |
+| `tg_bot/services/signal_service.py` | Comprehensive signal aggregation |
+| `tg_bot/services/cost_tracker.py` | API cost tracking with SQLite |
+| `tg_bot/services/digest_formatter.py` | Beautiful Telegram formatting |
+
+### 📊 Metrics
+
+| Metric | Value |
+|--------|-------|
+| DexScreener tokens | 20+ Solana trending |
+| Signal sources | 6 (DexScreener, Birdeye, DexTools, GMGN, Grok, Lute) |
+| Bot commands | 8 (start, signals, trending, analyze, digest, costs, status, help) |
+| Test coverage | Signal service fully tested |
+
+---
+
 # [3.3.0] - 2026-01-08
 
 ### 🏗️ **Architecture Refactor: Cross-Platform Support & Test Infrastructure**
