@@ -7,9 +7,9 @@
 </p>
 
 ![Status](https://img.shields.io/badge/Status-ONLINE-success)
-![Version](https://img.shields.io/badge/Version-3.4.0-blue)
+![Version](https://img.shields.io/badge/Version-3.5.0-blue)
 ![Dashboard](https://img.shields.io/badge/Dashboard-v3.0-blue)
-![Tests](https://img.shields.io/badge/Tests-180%2B%20Passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-209%2B%20Passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/Coverage-25%25-yellow)
 ![Security](https://img.shields.io/badge/Security-IDS_ACTIVE-red)
 ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
@@ -633,6 +633,53 @@ Every night Jarvis can:
 - **Error analysis**: Learns from failures and fixes itself
 - **Continuous iteration**: Gets smarter every day
 
+### 🧠 Self-Improving Core (v3.5) - **NEW**
+
+A complete self-improvement system based on the Reflexion pattern (NeurIPS 2023):
+
+**Architecture** (`core/self_improving/`):
+- **SQLite Memory Store**: Facts, reflections, predictions, interactions - no vector DB needed
+- **Trust Ladder**: 5-level gradual autonomy (STRANGER → OPERATOR)
+- **Reflexion Engine**: Nightly self-improvement via verbal reflection
+- **Proactive Engine**: Context-aware suggestions with rate limiting
+- **Learning Extractor**: Extracts facts/preferences from conversations
+- **Action Framework**: Trust-gated autonomous actions
+
+**Trust Levels**:
+| Level | Name | Permissions |
+|-------|------|-------------|
+| 0 | STRANGER | Only respond when asked |
+| 1 | ACQUAINTANCE | Can suggest, needs approval |
+| 2 | COLLEAGUE | Can draft content for review |
+| 3 | PARTNER | Can act autonomously, reports after |
+| 4 | OPERATOR | Full autonomy in domain |
+
+**Usage**:
+```python
+from core.self_improving import create_orchestrator
+
+# Initialize
+orchestrator = create_orchestrator(
+    db_path="data/jarvis_memory.db",
+    llm_client=anthropic_client,
+)
+
+# Before responding - get context with past lessons
+context = orchestrator.build_response_context(user_query)
+
+# After conversation - extract learnings
+orchestrator.learn_from_conversation_sync(messages, session_id)
+
+# Nightly at 3am - run self-improvement cycle
+orchestrator.run_nightly_cycle_sync()
+```
+
+**Key Insights**:
+- Reflexion (verbal self-reflection) beats weight updates for fast learning
+- SQL-native memory is 80-90% cheaper than vector databases
+- Trust is earned through accurate predictions and successful actions
+- Store "what I did wrong and what to do differently" as text for continuous improvement
+
 ### 🌙 Idle Missions (Auto-Research)
 - **MoonDev Watcher**: Tracks official MoonDevOnYT X feed for new HFT drops
 - **AlgoTradeCamp Digest**: Snapshots algotradecamp.com for lessons and tactics
@@ -748,9 +795,10 @@ Comprehensive test suite with coverage reporting.
 | `test_conversation.py` | Chat logic | ~35 | Entity extraction |
 | `test_platform.py` | Cross-platform | ~30 | All adapters |
 | `test_cli.py` | CLI helpers | 11 | Utilities |
+| `test_self_improving.py` | Self-improving core | 29 | Full coverage |
 | + 11 more | Various | 50+ | Integration |
 
-**Total: 180+ tests passing**
+**Total: 209+ tests passing**
 
 ### Running Tests
 
@@ -1476,6 +1524,15 @@ def my_skill(param1: str) -> str:
   - [x] Token safety analysis (mint/freeze authority, liquidity, concentration)
   - [x] Cross-platform file locking (Windows + Unix)
   - [x] Comprehensive test suite (111 tests passing)
+- [x] **v3.5 Self-Improving Core** (Jan 2026)
+  - [x] SQLite-based memory (facts, reflections, predictions, interactions)
+  - [x] 5-level Trust Ladder (STRANGER → OPERATOR)
+  - [x] Reflexion Engine for nightly self-improvement
+  - [x] Proactive Suggestion Engine with rate limiting
+  - [x] Learning Extractor for conversation analysis
+  - [x] Trust-gated Action Framework
+  - [x] APScheduler integration for scheduled tasks
+  - [x] 29 comprehensive tests
 
 ### In Progress 🚧
 

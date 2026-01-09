@@ -333,17 +333,39 @@ class MemoryStore:
 
     def search_facts(self, query: str, limit: int = 20) -> List[Fact]:
         """Full-text search across facts."""
-        cursor = self.conn.execute(
-            """
-            SELECT f.* FROM facts f
-            JOIN facts_fts fts ON f.id = fts.rowid
-            WHERE facts_fts MATCH ?
-            ORDER BY rank
-            LIMIT ?
-            """,
-            (query, limit),
-        )
-        return [Fact.from_row(dict(row)) for row in cursor.fetchall()]
+        # Sanitize query for FTS5 - remove special characters and quote words
+        import re
+        words = re.findall(r'\w+', query)
+        if not words:
+            return []
+        # Use OR to match any word
+        fts_query = " OR ".join(f'"{word}"' for word in words[:5])
+
+        try:
+            cursor = self.conn.execute(
+                """
+                SELECT f.* FROM facts f
+                JOIN facts_fts fts ON f.id = fts.rowid
+                WHERE facts_fts MATCH ?
+                ORDER BY rank
+                LIMIT ?
+                """,
+                (fts_query, limit),
+            )
+            return [Fact.from_row(dict(row)) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.warning(f"FTS search failed: {e}, falling back to LIKE")
+            # Fallback to LIKE search
+            cursor = self.conn.execute(
+                """
+                SELECT * FROM facts
+                WHERE fact LIKE ?
+                ORDER BY confidence DESC
+                LIMIT ?
+                """,
+                (f"%{words[0]}%", limit),
+            )
+            return [Fact.from_row(dict(row)) for row in cursor.fetchall()]
 
     def update_fact(self, entity: str, old_fact: str, new_fact: str, source: str = "correction") -> bool:
         """Update a fact (used when correcting knowledge)."""
@@ -391,18 +413,28 @@ class MemoryStore:
 
     def get_relevant_reflections(self, context: str, limit: int = 5) -> List[Reflection]:
         """Get reflections relevant to the current context."""
-        # First try FTS search
-        cursor = self.conn.execute(
-            """
-            SELECT r.* FROM reflections r
-            JOIN reflections_fts fts ON r.id = fts.rowid
-            WHERE reflections_fts MATCH ?
-            ORDER BY rank, r.applied_count DESC
-            LIMIT ?
-            """,
-            (context, limit),
-        )
-        results = [Reflection.from_row(dict(row)) for row in cursor.fetchall()]
+        # Sanitize query for FTS5
+        import re
+        words = re.findall(r'\w+', context)
+        results = []
+
+        if words:
+            fts_query = " OR ".join(f'"{word}"' for word in words[:5])
+
+            try:
+                cursor = self.conn.execute(
+                    """
+                    SELECT r.* FROM reflections r
+                    JOIN reflections_fts fts ON r.id = fts.rowid
+                    WHERE reflections_fts MATCH ?
+                    ORDER BY rank, r.applied_count DESC
+                    LIMIT ?
+                    """,
+                    (fts_query, limit),
+                )
+                results = [Reflection.from_row(dict(row)) for row in cursor.fetchall()]
+            except Exception as e:
+                logger.warning(f"Reflection FTS search failed: {e}")
 
         # Fallback to recent if no FTS matches
         if not results:

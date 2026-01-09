@@ -122,9 +122,16 @@ class Action(ABC):
 
     def check_permission(self) -> Permission:
         """Check if action is allowed at current trust level."""
-        return self.trust.check_permission(
-            self.action_type.value,
-            self.domain,
+        current_level = self.trust.get_level(self.domain)
+        required_level = self.required_trust
+        allowed = current_level >= required_level
+
+        return Permission(
+            allowed=allowed,
+            reason=f"Action allowed" if allowed else f"Need {required_level.name} level",
+            required_level=required_level,
+            current_level=current_level,
+            domain=self.domain,
         )
 
     @abstractmethod
