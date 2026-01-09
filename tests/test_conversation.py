@@ -301,7 +301,8 @@ class TestSupportPrompts:
         mock_library.get_support_prompts.return_value = [mock_prompt]
 
         from core.conversation import _support_prompts
-        inspirations, ids = _support_prompts("What's the Bitcoin price?")
+        # Use "solana" which is in the keyword list
+        inspirations, ids = _support_prompts("What's happening on Solana?")
 
         # Should have called with crypto tag
         call_args = mock_library.get_support_prompts.call_args

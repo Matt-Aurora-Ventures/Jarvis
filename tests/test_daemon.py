@@ -172,15 +172,13 @@ class TestShouldRunReport:
 class TestSendNotification:
     """Test notification sending (mocked)."""
 
-    @patch('core.daemon.safe_subprocess')
-    def test_send_notification_calls_osascript(self, mock_subprocess):
+    @patch('core.safe_subprocess.run_command_safe')
+    def test_send_notification_calls_osascript(self, mock_run):
         """Should call osascript with notification."""
-        mock_subprocess.run_command_safe = Mock()
-
         _send_notification("Test Title", "Test Message")
 
-        mock_subprocess.run_command_safe.assert_called_once()
-        call_args = mock_subprocess.run_command_safe.call_args
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
         # First arg should be the command list
         cmd_list = call_args[0][0]
         assert cmd_list[0] == "osascript"
@@ -189,35 +187,31 @@ class TestSendNotification:
         assert "Test Message" in cmd_list[2]
         assert "Test Title" in cmd_list[2]
 
-    @patch('core.daemon.safe_subprocess')
-    def test_send_notification_sanitizes_input(self, mock_subprocess):
+    @patch('core.safe_subprocess.run_command_safe')
+    def test_send_notification_sanitizes_input(self, mock_run):
         """Should sanitize quotes in notification."""
-        mock_subprocess.run_command_safe = Mock()
-
         _send_notification('Title with "quotes"', 'Message with "quotes"')
 
-        call_args = mock_subprocess.run_command_safe.call_args
+        call_args = mock_run.call_args
         cmd_list = call_args[0][0]
         script = cmd_list[2]
         # Should have escaped quotes
         assert '\\"' in script or "quotes" in script
 
-    @patch('core.daemon.safe_subprocess')
-    def test_send_notification_handles_error(self, mock_subprocess):
+    @patch('core.safe_subprocess.run_command_safe')
+    def test_send_notification_handles_error(self, mock_run):
         """Should handle errors gracefully."""
-        mock_subprocess.run_command_safe = Mock(side_effect=Exception("osascript failed"))
+        mock_run.side_effect = Exception("osascript failed")
 
         # Should not raise
         _send_notification("Title", "Message")
 
-    @patch('core.daemon.safe_subprocess')
-    def test_send_notification_timeout(self, mock_subprocess):
+    @patch('core.safe_subprocess.run_command_safe')
+    def test_send_notification_timeout(self, mock_run):
         """Should use timeout when calling osascript."""
-        mock_subprocess.run_command_safe = Mock()
-
         _send_notification("Title", "Message")
 
-        call_args = mock_subprocess.run_command_safe.call_args
+        call_args = mock_run.call_args
         # Check timeout kwarg
         assert call_args[1].get("timeout") == 5
 
