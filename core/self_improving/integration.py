@@ -6,18 +6,28 @@ Provides a singleton orchestrator and utilities for integrating with:
 - core/daemon.py - Startup and scheduling
 - tg_bot/bot.py - Telegram commands
 
+Enhanced features (v2):
+- Chain-of-Thought reasoning
+- BM25 retrieval for better context
+- Conversation summarization
+- Conversation flow state tracking
+
 Usage:
     from core.self_improving.integration import (
         get_self_improving,
         enrich_context,
         record_conversation,
         start_scheduler,
+        # New in v2:
+        enhance_with_reasoning,
+        get_conversation_flow,
+        summarize_session,
     )
 """
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
 
 logger = logging.getLogger("jarvis.self_improving.integration")

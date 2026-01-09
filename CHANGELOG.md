@@ -4,6 +4,125 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [3.5.2] - 2026-01-09
+
+### 🔧 **Deprecation Fixes & Code Quality**
+
+Comprehensive cleanup of Python 3.12+ deprecation warnings and code quality improvements.
+
+### 🐛 Bug Fixes
+
+- **datetime.utcnow() Deprecation**: Replaced 72 occurrences across 21 files with timezone-aware `datetime.now(timezone.utc)`
+- **Test Fixes**: Fixed 3 failing telegram bot tests (config validation, defaults, function imports)
+- **Warnings Eliminated**: Reduced pytest warnings from 336 to 0
+
+### 📁 Files Updated
+
+| Module | Files Changed | Changes |
+|--------|---------------|---------|
+| `core/self_improving/` | 8 files | All datetime calls modernized |
+| `core/integrations/` | 4 files | Calendar, sentiment bots updated |
+| `tg_bot/` | 3 files | Subscriber, scheduler, token_data |
+| `core/` | 4 files | api_server, jarvis, google_manager, trading_decision_matrix |
+| `tests/` | 1 file | test_self_improving.py |
+| `scripts/` | 1 file | monitor_positions.py |
+
+### 📊 Metrics
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Deprecation warnings | 336 | 0 |
+| Tests passing | 1065 | 1065 |
+| Test coverage | 20% | 20% |
+
+---
+
+# [3.5.1] - 2026-01-09
+
+### 🔗 **Self-Improving Core Integration**
+
+Integrates the Self-Improving Core (v3.5.0) with the main Jarvis daemon and API server.
+
+### 🆕 New Features
+
+- **Daemon Integration**: Self-improving scheduler runs nightly at 3am for reflection cycles
+- **API Endpoints**: `/api/brain/stats`, `/api/brain/health`, `/api/brain/trust`
+- **Conversation Enrichment**: Response context now includes learned patterns and reflections
+- **Telegram `/reflect` Command**: Trigger reflection cycle from Telegram
+
+### 📁 New Files
+
+| File | Description |
+|------|-------------|
+| `core/self_improving/integration.py` | Singleton orchestrator and integration utilities |
+| `tests/test_self_improving_integration.py` | 19 integration tests |
+
+---
+
+# [3.5.0] - 2026-01-09
+
+### 🧠 **Self-Improving Core: Reflexion Pattern Implementation**
+
+A complete self-improvement system based on the Reflexion paper (NeurIPS 2023). Jarvis can now learn from conversations, reflect on mistakes, and gradually earn autonomy.
+
+### 🆕 New Features
+
+**Memory System** (`core/self_improving/memory/`):
+- **SQLite Memory Store**: Facts, reflections, predictions, interactions - no vector DB needed
+- **Entity Management**: Track people, projects, companies, concepts
+- **Full-Text Search**: Efficient querying without embedding costs
+
+**Trust Ladder** (`core/self_improving/trust/`):
+- **5 Trust Levels**: STRANGER → ACQUAINTANCE → COLLEAGUE → PARTNER → OPERATOR
+- **Domain-Specific Trust**: Different autonomy levels per domain
+- **Trust Earned**: Through accurate predictions and accepted suggestions
+
+**Reflexion Engine** (`core/self_improving/reflexion/`):
+- **Nightly Reflection**: Analyzes problematic interactions at 3am
+- **Lesson Extraction**: "What went wrong and what to do differently"
+- **Memory Pruning**: Old, unused reflections automatically cleaned
+
+**Proactive Engine** (`core/self_improving/proactive/`):
+- **Context-Aware Suggestions**: Only suggests when confidence > 70%
+- **Rate Limiting**: Max 3 suggestions per day, cooldown between suggestions
+- **Learning from Feedback**: Tracks which suggestions get accepted
+
+**Action Framework** (`core/self_improving/actions/`):
+- **Trust-Gated Actions**: Actions require minimum trust level
+- **Action Types**: Draft, Schedule, Remind, Send, Execute
+- **Full Audit Trail**: All actions logged with reversibility info
+
+**Learning Extractor** (`core/self_improving/learning/`):
+- **Fact Extraction**: Pulls new facts from conversations
+- **Preference Detection**: Implicit preferences from behavior
+- **Correction Handling**: Updates outdated facts
+
+### 📁 New Files
+
+| File | Description |
+|------|-------------|
+| `core/self_improving/__init__.py` | Package exports |
+| `core/self_improving/orchestrator.py` | Main entry point, ties everything together |
+| `core/self_improving/memory/store.py` | SQLite memory implementation |
+| `core/self_improving/memory/models.py` | Data models (Entity, Fact, Reflection, etc.) |
+| `core/self_improving/trust/ladder.py` | Trust management and progression |
+| `core/self_improving/reflexion/engine.py` | Nightly reflection cycle |
+| `core/self_improving/proactive/engine.py` | Suggestion generation |
+| `core/self_improving/learning/extractor.py` | Conversation analysis |
+| `core/self_improving/actions/framework.py` | Autonomous action execution |
+| `tests/test_self_improving.py` | 29 comprehensive tests |
+
+### 📊 Metrics
+
+| Metric | Value |
+|--------|-------|
+| New tests | 29 |
+| Trust levels | 5 |
+| Action types | 5 |
+| Memory tables | 7 (entities, facts, reflections, predictions, interactions, trust, settings) |
+
+---
+
 # [3.4.0] - 2026-01-09
 
 ### 🤖 **Telegram Bot v1.0: Production Signal Bot with Grok Sentiment**
