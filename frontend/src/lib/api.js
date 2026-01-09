@@ -78,6 +78,7 @@ export const jarvisApi = {
   // Jarvis
   getJarvisStatus: () => api.get('/api/jarvis/status'),
   sendChat: (message) => api.post('/api/jarvis/chat', { message }),
+  chat: (message) => api.post('/api/jarvis/chat', { message }), // Alias for sendChat
   
   // Position
   getActivePosition: () => api.get('/api/position/active'),

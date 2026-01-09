@@ -1,8 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { createChart, ColorType, CrosshairMode } from 'lightweight-charts'
 import { RefreshCw, TrendingUp, Clock } from 'lucide-react'
 
 const API_BASE = ''
+
+// Performance: Batch chart updates to prevent UI thrashing
+const BATCH_INTERVAL = 100 // ms
 
 const TIMEFRAMES = [
     { label: '1m', value: '1m' },
@@ -25,6 +28,30 @@ function TradingChart({ mint, symbol = 'TOKEN', onPriceUpdate }) {
     const [lastPrice, setLastPrice] = useState(null)
     const [priceChange, setPriceChange] = useState(0)
     const [source, setSource] = useState('')
+
+    // Performance: Batched update refs
+    const pendingChartUpdate = useRef(null)
+    const batchTimeoutRef = useRef(null)
+
+    // Batched chart update - prevents UI thrashing during rapid updates
+    const scheduleChartUpdate = useCallback((candles, volumes, priceData) => {
+        pendingChartUpdate.current = { candles, volumes, priceData }
+
+        if (!batchTimeoutRef.current) {
+            batchTimeoutRef.current = setTimeout(() => {
+                const pending = pendingChartUpdate.current
+                if (pending && candleSeriesRef.current && volumeSeriesRef.current) {
+                    candleSeriesRef.current.setData(pending.candles)
+                    volumeSeriesRef.current.setData(pending.volumes)
+                    setLastPrice(pending.priceData.lastPrice)
+                    setPriceChange(pending.priceData.change)
+                    chartRef.current?.timeScale().fitContent()
+                }
+                batchTimeoutRef.current = null
+                pendingChartUpdate.current = null
+            }, BATCH_INTERVAL)
+        }
+    }, [])
 
     // Initialize chart
     useEffect(() => {
@@ -102,6 +129,10 @@ function TradingChart({ mint, symbol = 'TOKEN', onPriceUpdate }) {
         return () => {
             window.removeEventListener('resize', handleResize)
             chart.remove()
+            // Cleanup batch timeout
+            if (batchTimeoutRef.current) {
+                clearTimeout(batchTimeoutRef.current)
+            }
         }
     }, [])
 
@@ -137,23 +168,22 @@ function TradingChart({ mint, symbol = 'TOKEN', onPriceUpdate }) {
                     color: c.close >= c.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
                 }))
 
-                candleSeriesRef.current.setData(formattedCandles)
-                volumeSeriesRef.current.setData(formattedVolumes)
-
-                // Update price info
+                // Calculate price data
                 const lastCandle = formattedCandles[formattedCandles.length - 1]
                 const firstCandle = formattedCandles[0]
-                setLastPrice(lastCandle.close)
-                setPriceChange(((lastCandle.close - firstCandle.open) / firstCandle.open) * 100)
+                const priceData = {
+                    lastPrice: lastCandle.close,
+                    change: ((lastCandle.close - firstCandle.open) / firstCandle.open) * 100
+                }
+
+                // Performance: Use batched update instead of direct state updates
+                scheduleChartUpdate(formattedCandles, formattedVolumes, priceData)
                 setSource(data.source)
 
-                // Callback for parent
+                // Callback for parent (immediate, not batched)
                 if (onPriceUpdate) {
                     onPriceUpdate(lastCandle.close)
                 }
-
-                // Fit content
-                chartRef.current?.timeScale().fitContent()
             } else {
                 setError(data.error || 'No chart data available')
             }
