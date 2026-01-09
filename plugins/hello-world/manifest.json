@@ -1,0 +1,31 @@
+{
+    "name": "hello-world",
+    "version": "1.0.0",
+    "description": "Example plugin demonstrating the Jarvis plugin system",
+    "author": "Jarvis Team",
+    "entry_point": "main.py",
+    "permissions": [
+        "notifications"
+    ],
+    "dependencies": [],
+    "auto_enable": true,
+    "priority": 100,
+    "default_config": {
+        "greeting": "Hello from Jarvis!",
+        "interval_seconds": 60
+    },
+    "config_schema": {
+        "type": "object",
+        "properties": {
+            "greeting": {
+                "type": "string",
+                "description": "Custom greeting message"
+            },
+            "interval_seconds": {
+                "type": "integer",
+                "minimum": 10,
+                "description": "Interval for periodic greetings"
+            }
+        }
+    }
+}
