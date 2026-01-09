@@ -4,6 +4,73 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [3.6.0] - 2026-01-09
+
+### 🚀 **Ralph Wiggum Loop Enhancements**
+
+Major feature additions across trading, voice, and user experience.
+
+### 🆕 New Features
+
+#### Telegram Bot
+- **Inline Keyboard Navigation**: Interactive button menus replace text commands
+- **Paper Trading Commands**: `/paper wallet|buy|sell|history|reset`
+- Admin/user role-specific button layouts
+
+#### Voice Activation
+- **"Hey Jarvis" Wake Word**: Cross-platform wake word detection
+- Works on Windows, macOS, Linux without model training
+- Desktop launcher (`Jarvis-Voice.bat`) for testing
+
+#### Real-Time Data
+- **WebSocket Price Server**: True real-time price streaming on port 8766
+- Multi-client, per-token subscriptions
+- Frontend hooks: `useWebSocketPrice`, `useSingleTokenPrice`
+
+#### Position Tracking
+- **Position Tracker**: Full history and aggregate statistics
+- API endpoints: `/api/position/stats`, `/api/position/history`
+- Win rate, P&L, streaks, performance by symbol
+- Frontend `PositionStats` component
+
+#### Paper Trading
+- **Enhanced Paper Wallet**: Realistic balance simulation
+- Fee/slippage modeling (configurable bps)
+- Trade history logging with analytics
+
+#### Strategy Optimization
+- **Optuna Hyperparameter Tuning**: Automated strategy optimization
+- Support for SMA cross, RSI, Bollinger strategies
+- Multiple objectives: Sharpe ratio, profit factor, ROI
+
+### 📁 New Files
+
+| File | Description |
+|------|-------------|
+| `core/wake_word.py` | Cross-platform wake word detection |
+| `core/websocket_server.py` | WebSocket price streaming server |
+| `core/position_tracker.py` | Position history and statistics |
+| `core/paper_trading.py` | Enhanced paper trading engine |
+| `core/hyperparameter_tuning.py` | Optuna strategy optimization |
+| `frontend/src/hooks/useWebSocketPrice.js` | WebSocket price hook |
+| `frontend/src/hooks/usePositionStats.js` | Position stats hook |
+| `frontend/src/components/trading/PositionStats.jsx` | Stats display |
+
+### 🔧 Bug Fixes
+
+- Windows compatibility for process alive check in `state.py`
+- UTF-8 encoding for bot.py test reads
+
+### 📊 Metrics
+
+| Metric | Value |
+|--------|-------|
+| Tests passing | 1108 |
+| New features | 7 |
+| Files added | 8 |
+
+---
+
 # [3.5.2] - 2026-01-09
 
 ### 🔧 **Deprecation Fixes & Code Quality**
