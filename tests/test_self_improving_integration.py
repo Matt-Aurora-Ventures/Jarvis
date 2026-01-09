@@ -178,7 +178,7 @@ class TestTelegramIntegration:
         if not bot_path.exists():
             pytest.skip("Telegram bot file not found")
 
-        content = bot_path.read_text()
+        content = bot_path.read_text(encoding="utf-8")
 
         assert "async def brain" in content, "Bot should have brain command"
         assert "SELF_IMPROVING_AVAILABLE" in content, "Bot should have SELF_IMPROVING_AVAILABLE flag"
