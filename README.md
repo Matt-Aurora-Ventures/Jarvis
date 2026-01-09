@@ -7,9 +7,9 @@
 </p>
 
 ![Status](https://img.shields.io/badge/Status-ONLINE-success)
-![Version](https://img.shields.io/badge/Version-3.5.0-blue)
+![Version](https://img.shields.io/badge/Version-3.5.2-blue)
 ![Dashboard](https://img.shields.io/badge/Dashboard-v3.0-blue)
-![Tests](https://img.shields.io/badge/Tests-209%2B%20Passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-228%2B%20Passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/Coverage-25%25-yellow)
 ![Security](https://img.shields.io/badge/Security-IDS_ACTIVE-red)
 ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
@@ -796,9 +796,10 @@ Comprehensive test suite with coverage reporting.
 | `test_platform.py` | Cross-platform | ~30 | All adapters |
 | `test_cli.py` | CLI helpers | 11 | Utilities |
 | `test_self_improving.py` | Self-improving core | 29 | Full coverage |
+| `test_self_improving_integration.py` | SI integrations | 19 | Cross-module |
 | + 11 more | Various | 50+ | Integration |
 
-**Total: 209+ tests passing**
+**Total: 228+ tests passing**
 
 ### Running Tests
 
