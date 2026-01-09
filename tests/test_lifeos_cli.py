@@ -6,6 +6,7 @@ Tests cover:
 - Command handlers
 - Jarvis integration
 - Error handling
+- Unified CLI commands (doctor, diagnostics, trading, etc.)
 """
 
 import asyncio
@@ -459,3 +460,171 @@ class TestConfigCommand:
             result = await cli.cmd_config(args)
             assert result == 0
             mock_config.set.assert_called_with("general.name", "MyJarvis")
+
+
+# =============================================================================
+# Test Unified CLI Commands
+# =============================================================================
+
+class TestUnifiedCLICommands:
+    """Test unified CLI commands (doctor, diagnostics, etc.)."""
+
+    @pytest.fixture
+    def cli(self):
+        """Create CLI instance."""
+        return LifeOSCLI()
+
+    def test_parser_has_doctor_command(self):
+        """Parser should have doctor command."""
+        parser = create_parser()
+        args = parser.parse_args(["doctor"])
+        assert args.command == "doctor"
+
+    def test_parser_has_diagnostics_command(self):
+        """Parser should have diagnostics command."""
+        parser = create_parser()
+        args = parser.parse_args(["diagnostics"])
+        assert args.command == "diagnostics"
+
+    def test_parser_has_agents_command(self):
+        """Parser should have agents command."""
+        parser = create_parser()
+        args = parser.parse_args(["agents", "status"])
+        assert args.command == "agents"
+        assert args.agents_action == "status"
+
+    def test_parser_has_economics_command(self):
+        """Parser should have economics command."""
+        parser = create_parser()
+        args = parser.parse_args(["economics", "status"])
+        assert args.command == "economics"
+        assert args.economics_action == "status"
+
+    def test_parser_has_trading_command(self):
+        """Parser should have trading command."""
+        parser = create_parser()
+        args = parser.parse_args(["trading", "positions"])
+        assert args.command == "trading"
+        assert args.trading_action == "positions"
+
+    def test_parser_has_task_command(self):
+        """Parser should have task command."""
+        parser = create_parser()
+        args = parser.parse_args(["task", "list"])
+        assert args.command == "task"
+        assert args.task_action == "list"
+
+    def test_parser_has_objective_command(self):
+        """Parser should have objective command."""
+        parser = create_parser()
+        args = parser.parse_args(["objective", "list"])
+        assert args.command == "objective"
+        assert args.objective_action == "list"
+
+    def test_parser_has_secret_command(self):
+        """Parser should have secret command."""
+        parser = create_parser()
+        args = parser.parse_args(["secret", "--list"])
+        assert args.command == "secret"
+        assert args.list is True
+
+    def test_parser_has_log_command(self):
+        """Parser should have log command."""
+        parser = create_parser()
+        args = parser.parse_args(["log"])
+        assert args.command == "log"
+
+    def test_cmd_doctor_fallback(self, cli):
+        """Doctor command should have fallback when core unavailable."""
+        args = MagicMock()
+        args.verbose = False
+        args.fix = False
+
+        with patch("lifeos.cli.CORE_CLI_AVAILABLE", False):
+            with patch("lifeos.cli.core_cli", None):
+                with patch("core.providers.check_provider_health", return_value={}):
+                    with patch("core.secrets.list_configured_keys", return_value={}):
+                        result = cli.cmd_doctor(args)
+                        assert result == 0
+
+    def test_cmd_secret_list(self, cli):
+        """Secret list command should work."""
+        args = MagicMock()
+        args.list = True
+        args.set = None
+
+        with patch("lifeos.cli.CORE_CLI_AVAILABLE", False):
+            with patch("core.secrets.list_configured_keys", return_value={
+                "groq": True,
+                "openai": False,
+            }):
+                result = cli.cmd_secret(args)
+                assert result == 0
+
+    def test_cmd_trading_positions(self, cli):
+        """Trading positions command should delegate."""
+        args = MagicMock()
+        args.trading_action = "positions"
+
+        with patch("lifeos.cli.CORE_CLI_AVAILABLE", True):
+            with patch("lifeos.cli.core_cli") as mock_core:
+                mock_core.cmd_trading_positions = MagicMock(return_value=0)
+                result = cli.cmd_trading(args)
+                mock_core.cmd_trading_positions.assert_called_once()
+
+    def test_cmd_trading_no_action(self, cli):
+        """Trading with no action should show usage."""
+        args = MagicMock()
+        args.trading_action = None
+
+        with patch("lifeos.cli.CORE_CLI_AVAILABLE", True):
+            result = cli.cmd_trading(args)
+            assert result == 0
+
+
+class TestUnifiedCLIArgumentParsing:
+    """Test argument parsing for unified CLI."""
+
+    def test_doctor_verbose_flag(self):
+        """Doctor should accept verbose flag."""
+        parser = create_parser()
+        args = parser.parse_args(["doctor", "-v"])
+        assert args.verbose is True
+
+    def test_doctor_fix_flag(self):
+        """Doctor should accept fix flag."""
+        parser = create_parser()
+        args = parser.parse_args(["doctor", "--fix"])
+        assert args.fix is True
+
+    def test_diagnostics_dry_run(self):
+        """Diagnostics should accept dry-run flag."""
+        parser = create_parser()
+        args = parser.parse_args(["diagnostics", "--dry-run"])
+        assert args.dry_run is True
+
+    def test_agents_run_with_task(self):
+        """Agents run should accept task argument."""
+        parser = create_parser()
+        args = parser.parse_args(["agents", "run", "researcher", "--task", "analyze"])
+        assert args.agent_name == "researcher"
+        assert args.task == "analyze"
+
+    def test_task_add_with_priority(self):
+        """Task add should accept priority."""
+        parser = create_parser()
+        args = parser.parse_args(["task", "add", "Test task", "--priority", "8"])
+        assert args.description == "Test task"
+        assert args.priority == 8
+
+    def test_log_tail_option(self):
+        """Log should accept tail option."""
+        parser = create_parser()
+        args = parser.parse_args(["log", "--tail", "100"])
+        assert args.tail == 100
+
+    def test_log_follow_flag(self):
+        """Log should accept follow flag."""
+        parser = create_parser()
+        args = parser.parse_args(["log", "-f"])
+        assert args.follow is True

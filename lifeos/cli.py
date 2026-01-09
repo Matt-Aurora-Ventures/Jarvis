@@ -1,7 +1,7 @@
 """
 LifeOS CLI
 
-Command-line interface for the LifeOS Jarvis system.
+Unified command-line interface for the LifeOS Jarvis system.
 
 Provides commands for:
 - Starting/stopping the system
@@ -9,6 +9,12 @@ Provides commands for:
 - Status and diagnostics
 - Plugin management
 - Configuration
+- Doctor/health checks
+- Trading operations
+- Agent management
+- Economics tracking
+
+This is the single entry point for all LifeOS operations.
 """
 
 import argparse
@@ -19,6 +25,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from lifeos import Jarvis, Config, get_config
+
+# Import core CLI for delegation to advanced commands
+try:
+    from core import cli as core_cli
+    CORE_CLI_AVAILABLE = True
+except ImportError:
+    CORE_CLI_AVAILABLE = False
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -152,6 +165,72 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Version command
     version_parser = subparsers.add_parser("version", help="Show version")
+
+    # ==========================================================================
+    # Core CLI Commands (delegated to core/cli.py)
+    # ==========================================================================
+
+    # Doctor command - health diagnostics
+    doctor_parser = subparsers.add_parser("doctor", help="Run health diagnostics")
+    doctor_parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    doctor_parser.add_argument("--fix", action="store_true", help="Attempt to fix issues")
+
+    # Diagnostics command
+    diagnostics_parser = subparsers.add_parser("diagnostics", help="System diagnostics")
+    diagnostics_parser.add_argument("--dry-run", action="store_true", help="Preview only")
+
+    # Agents command
+    agents_parser = subparsers.add_parser("agents", help="Multi-agent system management")
+    agents_subparsers = agents_parser.add_subparsers(dest="agents_action")
+    agents_subparsers.add_parser("status", help="Show agent system status")
+    agents_run_parser = agents_subparsers.add_parser("run", help="Run specific agent")
+    agents_run_parser.add_argument("agent_name", help="Agent to run")
+    agents_run_parser.add_argument("--task", help="Task description")
+    agents_subparsers.add_parser("providers", help="Show provider availability")
+
+    # Economics command
+    economics_parser = subparsers.add_parser("economics", help="Economic dashboard and P&L")
+    economics_subparsers = economics_parser.add_subparsers(dest="economics_action")
+    economics_subparsers.add_parser("status", help="Show economic status")
+    economics_subparsers.add_parser("report", help="Generate P&L report")
+    economics_subparsers.add_parser("costs", help="Show cost breakdown")
+    economics_subparsers.add_parser("revenue", help="Show revenue breakdown")
+    economics_subparsers.add_parser("alerts", help="Show economic alerts")
+
+    # Trading positions command
+    trading_parser = subparsers.add_parser("trading", help="Trading operations")
+    trading_subparsers = trading_parser.add_subparsers(dest="trading_action")
+    trading_subparsers.add_parser("positions", help="List open positions")
+    trading_subparsers.add_parser("opportunities", help="Show trading opportunities")
+    trading_subparsers.add_parser("scores", help="Strategy scores")
+
+    # Task management command
+    task_parser = subparsers.add_parser("task", help="Task management")
+    task_subparsers = task_parser.add_subparsers(dest="task_action")
+    task_add = task_subparsers.add_parser("add", help="Add a task")
+    task_add.add_argument("description", help="Task description")
+    task_add.add_argument("--priority", type=int, default=5, help="Priority 1-10")
+    task_subparsers.add_parser("list", help="List tasks")
+    task_complete = task_subparsers.add_parser("complete", help="Complete a task")
+    task_complete.add_argument("task_id", help="Task ID")
+
+    # Objective management command
+    objective_parser = subparsers.add_parser("objective", help="Objective management")
+    objective_subparsers = objective_parser.add_subparsers(dest="objective_action")
+    obj_add = objective_subparsers.add_parser("add", help="Add an objective")
+    obj_add.add_argument("description", help="Objective description")
+    objective_subparsers.add_parser("list", help="List objectives")
+    objective_subparsers.add_parser("history", help="Show objective history")
+
+    # Secret management command
+    secret_parser = subparsers.add_parser("secret", help="Secret/API key management")
+    secret_parser.add_argument("--set", nargs=2, metavar=("KEY", "VALUE"), help="Set a secret")
+    secret_parser.add_argument("--list", action="store_true", help="List configured keys")
+
+    # Log command
+    log_parser = subparsers.add_parser("log", help="View system logs")
+    log_parser.add_argument("--tail", type=int, default=50, help="Number of lines")
+    log_parser.add_argument("--follow", "-f", action="store_true", help="Follow log output")
 
     return parser
 
@@ -496,9 +575,137 @@ class LifeOSCLI:
 
     def cmd_version(self, args: argparse.Namespace) -> int:
         """Show version."""
-        print("LifeOS v1.0.0")
+        from lifeos import __version__
+        print(f"LifeOS v{__version__}")
         print("Powered by Jarvis AI")
         return 0
+
+    # ==========================================================================
+    # Core CLI Command Handlers (delegated)
+    # ==========================================================================
+
+    def cmd_doctor(self, args: argparse.Namespace) -> int:
+        """Run health diagnostics."""
+        if CORE_CLI_AVAILABLE:
+            return core_cli.cmd_doctor(args)
+        else:
+            print("Running basic health check...")
+            # Fallback to basic checks
+            from core import providers, secrets
+            health = providers.check_provider_health()
+            print("\nProvider Health:")
+            for name, info in health.items():
+                status = "✓" if info.get("available") else "✗"
+                print(f"  {status} {name}: {info.get('message', 'Unknown')}")
+
+            keys = secrets.list_configured_keys()
+            print("\nConfigured Keys:")
+            for name, configured in keys.items():
+                status = "✓" if configured else "✗"
+                print(f"  {status} {name}")
+
+            return 0
+
+    def cmd_diagnostics(self, args: argparse.Namespace) -> int:
+        """Run system diagnostics."""
+        if CORE_CLI_AVAILABLE:
+            return core_cli.cmd_diagnostics(args)
+        else:
+            from core import diagnostics
+            data = diagnostics.run_diagnostics()
+            print("System Diagnostics")
+            print("=" * 40)
+            if "profile" in data and data["profile"]:
+                p = data["profile"]
+                print(f"OS: {p.os_version}")
+                print(f"CPU Load: {p.cpu_load:.2f}")
+                print(f"RAM: {p.ram_free_gb:.1f}/{p.ram_total_gb:.1f} GB free")
+                print(f"Disk Free: {p.disk_free_gb:.1f} GB")
+            return 0
+
+    def cmd_agents(self, args: argparse.Namespace) -> int:
+        """Manage multi-agent system."""
+        if CORE_CLI_AVAILABLE:
+            return core_cli.cmd_agents(args)
+        else:
+            print("Agent management requires core CLI")
+            return 1
+
+    def cmd_economics(self, args: argparse.Namespace) -> int:
+        """Economics dashboard."""
+        if CORE_CLI_AVAILABLE:
+            return core_cli.cmd_economics(args)
+        else:
+            print("Economics dashboard requires core CLI")
+            return 1
+
+    def cmd_trading(self, args: argparse.Namespace) -> int:
+        """Trading operations."""
+        if not CORE_CLI_AVAILABLE:
+            print("Trading operations require core CLI")
+            return 1
+
+        action = getattr(args, 'trading_action', None)
+        if action == "positions":
+            return core_cli.cmd_trading_positions(args)
+        elif action == "opportunities":
+            return core_cli.cmd_trading_opportunities(args)
+        elif action == "scores":
+            return core_cli.cmd_strategy_scores(args)
+        else:
+            print("Usage: lifeos trading [positions|opportunities|scores]")
+            return 0
+
+    def cmd_task(self, args: argparse.Namespace) -> int:
+        """Task management."""
+        if CORE_CLI_AVAILABLE:
+            return core_cli.cmd_task(args)
+        else:
+            print("Task management requires core CLI")
+            return 1
+
+    def cmd_objective(self, args: argparse.Namespace) -> int:
+        """Objective management."""
+        if CORE_CLI_AVAILABLE:
+            return core_cli.cmd_objective(args)
+        else:
+            print("Objective management requires core CLI")
+            return 1
+
+    def cmd_secret(self, args: argparse.Namespace) -> int:
+        """Secret/API key management."""
+        if CORE_CLI_AVAILABLE:
+            return core_cli.cmd_secret(args)
+        else:
+            from core import secrets
+            if args.list:
+                keys = secrets.list_configured_keys()
+                print("Configured Secrets:")
+                for name, configured in keys.items():
+                    status = "✓" if configured else "✗"
+                    print(f"  {status} {name}")
+            elif args.set:
+                key, value = args.set
+                secrets.set_key(key, value)
+                print(f"Set secret: {key}")
+            else:
+                print("Usage: lifeos secret [--list | --set KEY VALUE]")
+            return 0
+
+    def cmd_log(self, args: argparse.Namespace) -> int:
+        """View system logs."""
+        if CORE_CLI_AVAILABLE:
+            return core_cli.cmd_log(args)
+        else:
+            from pathlib import Path
+            log_path = Path.home() / ".lifeos" / "logs" / "jarvis.log"
+            if log_path.exists():
+                lines = log_path.read_text().splitlines()
+                for line in lines[-args.tail:]:
+                    print(line)
+            else:
+                print("No log file found")
+            return 0
 
     async def run(self, args: Optional[List[str]] = None) -> int:
         """Run the CLI."""
@@ -509,6 +716,7 @@ class LifeOSCLI:
             return 0
 
         handlers = {
+            # LifeOS native commands
             "start": self.cmd_start,
             "stop": self.cmd_stop,
             "status": self.cmd_status,
@@ -519,6 +727,16 @@ class LifeOSCLI:
             "persona": self.cmd_persona,
             "events": self.cmd_events,
             "version": lambda args: self.cmd_version(args),
+            # Core CLI delegated commands
+            "doctor": lambda args: self.cmd_doctor(args),
+            "diagnostics": lambda args: self.cmd_diagnostics(args),
+            "agents": lambda args: self.cmd_agents(args),
+            "economics": lambda args: self.cmd_economics(args),
+            "trading": lambda args: self.cmd_trading(args),
+            "task": lambda args: self.cmd_task(args),
+            "objective": lambda args: self.cmd_objective(args),
+            "secret": lambda args: self.cmd_secret(args),
+            "log": lambda args: self.cmd_log(args),
         }
 
         handler = handlers.get(parsed.command)
