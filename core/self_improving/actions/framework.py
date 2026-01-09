@@ -20,7 +20,7 @@ Key principles:
 import json
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Callable, Type
 from dataclasses import dataclass, field
 from enum import Enum
@@ -65,7 +65,7 @@ class ActionResult:
     data: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
     reversible: bool = False
-    executed_at: datetime = field(default_factory=datetime.utcnow)
+    executed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -209,7 +209,7 @@ class Action(ABC):
         if context is None:
             context = ActionContext()
 
-        action_id = f"act_{datetime.utcnow().timestamp()}"
+        action_id = f"act_{datetime.now(timezone.utc).timestamp()}"
 
         # Check permission
         permission = self.check_permission()
@@ -348,7 +348,7 @@ class ActionRegistry:
             return ActionResult(
                 success=False,
                 message=f"Unknown action: {action_name}",
-                action_id=f"err_{datetime.utcnow().timestamp()}",
+                action_id=f"err_{datetime.now(timezone.utc).timestamp()}",
                 action_type=ActionType.EXECUTE,
                 domain="general",
                 error="Action not found",
@@ -410,11 +410,11 @@ class ReminderAction(Action):
         message = params["message"]
         when = params["when"]
 
-        reminder_id = f"rem_{datetime.utcnow().timestamp()}"
+        reminder_id = f"rem_{datetime.now(timezone.utc).timestamp()}"
         self._reminders[reminder_id] = {
             "message": message,
             "when": when,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "context": context.metadata,
         }
 
@@ -476,12 +476,12 @@ class DraftAction(Action):
         content = params["content"]
         recipient = params.get("recipient")
 
-        draft_id = f"draft_{datetime.utcnow().timestamp()}"
+        draft_id = f"draft_{datetime.now(timezone.utc).timestamp()}"
         self._drafts[draft_id] = {
             "type": content_type,
             "content": content,
             "recipient": recipient,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "status": "pending_review",
         }
 
@@ -541,7 +541,7 @@ class ResearchAction(Action):
         return ActionResult(
             success=True,
             message=f"Research initiated for: {query}",
-            action_id=f"res_{datetime.utcnow().timestamp()}",
+            action_id=f"res_{datetime.now(timezone.utc).timestamp()}",
             action_type=self.action_type,
             domain=self.domain,
             data={"query": query, "status": "in_progress"},

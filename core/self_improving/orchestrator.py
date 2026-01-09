@@ -17,7 +17,7 @@ The orchestrator provides:
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
@@ -93,7 +93,7 @@ class SelfImprovingOrchestrator:
         self.actions = create_default_registry(self.memory, self.trust)
 
         # State
-        self._initialized_at = datetime.utcnow()
+        self._initialized_at = datetime.now(timezone.utc)
         self._last_reflection: Optional[datetime] = None
         self._session_count = 0
 
@@ -141,7 +141,7 @@ class SelfImprovingOrchestrator:
         # Format for prompt
         context = {
             "query": user_query,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         if include_facts and context_bundle.facts:
@@ -186,7 +186,7 @@ class SelfImprovingOrchestrator:
     def start_session(self, session_id: Optional[str] = None) -> str:
         """Start a new conversation session."""
         if not session_id:
-            session_id = f"session_{datetime.utcnow().timestamp()}"
+            session_id = f"session_{datetime.now(timezone.utc).timestamp()}"
         self._session_count += 1
         logger.info(f"Started session: {session_id}")
         return session_id
@@ -325,7 +325,7 @@ class SelfImprovingOrchestrator:
         """
         logger.info("Starting nightly reflection cycle")
         results = {
-            "started_at": datetime.utcnow().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "reflection": None,
             "predictions_resolved": 0,
         }
@@ -342,7 +342,7 @@ class SelfImprovingOrchestrator:
                 "reflections_generated": len(batch.reflections),
                 "duration_seconds": batch.duration_seconds,
             }
-            self._last_reflection = datetime.utcnow()
+            self._last_reflection = datetime.now(timezone.utc)
         except Exception as e:
             logger.error(f"Reflection cycle failed: {e}")
             results["reflection"] = {"error": str(e)}
@@ -351,7 +351,7 @@ class SelfImprovingOrchestrator:
         unresolved = self.memory.get_unresolved_predictions(limit=10)
         # In real implementation, would check if predictions can be resolved
 
-        results["completed_at"] = datetime.utcnow().isoformat()
+        results["completed_at"] = datetime.now(timezone.utc).isoformat()
         logger.info(f"Nightly cycle complete: {results}")
 
         return results
@@ -360,7 +360,7 @@ class SelfImprovingOrchestrator:
         """Synchronous version of run_nightly_cycle."""
         logger.info("Starting nightly reflection cycle (sync)")
         results = {
-            "started_at": datetime.utcnow().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "reflection": None,
         }
 
@@ -375,12 +375,12 @@ class SelfImprovingOrchestrator:
                 "reflections_generated": len(batch.reflections),
                 "duration_seconds": batch.duration_seconds,
             }
-            self._last_reflection = datetime.utcnow()
+            self._last_reflection = datetime.now(timezone.utc)
         except Exception as e:
             logger.error(f"Reflection cycle failed: {e}")
             results["reflection"] = {"error": str(e)}
 
-        results["completed_at"] = datetime.utcnow().isoformat()
+        results["completed_at"] = datetime.now(timezone.utc).isoformat()
         return results
 
     # =========================================================================
@@ -396,7 +396,7 @@ class SelfImprovingOrchestrator:
 
         return {
             "initialized_at": self._initialized_at.isoformat(),
-            "uptime_hours": (datetime.utcnow() - self._initialized_at).total_seconds() / 3600,
+            "uptime_hours": (datetime.now(timezone.utc) - self._initialized_at).total_seconds() / 3600,
             "sessions": self._session_count,
             "last_reflection": self._last_reflection.isoformat() if self._last_reflection else None,
             "memory": memory_stats,

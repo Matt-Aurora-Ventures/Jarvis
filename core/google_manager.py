@@ -5,7 +5,7 @@ Autonomous management of Google services.
 
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -157,7 +157,7 @@ class GoogleManager:
             calendar_id = "primary"
             
             # Time range
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             end_time = now + timedelta(days=days_ahead)
             
             # List events

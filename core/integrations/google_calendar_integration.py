@@ -1,7 +1,7 @@
 # This is /home/ubuntu/copri_app/src/integrations/google_calendar_integration.py
 import requests
 import json
-import datetime
+from datetime import datetime, timezone
 
 # Placeholder for Google API Client Library usage
 # from google.oauth2.credentials import Credentials

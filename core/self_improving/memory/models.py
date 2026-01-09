@@ -10,7 +10,7 @@ These dataclasses represent the core memory types:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 import json
 
@@ -22,8 +22,8 @@ class Entity:
     name: str
     entity_type: str  # person, project, company, concept
     attributes: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     id: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -46,8 +46,8 @@ class Entity:
             name=row.get("name", ""),
             entity_type=row.get("entity_type", "unknown"),
             attributes=attrs,
-            created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else datetime.utcnow(),
-            updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else datetime.utcnow(),
+            created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else lambda: datetime.now(timezone.utc)(),
+            updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else lambda: datetime.now(timezone.utc)(),
         )
 
 
@@ -59,7 +59,7 @@ class Fact:
     fact: str  # The actual knowledge
     confidence: float = 0.8  # 0.0-1.0
     source: str = "conversation"  # How we learned this
-    learned_at: datetime = field(default_factory=datetime.utcnow)
+    learned_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     entity_id: Optional[int] = None
     id: Optional[int] = None
 
@@ -83,7 +83,7 @@ class Fact:
             fact=row.get("fact", ""),
             confidence=float(row.get("confidence", 0.8)),
             source=row.get("source", "unknown"),
-            learned_at=datetime.fromisoformat(row["learned_at"]) if row.get("learned_at") else datetime.utcnow(),
+            learned_at=datetime.fromisoformat(row["learned_at"]) if row.get("learned_at") else lambda: datetime.now(timezone.utc)(),
         )
 
 
@@ -96,7 +96,7 @@ class Reflection:
     why_failed: str  # Analysis of the failure
     lesson: str  # Concrete rule to remember
     new_approach: str = ""  # How to handle this differently
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     applied: bool = False  # Has this been used?
     applied_count: int = 0  # How many times applied
     id: Optional[int] = None
@@ -123,7 +123,7 @@ class Reflection:
             why_failed=row.get("why_failed", ""),
             lesson=row.get("lesson", ""),
             new_approach=row.get("new_approach", ""),
-            created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else datetime.utcnow(),
+            created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else lambda: datetime.now(timezone.utc)(),
             applied=bool(row.get("applied", 0)),
             applied_count=int(row.get("applied_count", 0)),
         )
@@ -139,7 +139,7 @@ class Prediction:
     deadline: Optional[datetime] = None  # When outcome should be known
     outcome: Optional[str] = None  # What actually happened
     was_correct: Optional[bool] = None  # Did we get it right?
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     resolved_at: Optional[datetime] = None
     id: Optional[int] = None
 
@@ -166,7 +166,7 @@ class Prediction:
             deadline=datetime.fromisoformat(row["deadline"]) if row.get("deadline") else None,
             outcome=row.get("outcome"),
             was_correct=bool(row["was_correct"]) if row.get("was_correct") is not None else None,
-            created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else datetime.utcnow(),
+            created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else lambda: datetime.now(timezone.utc)(),
             resolved_at=datetime.fromisoformat(row["resolved_at"]) if row.get("resolved_at") else None,
         )
 
@@ -179,7 +179,7 @@ class Interaction:
     jarvis_response: str
     feedback: Optional[str] = None  # positive, negative, confused, retry
     session_id: Optional[str] = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Dict[str, Any] = field(default_factory=dict)
     id: Optional[int] = None
 
@@ -205,7 +205,7 @@ class Interaction:
             jarvis_response=row.get("jarvis_response", ""),
             feedback=row.get("feedback"),
             session_id=row.get("session_id"),
-            timestamp=datetime.fromisoformat(row["timestamp"]) if row.get("timestamp") else datetime.utcnow(),
+            timestamp=datetime.fromisoformat(row["timestamp"]) if row.get("timestamp") else lambda: datetime.now(timezone.utc)(),
             metadata=meta,
         )
 

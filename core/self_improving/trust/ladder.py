@@ -332,7 +332,7 @@ class TrustManager:
         state.successes += 1
         state.consecutive_successes += 1
         state.consecutive_failures = 0
-        state.last_success = datetime.utcnow()
+        state.last_success = datetime.now(timezone.utc)
         self._update_accuracy(state)
 
         # Check for promotion
@@ -372,7 +372,7 @@ class TrustManager:
         state.failures += 1
         state.consecutive_failures += 1
         state.consecutive_successes = 0
-        state.last_failure = datetime.utcnow()
+        state.last_failure = datetime.now(timezone.utc)
         self._update_accuracy(state)
 
         # Major failure = immediate demotion

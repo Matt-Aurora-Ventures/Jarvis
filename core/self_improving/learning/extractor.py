@@ -13,7 +13,7 @@ This module MUST use Claude API for extraction (local models aren't reliable eno
 import json
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 
@@ -193,7 +193,7 @@ class LearningExtractor:
             logger.warning("No LLM client set - skipping extraction")
             return ExtractionResult()
 
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         conversation_text = self._format_conversation(messages)
 
         prompt = EXTRACTION_PROMPT.format(conversation=conversation_text)
@@ -206,7 +206,7 @@ class LearningExtractor:
             )
             response_text = response.content[0].text
             result = self._parse_extraction(response_text)
-            result.extraction_time = (datetime.utcnow() - start_time).total_seconds()
+            result.extraction_time = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._extraction_count += 1
 
             logger.info(
@@ -235,7 +235,7 @@ class LearningExtractor:
             logger.warning("No LLM client set - skipping extraction")
             return ExtractionResult()
 
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         conversation_text = self._format_conversation(messages)
 
         prompt = EXTRACTION_PROMPT.format(conversation=conversation_text)
@@ -248,7 +248,7 @@ class LearningExtractor:
             )
             response_text = response.content[0].text
             result = self._parse_extraction(response_text)
-            result.extraction_time = (datetime.utcnow() - start_time).total_seconds()
+            result.extraction_time = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._extraction_count += 1
 
             return result

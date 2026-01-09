@@ -15,7 +15,7 @@ Features:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from enum import Enum
 import logging
@@ -445,7 +445,7 @@ VERSION:2.0
 PRODID:-//Jarvis//Calendar//EN
 BEGIN:VEVENT
 UID:{uid}
-DTSTAMP:{datetime.utcnow().strftime(dtformat)}
+DTSTAMP:{datetime.now(timezone.utc).strftime(dtformat)}
 DTSTART:{event.start.strftime(dtformat)}
 DTEND:{event.end.strftime(dtformat)}
 SUMMARY:{event.title}

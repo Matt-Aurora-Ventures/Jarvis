@@ -8,7 +8,7 @@ import json
 import os
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -158,7 +158,7 @@ def _format_dex_backtests(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         window_days = entry.get("window_days") or 30
         windows = entry.get("windows") or 3
         total_days = int(window_days) * int(windows)
-        end = datetime.utcnow().date()
+        end = datetime.now(timezone.utc).date()
         start = end - timedelta(days=total_days)
         window_rois = strategy.get("window_rois") or []
         win_rate = 0.0
@@ -742,7 +742,7 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
             def _run_backtests() -> None:
                 status = {
                     "running": True,
-                    "started_at": datetime.utcnow().isoformat(),
+                    "started_at": datetime.now(timezone.utc).isoformat(),
                     "completed_at": None,
                     "error": None,
                 }
@@ -796,7 +796,7 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
                         for entry in top5:
                             solana_dex_backtest.write_bot_config(entry)
 
-                    status["completed_at"] = datetime.utcnow().isoformat()
+                    status["completed_at"] = datetime.now(timezone.utc).isoformat()
                 except Exception as exc:
                     status["error"] = str(exc)
                 finally:
@@ -1388,7 +1388,7 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
             self._send_json({
                 "tokens": tokens,
                 "count": len(tokens),
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             })
         except Exception as e:
             self._send_json({"error": str(e), "tokens": []}, 500)

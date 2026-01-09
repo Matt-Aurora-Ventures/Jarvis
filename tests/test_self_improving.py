@@ -246,7 +246,7 @@ class TestProactiveEngine:
         engine = ProactiveEngine(memory_store, trust_manager)
 
         # Simulate having made a suggestion
-        engine._last_suggestion_time = datetime.utcnow()
+        engine._last_suggestion_time = datetime.now(timezone.utc)
 
         assert engine._is_in_cooldown()
 
@@ -256,7 +256,7 @@ class TestProactiveEngine:
         engine._daily_count = engine.MAX_DAILY_SUGGESTIONS
 
         # Should not suggest
-        context = {"time": datetime.utcnow().isoformat()}
+        context = {"time": datetime.now(timezone.utc).isoformat()}
         # Note: This would return None due to limit
         # Can't fully test without LLM client
 

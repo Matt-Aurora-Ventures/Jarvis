@@ -7,7 +7,7 @@ Uses SQLite for persistence.
 import sqlite3
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -94,7 +94,7 @@ class SubscriberDB:
         """Add or reactivate a subscriber."""
         conn = sqlite3.connect(self.db_path)
         try:
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             conn.execute(
                 """
                 INSERT INTO subscribers (user_id, chat_id, username, subscribed_at, active)
@@ -208,7 +208,7 @@ class SubscriberDB:
                 return row[0]
 
             # Create new wallet
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             conn.execute(
                 "INSERT INTO paper_wallets (user_id, balance_sol, created_at) VALUES (?, 100.0, ?)",
                 (user_id, now),

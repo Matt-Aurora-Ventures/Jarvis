@@ -16,7 +16,7 @@ suggestions when appropriate.
 import json
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -48,7 +48,7 @@ class Suggestion:
     action_if_approved: Optional[str] = None
     domain: str = "general"
     context: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: Optional[datetime] = None
     id: Optional[str] = None
 
@@ -67,7 +67,7 @@ class Suggestion:
 
     def is_expired(self) -> bool:
         if self.expires_at:
-            return datetime.utcnow() > self.expires_at
+            return datetime.now(timezone.utc) > self.expires_at
         return False
 
 
@@ -79,7 +79,7 @@ class SuggestionOutcome:
     accepted: bool
     dismissed: bool = False
     feedback: Optional[str] = None
-    recorded_at: datetime = field(default_factory=datetime.utcnow)
+    recorded_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # Prompt for generating suggestions
@@ -160,7 +160,7 @@ class ProactiveEngine:
         self._outcomes: List[SuggestionOutcome] = []
         self._last_suggestion_time: Optional[datetime] = None
         self._daily_count = 0
-        self._daily_reset = datetime.utcnow().date()
+        self._daily_reset = datetime.now(timezone.utc).date()
 
     def set_llm_client(self, client: Any):
         """Set the LLM client."""
@@ -168,7 +168,7 @@ class ProactiveEngine:
 
     def _reset_daily_count_if_needed(self):
         """Reset daily count at midnight."""
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
         if today > self._daily_reset:
             self._daily_count = 0
             self._daily_reset = today
@@ -178,7 +178,7 @@ class ProactiveEngine:
         if not self._last_suggestion_time:
             return False
         cooldown_end = self._last_suggestion_time + timedelta(hours=self.COOLDOWN_HOURS)
-        return datetime.utcnow() < cooldown_end
+        return datetime.now(timezone.utc) < cooldown_end
 
     def _get_allowed_actions(self, domain: str) -> str:
         """Get description of allowed actions for trust level."""
@@ -239,13 +239,13 @@ class ProactiveEngine:
             suggestion_type = SuggestionType(data.get("type", "insight"))
 
             return Suggestion(
-                id=f"sug_{datetime.utcnow().timestamp()}",
+                id=f"sug_{datetime.now(timezone.utc).timestamp()}",
                 message=data["message"],
                 suggestion_type=suggestion_type,
                 confidence=confidence,
                 action_if_approved=data.get("action_if_approved"),
                 domain=domain,
-                expires_at=datetime.utcnow() + timedelta(hours=4),
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=4),
             )
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
@@ -314,7 +314,7 @@ class ProactiveEngine:
 
             if suggestion:
                 self._recent_suggestions.append(suggestion)
-                self._last_suggestion_time = datetime.utcnow()
+                self._last_suggestion_time = datetime.now(timezone.utc)
                 self._daily_count += 1
 
                 logger.info(
@@ -370,7 +370,7 @@ class ProactiveEngine:
 
             if suggestion:
                 self._recent_suggestions.append(suggestion)
-                self._last_suggestion_time = datetime.utcnow()
+                self._last_suggestion_time = datetime.now(timezone.utc)
                 self._daily_count += 1
 
             return suggestion

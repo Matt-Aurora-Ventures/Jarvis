@@ -7,7 +7,7 @@ import json
 import subprocess
 import time
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -304,7 +304,7 @@ def boot_sequence() -> Dict[str, Any]:
 
 def _build_boot_report(state: Dict[str, Any], boot_result: Dict[str, Any]) -> Dict[str, Any]:
     BOOT_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow().isoformat()
+    timestamp = datetime.now(timezone.utc).isoformat()
 
     report: Dict[str, Any] = {
         "timestamp": timestamp,

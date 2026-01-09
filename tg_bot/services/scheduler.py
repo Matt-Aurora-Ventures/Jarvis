@@ -4,7 +4,7 @@ Scheduler for hourly sentiment digests.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -75,7 +75,7 @@ class DigestScheduler:
             analyzed.sort(key=lambda x: x[1].score, reverse=True)
 
             # Build digest message
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             message = f"""
 *Jarvis Hourly Digest*
 {now.strftime('%B %d, %Y')} | {now.strftime('%H:%M')} UTC

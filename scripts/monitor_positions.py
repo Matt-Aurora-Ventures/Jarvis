@@ -10,7 +10,7 @@ import asyncio
 import json
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import aiohttp
 
 EXIT_FILE = Path.home() / '.lifeos' / 'trading' / 'exit_intents.json'
@@ -45,7 +45,7 @@ def load_intents():
         return []
 
 def log(msg):
-    ts = datetime.utcnow().isoformat()
+    ts = datetime.now(timezone.utc).isoformat()
     line = f"[{ts}] {msg}\n"
     print(line, end='')
     try:

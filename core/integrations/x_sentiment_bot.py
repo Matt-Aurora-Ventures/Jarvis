@@ -32,7 +32,7 @@ import os
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -389,7 +389,7 @@ class XSentimentBot:
             return False
 
         times = schedule.get("times", [])
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         current_time = now.strftime("%H:%M")
 
         return current_time in times
@@ -399,7 +399,7 @@ class XSentimentBot:
         last_run_minute = -1
 
         while self._running:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             current_minute = now.hour * 60 + now.minute
 
             if current_minute != last_run_minute and self._should_run_now():

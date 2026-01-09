@@ -255,7 +255,7 @@ class MemoryStore:
                     entity.entity_type,
                     json.dumps(entity.attributes),
                     entity.created_at.isoformat(),
-                    datetime.utcnow().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                 ),
             )
             return cursor.lastrowid
@@ -375,7 +375,7 @@ class MemoryStore:
                 UPDATE facts SET fact = ?, source = ?, learned_at = ?
                 WHERE entity = ? AND fact = ?
                 """,
-                (new_fact, source, datetime.utcnow().isoformat(), entity, old_fact),
+                (new_fact, source, datetime.now(timezone.utc).isoformat(), entity, old_fact),
             )
             return cursor.rowcount > 0
 
@@ -509,7 +509,7 @@ class MemoryStore:
                 SET outcome = ?, was_correct = ?, resolved_at = ?
                 WHERE id = ?
                 """,
-                (outcome, int(was_correct), datetime.utcnow().isoformat(), prediction_id),
+                (outcome, int(was_correct), datetime.now(timezone.utc).isoformat(), prediction_id),
             )
             return cursor.rowcount > 0
 
@@ -517,7 +517,7 @@ class MemoryStore:
         self, domain: Optional[str] = None, days: int = 30
     ) -> Dict[str, Any]:
         """Calculate prediction accuracy for trust calibration."""
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
         if domain:
             cursor = self.conn.execute(
@@ -606,7 +606,7 @@ class MemoryStore:
         self, hours: int = 24, limit: int = 50
     ) -> List[Interaction]:
         """Get recent interactions."""
-        cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
         cursor = self.conn.execute(
             """
             SELECT * FROM interactions
@@ -622,7 +622,7 @@ class MemoryStore:
         self, hours: int = 24, limit: int = 20
     ) -> List[Interaction]:
         """Get interactions with negative feedback or retries."""
-        cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
         cursor = self.conn.execute(
             """
             SELECT * FROM interactions
@@ -716,7 +716,7 @@ class MemoryStore:
                     level = excluded.level,
                     updated_at = excluded.updated_at
                 """,
-                (domain, level, datetime.utcnow().isoformat()),
+                (domain, level, datetime.now(timezone.utc).isoformat()),
             )
             return True
 
@@ -732,7 +732,7 @@ class MemoryStore:
                     last_success = excluded.last_success,
                     updated_at = excluded.updated_at
                 """,
-                (domain, datetime.utcnow().isoformat(), datetime.utcnow().isoformat()),
+                (domain, datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat()),
             )
             cursor = conn.execute(
                 "SELECT successes, failures FROM trust WHERE domain = ?",
@@ -753,7 +753,7 @@ class MemoryStore:
                     last_failure = excluded.last_failure,
                     updated_at = excluded.updated_at
                 """,
-                (domain, datetime.utcnow().isoformat(), datetime.utcnow().isoformat()),
+                (domain, datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat()),
             )
             cursor = conn.execute(
                 "SELECT successes, failures FROM trust WHERE domain = ?",
@@ -805,7 +805,7 @@ class MemoryStore:
                     value = excluded.value,
                     updated_at = excluded.updated_at
                 """,
-                (key, json.dumps(value), datetime.utcnow().isoformat()),
+                (key, json.dumps(value), datetime.now(timezone.utc).isoformat()),
             )
             return True
 
@@ -822,7 +822,7 @@ class MemoryStore:
             stats[f"{table}_count"] = cursor.fetchone()["count"]
 
         # Recent activity
-        cutoff = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
         cursor = self.conn.execute(
             "SELECT COUNT(*) as count FROM interactions WHERE timestamp > ?",
             (cutoff,),

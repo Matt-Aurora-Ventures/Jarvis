@@ -250,7 +250,7 @@ class TradingDecisionMatrix:
             Dict with strategies, categories, regime mapping, and system prompt
         """
         return {
-            "export_timestamp": datetime.utcnow().isoformat(),
+            "export_timestamp": datetime.now(timezone.utc).isoformat(),
             "system_name": "LifeOS Trading Decision Matrix",
             "version": "2.0.0",
             "strategies": [s.to_dict() for s in self._strategies.values()],

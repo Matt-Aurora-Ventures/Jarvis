@@ -20,7 +20,7 @@ beats model fine-tuning for fast, continuous improvement.
 import json
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 
@@ -101,7 +101,7 @@ class ReflectionBatch:
 
     reflections: List[Reflection] = field(default_factory=list)
     interactions_analyzed: int = 0
-    cycle_time: datetime = field(default_factory=datetime.utcnow)
+    cycle_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     duration_seconds: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
@@ -205,7 +205,7 @@ class ReflexionEngine:
         Returns:
             ReflectionBatch with generated reflections
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         batch = ReflectionBatch(cycle_time=start_time)
 
         if not self.llm_client:
@@ -245,7 +245,7 @@ class ReflexionEngine:
                     batch.reflections.append(reflection)
                     self._reflection_count += 1
 
-            batch.duration_seconds = (datetime.utcnow() - start_time).total_seconds()
+            batch.duration_seconds = (datetime.now(timezone.utc) - start_time).total_seconds()
 
             logger.info(
                 f"Reflection cycle complete: analyzed {len(problems)} interactions, "
@@ -264,7 +264,7 @@ class ReflexionEngine:
         use_opus: bool = True,
     ) -> ReflectionBatch:
         """Synchronous version of run_reflection_cycle."""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         batch = ReflectionBatch(cycle_time=start_time)
 
         if not self.llm_client:
@@ -301,7 +301,7 @@ class ReflexionEngine:
                     batch.reflections.append(reflection)
                     self._reflection_count += 1
 
-            batch.duration_seconds = (datetime.utcnow() - start_time).total_seconds()
+            batch.duration_seconds = (datetime.now(timezone.utc) - start_time).total_seconds()
 
         except Exception as e:
             logger.error(f"Reflection cycle failed: {e}")

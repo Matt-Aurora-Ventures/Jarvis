@@ -27,7 +27,7 @@ import os
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -229,7 +229,7 @@ class TelegramSentimentBot:
         use_emojis = self.config.get("format", {}).get("use_emojis", True)
 
         # Header
-        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         lines = [
             f"{'🤖' if use_emojis else ''} *Jarvis Sentiment Report*",
             f"_{now}_",
@@ -319,7 +319,7 @@ class TelegramSentimentBot:
             return False
 
         times = schedule.get("times", [])
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         current_time = now.strftime("%H:%M")
 
         # Check if current time matches any scheduled time (within 1 minute)
@@ -334,7 +334,7 @@ class TelegramSentimentBot:
         last_run_minute = -1
 
         while self._running:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             current_minute = now.hour * 60 + now.minute
 
             # Only check once per minute
