@@ -7,9 +7,9 @@
 </p>
 
 ![Status](https://img.shields.io/badge/Status-ONLINE-success)
-![Version](https://img.shields.io/badge/Version-3.5.2-blue)
+![Version](https://img.shields.io/badge/Version-3.6.0-blue)
 ![Dashboard](https://img.shields.io/badge/Dashboard-v3.0-blue)
-![Tests](https://img.shields.io/badge/Tests-228%2B%20Passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-1108%20Passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/Coverage-25%25-yellow)
 ![Security](https://img.shields.io/badge/Security-IDS_ACTIVE-red)
 ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
@@ -633,17 +633,23 @@ Every night Jarvis can:
 - **Error analysis**: Learns from failures and fixes itself
 - **Continuous iteration**: Gets smarter every day
 
-### 🧠 Self-Improving Core (v3.5) - **NEW**
+### 🧠 Self-Improving Core (v3.5/v3.6) - **ENHANCED**
 
-A complete self-improvement system based on the Reflexion pattern (NeurIPS 2023):
+A complete self-improvement system based on the Reflexion pattern (NeurIPS 2023), now with v2 enhancements:
 
-**Architecture** (`core/self_improving/`):
+**Core Architecture** (`core/self_improving/`):
 - **SQLite Memory Store**: Facts, reflections, predictions, interactions - no vector DB needed
 - **Trust Ladder**: 5-level gradual autonomy (STRANGER → OPERATOR)
 - **Reflexion Engine**: Nightly self-improvement via verbal reflection
 - **Proactive Engine**: Context-aware suggestions with rate limiting
 - **Learning Extractor**: Extracts facts/preferences from conversations
 - **Action Framework**: Trust-gated autonomous actions
+
+**v2 Enhancements** (v3.6):
+- **Chain-of-Thought Reasoning** (`reasoning/chain_of_thought.py`): Structured step-by-step reasoning with CoT prompts
+- **BM25 Retrieval** (`memory/retrieval.py`): Okapi BM25+ ranking for intelligent memory search (no embeddings needed)
+- **Conversation Summarization** (`memory/summarizer.py`): Extractive + abstractive summarization for context compression
+- **Conversation State Machine** (`conversation/state_machine.py`): Multi-turn tracking with goals, slots, and transitions
 
 **Trust Levels**:
 | Level | Name | Permissions |
@@ -656,22 +662,23 @@ A complete self-improvement system based on the Reflexion pattern (NeurIPS 2023)
 
 **Usage**:
 ```python
-from core.self_improving import create_orchestrator
+from core.self_improving import integration
 
-# Initialize
-orchestrator = create_orchestrator(
-    db_path="data/jarvis_memory.db",
-    llm_client=anthropic_client,
-)
+# Get context with BM25-ranked facts and lessons
+context = integration.enrich_context_v2(user_query, session_id)
 
-# Before responding - get context with past lessons
-context = orchestrator.build_response_context(user_query)
+# Add Chain-of-Thought reasoning to prompts
+enhanced_prompt = integration.enhance_with_reasoning(prompt, user_query)
 
-# After conversation - extract learnings
-orchestrator.learn_from_conversation_sync(messages, session_id)
+# Track conversation state and goals
+trigger, state = integration.process_conversation_input(user_input, session_id)
+integration.add_conversation_goal(session_id, "help_user", "Assist with deployment")
 
-# Nightly at 3am - run self-improvement cycle
-orchestrator.run_nightly_cycle_sync()
+# Summarize conversation for memory efficiency
+summary = integration.summarize_session(messages, session_id)
+
+# Record interaction and extract learnings
+integration.record_conversation(user_input, response, session_id, extract_learnings=True)
 ```
 
 **Key Insights**:
@@ -795,11 +802,12 @@ Comprehensive test suite with coverage reporting.
 | `test_conversation.py` | Chat logic | ~35 | Entity extraction |
 | `test_platform.py` | Cross-platform | ~30 | All adapters |
 | `test_cli.py` | CLI helpers | 11 | Utilities |
-| `test_self_improving.py` | Self-improving core | 29 | Full coverage |
+| `test_self_improving.py` | Self-improving core | 46 | Full coverage |
 | `test_self_improving_integration.py` | SI integrations | 19 | Cross-module |
+| `test_self_improving_v2.py` | SI v2 features | 43 | CoT, BM25, State |
 | + 11 more | Various | 50+ | Integration |
 
-**Total: 228+ tests passing**
+**Total: 1108 tests passing**
 
 ### Running Tests
 
