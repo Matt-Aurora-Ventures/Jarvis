@@ -304,6 +304,10 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
         # Phase 1 Enhancement: Live Position Monitoring + DeFi Tools
         elif path == "/api/position/active":
             self._handle_position_active()
+        elif path == "/api/position/stats":
+            self._handle_position_stats()
+        elif path == "/api/position/history":
+            self._handle_position_history()
         elif path.startswith("/api/tools/token/"):
             mint = path.split("/api/tools/token/")[1]
             self._handle_tools_token(mint)
@@ -1646,6 +1650,39 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
             else:
                 self._send_json({"error": "No active position found"}, 400)
                 
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_position_stats(self):
+        """Get position tracking statistics."""
+        try:
+            from core import position_tracker
+            stats = position_tracker.get_stats()
+            self._send_json({
+                "success": True,
+                "stats": stats.to_dict() if hasattr(stats, "to_dict") else stats.__dict__,
+            })
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_position_history(self):
+        """Get position history."""
+        try:
+            from core import position_tracker
+            limit = 50
+            try:
+                query = parse_qs(urlparse(self.path).query)
+                if "limit" in query:
+                    limit = int(query["limit"][0])
+            except Exception:
+                pass
+
+            history = position_tracker.get_history(limit=limit)
+            self._send_json({
+                "success": True,
+                "positions": [p.to_dict() if hasattr(p, "to_dict") else p.__dict__ for p in history],
+                "count": len(history),
+            })
         except Exception as e:
             self._send_json({"error": str(e)}, 500)
 
