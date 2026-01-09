@@ -4,6 +4,55 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [3.2.0] - 2026-01-08
+
+### 🔐 **Wallet Infrastructure v2.5 - Institutional-Grade Solana Execution**
+
+This release introduces comprehensive wallet infrastructure for production-ready Solana trading.
+
+### 🆕 New Features
+
+**Wallet Infrastructure** (`core/wallet_infrastructure.py` ~700 lines):
+- **Address Lookup Tables (ALTs)**: Transaction compression reducing account size from 32 bytes to 1 byte
+- **Dual-Fee System**: 4-tier priority system (LOW/MEDIUM/HIGH/URGENT) with Jito tip integration
+- **Transaction Simulation**: Pre-sign validation with compute unit estimation and error classification
+- **Blockhash Lifecycle**: Freshness tracking, auto-refresh, and stale detection
+- **Token Safety Analyzer**: Mint authority, freeze authority, liquidity, and holder concentration checks
+
+**Test Suite Expansion**:
+- `tests/test_wallet_infrastructure.py`: 32 comprehensive tests for wallet module
+- `tests/test_cli.py`: 11 CLI helper function tests
+- **Total: 111 tests passing** (up from ~80)
+
+### 🐛 Bug Fixes
+
+**Cross-Platform Compatibility**:
+- Fixed `fcntl` import error on Windows in `core/exit_intents.py`
+- Added `msvcrt` fallback for file locking on Windows
+- Helper functions `_lock_file()` and `_unlock_file()` for cross-platform support
+
+**Test Corrections**:
+- Updated `test_trading_integration.py` to match current implementation:
+  - `classify_simulation_error("blockhash not found")` → "retryable" (not "blockhash_expired")
+  - Position sizer returns `position_value` (not `position_size`)
+
+### 📊 Backtest Results
+
+Ran Solana DEX backtest on 15 tokens via GeckoTerminal:
+- **Top Performer**: TRUMP token on Meteora DEX
+  - Strategy: SMA 10/50 crossover
+  - 90-day ROI: -8.2% | 30-day Avg: +0.5%
+  - Max Drawdown: 13.8% | 26 trades
+  - Bot config: `data/trader/solana_dex/bots/trump_6p6xgH.json`
+
+### 📝 Documentation
+
+- Updated README.md with Wallet Infrastructure section
+- Added dual-fee system table with priority levels
+- Added v2.5 to Completed roadmap section
+
+---
+
 # [3.1.0] - 2026-01-06
 
 ### 🔧 **Frontend Refactor: Modular Architecture & Premium Polish**

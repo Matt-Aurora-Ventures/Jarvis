@@ -27,12 +27,24 @@ Usage:
 
 from __future__ import annotations
 
-import fcntl
 import json
 import logging
+import os
 import re
 import time
 import uuid
+
+# Cross-platform file locking
+try:
+    import fcntl
+    HAS_FCNTL = True
+except ImportError:
+    HAS_FCNTL = False
+    try:
+        import msvcrt
+        HAS_MSVCRT = True
+    except ImportError:
+        HAS_MSVCRT = False
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
@@ -46,6 +58,30 @@ logger = logging.getLogger(__name__)
 def _merge_notes(*parts: str) -> str:
     cleaned = [part.strip() for part in parts if part and part.strip()]
     return "; ".join(cleaned)
+
+
+def _lock_file(f, exclusive: bool = True) -> None:
+    """Cross-platform file locking."""
+    if HAS_FCNTL:
+        import fcntl
+        mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+        fcntl.flock(f.fileno(), mode)
+    elif HAS_MSVCRT:
+        import msvcrt
+        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK if exclusive else msvcrt.LK_NBLCK, 1)
+
+
+def _unlock_file(f) -> None:
+    """Cross-platform file unlocking."""
+    if HAS_FCNTL:
+        import fcntl
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    elif HAS_MSVCRT:
+        import msvcrt
+        try:
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass  # Already unlocked
 
 
 def _extract_strategy_id(notes: str) -> Optional[str]:
@@ -441,9 +477,9 @@ def persist_intent(intent: ExitIntent) -> bool:
 
         # Write with lock
         with open(INTENTS_FILE, "w") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            _lock_file(f, exclusive=True)
             json.dump(intents, f, indent=2)
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            _unlock_file(f)
 
         logger.info(f"[exit_intents] Persisted intent {intent.id} for {intent.symbol}")
         return True
@@ -484,9 +520,9 @@ def _load_all_intents() -> Dict[str, Dict[str, Any]]:
 
     try:
         with open(INTENTS_FILE, "r") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+            _lock_file(f, exclusive=False)
             data = json.load(f)
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            _unlock_file(f)
             if isinstance(data, list):
                 return {str(item.get("id") or idx): item for idx, item in enumerate(data)}
             if isinstance(data, dict):

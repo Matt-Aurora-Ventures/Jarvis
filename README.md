@@ -290,6 +290,45 @@ At `http://localhost:5001`, Jarvis provides a SOC-style command center:
 - **Confirmation Loop**: Confirmed/finalized status checks
 - **Reconciliation**: On-chain balances reconciled with local intents
 
+### 🔐 Wallet Infrastructure (v2.5) - **NEW**
+
+Comprehensive Solana wallet management with institutional-grade features:
+
+**Core Module** (`core/wallet_infrastructure.py` ~700 lines):
+
+**Address Lookup Tables (ALTs)**:
+- Transaction compression for accounts (32 bytes → 1 byte per account)
+- ALT manager with address indexing and caching
+- Size savings estimation (typically 70%+ reduction)
+- Automatic account compression before transaction build
+
+**Dual-Fee System**:
+| Priority Level | Priority Fee | Jito Tip | Use Case |
+|----------------|--------------|----------|----------|
+| LOW | 1,000 lamports | - | Background ops |
+| MEDIUM | 10,000 lamports | - | Normal trades |
+| HIGH | 100,000 lamports | - | Time-sensitive |
+| URGENT | 500,000 lamports | 100,000+ | MEV protection |
+
+**Transaction Simulation**:
+- Pre-sign validation with compute unit estimation
+- Error classification (retryable vs permanent)
+- Human-readable error hints
+- Fee estimation before execution
+
+**Blockhash Lifecycle Management**:
+- Freshness tracking with validity checks
+- Auto-refresh before expiry (60s window)
+- Block height validation
+- Stale blockhash detection
+
+**Token Safety Analysis**:
+- Mint authority revocation check
+- Freeze authority detection
+- Liquidity threshold validation ($50k+ minimum)
+- Holder concentration analysis
+- Risk scoring (0-100)
+
 ### 📊 Multi-Source Data Aggregation (v2.4) - **NEW**
 
 Unified token data from multiple sources with automatic failover:
@@ -1201,6 +1240,14 @@ def my_skill(param1: str) -> str:
   - [x] Redundant daemon enforcement (dual daemons)
   - [x] Execution reliability tracking
   - [x] Jupyter cell bundle generation for trade monitoring
+- [x] **v2.5 Wallet Infrastructure** (Jan 2026)
+  - [x] Address Lookup Tables (ALTs) for transaction compression
+  - [x] Dual-fee system (Priority fees + Jito tips)
+  - [x] Transaction simulation before signing
+  - [x] Blockhash lifecycle management
+  - [x] Token safety analysis (mint/freeze authority, liquidity, concentration)
+  - [x] Cross-platform file locking (Windows + Unix)
+  - [x] Comprehensive test suite (111 tests passing)
 
 ### In Progress 🚧
 
