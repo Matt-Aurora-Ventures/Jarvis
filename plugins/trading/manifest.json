@@ -1,0 +1,23 @@
+{
+  "name": "trading",
+  "version": "1.0.0",
+  "description": "Solana trading integration with Jupiter, position management, and risk controls",
+  "author": "Jarvis",
+  "entry_point": "main.py",
+  "permissions": [
+    "memory:trading",
+    "network",
+    "events"
+  ],
+  "dependencies": [],
+  "default_config": {
+    "paper_mode": true,
+    "max_position_pct": 0.1,
+    "default_slippage": 0.01,
+    "auto_create_intents": false,
+    "poll_seconds": 60
+  },
+  "auto_enable": false,
+  "priority": 100,
+  "tags": ["trading", "solana", "defi"]
+}

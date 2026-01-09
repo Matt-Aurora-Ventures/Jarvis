@@ -1,0 +1,20 @@
+{
+  "name": "x_sentiment",
+  "version": "1.0.0",
+  "description": "X/Twitter sentiment analysis using Grok for crypto and market insights",
+  "author": "LifeOS",
+  "main": "main.py",
+  "permissions": [
+    "network",
+    "events",
+    "memory:x_sentiment"
+  ],
+  "dependencies": [],
+  "config": {
+    "enabled": true,
+    "default_focus": "trading",
+    "cache_ttl_seconds": 3600,
+    "daily_budget_usd": 3.0,
+    "default_tokens": ["SOL", "BTC", "ETH"]
+  }
+}

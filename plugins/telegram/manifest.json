@@ -1,0 +1,26 @@
+{
+  "name": "telegram",
+  "version": "1.0.0",
+  "description": "Telegram bot integration for sentiment analysis and notifications",
+  "author": "LifeOS",
+  "main": "main.py",
+  "permissions": [
+    "network",
+    "events",
+    "memory:telegram"
+  ],
+  "dependencies": [],
+  "config": {
+    "enabled": true,
+    "chat_ids": [],
+    "schedule": {
+      "enabled": false,
+      "times": ["09:00", "12:00", "17:00", "21:00"]
+    },
+    "tokens": ["SOL", "BTC", "ETH"],
+    "format": {
+      "use_emojis": true,
+      "include_price": true
+    }
+  }
+}

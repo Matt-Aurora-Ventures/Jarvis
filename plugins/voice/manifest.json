@@ -1,0 +1,24 @@
+{
+  "name": "voice",
+  "version": "1.0.0",
+  "description": "Voice/TTS integration with persona-aware speech synthesis",
+  "author": "LifeOS",
+  "main": "main.py",
+  "permissions": [
+    "audio",
+    "events",
+    "memory:voice"
+  ],
+  "dependencies": [],
+  "config": {
+    "enabled": true,
+    "tts_engine": "piper",
+    "speak_responses": true,
+    "persona_voice_mapping": {
+      "jarvis": {"voice": "Reed", "rate": 180},
+      "casual": {"voice": "Samantha", "rate": 200},
+      "analyst": {"voice": "Daniel", "rate": 160},
+      "coder": {"voice": "Alex", "rate": 190}
+    }
+  }
+}

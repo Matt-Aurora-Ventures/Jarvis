@@ -36,6 +36,7 @@ from lifeos.pae.base import (
     ProviderError,
     ActionError,
     EvaluatorError,
+    EvaluationResult,
 )
 from lifeos.pae.registry import PAERegistry
 from lifeos.pae.pipeline import PAEPipeline, PipelineStep, PipelineResult
@@ -46,6 +47,7 @@ __all__ = [
     "Action",
     "Evaluator",
     "PAEComponent",
+    "EvaluationResult",
     # Errors
     "PAEError",
     "ProviderError",
