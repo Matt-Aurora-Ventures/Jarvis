@@ -28,6 +28,7 @@ google-auth>=2.0.0
 yt-dlp>=2024.10.22
 youtube-transcript-api>=0.6.2
 piper-tts>=1.2.0
+websockets>=12.0
 
 # Testing
 pytest>=8.0.0
