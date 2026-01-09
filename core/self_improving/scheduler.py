@@ -11,7 +11,7 @@ Uses APScheduler for background task execution.
 """
 
 import logging
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from typing import Optional, Callable, Dict, Any
 
 logger = logging.getLogger("jarvis.scheduler")
@@ -34,6 +34,10 @@ class SelfImprovingScheduler:
 
     Usage:
         scheduler = SelfImprovingScheduler(orchestrator)
+
+        # Optional: set callback for proactive suggestions
+        scheduler.on_suggestion = lambda suggestion: send_telegram(suggestion)
+
         scheduler.start()
 
         # Later
@@ -44,11 +48,15 @@ class SelfImprovingScheduler:
         self,
         orchestrator,  # SelfImprovingOrchestrator
         use_async: bool = False,
+        on_suggestion: Optional[Callable] = None,
     ):
         self.orchestrator = orchestrator
         self.use_async = use_async
         self._scheduler = None
         self._running = False
+
+        # Callback for when a proactive suggestion is generated
+        self.on_suggestion = on_suggestion
 
         if not APSCHEDULER_AVAILABLE:
             logger.warning("APScheduler not available - using manual scheduling")
@@ -132,17 +140,24 @@ class SelfImprovingScheduler:
     def _run_proactive_check(self):
         """Run proactive suggestion check."""
         # Get current context (simplified - in real use, gather more context)
+        now = datetime.now(timezone.utc)
         context = {
-            "time": datetime.utcnow().isoformat(),
-            "day_of_week": datetime.utcnow().strftime("%A"),
-            "hour": datetime.utcnow().hour,
+            "time": now.isoformat(),
+            "day_of_week": now.strftime("%A"),
+            "hour": now.hour,
         }
 
         try:
             suggestion = self.orchestrator.proactive.check_for_suggestion_sync(context)
             if suggestion:
                 logger.info(f"Proactive suggestion generated: {suggestion.message[:50]}...")
-                # In real implementation, would notify user via Telegram/etc.
+
+                # Call the notification callback if set
+                if self.on_suggestion:
+                    try:
+                        self.on_suggestion(suggestion)
+                    except Exception as e:
+                        logger.error(f"Suggestion notification failed: {e}")
         except Exception as e:
             logger.error(f"Proactive check failed: {e}")
 

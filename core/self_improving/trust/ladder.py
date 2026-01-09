@@ -21,7 +21,7 @@ Trust is earned through:
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import IntEnum
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass, field

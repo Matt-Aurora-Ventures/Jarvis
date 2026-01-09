@@ -188,7 +188,12 @@ def run() -> None:
     si_scheduler = None
     if SELF_IMPROVING_AVAILABLE:
         try:
-            si_scheduler = self_improving.start_scheduler()
+            # Callback for proactive suggestions
+            def on_suggestion(suggestion):
+                _log_message(log_path, f"Proactive suggestion: {suggestion.message[:100]}...")
+                # Future: Send to Telegram via tg_bot.services
+
+            si_scheduler = self_improving.start_scheduler(on_suggestion=on_suggestion)
             component_status["self_improving"]["ok"] = True
             _log_message(log_path, "Self-improving scheduler started (3am nightly reflection)")
         except Exception as e:

@@ -13,7 +13,7 @@ Tests cover:
 import pytest
 import tempfile
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from core.self_improving.memory.store import MemoryStore

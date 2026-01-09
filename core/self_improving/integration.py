@@ -57,8 +57,18 @@ def set_llm_client(client: Any) -> None:
     logger.info("LLM client set for self-improving system")
 
 
-def start_scheduler(use_async: bool = False) -> Any:
-    """Start the self-improving scheduler for nightly tasks."""
+def start_scheduler(
+    use_async: bool = False,
+    on_suggestion: Optional[callable] = None,
+) -> Any:
+    """
+    Start the self-improving scheduler for nightly tasks.
+
+    Args:
+        use_async: Use async scheduler (for async applications)
+        on_suggestion: Callback function called when a proactive suggestion is generated.
+                      Signature: callback(suggestion) where suggestion has .message, .confidence, etc.
+    """
     global _scheduler
 
     if _scheduler is not None:
@@ -67,7 +77,11 @@ def start_scheduler(use_async: bool = False) -> Any:
     from core.self_improving.scheduler import SelfImprovingScheduler
 
     orch = get_self_improving()
-    _scheduler = SelfImprovingScheduler(orch, use_async=use_async)
+    _scheduler = SelfImprovingScheduler(
+        orch,
+        use_async=use_async,
+        on_suggestion=on_suggestion,
+    )
     _scheduler.start()
     logger.info("Self-improving scheduler started")
 
