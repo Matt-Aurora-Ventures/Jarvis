@@ -1013,6 +1013,82 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
     # Enhanced Trading Dashboard Handlers
     # =========================================================================
 
+    def _fetch_spl_token_holdings(self, address: str, sol_price: float) -> List[Dict[str, Any]]:
+        """Fetch SPL token holdings for a wallet address."""
+        tokens = []
+        try:
+            import urllib.request
+            from core import solana_execution, birdeye
+
+            endpoints = solana_execution.load_solana_rpc_endpoints()
+            if not endpoints:
+                return []
+
+            # Get token accounts using getTokenAccountsByOwner
+            for ep in endpoints[:2]:
+                try:
+                    payload = {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "getTokenAccountsByOwner",
+                        "params": [
+                            address,
+                            {"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},
+                            {"encoding": "jsonParsed"}
+                        ]
+                    }
+                    req = urllib.request.Request(
+                        ep.url,
+                        data=json.dumps(payload).encode(),
+                        headers={"Content-Type": "application/json"}
+                    )
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        data = json.loads(resp.read())
+                        if "result" in data and "value" in data["result"]:
+                            for account in data["result"]["value"]:
+                                try:
+                                    info = account.get("account", {}).get("data", {}).get("parsed", {}).get("info", {})
+                                    mint = info.get("mint", "")
+                                    token_amount = info.get("tokenAmount", {})
+                                    amount = float(token_amount.get("uiAmount", 0) or 0)
+
+                                    if amount <= 0:
+                                        continue
+
+                                    # Try to get token price and metadata
+                                    token_price = 0.0
+                                    symbol = mint[:8] + "..."
+                                    try:
+                                        price_data = birdeye.fetch_token_price(mint)
+                                        if price_data and "value" in price_data:
+                                            token_price = float(price_data["value"])
+                                        # Try to get symbol from metadata
+                                        meta = birdeye.fetch_token_metadata(mint)
+                                        if meta and "symbol" in meta:
+                                            symbol = meta["symbol"]
+                                    except Exception:
+                                        pass
+
+                                    tokens.append({
+                                        "mint": mint,
+                                        "symbol": symbol,
+                                        "amount": round(amount, 6),
+                                        "price_usd": round(token_price, 8),
+                                        "value_usd": round(amount * token_price, 2),
+                                    })
+                                except Exception:
+                                    continue
+                            break
+                except Exception:
+                    continue
+
+            # Sort by value descending
+            tokens.sort(key=lambda x: x.get("value_usd", 0), reverse=True)
+            return tokens[:20]  # Return top 20 tokens
+
+        except Exception:
+            return []
+
     def _handle_wallet_status(self):
         """Get wallet address, SOL balance, and token holdings."""
         try:
@@ -1062,8 +1138,8 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
             except Exception:
                 pass
             
-            # Estimate USD value (rough estimate, ~$20/SOL placeholder)
-            sol_price = 20.0  # TODO: Get actual SOL price from API
+            # Fetch SOL price from BirdEye API
+            sol_price = 20.0  # Fallback price
             try:
                 from core import birdeye
                 sol_mint = "So11111111111111111111111111111111111111112"
@@ -1072,14 +1148,17 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
                     sol_price = float(price_data["value"])
             except Exception:
                 pass
-            
+
+            # Fetch SPL token holdings
+            spl_tokens = self._fetch_spl_token_holdings(address, sol_price)
+
             self._send_json({
                 "address": address,
                 "address_short": f"{address[:6]}...{address[-4:]}",
                 "balance_sol": round(balance_sol, 6),
                 "balance_usd": round(balance_sol * sol_price, 2),
                 "sol_price": sol_price,
-                "tokens": [],  # TODO: Fetch SPL token holdings
+                "tokens": spl_tokens,
                 "connected": True,
             })
         except Exception as e:

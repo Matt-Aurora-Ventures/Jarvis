@@ -385,7 +385,7 @@ def clear_cache() -> int:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     
     print("API Status:", get_api_status())
     print("\nFetching Solana pools...")

@@ -546,7 +546,7 @@ def clear_cache() -> int:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     
     # Test API status
     print("API Status:", get_api_status())

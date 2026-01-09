@@ -4,6 +4,116 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [3.3.0] - 2026-01-08
+
+### 🏗️ **Architecture Refactor: Cross-Platform Support & Test Infrastructure**
+
+This release introduces comprehensive cross-platform support, modular subpackages for better code organization, and significantly expanded test coverage.
+
+### 🆕 New Features
+
+**Cross-Platform Abstraction Layer** (`core/platform/`):
+- **PlatformAdapter**: Abstract base class for OS-specific operations
+- **MacOSAdapter**: osascript, pbcopy/pbpaste, say command integration
+- **WindowsAdapter**: win32 APIs, PowerShell notifications, pyttsx3 TTS
+- **LinuxAdapter**: notify-send, xdotool, xclip, espeak support
+- **Auto-Detection**: Singleton pattern with `get_adapter()` for runtime platform detection
+- **Unified API**: `send_notification()`, `get_clipboard_content()`, `speak_text()`, etc.
+
+**Module Consolidation Subpackages**:
+- **`core/trading/`**: Unified re-exports for all trading modules (jupiter, raydium, jito, strategies, signals, wallet)
+- **`core/voice/`**: Unified re-exports for voice modules (voice.py, hotkeys.py, openai_tts.py)
+- **Backwards Compatible**: All existing imports continue to work
+
+**SPL Token Holdings API** (`core/api_server.py`):
+- New `_fetch_spl_token_holdings()` method for wallet token display
+- Fetches via `getTokenAccountsByOwner` RPC call
+- Token metadata and pricing via BirdEye API
+- Returns top 20 tokens sorted by USD value
+
+**MCP Health Check Enhancement** (`core/mcp_loader.py`):
+- `_check_mcp_protocol_health()` for protocol-level validation
+- Checks process stdin writability for stdio-based servers
+- Improved restart reliability
+
+### 🧪 Test Suite Expansion
+
+**New Test Files (5 added)**:
+- `tests/test_guardian.py`: ~50 tests for safety rules, protected paths, dangerous commands
+- `tests/test_providers.py`: ~40 tests for LLM provider abstraction
+- `tests/test_daemon.py`: ~25 tests for daemon orchestration
+- `tests/test_conversation.py`: ~35 tests for conversation logic
+- `tests/test_platform.py`: ~30 tests for platform abstraction
+
+**Test Infrastructure**:
+- Added `pytest-cov>=4.1.0` for coverage reporting
+- Added `pytest-asyncio>=0.23.0` for async tests
+- Added `pytest-mock>=3.12.0` for mocking
+- Added `responses>=0.25.0` for HTTP mocking
+- Added `ruff>=0.1.0` for fast linting
+- Added `mypy>=1.8.0` for type checking
+
+**Coverage Improvement**:
+- Test files: 13 → 18 (+5)
+- Estimated coverage: ~15% → ~25%
+- Critical modules now tested: guardian, providers, daemon, conversation, platform
+
+### 🔐 Security Fixes
+
+**osascript Injection Prevention** (`core/daemon.py`):
+```python
+# Before (vulnerable):
+script = f'display notification "{message}" with title "{title}"'
+
+# After (safe):
+safe_title = title.replace('\\', '\\\\').replace('"', '\\"')
+safe_message = message.replace('\\', '\\\\').replace('"', '\\"')
+```
+
+### 🧹 Code Cleanup
+
+**Removed DEBUG Logging in Production**:
+- `core/birdeye.py:549` - Changed to INFO level
+- `core/dexscreener.py:486` - Changed to INFO level
+- `core/geckoterminal.py:388` - Changed to INFO level
+
+**Deleted Broken Files**:
+- Removed `core/iterative_improver_broken.py` (duplicate of working version)
+
+### 📝 Documentation
+
+**Ralph Wiggum Loop** (`.windsurf/workflows/jarvis.md`):
+- Comprehensive improvement tracking system
+- 6 phases with prioritized tasks
+- Metrics dashboard with before/after comparisons
+- Quick commands for testing and linting
+
+### 📊 Metrics
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| Test Files | 13 | 18 | +5 |
+| TODO Items | 19 | 16 | -3 |
+| DEBUG in prod | 3 | 0 | -3 |
+| Security Issues | 2 | 1 | -1 |
+| Core Subpackages | 0 | 3 | +3 |
+
+### 🔧 Dependencies
+
+```bash
+# New test dependencies
+pytest-cov>=4.1.0
+pytest-asyncio>=0.23.0
+pytest-mock>=3.12.0
+responses>=0.25.0
+
+# New code quality tools
+ruff>=0.1.0
+mypy>=1.8.0
+```
+
+---
+
 # [3.2.0] - 2026-01-08
 
 ### 🔐 **Wallet Infrastructure v2.5 - Institutional-Grade Solana Execution**

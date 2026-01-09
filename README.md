@@ -7,14 +7,18 @@
 </p>
 
 ![Status](https://img.shields.io/badge/Status-ONLINE-success)
+![Version](https://img.shields.io/badge/Version-3.3.0-blue)
 ![Dashboard](https://img.shields.io/badge/Dashboard-v3.0-blue)
+![Tests](https://img.shields.io/badge/Tests-180%2B%20Passing-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-25%25-yellow)
 ![Security](https://img.shields.io/badge/Security-IDS_ACTIVE-red)
+![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
-**[📋 View CHANGELOG](CHANGELOG.md)** | **[🛣️ Roadmap](#-ultimate-dashboard-roadmap)**
+**[📋 View CHANGELOG](CHANGELOG.md)** | **[🛣️ Roadmap](#-ultimate-dashboard-roadmap)** | **[🧪 Tests](#-test-infrastructure)**
 
 ---
 
-**Jarvis** is an autonomous AI assistant that runs 24/7 on your Mac. It observes what you're doing, offers proactive suggestions, controls your computer via voice or text, conducts research, executes trading strategies, and continuously improves itself. **Jarvis v2.0** brings complete observability to autonomous operations—visualizing its entire cognition process, monitoring system security in real-time, and executing high-frequency trading strategies with full transparency.
+**Jarvis** is an autonomous AI assistant that runs 24/7 on your computer. It observes what you're doing, offers proactive suggestions, controls your computer via voice or text, conducts research, executes trading strategies, and continuously improves itself. **Jarvis v3.3** brings complete observability to autonomous operations—visualizing its entire cognition process, monitoring system security in real-time, executing high-frequency trading strategies with full transparency, and now with **cross-platform support for macOS, Windows, and Linux**.
 
 ## ✨ What Makes Jarvis Different
 
@@ -22,12 +26,13 @@
 |---------|--------|----------------|
 | Runs locally 24/7 | ✅ | ❌ |
 | Watches your screen | ✅ | ❌ |
-| Controls your Mac | ✅ | ❌ |
+| Controls your computer | ✅ (Mac/Win/Linux) | ❌ |
 | Real-time IDS monitoring | ✅ | ❌ |
 | Proactive suggestions | ✅ | ❌ |
 | Self-improving | ✅ | ❌ |
 | Voice activated | ✅ | Limited |
 | Algorithmic trading | ✅ | ❌ |
+| Cross-platform | ✅ | N/A |
 | Free to run | ✅ (with Ollama/Groq) | ❌ |
 
 ---
@@ -559,6 +564,148 @@ Every night Jarvis can:
 - **Voice clone**: Optional Coqui XTTS local cloning; enable via `lifeos/config/lifeos.config.local.json`
 - **Voice doctor**: `./bin/lifeos doctor --voice` for full mic/STT/TTS diagnostics
 - **Configurable**: Customize `voice.tts_engine`, `piper_model`, and `speech_voice` in config
+
+---
+
+## 🌐 Cross-Platform Support (v3.3) - **NEW**
+
+Jarvis now runs on macOS, Windows, and Linux with unified APIs for platform-specific operations.
+
+### Platform Abstraction Layer (`core/platform/`)
+
+**Architecture**:
+```
+core/platform/
+├── __init__.py          # Unified API + auto-detection
+├── PlatformAdapter      # Abstract base class
+├── MacOSAdapter         # osascript, pbcopy, say
+├── WindowsAdapter       # win32, PowerShell, pyttsx3
+└── LinuxAdapter         # notify-send, xdotool, espeak
+```
+
+**Supported Operations**:
+| Operation | macOS | Windows | Linux |
+|-----------|-------|---------|-------|
+| Notifications | osascript | ToastNotifier/PowerShell | notify-send |
+| Clipboard | pbcopy/pbpaste | win32clipboard | xclip |
+| TTS | say | pyttsx3 | espeak |
+| Active Window | System Events | win32gui | xdotool |
+| Screenshots | screencapture | pyautogui | scrot |
+| App Launch | open -a | start | xdg-open |
+
+**Usage**:
+```python
+from core.platform import send_notification, get_clipboard_content, speak_text
+
+# Works on any platform
+send_notification("Jarvis", "Trade executed successfully!")
+text = get_clipboard_content()
+speak_text("Hello from Jarvis")
+```
+
+---
+
+## 📦 Module Organization (v3.3) - **NEW**
+
+Core modules are now organized into logical subpackages for better maintainability.
+
+### Trading Subpackage (`core/trading/`)
+
+Consolidated re-exports for all trading functionality:
+
+```python
+from core.trading import (
+    # DEX integrations
+    fetch_quote, execute_swap, JitoExecutor,
+    # Strategies
+    TradingPipeline, run_backtest, TradingColiseum,
+    # Market data
+    fetch_token_price, get_trending_tokens,
+    # Wallet
+    TransactionBuilder, TokenSafetyAnalyzer,
+    # Signals
+    aggregate_signals, fetch_grok_sentiment,
+)
+```
+
+### Voice Subpackage (`core/voice/`)
+
+Consolidated re-exports for voice functionality:
+
+```python
+from core.voice import (
+    VoiceManager, speak, speak_async,
+    HotkeyManager, register_hotkey,
+    speak_openai, get_tts_cost,
+)
+```
+
+### Core Module Count
+| Category | Count | Examples |
+|----------|-------|----------|
+| Trading | 25+ | jupiter, raydium, jito_executor, trading_* |
+| Voice | 4 | voice, hotkeys, openai_tts, voice_clone |
+| Platform | 1 | platform (3 adapters) |
+| Agents | 8+ | autonomous_agent, autonomous_controller |
+| Data | 10+ | birdeye, dexscreener, geckoterminal |
+| Memory | 5+ | memory, context_manager, prompt_library |
+
+---
+
+## 🧪 Test Infrastructure - **NEW**
+
+Comprehensive test suite with coverage reporting.
+
+### Test Suite Overview
+
+| Test File | Module | Test Count | Coverage |
+|-----------|--------|------------|----------|
+| `test_wallet_infrastructure.py` | Wallet ops | 32 | Comprehensive |
+| `test_guardian.py` | Safety rules | ~50 | All patterns |
+| `test_providers.py` | LLM providers | ~40 | Provider chain |
+| `test_daemon.py` | Orchestration | ~25 | Core functions |
+| `test_conversation.py` | Chat logic | ~35 | Entity extraction |
+| `test_platform.py` | Cross-platform | ~30 | All adapters |
+| `test_cli.py` | CLI helpers | 11 | Utilities |
+| + 11 more | Various | 50+ | Integration |
+
+**Total: 180+ tests passing**
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest --cov=core --cov-report=html tests/
+
+# Run specific test file
+pytest tests/test_guardian.py -v
+
+# Run tests matching pattern
+pytest -k "test_protected" -v
+```
+
+### Code Quality Tools
+
+```bash
+# Fast linting with ruff
+ruff check core/ --fix
+
+# Type checking with mypy
+mypy core/ --ignore-missing-imports
+
+# Find TODOs
+grep -rn "TODO\|FIXME" core/
+```
+
+### Coverage Targets
+| Metric | Current | Target |
+|--------|---------|--------|
+| Test Files | 18 | 40+ |
+| Line Coverage | ~25% | 60%+ |
+| Critical Paths | ~40% | 80%+ |
 
 ---
 

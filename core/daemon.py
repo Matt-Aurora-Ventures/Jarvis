@@ -60,12 +60,15 @@ def _send_notification(title: str, message: str) -> None:
     """Send a macOS notification."""
     try:
         from core import safe_subprocess
-        script = f'display notification "{message}" with title "{title}"'
+        # Sanitize inputs to prevent osascript injection
+        safe_title = title.replace('\\', '\\\\').replace('"', '\\"')
+        safe_message = message.replace('\\', '\\\\').replace('"', '\\"')
+        script = f'display notification "{safe_message}" with title "{safe_title}"'
         safe_subprocess.run_command_safe(
             ["osascript", "-e", script],
             timeout=5,
         )
-    except Exception as e:
+    except Exception:
         pass
 
 
