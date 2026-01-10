@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-3.7.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.6.0-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1108%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
@@ -218,6 +218,44 @@ RISK_CONFIG = {
     "max_daily_trades": 50,            # Rate limit
 }
 ```
+
+### Position Tracking & Analytics (NEW in v3.6.0)
+
+**Comprehensive position history and performance statistics**:
+
+```python
+from core.position_tracker import PositionTracker
+
+tracker = PositionTracker()
+
+# Record trade
+await tracker.record_position(
+    symbol="SOL/USDC",
+    entry_price=100.0,
+    exit_price=110.0,
+    quantity=10,
+    pnl=100.0
+)
+
+# Get statistics
+stats = await tracker.get_stats()
+print(f"Win Rate: {stats['win_rate']:.2%}")
+print(f"Total P&L: ${stats['total_pnl']:.2f}")
+print(f"Best Streak: {stats['best_winning_streak']}")
+```
+
+**API Endpoints**:
+```bash
+GET /api/position/stats        # Aggregate statistics
+GET /api/position/history      # Full trade history
+GET /api/position/by-symbol    # Performance by token
+```
+
+**Frontend Component** (`frontend/src/components/trading/PositionStats.jsx`):
+- Win rate visualization
+- P&L charts
+- Streak tracking
+- Performance by symbol
 
 ### LUT Micro-Alpha Module
 
@@ -503,6 +541,90 @@ lessons = analysis.lessons
 await reflexion.apply_lessons(lessons)
 ```
 
+### Hyperparameter Optimization (NEW in v3.6.0)
+
+**Automated strategy optimization using Optuna**:
+
+```python
+from core.hyperparameter_tuning import optimize_strategy
+
+# Optimize SMA crossover strategy
+best_params = optimize_strategy(
+    strategy_type="sma_cross",
+    data=historical_data,
+    n_trials=100,
+    objectives=["sharpe_ratio", "profit_factor"]
+)
+
+print(f"Best fast period: {best_params['fast_period']}")
+print(f"Best slow period: {best_params['slow_period']}")
+print(f"Expected Sharpe: {best_params['sharpe_ratio']:.2f}")
+```
+
+**Supported Strategies**:
+- SMA Crossover
+- RSI Mean Reversion
+- Bollinger Bands
+- MACD
+- Custom strategies (extensible)
+
+**Optimization Objectives**:
+- Sharpe Ratio
+- Profit Factor
+- ROI
+- Max Drawdown
+- Win Rate
+
+**Features**:
+- Multi-objective optimization
+- Parallel trial execution
+- Pruning of unpromising trials
+- Visualization of optimization history
+- Automatic parameter validation
+
+### Enhanced Paper Trading (v3.6.0)
+
+**Realistic simulation with fee/slippage modeling**:
+
+```python
+from core.paper_trading import PaperWallet
+
+wallet = PaperWallet(initial_balance=10000.0)
+
+# Configure realistic fees
+wallet.set_fees(
+    trading_fee_bps=30,      # 0.30% trading fee
+    slippage_bps=10          # 0.10% slippage
+)
+
+# Execute paper trade
+result = await wallet.buy(
+    symbol="SOL/USDC",
+    amount=1000.0,
+    price=100.0
+)
+
+# View history
+history = wallet.get_trade_history()
+analytics = wallet.get_analytics()
+```
+
+**Features**:
+- Realistic balance simulation
+- Configurable fees and slippage
+- Trade history logging
+- Performance analytics
+- Win rate, P&L, streaks
+
+**Telegram Commands** (NEW):
+```bash
+/paper wallet    # View paper wallet balance
+/paper buy       # Execute paper buy
+/paper sell      # Execute paper sell
+/paper history   # View trade history
+/paper reset     # Reset paper wallet
+```
+
 ### Paper-Trading Coliseum
 
 All strategies are battle-tested before going live:
@@ -528,25 +650,37 @@ lifeos trading coliseum cemetery   # View deleted strategies
 
 ## 🎤 Voice Control
 
-### Wake Word Activation
+### Wake Word Detection (NEW in v3.6.0)
+
+**Cross-platform "Hey JARVIS" wake word detection** - works on Windows, macOS, and Linux without model training!
 
 ```bash
-# Start voice mode
+# Start voice mode with wake word
 ./bin/lifeos chat --streaming
+
+# Windows desktop launcher
+Jarvis-Voice.bat
 
 # With Minimax 2.1 streaming consciousness
 ./bin/lifeos chat --streaming --minimax
 ```
 
+**Implementation** (`core/wake_word.py`):
+- Lightweight keyword spotting
+- No cloud dependencies
+- Low CPU usage (~2-5%)
+- Instant activation
+
 ### Features
 
 | Feature | Description |
 |---------|-------------|
-| Wake Word | "Hey JARVIS" activates listening |
+| Wake Word | "Hey JARVIS" activates listening (cross-platform) |
 | Barge-In | Interrupt mid-response naturally |
 | Pre-Caching | Predicts your next 3 likely intents |
 | Ring Buffer | Last 30 seconds always in context |
 | Offline TTS | Piper synthesis works without internet |
+| Desktop Launcher | One-click voice activation on Windows |
 
 ### Voice Commands
 
@@ -600,6 +734,32 @@ speak_text("Hello from JARVIS")
 
 ## 🎨 Dashboard
 
+### Real-Time WebSocket Price Streaming (NEW in v3.6.0)
+
+**True real-time price updates** via WebSocket server on port 8766:
+
+```javascript
+// Frontend usage
+import { useWebSocketPrice } from '@/hooks/useWebSocketPrice';
+
+function TokenPrice({ mint }) {
+  const price = useWebSocketPrice(mint);
+  return <span>${price?.toFixed(6)}</span>;
+}
+```
+
+**Server** (`core/websocket_server.py`):
+- Multi-client support
+- Per-token subscriptions
+- Automatic reconnection
+- Sub-second latency
+
+**Start WebSocket Server**:
+```bash
+python core/websocket_server.py
+# Listens on ws://localhost:8766
+```
+
 ### Trading Dashboard V2
 
 Premium trading command center at `http://localhost:5173/trading`:
@@ -609,7 +769,8 @@ Premium trading command center at `http://localhost:5173/trading`:
 - 🛠️ Token Scanner with rug detection
 - 💬 Floating JARVIS Chat
 - 📈 TradingView-style charts
-- 🔄 Auto-refresh (5s positions, 10s wallet)
+- 🔄 Real-time WebSocket price updates
+- 📈 Position tracking with statistics
 
 ### Routes
 
@@ -633,7 +794,7 @@ Premium trading command center at `http://localhost:5173/trading`:
 
 ## 📱 Telegram Bot
 
-**JARVIS Telegram Bot** delivers AI-powered trading signals:
+**JARVIS Telegram Bot** delivers AI-powered trading signals with interactive controls:
 
 ### Quick Start
 
@@ -652,16 +813,30 @@ EOF
 python bot.py
 ```
 
+### Interactive Inline Keyboards (NEW in v3.6.0)
+
+**Button-based navigation** replaces text commands for better UX:
+
+- **Main Menu**: Quick access to all features
+- **Paper Trading**: Interactive wallet management
+- **Admin Panel**: Role-specific controls
+- **Token Analysis**: One-tap token lookup
+
 ### Commands
 
 | Command | Description | Access |
 |---------|-------------|--------|
-| `/start` | Welcome message | Public |
+| `/start` | Welcome + interactive menu | Public |
 | `/status` | Check API status | Public |
 | `/trending` | Top 5 trending tokens | Public |
 | `/signals` | Master Signal Report (Top 10) | Admin |
 | `/analyze <token>` | Full analysis with Grok | Admin |
 | `/digest` | Comprehensive digest | Admin |
+| `/paper wallet` | View paper wallet balance | Public |
+| `/paper buy` | Execute paper buy | Public |
+| `/paper sell` | Execute paper sell | Public |
+| `/paper history` | View trade history | Public |
+| `/paper reset` | Reset paper wallet | Admin |
 
 ### Master Signal Report
 
@@ -867,14 +1042,21 @@ docker-compose -f docker-compose.monitoring.yml up -d
 - [x] Trust Ladder (5 levels)
 - [x] Reflexion Engine
 - [x] Wallet infrastructure (ALTs, dual-fee, simulation)
+- [x] **Cross-platform wake word detection** (v3.6.0)
+- [x] **WebSocket real-time price streaming** (v3.6.0)
+- [x] **Position tracking & analytics** (v3.6.0)
+- [x] **Enhanced paper trading with fees/slippage** (v3.6.0)
+- [x] **Hyperparameter optimization with Optuna** (v3.6.0)
+- [x] **Telegram inline keyboard navigation** (v3.6.0)
+- [x] **Paper trading via Telegram** (v3.6.0)
 - [x] 1108+ tests passing
 
 ### In Progress 🚧
 
-- [ ] Hyperparameter tuning via Optuna
 - [ ] Walk-forward validation
 - [ ] Cross-chain MEV (Flashbots for Ethereum)
 - [ ] ML model retraining pipeline
+- [ ] Advanced sentiment analysis pipeline
 
 ### Q1 2026
 
