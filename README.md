@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-3.8.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.9.0-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1108%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
@@ -128,6 +128,70 @@ JARVIS is not just another chatbot. It's an **autonomous AI system** that:
 | **Treasury Reports** | Weekly/monthly performance with Markdown export |
 | **Rewards Calculator** | Tiered APY projections with lock bonuses |
 
+### 📢 Multi-Channel Alerts (v3.9.0)
+| Feature | Description |
+|---------|-------------|
+| **Alert Delivery** | Discord, Telegram, Email, Push, Webhook channels |
+| **Rich Formatting** | Discord embeds, Telegram Markdown, HTML email |
+| **Retry Logic** | Configurable attempts with exponential backoff |
+| **User Preferences** | Per-user channel and alert type settings |
+
+### 🐋 Whale Tracking (v3.9.0)
+| Feature | Description |
+|---------|-------------|
+| **Whale Tracker** | Monitor large transactions above threshold |
+| **Pattern Analysis** | Detect accumulation, distribution, coordinated activity |
+| **Trading Signals** | Generate signals from whale movements |
+| **Risk Assessment** | Smart money flow direction analysis |
+
+### 📊 Signal Fusion & Position Sizing (v3.9.0)
+| Feature | Description |
+|---------|-------------|
+| **Signal Fusion** | Combine multiple sources with dynamic weighting |
+| **Confidence Scoring** | Meta-signals with track-record-based weights |
+| **Position Sizer** | Kelly Criterion, volatility-adjusted, risk-based sizing |
+| **Risk Management** | Configurable max position, drawdown limits |
+
+### 👥 Copy Trading (v3.9.0)
+| Feature | Description |
+|---------|-------------|
+| **Leader System** | Tier-based rankings (Bronze → Diamond) |
+| **Follower System** | Risk-adjusted copying with filters |
+| **Copy Modes** | Exact, proportional, signal-only |
+| **Safety Controls** | DISABLED until security audit complete |
+
+### 💼 Portfolio Tracking (v3.9.0)
+| Feature | Description |
+|---------|-------------|
+| **Position Manager** | Track buys, sells, transfers with cost basis |
+| **P&L Analytics** | Realized/unrealized gains, total return |
+| **Performance Metrics** | Sharpe ratio, max drawdown, volatility |
+| **Benchmark Comparison** | Alpha, beta vs SOL/market indices |
+
+### 👤 User Accounts & Subscriptions (v3.9.0)
+| Feature | Description |
+|---------|-------------|
+| **Wallet Auth** | Wallet-based authentication (NO KYC) |
+| **Subscription Tiers** | Free, Starter, Pro, Whale, Enterprise |
+| **Feature Flags** | Percentage rollout, tier gating, overrides |
+| **Usage Limits** | Per-tier alerts, API calls, positions |
+
+### 🔄 DCA Automation (v3.9.0)
+| Feature | Description |
+|---------|-------------|
+| **Scheduler** | Hourly, daily, weekly, monthly frequency |
+| **Smart DCA** | Adjust size based on fear/greed, dips, volatility |
+| **Multi-Token** | Configure different schedules per token |
+| **Safety Controls** | DISABLED until security audit complete |
+
+### 🏪 Strategy Marketplace (v3.9.0)
+| Feature | Description |
+|---------|-------------|
+| **Strategy Listings** | Share and monetize trading strategies |
+| **Subscription Model** | Monthly subscriptions with creator payouts |
+| **Review System** | Ratings, helpfulness votes, moderation |
+| **Performance Tracking** | Historical returns for all strategies |
+
 ---
 
 ## 🚀 Quick Start
@@ -234,7 +298,14 @@ This section maps every major capability to its home in the repo so the README s
 | Treasury and rewards | `core/treasury/`, `core/economics/`, `core/monitoring/`, `api/` |
 | Staking and credits | `contracts/`, `core/staking/`, `core/credits/`, `core/payments/` |
 | Data platform and experiments | `core/data/`, `core/data_consent/`, `core/experiments/`, `core/metrics/` |
-| Monitoring and alerts | `core/monitoring/`, `monitoring/`, `api/` |
+| Monitoring and alerts | `core/monitoring/`, `core/alerts/`, `monitoring/`, `api/` |
+| Whale tracking | `core/whale_tracking/` (tracker, analyzer) |
+| Signal fusion | `core/signals/` (fusion, position_sizer) |
+| Copy trading | `core/copy_trading/` (leader, follower, copier) |
+| Portfolio tracking | `core/portfolio/` (tracker, performance) |
+| DCA automation | `core/dca/` (scheduler, smart_dca) |
+| Strategy marketplace | `core/strategy_marketplace/` (strategies, reviews) |
+| User accounts | `core/users/` (account, subscriptions, features) |
 | Voice and wake word | `core/voice*.py`, `core/wake_word.py`, `plugins/voice/` |
 | Self-improvement | `core/self_improving/`, `core/self_improvement_engine*.py`, `lifeos/` |
 | Integrations and plugins | `integrations/`, `core/integrations/`, `plugins/` |
@@ -875,6 +946,59 @@ GET /api/rewards/tiers
 GET /api/rewards/apy-range
 ```
 
+#### Whale Tracking (v3.9.0)
+```bash
+GET /api/whales/activity/{token}
+GET /api/whales/patterns/{token}
+GET /api/whales/signals
+POST /api/whales/configure
+```
+
+#### Copy Trading (v3.9.0)
+```bash
+GET /api/copy/leaders
+GET /api/copy/leaders/{wallet}
+POST /api/copy/follow
+DELETE /api/copy/unfollow/{leader}
+GET /api/copy/portfolio
+```
+
+#### Portfolio (v3.9.0)
+```bash
+GET /api/portfolio/{wallet}
+GET /api/portfolio/{wallet}/performance
+GET /api/portfolio/{wallet}/positions
+GET /api/portfolio/{wallet}/transactions
+```
+
+#### DCA (v3.9.0)
+```bash
+GET /api/dca/schedules
+POST /api/dca/schedules
+PUT /api/dca/schedules/{id}
+DELETE /api/dca/schedules/{id}
+POST /api/dca/execute/{id}
+```
+
+#### Strategy Marketplace (v3.9.0)
+```bash
+GET /api/marketplace/strategies
+GET /api/marketplace/strategies/{id}
+POST /api/marketplace/strategies
+POST /api/marketplace/subscribe/{id}
+GET /api/marketplace/reviews/{strategy_id}
+POST /api/marketplace/reviews
+```
+
+#### Users & Subscriptions (v3.9.0)
+```bash
+GET /api/users/{wallet}
+POST /api/users/register
+GET /api/subscriptions/tiers
+POST /api/subscriptions/upgrade
+GET /api/features/{wallet}
+```
+
 ---
 
 ## ⚙️ Configuration
@@ -1002,7 +1126,21 @@ This README is the capability index; the authoritative release log lives in `CHA
 
 ### Completed ✓
 
-**v3.8.0 - Treasury & Data Platform (NEW)**
+**v3.9.0 - Social Trading & Automation (NEW)**
+- [x] Multi-channel alert delivery (Discord, Telegram, Email, Push, Webhook)
+- [x] Whale tracking with pattern analysis (accumulation, distribution)
+- [x] Signal fusion system with dynamic weight adjustment
+- [x] Position sizing (Kelly Criterion, volatility-adjusted, hybrid)
+- [x] Copy trading infrastructure (DISABLED pending audit)
+- [x] Leader/follower system with tier rankings
+- [x] Portfolio tracker with P&L and performance metrics
+- [x] User account system (wallet-based, NO KYC)
+- [x] Subscription tiers (Free → Enterprise)
+- [x] Feature flags with percentage rollout
+- [x] DCA automation with smart adjustments (DISABLED pending audit)
+- [x] Strategy marketplace with reviews
+
+**v3.8.0 - Treasury & Data Platform**
 - [x] Squads Protocol multisig integration for treasury
 - [x] Strategy Manager framework with YAML configuration
 - [x] Treasury transparency dashboard with WebSocket updates

@@ -12,12 +12,25 @@ from .tracker import (
     Portfolio,
     Position,
     Transaction,
+    TransactionType,
     get_portfolio_tracker,
 )
 from .performance import (
     PerformanceAnalyzer,
     PerformanceMetrics,
     TimeFrame,
+)
+from .tax_reporting import (
+    TaxReportGenerator,
+    TaxReportingService,
+    TaxYearSummary,
+    TaxLot,
+    CapitalGain,
+    TaxableIncome,
+    CostBasisMethod,
+    GainType,
+    IncomeType,
+    get_tax_service,
 )
 
 __all__ = [
@@ -26,9 +39,21 @@ __all__ = [
     "Portfolio",
     "Position",
     "Transaction",
+    "TransactionType",
     "get_portfolio_tracker",
     # Performance
     "PerformanceAnalyzer",
     "PerformanceMetrics",
     "TimeFrame",
+    # Tax Reporting
+    "TaxReportGenerator",
+    "TaxReportingService",
+    "TaxYearSummary",
+    "TaxLot",
+    "CapitalGain",
+    "TaxableIncome",
+    "CostBasisMethod",
+    "GainType",
+    "IncomeType",
+    "get_tax_service",
 ]
