@@ -27,7 +27,10 @@ google-auth-httplib2>=0.1.0
 google-auth>=2.0.0
 yt-dlp>=2024.10.22
 youtube-transcript-api>=0.6.2
-piper-tts>=1.2.0
+# TTS options (use edge-tts for free high-quality voices)
+edge-tts>=7.0.0
+pyttsx3>=2.90
+# piper-tts>=1.2.0  # Optional: requires AVX CPU support
 websockets>=12.0
 optuna>=3.5.0
 
