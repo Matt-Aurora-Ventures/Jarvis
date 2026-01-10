@@ -1,0 +1,182 @@
+# ============================================================================
+# JARVIS Docker Compose Configuration
+# ============================================================================
+# Complete stack for development and production
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # FastAPI Backend
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jarvis-api
+    ports:
+      - "${API_PORT:-8766}:8766"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATA_DIR=/app/data
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:///./data/jarvis.db
+      # Solana
+      - SOLANA_NETWORK=${SOLANA_NETWORK:-devnet}
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-https://api.devnet.solana.com}
+      # Bags.fm
+      - ENABLE_BAGS_INTEGRATION=${ENABLE_BAGS_INTEGRATION:-false}
+      - BAGS_API_URL=${BAGS_API_URL:-}
+      - BAGS_PARTNER_CODE=${BAGS_PARTNER_CODE:-}
+      # Stripe
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+    volumes:
+      - jarvis-data:/app/data
+      - jarvis-logs:/app/logs
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8766/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Flask Backend (Legacy)
+  # ---------------------------------------------------------------------------
+  flask:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jarvis-flask
+    ports:
+      - "${FLASK_PORT:-8765}:8765"
+    command: ["python", "api/server.py"]
+    environment:
+      - DATA_DIR=/app/data
+    volumes:
+      - jarvis-data:/app/data
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Frontend (Development)
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: node:20-alpine
+    container_name: jarvis-frontend
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:${API_PORT:-8766}
+      - VITE_WS_URL=ws://localhost:${API_PORT:-8766}
+      - VITE_SOLANA_NETWORK=${SOLANA_NETWORK:-devnet}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: ["npm", "run", "dev", "--", "--host"]
+    profiles:
+      - dev
+
+  # ---------------------------------------------------------------------------
+  # Redis (Caching & Sessions)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: jarvis-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Nginx (Production Reverse Proxy)
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: jarvis-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - nginx-certs:/etc/nginx/certs
+    depends_on:
+      - api
+    profiles:
+      - production
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Prometheus (Metrics)
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: jarvis-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    profiles:
+      - monitoring
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Grafana (Dashboards)
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: jarvis-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+    restart: unless-stopped
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  jarvis-data:
+    driver: local
+  jarvis-logs:
+    driver: local
+  redis-data:
+    driver: local
+  nginx-certs:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  default:
+    name: jarvis-network

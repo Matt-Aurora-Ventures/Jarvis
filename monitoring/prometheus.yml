@@ -1,0 +1,122 @@
+# Prometheus Configuration for JARVIS
+# Monitoring for API, trading, staking, and infrastructure
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'jarvis-monitor'
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Rule files
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Scrape configurations
+scrape_configs:
+  # ==========================================================================
+  # Infrastructure
+  # ==========================================================================
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node exporter for system metrics
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):\d+'
+        replacement: '${1}'
+
+  # Docker/container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # ==========================================================================
+  # Applications
+  # ==========================================================================
+
+  # JARVIS FastAPI
+  - job_name: 'jarvis-api'
+    static_configs:
+      - targets: ['api:8000']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # JARVIS Flask (legacy)
+  - job_name: 'jarvis-flask'
+    static_configs:
+      - targets: ['flask:5000']
+    metrics_path: /metrics
+
+  # Background workers
+  - job_name: 'jarvis-worker'
+    static_configs:
+      - targets: ['worker:8001']
+    metrics_path: /metrics
+
+  # ==========================================================================
+  # Databases
+  # ==========================================================================
+
+  # PostgreSQL
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # ==========================================================================
+  # External Services
+  # ==========================================================================
+
+  # Solana RPC health (custom exporter)
+  - job_name: 'solana-rpc'
+    static_configs:
+      - targets: ['solana-exporter:9100']
+    scrape_interval: 30s
+
+  # ==========================================================================
+  # Service Discovery (Optional - for Kubernetes)
+  # ==========================================================================
+
+  # Kubernetes API server
+  # - job_name: 'kubernetes-apiservers'
+  #   kubernetes_sd_configs:
+  #     - role: endpoints
+  #   scheme: https
+  #   tls_config:
+  #     ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  #   bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+  #   relabel_configs:
+  #     - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+  #       action: keep
+  #       regex: default;kubernetes;https
+
+  # Kubernetes pods
+  # - job_name: 'kubernetes-pods'
+  #   kubernetes_sd_configs:
+  #     - role: pod
+  #   relabel_configs:
+  #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+  #       action: keep
+  #       regex: true
+  #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+  #       action: replace
+  #       target_label: __metrics_path__
+  #       regex: (.+)

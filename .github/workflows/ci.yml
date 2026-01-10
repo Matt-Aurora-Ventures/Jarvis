@@ -1,0 +1,171 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # =========================================================================
+  # Linting & Type Checking
+  # =========================================================================
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy black isort
+          pip install -r requirements.txt
+
+      - name: Run ruff (linting)
+        run: ruff check . --output-format=github
+
+      - name: Run black (formatting check)
+        run: black --check .
+
+      - name: Run isort (import sorting check)
+        run: isort --check-only .
+
+      - name: Run mypy (type checking)
+        run: mypy core/ api/ --ignore-missing-imports
+        continue-on-error: true  # Allow type errors for now
+
+  # =========================================================================
+  # Python Tests
+  # =========================================================================
+  test-python:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v --cov=core --cov=api --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  # =========================================================================
+  # Frontend Tests
+  # =========================================================================
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run linting
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Run tests
+        working-directory: frontend
+        run: npm test -- --passWithNoTests
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  # =========================================================================
+  # Security Scan
+  # =========================================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install bandit safety
+
+      - name: Run bandit (security linter)
+        run: bandit -r core/ api/ -ll -f json -o bandit-report.json
+        continue-on-error: true
+
+      - name: Check for vulnerabilities
+        run: safety check -r requirements.txt
+        continue-on-error: true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: bandit-report.json
+        if: always()
+
+  # =========================================================================
+  # Build Docker Image
+  # =========================================================================
+  build:
+    name: Build Docker
+    runs-on: ubuntu-latest
+    needs: [test-python, test-frontend]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: jarvis:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

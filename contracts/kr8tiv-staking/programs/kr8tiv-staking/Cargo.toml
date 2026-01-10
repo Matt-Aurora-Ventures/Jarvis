@@ -1,0 +1,20 @@
+[package]
+name = "kr8tiv-staking"
+version = "0.1.0"
+description = "KR8TIV Token Staking Program with Time-Weighted Rewards"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "kr8tiv_staking"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.29.0"
+anchor-spl = "0.29.0"

@@ -1,0 +1,254 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # =========================================================================
+  # Deploy to Staging (on push to main)
+  # =========================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=staging-
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to staging server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd /opt/jarvis
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker image prune -f
+
+      - name: Run smoke tests
+        run: |
+          sleep 30
+          curl -f ${{ secrets.STAGING_URL }}/api/health || exit 1
+
+      - name: Notify on success
+        uses: slackapi/slack-github-action@v1.25.0
+        if: success()
+        with:
+          payload: |
+            {
+              "text": "✅ Staging deployment successful",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "✅ *Staging deployment successful*\nCommit: ${{ github.sha }}\nBy: ${{ github.actor }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  # =========================================================================
+  # Deploy to Production (on release)
+  # =========================================================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    environment: production
+    needs: []
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to production (blue-green)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            cd /opt/jarvis
+
+            # Pull new image
+            docker compose pull
+
+            # Start new container (green)
+            docker compose up -d --no-deps --scale api=2 api
+
+            # Wait for health check
+            sleep 30
+
+            # Check health
+            if curl -f http://localhost:8766/api/health; then
+              # Remove old container (blue)
+              docker compose up -d --no-deps --scale api=1 api
+              docker image prune -f
+              echo "Deployment successful"
+            else
+              # Rollback
+              docker compose down
+              docker compose up -d
+              echo "Deployment failed, rolled back"
+              exit 1
+            fi
+
+      - name: Run smoke tests
+        run: |
+          sleep 10
+          curl -f ${{ secrets.PRODUCTION_URL }}/api/health || exit 1
+
+      - name: Notify on success
+        uses: slackapi/slack-github-action@v1.25.0
+        if: success()
+        with:
+          payload: |
+            {
+              "text": "🚀 Production deployment successful",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🚀 *Production deployment successful*\nVersion: ${{ github.event.release.tag_name }}\nBy: ${{ github.actor }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Notify on failure
+        uses: slackapi/slack-github-action@v1.25.0
+        if: failure()
+        with:
+          payload: |
+            {
+              "text": "❌ Production deployment failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "❌ *Production deployment failed*\nVersion: ${{ github.event.release.tag_name }}\nCheck logs for details."
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  # =========================================================================
+  # Smart Contract Deployment (manual trigger)
+  # =========================================================================
+  deploy-contracts:
+    name: Deploy Smart Contracts
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment: ${{ github.event.inputs.network }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Anchor
+        uses: coral-xyz/setup-anchor@v1
+        with:
+          node-version: '20'
+          solana-cli-version: '1.18.0'
+          anchor-version: '0.29.0'
+
+      - name: Build contracts
+        working-directory: contracts
+        run: anchor build
+
+      - name: Deploy to devnet
+        if: github.event.inputs.network == 'devnet'
+        working-directory: contracts
+        run: |
+          echo "${{ secrets.DEVNET_DEPLOY_KEYPAIR }}" > deploy-keypair.json
+          anchor deploy --provider.cluster devnet --provider.wallet deploy-keypair.json
+          rm deploy-keypair.json
+
+      - name: Deploy to mainnet
+        if: github.event.inputs.network == 'mainnet'
+        working-directory: contracts
+        run: |
+          echo "${{ secrets.MAINNET_DEPLOY_KEYPAIR }}" > deploy-keypair.json
+          anchor deploy --provider.cluster mainnet --provider.wallet deploy-keypair.json
+          rm deploy-keypair.json
+
+      - name: Upload IDL
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-idl
+          path: contracts/target/idl/
