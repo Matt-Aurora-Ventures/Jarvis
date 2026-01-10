@@ -38,7 +38,7 @@ lifeos/logs/
 lifeos/models/
 lifeos/memory/
 lifeos/reports/
-data/
+/data/
 *.log
 *.log.*
 *.pid

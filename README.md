@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-3.7.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.8.0-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1108%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
@@ -105,6 +105,25 @@ JARVIS is not just another chatbot. It's an **autonomous AI system** that:
 - Live positions with TP/SL visualization
 - Token scanner with rug detection
 - Strategy performance metrics
+
+### 📈 Data Platform (v3.8.0)
+| Feature | Description |
+|---------|-------------|
+| **Anonymous Data Collection** | GDPR-compliant with k-anonymity enforcement |
+| **Data Quality Scoring** | 6-dimension scoring (completeness, accuracy, freshness) |
+| **Anomaly Detection** | Z-score outliers, spike detection, impossible values |
+| **A/B Testing** | Deterministic hash-based user assignment, statistical analysis |
+| **Strategy Optimization** | Optuna hyperparameter tuning with walk-forward validation |
+| **Data Marketplace** | Packaging, dynamic pricing, contributor payouts |
+
+### 🔍 Monitoring & Alerts (v3.8.0)
+| Feature | Description |
+|---------|-------------|
+| **Health Monitoring** | Real-time component status (DB, RPC, Treasury, Trading) |
+| **Alert Management** | Severity levels, cooldowns, suppression |
+| **Notifications** | Slack and Discord webhook integration |
+| **Treasury Reports** | Weekly/monthly performance with Markdown export |
+| **Rewards Calculator** | Tiered APY projections with lock bonuses |
 
 ---
 
@@ -728,6 +747,49 @@ GET /api/credits/transactions
 GET /api/treasury/status
 GET /api/treasury/balances
 GET /api/treasury/distributions
+GET /api/treasury/reports/weekly
+GET /api/treasury/reports/monthly
+```
+
+#### Data Platform (v3.8.0)
+```bash
+# Consent management
+GET /api/consent/{wallet}
+POST /api/consent/update
+DELETE /api/data/request-deletion
+
+# Data quality
+GET /api/data/quality/{dataset_id}
+GET /api/data/anomalies
+
+# Aggregation
+GET /api/data/aggregated/strategy/{strategy_id}
+GET /api/data/aggregated/token/{token_address}
+```
+
+#### Experiments (v3.8.0)
+```bash
+POST /api/experiments/create
+GET /api/experiments/{experiment_id}
+POST /api/experiments/{experiment_id}/variant/{user_id}
+GET /api/experiments/{experiment_id}/analysis
+```
+
+#### Monitoring (v3.8.0)
+```bash
+GET /api/health
+GET /api/health/components
+GET /api/alerts/active
+POST /api/alerts/{alert_id}/acknowledge
+POST /api/alerts/{alert_id}/resolve
+```
+
+#### Rewards Calculator (v3.8.0)
+```bash
+GET /api/rewards/calculate/{wallet}
+GET /api/rewards/project/{wallet}
+GET /api/rewards/tiers
+GET /api/rewards/apy-range
 ```
 
 ---
@@ -845,6 +907,29 @@ docker-compose -f docker-compose.monitoring.yml up -d
 ## 🗺️ Roadmap
 
 ### Completed ✓
+
+**v3.8.0 - Treasury & Data Platform (NEW)**
+- [x] Squads Protocol multisig integration for treasury
+- [x] Strategy Manager framework with YAML configuration
+- [x] Treasury transparency dashboard with WebSocket updates
+- [x] GDPR-compliant data anonymization (k-anonymity, hashing)
+- [x] Consent-based data collection system
+- [x] Data deletion with audit trail (GDPR compliance)
+- [x] Retention policies with automated cleanup
+- [x] Data quality metrics (completeness, accuracy, freshness)
+- [x] Statistical anomaly detection (z-score, spike detection)
+- [x] Trade outcome aggregation by strategy/token/market
+- [x] Optuna-based strategy parameter optimization
+- [x] Walk-forward backtesting framework
+- [x] A/B testing framework with statistical analysis
+- [x] Wallet-based verification (NO KYC required)
+- [x] On-chain reputation scoring system
+- [x] Data marketplace packaging and dynamic pricing
+- [x] Revenue distribution to data contributors
+- [x] System health monitoring dashboard
+- [x] Alert management (Slack/Discord notifications)
+- [x] Treasury performance reports (weekly/monthly)
+- [x] Tiered staking rewards calculator with projections
 
 - [x] Core trading engine with 81+ strategies
 - [x] Jupiter, Raydium, Orca DEX integration
