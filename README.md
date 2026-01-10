@@ -21,6 +21,7 @@
 - [Vision](#-vision)
 - [Features](#-features)
 - [Quick Start](#-quick-start)
+- [Repository Map](#repository-map)
 - [Trading Engine](#-trading-engine)
 - [Staking System](#-staking-system)
 - [Credit System](#-credit-system)
@@ -34,9 +35,11 @@
 - [API Reference](#-api-reference)
 - [Configuration](#%EF%B8%8F-configuration)
 - [Deployment](#-deployment)
+- [Change History & Traceability](#change-history--traceability)
 - [Roadmap](#%EF%B8%8F-roadmap)
 - [Contributing](#-contributing)
 - [Security](#-security)
+- [License](#-license)
 
 ---
 
@@ -188,6 +191,86 @@ cd frontend && npm install && npm run dev
 | `lifeos chat` | Voice conversation mode |
 | `lifeos doctor` | System health check |
 | `lifeos trading coliseum start` | Start paper-trading |
+
+---
+
+## Repository Map
+
+This section maps every major capability to its home in the repo so the README stays exhaustive.
+
+### Top-Level Structure
+
+| Path | Purpose |
+| --- | --- |
+| `api/` | API servers (Flask/FastAPI), routes, webhooks, websocket streaming. |
+| `bin/` | CLI entry points (`lifeos`). |
+| `config/` | Runtime settings and RPC provider configs. |
+| `contracts/` | On-chain programs for staking and $KR8TIV. |
+| `core/` | Core engine: trading, treasury, data platform, self-improvement, safety. |
+| `data/` | Runtime state, memory DB, reports, positions, paper trading, wallets. |
+| `database/` | Database schema and migrations. |
+| `desktop/` | Desktop task manager UI (tkinter). |
+| `docs/` | Architecture, trading, security, setup, handoffs. |
+| `examples/` | Demos and small integration tests. |
+| `frontend/` | React dashboard (Vite + Tailwind). |
+| `integrations/` | External service integrations (Bags.fm, etc.). |
+| `lifeos/` | LifeOS runtime, config, plugins, persistence. |
+| `logs/` | Local runtime logs and PID files. |
+| `monitoring/` | Prometheus/Grafana/Alertmanager config. |
+| `playground/` | Experiments and simulations. |
+| `plugins/` | Modular extensions (telegram, trading, voice, x_sentiment). |
+| `scripts/` | Ops utilities, trading helpers, health checks. |
+| `tests/` | Automated test suite. |
+| `tg_bot/` | Telegram bot app, handlers, services. |
+| `web/` | Flask control deck and web UI helpers. |
+| `.github/` | CI, workflows, issue templates. |
+
+### Capability-to-Module Index
+
+| Capability | Primary modules |
+| --- | --- |
+| Trading and execution | `core/trading/`, `core/trading_*.py`, `scripts/*trader*`, `api/`, `frontend/` |
+| Paper trading and coliseum | `core/paper_trading.py`, `core/trading_coliseum.py`, `tg_bot/`, `scripts/*paper*` |
+| Treasury and rewards | `core/treasury/`, `core/economics/`, `core/monitoring/`, `api/` |
+| Staking and credits | `contracts/`, `core/staking/`, `core/credits/`, `core/payments/` |
+| Data platform and experiments | `core/data/`, `core/data_consent/`, `core/experiments/`, `core/metrics/` |
+| Monitoring and alerts | `core/monitoring/`, `monitoring/`, `api/` |
+| Voice and wake word | `core/voice*.py`, `core/wake_word.py`, `plugins/voice/` |
+| Self-improvement | `core/self_improving/`, `core/self_improvement_engine*.py`, `lifeos/` |
+| Integrations and plugins | `integrations/`, `core/integrations/`, `plugins/` |
+| Interfaces | `frontend/`, `tg_bot/`, `web/`, `desktop/` |
+
+### Primary Entry Points
+
+- CLI: `bin/lifeos` (calls `core/cli.py`)
+- LifeOS runtime: `lifeos/jarvis.py`, `core/jarvis.py`
+- API servers: `api/server.py` (Flask), `api/fastapi_app.py` (FastAPI)
+- Dashboard: `frontend/` (Vite dev server)
+- Telegram bot: `tg_bot/bot.py`
+- Web control deck: `web/task_web.py`
+- Desktop task GUI: `desktop/task_gui.py`
+- Ops scripts: `scripts/run_dev.py`, `scripts/run_trading_pipeline.py`
+
+### Data and Storage Locations
+
+- `data/` for memory (`jarvis_memory.db`), state (`jarvis_state.json`), positions, paper trading, wallets.
+- `database/migrations/` for schema evolution.
+- `logs/` for runtime logs and PID files.
+- `secrets/` for local keys (created during setup, git-ignored).
+- Local caches (for example `.pytest_cache/`, `__pycache__/`) are ignored.
+
+### Docs Index
+
+- `docs/architecture/` for system architecture and audits.
+- `docs/trading/` for trading system guidance.
+- `docs/security/` for security and compliance notes.
+- `docs/setup/`, `docs/development/`, `docs/sessions/` for environment, dev, and handoff notes.
+- Key references: `docs/ARCHITECTURE_ANALYSIS_2026-01-01.md`, `docs/TRADING_AI_CONTEXT.md`, `docs/SENTIMENT_BOTS_GUIDE.md`.
+
+### Testing and QA
+
+- `tests/` holds unit and integration coverage across core, API, and integrations.
+- Run with `pytest tests/ -v` (see Contributing for more).
 
 ---
 
@@ -901,6 +984,17 @@ docker-compose -f docker-compose.monitoring.yml up -d
 - [ ] Monitoring and alerting
 - [ ] Log aggregation (Loki)
 - [ ] Backup automation
+
+---
+
+## Change History & Traceability
+
+This README is the capability index; the authoritative release log lives in `CHANGELOG.md`.
+
+- Release summaries: `CHANGELOG.md`
+- Full commit ledger: `git log --oneline --decorate`
+- File-level diffs between versions: `git diff tag1..tag2`
+- Architecture decisions and audits: `docs/`
 
 ---
 
