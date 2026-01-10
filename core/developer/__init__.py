@@ -13,7 +13,7 @@ from .sdk import (
     RateLimitInfo,
 )
 
-from .api_keys import (
+from .key_manager import (
     APIKeyManager,
     APIKey,
     KeyScope,
