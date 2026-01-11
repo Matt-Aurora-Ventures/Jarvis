@@ -1082,6 +1082,30 @@ else:
 | Pre-Caching | Predicts your next 3 likely intents |
 | Ring Buffer | Last 30 seconds always in context |
 | Offline TTS | Piper synthesis works without internet |
+| Morgan Freeman | Deep narrator voice preset via edge-tts |
+
+### Voice Presets (Voice Bible)
+
+```python
+from core.voice_tts import speak
+
+# Available presets
+speak("Hello", preset="morgan")   # Morgan Freeman-style deep voice
+speak("Hello", preset="jarvis")   # Default Jarvis voice
+speak("Hello", preset="butler")   # British butler (en-GB-RyanNeural)
+speak("Hello", preset="narrator") # Deep storyteller (en-US-RogerNeural)
+speak("Hello", preset="tech")     # Fast technical voice
+```
+
+### TTS/STT Engine Support
+
+| Engine | Type | Cost | Offline |
+|--------|------|------|---------|
+| Edge-TTS | TTS | FREE | No |
+| Piper | TTS | FREE | Yes |
+| Faster Whisper | STT | FREE | Yes |
+| Gemini | STT | FREE tier | No |
+| OpenAI Whisper | STT | $0.006/min | No |
 
 ### Voice Commands
 
@@ -1854,7 +1878,26 @@ This README is the capability index; the authoritative release log lives in `CHA
 
 ### Completed ✓
 
-**v4.0.0 - Developer Platform & Vision (NEW)**
+**v4.1.0 - Full System Audit & Enhancement (NEW)**
+- [x] Treasury Trading System with AES-256 encrypted wallets
+- [x] Jupiter Aggregator integration for Solana swaps
+- [x] Telegram trading dashboard with live buttons (/dashboard, /trade, /positions)
+- [x] Take profit/stop loss by sentiment grade (A=30%/10%, B+=20%/8%)
+- [x] Grok-3 AI integration (content, images, sentiment)
+- [x] X.com sentiment analysis with budget controls ($3/day cap)
+- [x] Whale tracking with alert thresholds ($10K/$50K/$100K)
+- [x] Voice Bible with Morgan Freeman preset (edge-tts)
+- [x] 6 TTS engines (Edge-TTS, Piper, macOS say, OpenAI, XTTS, Coqui)
+- [x] 5 STT engines (Faster Whisper, Gemini, OpenAI, Google, Sphinx)
+- [x] Wake word detection via openwakeword
+- [x] Autonomous Agent with 7 tools and self-healing
+- [x] Circular logic detection and prevention (CycleGovernor)
+- [x] Autonomous Researcher for model discovery
+- [x] Twitter/X OAuth 2.0 for @Jarvis_lifeos
+- [x] Sentiment Engine at 84.6% accuracy
+- [x] Security testing framework (22 unit tests, 9 penetration tests)
+
+**v4.0.0 - Developer Platform & Vision**
 - [x] Developer API SDK with auto-auth and retry
 - [x] API key management with scopes and rate limits
 - [x] Webhook system with signed payloads and retry logic
