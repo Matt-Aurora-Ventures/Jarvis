@@ -255,6 +255,24 @@ def _include_routers(app: FastAPI):
     except ImportError as e:
         logger.warning(f"Transparency routes not available: {e}")
 
+    # Treasury dashboard routes
+    try:
+        from core.treasury.dashboard import create_dashboard_router
+        dashboard_router = create_dashboard_router()
+        if dashboard_router:
+            app.include_router(dashboard_router)
+            logger.info("Included treasury dashboard routes")
+    except ImportError as e:
+        logger.warning(f"Treasury dashboard routes not available: {e}")
+
+    # Treasury reports routes
+    try:
+        from api.routes.treasury_reports import router as reports_router
+        app.include_router(reports_router)
+        logger.info("Included treasury reports routes")
+    except ImportError as e:
+        logger.warning(f"Treasury reports routes not available: {e}")
+
     # Data consent routes
     try:
         from core.data_consent.routes import router as consent_router
