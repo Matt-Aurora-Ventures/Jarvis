@@ -25,6 +25,11 @@ import os
 import sys
 from pathlib import Path
 
+# Fix Windows console encoding for emojis
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 # Add project root to path
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
