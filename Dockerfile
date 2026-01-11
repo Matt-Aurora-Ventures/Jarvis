@@ -30,6 +30,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libffi-dev \
+    portaudio19-dev \
+    libgl1-mesa-glx \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
