@@ -11,6 +11,7 @@ from core.data.retention import RetentionManager, RetentionPolicy
 from core.data.validation import DataValidator, ValidationResult
 from core.data.anomaly import AnomalyDetector, Anomaly, AnomalyType
 from core.data.quality import QualityMetrics, QualityReport
+from core.data.metrics import DataCollectionMonitor, get_data_collection_monitor
 
 __all__ = [
     # Anonymization
@@ -34,4 +35,7 @@ __all__ = [
     # Quality
     "QualityMetrics",
     "QualityReport",
+    # Metrics
+    "DataCollectionMonitor",
+    "get_data_collection_monitor",
 ]
