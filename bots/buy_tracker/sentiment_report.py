@@ -21,6 +21,34 @@ logger = logging.getLogger(__name__)
 PREDICTIONS_FILE = Path(__file__).parent / "predictions_history.json"
 
 
+# Custom emoji IDs from the KR8TIV pack (t.me/addemoji/KR8TIV)
+# You can get these IDs by adding the pack and checking the sticker info
+# Format: <tg-emoji emoji-id="ID">fallback</tg-emoji>
+CUSTOM_EMOJIS = {
+    # These IDs need to be replaced with actual IDs from your pack
+    # For now using standard emojis as fallback
+    "bull": "🟢",      # Replace with KR8TIV bull emoji ID
+    "bear": "🔴",      # Replace with KR8TIV bear emoji ID
+    "neutral": "🟡",   # Replace with KR8TIV neutral emoji ID
+    "rocket": "🚀",    # Replace with KR8TIV rocket emoji ID
+    "fire": "🔥",      # Replace with KR8TIV fire emoji ID
+    "chart_up": "📈",  # Replace with KR8TIV chart up emoji ID
+    "chart_down": "📉",# Replace with KR8TIV chart down emoji ID
+    "money": "💰",     # Replace with KR8TIV money emoji ID
+    "robot": "🤖",     # Replace with KR8TIV robot emoji ID
+    "ape": "🦍",       # Replace with KR8TIV ape emoji ID
+    "crown": "👑",     # Replace with KR8TIV crown emoji ID
+    "target": "🎯",    # Replace with KR8TIV target emoji ID
+    "warning": "⚠️",   # Replace with KR8TIV warning emoji ID
+    "diamond": "💎",   # Replace with KR8TIV diamond emoji ID
+}
+
+
+def get_emoji(name: str, use_custom: bool = True) -> str:
+    """Get emoji, optionally using custom KR8TIV pack."""
+    return CUSTOM_EMOJIS.get(name, "")
+
+
 @dataclass
 class MacroAnalysis:
     """Macro events and geopolitical analysis."""
@@ -317,8 +345,8 @@ class SentimentReportGenerator:
             # Format report
             report = self._format_report(tokens, grok_summary, macro, markets, stock_picks, picks_changes, commodities, precious_metals)
 
-            # Post to Telegram
-            await self._post_to_telegram(report)
+            # Post to Telegram with ape buttons for bullish tokens
+            await self._post_to_telegram(report, tokens=tokens)
 
             logger.info(f"Posted sentiment report with {len(tokens)} tokens + stocks + commodities + metals")
 
@@ -1360,18 +1388,40 @@ Be specific about price targets and key levels to watch."""
 
         return [msg1, msg2, msg3]
 
-    async def _post_to_telegram(self, messages: List[str]):
-        """Post report messages to Telegram."""
+    async def _post_to_telegram(self, messages: List[str], tokens: List[TokenSentiment] = None):
+        """Post report messages to Telegram with ape buttons for tradeable assets."""
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
         for i, msg in enumerate(messages):
             try:
+                payload = {
+                    "chat_id": self.chat_id,
+                    "text": msg,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": "true",
+                }
+
+                # Add ape buttons to the first message (tokens)
+                if i == 0 and tokens:
+                    # Filter for bullish tokens with contracts
+                    tradeable = [t for t in tokens if t.grok_verdict == "BULLISH" and t.contract_address]
+
+                    if tradeable:
+                        keyboard = []
+                        for t in tradeable[:3]:  # Top 3 bullish tokens
+                            # Short callback data to fit Telegram's 64 byte limit
+                            cb_base = f"ape:t:{t.symbol}:{t.contract_address[:10]}"
+                            keyboard.append([
+                                InlineKeyboardButton(f"🦍 {t.symbol} 5%", callback_data=f"5:{cb_base}"[:64]),
+                                InlineKeyboardButton(f"🐒 2%", callback_data=f"2:{cb_base}"[:64]),
+                                InlineKeyboardButton(f"🐵 1%", callback_data=f"1:{cb_base}"[:64]),
+                            ])
+
+                        payload["reply_markup"] = InlineKeyboardMarkup(keyboard).to_dict()
+
                 async with self._session.post(
                     f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
-                    data={
-                        "chat_id": self.chat_id,
-                        "text": msg,
-                        "parse_mode": "HTML",
-                        "disable_web_page_preview": "true",
-                    }
+                    json=payload
                 ) as resp:
                     result = await resp.json()
                     if not result.get("ok"):
@@ -1383,6 +1433,72 @@ Be specific about price targets and key levels to watch."""
 
             except Exception as e:
                 logger.error(f"Failed to post message {i+1} to Telegram: {e}")
+
+        # Post treasury status as final message
+        await self._post_treasury_status()
+
+    async def _post_treasury_status(self):
+        """Post treasury status at the end of report."""
+        try:
+            # Try to get treasury status
+            treasury_status = await self._get_treasury_status()
+
+            if treasury_status:
+                status_msg = f"""
+<b>========================================</b>
+<b>   💰 TREASURY STATUS</b>
+<b>========================================</b>
+
+Balance: <code>{treasury_status['balance_sol']:.4f} SOL</code> (~${treasury_status['balance_usd']:,.2f})
+Open Positions: <code>{treasury_status['positions']}</code>
+24h P&L: {'📈' if treasury_status['pnl_24h'] >= 0 else '📉'} <code>{treasury_status['pnl_24h']:+.2f}%</code>
+
+Treasury: <code>{treasury_status['address'][:12]}...{treasury_status['address'][-4:]}</code>
+<a href="https://solscan.io/account/{treasury_status['address']}">View on Solscan</a>
+
+<i>Use APE buttons above to trade with treasury</i>
+<i>All trades follow Grok's recommended TP/SL</i>
+"""
+                async with self._session.post(
+                    f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                    data={
+                        "chat_id": self.chat_id,
+                        "text": status_msg,
+                        "parse_mode": "HTML",
+                        "disable_web_page_preview": "false",
+                    }
+                ) as resp:
+                    result = await resp.json()
+                    if not result.get("ok"):
+                        logger.debug(f"Treasury status not posted: {result}")
+
+        except Exception as e:
+            logger.debug(f"Could not post treasury status: {e}")
+
+    async def _get_treasury_status(self) -> Optional[Dict[str, Any]]:
+        """Get current treasury status."""
+        try:
+            from bots.treasury.wallet import SecureWallet
+
+            wallet = SecureWallet()
+            treasury = wallet.get_treasury()
+
+            if treasury:
+                # Get current SOL price
+                sol_price = 100  # Placeholder - would fetch from API
+                balance_usd = treasury.balance_sol * sol_price
+
+                return {
+                    "address": treasury.address,
+                    "balance_sol": treasury.balance_sol,
+                    "balance_usd": balance_usd,
+                    "positions": 0,  # Would get from trading engine
+                    "pnl_24h": 0.0,  # Would calculate from trade history
+                }
+        except Exception as e:
+            logger.debug(f"Treasury not available: {e}")
+
+        return None
 
 
 async def run_sentiment_reporter():

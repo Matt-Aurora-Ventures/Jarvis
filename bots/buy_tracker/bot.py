@@ -87,6 +87,8 @@ class JarvisBuyBot:
         self._running = False
         # Store original messages for FAQ expand/collapse {message_id: original_text}
         self._message_cache: dict[int, str] = {}
+        # Counter for emoji credit attribution
+        self._buy_counter = 0
 
     async def start(self):
         """Start the buy bot."""
@@ -281,6 +283,8 @@ class JarvisBuyBot:
 
     def _format_buy_message(self, buy: BuyTransaction) -> str:
         """Format buy notification message like BobbyBuyBot style."""
+        # Increment buy counter
+        self._buy_counter += 1
 
         # Green circles based on buy size
         circles = self._get_buy_circles(buy.usd_amount)
@@ -304,6 +308,10 @@ class JarvisBuyBot:
             f"<b>MCap:</b> {mcap_str}\n\n"
             f"<a href=\"{buy.tx_url}\">TX</a> | <a href=\"{buy.dex_url}\">Dex</a>\n"
         )
+
+        # Add @FrankkkNL credit every 10th buy
+        if self._buy_counter % 10 == 0:
+            message += f"\n<i>🎨 Custom emojis by @FrankkkNL</i>\n"
 
         return message
 
