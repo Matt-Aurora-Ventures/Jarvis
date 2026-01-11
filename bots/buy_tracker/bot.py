@@ -316,8 +316,10 @@ class JarvisBuyBot:
         return message
 
     def _get_buy_circles(self, usd_amount: float) -> str:
-        """Get green circles based on buy amount."""
-        emoji = self.config.buy_emoji  # Robot emoji
+        """Get KR8TIV custom emoji circles based on buy amount."""
+        # Custom KR8TIV robot emoji (ID from t.me/addemoji/KR8TIV)
+        KR8TIV_ROBOT_ID = "5990286304724655084"
+        emoji = f'<tg-emoji emoji-id="{KR8TIV_ROBOT_ID}">🤖</tg-emoji>'
 
         if usd_amount >= 10000:
             return emoji * 10

@@ -22,31 +22,50 @@ PREDICTIONS_FILE = Path(__file__).parent / "predictions_history.json"
 
 
 # Custom emoji IDs from the KR8TIV pack (t.me/addemoji/KR8TIV)
-# You can get these IDs by adding the pack and checking the sticker info
 # Format: <tg-emoji emoji-id="ID">fallback</tg-emoji>
-CUSTOM_EMOJIS = {
-    # These IDs need to be replaced with actual IDs from your pack
-    # For now using standard emojis as fallback
-    "bull": "🟢",      # Replace with KR8TIV bull emoji ID
-    "bear": "🔴",      # Replace with KR8TIV bear emoji ID
-    "neutral": "🟡",   # Replace with KR8TIV neutral emoji ID
-    "rocket": "🚀",    # Replace with KR8TIV rocket emoji ID
-    "fire": "🔥",      # Replace with KR8TIV fire emoji ID
-    "chart_up": "📈",  # Replace with KR8TIV chart up emoji ID
-    "chart_down": "📉",# Replace with KR8TIV chart down emoji ID
-    "money": "💰",     # Replace with KR8TIV money emoji ID
-    "robot": "🤖",     # Replace with KR8TIV robot emoji ID
-    "ape": "🦍",       # Replace with KR8TIV ape emoji ID
-    "crown": "👑",     # Replace with KR8TIV crown emoji ID
-    "target": "🎯",    # Replace with KR8TIV target emoji ID
-    "warning": "⚠️",   # Replace with KR8TIV warning emoji ID
-    "diamond": "💎",   # Replace with KR8TIV diamond emoji ID
+# To add more: forward emoji to @RawDataBot to get the ID
+KR8TIV_EMOJI_IDS = {
+    "robot": "5990286304724655084",  # KR8TIV robot emoji
+    # Add more emoji IDs here as you get them from the pack
+    # "bull": "ID_HERE",
+    # "bear": "ID_HERE",
+    # etc.
+}
+
+# Standard emoji fallbacks (used when custom not available)
+STANDARD_EMOJIS = {
+    "bull": "🟢",
+    "bear": "🔴",
+    "neutral": "🟡",
+    "rocket": "🚀",
+    "fire": "🔥",
+    "chart_up": "📈",
+    "chart_down": "📉",
+    "money": "💰",
+    "robot": "🤖",
+    "ape": "🦍",
+    "crown": "👑",
+    "target": "🎯",
+    "warning": "⚠️",
+    "diamond": "💎",
 }
 
 
 def get_emoji(name: str, use_custom: bool = True) -> str:
-    """Get emoji, optionally using custom KR8TIV pack."""
-    return CUSTOM_EMOJIS.get(name, "")
+    """Get emoji, using custom KR8TIV pack when available.
+
+    Args:
+        name: Emoji name (robot, bull, bear, etc.)
+        use_custom: If True, use custom emoji when available
+
+    Returns:
+        HTML string with custom emoji or standard fallback
+    """
+    if use_custom and name in KR8TIV_EMOJI_IDS:
+        emoji_id = KR8TIV_EMOJI_IDS[name]
+        fallback = STANDARD_EMOJIS.get(name, "")
+        return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
+    return STANDARD_EMOJIS.get(name, "")
 
 
 @dataclass
