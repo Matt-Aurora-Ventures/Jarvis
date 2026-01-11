@@ -1,0 +1,680 @@
+"""
+Jupiter Aggregator Integration for Jarvis Treasury
+Provides swap execution, quotes, and DCA functionality
+"""
+
+import os
+import json
+import asyncio
+import aiohttp
+import logging
+from typing import Optional, Dict, Any, List, Tuple
+from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal
+from enum import Enum
+
+logger = logging.getLogger(__name__)
+
+
+class SwapMode(Enum):
+    EXACT_IN = "ExactIn"    # Specify input amount
+    EXACT_OUT = "ExactOut"  # Specify output amount
+
+
+class SlippageMode(Enum):
+    AUTO = "auto"
+    FIXED = "fixed"
+
+
+@dataclass
+class TokenInfo:
+    """Token information from Jupiter."""
+    address: str
+    symbol: str
+    name: str
+    decimals: int
+    price_usd: float = 0.0
+    logo_uri: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'TokenInfo':
+        return cls(
+            address=data.get('address', ''),
+            symbol=data.get('symbol', 'UNKNOWN'),
+            name=data.get('name', ''),
+            decimals=data.get('decimals', 9),
+            price_usd=data.get('price', 0.0),
+            logo_uri=data.get('logoURI', '')
+        )
+
+
+@dataclass
+class SwapQuote:
+    """Quote for a token swap."""
+    input_mint: str
+    output_mint: str
+    input_amount: int          # In lamports/smallest unit
+    output_amount: int         # Expected output in smallest unit
+    input_amount_ui: float     # Human readable
+    output_amount_ui: float    # Human readable
+    price_impact_pct: float
+    slippage_bps: int
+    fees_usd: float
+    route_plan: List[Dict]
+    quote_response: Dict       # Raw Jupiter response for execution
+
+    @property
+    def exchange_rate(self) -> float:
+        """Get the exchange rate (output per input)."""
+        if self.input_amount_ui > 0:
+            return self.output_amount_ui / self.input_amount_ui
+        return 0.0
+
+
+@dataclass
+class SwapResult:
+    """Result of a swap execution."""
+    success: bool
+    signature: str = ""
+    input_amount: float = 0.0
+    output_amount: float = 0.0
+    input_symbol: str = ""
+    output_symbol: str = ""
+    price_impact: float = 0.0
+    fees_usd: float = 0.0
+    error: str = ""
+    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'success': self.success,
+            'signature': self.signature,
+            'input_amount': self.input_amount,
+            'output_amount': self.output_amount,
+            'input_symbol': self.input_symbol,
+            'output_symbol': self.output_symbol,
+            'price_impact': self.price_impact,
+            'fees_usd': self.fees_usd,
+            'error': self.error,
+            'timestamp': self.timestamp
+        }
+
+
+class JupiterClient:
+    """
+    Jupiter Aggregator API client for Solana swaps.
+
+    Features:
+    - Best route discovery across all DEXs
+    - Price quotes with slippage protection
+    - Transaction building and simulation
+    - Support for limit orders via DCA
+    """
+
+    JUPITER_API = "https://quote-api.jup.ag/v6"
+    JUPITER_PRICE_API = "https://price.jup.ag/v6"
+    JUPITER_TOKEN_API = "https://token.jup.ag"
+
+    # Common token addresses
+    SOL_MINT = "So11111111111111111111111111111111111111112"
+    USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+
+    def __init__(self, rpc_url: str = None):
+        """
+        Initialize Jupiter client.
+
+        Args:
+            rpc_url: Solana RPC URL (defaults to env var or mainnet)
+        """
+        self.rpc_url = rpc_url or os.environ.get(
+            'SOLANA_RPC_URL',
+            'https://api.mainnet-beta.solana.com'
+        )
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._token_cache: Dict[str, TokenInfo] = {}
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Get or create aiohttp session."""
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession()
+        return self._session
+
+    async def close(self):
+        """Close the client session."""
+        if self._session and not self._session.closed:
+            await self._session.close()
+
+    async def get_token_info(self, mint: str) -> Optional[TokenInfo]:
+        """Get token information by mint address."""
+        if mint in self._token_cache:
+            return self._token_cache[mint]
+
+        session = await self._get_session()
+
+        try:
+            # Get token from Jupiter token list
+            async with session.get(
+                f"{self.JUPITER_TOKEN_API}/strict",
+                params={'mint': mint}
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data:
+                        token = TokenInfo.from_dict(data[0] if isinstance(data, list) else data)
+                        self._token_cache[mint] = token
+                        return token
+
+            # Fallback: get from price API
+            async with session.get(
+                f"{self.JUPITER_PRICE_API}/price",
+                params={'ids': mint}
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if mint in data.get('data', {}):
+                        price_info = data['data'][mint]
+                        token = TokenInfo(
+                            address=mint,
+                            symbol=price_info.get('mintSymbol', 'UNKNOWN'),
+                            name=price_info.get('mintSymbol', ''),
+                            decimals=9,
+                            price_usd=price_info.get('price', 0)
+                        )
+                        self._token_cache[mint] = token
+                        return token
+
+        except Exception as e:
+            logger.error(f"Failed to get token info for {mint[:8]}...: {e}")
+
+        return None
+
+    async def get_token_price(self, mint: str) -> float:
+        """Get current token price in USD."""
+        session = await self._get_session()
+
+        try:
+            async with session.get(
+                f"{self.JUPITER_PRICE_API}/price",
+                params={'ids': mint}
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data.get('data', {}).get(mint, {}).get('price', 0.0)
+        except Exception as e:
+            logger.error(f"Failed to get price for {mint[:8]}...: {e}")
+
+        return 0.0
+
+    async def get_quote(
+        self,
+        input_mint: str,
+        output_mint: str,
+        amount: int,
+        slippage_bps: int = 50,
+        mode: SwapMode = SwapMode.EXACT_IN
+    ) -> Optional[SwapQuote]:
+        """
+        Get a swap quote from Jupiter.
+
+        Args:
+            input_mint: Input token mint address
+            output_mint: Output token mint address
+            amount: Amount in smallest unit (lamports for SOL)
+            slippage_bps: Slippage tolerance in basis points (50 = 0.5%)
+            mode: ExactIn or ExactOut
+
+        Returns:
+            SwapQuote with route details or None if failed
+        """
+        session = await self._get_session()
+
+        try:
+            params = {
+                'inputMint': input_mint,
+                'outputMint': output_mint,
+                'amount': str(amount),
+                'slippageBps': slippage_bps,
+                'swapMode': mode.value
+            }
+
+            async with session.get(f"{self.JUPITER_API}/quote", params=params) as resp:
+                if resp.status != 200:
+                    logger.error(f"Quote failed: {resp.status}")
+                    return None
+
+                data = await resp.json()
+
+                if 'error' in data:
+                    logger.error(f"Quote error: {data['error']}")
+                    return None
+
+                # Get token info for decimals
+                input_info = await self.get_token_info(input_mint)
+                output_info = await self.get_token_info(output_mint)
+
+                input_decimals = input_info.decimals if input_info else 9
+                output_decimals = output_info.decimals if output_info else 9
+
+                input_amount = int(data.get('inAmount', 0))
+                output_amount = int(data.get('outAmount', 0))
+
+                return SwapQuote(
+                    input_mint=input_mint,
+                    output_mint=output_mint,
+                    input_amount=input_amount,
+                    output_amount=output_amount,
+                    input_amount_ui=input_amount / (10 ** input_decimals),
+                    output_amount_ui=output_amount / (10 ** output_decimals),
+                    price_impact_pct=float(data.get('priceImpactPct', 0)),
+                    slippage_bps=slippage_bps,
+                    fees_usd=0.0,  # Calculate from route
+                    route_plan=data.get('routePlan', []),
+                    quote_response=data
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to get quote: {e}")
+            return None
+
+    async def get_swap_transaction(
+        self,
+        quote: SwapQuote,
+        user_public_key: str,
+        wrap_unwrap_sol: bool = True,
+        compute_unit_price_micro_lamports: int = None
+    ) -> Optional[bytes]:
+        """
+        Get the swap transaction for signing.
+
+        Args:
+            quote: Quote from get_quote()
+            user_public_key: Wallet public key
+            wrap_unwrap_sol: Auto wrap/unwrap SOL
+            compute_unit_price_micro_lamports: Priority fee
+
+        Returns:
+            Transaction bytes for signing or None
+        """
+        session = await self._get_session()
+
+        try:
+            payload = {
+                'quoteResponse': quote.quote_response,
+                'userPublicKey': user_public_key,
+                'wrapAndUnwrapSol': wrap_unwrap_sol,
+                'dynamicComputeUnitLimit': True,
+            }
+
+            if compute_unit_price_micro_lamports:
+                payload['computeUnitPriceMicroLamports'] = compute_unit_price_micro_lamports
+
+            async with session.post(
+                f"{self.JUPITER_API}/swap",
+                json=payload
+            ) as resp:
+                if resp.status != 200:
+                    error = await resp.text()
+                    logger.error(f"Swap transaction failed: {error}")
+                    return None
+
+                data = await resp.json()
+                swap_transaction = data.get('swapTransaction')
+
+                if swap_transaction:
+                    import base64
+                    return base64.b64decode(swap_transaction)
+
+        except Exception as e:
+            logger.error(f"Failed to get swap transaction: {e}")
+
+        return None
+
+    async def simulate_transaction(self, transaction_bytes: bytes) -> Tuple[bool, str]:
+        """
+        Simulate a transaction before execution.
+
+        Returns:
+            Tuple of (success, error_message)
+        """
+        session = await self._get_session()
+
+        try:
+            import base64
+            encoded = base64.b64encode(transaction_bytes).decode()
+
+            async with session.post(self.rpc_url, json={
+                'jsonrpc': '2.0',
+                'id': 1,
+                'method': 'simulateTransaction',
+                'params': [
+                    encoded,
+                    {'encoding': 'base64', 'commitment': 'confirmed'}
+                ]
+            }) as resp:
+                data = await resp.json()
+                result = data.get('result', {})
+
+                if result.get('value', {}).get('err'):
+                    error = result['value']['err']
+                    return False, str(error)
+
+                return True, ""
+
+        except Exception as e:
+            return False, str(e)
+
+    async def execute_swap(
+        self,
+        quote: SwapQuote,
+        wallet,  # SecureWallet instance
+        simulate_first: bool = True,
+        priority_fee: int = None
+    ) -> SwapResult:
+        """
+        Execute a swap using the treasury wallet.
+
+        Args:
+            quote: Quote from get_quote()
+            wallet: SecureWallet instance for signing
+            simulate_first: Simulate before executing
+            priority_fee: Priority fee in micro lamports
+
+        Returns:
+            SwapResult with transaction details
+        """
+        try:
+            treasury = wallet.get_treasury()
+            if not treasury:
+                return SwapResult(success=False, error="No treasury wallet found")
+
+            # Get swap transaction
+            tx_bytes = await self.get_swap_transaction(
+                quote,
+                treasury.address,
+                compute_unit_price_micro_lamports=priority_fee
+            )
+
+            if not tx_bytes:
+                return SwapResult(success=False, error="Failed to build transaction")
+
+            # Simulate first
+            if simulate_first:
+                sim_success, sim_error = await self.simulate_transaction(tx_bytes)
+                if not sim_success:
+                    return SwapResult(
+                        success=False,
+                        error=f"Simulation failed: {sim_error}"
+                    )
+
+            # Sign transaction
+            signed_tx = wallet.sign_transaction(treasury.address, tx_bytes)
+
+            # Submit to network
+            session = await self._get_session()
+            import base64
+
+            async with session.post(self.rpc_url, json={
+                'jsonrpc': '2.0',
+                'id': 1,
+                'method': 'sendTransaction',
+                'params': [
+                    base64.b64encode(signed_tx).decode(),
+                    {'encoding': 'base64', 'preflightCommitment': 'confirmed'}
+                ]
+            }) as resp:
+                data = await resp.json()
+
+                if 'error' in data:
+                    return SwapResult(
+                        success=False,
+                        error=data['error'].get('message', 'Unknown error')
+                    )
+
+                signature = data.get('result', '')
+
+                # Get token info for symbols
+                input_info = await self.get_token_info(quote.input_mint)
+                output_info = await self.get_token_info(quote.output_mint)
+
+                return SwapResult(
+                    success=True,
+                    signature=signature,
+                    input_amount=quote.input_amount_ui,
+                    output_amount=quote.output_amount_ui,
+                    input_symbol=input_info.symbol if input_info else 'UNKNOWN',
+                    output_symbol=output_info.symbol if output_info else 'UNKNOWN',
+                    price_impact=quote.price_impact_pct,
+                    fees_usd=quote.fees_usd
+                )
+
+        except Exception as e:
+            logger.error(f"Swap execution failed: {e}")
+            return SwapResult(success=False, error=str(e))
+
+    async def get_sol_quote_for_usd(self, usd_amount: float, output_mint: str) -> Optional[SwapQuote]:
+        """
+        Get a quote to spend a specific USD amount of SOL.
+
+        Args:
+            usd_amount: Amount in USD to spend
+            output_mint: Token to receive
+
+        Returns:
+            SwapQuote or None
+        """
+        # Get SOL price
+        sol_price = await self.get_token_price(self.SOL_MINT)
+        if sol_price <= 0:
+            return None
+
+        # Calculate SOL amount
+        sol_amount = usd_amount / sol_price
+        lamports = int(sol_amount * 1e9)
+
+        return await self.get_quote(self.SOL_MINT, output_mint, lamports)
+
+
+class LimitOrderManager:
+    """
+    Manages limit orders, take profit, and stop loss triggers.
+    Uses price monitoring and executes via Jupiter when triggered.
+    """
+
+    def __init__(self, jupiter: JupiterClient, wallet):
+        self.jupiter = jupiter
+        self.wallet = wallet
+        self.orders: Dict[str, Dict] = {}
+        self._running = False
+        self._monitor_task: Optional[asyncio.Task] = None
+
+    async def create_take_profit(
+        self,
+        token_mint: str,
+        amount: int,
+        target_price: float,
+        order_id: str = None
+    ) -> str:
+        """
+        Create a take profit order.
+
+        Args:
+            token_mint: Token to sell
+            amount: Amount in smallest unit
+            target_price: Price in USD to trigger at
+            order_id: Optional custom order ID
+
+        Returns:
+            Order ID
+        """
+        import uuid
+        order_id = order_id or str(uuid.uuid4())[:8]
+
+        self.orders[order_id] = {
+            'type': 'TAKE_PROFIT',
+            'token_mint': token_mint,
+            'amount': amount,
+            'target_price': target_price,
+            'output_mint': JupiterClient.USDC_MINT,
+            'created_at': datetime.utcnow().isoformat(),
+            'status': 'ACTIVE',
+            'triggered_at': None,
+            'result': None
+        }
+
+        logger.info(f"Created take profit order {order_id}: sell at ${target_price}")
+        return order_id
+
+    async def create_stop_loss(
+        self,
+        token_mint: str,
+        amount: int,
+        stop_price: float,
+        order_id: str = None
+    ) -> str:
+        """
+        Create a stop loss order.
+
+        Args:
+            token_mint: Token to sell
+            amount: Amount in smallest unit
+            stop_price: Price in USD to trigger at
+            order_id: Optional custom order ID
+
+        Returns:
+            Order ID
+        """
+        import uuid
+        order_id = order_id or str(uuid.uuid4())[:8]
+
+        self.orders[order_id] = {
+            'type': 'STOP_LOSS',
+            'token_mint': token_mint,
+            'amount': amount,
+            'target_price': stop_price,
+            'output_mint': JupiterClient.USDC_MINT,
+            'created_at': datetime.utcnow().isoformat(),
+            'status': 'ACTIVE',
+            'triggered_at': None,
+            'result': None
+        }
+
+        logger.info(f"Created stop loss order {order_id}: sell at ${stop_price}")
+        return order_id
+
+    async def cancel_order(self, order_id: str) -> bool:
+        """Cancel an order."""
+        if order_id in self.orders:
+            self.orders[order_id]['status'] = 'CANCELLED'
+            logger.info(f"Cancelled order {order_id}")
+            return True
+        return False
+
+    async def start_monitoring(self, interval_seconds: int = 10):
+        """Start monitoring prices for order triggers."""
+        if self._running:
+            return
+
+        self._running = True
+        self._monitor_task = asyncio.create_task(self._monitor_loop(interval_seconds))
+        logger.info("Started order monitoring")
+
+    async def stop_monitoring(self):
+        """Stop monitoring."""
+        self._running = False
+        if self._monitor_task:
+            self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except asyncio.CancelledError:
+                pass
+
+    async def _monitor_loop(self, interval: int):
+        """Monitor prices and trigger orders."""
+        while self._running:
+            try:
+                await self._check_orders()
+            except Exception as e:
+                logger.error(f"Order check failed: {e}")
+
+            await asyncio.sleep(interval)
+
+    async def _check_orders(self):
+        """Check all active orders against current prices."""
+        active_orders = [
+            (oid, order) for oid, order in self.orders.items()
+            if order['status'] == 'ACTIVE'
+        ]
+
+        for order_id, order in active_orders:
+            try:
+                current_price = await self.jupiter.get_token_price(order['token_mint'])
+
+                if current_price <= 0:
+                    continue
+
+                triggered = False
+
+                if order['type'] == 'TAKE_PROFIT':
+                    # Trigger when price goes ABOVE target
+                    if current_price >= order['target_price']:
+                        triggered = True
+
+                elif order['type'] == 'STOP_LOSS':
+                    # Trigger when price goes BELOW target
+                    if current_price <= order['target_price']:
+                        triggered = True
+
+                if triggered:
+                    await self._execute_order(order_id, order, current_price)
+
+            except Exception as e:
+                logger.error(f"Failed to check order {order_id}: {e}")
+
+    async def _execute_order(self, order_id: str, order: Dict, current_price: float):
+        """Execute a triggered order."""
+        logger.info(f"Executing {order['type']} order {order_id} at ${current_price}")
+
+        order['status'] = 'EXECUTING'
+        order['triggered_at'] = datetime.utcnow().isoformat()
+        order['triggered_price'] = current_price
+
+        try:
+            # Get quote
+            quote = await self.jupiter.get_quote(
+                order['token_mint'],
+                order['output_mint'],
+                order['amount'],
+                slippage_bps=100  # 1% slippage for triggered orders
+            )
+
+            if not quote:
+                order['status'] = 'FAILED'
+                order['result'] = {'error': 'Failed to get quote'}
+                return
+
+            # Execute swap
+            result = await self.jupiter.execute_swap(quote, self.wallet)
+
+            order['status'] = 'COMPLETED' if result.success else 'FAILED'
+            order['result'] = result.to_dict()
+
+            logger.info(f"Order {order_id} {'completed' if result.success else 'failed'}")
+
+        except Exception as e:
+            order['status'] = 'FAILED'
+            order['result'] = {'error': str(e)}
+            logger.error(f"Order {order_id} execution failed: {e}")
+
+    def get_active_orders(self) -> List[Dict]:
+        """Get all active orders."""
+        return [
+            {'id': oid, **order}
+            for oid, order in self.orders.items()
+            if order['status'] == 'ACTIVE'
+        ]
+
+    def get_order_history(self) -> List[Dict]:
+        """Get all orders."""
+        return [{'id': oid, **order} for oid, order in self.orders.items()]

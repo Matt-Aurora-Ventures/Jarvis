@@ -158,6 +158,15 @@ data/youtube/
 bots/buy_tracker/predictions_history.json
 *_history.json
 
+# === TREASURY WALLET DATA ===
+# CRITICAL: Never commit wallet keys or trading state
+bots/treasury/.wallets/
+bots/treasury/.positions.json
+bots/treasury/.trade_history.json
+bots/treasury/.backtest_results/
+*.key
+.salt
+
 # === JUNK DIRECTORIES ===
 # Temporary/orphan directories
 \#/
