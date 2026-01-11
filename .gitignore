@@ -164,6 +164,7 @@ bots/treasury/.wallets/
 bots/treasury/.positions.json
 bots/treasury/.trade_history.json
 bots/treasury/.backtest_results/
+data/treasury_keypair.json
 *.key
 .salt
 
