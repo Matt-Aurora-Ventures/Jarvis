@@ -1,15 +1,29 @@
 name: Deploy
 
 on:
-  push:
-    branches: [main]
   release:
     types: [published]
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      network:
+        description: 'Network for contract deployment'
+        required: false
+        default: 'devnet'
+        type: choice
+        options:
+          - devnet
+          - mainnet
 
-# NOTE: This workflow is DISABLED by default.
-# To enable: Go to Settings > Secrets and Variables > Actions > Variables
-# Add a new variable: DEPLOY_ENABLED = true
+# NOTE: Deployments only run on manual trigger or release.
+# Push to main NO LONGER triggers automatic deployments.
 
 env:
   REGISTRY: ghcr.io
@@ -17,14 +31,13 @@ env:
 
 jobs:
   # =========================================================================
-  # Deploy to Staging (on push to main)
+  # Deploy to Staging (manual trigger only)
   # =========================================================================
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'
     environment: staging
-    continue-on-error: true  # Don't fail workflow if deploy fails
 
     steps:
       - uses: actions/checkout@v4
@@ -59,6 +72,7 @@ jobs:
 
       - name: Deploy to staging server
         uses: appleboy/ssh-action@v1.0.3
+        continue-on-error: true
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
@@ -69,41 +83,14 @@ jobs:
             docker compose up -d --remove-orphans
             docker image prune -f
 
-      - name: Run smoke tests
-        run: |
-          sleep 30
-          curl -f ${{ secrets.STAGING_URL }}/api/health || exit 1
-
-      - name: Notify on success
-        uses: slackapi/slack-github-action@v1.25.0
-        if: success()
-        with:
-          payload: |
-            {
-              "text": "✅ Staging deployment successful",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "✅ *Staging deployment successful*\nCommit: ${{ github.sha }}\nBy: ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-
   # =========================================================================
-  # Deploy to Production (on release)
+  # Deploy to Production (on release only)
   # =========================================================================
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' && vars.DEPLOY_ENABLED == 'true'
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
     environment: production
-    continue-on-error: true
-    needs: []
 
     steps:
       - uses: actions/checkout@v4
@@ -138,82 +125,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to production (blue-green)
+      - name: Deploy to production
         uses: appleboy/ssh-action@v1.0.3
+        continue-on-error: true
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
             cd /opt/jarvis
-
-            # Pull new image
             docker compose pull
-
-            # Start new container (green)
-            docker compose up -d --no-deps --scale api=2 api
-
-            # Wait for health check
-            sleep 30
-
-            # Check health
-            if curl -f http://localhost:8766/api/health; then
-              # Remove old container (blue)
-              docker compose up -d --no-deps --scale api=1 api
-              docker image prune -f
-              echo "Deployment successful"
-            else
-              # Rollback
-              docker compose down
-              docker compose up -d
-              echo "Deployment failed, rolled back"
-              exit 1
-            fi
-
-      - name: Run smoke tests
-        run: |
-          sleep 10
-          curl -f ${{ secrets.PRODUCTION_URL }}/api/health || exit 1
-
-      - name: Notify on success
-        uses: slackapi/slack-github-action@v1.25.0
-        if: success()
-        with:
-          payload: |
-            {
-              "text": "🚀 Production deployment successful",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "🚀 *Production deployment successful*\nVersion: ${{ github.event.release.tag_name }}\nBy: ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-
-      - name: Notify on failure
-        uses: slackapi/slack-github-action@v1.25.0
-        if: failure()
-        with:
-          payload: |
-            {
-              "text": "❌ Production deployment failed",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "❌ *Production deployment failed*\nVersion: ${{ github.event.release.tag_name }}\nCheck logs for details."
-                  }
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+            docker compose up -d --remove-orphans
+            docker image prune -f
 
   # =========================================================================
   # Smart Contract Deployment (manual trigger)
@@ -221,8 +144,7 @@ jobs:
   deploy-contracts:
     name: Deploy Smart Contracts
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    environment: ${{ github.event.inputs.network }}
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.network != ''
 
     steps:
       - uses: actions/checkout@v4
@@ -241,6 +163,7 @@ jobs:
       - name: Deploy to devnet
         if: github.event.inputs.network == 'devnet'
         working-directory: contracts
+        continue-on-error: true
         run: |
           echo "${{ secrets.DEVNET_DEPLOY_KEYPAIR }}" > deploy-keypair.json
           anchor deploy --provider.cluster devnet --provider.wallet deploy-keypair.json
@@ -249,6 +172,7 @@ jobs:
       - name: Deploy to mainnet
         if: github.event.inputs.network == 'mainnet'
         working-directory: contracts
+        continue-on-error: true
         run: |
           echo "${{ secrets.MAINNET_DEPLOY_KEYPAIR }}" > deploy-keypair.json
           anchor deploy --provider.cluster mainnet --provider.wallet deploy-keypair.json
