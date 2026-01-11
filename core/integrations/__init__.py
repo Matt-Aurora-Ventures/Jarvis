@@ -1,6 +1,6 @@
 """
 Platform integrations for Jarvis.
-Provides connections to Trello, Gmail, Google Calendar, LinkedIn, X/Twitter, GitHub,
+Provides connections to Trello, Gmail, Google Calendar, LinkedIn, X/Twitter, GitHub, Slack,
 and automated sentiment bots for Telegram and X.
 """
 
@@ -8,6 +8,26 @@ from .trello_integration import TrelloIntegration
 from .gmail_integration import GmailIntegration
 from .google_calendar_integration import GoogleCalendarIntegration
 from .github_integration import GitHubIntegration
+
+# Slack integration
+try:
+    from .slack_integration import (
+        SlackIntegration,
+        SlackConfig,
+        SlackChannel,
+        get_slack,
+        send_alert as slack_send_alert,
+        send_message as slack_send_message,
+        is_configured as slack_is_configured,
+    )
+except ImportError:
+    SlackIntegration = None
+    SlackConfig = None
+    SlackChannel = None
+    get_slack = None
+    slack_send_alert = None
+    slack_send_message = None
+    slack_is_configured = None
 
 # Sentiment bots (lazy import to avoid dependency issues)
 try:
@@ -50,6 +70,14 @@ __all__ = [
     "GmailIntegration",
     "GoogleCalendarIntegration",
     "GitHubIntegration",
+    # Slack integration
+    "SlackIntegration",
+    "SlackConfig",
+    "SlackChannel",
+    "get_slack",
+    "slack_send_alert",
+    "slack_send_message",
+    "slack_is_configured",
     # Telegram bot
     "TelegramSentimentBot",
     "get_telegram_bot",

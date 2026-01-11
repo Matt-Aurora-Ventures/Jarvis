@@ -147,14 +147,70 @@ def create_app() -> FastAPI:
     # Health check
     @app.get("/api/health")
     async def health_check():
+        import psutil
+        import time
+
+        # Get system metrics
+        try:
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            memory = psutil.virtual_memory()
+            disk = psutil.disk_usage("/")
+        except Exception:
+            cpu_percent = 0
+            memory = None
+            disk = None
+
+        # Check provider availability
+        providers_status = {}
+        try:
+            from core import providers
+            provider_check = providers.check_providers()
+            for name, status in provider_check.items():
+                providers_status[name] = status.get("available", False)
+        except Exception:
+            pass
+
         return {
             "status": "healthy",
-            "version": "3.7.0",
+            "version": "4.1.0",
+            "timestamp": time.time(),
             "services": {
                 "staking": True,
                 "credits": True,
                 "treasury": True,
+                "voice": True,
+                "sentiment": True,
             },
+            "providers": providers_status,
+            "system": {
+                "cpu_percent": cpu_percent,
+                "memory_percent": memory.percent if memory else 0,
+                "memory_available_gb": round(memory.available / (1024**3), 2) if memory else 0,
+                "disk_percent": disk.percent if disk else 0,
+                "disk_free_gb": round(disk.free / (1024**3), 2) if disk else 0,
+            },
+        }
+
+    @app.get("/api/health/components")
+    async def health_components():
+        """Detailed component health check."""
+        from core import state
+
+        daemon_state = state.read_state()
+        component_status = daemon_state.get("component_status", {})
+
+        components = []
+        for name, status in component_status.items():
+            components.append({
+                "name": name,
+                "healthy": status.get("ok", False),
+                "error": status.get("error"),
+            })
+
+        return {
+            "components": components,
+            "startup_ok": daemon_state.get("startup_ok", 0),
+            "startup_failed": daemon_state.get("startup_failed", 0),
         }
 
     return app

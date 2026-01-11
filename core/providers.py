@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import shutil
@@ -9,11 +10,15 @@ import urllib.request
 import warnings
 import threading
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from typing import Any, Deque, Dict, List, Optional
 from collections import deque
 
 import requests
 from core import config, secrets, state as state_module
+
+# Configure module logger
+logger = logging.getLogger(__name__)
 
 # Trading context injection for backup LLMs
 _TRADING_CONTEXT_ENABLED = True  # Enable trading knowledge for all LLMs
@@ -109,6 +114,123 @@ class ProviderAttempt:
 
 _LAST_PROVIDER_ERRORS: Dict[str, str] = {"openrouter": "", "gemini": "", "ollama": "", "groq": "", "grok": "", "openai": "", "minimax": ""}
 _ATTEMPT_HISTORY: Deque[ProviderAttempt] = deque(maxlen=25)
+
+
+@dataclass
+class FallbackChainEntry:
+    """Entry in a fallback chain showing what was tried."""
+    provider: str
+    model: str
+    success: bool
+    error: str
+    latency_ms: int
+    reason_for_fallback: str
+
+
+class FallbackLogger:
+    """Logs provider fallback chains with structured context.
+
+    Provides clear visibility into:
+    - Which providers were tried in order
+    - Why each fallback occurred
+    - Total time spent in fallback chain
+    - Final outcome
+    """
+
+    def __init__(self, request_id: Optional[str] = None):
+        self.request_id = request_id or datetime.now().strftime("%H%M%S%f")[:10]
+        self.chain: List[FallbackChainEntry] = []
+        self.start_time = time.time()
+        self.final_provider: Optional[str] = None
+        self.final_model: Optional[str] = None
+
+    def log_attempt(
+        self,
+        provider: str,
+        model: str,
+        success: bool,
+        error: str = "",
+        latency_ms: int = 0,
+        reason: str = ""
+    ):
+        """Log a provider attempt in the chain."""
+        entry = FallbackChainEntry(
+            provider=provider,
+            model=model,
+            success=success,
+            error=error,
+            latency_ms=latency_ms,
+            reason_for_fallback=reason if not success else ""
+        )
+        self.chain.append(entry)
+
+        if success:
+            self.final_provider = provider
+            self.final_model = model
+
+    def get_chain_summary(self) -> str:
+        """Get a human-readable summary of the fallback chain."""
+        if not self.chain:
+            return "No providers attempted"
+
+        total_time = int((time.time() - self.start_time) * 1000)
+
+        lines = [f"[{self.request_id}] Provider Fallback Chain:"]
+
+        for i, entry in enumerate(self.chain):
+            status = "✓" if entry.success else "✗"
+            time_str = f"{entry.latency_ms}ms" if entry.latency_ms else "skipped"
+
+            if entry.success:
+                lines.append(f"  {i+1}. {status} {entry.provider}/{entry.model} ({time_str}) - SUCCESS")
+            else:
+                reason = entry.reason_for_fallback or entry.error or "failed"
+                lines.append(f"  {i+1}. {status} {entry.provider}/{entry.model} ({time_str}) - {reason}")
+
+        lines.append(f"  Total: {total_time}ms | Result: {self.final_provider or 'FAILED'}")
+
+        return "\n".join(lines)
+
+    def log_summary(self, level: int = logging.INFO):
+        """Log the chain summary at the specified level."""
+        summary = self.get_chain_summary()
+
+        # Determine appropriate log level based on outcome
+        if not self.final_provider:
+            level = logging.ERROR
+        elif len(self.chain) > 2:
+            level = logging.WARNING  # Multiple fallbacks is concerning
+
+        logger.log(level, summary)
+
+        # Also print to stderr for visibility
+        if level >= logging.WARNING or len(self.chain) > 1:
+            _log(summary)
+
+    def get_metrics(self) -> Dict[str, Any]:
+        """Get metrics for monitoring/analytics."""
+        return {
+            "request_id": self.request_id,
+            "total_attempts": len(self.chain),
+            "successful": self.final_provider is not None,
+            "final_provider": self.final_provider,
+            "final_model": self.final_model,
+            "total_latency_ms": int((time.time() - self.start_time) * 1000),
+            "providers_tried": [e.provider for e in self.chain],
+            "fallback_reasons": [e.reason_for_fallback for e in self.chain if e.reason_for_fallback],
+        }
+
+
+# Current request's fallback logger (thread-local would be better for production)
+_current_fallback_logger: Optional[FallbackLogger] = None
+
+
+def get_last_fallback_chain() -> Optional[Dict[str, Any]]:
+    """Get the last fallback chain metrics for debugging."""
+    global _current_fallback_logger
+    if _current_fallback_logger:
+        return _current_fallback_logger.get_metrics()
+    return None
 
 
 def _record_attempt(attempt: ProviderAttempt, diagnostics: Optional[List[Dict[str, Any]]] = None) -> None:
@@ -1107,25 +1229,37 @@ def generate_text(
     diagnostics: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[str]:
     """Generate text using the best available provider, ranked by intelligence.
-    
+
     Priority order:
     1. Best free cloud models (Gemini 2.5 Pro/Flash)
     2. Local models (Ollama - always available, private)
     3. Paid fallbacks (OpenAI - only if free exhausted)
-    
+
     This ensures we use the most intelligent, free resources first.
+
+    Fallback logging:
+    - All provider attempts are logged with timing
+    - Fallback chains are summarized for debugging
+    - Access last chain via get_last_fallback_chain()
     """
+    global _current_fallback_logger
+
     cfg = config.load_config()
     ranked = get_ranked_providers(prefer_free=prefer_free)
     ranked = _apply_routing_override(ranked, cfg)
-    
+
     if not ranked:
         _log("No AI providers available")
+        logger.error("No AI providers available - check configuration")
         return None
-    
+
+    # Initialize fallback logger
+    _current_fallback_logger = FallbackLogger()
+
     _log(f"Provider chain: {' → '.join(p['name'] for p in ranked[:4])}")
-    
+
     for provider in ranked:
+        start_ts = time.time()
         result = _try_provider(
             provider,
             prompt,
@@ -1133,11 +1267,63 @@ def generate_text(
             cfg,
             diagnostics=diagnostics,
         )
+        latency_ms = int((time.time() - start_ts) * 1000)
+
         if result:
+            _current_fallback_logger.log_attempt(
+                provider=provider["provider"],
+                model=provider["name"],
+                success=True,
+                latency_ms=latency_ms
+            )
+            # Log summary if we had to fallback
+            if len(_current_fallback_logger.chain) > 1:
+                _current_fallback_logger.log_summary()
             return result
-    
+        else:
+            # Determine fallback reason from last error
+            last_error = _LAST_PROVIDER_ERRORS.get(provider["provider"], "unknown error")
+            reason = _categorize_fallback_reason(last_error)
+            _current_fallback_logger.log_attempt(
+                provider=provider["provider"],
+                model=provider["name"],
+                success=False,
+                error=last_error[:100] if last_error else "",
+                latency_ms=latency_ms,
+                reason=reason
+            )
+
+    # All providers failed - log the full chain
+    _current_fallback_logger.log_summary()
     _log("All providers exhausted")
     return None
+
+
+def _categorize_fallback_reason(error: str) -> str:
+    """Categorize error into a short fallback reason."""
+    if not error:
+        return "empty response"
+
+    error_lower = error.lower()
+
+    if "rate limit" in error_lower or "429" in error_lower or "too many" in error_lower:
+        return "rate limited"
+    elif "quota" in error_lower or "exceeded" in error_lower:
+        return "quota exceeded"
+    elif "timeout" in error_lower:
+        return "timeout"
+    elif "unavailable" in error_lower or "not running" in error_lower:
+        return "unavailable"
+    elif "key" in error_lower or "auth" in error_lower or "401" in error_lower:
+        return "auth error"
+    elif "402" in error_lower or "insufficient" in error_lower:
+        return "no credits"
+    elif "500" in error_lower or "503" in error_lower or "internal" in error_lower:
+        return "server error"
+    elif "empty" in error_lower:
+        return "empty response"
+    else:
+        return "failed"
 
 
 def generate_text_with_trading(
@@ -1392,3 +1578,39 @@ def get_provider_summary() -> str:
         lines.append("Recommended: Set up Groq for best performance")
 
     return "\n".join(lines)
+
+
+def check_providers() -> Dict[str, Dict[str, Any]]:
+    """Alias for check_provider_health - used by health endpoints."""
+    return check_provider_health()
+
+
+def get_fallback_stats() -> Dict[str, Any]:
+    """Get fallback statistics for monitoring dashboards.
+
+    Returns:
+        Dict with recent fallback metrics including:
+        - last_chain: Most recent fallback chain info
+        - recent_attempts: Last N provider attempts
+        - error_counts: Count of errors by provider
+    """
+    # Get last fallback chain
+    last_chain = get_last_fallback_chain()
+
+    # Count recent errors by provider
+    error_counts: Dict[str, int] = {}
+    for attempt in _ATTEMPT_HISTORY:
+        if not attempt.success:
+            provider = attempt.provider_type
+            error_counts[provider] = error_counts.get(provider, 0) + 1
+
+    # Recent attempts
+    recent = list(_ATTEMPT_HISTORY)[-10:]
+
+    return {
+        "last_chain": last_chain,
+        "recent_attempts": [asdict(a) for a in recent],
+        "error_counts": error_counts,
+        "last_errors": dict(_LAST_PROVIDER_ERRORS),
+        "timestamp": time.time(),
+    }
