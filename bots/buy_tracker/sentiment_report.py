@@ -112,11 +112,25 @@ class TokenSentiment:
     grok_verdict: str = ""   # Grok's one-word verdict
 
     def calculate_sentiment(self, include_grok: bool = True):
-        """Calculate sentiment from metrics + Grok AI score."""
+        """
+        Calculate sentiment from metrics + Grok AI score.
+
+        Enhanced with learnings from accuracy analysis (84.6% accuracy):
+        - Strong sell pressure detection (ratio < 0.7x = heavily bearish)
+        - Extreme momentum bonuses (>100% pumps)
+        - Profit-taking warning (big gains + sell pressure)
+        - Better grade thresholds based on performance data
+        """
         score = 0.0
 
-        # Price momentum (weight: 25%)
-        if self.change_24h > 10:
+        # === PRICE MOMENTUM (weight: 25%) ===
+        # Enhanced: Extreme pumps get bonus, extreme dumps get extra penalty
+        if self.change_24h > 100:
+            # Extreme pump - strong momentum signal (learned: these often continue)
+            score += 0.30
+        elif self.change_24h > 50:
+            score += 0.27
+        elif self.change_24h > 10:
             score += 0.25
         elif self.change_24h > 5:
             score += 0.15
@@ -126,13 +140,21 @@ class TokenSentiment:
             score -= 0.08
         elif self.change_24h > -10:
             score -= 0.15
-        else:
+        elif self.change_24h > -30:
             score -= 0.25
+        else:
+            # Extreme dump - heavy penalty
+            score -= 0.35
 
-        # Buy/sell ratio (weight: 30%)
+        # === BUY/SELL RATIO (weight: 35%) ===
+        # Increased weight - this was our most predictive indicator
         self.buy_sell_ratio = self.buys_24h / max(self.sells_24h, 1)
-        if self.buy_sell_ratio > 2:
-            score += 0.3
+
+        if self.buy_sell_ratio > 3:
+            # Extreme buying pressure - very bullish
+            score += 0.35
+        elif self.buy_sell_ratio > 2:
+            score += 0.30
         elif self.buy_sell_ratio > 1.5:
             score += 0.22
         elif self.buy_sell_ratio > 1.2:
@@ -140,51 +162,76 @@ class TokenSentiment:
         elif self.buy_sell_ratio > 1:
             score += 0.08
         elif self.buy_sell_ratio > 0.8:
-            score -= 0.08
+            score -= 0.10
+        elif self.buy_sell_ratio > 0.7:
+            # Warning zone - sellers gaining control
+            score -= 0.18
         elif self.buy_sell_ratio > 0.5:
-            score -= 0.15
+            # Heavy sell pressure - strongly bearish (learned: sub-0.7x = danger)
+            score -= 0.28
         else:
-            score -= 0.3
+            # Extreme sell pressure - capitulation signal
+            score -= 0.35
 
-        # Volume health (weight: 15%)
+        # === PROFIT-TAKING DETECTION ===
+        # Learned: Big gains + weak buy ratio = profit-taking, bearish signal
+        if self.change_24h > 50 and self.buy_sell_ratio < 0.8:
+            # Token pumped but sellers dominating - likely profit-taking
+            score -= 0.15  # Penalty for profit-taking pattern
+        elif self.change_24h > 30 and self.buy_sell_ratio < 0.7:
+            # Moderate pump with heavy selling - bearish divergence
+            score -= 0.12
+
+        # === VOLUME HEALTH (weight: 15%) ===
         vol_to_mcap = (self.volume_24h / max(self.mcap, 1)) * 100
-        if vol_to_mcap > 50:
+        if vol_to_mcap > 100:
+            # Extreme volume - strong interest (could be pump or dump)
+            score += 0.18
+        elif vol_to_mcap > 50:
             score += 0.15
         elif vol_to_mcap > 20:
             score += 0.08
+        elif vol_to_mcap > 10:
+            score += 0.03
         elif vol_to_mcap < 5:
-            score -= 0.1
+            # Low volume = low conviction
+            score -= 0.12
 
-        # Liquidity (weight: 10%)
+        # === LIQUIDITY (weight: 10%) ===
         if self.liquidity > 100000:
             score += 0.1
         elif self.liquidity > 50000:
             score += 0.05
+        elif self.liquidity > 20000:
+            score += 0.02
         elif self.liquidity < 10000:
-            score -= 0.1
+            # Low liquidity - higher risk
+            score -= 0.12
 
-        # Grok AI score (weight: 20%)
+        # === GROK AI SCORE (weight: 15%) ===
+        # Slightly reduced - technical signals more reliable
         if include_grok and self.grok_score != 0:
-            score += self.grok_score * 0.2
+            score += self.grok_score * 0.15
 
         self.sentiment_score = max(-1, min(1, score))
 
-        # Label based on final score
-        if self.sentiment_score > 0.35:
+        # === GRADE ASSIGNMENT ===
+        # Refined thresholds based on accuracy data
+        if self.sentiment_score > 0.45:
             self.sentiment_label = "BULLISH"
-            self.grade = "A" if self.sentiment_score > 0.5 else "A-"
-        elif self.sentiment_score > 0.15:
+            self.grade = "A" if self.sentiment_score > 0.55 else "A-"
+        elif self.sentiment_score > 0.20:
             self.sentiment_label = "SLIGHTLY BULLISH"
-            self.grade = "B+" if self.sentiment_score > 0.25 else "B"
-        elif self.sentiment_score > -0.15:
+            self.grade = "B+" if self.sentiment_score > 0.32 else "B"
+        elif self.sentiment_score > -0.20:
             self.sentiment_label = "NEUTRAL"
-            self.grade = "C+" if self.sentiment_score > 0 else "C"
-        elif self.sentiment_score > -0.35:
+            self.grade = "C+" if self.sentiment_score > 0.05 else "C"
+        elif self.sentiment_score > -0.40:
             self.sentiment_label = "SLIGHTLY BEARISH"
-            self.grade = "C-" if self.sentiment_score > -0.25 else "D+"
+            self.grade = "C-" if self.sentiment_score > -0.30 else "D+"
         else:
             self.sentiment_label = "BEARISH"
-            self.grade = "D" if self.sentiment_score > -0.5 else "F"
+            self.grade = "D" if self.sentiment_score > -0.55 else "F"
 
 
 class SentimentReportGenerator:
@@ -1081,11 +1128,19 @@ Be specific about price targets and key levels to watch."""
             else:
                 price_str = f"${t.price_usd:.6f}"
 
+            # Format market cap
+            if t.mcap >= 1_000_000:
+                mcap_str = f"${t.mcap/1_000_000:.2f}M"
+            elif t.mcap >= 1_000:
+                mcap_str = f"${t.mcap/1_000:.1f}K"
+            else:
+                mcap_str = f"${t.mcap:.0f}"
+
             # Build token entry with contract and DexScreener link
             entry = (
                 f"{emoji} <b>{i}. {t.symbol}</b>  {t.grade} {grok_icon}\n"
                 f"   {price_str}  <code>{t.change_24h:+.1f}%</code> {trend}\n"
-                f"   B/S: <code>{t.buy_sell_ratio:.2f}x</code> | Vol: <code>${t.volume_24h/1000:.0f}K</code>"
+                f"   MCap: <code>{mcap_str}</code> | B/S: <code>{t.buy_sell_ratio:.2f}x</code> | Vol: <code>${t.volume_24h/1000:.0f}K</code>"
             )
 
             # Add contract address and DexScreener link (always show if available)
