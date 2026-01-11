@@ -1,116 +1,267 @@
 """
 Ape Trading Buttons for Sentiment Reports.
 
-Adds inline keyboard buttons to sentiment reports for one-click trading:
-- 5% Treasury allocation
-- 2% Treasury allocation
-- 1% Treasury allocation
+CRITICAL: All treasury trades MUST have TP/SL set.
+If TP/SL cannot be configured, the trade WILL NOT execute.
 
-Supports: Solana tokens, stocks (via broker integration), commodities (futures).
-All trades follow recommended TP/SL from Grok analysis.
+Risk Profiles:
+- SAFE:   TP +15%, SL -5%  (3:1 R/R)
+- MEDIUM: TP +30%, SL -10% (3:1 R/R)
+- DEGEN:  TP +50%, SL -15% (3.3:1 R/R)
+
+Treasury Allocations:
+- 5% of active wallet
+- 2% of active wallet
+- 1% of active wallet
 """
 
 import logging
+import json
+import os
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 logger = logging.getLogger(__name__)
 
 
-# Treasury allocation percentages
-APE_LEVELS = {
-    "ape_5": {"percent": 5, "label": "5% 🐒"},
-    "ape_2": {"percent": 2, "label": "2% 🦧"},
-    "ape_1": {"percent": 1, "label": "1% 🐵"},
+# =============================================================================
+# RISK PROFILES - MANDATORY FOR ALL TRADES
+# =============================================================================
+
+class RiskProfile(Enum):
+    """Risk profile determines TP/SL percentages."""
+    SAFE = "safe"
+    MEDIUM = "medium"
+    DEGEN = "degen"
+
+
+# TP/SL percentages by risk profile
+# Format: (take_profit_pct, stop_loss_pct)
+RISK_PROFILE_CONFIG = {
+    RiskProfile.SAFE: {
+        "tp_pct": 15.0,   # +15% take profit
+        "sl_pct": 5.0,    # -5% stop loss
+        "label": "SAFE",
+        "emoji": "🛡️",
+        "description": "Conservative: +15% TP / -5% SL (3:1 R/R)",
+    },
+    RiskProfile.MEDIUM: {
+        "tp_pct": 30.0,   # +30% take profit
+        "sl_pct": 10.0,   # -10% stop loss
+        "label": "MED",
+        "emoji": "⚖️",
+        "description": "Balanced: +30% TP / -10% SL (3:1 R/R)",
+    },
+    RiskProfile.DEGEN: {
+        "tp_pct": 50.0,   # +50% take profit
+        "sl_pct": 15.0,   # -15% stop loss
+        "label": "DEGEN",
+        "emoji": "🔥",
+        "description": "Aggressive: +50% TP / -15% SL (3.3:1 R/R)",
+    },
 }
 
 
+# Treasury allocation percentages
+APE_ALLOCATION_PCT = {
+    "5": {"percent": 5.0, "label": "5%"},
+    "2": {"percent": 2.0, "label": "2%"},
+    "1": {"percent": 1.0, "label": "1%"},
+}
+
+
+# =============================================================================
+# DATA STRUCTURES
+# =============================================================================
+
 @dataclass
 class TradeSetup:
-    """Trade setup with entry, TP, and SL."""
+    """
+    Complete trade setup with MANDATORY TP/SL.
+
+    A trade CANNOT be executed without valid TP and SL prices.
+    """
     symbol: str
     asset_type: str  # "token", "stock", "commodity", "metal"
     direction: str   # "LONG" or "SHORT"
     entry_price: float
-    stop_loss: Optional[float] = None
-    target_safe: Optional[float] = None
-    target_med: Optional[float] = None
-    target_degen: Optional[float] = None
-    contract_address: Optional[str] = None  # For Solana tokens
+
+    # MANDATORY - Trade will be rejected without these
+    take_profit_price: float
+    stop_loss_price: float
+    risk_profile: RiskProfile
+
+    # Trade sizing
+    allocation_percent: float
+    amount_sol: float = 0.0
+
+    # Optional metadata
+    contract_address: Optional[str] = None
     reasoning: str = ""
+    grade: str = ""
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def validate(self) -> tuple[bool, str]:
+        """
+        Validate that trade setup has all required fields.
+
+        Returns:
+            (is_valid, error_message)
+        """
+        errors = []
+
+        # Check mandatory TP/SL
+        if self.take_profit_price <= 0:
+            errors.append("Take profit price must be set and > 0")
+
+        if self.stop_loss_price <= 0:
+            errors.append("Stop loss price must be set and > 0")
+
+        if self.entry_price <= 0:
+            errors.append("Entry price must be > 0")
+
+        # Validate TP/SL logic for direction
+        if self.direction == "LONG":
+            if self.take_profit_price <= self.entry_price:
+                errors.append("LONG: Take profit must be above entry price")
+            if self.stop_loss_price >= self.entry_price:
+                errors.append("LONG: Stop loss must be below entry price")
+        else:  # SHORT
+            if self.take_profit_price >= self.entry_price:
+                errors.append("SHORT: Take profit must be below entry price")
+            if self.stop_loss_price <= self.entry_price:
+                errors.append("SHORT: Stop loss must be above entry price")
+
+        # Check allocation
+        if self.allocation_percent <= 0 or self.allocation_percent > 10:
+            errors.append("Allocation must be between 0 and 10%")
+
+        if errors:
+            return False, "; ".join(errors)
+
+        return True, "Valid"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for storage/transmission."""
+        return {
+            "symbol": self.symbol,
+            "asset_type": self.asset_type,
+            "direction": self.direction,
+            "entry_price": self.entry_price,
+            "take_profit_price": self.take_profit_price,
+            "stop_loss_price": self.stop_loss_price,
+            "risk_profile": self.risk_profile.value,
+            "allocation_percent": self.allocation_percent,
+            "amount_sol": self.amount_sol,
+            "contract_address": self.contract_address,
+            "grade": self.grade,
+            "created_at": self.created_at.isoformat(),
+        }
 
 
-def parse_price(price_str: str) -> Optional[float]:
-    """Parse price string like '$0.00123' or '2,345.50' to float."""
-    if not price_str:
-        return None
-    try:
-        # Remove $ and commas
-        clean = price_str.replace("$", "").replace(",", "").strip()
-        return float(clean)
-    except (ValueError, AttributeError):
-        return None
+@dataclass
+class TradeResult:
+    """Result of a trade execution attempt."""
+    success: bool
+    trade_setup: Optional[TradeSetup] = None
+    error: str = ""
+    tx_signature: str = ""
+    message: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "success": self.success,
+            "error": self.error,
+            "tx_signature": self.tx_signature,
+            "message": self.message,
+            "trade_setup": self.trade_setup.to_dict() if self.trade_setup else None,
+        }
 
 
-def create_ape_buttons(
+# =============================================================================
+# BUTTON CREATION
+# =============================================================================
+
+def create_ape_buttons_with_tp_sl(
     symbol: str,
     asset_type: str,
-    direction: str = "LONG",
     contract_address: str = "",
-    stop_loss: str = "",
-    target_safe: str = "",
-    target_med: str = "",
-    target_degen: str = "",
+    entry_price: float = 0.0,
+    grade: str = "",
 ) -> InlineKeyboardMarkup:
     """
-    Create inline keyboard with ape buttons for a tradeable asset.
+    Create ape buttons with risk profile selection.
+
+    Each button shows:
+    - Allocation percentage (1%, 2%, 5%)
+    - Risk profile (Safe, Med, Degen)
+    - TP/SL percentages
 
     Args:
-        symbol: Asset symbol (e.g., "BONK", "NVDA", "GOLD")
-        asset_type: "token", "stock", "commodity", "metal"
-        direction: "LONG" or "SHORT"
-        contract_address: Token contract for Solana tokens
-        stop_loss: Stop loss price string
-        target_safe: Safe target price string
-        target_med: Medium target price string
-        target_degen: Degen target price string
+        symbol: Asset symbol
+        asset_type: "token", "stock", etc.
+        contract_address: For Solana tokens
+        entry_price: Current entry price
+        grade: Grok grade (A, B, C, etc.)
 
     Returns:
-        InlineKeyboardMarkup with ape buttons
+        InlineKeyboardMarkup with 9 buttons (3 allocations x 3 profiles)
     """
-    # Encode trade data in callback_data
-    # Format: ape_{percent}:{asset_type}:{symbol}:{direction}:{contract}:{sl}:{tp}
-    # Keep it short for Telegram's 64-byte limit
-
-    # Shorten contract address if present
-    contract_short = contract_address[:12] if contract_address else ""
-
-    # Parse stop loss as percentage from current (if target available)
-    sl_pct = ""
-    tp_pct = ""
-
-    # For callback, we'll use a hash or shortened identifier
-    base_data = f"{asset_type[:1]}:{symbol}:{direction[0]}:{contract_short}"
-
     buttons = []
-    row = []
 
-    for ape_id, config in APE_LEVELS.items():
-        callback = f"{ape_id}:{base_data}"[:64]  # Telegram limit
-        row.append(InlineKeyboardButton(
-            text=f"APE {config['label']}",
-            callback_data=callback
-        ))
+    # Shorten contract for callback data (Telegram 64-byte limit)
+    contract_short = contract_address[:10] if contract_address else ""
 
-    buttons.append(row)
-
-    # Add info button
+    # Header row with profile descriptions
     buttons.append([
         InlineKeyboardButton(
-            text=f"ℹ️ {symbol} Info",
-            callback_data=f"info:{base_data}"[:64]
+            text="🛡️ SAFE",
+            callback_data="info:safe"
+        ),
+        InlineKeyboardButton(
+            text="⚖️ MED",
+            callback_data="info:med"
+        ),
+        InlineKeyboardButton(
+            text="🔥 DEGEN",
+            callback_data="info:degen"
+        ),
+    ])
+
+    # Create button rows for each allocation level
+    for alloc_key, alloc_config in APE_ALLOCATION_PCT.items():
+        row = []
+
+        for profile in [RiskProfile.SAFE, RiskProfile.MEDIUM, RiskProfile.DEGEN]:
+            profile_config = RISK_PROFILE_CONFIG[profile]
+
+            # Button text: "5% 🛡️ +15/-5"
+            tp = profile_config["tp_pct"]
+            sl = profile_config["sl_pct"]
+            emoji = profile_config["emoji"]
+
+            button_text = f"{alloc_config['label']} {emoji} +{int(tp)}/-{int(sl)}"
+
+            # Callback data format: ape:{alloc}:{profile}:{type}:{symbol}:{contract}
+            # Keep under 64 bytes
+            callback = f"ape:{alloc_key}:{profile.value[0]}:{asset_type[0]}:{symbol}:{contract_short}"
+
+            row.append(InlineKeyboardButton(
+                text=button_text,
+                callback_data=callback[:64]
+            ))
+
+        buttons.append(row)
+
+    # Info row
+    grade_display = f"Grade: {grade}" if grade else "Ungraded"
+    buttons.append([
+        InlineKeyboardButton(
+            text=f"ℹ️ {symbol} ({grade_display})",
+            callback_data=f"info:{asset_type[0]}:{symbol}:{contract_short}"[:64]
         )
     ])
 
@@ -120,113 +271,305 @@ def create_ape_buttons(
 def create_token_ape_keyboard(
     symbol: str,
     contract: str,
-    grok_analysis: str = "",
-    grok_reasoning: str = "",
+    entry_price: float = 0.0,
+    grade: str = "",
 ) -> InlineKeyboardMarkup:
     """Create ape keyboard specifically for Solana tokens."""
-    # Parse targets from grok_analysis if available
-    # Format: "Stop: $X | Safe: $Y | Med: $Z | Degen: $W"
-
-    sl, safe, med, degen = "", "", "", ""
-    if grok_analysis:
-        parts = grok_analysis.split("|")
-        for part in parts:
-            part = part.strip().lower()
-            if part.startswith("stop:"):
-                sl = part.replace("stop:", "").strip()
-            elif part.startswith("safe:"):
-                safe = part.replace("safe:", "").strip()
-            elif part.startswith("med:"):
-                med = part.replace("med:", "").strip()
-            elif part.startswith("degen:"):
-                degen = part.replace("degen:", "").strip()
-
-    return create_ape_buttons(
+    return create_ape_buttons_with_tp_sl(
         symbol=symbol,
         asset_type="token",
-        direction="LONG",
         contract_address=contract,
-        stop_loss=sl,
-        target_safe=safe,
-        target_med=med,
-        target_degen=degen,
+        entry_price=entry_price,
+        grade=grade,
     )
 
 
 def create_stock_ape_keyboard(
     ticker: str,
-    direction: str,
-    target: str = "",
-    stop_loss: str = "",
+    entry_price: float = 0.0,
+    grade: str = "",
 ) -> InlineKeyboardMarkup:
     """Create ape keyboard for stocks."""
-    return create_ape_buttons(
+    return create_ape_buttons_with_tp_sl(
         symbol=ticker,
         asset_type="stock",
-        direction=direction.upper(),
-        stop_loss=stop_loss,
-        target_safe=target,
+        entry_price=entry_price,
+        grade=grade,
     )
 
 
-def create_commodity_ape_keyboard(
-    name: str,
-    direction: str,
-) -> InlineKeyboardMarkup:
-    """Create ape keyboard for commodities."""
-    return create_ape_buttons(
-        symbol=name.upper().replace(" ", "_"),
-        asset_type="commodity",
-        direction="LONG" if direction.upper() == "UP" else "SHORT",
-    )
-
-
-def create_metal_ape_keyboard(
-    metal: str,
-    direction: str,
-) -> InlineKeyboardMarkup:
-    """Create ape keyboard for precious metals."""
-    return create_ape_buttons(
-        symbol=metal.upper(),
-        asset_type="metal",
-        direction=direction.upper(),
-    )
-
+# =============================================================================
+# CALLBACK PARSING
+# =============================================================================
 
 def parse_ape_callback(callback_data: str) -> Optional[Dict[str, Any]]:
     """
     Parse ape button callback data.
 
+    Callback format: ape:{alloc}:{profile}:{type}:{symbol}:{contract}
+
     Returns:
-        Dict with: ape_percent, asset_type, symbol, direction, contract
+        Dict with parsed data or None if invalid
     """
     try:
         parts = callback_data.split(":")
-        if len(parts) < 2:
+
+        if parts[0] != "ape" or len(parts) < 5:
             return None
 
-        action = parts[0]  # e.g., "ape_5" or "info"
+        alloc_key = parts[1]
+        profile_char = parts[2]
+        asset_type_char = parts[3]
+        symbol = parts[4]
+        contract = parts[5] if len(parts) > 5 else ""
 
-        if action.startswith("ape_"):
-            percent = APE_LEVELS.get(action, {}).get("percent", 1)
-        else:
-            percent = 0
+        # Map profile character to enum
+        profile_map = {"s": RiskProfile.SAFE, "m": RiskProfile.MEDIUM, "d": RiskProfile.DEGEN}
+        profile = profile_map.get(profile_char, RiskProfile.MEDIUM)
 
-        asset_type_map = {"t": "token", "s": "stock", "c": "commodity", "m": "metal"}
+        # Map asset type character
+        type_map = {"t": "token", "s": "stock", "c": "commodity", "m": "metal"}
+        asset_type = type_map.get(asset_type_char, "token")
+
+        # Get allocation percent
+        alloc_config = APE_ALLOCATION_PCT.get(alloc_key, {"percent": 1.0})
+
+        # Get TP/SL config
+        profile_config = RISK_PROFILE_CONFIG[profile]
 
         return {
-            "action": action,
-            "ape_percent": percent,
-            "asset_type": asset_type_map.get(parts[1], "token") if len(parts) > 1 else "token",
-            "symbol": parts[2] if len(parts) > 2 else "",
-            "direction": "LONG" if len(parts) <= 3 or parts[3] == "L" else "SHORT",
-            "contract": parts[4] if len(parts) > 4 else "",
+            "allocation_percent": alloc_config["percent"],
+            "risk_profile": profile,
+            "tp_pct": profile_config["tp_pct"],
+            "sl_pct": profile_config["sl_pct"],
+            "asset_type": asset_type,
+            "symbol": symbol,
+            "contract": contract,
         }
 
     except Exception as e:
-        logger.error(f"Failed to parse callback: {e}")
+        logger.error(f"Failed to parse ape callback: {e}")
         return None
 
+
+# =============================================================================
+# TRADE EXECUTION WITH MANDATORY TP/SL
+# =============================================================================
+
+def calculate_tp_sl_prices(
+    entry_price: float,
+    risk_profile: RiskProfile,
+    direction: str = "LONG",
+) -> tuple[float, float]:
+    """
+    Calculate TP and SL prices from entry price and risk profile.
+
+    Args:
+        entry_price: Current/entry price
+        risk_profile: Selected risk profile
+        direction: "LONG" or "SHORT"
+
+    Returns:
+        (take_profit_price, stop_loss_price)
+    """
+    config = RISK_PROFILE_CONFIG[risk_profile]
+    tp_pct = config["tp_pct"] / 100
+    sl_pct = config["sl_pct"] / 100
+
+    if direction == "LONG":
+        tp_price = entry_price * (1 + tp_pct)
+        sl_price = entry_price * (1 - sl_pct)
+    else:  # SHORT
+        tp_price = entry_price * (1 - tp_pct)
+        sl_price = entry_price * (1 + sl_pct)
+
+    return tp_price, sl_price
+
+
+def create_trade_setup(
+    parsed_callback: Dict[str, Any],
+    entry_price: float,
+    treasury_balance_sol: float,
+    direction: str = "LONG",
+    grade: str = "",
+) -> TradeSetup:
+    """
+    Create a validated TradeSetup from parsed callback data.
+
+    Args:
+        parsed_callback: Parsed callback data from parse_ape_callback
+        entry_price: Current entry price
+        treasury_balance_sol: Treasury balance for sizing
+        direction: Trade direction
+        grade: Asset grade
+
+    Returns:
+        TradeSetup with TP/SL calculated
+    """
+    profile = parsed_callback["risk_profile"]
+    allocation_pct = parsed_callback["allocation_percent"]
+
+    # Calculate TP/SL prices
+    tp_price, sl_price = calculate_tp_sl_prices(entry_price, profile, direction)
+
+    # Calculate trade amount
+    amount_sol = treasury_balance_sol * (allocation_pct / 100)
+
+    return TradeSetup(
+        symbol=parsed_callback["symbol"],
+        asset_type=parsed_callback["asset_type"],
+        direction=direction,
+        entry_price=entry_price,
+        take_profit_price=tp_price,
+        stop_loss_price=sl_price,
+        risk_profile=profile,
+        allocation_percent=allocation_pct,
+        amount_sol=amount_sol,
+        contract_address=parsed_callback.get("contract", ""),
+        grade=grade,
+    )
+
+
+async def execute_ape_trade(
+    callback_data: str,
+    entry_price: float,
+    treasury_balance_sol: float,
+    direction: str = "LONG",
+    grade: str = "",
+) -> TradeResult:
+    """
+    Execute an ape trade with MANDATORY TP/SL validation.
+
+    CRITICAL: This function will REFUSE to execute if TP/SL cannot be set.
+
+    Args:
+        callback_data: Raw callback data from button
+        entry_price: Current entry price
+        treasury_balance_sol: Available treasury balance
+        direction: Trade direction
+        grade: Asset grade
+
+    Returns:
+        TradeResult with success/failure info
+    """
+    # Parse callback
+    parsed = parse_ape_callback(callback_data)
+    if not parsed:
+        return TradeResult(
+            success=False,
+            error="Invalid callback data - cannot parse trade parameters"
+        )
+
+    # Validate entry price
+    if entry_price <= 0:
+        return TradeResult(
+            success=False,
+            error="REJECTED: Entry price not available - cannot calculate TP/SL"
+        )
+
+    # Create trade setup with TP/SL
+    trade_setup = create_trade_setup(
+        parsed_callback=parsed,
+        entry_price=entry_price,
+        treasury_balance_sol=treasury_balance_sol,
+        direction=direction,
+        grade=grade,
+    )
+
+    # CRITICAL: Validate trade setup
+    is_valid, error_msg = trade_setup.validate()
+    if not is_valid:
+        return TradeResult(
+            success=False,
+            trade_setup=trade_setup,
+            error=f"REJECTED: {error_msg}"
+        )
+
+    # Log the validated trade
+    profile_config = RISK_PROFILE_CONFIG[trade_setup.risk_profile]
+    logger.info(
+        f"APE TRADE VALIDATED: {trade_setup.symbol} "
+        f"| {trade_setup.allocation_percent}% allocation "
+        f"| {profile_config['label']} profile "
+        f"| Entry: ${trade_setup.entry_price:.6f} "
+        f"| TP: ${trade_setup.take_profit_price:.6f} (+{profile_config['tp_pct']}%) "
+        f"| SL: ${trade_setup.stop_loss_price:.6f} (-{profile_config['sl_pct']}%)"
+    )
+
+    # Execute trade based on asset type
+    if trade_setup.asset_type == "token":
+        return await _execute_token_trade(trade_setup)
+    elif trade_setup.asset_type == "stock":
+        return TradeResult(
+            success=False,
+            trade_setup=trade_setup,
+            error="Stock trading not yet implemented"
+        )
+    else:
+        return TradeResult(
+            success=False,
+            trade_setup=trade_setup,
+            error=f"Asset type '{trade_setup.asset_type}' not supported"
+        )
+
+
+async def _execute_token_trade(setup: TradeSetup) -> TradeResult:
+    """
+    Execute a Solana token trade with TP/SL orders.
+
+    This integrates with the treasury trading system.
+    """
+    try:
+        # Import treasury trading module
+        from bots.treasury.trading import TreasuryTrader
+
+        trader = TreasuryTrader()
+
+        # Execute buy with TP/SL
+        result = await trader.execute_buy_with_tp_sl(
+            token_mint=setup.contract_address,
+            amount_sol=setup.amount_sol,
+            take_profit_price=setup.take_profit_price,
+            stop_loss_price=setup.stop_loss_price,
+        )
+
+        if result.get("success"):
+            return TradeResult(
+                success=True,
+                trade_setup=setup,
+                tx_signature=result.get("tx_signature", ""),
+                message=f"Trade executed: {setup.amount_sol:.4f} SOL of {setup.symbol} "
+                        f"| TP: ${setup.take_profit_price:.6f} | SL: ${setup.stop_loss_price:.6f}"
+            )
+        else:
+            return TradeResult(
+                success=False,
+                trade_setup=setup,
+                error=result.get("error", "Unknown error during execution")
+            )
+
+    except ImportError:
+        # Treasury trader not available - return placeholder result
+        logger.warning("TreasuryTrader not available - trade not executed")
+        return TradeResult(
+            success=False,
+            trade_setup=setup,
+            error="Treasury trading system not available",
+            message=f"VALIDATED (not executed): {setup.amount_sol:.4f} SOL of {setup.symbol} "
+                    f"| TP: ${setup.take_profit_price:.6f} | SL: ${setup.stop_loss_price:.6f}"
+        )
+    except Exception as e:
+        logger.error(f"Token trade execution failed: {e}")
+        return TradeResult(
+            success=False,
+            trade_setup=setup,
+            error=str(e)
+        )
+
+
+# =============================================================================
+# TREASURY STATUS DISPLAY
+# =============================================================================
 
 def format_treasury_status(
     balance_sol: float = 0.0,
@@ -237,16 +580,6 @@ def format_treasury_status(
 ) -> str:
     """
     Format treasury status message for end of sentiment report.
-
-    Args:
-        balance_sol: Treasury balance in SOL
-        balance_usd: Treasury balance in USD
-        open_positions: Number of open positions
-        pnl_24h: 24-hour P&L percentage
-        treasury_address: Public treasury address
-
-    Returns:
-        Formatted HTML string
     """
     pnl_emoji = "📈" if pnl_24h >= 0 else "📉"
 
@@ -271,102 +604,113 @@ def format_treasury_status(
 
     lines.extend([
         "",
-        "<i>Use APE buttons above to trade with treasury</i>",
-        "<i>All trades use recommended TP/SL</i>",
+        "<b>Risk Profiles:</b>",
+        "🛡️ <b>SAFE</b>: +15% TP / -5% SL",
+        "⚖️ <b>MED</b>: +30% TP / -10% SL",
+        "🔥 <b>DEGEN</b>: +50% TP / -15% SL",
+        "",
+        "<i>⚠️ All trades REQUIRE TP/SL - no exceptions</i>",
     ])
 
     return "\n".join(lines)
 
 
-async def handle_ape_trade(
-    callback_data: str,
-    treasury_balance_sol: float,
-    current_prices: Dict[str, float],
-) -> Dict[str, Any]:
-    """
-    Handle an ape button press and execute the trade.
+# =============================================================================
+# TESTING
+# =============================================================================
 
-    Args:
-        callback_data: Callback data from button press
-        treasury_balance_sol: Current treasury balance
-        current_prices: Dict of symbol -> current price
+def test_ape_buttons():
+    """Test the ape button system."""
+    print("=" * 60)
+    print("APE BUTTON SYSTEM TEST")
+    print("=" * 60)
 
-    Returns:
-        Dict with trade result
-    """
-    parsed = parse_ape_callback(callback_data)
-    if not parsed or parsed["ape_percent"] == 0:
-        return {"success": False, "error": "Invalid ape action"}
+    # Test 1: Create buttons
+    print("\n1. Creating buttons for BONK token...")
+    keyboard = create_token_ape_keyboard(
+        symbol="BONK",
+        contract="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        entry_price=0.00001234,
+        grade="B+",
+    )
+    print(f"   Created keyboard with {len(keyboard.inline_keyboard)} rows")
+    for row in keyboard.inline_keyboard:
+        print(f"   Row: {[btn.text for btn in row]}")
 
-    symbol = parsed["symbol"]
-    percent = parsed["ape_percent"]
-    asset_type = parsed["asset_type"]
-    direction = parsed["direction"]
-    contract = parsed.get("contract", "")
+    # Test 2: Parse callback
+    print("\n2. Testing callback parsing...")
+    test_callbacks = [
+        "ape:5:s:t:BONK:DezXAZ8z7P",  # 5%, Safe, Token
+        "ape:2:m:t:BONK:DezXAZ8z7P",  # 2%, Medium, Token
+        "ape:1:d:t:BONK:DezXAZ8z7P",  # 1%, Degen, Token
+    ]
 
-    # Calculate trade amount
-    trade_amount_sol = treasury_balance_sol * (percent / 100)
+    for cb in test_callbacks:
+        parsed = parse_ape_callback(cb)
+        if parsed:
+            print(f"   {cb}")
+            print(f"      -> {parsed['allocation_percent']}% | {parsed['risk_profile'].value} | TP +{parsed['tp_pct']}% / SL -{parsed['sl_pct']}%")
+        else:
+            print(f"   FAILED: {cb}")
 
-    result = {
-        "success": False,
-        "symbol": symbol,
-        "asset_type": asset_type,
-        "direction": direction,
-        "allocation_percent": percent,
-        "amount_sol": trade_amount_sol,
-        "contract": contract,
-    }
+    # Test 3: Create trade setup
+    print("\n3. Testing trade setup creation...")
+    parsed = parse_ape_callback("ape:5:m:t:BONK:DezXAZ8z7P")
+    if parsed:
+        setup = create_trade_setup(
+            parsed_callback=parsed,
+            entry_price=0.00001234,
+            treasury_balance_sol=10.0,
+            direction="LONG",
+            grade="B+",
+        )
 
-    # Execute trade based on asset type
-    if asset_type == "token":
-        # Solana token - use Jupiter
-        try:
-            # This would integrate with bots/treasury/trading.py
-            result["message"] = f"Would buy {trade_amount_sol:.4f} SOL worth of {symbol}"
-            result["success"] = True  # Placeholder - real execution in trading.py
-        except Exception as e:
-            result["error"] = str(e)
+        print(f"   Symbol: {setup.symbol}")
+        print(f"   Allocation: {setup.allocation_percent}%")
+        print(f"   Amount: {setup.amount_sol:.4f} SOL")
+        print(f"   Entry: ${setup.entry_price:.8f}")
+        print(f"   TP: ${setup.take_profit_price:.8f} (+{RISK_PROFILE_CONFIG[setup.risk_profile]['tp_pct']}%)")
+        print(f"   SL: ${setup.stop_loss_price:.8f} (-{RISK_PROFILE_CONFIG[setup.risk_profile]['sl_pct']}%)")
 
-    elif asset_type == "stock":
-        # Stock - would need broker integration
-        result["message"] = f"Stock trading not yet implemented for {symbol}"
+        # Validate
+        is_valid, msg = setup.validate()
+        print(f"   Valid: {is_valid} ({msg})")
 
-    elif asset_type == "commodity":
-        # Commodity - would need futures broker
-        result["message"] = f"Commodity trading not yet implemented for {symbol}"
+    # Test 4: Validation failures
+    print("\n4. Testing validation failures...")
 
-    elif asset_type == "metal":
-        # Precious metals - could use PAXG or similar
-        result["message"] = f"Metal trading not yet implemented for {symbol}"
+    # Missing TP
+    bad_setup = TradeSetup(
+        symbol="TEST",
+        asset_type="token",
+        direction="LONG",
+        entry_price=1.0,
+        take_profit_price=0,  # Invalid!
+        stop_loss_price=0.95,
+        risk_profile=RiskProfile.SAFE,
+        allocation_percent=5.0,
+    )
+    is_valid, msg = bad_setup.validate()
+    print(f"   Missing TP: Valid={is_valid}, Error='{msg}'")
 
-    return result
+    # Wrong direction TP
+    bad_setup2 = TradeSetup(
+        symbol="TEST",
+        asset_type="token",
+        direction="LONG",
+        entry_price=1.0,
+        take_profit_price=0.8,  # Below entry for LONG - wrong!
+        stop_loss_price=0.95,
+        risk_profile=RiskProfile.SAFE,
+        allocation_percent=5.0,
+    )
+    is_valid, msg = bad_setup2.validate()
+    print(f"   Wrong TP direction: Valid={is_valid}, Error='{msg}'")
+
+    print("\n" + "=" * 60)
+    print("TEST COMPLETE")
+    print("=" * 60)
 
 
-# Recommended TP/SL based on grade
-GRADE_TP_SL = {
-    "A": {"tp_percent": 30, "sl_percent": 10},
-    "A-": {"tp_percent": 25, "sl_percent": 10},
-    "B+": {"tp_percent": 20, "sl_percent": 8},
-    "B": {"tp_percent": 15, "sl_percent": 8},
-    "C+": {"tp_percent": 12, "sl_percent": 7},
-    "C": {"tp_percent": 10, "sl_percent": 5},
-    "C-": {"tp_percent": 8, "sl_percent": 5},
-    "D+": {"tp_percent": 5, "sl_percent": 5},
-    "D": {"tp_percent": 3, "sl_percent": 5},
-    "F": {"tp_percent": 2, "sl_percent": 3},
-}
-
-
-def get_tp_sl_for_grade(grade: str, entry_price: float) -> Dict[str, float]:
-    """Get TP and SL prices based on grade."""
-    config = GRADE_TP_SL.get(grade, GRADE_TP_SL["C"])
-
-    tp_price = entry_price * (1 + config["tp_percent"] / 100)
-    sl_price = entry_price * (1 - config["sl_percent"] / 100)
-
-    return {
-        "take_profit": tp_price,
-        "stop_loss": sl_price,
-        "tp_percent": config["tp_percent"],
-        "sl_percent": config["sl_percent"],
-    }
+if __name__ == "__main__":
+    test_ape_buttons()
