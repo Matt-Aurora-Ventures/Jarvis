@@ -14,6 +14,17 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+# Import ape buttons with TP/SL profiles
+from bots.buy_tracker.ape_buttons import create_ape_buttons_with_tp_sl
+
+# Import XStocks/PreStocks universe
+from core.tokenized_equities_universe import (
+    fetch_xstocks_universe,
+    fetch_prestocks_universe,
+    EquityToken,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +168,13 @@ class TokenSentiment:
 
     grok_score: float = 0.0  # Grok AI score (-1 to 1)
     grok_verdict: str = ""   # Grok's one-word verdict
+
+    # Grok-provided targets (for ape buttons)
+    grok_stop_loss: str = ""      # e.g. "$0.000015"
+    grok_target_safe: str = ""    # Conservative target
+    grok_target_med: str = ""     # Medium risk target
+    grok_target_degen: str = ""   # Moon target
+    grok_grade: str = ""          # Grade (A+, A, B+, etc.)
 
     def calculate_sentiment(self, include_grok: bool = True):
         """
@@ -587,6 +605,10 @@ Respond with ONLY the formatted lines, no other text."""
 
                                 # Parse price targets if bullish (now at indices 4-7)
                                 if len(parts) >= 8 and verdict == "BULLISH":
+                                    token.grok_stop_loss = parts[4].strip()
+                                    token.grok_target_safe = parts[5].strip()
+                                    token.grok_target_med = parts[6].strip()
+                                    token.grok_target_degen = parts[7].strip()
                                     token.grok_analysis = (
                                         f"Stop: {parts[4]} | "
                                         f"Safe: {parts[5]} | "
@@ -1409,8 +1431,6 @@ Be specific about price targets and key levels to watch."""
 
     async def _post_to_telegram(self, messages: List[str], tokens: List[TokenSentiment] = None):
         """Post report messages to Telegram with ape buttons for tradeable assets."""
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
         for i, msg in enumerate(messages):
             try:
                 payload = {
@@ -1419,24 +1439,6 @@ Be specific about price targets and key levels to watch."""
                     "parse_mode": "HTML",
                     "disable_web_page_preview": "true",
                 }
-
-                # Add ape buttons to the first message (tokens)
-                if i == 0 and tokens:
-                    # Filter for bullish tokens with contracts
-                    tradeable = [t for t in tokens if t.grok_verdict == "BULLISH" and t.contract_address]
-
-                    if tradeable:
-                        keyboard = []
-                        for t in tradeable[:3]:  # Top 3 bullish tokens
-                            # Short callback data to fit Telegram's 64 byte limit
-                            cb_base = f"ape:t:{t.symbol}:{t.contract_address[:10]}"
-                            keyboard.append([
-                                InlineKeyboardButton(f"🦍 {t.symbol} 5%", callback_data=f"5:{cb_base}"[:64]),
-                                InlineKeyboardButton(f"🐒 2%", callback_data=f"2:{cb_base}"[:64]),
-                                InlineKeyboardButton(f"🐵 1%", callback_data=f"1:{cb_base}"[:64]),
-                            ])
-
-                        payload["reply_markup"] = InlineKeyboardMarkup(keyboard).to_dict()
 
                 async with self._session.post(
                     f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
@@ -1453,8 +1455,293 @@ Be specific about price targets and key levels to watch."""
             except Exception as e:
                 logger.error(f"Failed to post message {i+1} to Telegram: {e}")
 
+        # Post ape buttons for bullish crypto tokens with TP/SL profiles
+        await self._post_ape_buttons(tokens)
+
+        # Post XStocks/PreStocks tradeable section
+        await self._post_xstocks_section()
+
         # Post treasury status as final message
         await self._post_treasury_status()
+
+    async def _post_ape_buttons(self, tokens: List[TokenSentiment] = None):
+        """Post ape buttons with Grok-driven TP/SL targets for bullish tokens."""
+        if not tokens:
+            logger.debug("No tokens provided for ape buttons")
+            return
+
+        # Filter for bullish tokens with contracts AND Grok targets
+        tradeable = [
+            t for t in tokens
+            if t.grok_verdict == "BULLISH"
+            and t.contract_address
+            and t.grok_target_safe  # Must have Grok targets
+        ]
+
+        logger.info(f"Found {len(tradeable)} bullish tokens with Grok targets")
+
+        if not tradeable:
+            # If no tokens have full targets, try any bullish with contract
+            tradeable = [t for t in tokens if t.grok_verdict == "BULLISH" and t.contract_address]
+            if not tradeable:
+                logger.debug("No tradeable bullish tokens found")
+                return
+
+        try:
+            # Header message
+            header = """
+<b>========================================</b>
+<b>   🦍 SOLANA APE BUTTONS</b>
+<b>========================================</b>
+
+<b>Grok-Driven Targets:</b>
+🛡️ SAFE = Conservative target
+⚖️ MED = Medium risk target
+🔥 DEGEN = Moon target
+
+<i>All TP/SL set by Grok AI analysis</i>
+<i>Treasury protected - MUST hit targets</i>
+"""
+            async with self._session.post(
+                f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                json={
+                    "chat_id": self.chat_id,
+                    "text": header,
+                    "parse_mode": "HTML",
+                }
+            ) as resp:
+                await resp.json()
+
+            await asyncio.sleep(0.3)
+
+            # Post buttons for top 3 bullish tokens
+            for t in tradeable[:3]:
+                try:
+                    # Build Grok targets display
+                    targets_display = []
+                    if t.grok_stop_loss:
+                        targets_display.append(f"🛑 SL: {t.grok_stop_loss}")
+                    if t.grok_target_safe:
+                        targets_display.append(f"🛡️ Safe: {t.grok_target_safe}")
+                    if t.grok_target_med:
+                        targets_display.append(f"⚖️ Med: {t.grok_target_med}")
+                    if t.grok_target_degen:
+                        targets_display.append(f"🔥 Degen: {t.grok_target_degen}")
+
+                    targets_str = " | ".join(targets_display) if targets_display else "Awaiting targets..."
+
+                    # Create simple buttons with Grok targets
+                    keyboard = self._create_grok_ape_keyboard(t)
+
+                    token_msg = (
+                        f"<b>🪙 {t.symbol}</b> ({t.grok_verdict})\n"
+                        f"💰 ${t.price_usd:.8f}\n"
+                        f"📊 {t.grok_reasoning[:80]}...\n\n"
+                        f"<b>Grok Targets:</b>\n"
+                        f"{targets_str}"
+                    )
+
+                    async with self._session.post(
+                        f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                        json={
+                            "chat_id": self.chat_id,
+                            "text": token_msg,
+                            "parse_mode": "HTML",
+                            "reply_markup": keyboard.to_dict(),
+                        }
+                    ) as resp:
+                        result = await resp.json()
+                        if not result.get("ok"):
+                            logger.error(f"Failed to post ape buttons for {t.symbol}: {result}")
+                        else:
+                            logger.info(f"Posted ape buttons for {t.symbol}")
+
+                    await asyncio.sleep(0.3)
+
+                except Exception as e:
+                    logger.error(f"Error posting ape buttons for {t.symbol}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to post ape buttons section: {e}")
+
+    def _create_grok_ape_keyboard(self, token: 'TokenSentiment') -> InlineKeyboardMarkup:
+        """Create ape keyboard with Grok-driven targets."""
+        contract_short = token.contract_address[:10] if token.contract_address else ""
+
+        buttons = []
+
+        # Header row showing token info
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"📊 {token.symbol} Info",
+                callback_data=f"info:t:{token.symbol}:{contract_short}"[:64]
+            )
+        ])
+
+        # Row 1: 5% allocation with three risk levels
+        buttons.append([
+            InlineKeyboardButton(
+                text="5% 🛡️ Safe",
+                callback_data=f"ape:5:s:t:{token.symbol}:{contract_short}"[:64]
+            ),
+            InlineKeyboardButton(
+                text="5% ⚖️ Med",
+                callback_data=f"ape:5:m:t:{token.symbol}:{contract_short}"[:64]
+            ),
+            InlineKeyboardButton(
+                text="5% 🔥 Degen",
+                callback_data=f"ape:5:d:t:{token.symbol}:{contract_short}"[:64]
+            ),
+        ])
+
+        # Row 2: 2% allocation
+        buttons.append([
+            InlineKeyboardButton(
+                text="2% 🛡️ Safe",
+                callback_data=f"ape:2:s:t:{token.symbol}:{contract_short}"[:64]
+            ),
+            InlineKeyboardButton(
+                text="2% ⚖️ Med",
+                callback_data=f"ape:2:m:t:{token.symbol}:{contract_short}"[:64]
+            ),
+            InlineKeyboardButton(
+                text="2% 🔥 Degen",
+                callback_data=f"ape:2:d:t:{token.symbol}:{contract_short}"[:64]
+            ),
+        ])
+
+        # Row 3: 1% allocation
+        buttons.append([
+            InlineKeyboardButton(
+                text="1% 🛡️ Safe",
+                callback_data=f"ape:1:s:t:{token.symbol}:{contract_short}"[:64]
+            ),
+            InlineKeyboardButton(
+                text="1% ⚖️ Med",
+                callback_data=f"ape:1:m:t:{token.symbol}:{contract_short}"[:64]
+            ),
+            InlineKeyboardButton(
+                text="1% 🔥 Degen",
+                callback_data=f"ape:1:d:t:{token.symbol}:{contract_short}"[:64]
+            ),
+        ])
+
+        return InlineKeyboardMarkup(buttons)
+
+    async def _post_xstocks_section(self):
+        """Post XStocks/PreStocks tradeable stocks section."""
+        try:
+            # Fetch XStocks universe
+            xstocks, xstocks_warnings = fetch_xstocks_universe()
+            prestocks, prestocks_warnings = fetch_prestocks_universe()
+
+            # Combine and filter
+            all_stocks = xstocks + prestocks
+
+            if not all_stocks:
+                logger.debug("No XStocks/PreStocks available")
+                return
+
+            # Header message with stock-appropriate targets
+            header = """
+<b>========================================</b>
+<b>   📊 XSTOCKS TRADEABLE</b>
+<b>========================================</b>
+
+<b>Tokenized Stocks on Solana</b>
+Trade stocks 24/7 with SOL/USDC
+
+<b>Stock Risk Profiles:</b>
+🛡️ SAFE: +5% TP / -2% SL
+⚖️ MED: +10% TP / -4% SL
+🔥 DEGEN: +20% TP / -8% SL
+
+<i>Source: XStocks.fi + PreStocks.com</i>
+"""
+            async with self._session.post(
+                f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                json={
+                    "chat_id": self.chat_id,
+                    "text": header,
+                    "parse_mode": "HTML",
+                }
+            ) as resp:
+                await resp.json()
+
+            await asyncio.sleep(0.3)
+
+            # Group by issuer
+            xstocks_list = [s for s in all_stocks if s.issuer == "xstocks"][:5]
+            prestocks_list = [s for s in all_stocks if s.issuer == "prestocks"][:5]
+
+            # Post XStocks
+            if xstocks_list:
+                for stock in xstocks_list:
+                    try:
+                        keyboard = create_ape_buttons_with_tp_sl(
+                            symbol=stock.symbol,
+                            asset_type="stock",
+                            contract_address=stock.mint_address or "",
+                            entry_price=0.0,  # Price fetched at trade time
+                            grade="",
+                        )
+
+                        stock_msg = f"<b>📈 {stock.symbol}</b> ({stock.underlying_ticker}) - XStocks"
+
+                        async with self._session.post(
+                            f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                            json={
+                                "chat_id": self.chat_id,
+                                "text": stock_msg,
+                                "parse_mode": "HTML",
+                                "reply_markup": keyboard.to_dict(),
+                            }
+                        ) as resp:
+                            result = await resp.json()
+                            if not result.get("ok"):
+                                logger.debug(f"XStock button error: {result}")
+
+                        await asyncio.sleep(0.2)
+
+                    except Exception as e:
+                        logger.debug(f"XStock button error for {stock.symbol}: {e}")
+
+            # Post PreStocks
+            if prestocks_list:
+                for stock in prestocks_list:
+                    if stock.symbol == "UNKNOWN":
+                        continue
+                    try:
+                        keyboard = create_ape_buttons_with_tp_sl(
+                            symbol=stock.symbol,
+                            asset_type="stock",
+                            contract_address=stock.mint_address or "",
+                            entry_price=0.0,
+                            grade="",
+                        )
+
+                        stock_msg = f"<b>📈 {stock.symbol}</b> ({stock.underlying_ticker}) - PreStocks"
+
+                        async with self._session.post(
+                            f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                            json={
+                                "chat_id": self.chat_id,
+                                "text": stock_msg,
+                                "parse_mode": "HTML",
+                                "reply_markup": keyboard.to_dict(),
+                            }
+                        ) as resp:
+                            result = await resp.json()
+                            if not result.get("ok"):
+                                logger.debug(f"PreStock button error: {result}")
+
+                        await asyncio.sleep(0.2)
+
+                    except Exception as e:
+                        logger.debug(f"PreStock button error for {stock.symbol}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to post XStocks section: {e}")
 
     async def _post_treasury_status(self):
         """Post treasury status at the end of report."""

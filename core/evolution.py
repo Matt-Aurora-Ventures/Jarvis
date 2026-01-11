@@ -521,3 +521,25 @@ If no improvement needed: {{"category": "none"}}"""
         )
     except Exception as e:
         return None
+
+
+class Evolution:
+    """Class wrapper for evolution/self-improvement operations."""
+
+    def __init__(self):
+        pass
+
+    def analyze_conversation(self, history, feedback=""):
+        return analyze_conversation_for_improvements(history, feedback)
+
+    def propose_improvement(self, request: str):
+        return propose_improvement_from_request(request)
+
+    def apply(self, proposal, context=None, dry_run=None):
+        return apply_improvement(proposal, context, dry_run)
+
+    def get_stats(self):
+        return get_evolution_stats()
+
+    def list_skills(self):
+        return list_skills()

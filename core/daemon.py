@@ -2,6 +2,7 @@ import datetime as dt
 import os
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -65,6 +66,8 @@ def _should_run_report(
 
 def _send_notification(title: str, message: str) -> None:
     """Send a macOS notification."""
+    if sys.platform != "darwin":
+        return
     try:
         from core import safe_subprocess
         # Sanitize inputs to prevent osascript injection

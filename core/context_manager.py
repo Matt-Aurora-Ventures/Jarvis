@@ -394,3 +394,62 @@ def list_context_documents(limit: int = 20, category: Optional[str] = None) -> L
 def get_context_document(doc_id: str) -> Optional[ContextDocument]:
     """Fetch a single document metadata entry."""
     return _load_doc_index().get(doc_id)
+
+
+class ContextManager:
+    """Class wrapper for context management operations."""
+
+    def __init__(self):
+        _ensure_paths()
+        self.master = load_master_context()
+        self.activity = load_activity_context()
+        self.conversation = load_conversation_context()
+
+    def refresh(self) -> None:
+        """Reload all contexts from disk."""
+        self.master = load_master_context()
+        self.activity = load_activity_context()
+        self.conversation = load_conversation_context()
+
+    def get_full_context(self) -> Dict[str, Any]:
+        """Get combined context for AI prompts."""
+        return get_full_context()
+
+    def get_context_summary(self) -> str:
+        """Get a brief text summary of current context."""
+        return get_context_summary()
+
+    def update_activity(self, app: str, window: str, screen_content: str = "") -> None:
+        """Update activity context with current state."""
+        update_activity(app, window, screen_content)
+        self.activity = load_activity_context()
+
+    def add_message(self, role: str, content: str) -> None:
+        """Add a message to conversation context."""
+        add_conversation_message(role, content)
+        self.conversation = load_conversation_context()
+
+    def add_action(self, action: str, success: bool, result: str) -> None:
+        """Record an action result for learning."""
+        add_action_result(action, success, result)
+        self.conversation = load_conversation_context()
+
+    def learn_preference(self, key: str, value: Any) -> None:
+        """Learn a user preference."""
+        learn_user_preference(key, value)
+        self.master = load_master_context()
+
+    def add_goal(self, goal: str) -> None:
+        """Add a user goal."""
+        add_user_goal(goal)
+        self.master = load_master_context()
+
+    def add_project(self, project: str) -> None:
+        """Add a current project."""
+        add_current_project(project)
+        self.master = load_master_context()
+
+    def clear_session(self) -> None:
+        """Clear session-specific context."""
+        clear_session_context()
+        self.conversation = load_conversation_context()

@@ -275,15 +275,25 @@ class SecureWallet:
         try:
             keypair = self._load_keypair(address)
 
-            # Sign the transaction
-            if hasattr(transaction, 'sign'):
+            # Serialized Jupiter transactions are passed as bytes.
+            if isinstance(transaction, (bytes, bytearray)):
+                tx_bytes = bytes(transaction)
+                try:
+                    from solders.transaction import VersionedTransaction
+
+                    versioned = VersionedTransaction.from_bytes(tx_bytes)
+                    signed_tx = VersionedTransaction(versioned.message, [keypair])
+                    return bytes(signed_tx)
+                except Exception:
+                    signature = keypair.sign_message(tx_bytes)
+                    return bytes(signature)
+
+            if hasattr(transaction, "sign"):
                 transaction.sign([keypair])
                 return bytes(transaction)
-            else:
-                # Raw message signing
-                from solders.signature import Signature
-                signature = keypair.sign_message(transaction)
-                return bytes(signature)
+
+            signature = keypair.sign_message(transaction)
+            return bytes(signature)
 
         finally:
             # Always clear keypair

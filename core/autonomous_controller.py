@@ -26,6 +26,7 @@ class AutonomousController:
         self.schedule = self._load_schedule()
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
+        self.running = False
         
         # Initialize circular logic detection
         self.circular_detector = circular_logic.CircularLogicDetector()

@@ -14,6 +14,13 @@ from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 
 from bots.buy_tracker.config import BuyBotConfig, load_config
 from bots.buy_tracker.monitor import BuyTransaction, TransactionMonitor
+from bots.buy_tracker.ape_buttons import (
+    parse_ape_callback,
+    create_trade_setup,
+    execute_ape_trade,
+    RISK_PROFILE_CONFIG,
+    get_risk_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +115,15 @@ class JarvisBuyBot:
         self.app = Application.builder().token(self.config.bot_token).build()
         self.bot = self.app.bot
 
-        # Add callback handler for FAQ expand/collapse
+        # Add callback handlers
+        # Ape button handler (pattern: starts with "ape:")
+        self.app.add_handler(CallbackQueryHandler(self._handle_ape_callback, pattern="^ape:"))
+        # Confirm/cancel trade handler
+        self.app.add_handler(CallbackQueryHandler(self._handle_confirm_callback, pattern="^confirm:"))
+        self.app.add_handler(CallbackQueryHandler(self._handle_confirm_callback, pattern="^cancel_trade$"))
+        # Info button handler (pattern: starts with "info:")
+        self.app.add_handler(CallbackQueryHandler(self._handle_info_callback, pattern="^info:"))
+        # FAQ handler for all other callbacks
         self.app.add_handler(CallbackQueryHandler(self._handle_faq_callback))
 
         # Test bot connection
@@ -280,6 +295,192 @@ class JarvisBuyBot:
 
         except Exception as e:
             logger.error(f"Failed to handle FAQ callback: {e}")
+
+    async def _handle_ape_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle ape button clicks for treasury trading with TP/SL."""
+        query = update.callback_query
+        callback_data = query.data
+        chat_id = query.message.chat_id
+
+        logger.info(f"APE CALLBACK RECEIVED: {callback_data}")
+
+        # Try to acknowledge callback (may fail if old)
+        try:
+            await query.answer("🦍 Processing...", show_alert=False)
+        except Exception:
+            logger.debug("Callback acknowledgment failed (may be stale)")
+
+        try:
+            # Parse the callback
+            parsed = parse_ape_callback(callback_data)
+            logger.info(f"Parsed callback: {parsed}")
+
+            if not parsed:
+                await self.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ Invalid button data",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            # Get risk profile config
+            profile_config = get_risk_config(parsed["asset_type"], parsed["risk_profile"])
+
+            # Send confirmation request with CONFIRM/CANCEL buttons
+            confirm_msg = (
+                f"🦍 <b>CONFIRM APE TRADE?</b>\n\n"
+                f"🪙 Asset: <code>{parsed['symbol']}</code>\n"
+                f"📊 Type: {parsed['asset_type'].upper()}\n"
+                f"💰 Allocation: {parsed['allocation_percent']}% of treasury\n"
+                f"📈 Profile: {profile_config['emoji']} {profile_config['label']}\n\n"
+                f"🎯 Take Profit: +{profile_config['tp_pct']}%\n"
+                f"🛑 Stop Loss: -{profile_config['sl_pct']}%\n"
+                f"⚖️ Risk/Reward: {profile_config['tp_pct']/profile_config['sl_pct']:.1f}:1\n\n"
+                f"<i>Click CONFIRM to execute or CANCEL to abort</i>"
+            )
+
+            # Create confirm/cancel buttons
+            confirm_keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("✅ CONFIRM", callback_data=f"confirm:{callback_data}"[:64]),
+                    InlineKeyboardButton("❌ CANCEL", callback_data="cancel_trade"),
+                ]
+            ])
+
+            await self.bot.send_message(
+                chat_id=chat_id,
+                text=confirm_msg,
+                parse_mode=ParseMode.HTML,
+                reply_markup=confirm_keyboard,
+            )
+
+        except Exception as e:
+            logger.error(f"Ape callback error: {e}", exc_info=True)
+            try:
+                await self.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"❌ Error processing trade: {str(e)[:100]}",
+                    parse_mode=ParseMode.HTML,
+                )
+            except:
+                pass
+
+    async def _handle_confirm_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle trade confirmation button clicks."""
+        query = update.callback_query
+        callback_data = query.data
+        chat_id = query.message.chat_id
+
+        logger.info(f"CONFIRM CALLBACK: {callback_data}")
+
+        # Try to acknowledge
+        try:
+            await query.answer("🚀 Executing...", show_alert=False)
+        except Exception:
+            pass
+
+        if callback_data == "cancel_trade":
+            await self.bot.send_message(
+                chat_id=chat_id,
+                text="❌ <b>Trade cancelled.</b>",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        # Extract original ape callback from confirm:ape:...
+        if callback_data.startswith("confirm:"):
+            original_callback = callback_data[8:]  # Remove "confirm:"
+            parsed = parse_ape_callback(original_callback)
+
+            if not parsed:
+                await self.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ Invalid trade data",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            profile_config = get_risk_config(parsed["asset_type"], parsed["risk_profile"])
+
+            # INSTANT FEEDBACK - Send "executing" message immediately
+            executing_msg = await self.bot.send_message(
+                chat_id=chat_id,
+                text=f"⏳ <b>EXECUTING TRADE...</b>\n\n🪙 {parsed['symbol']}\n💰 {parsed['allocation_percent']}% allocation\n\n<i>Fetching live price from DexScreener...</i>",
+                parse_mode=ParseMode.HTML,
+            )
+
+            # Execute the trade
+            try:
+                result = await execute_ape_trade(
+                    callback_data=original_callback,
+                    entry_price=0.0,
+                    treasury_balance_sol=0.1,
+                )
+
+                if result.success:
+                    setup = result.trade_setup
+                    result_msg = (
+                        f"✅ <b>TRADE EXECUTED!</b>\n\n"
+                        f"🪙 {setup.symbol}\n"
+                        f"💰 Amount: {setup.amount_sol:.4f} SOL\n"
+                        f"📍 Entry: ${setup.entry_price:.8f}\n"
+                        f"🎯 TP: ${setup.take_profit_price:.8f}\n"
+                        f"🛑 SL: ${setup.stop_loss_price:.8f}\n\n"
+                        f"<i>TX: {result.tx_signature[:20]}...</i>"
+                    )
+                else:
+                    result_msg = (
+                        f"⚠️ <b>TRADE SIMULATION</b>\n\n"
+                        f"Symbol: {parsed['symbol']}\n"
+                        f"Allocation: {parsed['allocation_percent']}%\n"
+                        f"Profile: {profile_config['label']}\n\n"
+                        f"<i>Status: {result.error}</i>\n\n"
+                        f"<i>Live execution coming soon!</i>"
+                    )
+
+                await self.bot.send_message(
+                    chat_id=chat_id,
+                    text=result_msg,
+                    parse_mode=ParseMode.HTML,
+                )
+
+            except Exception as trade_error:
+                logger.error(f"Trade execution error: {trade_error}")
+                await self.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"⚠️ Trade in simulation mode\n\nSymbol: {parsed['symbol']}\nAllocation: {parsed['allocation_percent']}%\n\n<i>Live trading coming soon!</i>",
+                    parse_mode=ParseMode.HTML,
+                )
+
+    async def _handle_info_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle info button clicks."""
+        query = update.callback_query
+        callback_data = query.data
+
+        try:
+            # Parse info callback (format: info:{profile} or info:{type}:{symbol}:{contract})
+            parts = callback_data.split(":")
+
+            if len(parts) == 2:
+                # Risk profile info
+                profile = parts[1]
+                profile_info = {
+                    "safe": "🛡️ SAFE Profile\n\n+15% Take Profit\n-5% Stop Loss\n3:1 Risk/Reward\n\nBest for: Stable coins, blue chips",
+                    "med": "⚖️ MEDIUM Profile\n\n+30% Take Profit\n-10% Stop Loss\n3:1 Risk/Reward\n\nBest for: Mid-cap tokens",
+                    "degen": "🔥 DEGEN Profile\n\n+50% Take Profit\n-15% Stop Loss\n3.3:1 Risk/Reward\n\nBest for: High-risk plays",
+                }
+                info_text = profile_info.get(profile, "Unknown profile")
+                await query.answer(info_text, show_alert=True)
+            else:
+                # Asset info
+                asset_type = parts[1] if len(parts) > 1 else "t"
+                symbol = parts[2] if len(parts) > 2 else "?"
+                info_text = f"ℹ️ {symbol}\nType: {'Token' if asset_type == 't' else 'Stock'}"
+                await query.answer(info_text, show_alert=True)
+
+        except Exception as e:
+            logger.error(f"Info callback error: {e}")
+            await query.answer("Info unavailable", show_alert=True)
 
     def _format_buy_message(self, buy: BuyTransaction) -> str:
         """Format buy notification message like BobbyBuyBot style."""

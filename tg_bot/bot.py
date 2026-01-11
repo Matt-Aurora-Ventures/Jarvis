@@ -21,6 +21,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import List
 
 # Add parent dir to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -57,6 +58,75 @@ logger = logging.getLogger(__name__)
 # Suppress noisy loggers
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
+
+_TREASURY_ENGINE = None
+
+
+def _parse_admin_ids(value: str) -> List[int]:
+    ids = []
+    for item in value.split(","):
+        item = item.strip()
+        if item.isdigit():
+            ids.append(int(item))
+    return ids
+
+
+def _get_treasury_admin_ids(config) -> List[int]:
+    ids_str = os.environ.get("TREASURY_ADMIN_IDS", "")
+    if ids_str:
+        return _parse_admin_ids(ids_str)
+    return list(config.admin_ids)
+
+
+def _grade_for_signal(signal) -> str:
+    mapping = {
+        "STRONG_BUY": "A",
+        "BUY": "B+",
+        "NEUTRAL": "C+",
+        "SELL": "C",
+        "STRONG_SELL": "C",
+        "AVOID": "C",
+    }
+    return mapping.get(signal.signal, "B")
+
+
+async def _get_treasury_engine():
+    global _TREASURY_ENGINE
+    if _TREASURY_ENGINE:
+        return _TREASURY_ENGINE
+
+    from bots.treasury.wallet import SecureWallet
+    from bots.treasury.jupiter import JupiterClient
+    from bots.treasury.trading import TradingEngine, RiskLevel
+
+    wallet_password = os.environ.get("JARVIS_WALLET_PASSWORD")
+    if not wallet_password:
+        raise RuntimeError("JARVIS_WALLET_PASSWORD not set")
+
+    wallet = SecureWallet(wallet_password)
+    treasury = wallet.get_treasury()
+    if not treasury:
+        raise RuntimeError("Treasury wallet not initialized")
+
+    rpc_url = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
+    jupiter = JupiterClient(rpc_url)
+
+    config = get_config()
+    admin_ids = _get_treasury_admin_ids(config)
+    dry_run = os.environ.get("TREASURY_DRY_RUN", "true").lower() in ("1", "true", "yes", "on")
+
+    engine = TradingEngine(
+        wallet=wallet,
+        jupiter=jupiter,
+        admin_user_ids=admin_ids,
+        risk_level=RiskLevel.MODERATE,
+        max_positions=5,
+        dry_run=dry_run,
+    )
+
+    await engine.initialize_order_manager()
+    _TREASURY_ENGINE = engine
+    return engine
 
 
 # =============================================================================
@@ -256,6 +326,8 @@ async def costs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def trending(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /trending command - show trending tokens (FREE - no sentiment)."""
+    config = get_config()
+    user_id = update.effective_user.id
     await update.message.reply_text(
         "_Fetching trending tokens..._",
         parse_mode=ParseMode.MARKDOWN,
@@ -293,9 +365,19 @@ async def trending(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lines.append("_Use /signals for full Master Report (admin only)_")
 
+    keyboard = None
+    if config.is_admin(user_id):
+        trade_buttons = [
+            [InlineKeyboardButton(f"Trade {sig.symbol} (1/2/5%)", callback_data=f"trade_{sig.address}")]
+            for sig in signals[:3]
+        ]
+        if trade_buttons:
+            keyboard = InlineKeyboardMarkup(trade_buttons)
+
     await update.message.reply_text(
         "\n".join(lines),
         parse_mode=ParseMode.MARKDOWN,
+        reply_markup=keyboard,
         disable_web_page_preview=True,
     )
 
@@ -860,6 +942,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reload(update, context)
         return
 
+    # Trading callbacks
+    if data.startswith("trade_"):
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+
+        token_address = data.replace("trade_", "", 1)
+        await _show_trade_ticket(query, token_address)
+        return
+
+    if data.startswith("buy_"):
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+
+        await _execute_trade_percent(query, data)
+        return
+
     # Token-specific callbacks
     if data.startswith("analyze_"):
         if not config.is_admin(user_id):
@@ -884,6 +984,7 @@ async def _handle_trending_inline(query):
         parse_mode=ParseMode.MARKDOWN,
     )
 
+    config = get_config()
     service = get_signal_service()
     signals_list = await service.get_trending_tokens(limit=5)
 
@@ -910,20 +1011,250 @@ async def _handle_trending_inline(query):
         lines.append("")
 
     # Add inline buttons for quick actions
-    keyboard = [
-        [
-            InlineKeyboardButton(f"📊 Analyze {signals_list[0].symbol}", callback_data=f"analyze_{signals_list[0].symbol}"),
-        ],
-        [
-            InlineKeyboardButton("🔄 Refresh", callback_data="refresh_trending"),
-            InlineKeyboardButton("🏠 Menu", callback_data="menu_back"),
-        ],
-    ]
+    keyboard = []
+    if config.is_admin(query.from_user.id):
+        for sig in signals_list[:3]:
+            keyboard.append([
+                InlineKeyboardButton(f"Trade {sig.symbol} (1/2/5%)", callback_data=f"trade_{sig.address}")
+            ])
+        keyboard.append([
+            InlineKeyboardButton(f"Analyze {signals_list[0].symbol}", callback_data=f"analyze_{signals_list[0].symbol}")
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton("Refresh", callback_data="refresh_trending"),
+        InlineKeyboardButton("Menu", callback_data="menu_back"),
+    ])
 
     await query.message.reply_text(
         "\n".join(lines),
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(keyboard),
+        disable_web_page_preview=True,
+    )
+
+
+async def _show_trade_ticket(query, token_address: str):
+    """Show a Jupiter-style trade ticket with treasury sizing."""
+    service = get_signal_service()
+
+    try:
+        signal = await service.get_comprehensive_signal(
+            token_address,
+            include_sentiment=False,
+        )
+    except Exception as e:
+        logger.error(f"Trade ticket failed: {e}")
+        await query.message.reply_text(
+            fmt.format_error("Trade ticket failed", "Unable to load token data."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if signal.is_honeypot or signal.risk_level == "critical":
+        await query.message.reply_text(
+            fmt.format_error("Trade blocked", "Token flagged as high risk."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if signal.price_usd <= 0:
+        await query.message.reply_text(
+            fmt.format_error("Trade blocked", "Invalid token price."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    try:
+        engine = await _get_treasury_engine()
+        _, portfolio_usd = await engine.get_portfolio_value()
+    except Exception as e:
+        logger.error(f"Treasury engine unavailable: {e}")
+        await query.message.reply_text(
+            fmt.format_error("Trading not configured", str(e)),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if portfolio_usd <= 0:
+        await query.message.reply_text(
+            fmt.format_error("Trade blocked", "Treasury balance is zero."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    grade = _grade_for_signal(signal)
+    tp_price, sl_price = engine.get_tp_sl_levels(signal.price_usd, grade)
+    tp_pct = ((tp_price / signal.price_usd) - 1) * 100
+    sl_pct = (1 - (sl_price / signal.price_usd)) * 100
+
+    size_1 = portfolio_usd * 0.01
+    size_2 = portfolio_usd * 0.02
+    size_5 = portfolio_usd * 0.05
+
+    mode = "DRY RUN" if engine.dry_run else "LIVE"
+
+    lines = [
+        "*JUPITER TRADE TICKET*",
+        "",
+        f"*{signal.symbol}*",
+        f"`{signal.address}`",
+        f"Price: {fmt.format_price(signal.price_usd)}",
+        f"1h: {fmt.format_change(signal.price_change_1h)} | 24h: {fmt.format_change(signal.price_change_24h)}",
+        f"Vol 24h: {fmt.format_volume(signal.volume_24h)} | Liq: {fmt.format_volume(signal.liquidity_usd)}",
+        "",
+        f"*Treasury Sizing* (total ~{fmt.format_price(portfolio_usd)})",
+        f"1% ~ {fmt.format_price(size_1)} | 2% ~ {fmt.format_price(size_2)} | 5% ~ {fmt.format_price(size_5)}",
+        "",
+        f"*Risk Controls* (grade {grade})",
+        f"TP: {fmt.format_price(tp_price)} (+{tp_pct:.0f}%)",
+        f"SL: {fmt.format_price(sl_price)} (-{sl_pct:.0f}%)",
+        "",
+        f"*Mode:* {mode}",
+        f"[Chart]({fmt.get_dexscreener_link(signal.address)})",
+    ]
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("BUY 1%", callback_data=f"buy_1_{signal.address}"),
+            InlineKeyboardButton("BUY 2%", callback_data=f"buy_2_{signal.address}"),
+            InlineKeyboardButton("BUY 5%", callback_data=f"buy_5_{signal.address}"),
+        ],
+        [
+            InlineKeyboardButton("Cancel", callback_data="menu_back"),
+        ],
+    ])
+
+    await query.message.reply_text(
+        "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=keyboard,
+        disable_web_page_preview=True,
+    )
+
+
+async def _execute_trade_percent(query, data: str):
+    """Execute a trade as a percentage of treasury value."""
+    parts = data.split("_", 2)
+    if len(parts) != 3:
+        await query.message.reply_text(
+            fmt.format_error("Trade failed", "Invalid trade request."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    try:
+        pct = float(parts[1])
+    except ValueError:
+        await query.message.reply_text(
+            fmt.format_error("Trade failed", "Invalid size percent."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    token_address = parts[2]
+    service = get_signal_service()
+
+    try:
+        signal = await service.get_comprehensive_signal(
+            token_address,
+            include_sentiment=False,
+        )
+    except Exception as e:
+        logger.error(f"Trade execution failed: {e}")
+        await query.message.reply_text(
+            fmt.format_error("Trade failed", "Unable to load token data."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if signal.is_honeypot or signal.risk_level == "critical":
+        await query.message.reply_text(
+            fmt.format_error("Trade blocked", "Token flagged as high risk."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if signal.price_usd <= 0:
+        await query.message.reply_text(
+            fmt.format_error("Trade failed", "Invalid token price."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    try:
+        engine = await _get_treasury_engine()
+        _, portfolio_usd = await engine.get_portfolio_value()
+    except Exception as e:
+        logger.error(f"Treasury engine unavailable: {e}")
+        await query.message.reply_text(
+            fmt.format_error("Trading not configured", str(e)),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if portfolio_usd <= 0:
+        await query.message.reply_text(
+            fmt.format_error("Trade blocked", "Treasury balance is zero."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    amount_usd = portfolio_usd * (pct / 100.0)
+    grade = _grade_for_signal(signal)
+
+    try:
+        from bots.treasury.trading import TradeDirection
+
+        success, msg, position = await engine.open_position(
+            token_mint=signal.address,
+            token_symbol=signal.symbol,
+            direction=TradeDirection.LONG,
+            amount_usd=amount_usd,
+            sentiment_grade=grade,
+            sentiment_score=signal.sentiment_score,
+            user_id=query.from_user.id,
+        )
+    except Exception as e:
+        logger.error(f"Trade execution failed: {e}")
+        await query.message.reply_text(
+            fmt.format_error("Trade failed", "Execution error."),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if not success:
+        await query.message.reply_text(
+            fmt.format_error("Trade failed", msg),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    tp_price, sl_price = engine.get_tp_sl_levels(signal.price_usd, grade)
+    tp_pct = ((tp_price / signal.price_usd) - 1) * 100
+    sl_pct = (1 - (sl_price / signal.price_usd)) * 100
+    mode = "DRY RUN" if engine.dry_run else "LIVE"
+
+    entry_price = position.entry_price if position else signal.price_usd
+    amount_line = f"Amount: {position.amount:.4f}" if position else "Amount: n/a"
+
+    lines = [
+        "*TRADE EXECUTED*",
+        "",
+        f"Token: *{signal.symbol}*",
+        f"Size: {pct:.0f}% (~{fmt.format_price(amount_usd)})",
+        f"Entry: {fmt.format_price(entry_price)}",
+        amount_line,
+        "",
+        f"TP: {fmt.format_price(tp_price)} (+{tp_pct:.0f}%)",
+        f"SL: {fmt.format_price(sl_price)} (-{sl_pct:.0f}%)",
+        "",
+        f"Mode: {mode}",
+    ]
+
+    await query.edit_message_text(
+        "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN,
         disable_web_page_preview=True,
     )
 

@@ -1878,6 +1878,20 @@ This README is the capability index; the authoritative release log lives in `CHA
 
 ### Completed ✓
 
+**v4.1.1 - Daemon Stability & Module Fixes (January 2026)**
+- [x] Fixed `core/memory` module - Added `get_recent_entries()` and `summarize_entries()` functions
+- [x] Fixed `core/guardian` module - Added `Guardian` class alias for backward compatibility
+- [x] Fixed `core/context_manager` module - Added `ContextManager` class wrapper
+- [x] Fixed `core/providers` module - Added `Providers` class wrapper
+- [x] Fixed `core/evolution` module - Added `Evolution` class wrapper
+- [x] Fixed `core/autonomous_restart` module - Added `AutonomousRestartManager` alias
+- [x] Fixed `core/autonomous_controller` - Added missing `running` attribute
+- [x] All 11 daemon components now start successfully
+- [x] Installed missing dependencies: `pyautogui`, `groq`
+- [x] Enhanced Telegram bot with sentiment reporting and ape trading buttons
+- [x] Treasury trading improvements with position management
+- [x] Buy tracker enhancements with sentiment analysis
+
 **v4.1.0 - Full System Audit & Enhancement (NEW)**
 - [x] Treasury Trading System with AES-256 encrypted wallets
 - [x] Jupiter Aggregator integration for Solana swaps

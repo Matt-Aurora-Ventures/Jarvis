@@ -1614,3 +1614,19 @@ def get_fallback_stats() -> Dict[str, Any]:
         "last_errors": dict(_LAST_PROVIDER_ERRORS),
         "timestamp": time.time(),
     }
+
+
+class Providers:
+    """Class wrapper for provider operations."""
+
+    def __init__(self):
+        pass
+
+    def generate_text(self, prompt: str, max_output_tokens: int = 512) -> Optional[str]:
+        return generate_text(prompt, max_output_tokens)
+
+    def check_health(self) -> Dict[str, Dict[str, Any]]:
+        return check_provider_health()
+
+    def get_fallback_stats(self) -> Dict[str, Any]:
+        return get_fallback_stats()

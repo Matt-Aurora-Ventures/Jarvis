@@ -233,3 +233,7 @@ _guard = SafetyGuard()
 def guard() -> SafetyGuard:
     """Get the global safety guard instance."""
     return _guard
+
+
+# Alias for backward compatibility
+Guardian = SafetyGuard

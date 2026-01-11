@@ -326,3 +326,7 @@ def execute_autonomous_restart():
     """Execute the scheduled autonomous restart."""
     restart_manager = get_autonomous_restart()
     restart_manager.execute_restart()
+
+
+# Alias for backward compatibility
+AutonomousRestartManager = AutonomousRestart

@@ -636,11 +636,33 @@ def get_treasury_bot() -> TreasuryTradingBot:
 def create_treasury_bot_router():
     """Create FastAPI router for treasury bot."""
     try:
-        from fastapi import APIRouter, HTTPException
+        from fastapi import APIRouter, Depends, Header, HTTPException
     except ImportError:
         return None
 
-    router = APIRouter(prefix="/api/treasury/bot", tags=["Treasury Bot"])
+    def _require_api_key(
+        x_api_key: str = Header(default=""),
+        authorization: str = Header(default=""),
+    ):
+        expected = os.getenv("TREASURY_BOT_API_KEY", "")
+        if not expected:
+            raise HTTPException(status_code=503, detail="Treasury bot API key not configured")
+
+        if x_api_key == expected:
+            return
+
+        if authorization.startswith("Bearer "):
+            token = authorization.split(" ", 1)[1]
+            if token == expected:
+                return
+
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    router = APIRouter(
+        prefix="/api/treasury/bot",
+        tags=["Treasury Bot"],
+        dependencies=[Depends(_require_api_key)],
+    )
     bot = get_treasury_bot()
 
     @router.get("/status")

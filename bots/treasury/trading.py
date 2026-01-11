@@ -400,8 +400,9 @@ class TradingEngine:
             Tuple of (success, message, position)
         """
         # Check admin auth
-        if user_id and not self.is_admin(user_id):
-            return False, "Unauthorized", None
+        if self.admin_user_ids:
+            if not user_id or not self.is_admin(user_id):
+                return False, "Unauthorized", None
 
         # Check existing positions
         existing = [p for p in self.positions.values()
@@ -527,8 +528,9 @@ class TradingEngine:
         Returns:
             Tuple of (success, message)
         """
-        if user_id and not self.is_admin(user_id):
-            return False, "Unauthorized"
+        if self.admin_user_ids:
+            if not user_id or not self.is_admin(user_id):
+                return False, "Unauthorized"
 
         if position_id not in self.positions:
             return False, "Position not found"
@@ -674,3 +676,424 @@ class TradingEngine:
             await self.order_manager.stop_monitoring()
         await self.jupiter.close()
         self._save_state()
+
+
+# =============================================================================
+# SIMPLE WALLET WRAPPER - For direct keypair usage
+# =============================================================================
+
+class _SimpleWallet:
+    """
+    Minimal wallet wrapper for direct keypair usage.
+
+    Provides the interface TradingEngine expects without
+    the complexity of SecureWallet encryption.
+    """
+
+    def __init__(self, keypair, address: str):
+        self._keypair = keypair
+        self._address = address
+        self._treasury_info = WalletInfo(
+            address=address,
+            created_at="",
+            label="Treasury",
+            is_treasury=True,
+        )
+
+    def get_treasury(self) -> Optional[WalletInfo]:
+        """Return the treasury wallet info."""
+        return self._treasury_info
+
+    async def get_balance(self, address: str = None) -> Tuple[float, float]:
+        """Get wallet balance in SOL and USD."""
+        import aiohttp
+        try:
+            target = address or self._address
+            rpc_url = os.environ.get('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com')
+
+            async with aiohttp.ClientSession() as session:
+                # Get SOL balance
+                payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "getBalance",
+                    "params": [target]
+                }
+                async with session.post(rpc_url, json=payload) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        lamports = data.get("result", {}).get("value", 0)
+                        sol_balance = lamports / 1e9
+
+                        # Get SOL price from Jupiter
+                        sol_mint = "So11111111111111111111111111111111111111112"
+                        price_url = f"https://price.jup.ag/v6/price?ids={sol_mint}"
+                        async with session.get(price_url) as price_resp:
+                            if price_resp.status == 200:
+                                price_data = await price_resp.json()
+                                sol_price = price_data.get("data", {}).get(sol_mint, {}).get("price", 0)
+                                return sol_balance, sol_balance * sol_price
+
+                        return sol_balance, 0.0
+        except Exception as e:
+            logger.error(f"Failed to get balance: {e}")
+            return 0.0, 0.0
+
+    async def get_token_balances(self, address: str = None) -> Dict[str, Dict]:
+        """Get token balances for the wallet."""
+        return {}
+
+    def sign_transaction(self, tx):
+        """Sign a transaction with the keypair."""
+        return tx.sign([self._keypair])
+
+    @property
+    def keypair(self):
+        """Get the underlying keypair for signing."""
+        return self._keypair
+
+
+# =============================================================================
+# TREASURY TRADER - Simple Interface for Ape Buttons
+# =============================================================================
+
+class TreasuryTrader:
+    """
+    Simple trading interface for ape buttons.
+
+    Provides a clean execute_buy_with_tp_sl method that handles:
+    - Wallet initialization
+    - Jupiter quote fetching
+    - Trade execution with TP/SL orders
+    """
+
+    _instance: Optional['TreasuryTrader'] = None
+    _engine: Optional[TradingEngine] = None
+    _initialized: bool = False
+
+    def __new__(cls):
+        """Singleton pattern for shared state."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    async def _ensure_initialized(self) -> Tuple[bool, str]:
+        """Initialize wallet and jupiter client if not already done."""
+        if self._initialized and self._engine:
+            return True, "Already initialized"
+
+        try:
+            # Try to load keypair from treasury_keypair.json first
+            from pathlib import Path
+            keypair_path = Path(__file__).resolve().parents[2] / "data" / "treasury_keypair.json"
+
+            wallet = None
+            treasury_address = None
+
+            if keypair_path.exists():
+                try:
+                    keypair = self._load_encrypted_keypair(keypair_path)
+                    if keypair:
+                        treasury_address = str(keypair.pubkey())
+                        logger.info(f"Loaded treasury keypair: {treasury_address[:8]}...")
+
+                        # Create a minimal wallet wrapper that works with TradingEngine
+                        wallet = _SimpleWallet(keypair, treasury_address)
+                except Exception as kp_err:
+                    logger.warning(f"Keypair load failed: {kp_err}")
+
+            # Fallback to SecureWallet if direct load failed
+            if not wallet:
+                wallet_password = os.environ.get('JARVIS_WALLET_PASSWORD')
+                if not wallet_password:
+                    logger.warning("JARVIS_WALLET_PASSWORD not set - running in simulation mode")
+                    return False, "No wallet found - check treasury_keypair.json or JARVIS_WALLET_PASSWORD"
+
+                try:
+                    secure_wallet = SecureWallet()
+                    treasury = secure_wallet.get_treasury()
+                    if treasury:
+                        wallet = secure_wallet
+                        treasury_address = treasury.address
+                except Exception as wallet_err:
+                    logger.warning(f"SecureWallet init failed: {wallet_err}")
+
+            if not wallet:
+                return False, "No treasury wallet found - create data/treasury_keypair.json"
+
+            # Initialize Jupiter client
+            jupiter = JupiterClient()
+
+            # Create trading engine (start in live mode, not dry run)
+            self._engine = TradingEngine(
+                wallet=wallet,
+                jupiter=jupiter,
+                dry_run=False,  # Live trading
+                max_positions=10,
+            )
+
+            self._initialized = True
+            logger.info(f"TreasuryTrader initialized with wallet {treasury_address[:8]}...")
+            return True, f"Initialized with {treasury_address[:8]}..."
+
+        except Exception as e:
+            logger.error(f"Failed to initialize TreasuryTrader: {e}")
+            return False, str(e)
+
+    async def execute_buy_with_tp_sl(
+        self,
+        token_mint: str,
+        amount_sol: float,
+        take_profit_price: float,
+        stop_loss_price: float,
+        token_symbol: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Execute a buy trade with take profit and stop loss.
+
+        Args:
+            token_mint: Token contract address (can be partial)
+            amount_sol: Amount in SOL to spend
+            take_profit_price: Take profit target price
+            stop_loss_price: Stop loss target price
+            token_symbol: Token symbol for logging
+
+        Returns:
+            Dict with success, tx_signature, error, and message
+        """
+        # Initialize if needed
+        initialized, init_msg = await self._ensure_initialized()
+        if not initialized:
+            return {
+                "success": False,
+                "error": init_msg,
+                "tx_signature": "",
+            }
+
+        try:
+            # Resolve partial contract address if needed
+            full_mint = await self._resolve_token_mint(token_mint, token_symbol)
+            if not full_mint:
+                return {
+                    "success": False,
+                    "error": f"Could not resolve token address for {token_symbol or token_mint}",
+                    "tx_signature": "",
+                }
+
+            # Get current price for position sizing
+            current_price = await self._engine.jupiter.get_token_price(full_mint)
+            if current_price <= 0:
+                return {
+                    "success": False,
+                    "error": "Could not fetch current token price",
+                    "tx_signature": "",
+                }
+
+            # Get SOL price for USD conversion
+            sol_price = await self._engine.jupiter.get_token_price(JupiterClient.SOL_MINT)
+            amount_usd = amount_sol * sol_price
+
+            # Calculate custom TP/SL percentages from prices
+            tp_pct = (take_profit_price - current_price) / current_price
+            sl_pct = (current_price - stop_loss_price) / current_price
+
+            # Get token info for symbol
+            token_info = await self._engine.jupiter.get_token_info(full_mint)
+            symbol = token_symbol or (token_info.symbol if token_info else "UNKNOWN")
+
+            logger.info(
+                f"Executing buy: {symbol} | {amount_sol:.4f} SOL (${amount_usd:.2f}) | "
+                f"Entry: ${current_price:.6f} | TP: ${take_profit_price:.6f} | SL: ${stop_loss_price:.6f}"
+            )
+
+            # Open position through trading engine
+            success, message, position = await self._engine.open_position(
+                token_mint=full_mint,
+                token_symbol=symbol,
+                direction=TradeDirection.LONG,
+                amount_usd=amount_usd,
+                sentiment_grade="B",  # Default grade
+                custom_tp=tp_pct,
+                custom_sl=sl_pct,
+            )
+
+            if success and position:
+                return {
+                    "success": True,
+                    "tx_signature": message.split(": ")[-1] if ": " in message else "",
+                    "message": message,
+                    "position_id": position.id,
+                    "entry_price": position.entry_price,
+                    "amount_tokens": position.amount,
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": message,
+                    "tx_signature": "",
+                }
+
+        except Exception as e:
+            logger.error(f"Trade execution failed: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "tx_signature": "",
+            }
+
+    async def _resolve_token_mint(self, partial_mint: str, symbol: str = "") -> Optional[str]:
+        """
+        Resolve a partial token mint to full address.
+
+        Uses DexScreener search if the mint is truncated.
+        """
+        # If it looks like a full Solana address, return as-is
+        if len(partial_mint) >= 32:
+            return partial_mint
+
+        # Try to search by symbol using DexScreener
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                search_term = symbol or partial_mint
+                url = f"https://api.dexscreener.com/latest/dex/search?q={search_term}"
+
+                async with session.get(url, timeout=5) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        pairs = data.get("pairs", [])
+
+                        # Filter for Solana pairs
+                        solana_pairs = [
+                            p for p in pairs
+                            if p.get("chainId") == "solana"
+                            and (
+                                p.get("baseToken", {}).get("symbol", "").upper() == search_term.upper()
+                                or search_term.upper() in p.get("baseToken", {}).get("name", "").upper()
+                                or p.get("baseToken", {}).get("address", "").startswith(partial_mint)
+                            )
+                        ]
+
+                        if solana_pairs:
+                            # Get most liquid pair
+                            best = max(solana_pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
+                            full_address = best.get("baseToken", {}).get("address")
+                            if full_address:
+                                logger.info(f"Resolved {search_term} to {full_address[:8]}...")
+                                return full_address
+        except Exception as e:
+            logger.error(f"Failed to resolve token mint: {e}")
+
+        return None
+
+    def _load_encrypted_keypair(self, keypair_path):
+        """
+        Load and decrypt keypair from encrypted treasury_keypair.json.
+
+        The file format:
+        {
+            "salt": "<base64>",
+            "nonce": "<base64>",
+            "encrypted_key": "<base64>",
+            "pubkey": "<address>"
+        }
+        """
+        import json
+        import base64
+        import hashlib
+
+        password = os.environ.get('JARVIS_WALLET_PASSWORD', '')
+        if not password:
+            logger.warning("JARVIS_WALLET_PASSWORD not set - cannot decrypt keypair")
+            return None
+
+        try:
+            with open(keypair_path) as f:
+                data = json.load(f)
+
+            # Check if this is an encrypted format
+            if 'encrypted_key' in data and 'salt' in data and 'nonce' in data:
+                salt = base64.b64decode(data['salt'])
+                nonce = base64.b64decode(data['nonce'])
+                encrypted_key = base64.b64decode(data['encrypted_key'])
+
+                # Try PyNaCl (libsodium) decryption
+                try:
+                    import nacl.secret
+                    import nacl.pwhash
+
+                    # Derive key from password using Argon2
+                    key = nacl.pwhash.argon2id.kdf(
+                        nacl.secret.SecretBox.KEY_SIZE,
+                        password.encode(),
+                        salt,
+                        opslimit=nacl.pwhash.argon2id.OPSLIMIT_MODERATE,
+                        memlimit=nacl.pwhash.argon2id.MEMLIMIT_MODERATE,
+                    )
+
+                    box = nacl.secret.SecretBox(key)
+                    decrypted = box.decrypt(encrypted_key, nonce)
+
+                    from solders.keypair import Keypair
+                    return Keypair.from_bytes(decrypted)
+
+                except ImportError:
+                    logger.warning("PyNaCl not installed, trying Fernet")
+
+                # Try Fernet decryption as fallback
+                try:
+                    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+                    from cryptography.hazmat.primitives import hashes
+                    from cryptography.fernet import Fernet
+
+                    kdf = PBKDF2HMAC(
+                        algorithm=hashes.SHA256(),
+                        length=32,
+                        salt=salt,
+                        iterations=480000,
+                    )
+                    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+                    fernet = Fernet(key)
+                    decrypted = fernet.decrypt(encrypted_key)
+
+                    from solders.keypair import Keypair
+                    return Keypair.from_bytes(decrypted)
+
+                except Exception as e:
+                    logger.error(f"Fernet decryption failed: {e}")
+
+            # Check if raw format (list of bytes)
+            elif isinstance(data, list):
+                from solders.keypair import Keypair
+                return Keypair.from_bytes(bytes(data))
+
+            # Has pubkey but couldn't decrypt - return None
+            if 'pubkey' in data:
+                logger.warning(f"Found encrypted keypair for {data['pubkey'][:8]}... but could not decrypt")
+
+        except Exception as e:
+            logger.error(f"Failed to load keypair: {e}")
+
+        return None
+
+    async def get_balance(self) -> Tuple[float, float]:
+        """Get treasury balance in SOL and USD."""
+        initialized, _ = await self._ensure_initialized()
+        if not initialized:
+            return 0.0, 0.0
+        return await self._engine.get_portfolio_value()
+
+    async def get_open_positions(self) -> List[Position]:
+        """Get all open positions."""
+        initialized, _ = await self._ensure_initialized()
+        if not initialized:
+            return []
+        return self._engine.get_open_positions()
+
+    async def close_position(self, position_id: str) -> Tuple[bool, str]:
+        """Close a position by ID."""
+        initialized, msg = await self._ensure_initialized()
+        if not initialized:
+            return False, msg
+        return await self._engine.close_position(position_id)

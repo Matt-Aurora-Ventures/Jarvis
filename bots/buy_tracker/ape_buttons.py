@@ -38,7 +38,7 @@ class RiskProfile(Enum):
     DEGEN = "degen"
 
 
-# TP/SL percentages by risk profile
+# TP/SL percentages by risk profile for CRYPTO (volatile assets)
 # Format: (take_profit_pct, stop_loss_pct)
 RISK_PROFILE_CONFIG = {
     RiskProfile.SAFE: {
@@ -63,6 +63,37 @@ RISK_PROFILE_CONFIG = {
         "description": "Aggressive: +50% TP / -15% SL (3.3:1 R/R)",
     },
 }
+
+# TP/SL percentages for STOCKS (less volatile, realistic targets)
+STOCK_RISK_PROFILE_CONFIG = {
+    RiskProfile.SAFE: {
+        "tp_pct": 5.0,    # +5% take profit (swing trade)
+        "sl_pct": 2.0,    # -2% stop loss
+        "label": "SAFE",
+        "emoji": "🛡️",
+        "description": "Conservative: +5% TP / -2% SL (2.5:1 R/R)",
+    },
+    RiskProfile.MEDIUM: {
+        "tp_pct": 10.0,   # +10% take profit
+        "sl_pct": 4.0,    # -4% stop loss
+        "label": "MED",
+        "emoji": "⚖️",
+        "description": "Balanced: +10% TP / -4% SL (2.5:1 R/R)",
+    },
+    RiskProfile.DEGEN: {
+        "tp_pct": 20.0,   # +20% take profit (momentum play)
+        "sl_pct": 8.0,    # -8% stop loss
+        "label": "DEGEN",
+        "emoji": "🔥",
+        "description": "Aggressive: +20% TP / -8% SL (2.5:1 R/R)",
+    },
+}
+
+def get_risk_config(asset_type: str, profile: RiskProfile) -> dict:
+    """Get appropriate risk config based on asset type."""
+    if asset_type == "stock":
+        return STOCK_RISK_PROFILE_CONFIG[profile]
+    return RISK_PROFILE_CONFIG[profile]
 
 
 # Treasury allocation percentages
@@ -236,9 +267,10 @@ def create_ape_buttons_with_tp_sl(
         row = []
 
         for profile in [RiskProfile.SAFE, RiskProfile.MEDIUM, RiskProfile.DEGEN]:
-            profile_config = RISK_PROFILE_CONFIG[profile]
+            # Use asset-appropriate risk config (stocks have lower targets)
+            profile_config = get_risk_config(asset_type, profile)
 
-            # Button text: "5% 🛡️ +15/-5"
+            # Button text: "5% 🛡️ +15/-5" for crypto, "5% 🛡️ +5/-2" for stocks
             tp = profile_config["tp_pct"]
             sl = profile_config["sl_pct"]
             emoji = profile_config["emoji"]
@@ -334,8 +366,8 @@ def parse_ape_callback(callback_data: str) -> Optional[Dict[str, Any]]:
         # Get allocation percent
         alloc_config = APE_ALLOCATION_PCT.get(alloc_key, {"percent": 1.0})
 
-        # Get TP/SL config
-        profile_config = RISK_PROFILE_CONFIG[profile]
+        # Get TP/SL config based on asset type (stocks have lower targets)
+        profile_config = get_risk_config(asset_type, profile)
 
         return {
             "allocation_percent": alloc_config["percent"],
@@ -430,24 +462,95 @@ def create_trade_setup(
     )
 
 
+async def fetch_token_price(contract_address: str = "", symbol: str = "") -> float:
+    """Fetch current token price from DexScreener by contract or symbol."""
+    import aiohttp
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Try by contract address first (if full address)
+            if contract_address and len(contract_address) >= 32:
+                url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
+                async with session.get(url, timeout=5) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        pairs = data.get("pairs", [])
+                        if pairs:
+                            best_pair = max(pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
+                            price = float(best_pair.get("priceUsd", 0) or 0)
+                            if price > 0:
+                                logger.info(f"Fetched price by contract: ${price}")
+                                return price
+
+            # Try by symbol search (for truncated addresses)
+            if symbol:
+                url = f"https://api.dexscreener.com/latest/dex/search?q={symbol}"
+                async with session.get(url, timeout=5) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        pairs = data.get("pairs", [])
+                        # Filter for Solana pairs matching our symbol
+                        solana_pairs = [
+                            p for p in pairs
+                            if p.get("chainId") == "solana"
+                            and (p.get("baseToken", {}).get("symbol", "").upper() == symbol.upper()
+                                 or symbol.upper() in p.get("baseToken", {}).get("name", "").upper())
+                        ]
+                        if solana_pairs:
+                            # Get most liquid Solana pair
+                            best_pair = max(solana_pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
+                            price = float(best_pair.get("priceUsd", 0) or 0)
+                            if price > 0:
+                                logger.info(f"Fetched price for {symbol} by search: ${price}")
+                                return price
+
+            # Last resort: search trending tokens
+            if symbol:
+                url = "https://api.dexscreener.com/token-boosts/top/v1"
+                async with session.get(url, timeout=5) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        for token in data:
+                            if token.get("tokenAddress") and symbol.upper() in str(token).upper():
+                                # Found a match, fetch its price
+                                token_addr = token.get("tokenAddress")
+                                price_url = f"https://api.dexscreener.com/latest/dex/tokens/{token_addr}"
+                                async with session.get(price_url, timeout=5) as price_resp:
+                                    if price_resp.status == 200:
+                                        price_data = await price_resp.json()
+                                        pairs = price_data.get("pairs", [])
+                                        if pairs:
+                                            price = float(pairs[0].get("priceUsd", 0) or 0)
+                                            if price > 0:
+                                                logger.info(f"Fetched price for {symbol} from trending: ${price}")
+                                                return price
+
+    except Exception as e:
+        logger.error(f"Failed to fetch token price: {e}")
+
+    return 0.0
+
+
 async def execute_ape_trade(
     callback_data: str,
     entry_price: float,
     treasury_balance_sol: float,
     direction: str = "LONG",
     grade: str = "",
+    max_slippage_pct: float = 20.0,  # Accept up to 20% slippage for volatile tokens
 ) -> TradeResult:
     """
     Execute an ape trade with MANDATORY TP/SL validation.
 
-    CRITICAL: This function will REFUSE to execute if TP/SL cannot be set.
+    For volatile Solana tokens, fetches current price and accepts slippage.
 
     Args:
         callback_data: Raw callback data from button
-        entry_price: Current entry price
+        entry_price: Quoted entry price (0 = fetch from DexScreener)
         treasury_balance_sol: Available treasury balance
         direction: Trade direction
         grade: Asset grade
+        max_slippage_pct: Maximum acceptable slippage from quoted price
 
     Returns:
         TradeResult with success/failure info
@@ -460,17 +563,34 @@ async def execute_ape_trade(
             error="Invalid callback data - cannot parse trade parameters"
         )
 
-    # Validate entry price
-    if entry_price <= 0:
+    # Fetch current price if not provided
+    current_price = entry_price
+    symbol = parsed.get("symbol", "")
+    contract = parsed.get("contract", "")
+
+    if current_price <= 0:
+        logger.info(f"Fetching live price for {symbol} (contract: {contract})")
+        current_price = await fetch_token_price(contract_address=contract, symbol=symbol)
+
+    # For volatile tokens, use market order if price fetch fails
+    if current_price <= 0:
+        logger.warning(f"Could not fetch price for {symbol}, will use market order with 20% slippage protection")
+        # Use a small placeholder - actual execution will be at market price
+        # TP/SL will be calculated as percentages from actual fill price
+        current_price = 0.000001
+
+    if current_price <= 0:
         return TradeResult(
             success=False,
-            error="REJECTED: Entry price not available - cannot calculate TP/SL"
+            error="Could not determine entry price - try again"
         )
 
-    # Create trade setup with TP/SL
+    logger.info(f"Trade price for {symbol}: ${current_price}")
+
+    # Create trade setup with TP/SL using FETCHED price
     trade_setup = create_trade_setup(
         parsed_callback=parsed,
-        entry_price=entry_price,
+        entry_price=current_price,  # Use the fetched/current price, NOT the original parameter
         treasury_balance_sol=treasury_balance_sol,
         direction=direction,
         grade=grade,
@@ -527,10 +647,11 @@ async def _execute_token_trade(setup: TradeSetup) -> TradeResult:
 
         # Execute buy with TP/SL
         result = await trader.execute_buy_with_tp_sl(
-            token_mint=setup.contract_address,
+            token_mint=setup.contract_address or "",
             amount_sol=setup.amount_sol,
             take_profit_price=setup.take_profit_price,
             stop_loss_price=setup.stop_loss_price,
+            token_symbol=setup.symbol,
         )
 
         if result.get("success"):

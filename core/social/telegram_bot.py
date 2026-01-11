@@ -93,7 +93,13 @@ class SecureKeyManager:
     """
 
     def __init__(self):
-        self.master_key = self._derive_master_key()
+        self.enabled = True
+        try:
+            self.master_key = self._derive_master_key()
+        except Exception as e:
+            self.enabled = False
+            self.master_key = None
+            logger.error(f"Key manager disabled: {e}")
 
     def _derive_master_key(self) -> bytes:
         """Derive master encryption key"""
@@ -104,10 +110,13 @@ class SecureKeyManager:
             # Get from secure environment
             password = os.environ.get("JARVIS_MASTER_KEY")
             if not password:
-                logger.warning("JARVIS_MASTER_KEY not set, using development key")
-                password = "development_key_do_not_use_in_production"
+                raise RuntimeError("JARVIS_MASTER_KEY not set")
 
-            salt = os.environ.get("JARVIS_KEY_SALT", "jarvis_default_salt").encode()
+            salt_value = os.environ.get("JARVIS_KEY_SALT")
+            if not salt_value:
+                raise RuntimeError("JARVIS_KEY_SALT not set")
+
+            salt = salt_value.encode()
 
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
@@ -119,11 +128,13 @@ class SecureKeyManager:
             return kdf.derive(password.encode())
 
         except ImportError:
-            logger.warning("cryptography not installed, key management disabled")
-            return b"dummy_key_for_development"
+            raise RuntimeError("cryptography not installed")
 
     def encrypt(self, data: bytes, context: str) -> str:
         """Encrypt sensitive data"""
+        if not self.enabled or not self.master_key:
+            raise RuntimeError("Key manager not configured")
+
         try:
             from cryptography.fernet import Fernet
             import base64
@@ -144,6 +155,9 @@ class SecureKeyManager:
 
     def decrypt(self, encrypted_data: str, context: str) -> bytes:
         """Decrypt sensitive data"""
+        if not self.enabled or not self.master_key:
+            raise RuntimeError("Key manager not configured")
+
         try:
             from cryptography.fernet import Fernet
             import base64
@@ -229,19 +243,20 @@ class UserManager:
         username: str
     ) -> UserAccount:
         """Create a new user account with custodial wallet"""
+        if not self.key_manager.enabled:
+            raise RuntimeError("Custodial wallet disabled (missing master key config)")
 
-        # Generate a deterministic wallet address (placeholder)
-        # In production, would use actual Solana keypair generation
-        wallet_seed = hashlib.sha256(
-            f"jarvis_wallet_{telegram_id}_{datetime.now().isoformat()}".encode()
-        ).hexdigest()
+        try:
+            from solders.keypair import Keypair
+        except ImportError:
+            raise RuntimeError("solders library required for wallet creation")
 
-        wallet_address = f"JARVIS{wallet_seed[:40]}"
-
-        # Encrypt private key (placeholder - would be actual key)
+        keypair = Keypair()
+        wallet_address = str(keypair.pubkey())
+        key_bytes = bytes(keypair)
         encrypted_key = self.key_manager.encrypt(
-            wallet_seed.encode(),
-            context=f"user_{telegram_id}"
+            key_bytes,
+            context=f"user_{telegram_id}",
         )
 
         account = UserAccount(
@@ -257,6 +272,9 @@ class UserManager:
 
         self.users[telegram_id] = account
         self._save_users()
+
+        del keypair
+        del key_bytes
 
         logger.info(f"Created account for user {telegram_id}")
         return account
@@ -556,7 +574,14 @@ class JarvisTelegramBot:
             return
 
         # Create new account
-        account = await self.user_manager.create_account(user.id, user.username)
+        try:
+            account = await self.user_manager.create_account(user.id, user.username)
+        except RuntimeError as e:
+            logger.error(f"Account creation failed for {user.id}: {e}")
+            await update.message.reply_text(
+                "Account creation is temporarily disabled. Please try again later."
+            )
+            return
 
         await update.message.reply_text(
             f"Welcome to Jarvis Trading! 🤖\n\n"
