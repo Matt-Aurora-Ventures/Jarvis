@@ -56,6 +56,146 @@ class VoiceCommand:
     payload: str
 
 
+@dataclass
+class VoiceDiagnostics:
+    """Results from voice system diagnostics."""
+    microphone_available: bool = False
+    microphone_error: str = ""
+    tts_engine: str = ""
+    tts_available: bool = False
+    tts_error: str = ""
+    stt_engine: str = ""
+    stt_available: bool = False
+    stt_error: str = ""
+    wake_word_available: bool = False
+    wake_word_error: str = ""
+    overall_status: str = "unknown"
+
+    def to_report(self) -> str:
+        """Generate human-readable diagnostics report."""
+        lines = ["🎙️ VOICE SYSTEM DIAGNOSTICS", "=" * 40]
+
+        # Microphone
+        mic_status = "✅" if self.microphone_available else "❌"
+        lines.append(f"{mic_status} Microphone: {'OK' if self.microphone_available else self.microphone_error}")
+
+        # TTS
+        tts_status = "✅" if self.tts_available else "❌"
+        lines.append(f"{tts_status} TTS ({self.tts_engine}): {'OK' if self.tts_available else self.tts_error}")
+
+        # STT
+        stt_status = "✅" if self.stt_available else "❌"
+        lines.append(f"{stt_status} STT ({self.stt_engine}): {'OK' if self.stt_available else self.stt_error}")
+
+        # Wake Word
+        wake_status = "✅" if self.wake_word_available else "⚠️"
+        lines.append(f"{wake_status} Wake Word: {'OK' if self.wake_word_available else self.wake_word_error}")
+
+        lines.append("=" * 40)
+        lines.append(f"Overall: {self.overall_status}")
+
+        return "\n".join(lines)
+
+
+def run_voice_diagnostics() -> VoiceDiagnostics:
+    """Run comprehensive voice system diagnostics.
+
+    Checks:
+    - Microphone availability and permissions
+    - TTS engine availability
+    - STT engine availability
+    - Wake word model availability
+
+    Returns:
+        VoiceDiagnostics with detailed status
+    """
+    diag = VoiceDiagnostics()
+    voice_cfg = _voice_cfg()
+
+    # Check microphone
+    try:
+        import pyaudio
+        pa = pyaudio.PyAudio()
+        device_count = pa.get_device_count()
+        input_devices = [
+            pa.get_device_info_by_index(i)
+            for i in range(device_count)
+            if pa.get_device_info_by_index(i).get("maxInputChannels", 0) > 0
+        ]
+        pa.terminate()
+        if input_devices:
+            diag.microphone_available = True
+        else:
+            diag.microphone_error = "No input devices found"
+    except ImportError:
+        diag.microphone_error = "pyaudio not installed (pip install pyaudio)"
+    except Exception as e:
+        diag.microphone_error = f"Microphone check failed: {e}"
+
+    # Check TTS
+    diag.tts_engine = voice_cfg.get("tts_engine", "piper")
+    try:
+        if diag.tts_engine == "piper":
+            if shutil.which(PIPER_BINARY):
+                diag.tts_available = True
+            else:
+                diag.tts_error = "Piper not found (brew install piper)"
+        elif diag.tts_engine == "edge_tts":
+            try:
+                import edge_tts
+                diag.tts_available = True
+            except ImportError:
+                diag.tts_error = "edge_tts not installed (pip install edge-tts)"
+        elif diag.tts_engine == "say":
+            if shutil.which("say"):
+                diag.tts_available = True
+            else:
+                diag.tts_error = "macOS 'say' command not available"
+        else:
+            diag.tts_available = True  # Assume OK for other engines
+    except Exception as e:
+        diag.tts_error = f"TTS check failed: {e}"
+
+    # Check STT
+    diag.stt_engine = voice_cfg.get("local_stt_engine", "faster_whisper")
+    try:
+        if diag.stt_engine == "faster_whisper":
+            try:
+                from faster_whisper import WhisperModel
+                diag.stt_available = True
+            except ImportError:
+                diag.stt_error = "faster-whisper not installed (pip install faster-whisper)"
+        elif diag.stt_engine == "whisper":
+            try:
+                import whisper
+                diag.stt_available = True
+            except ImportError:
+                diag.stt_error = "openai-whisper not installed (pip install openai-whisper)"
+        else:
+            diag.stt_available = True  # Assume OK for cloud engines
+    except Exception as e:
+        diag.stt_error = f"STT check failed: {e}"
+
+    # Check wake word
+    try:
+        from openwakeword.model import Model
+        diag.wake_word_available = True
+    except ImportError:
+        diag.wake_word_error = "openwakeword not installed (pip install openwakeword)"
+    except Exception as e:
+        diag.wake_word_error = f"Wake word check failed: {e}"
+
+    # Overall status
+    if diag.microphone_available and diag.tts_available and diag.stt_available:
+        diag.overall_status = "✅ Voice system ready"
+    elif diag.tts_available:
+        diag.overall_status = "⚠️ TTS only (no voice input)"
+    else:
+        diag.overall_status = "❌ Voice system not available"
+
+    return diag
+
+
 def _load_config() -> dict:
     return config.load_config()
 

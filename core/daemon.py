@@ -79,6 +79,80 @@ def _send_notification(title: str, message: str) -> None:
         pass
 
 
+def _generate_startup_report(
+    component_status: dict[str, dict], ok_count: int, fail_count: int
+) -> str:
+    """Generate detailed startup report with failure guidance.
+
+    Args:
+        component_status: Dict of component name -> {"ok": bool, "error": str}
+        ok_count: Number of successful components
+        fail_count: Number of failed components
+
+    Returns:
+        Human-readable startup report with fix suggestions
+    """
+    lines = [
+        "",
+        "=" * 50,
+        "  JARVIS DAEMON STARTUP REPORT",
+        "=" * 50,
+        "",
+    ]
+
+    # Status summary
+    total = len(component_status)
+    if fail_count == 0:
+        lines.append(f"✅ All {total} components started successfully!")
+    else:
+        lines.append(f"⚠️  {ok_count}/{total} components OK, {fail_count} FAILED")
+
+    lines.append("")
+
+    # Component details
+    for name, status in component_status.items():
+        if status["ok"]:
+            lines.append(f"  ✓ {name}")
+        else:
+            lines.append(f"  ✗ {name}: {status['error']}")
+
+    # Provide fix suggestions for common failures
+    if fail_count > 0:
+        lines.extend([
+            "",
+            "-" * 50,
+            "HOW TO FIX:",
+            "",
+        ])
+
+        fix_map = {
+            "mcp": "Check MCP server configs in lifeos/config/mcp.config.json",
+            "voice": "Run: lifeos voice diagnose (or check pyaudio, piper installs)",
+            "brain": "Check orchestrator logs, ensure providers are configured",
+            "jarvis": "Check boot sequence errors in logs/daemon.log",
+            "hotkeys": "pynput may need accessibility permissions on macOS",
+            "passive": "Check passive observer config in lifeos/config/config.yaml",
+            "observer": "Observer may need keyboard monitoring permissions",
+            "resource_monitor": "Check psutil installation (pip install psutil)",
+            "missions": "Check mission config in lifeos/config/config.yaml",
+            "proactive": "Check proactive module dependencies",
+            "self_improving": "Optional module - not critical for operation",
+        }
+
+        for name, status in component_status.items():
+            if status["error"]:
+                fix = fix_map.get(name, "Check logs for details")
+                lines.append(f"  {name}: {fix}")
+
+        lines.extend([
+            "",
+            "For full logs: cat lifeos/logs/daemon.log",
+            "=" * 50,
+        ])
+
+    return "\n".join(lines)
+
+
 def run() -> None:
     config = config_module.load_config()
     logs_dir = config_module.resolve_path(
@@ -290,8 +364,14 @@ def run() -> None:
         brain_status=brain_status,
     )
 
+    # Generate detailed startup report
+    startup_report = _generate_startup_report(component_status, ok_count, fail_count)
+
     if fail_count > 0:
         _log_message(log_path, f"⚠ Startup: {ok_count} OK, {fail_count} FAILED: {', '.join(failed_components)}")
+        _log_message(log_path, startup_report)
+        # Print to console so user sees failures even if not watching logs
+        print(startup_report)
         _send_notification("Jarvis Warning", f"{fail_count} component(s) failed: {', '.join(failed_components)}")
     else:
         _log_message(log_path, f"✓ Startup complete: {ok_count}/{len(component_status)} components OK")

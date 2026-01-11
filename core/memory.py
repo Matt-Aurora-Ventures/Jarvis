@@ -120,6 +120,60 @@ def get_factual_entries() -> List[Dict[str, Any]]:
     return [e for e in entries if e.get("source") not in assistant_sources]
 
 
+def get_quality_filtered_entries(min_length: int = 10) -> List[Dict[str, Any]]:
+    """Get memory entries with quality filtering applied.
+
+    Filters:
+    - Echo chamber prevention (no assistant responses)
+    - Minimum text length
+    - Deduplication (case-insensitive)
+    - Removes common filler phrases
+
+    Args:
+        min_length: Minimum text length to include
+
+    Returns:
+        High-quality memory entries
+    """
+    entries = get_factual_entries()
+
+    # Low-value patterns to filter out
+    filler_patterns = {
+        "ok", "okay", "yes", "no", "sure", "thanks", "thank you",
+        "got it", "i see", "understood", "alright", "right",
+        "hmm", "uh", "um", "ah", "oh", "huh", "what", "why",
+    }
+
+    seen_normalized: set = set()
+    quality_entries: List[Dict[str, Any]] = []
+
+    for entry in entries:
+        text = str(entry.get("text", "")).strip()
+
+        # Skip too short
+        if len(text) < min_length:
+            continue
+
+        # Skip filler phrases
+        normalized = text.lower().strip(".,!?")
+        if normalized in filler_patterns:
+            continue
+
+        # Skip duplicates (normalized)
+        if normalized in seen_normalized:
+            continue
+        seen_normalized.add(normalized)
+
+        # Skip if mostly punctuation/whitespace
+        alpha_ratio = sum(1 for c in text if c.isalnum()) / max(len(text), 1)
+        if alpha_ratio < 0.5:
+            continue
+
+        quality_entries.append(entry)
+
+    return quality_entries
+
+
 def fetch_recent_entries(limit: int = 10) -> List[Dict[str, Any]]:
     entries = _read_jsonl(RECENT_PATH)
     if limit <= 0:

@@ -545,18 +545,52 @@ def _ask_gemini_cli(prompt: str, max_output_tokens: int = 512) -> Optional[str]:
         return None
 
 
+def validate_groq_api_key() -> tuple[bool, str]:
+    """Validate Groq API key with clear error messages.
+
+    Returns:
+        Tuple of (is_valid, message)
+    """
+    key = os.environ.get("GROQ_API_KEY") or secrets.get_groq_key()
+
+    if not key:
+        return False, (
+            "❌ GROQ_API_KEY not configured!\n"
+            "Groq is the primary LLM provider (free, fast).\n\n"
+            "To fix:\n"
+            "  1. Get free key at: https://console.groq.com\n"
+            "  2. Set: export GROQ_API_KEY='gsk_your_key'\n"
+            "  3. Or add to secrets/keys.json: {\"groq_api_key\": \"gsk_...\"}\n\n"
+            "System will fall back to slower alternatives."
+        )
+
+    if not key.startswith("gsk_"):
+        return False, (
+            "⚠️ GROQ_API_KEY format invalid!\n"
+            "Groq keys should start with 'gsk_'\n"
+            f"Got: {key[:8]}...\n\n"
+            "Get a valid key at: https://console.groq.com"
+        )
+
+    return True, "✓ Groq API key configured"
+
+
 def _groq_client():
     """Get Groq client if available."""
     key = os.environ.get("GROQ_API_KEY") or secrets.get_groq_key()
     if not key:
+        # Log warning instead of silent failure
+        valid, msg = validate_groq_api_key()
+        if not valid:
+            logger.warning(msg.replace("\n", " | "))
         return None
     try:
         from groq import Groq
         return Groq(api_key=key)
     except ImportError:
-        pass
-    except Exception:
-        pass
+        logger.warning("Groq package not installed. Run: pip install groq")
+    except Exception as e:
+        logger.warning(f"Groq client init failed: {e}")
     return {"api_key": key}  # Fallback handled in _ask_groq
 
 
