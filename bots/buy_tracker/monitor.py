@@ -51,6 +51,9 @@ class TransactionMonitor:
     Detects buys and notifies via callback.
     """
 
+    # Maximum number of signatures to keep in memory (prevent unbounded growth)
+    MAX_PROCESSED_SIGNATURES = 500
+
     def __init__(
         self,
         token_address: str,
@@ -75,6 +78,21 @@ class TransactionMonitor:
         self._sol_price_usd: float = 0
         self._token_price_usd: float = 0
         self._market_cap: float = 0
+
+        # Track processed signatures to prevent duplicate notifications
+        self._processed_signatures: List[str] = []
+
+    def _is_already_processed(self, signature: str) -> bool:
+        """Check if a signature has already been processed."""
+        return signature in self._processed_signatures
+
+    def _mark_as_processed(self, signature: str):
+        """Mark a signature as processed, maintaining max size."""
+        if signature not in self._processed_signatures:
+            self._processed_signatures.append(signature)
+            # Trim old signatures if we exceed max
+            if len(self._processed_signatures) > self.MAX_PROCESSED_SIGNATURES:
+                self._processed_signatures = self._processed_signatures[-self.MAX_PROCESSED_SIGNATURES:]
 
     async def start(self):
         """Start monitoring transactions."""
@@ -139,7 +157,7 @@ class TransactionMonitor:
 
     async def _transaction_poll_loop(self):
         """Poll for recent transactions (fallback to WebSocket)."""
-        last_signature = None
+        first_run = True
 
         while self._running:
             try:
@@ -148,23 +166,28 @@ class TransactionMonitor:
 
                 for sig_info in signatures:
                     sig = sig_info.get("signature")
-                    if sig == last_signature:
-                        break
 
-                    if last_signature is None:
-                        last_signature = sig
-                        break  # Skip first batch on startup
+                    # Skip if already processed (prevents duplicates)
+                    if self._is_already_processed(sig):
+                        continue
+
+                    # On first run, just mark existing signatures as processed
+                    if first_run:
+                        self._mark_as_processed(sig)
+                        continue
 
                     # Parse transaction
                     buy = await self._parse_transaction(sig)
                     if buy and buy.usd_amount >= self.min_buy_usd:
                         logger.info(f"Buy detected: ${buy.usd_amount:.2f} by {buy.buyer_short}")
+                        self._mark_as_processed(sig)
                         if self.on_buy:
                             await self._safe_callback(buy)
+                    else:
+                        # Mark non-buy transactions too to avoid reprocessing
+                        self._mark_as_processed(sig)
 
-                if signatures:
-                    last_signature = signatures[0].get("signature")
-
+                first_run = False
                 await asyncio.sleep(2)  # Poll every 2 seconds
 
             except Exception as e:
@@ -338,12 +361,24 @@ class HeliusWebSocketMonitor(TransactionMonitor):
 
                 # Fetch recent transactions to find the buy
                 signatures = await self._get_recent_signatures()
-                if signatures:
-                    sig = signatures[0].get("signature")
+                for sig_info in signatures:
+                    sig = sig_info.get("signature")
+
+                    # Skip if already processed (prevents duplicates)
+                    if self._is_already_processed(sig):
+                        continue
+
                     buy = await self._parse_transaction(sig)
                     if buy and buy.usd_amount >= self.min_buy_usd:
+                        logger.info(f"Buy detected: ${buy.usd_amount:.2f} by {buy.buyer_short}")
+                        self._mark_as_processed(sig)
                         if self.on_buy:
                             await self._safe_callback(buy)
+                    else:
+                        self._mark_as_processed(sig)
+
+                    # Only process most recent unprocessed transaction per update
+                    break
 
         except Exception as e:
             logger.error(f"Failed to handle WS message: {e}")

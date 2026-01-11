@@ -30,9 +30,10 @@ from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
+    ChatMemberHandler,
     ContextTypes,
 )
-from telegram.constants import ParseMode
+from telegram.constants import ParseMode, ChatMemberStatus
 
 from tg_bot.config import get_config, reload_config
 from tg_bot.services.signal_service import get_signal_service
@@ -153,6 +154,78 @@ _Use the buttons below for quick access:_
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command."""
     await start(update, context)
+
+
+async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Welcome new members to the group with links and getting started info.
+    Triggered when someone joins the chat.
+    """
+    # Check if this is a new member joining (not leaving or other status changes)
+    if update.chat_member is None:
+        return
+
+    old_status = update.chat_member.old_chat_member.status
+    new_status = update.chat_member.new_chat_member.status
+
+    # Only welcome if someone is joining (was not a member, now is a member)
+    was_member = old_status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
+    is_member = new_status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
+
+    if was_member or not is_member:
+        return  # Not a new join
+
+    new_user = update.chat_member.new_chat_member.user
+    first_name = new_user.first_name or "fren"
+
+    welcome_message = f"""
+━━━━━━━━━━━━━━━━━━━━━━
+*welcome, {first_name}* 🤖
+━━━━━━━━━━━━━━━━━━━━━━
+
+im jarvis - an autonomous AI trading companion built completely in public
+
+not another wrapper. a full system you can fork, run, and make your own
+
+━━━ *what i do* ━━━
+
+◆ solana microcap sentiment (every 30 min)
+◆ grok-powered market analysis
+◆ stock picks + pre-IPO plays
+◆ all tracked for accuracy - i own my Ls
+
+━━━ *links* ━━━
+
+🐦 [twitter/x](https://x.com/Jarvis_lifeos)
+💻 [github](https://github.com/Matt-Aurora-Ventures/Jarvis)
+🟢 [buy $KR8TIV](https://jup.ag/swap/SOL-KR8TIV)
+📊 [dexscreener](https://dexscreener.com/solana/u1zc8qpnrq3hbjubrwfywbqtlznscppgznegwxdbags)
+
+━━━ *build with AI* ━━━
+
+never coded? no problem
+
+claude opus 4.5 is free on google antigravity:
+→ idx.google.com/antigravity
+→ drop the jarvis repo in
+→ type "please make this work"
+→ watch AI build it for you
+
+━━━━━━━━━━━━━━━━━━━━━━
+ask questions anytime
+*lets build* ⚡
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+
+    try:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=welcome_message,
+            parse_mode=ParseMode.MARKDOWN,
+            disable_web_page_preview=True,
+        )
+    except Exception as e:
+        logger.error(f"Failed to send welcome message: {e}")
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1008,6 +1081,9 @@ def main():
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
     app.add_handler(CallbackQueryHandler(button_callback))
+
+    # Welcome new members
+    app.add_handler(ChatMemberHandler(welcome_new_member, ChatMemberHandler.CHAT_MEMBER))
 
     # Error handler
     app.add_error_handler(error_handler)

@@ -8,13 +8,64 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
+from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 
 from bots.buy_tracker.config import BuyBotConfig, load_config
 from bots.buy_tracker.monitor import BuyTransaction, TransactionMonitor
 
 logger = logging.getLogger(__name__)
+
+# FAQ content for expandable section
+FAQ_CONTENT = """
+━━━━━━━━━━━━━━━━━━━━━━━━
+🤖 <b>WHAT IS JARVIS?</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+your iron man AI. one brain across every device.
+trades while you sleep. manages your life. open source forever.
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+💰 <b>WHAT IS $KR8TIV?</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+the token powering the jarvis ecosystem.
+launched on bags.fm. solana native.
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+🔗 <b>LINKS</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 jarvislife.io
+🐦 x.com/Jarvis_lifeos
+💻 github.com/Matt-Aurora-Ventures/Jarvis
+📱 @kr8tivai
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+❓ <b>FAQ</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+<b>Q:</b> is this financial advice?
+<b>A:</b> no. im literally a bot. NFA.
+
+<b>Q:</b> who built this?
+<b>A:</b> kr8tiv AI (@kr8tivai)
+
+<b>Q:</b> is jarvis open source?
+<b>A:</b> yes. github link above. fork it.
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+
+
+def get_faq_keyboard(show_faq: bool = False) -> InlineKeyboardMarkup:
+    """Get inline keyboard with FAQ button."""
+    if show_faq:
+        button = InlineKeyboardButton("🔼 Hide Info", callback_data="hide_faq")
+    else:
+        button = InlineKeyboardButton("ℹ️ What is Jarvis?", callback_data="show_faq")
+    return InlineKeyboardMarkup([[button]])
 
 
 class JarvisBuyBot:
@@ -31,8 +82,11 @@ class JarvisBuyBot:
     def __init__(self, config: Optional[BuyBotConfig] = None):
         self.config = config or load_config()
         self.bot: Optional[Bot] = None
+        self.app: Optional[Application] = None
         self.monitor: Optional[TransactionMonitor] = None
         self._running = False
+        # Store original messages for FAQ expand/collapse {message_id: original_text}
+        self._message_cache: dict[int, str] = {}
 
     async def start(self):
         """Start the buy bot."""
@@ -48,8 +102,12 @@ class JarvisBuyBot:
         if not self.config.helius_api_key:
             raise ValueError("HELIUS_API_KEY not set")
 
-        # Initialize Telegram bot
-        self.bot = Bot(token=self.config.bot_token)
+        # Initialize Telegram Application for callback handling
+        self.app = Application.builder().token(self.config.bot_token).build()
+        self.bot = self.app.bot
+
+        # Add callback handler for FAQ expand/collapse
+        self.app.add_handler(CallbackQueryHandler(self._handle_faq_callback))
 
         # Test bot connection
         try:
@@ -57,6 +115,12 @@ class JarvisBuyBot:
             logger.info(f"Bot connected: @{me.username}")
         except Exception as e:
             raise RuntimeError(f"Failed to connect bot: {e}")
+
+        # Start Application for callback handling FIRST (before any messages)
+        await self.app.initialize()
+        await self.app.start()
+        await self.app.updater.start_polling(allowed_updates=["callback_query"])
+        logger.info("Callback handler ready")
 
         # Send startup message
         await self._send_startup_message()
@@ -83,6 +147,10 @@ class JarvisBuyBot:
         self._running = False
         if self.monitor:
             await self.monitor.stop()
+        if self.app:
+            await self.app.updater.stop()
+            await self.app.stop()
+            await self.app.shutdown()
         logger.info("Buy bot stopped")
 
     async def _send_startup_message(self):
@@ -110,34 +178,106 @@ class JarvisBuyBot:
 
         # Format the message
         message = self._format_buy_message(buy)
+        keyboard = get_faq_keyboard(show_faq=False)
 
         try:
             # Check if we have a video to send
             video_path = Path(self.config.video_path) if self.config.video_path else None
 
             if video_path and video_path.exists():
-                # Send video with caption
+                # Send video with caption and FAQ button
                 with open(video_path, 'rb') as video_file:
-                    await self.bot.send_video(
+                    sent_msg = await self.bot.send_video(
                         chat_id=self.config.chat_id,
                         video=video_file,
                         caption=message,
                         parse_mode=ParseMode.HTML,
                         supports_streaming=True,
+                        reply_markup=keyboard,
                     )
             else:
-                # Send text message only
-                await self.bot.send_message(
+                # Send text message with FAQ button
+                sent_msg = await self.bot.send_message(
                     chat_id=self.config.chat_id,
                     text=message,
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True,
+                    reply_markup=keyboard,
                 )
+
+            # Cache original message for expand/collapse
+            self._message_cache[sent_msg.message_id] = message
+            # Limit cache size to last 100 messages
+            if len(self._message_cache) > 100:
+                oldest = list(self._message_cache.keys())[0]
+                del self._message_cache[oldest]
 
             logger.info(f"Buy notification sent: ${buy.usd_amount:.2f}")
 
         except Exception as e:
             logger.error(f"Failed to send buy notification: {e}")
+
+    async def _handle_faq_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle FAQ expand/collapse button clicks."""
+        query = update.callback_query
+        await query.answer()  # Acknowledge the callback
+
+        message_id = query.message.message_id
+        chat_id = query.message.chat_id
+        action = query.data  # "show_faq" or "hide_faq"
+
+        try:
+            if action == "show_faq":
+                # Expand: show FAQ content
+                original_text = self._message_cache.get(message_id)
+                if original_text:
+                    expanded_text = original_text + FAQ_CONTENT
+                    keyboard = get_faq_keyboard(show_faq=True)
+
+                    # Check if it's a video message (caption) or text message
+                    if query.message.video or query.message.animation:
+                        await query.message.edit_caption(
+                            caption=expanded_text,
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=keyboard,
+                        )
+                    else:
+                        await query.message.edit_text(
+                            text=expanded_text,
+                            parse_mode=ParseMode.HTML,
+                            disable_web_page_preview=True,
+                            reply_markup=keyboard,
+                        )
+                else:
+                    # No cached message, just send FAQ as new message
+                    await self.bot.send_message(
+                        chat_id=chat_id,
+                        text=FAQ_CONTENT,
+                        parse_mode=ParseMode.HTML,
+                    )
+
+            elif action == "hide_faq":
+                # Collapse: restore original message
+                original_text = self._message_cache.get(message_id)
+                if original_text:
+                    keyboard = get_faq_keyboard(show_faq=False)
+
+                    if query.message.video or query.message.animation:
+                        await query.message.edit_caption(
+                            caption=original_text,
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=keyboard,
+                        )
+                    else:
+                        await query.message.edit_text(
+                            text=original_text,
+                            parse_mode=ParseMode.HTML,
+                            disable_web_page_preview=True,
+                            reply_markup=keyboard,
+                        )
+
+        except Exception as e:
+            logger.error(f"Failed to handle FAQ callback: {e}")
 
     def _format_buy_message(self, buy: BuyTransaction) -> str:
         """Format buy notification message like BobbyBuyBot style."""

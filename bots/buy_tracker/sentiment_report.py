@@ -2,6 +2,7 @@
 Sentiment Report Generator - Automated 10-token sentiment analysis using Grok + indicators.
 
 Posts beautiful sentiment reports to Telegram every 30 minutes.
+Includes macro events, geopolitical analysis, and traditional market sentiment.
 """
 
 import asyncio
@@ -9,11 +10,79 @@ import logging
 import os
 import json
 import aiohttp
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Prediction tracking file
+PREDICTIONS_FILE = Path(__file__).parent / "predictions_history.json"
+
+
+@dataclass
+class MacroAnalysis:
+    """Macro events and geopolitical analysis."""
+    short_term: str = ""      # Next 24 hours
+    medium_term: str = ""     # Next 3 days
+    long_term: str = ""       # 1 week to 1 month
+    key_events: List[str] = field(default_factory=list)
+
+
+@dataclass
+class TraditionalMarkets:
+    """DXY and US stocks sentiment."""
+    dxy_sentiment: str = ""           # Dollar index outlook
+    dxy_direction: str = "NEUTRAL"    # BULLISH/BEARISH/NEUTRAL
+    stocks_sentiment: str = ""         # US stocks outlook
+    stocks_direction: str = "NEUTRAL"  # BULLISH/BEARISH/NEUTRAL
+    next_24h: str = ""
+    next_week: str = ""
+    correlation_note: str = ""         # How it affects crypto
+
+
+@dataclass
+class StockPick:
+    """A stock pick with reasoning."""
+    ticker: str
+    direction: str  # BULLISH/BEARISH
+    reason: str
+    target: str = ""
+    stop_loss: str = ""
+
+
+@dataclass
+class CommodityMover:
+    """A commodity mover with outlook."""
+    name: str
+    direction: str  # UP/DOWN
+    change: str
+    reason: str
+    outlook: str = ""
+
+
+@dataclass
+class PreciousMetalsOutlook:
+    """Precious metals weekly outlook."""
+    gold_direction: str = "NEUTRAL"
+    gold_outlook: str = ""
+    silver_direction: str = "NEUTRAL"
+    silver_outlook: str = ""
+    platinum_direction: str = "NEUTRAL"
+    platinum_outlook: str = ""
+
+
+@dataclass
+class PredictionRecord:
+    """Track predictions for accuracy measurement."""
+    timestamp: str
+    token_predictions: Dict[str, dict] = field(default_factory=dict)  # symbol -> {verdict, targets, price_at_prediction}
+    macro_predictions: Dict[str, str] = field(default_factory=dict)
+    market_predictions: Dict[str, str] = field(default_factory=dict)
+    stock_picks: List[str] = field(default_factory=list)  # Track stock tickers for change detection
+    commodity_movers: List[str] = field(default_factory=list)
+    precious_metals: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -29,55 +98,60 @@ class TokenSentiment:
     buys_24h: int
     sells_24h: int
     liquidity: float
+    contract_address: str = ""  # Token mint/contract address
 
     # Calculated
     buy_sell_ratio: float = 0.0
     sentiment_score: float = 0.0  # -1 to 1
     sentiment_label: str = "NEUTRAL"
-    grok_analysis: str = ""
+    grok_analysis: str = ""       # Price targets
+    grok_reasoning: str = ""      # WHY bullish/bearish/neutral
     grade: str = "C"
 
-    def calculate_sentiment(self):
-        """Calculate sentiment from metrics."""
+    grok_score: float = 0.0  # Grok AI score (-1 to 1)
+    grok_verdict: str = ""   # Grok's one-word verdict
+
+    def calculate_sentiment(self, include_grok: bool = True):
+        """Calculate sentiment from metrics + Grok AI score."""
         score = 0.0
 
-        # Price momentum (weight: 30%)
+        # Price momentum (weight: 25%)
         if self.change_24h > 10:
-            score += 0.3
+            score += 0.25
         elif self.change_24h > 5:
-            score += 0.2
+            score += 0.15
         elif self.change_24h > 0:
-            score += 0.1
+            score += 0.08
         elif self.change_24h > -5:
-            score -= 0.1
+            score -= 0.08
         elif self.change_24h > -10:
-            score -= 0.2
+            score -= 0.15
+        else:
+            score -= 0.25
+
+        # Buy/sell ratio (weight: 30%)
+        self.buy_sell_ratio = self.buys_24h / max(self.sells_24h, 1)
+        if self.buy_sell_ratio > 2:
+            score += 0.3
+        elif self.buy_sell_ratio > 1.5:
+            score += 0.22
+        elif self.buy_sell_ratio > 1.2:
+            score += 0.15
+        elif self.buy_sell_ratio > 1:
+            score += 0.08
+        elif self.buy_sell_ratio > 0.8:
+            score -= 0.08
+        elif self.buy_sell_ratio > 0.5:
+            score -= 0.15
         else:
             score -= 0.3
 
-        # Buy/sell ratio (weight: 40%)
-        self.buy_sell_ratio = self.buys_24h / max(self.sells_24h, 1)
-        if self.buy_sell_ratio > 2:
-            score += 0.4
-        elif self.buy_sell_ratio > 1.5:
-            score += 0.3
-        elif self.buy_sell_ratio > 1.2:
-            score += 0.2
-        elif self.buy_sell_ratio > 1:
-            score += 0.1
-        elif self.buy_sell_ratio > 0.8:
-            score -= 0.1
-        elif self.buy_sell_ratio > 0.5:
-            score -= 0.2
-        else:
-            score -= 0.4
-
-        # Volume health (weight: 20%)
+        # Volume health (weight: 15%)
         vol_to_mcap = (self.volume_24h / max(self.mcap, 1)) * 100
         if vol_to_mcap > 50:
-            score += 0.2
+            score += 0.15
         elif vol_to_mcap > 20:
-            score += 0.1
+            score += 0.08
         elif vol_to_mcap < 5:
             score -= 0.1
 
@@ -89,21 +163,25 @@ class TokenSentiment:
         elif self.liquidity < 10000:
             score -= 0.1
 
+        # Grok AI score (weight: 20%)
+        if include_grok and self.grok_score != 0:
+            score += self.grok_score * 0.2
+
         self.sentiment_score = max(-1, min(1, score))
 
-        # Label
-        if self.sentiment_score > 0.3:
+        # Label based on final score
+        if self.sentiment_score > 0.35:
             self.sentiment_label = "BULLISH"
-            self.grade = "A" if self.sentiment_score > 0.5 else "B+"
-        elif self.sentiment_score > 0.1:
+            self.grade = "A" if self.sentiment_score > 0.5 else "A-"
+        elif self.sentiment_score > 0.15:
             self.sentiment_label = "SLIGHTLY BULLISH"
-            self.grade = "B"
-        elif self.sentiment_score > -0.1:
+            self.grade = "B+" if self.sentiment_score > 0.25 else "B"
+        elif self.sentiment_score > -0.15:
             self.sentiment_label = "NEUTRAL"
-            self.grade = "C+"
-        elif self.sentiment_score > -0.3:
+            self.grade = "C+" if self.sentiment_score > 0 else "C"
+        elif self.sentiment_score > -0.35:
             self.sentiment_label = "SLIGHTLY BEARISH"
-            self.grade = "C"
+            self.grade = "C-" if self.sentiment_score > -0.25 else "D+"
         else:
             self.sentiment_label = "BEARISH"
             self.grade = "D" if self.sentiment_score > -0.5 else "F"
@@ -160,94 +238,212 @@ class SentimentReportGenerator:
                 logger.warning("No tokens found for sentiment report")
                 return
 
-            # Calculate sentiment for each
+            # Calculate initial technical sentiment (without Grok)
             for token in tokens:
-                token.calculate_sentiment()
+                token.calculate_sentiment(include_grok=False)
 
-            # Get Grok analysis for top movers
-            top_movers = sorted(tokens, key=lambda t: abs(t.change_24h), reverse=True)[:3]
-            grok_summary = await self._get_grok_analysis(top_movers)
+            # Have Grok evaluate each token individually
+            await self._get_grok_token_scores(tokens)
+
+            # Recalculate final sentiment with Grok scores
+            for token in tokens:
+                token.calculate_sentiment(include_grok=True)
+
+            # Get Grok's overall market summary
+            grok_summary = await self._get_grok_summary(tokens)
+
+            # Get macro events and traditional markets analysis
+            macro = await self._get_macro_analysis()
+            markets = await self._get_traditional_markets()
+
+            # Get stock picks with change tracking
+            previous_picks = self._get_previous_stock_picks()
+            stock_picks, picks_changes = await self._get_stock_picks(previous_picks)
+
+            # Get commodity movers and precious metals
+            commodities = await self._get_commodity_movers()
+            precious_metals = await self._get_precious_metals_outlook()
+
+            # Save predictions for tracking
+            self._save_predictions(tokens, macro, markets, stock_picks, commodities, precious_metals)
 
             # Format report
-            report = self._format_report(tokens, grok_summary)
+            report = self._format_report(tokens, grok_summary, macro, markets, stock_picks, picks_changes, commodities, precious_metals)
 
             # Post to Telegram
             await self._post_to_telegram(report)
 
-            logger.info(f"Posted sentiment report with {len(tokens)} tokens")
+            logger.info(f"Posted sentiment report with {len(tokens)} tokens + stocks + commodities + metals")
 
         except Exception as e:
             logger.error(f"Failed to generate sentiment report: {e}")
 
     async def _get_trending_tokens(self, limit: int = 10) -> List[TokenSentiment]:
-        """Get trending Solana tokens from DexScreener."""
+        """Get HOT trending Solana tokens from DexScreener - no major caps."""
         tokens = []
+        seen_symbols = set()
+
+        # Major tokens to exclude (we want microcaps/trending, not blue chips)
+        EXCLUDED_SYMBOLS = {
+            "SOL", "WSOL", "USDC", "USDT", "RAY", "JUP", "PYTH", "JTO",
+            "ORCA", "MNGO", "SRM", "FIDA", "STEP", "COPE", "MEDIA",
+            "ETH", "BTC", "WBTC", "WETH"
+        }
 
         try:
-            # Get trending on Solana
-            url = "https://api.dexscreener.com/latest/dex/tokens/solana"
+            # Fetch trending/boosted tokens from DexScreener
+            trending_url = "https://api.dexscreener.com/token-boosts/top/v1"
 
-            # Use search for popular tokens instead
-            searches = ["SOL", "BONK", "WIF", "JUP", "PYTH", "RAY", "ORCA", "MNGO", "KR8TIV", "JTO"]
+            async with self._session.get(trending_url) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
 
-            for symbol in searches[:limit]:
-                try:
-                    async with self._session.get(
-                        f"https://api.dexscreener.com/latest/dex/search?q={symbol}"
-                    ) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            pairs = data.get("pairs", [])
+                    # Filter for Solana tokens
+                    for item in data:
+                        if len(tokens) >= limit:
+                            break
 
-                            # Find Solana pair
-                            for pair in pairs:
-                                if pair.get("chainId") == "solana":
-                                    base = pair.get("baseToken", {})
-                                    txns = pair.get("txns", {}).get("h24", {})
+                        if item.get("chainId") != "solana":
+                            continue
 
-                                    token = TokenSentiment(
-                                        symbol=base.get("symbol", symbol),
-                                        name=base.get("name", symbol),
-                                        price_usd=float(pair.get("priceUsd", 0)),
-                                        change_1h=pair.get("priceChange", {}).get("h1", 0) or 0,
-                                        change_24h=pair.get("priceChange", {}).get("h24", 0) or 0,
-                                        volume_24h=pair.get("volume", {}).get("h24", 0) or 0,
-                                        mcap=pair.get("marketCap", 0) or pair.get("fdv", 0) or 0,
-                                        buys_24h=txns.get("buys", 0),
-                                        sells_24h=txns.get("sells", 0),
-                                        liquidity=pair.get("liquidity", {}).get("usd", 0) or 0,
-                                    )
-                                    tokens.append(token)
-                                    break
+                        token_addr = item.get("tokenAddress", "")
+                        if not token_addr:
+                            continue
 
-                except Exception as e:
-                    logger.debug(f"Failed to fetch {symbol}: {e}")
+                        # Fetch full pair data for this token
+                        try:
+                            async with self._session.get(
+                                f"https://api.dexscreener.com/latest/dex/tokens/{token_addr}"
+                            ) as pair_resp:
+                                if pair_resp.status == 200:
+                                    pair_data = await pair_resp.json()
+                                    pairs = pair_data.get("pairs", [])
 
-                await asyncio.sleep(0.2)  # Rate limit
+                                    if pairs:
+                                        pair = pairs[0]  # Get main pair
+                                        base = pair.get("baseToken", {})
+                                        symbol = base.get("symbol", "").upper()
+
+                                        # Skip excluded and duplicates
+                                        if symbol in EXCLUDED_SYMBOLS or symbol in seen_symbols:
+                                            continue
+
+                                        seen_symbols.add(symbol)
+                                        txns = pair.get("txns", {}).get("h24", {})
+
+                                        token = TokenSentiment(
+                                            symbol=base.get("symbol", "???"),
+                                            name=base.get("name", "Unknown"),
+                                            price_usd=float(pair.get("priceUsd", 0) or 0),
+                                            change_1h=pair.get("priceChange", {}).get("h1", 0) or 0,
+                                            change_24h=pair.get("priceChange", {}).get("h24", 0) or 0,
+                                            volume_24h=pair.get("volume", {}).get("h24", 0) or 0,
+                                            mcap=pair.get("marketCap", 0) or pair.get("fdv", 0) or 0,
+                                            buys_24h=txns.get("buys", 0),
+                                            sells_24h=txns.get("sells", 0),
+                                            liquidity=pair.get("liquidity", {}).get("usd", 0) or 0,
+                                            contract_address=base.get("address", token_addr),
+                                        )
+                                        tokens.append(token)
+
+                            await asyncio.sleep(0.15)  # Rate limit
+
+                        except Exception as e:
+                            logger.debug(f"Failed to fetch pair data: {e}")
+
+            # If we don't have enough from trending, supplement with gainers
+            if len(tokens) < limit:
+                async with self._session.get(
+                    "https://api.dexscreener.com/latest/dex/search?q=solana"
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        pairs = data.get("pairs", [])
+
+                        # Sort by 24h change (momentum)
+                        pairs = sorted(
+                            [p for p in pairs if p.get("chainId") == "solana"],
+                            key=lambda p: p.get("priceChange", {}).get("h24", 0) or 0,
+                            reverse=True
+                        )
+
+                        for pair in pairs:
+                            if len(tokens) >= limit:
+                                break
+
+                            base = pair.get("baseToken", {})
+                            symbol = base.get("symbol", "").upper()
+
+                            if symbol in EXCLUDED_SYMBOLS or symbol in seen_symbols:
+                                continue
+
+                            seen_symbols.add(symbol)
+                            txns = pair.get("txns", {}).get("h24", {})
+
+                            token = TokenSentiment(
+                                symbol=base.get("symbol", "???"),
+                                name=base.get("name", "Unknown"),
+                                price_usd=float(pair.get("priceUsd", 0) or 0),
+                                change_1h=pair.get("priceChange", {}).get("h1", 0) or 0,
+                                change_24h=pair.get("priceChange", {}).get("h24", 0) or 0,
+                                volume_24h=pair.get("volume", {}).get("h24", 0) or 0,
+                                mcap=pair.get("marketCap", 0) or pair.get("fdv", 0) or 0,
+                                buys_24h=txns.get("buys", 0),
+                                sells_24h=txns.get("sells", 0),
+                                liquidity=pair.get("liquidity", {}).get("usd", 0) or 0,
+                                contract_address=base.get("address", ""),
+                            )
+                            tokens.append(token)
+
+            logger.info(f"Found {len(tokens)} trending tokens")
 
         except Exception as e:
             logger.error(f"Failed to get trending tokens: {e}")
 
         return tokens
 
-    async def _get_grok_analysis(self, tokens: List[TokenSentiment]) -> str:
-        """Get AI analysis from Grok (xAI)."""
+    async def _get_grok_token_scores(self, tokens: List[TokenSentiment]) -> None:
+        """Have Grok evaluate each token and assign sentiment scores."""
         if not self.xai_api_key:
-            return "AI analysis unavailable"
+            return
 
         try:
-            # Prepare context
-            token_summary = "\n".join([
-                f"- {t.symbol}: ${t.price_usd:.6f}, {t.change_24h:+.1f}% 24h, "
-                f"B/S ratio: {t.buy_sell_ratio:.2f}, Vol: ${t.volume_24h:,.0f}"
-                for t in tokens
+            # Build token data for Grok
+            token_data = "\n".join([
+                f"{i+1}. {t.symbol}: Price ${t.price_usd:.8f}, 24h Change {t.change_24h:+.1f}%, "
+                f"Buy/Sell Ratio {t.buy_sell_ratio:.2f}x, Volume ${t.volume_24h:,.0f}, MCap ${t.mcap:,.0f}"
+                for i, t in enumerate(tokens)
             ])
 
-            prompt = f"""Analyze these Solana tokens briefly (2-3 sentences total). Focus on which shows strongest momentum and any risks:
+            prompt = f"""Score each MICROCAP token's sentiment from -100 (extremely bearish) to +100 (extremely bullish).
+These are HIGH RISK microcaps - basically lottery tickets. Be honest about the risk.
+Analyze onchain metrics (buy/sell ratio), volume, momentum, and fundamentals.
+For BULLISH tokens, provide price targets. For ALL tokens, explain WHY.
 
-{token_summary}
+MICROCAP TOKENS (with onchain data):
+{token_data}
 
-Be concise and actionable. No disclaimers needed."""
+Respond in EXACTLY this format for each token (one per line):
+SYMBOL|SCORE|VERDICT|REASON|STOP_LOSS|TARGET_SAFE|TARGET_MED|TARGET_DEGEN
+
+Example:
+BONK|45|BULLISH|Strong buy pressure 2.1x ratio, volume surge, meme momentum|$0.000015|$0.000025|$0.000040|$0.000080
+WIF|-20|BEARISH|Sell pressure dominating, declining volume, weak hands exiting||||
+POPCAT|10|NEUTRAL|Mixed signals, buy/sell balanced, waiting for catalyst||||
+
+Rules:
+- Score: -100 to +100
+- Verdict: BULLISH, BEARISH, or NEUTRAL
+- REASON: Brief explanation (15-25 words) covering onchain metrics, volume trends, momentum, or catalysts
+- Only include price targets for BULLISH tokens
+- Stop loss = recommended exit if trade goes wrong (protect capital!)
+- Target Safe = conservative target (reasonable expectation)
+- Target Med = medium risk target (optimistic but possible)
+- Target Degen = full send target (moonshot potential)
+- Consider: buy/sell ratio, volume health, price momentum, liquidity depth
+- Remember: these are volatile microcaps, not blue chips
+
+Respond with ONLY the formatted lines, no other text."""
 
             async with self._session.post(
                 "https://api.x.ai/v1/chat/completions",
@@ -258,27 +454,578 @@ Be concise and actionable. No disclaimers needed."""
                 json={
                     "model": "grok-3",
                     "messages": [
-                        {"role": "system", "content": "You are a crypto analyst. Be brief and direct."},
+                        {"role": "system", "content": "You are a crypto trading analyst. Provide precise, actionable analysis."},
                         {"role": "user", "content": prompt}
                     ],
-                    "max_tokens": 150,
+                    "max_tokens": 500,
+                    "temperature": 0.5,
+                }
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    response = data["choices"][0]["message"]["content"].strip()
+
+                    # Parse Grok's response (new format: SYMBOL|SCORE|VERDICT|REASON|STOP|SAFE|MED|DEGEN)
+                    for line in response.split("\n"):
+                        line = line.strip()
+                        if "|" not in line:
+                            continue
+
+                        parts = line.split("|")
+                        if len(parts) < 4:
+                            continue
+
+                        symbol = parts[0].strip().upper()
+                        try:
+                            score = int(parts[1].strip())
+                        except:
+                            continue
+
+                        verdict = parts[2].strip().upper()
+                        reason = parts[3].strip() if len(parts) > 3 else ""
+
+                        # Find matching token
+                        for token in tokens:
+                            if token.symbol.upper() == symbol:
+                                token.grok_score = score / 100.0  # Normalize to -1 to 1
+                                token.grok_verdict = verdict
+                                token.grok_reasoning = reason
+
+                                # Parse price targets if bullish (now at indices 4-7)
+                                if len(parts) >= 8 and verdict == "BULLISH":
+                                    token.grok_analysis = (
+                                        f"Stop: {parts[4]} | "
+                                        f"Safe: {parts[5]} | "
+                                        f"Med: {parts[6]} | "
+                                        f"Degen: {parts[7]}"
+                                    )
+                                break
+
+                    logger.info(f"Grok scored {len(tokens)} tokens")
+                else:
+                    logger.error(f"Grok API error: {resp.status}")
+
+        except Exception as e:
+            logger.error(f"Grok scoring failed: {e}")
+
+    async def _get_grok_summary(self, tokens: List[TokenSentiment]) -> str:
+        """Get overall market summary from Grok."""
+        if not self.xai_api_key:
+            return "AI analysis unavailable"
+
+        try:
+            bullish = [t for t in tokens if t.grok_verdict == "BULLISH"]
+            bearish = [t for t in tokens if t.grok_verdict == "BEARISH"]
+
+            context = f"""Solana MICROCAP market snapshot (high risk lottery tickets):
+- Bullish microcaps: {', '.join(t.symbol for t in bullish) or 'None'}
+- Bearish microcaps: {', '.join(t.symbol for t in bearish) or 'None'}
+- Top performer: {max(tokens, key=lambda t: t.change_24h).symbol} ({max(tokens, key=lambda t: t.change_24h).change_24h:+.1f}%)
+- Worst performer: {min(tokens, key=lambda t: t.change_24h).symbol} ({min(tokens, key=lambda t: t.change_24h).change_24h:+.1f}%)
+
+Give a 2 sentence microcap market outlook. Be direct, acknowledge the risk, but point out opportunities. Keep it real."""
+
+            async with self._session.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.xai_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "grok-3",
+                    "messages": [
+                        {"role": "user", "content": context}
+                    ],
+                    "max_tokens": 100,
                     "temperature": 0.7,
                 }
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     return data["choices"][0]["message"]["content"].strip()
-                else:
-                    logger.error(f"Grok API error: {resp.status}")
 
         except Exception as e:
-            logger.error(f"Grok analysis failed: {e}")
+            logger.error(f"Grok summary failed: {e}")
 
-        return "AI analysis temporarily unavailable"
+        return "Market analysis pending..."
 
-    def _format_report(self, tokens: List[TokenSentiment], grok_summary: str) -> str:
-        """Format beautiful sentiment report."""
-        now = datetime.utcnow()
+    async def _get_macro_analysis(self) -> MacroAnalysis:
+        """Get macro events and geopolitical analysis from Grok."""
+        macro = MacroAnalysis()
+
+        if not self.xai_api_key:
+            return macro
+
+        try:
+            prompt = """Analyze current macro events and geopolitics affecting crypto markets.
+
+Provide analysis for THREE timeframes:
+
+1. SHORT TERM (Next 24 hours):
+- Any scheduled economic data releases (CPI, jobs, Fed speakers)?
+- Immediate geopolitical risks or catalysts?
+- What should traders watch TODAY?
+
+2. MEDIUM TERM (Next 3 days):
+- Any major events coming this week?
+- Developing geopolitical situations?
+- Key support/resistance levels to watch?
+
+3. LONG TERM (1 week to 1 month):
+- Major macro themes playing out?
+- Upcoming Fed meetings, halving events, regulatory deadlines?
+- Big picture trends affecting risk assets?
+
+Format your response EXACTLY like this:
+SHORT|[Your 24h analysis in 2-3 sentences]
+MEDIUM|[Your 3-day analysis in 2-3 sentences]
+LONG|[Your 1w-1m analysis in 2-3 sentences]
+EVENTS|[Comma-separated list of key dates/events to watch]
+
+Be specific and actionable. Focus on what actually matters for crypto traders."""
+
+            async with self._session.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.xai_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "grok-3",
+                    "messages": [
+                        {"role": "system", "content": "You are a macro analyst specializing in crypto markets. Provide current, actionable analysis based on real-time news and events."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 600,
+                    "temperature": 0.6,
+                }
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    response = data["choices"][0]["message"]["content"].strip()
+
+                    for line in response.split("\n"):
+                        line = line.strip()
+                        if "|" not in line:
+                            continue
+
+                        parts = line.split("|", 1)
+                        if len(parts) < 2:
+                            continue
+
+                        key = parts[0].strip().upper()
+                        value = parts[1].strip()
+
+                        if key == "SHORT":
+                            macro.short_term = value
+                        elif key == "MEDIUM":
+                            macro.medium_term = value
+                        elif key == "LONG":
+                            macro.long_term = value
+                        elif key == "EVENTS":
+                            macro.key_events = [e.strip() for e in value.split(",")]
+
+                    logger.info("Grok completed macro analysis")
+
+        except Exception as e:
+            logger.error(f"Macro analysis failed: {e}")
+
+        return macro
+
+    async def _get_traditional_markets(self) -> TraditionalMarkets:
+        """Get DXY and US stocks sentiment from Grok."""
+        markets = TraditionalMarkets()
+
+        if not self.xai_api_key:
+            return markets
+
+        try:
+            prompt = """Analyze DXY (US Dollar Index) and US stock market sentiment.
+
+Consider:
+- Recent Fed policy/commentary
+- Treasury yields movement
+- Risk-on vs risk-off sentiment
+- How dollar strength/weakness affects crypto
+- S&P 500, Nasdaq, overall equity sentiment
+
+Provide your analysis in EXACTLY this format:
+DXY_DIR|[BULLISH/BEARISH/NEUTRAL]
+DXY|[2-3 sentence analysis of dollar outlook]
+STOCKS_DIR|[BULLISH/BEARISH/NEUTRAL]
+STOCKS|[2-3 sentence analysis of US stocks outlook]
+24H|[What to expect in next 24 hours for both]
+WEEK|[What to expect this week]
+CRYPTO_IMPACT|[How does this affect crypto? 1-2 sentences on correlation]
+
+Be direct and specific. Traders need actionable intel, not fluff."""
+
+            async with self._session.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.xai_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "grok-3",
+                    "messages": [
+                        {"role": "system", "content": "You are a traditional markets analyst. Provide current market analysis based on real-time data."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 500,
+                    "temperature": 0.6,
+                }
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    response = data["choices"][0]["message"]["content"].strip()
+
+                    for line in response.split("\n"):
+                        line = line.strip()
+                        if "|" not in line:
+                            continue
+
+                        parts = line.split("|", 1)
+                        if len(parts) < 2:
+                            continue
+
+                        key = parts[0].strip().upper()
+                        value = parts[1].strip()
+
+                        if key == "DXY_DIR":
+                            markets.dxy_direction = value.upper()
+                        elif key == "DXY":
+                            markets.dxy_sentiment = value
+                        elif key == "STOCKS_DIR":
+                            markets.stocks_direction = value.upper()
+                        elif key == "STOCKS":
+                            markets.stocks_sentiment = value
+                        elif key == "24H":
+                            markets.next_24h = value
+                        elif key == "WEEK":
+                            markets.next_week = value
+                        elif key == "CRYPTO_IMPACT":
+                            markets.correlation_note = value
+
+                    logger.info("Grok completed traditional markets analysis")
+
+        except Exception as e:
+            logger.error(f"Traditional markets analysis failed: {e}")
+
+        return markets
+
+    async def _get_stock_picks(self, previous_picks: List[str] = None) -> tuple[List[StockPick], str]:
+        """Get top 5 stock picks from Grok with change tracking."""
+        picks = []
+        changes_note = ""
+
+        if not self.xai_api_key:
+            return picks, changes_note
+
+        try:
+            prev_context = ""
+            if previous_picks:
+                prev_context = f"\nPrevious top picks were: {', '.join(previous_picks)}. If any changed, briefly explain why they're no longer top picks."
+
+            prompt = f"""Give me your TOP 5 STOCK PICKS for the next week.
+
+For each pick provide:
+- Ticker symbol
+- BULLISH or BEARISH direction
+- Brief reason (15-25 words) covering catalysts, technicals, or fundamentals
+- Price target
+- Stop loss level
+{prev_context}
+
+Format EXACTLY like this (one per line):
+TICKER|DIRECTION|REASON|TARGET|STOP_LOSS
+
+Example:
+NVDA|BULLISH|AI demand surge, strong earnings momentum, breaking resistance at $500|$550|$480
+TSLA|BEARISH|Delivery miss concerns, competition pressure, head and shoulders pattern forming|$180|$220
+
+If previous picks changed, add a final line:
+CHANGES|[Brief explanation of why old picks were dropped]
+
+Respond with ONLY the formatted lines."""
+
+            async with self._session.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.xai_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "grok-3",
+                    "messages": [
+                        {"role": "system", "content": "You are a stock market analyst. Provide actionable picks with clear reasoning."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 500,
+                    "temperature": 0.6,
+                }
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    response = data["choices"][0]["message"]["content"].strip()
+
+                    for line in response.split("\n"):
+                        line = line.strip()
+                        if "|" not in line:
+                            continue
+
+                        parts = line.split("|")
+                        if parts[0].strip().upper() == "CHANGES":
+                            changes_note = parts[1].strip() if len(parts) > 1 else ""
+                            continue
+
+                        if len(parts) >= 3:
+                            pick = StockPick(
+                                ticker=parts[0].strip().upper(),
+                                direction=parts[1].strip().upper(),
+                                reason=parts[2].strip(),
+                                target=parts[3].strip() if len(parts) > 3 else "",
+                                stop_loss=parts[4].strip() if len(parts) > 4 else "",
+                            )
+                            picks.append(pick)
+
+                    logger.info(f"Grok provided {len(picks)} stock picks")
+
+        except Exception as e:
+            logger.error(f"Stock picks failed: {e}")
+
+        return picks[:5], changes_note
+
+    async def _get_commodity_movers(self) -> List[CommodityMover]:
+        """Get top 5 commodity movers with outlook."""
+        movers = []
+
+        if not self.xai_api_key:
+            return movers
+
+        try:
+            prompt = """Identify the TOP 5 COMMODITY MOVERS right now.
+
+Consider: Oil, Natural Gas, Copper, Wheat, Corn, Soybeans, Coffee, Sugar, Cotton, Lumber, etc.
+
+For each mover provide:
+- Commodity name
+- Direction (UP or DOWN)
+- Recent change/move description
+- Why it's moving (supply/demand, weather, geopolitics)
+- Short-term outlook (next few days)
+
+Format EXACTLY like this (one per line):
+COMMODITY|DIRECTION|CHANGE|REASON|OUTLOOK
+
+Example:
+Crude Oil|UP|+3.2% this week|Middle East tensions, OPEC cuts|Likely to test $85 resistance
+Natural Gas|DOWN|-8% weekly|Warm weather forecast, storage surplus|Further downside to $2.50
+
+Respond with ONLY the formatted lines."""
+
+            async with self._session.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.xai_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "grok-3",
+                    "messages": [
+                        {"role": "system", "content": "You are a commodities analyst. Provide current market movers with actionable insights."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 400,
+                    "temperature": 0.6,
+                }
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    response = data["choices"][0]["message"]["content"].strip()
+
+                    for line in response.split("\n"):
+                        line = line.strip()
+                        if "|" not in line:
+                            continue
+
+                        parts = line.split("|")
+                        if len(parts) >= 4:
+                            mover = CommodityMover(
+                                name=parts[0].strip(),
+                                direction=parts[1].strip().upper(),
+                                change=parts[2].strip(),
+                                reason=parts[3].strip(),
+                                outlook=parts[4].strip() if len(parts) > 4 else "",
+                            )
+                            movers.append(mover)
+
+                    logger.info(f"Grok provided {len(movers)} commodity movers")
+
+        except Exception as e:
+            logger.error(f"Commodity movers failed: {e}")
+
+        return movers[:5]
+
+    async def _get_precious_metals_outlook(self) -> PreciousMetalsOutlook:
+        """Get weekly outlook for Gold, Silver, and Platinum."""
+        outlook = PreciousMetalsOutlook()
+
+        if not self.xai_api_key:
+            return outlook
+
+        try:
+            prompt = """Provide your WEEKLY OUTLOOK for precious metals: Gold, Silver, and Platinum.
+
+For each metal analyze:
+- Current price action and trend
+- Key drivers (Fed policy, dollar strength, inflation, industrial demand)
+- Support/resistance levels
+- Direction for next week (BULLISH/BEARISH/NEUTRAL)
+
+Format EXACTLY like this:
+GOLD_DIR|[BULLISH/BEARISH/NEUTRAL]
+GOLD|[2-3 sentence outlook with price levels and reasoning]
+SILVER_DIR|[BULLISH/BEARISH/NEUTRAL]
+SILVER|[2-3 sentence outlook with price levels and reasoning]
+PLATINUM_DIR|[BULLISH/BEARISH/NEUTRAL]
+PLATINUM|[2-3 sentence outlook with price levels and reasoning]
+
+Be specific about price targets and key levels to watch."""
+
+            async with self._session.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.xai_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "grok-3",
+                    "messages": [
+                        {"role": "system", "content": "You are a precious metals analyst. Provide actionable weekly outlook with specific price levels."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 400,
+                    "temperature": 0.6,
+                }
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    response = data["choices"][0]["message"]["content"].strip()
+
+                    for line in response.split("\n"):
+                        line = line.strip()
+                        if "|" not in line:
+                            continue
+
+                        parts = line.split("|", 1)
+                        if len(parts) < 2:
+                            continue
+
+                        key = parts[0].strip().upper()
+                        value = parts[1].strip()
+
+                        if key == "GOLD_DIR":
+                            outlook.gold_direction = value.upper()
+                        elif key == "GOLD":
+                            outlook.gold_outlook = value
+                        elif key == "SILVER_DIR":
+                            outlook.silver_direction = value.upper()
+                        elif key == "SILVER":
+                            outlook.silver_outlook = value
+                        elif key == "PLATINUM_DIR":
+                            outlook.platinum_direction = value.upper()
+                        elif key == "PLATINUM":
+                            outlook.platinum_outlook = value
+
+                    logger.info("Grok completed precious metals outlook")
+
+        except Exception as e:
+            logger.error(f"Precious metals outlook failed: {e}")
+
+        return outlook
+
+    def _get_previous_stock_picks(self) -> List[str]:
+        """Get previous stock picks from history for change tracking."""
+        try:
+            if PREDICTIONS_FILE.exists():
+                with open(PREDICTIONS_FILE, "r") as f:
+                    history = json.load(f)
+                    if history and "stock_picks" in history[-1]:
+                        return history[-1]["stock_picks"]
+        except Exception as e:
+            logger.debug(f"Could not load previous picks: {e}")
+        return []
+
+    def _save_predictions(self, tokens: List[TokenSentiment], macro: MacroAnalysis, markets: TraditionalMarkets,
+                          stock_picks: List[StockPick] = None, commodities: List[CommodityMover] = None,
+                          precious_metals: PreciousMetalsOutlook = None):
+        """Save predictions to track accuracy over time."""
+        try:
+            # Load existing predictions
+            history = []
+            if PREDICTIONS_FILE.exists():
+                with open(PREDICTIONS_FILE, "r") as f:
+                    history = json.load(f)
+
+            # Create new prediction record
+            record = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "token_predictions": {
+                    t.symbol: {
+                        "verdict": t.grok_verdict,
+                        "score": t.grok_score,
+                        "price_at_prediction": t.price_usd,
+                        "targets": t.grok_analysis,
+                        "reasoning": t.grok_reasoning,
+                        "contract": t.contract_address,
+                    }
+                    for t in tokens if t.grok_verdict
+                },
+                "macro_predictions": {
+                    "short_term": macro.short_term,
+                    "medium_term": macro.medium_term,
+                    "long_term": macro.long_term,
+                },
+                "market_predictions": {
+                    "dxy_direction": markets.dxy_direction,
+                    "stocks_direction": markets.stocks_direction,
+                    "next_24h": markets.next_24h,
+                    "next_week": markets.next_week,
+                },
+                "stock_picks": [p.ticker for p in (stock_picks or [])],
+                "stock_picks_detail": {
+                    p.ticker: {"direction": p.direction, "reason": p.reason, "target": p.target}
+                    for p in (stock_picks or [])
+                },
+                "commodity_movers": [c.name for c in (commodities or [])],
+                "precious_metals": {
+                    "gold": precious_metals.gold_direction if precious_metals else "",
+                    "silver": precious_metals.silver_direction if precious_metals else "",
+                    "platinum": precious_metals.platinum_direction if precious_metals else "",
+                }
+            }
+
+            history.append(record)
+
+            # Keep last 100 predictions
+            if len(history) > 100:
+                history = history[-100:]
+
+            with open(PREDICTIONS_FILE, "w") as f:
+                json.dump(history, f, indent=2)
+
+            logger.info(f"Saved prediction record (total: {len(history)})")
+
+        except Exception as e:
+            logger.error(f"Failed to save predictions: {e}")
+
+    def _format_report(self, tokens: List[TokenSentiment], grok_summary: str, macro: MacroAnalysis = None,
+                        markets: TraditionalMarkets = None, stock_picks: List[StockPick] = None,
+                        picks_changes: str = "", commodities: List[CommodityMover] = None,
+                        precious_metals: PreciousMetalsOutlook = None) -> List[str]:
+        """Format beautiful sentiment report. Returns list of messages (split for Telegram limit)."""
+        now = datetime.now(timezone.utc)
 
         # Sort by sentiment score
         tokens_sorted = sorted(tokens, key=lambda t: t.sentiment_score, reverse=True)
@@ -290,14 +1037,14 @@ Be concise and actionable. No disclaimers needed."""
             "<b>========================================</b>",
             f"<i>{now.strftime('%B %d, %Y')} | {now.strftime('%H:%M')} UTC</i>",
             "",
-            "<b>TOP 10 SOLANA TOKENS</b>",
+            "<b>HOT TRENDING SOLANA TOKENS</b>",
             "<b>________________________________________</b>",
             "",
         ]
 
         # Token rows
         for i, t in enumerate(tokens_sorted, 1):
-            # Sentiment emoji
+            # Sentiment emoji based on combined score
             if t.sentiment_score > 0.3:
                 emoji = "🟢"
             elif t.sentiment_score > 0:
@@ -306,6 +1053,15 @@ Be concise and actionable. No disclaimers needed."""
                 emoji = "🟠"
             else:
                 emoji = "🔴"
+
+            # Grok verdict indicator
+            grok_icon = ""
+            if t.grok_verdict == "BULLISH":
+                grok_icon = "🤖+"
+            elif t.grok_verdict == "BEARISH":
+                grok_icon = "🤖-"
+            elif t.grok_verdict:
+                grok_icon = "🤖"
 
             # Trend arrow
             if t.change_24h > 5:
@@ -325,11 +1081,28 @@ Be concise and actionable. No disclaimers needed."""
             else:
                 price_str = f"${t.price_usd:.6f}"
 
-            lines.append(
-                f"{emoji} <b>{i}. {t.symbol}</b>  {t.grade}\n"
+            # Build token entry with contract and DexScreener link
+            entry = (
+                f"{emoji} <b>{i}. {t.symbol}</b>  {t.grade} {grok_icon}\n"
                 f"   {price_str}  <code>{t.change_24h:+.1f}%</code> {trend}\n"
                 f"   B/S: <code>{t.buy_sell_ratio:.2f}x</code> | Vol: <code>${t.volume_24h/1000:.0f}K</code>"
             )
+
+            # Add contract address and DexScreener link (always show if available)
+            if t.contract_address:
+                addr_short = t.contract_address[:6] + "..." + t.contract_address[-4:]
+                entry += f"\n   📋 <code>{t.contract_address}</code>"
+                entry += f"\n   📊 <a href=\"https://dexscreener.com/solana/{t.contract_address}\">DexScreener</a> | <a href=\"https://solscan.io/token/{t.contract_address}\">Solscan</a>"
+
+            # Add reasoning for ALL tokens
+            if t.grok_reasoning:
+                entry += f"\n   <i>Why: {t.grok_reasoning}</i>"
+
+            # Add price targets for bullish tokens
+            if t.grok_verdict == "BULLISH" and t.grok_analysis:
+                entry += f"\n   <b>Targets:</b> <i>{t.grok_analysis}</i>"
+
+            lines.append(entry)
             lines.append("")
 
         # Summary stats
@@ -342,41 +1115,219 @@ Be concise and actionable. No disclaimers needed."""
         lines.extend([
             "<b>________________________________________</b>",
             "",
-            "<b>MARKET SUMMARY</b>",
+            "<b>MICROCAP SUMMARY</b>",
             f"   🟢 Bullish:  <code>{bullish_count}</code>",
             f"   🟡 Neutral:  <code>{neutral_count}</code>",
             f"   🔴 Bearish:  <code>{bearish_count}</code>",
             f"   Avg 24h:    <code>{avg_change:+.1f}%</code>",
             "",
-            "<b>________________________________________</b>",
-            "",
-            "<b>AI ANALYSIS (Grok)</b>",
-            f"<i>{grok_summary}</i>",
-            "",
-            "<b>========================================</b>",
-            "<i>Powered by JARVIS AI | NFA</i>",
+            "<i>Markets + Macro analysis in next message...</i>",
         ])
 
-        return "\n".join(lines)
+        # Build message 1: Token analysis
+        msg1 = "\n".join(lines)
 
-    async def _post_to_telegram(self, report: str):
-        """Post report to Telegram."""
-        try:
-            async with self._session.post(
-                f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
-                data={
-                    "chat_id": self.chat_id,
-                    "text": report,
-                    "parse_mode": "HTML",
-                    "disable_web_page_preview": "true",
-                }
-            ) as resp:
-                result = await resp.json()
-                if not result.get("ok"):
-                    logger.error(f"Telegram error: {result}")
+        # Build message 2: Markets + Macro + Summary
+        lines2 = []
 
-        except Exception as e:
-            logger.error(f"Failed to post to Telegram: {e}")
+        # Traditional Markets Section
+        if markets and (markets.dxy_sentiment or markets.stocks_sentiment):
+            dxy_emoji = "🟢" if markets.dxy_direction == "BULLISH" else "🔴" if markets.dxy_direction == "BEARISH" else "🟡"
+            stocks_emoji = "🟢" if markets.stocks_direction == "BULLISH" else "🔴" if markets.stocks_direction == "BEARISH" else "🟡"
+
+            lines2.extend([
+                "<b>========================================</b>",
+                "<b>   TRADITIONAL MARKETS</b>",
+                "<b>========================================</b>",
+                "",
+                f"{dxy_emoji} <b>DXY (Dollar)</b>: {markets.dxy_direction}",
+            ])
+            if markets.dxy_sentiment:
+                lines2.append(f"<i>{markets.dxy_sentiment}</i>")
+            lines2.append("")
+
+            lines2.extend([
+                f"{stocks_emoji} <b>US Stocks</b>: {markets.stocks_direction}",
+            ])
+            if markets.stocks_sentiment:
+                lines2.append(f"<i>{markets.stocks_sentiment}</i>")
+            lines2.append("")
+
+            if markets.next_24h:
+                lines2.append(f"<b>Next 24h:</b> <i>{markets.next_24h}</i>")
+            if markets.next_week:
+                lines2.append(f"<b>This Week:</b> <i>{markets.next_week}</i>")
+            if markets.correlation_note:
+                lines2.extend(["", f"<b>Crypto Impact:</b> <i>{markets.correlation_note}</i>"])
+            lines2.append("")
+
+        # Macro Events Section
+        if macro and (macro.short_term or macro.medium_term or macro.long_term):
+            lines2.extend([
+                "<b>________________________________________</b>",
+                "",
+                "<b>MACRO & GEOPOLITICS</b>",
+                "",
+            ])
+            if macro.short_term:
+                lines2.extend([
+                    "⏰ <b>Next 24 Hours:</b>",
+                    f"<i>{macro.short_term}</i>",
+                    "",
+                ])
+            if macro.medium_term:
+                lines2.extend([
+                    "📅 <b>Next 3 Days:</b>",
+                    f"<i>{macro.medium_term}</i>",
+                    "",
+                ])
+            if macro.long_term:
+                lines2.extend([
+                    "🗓 <b>1 Week - 1 Month:</b>",
+                    f"<i>{macro.long_term}</i>",
+                    "",
+                ])
+            if macro.key_events:
+                lines2.extend([
+                    "<b>Key Events to Watch:</b>",
+                    f"<i>{', '.join(macro.key_events[:5])}</i>",
+                    "",
+                ])
+
+        # Grok's Overall Take
+        lines2.extend([
+            "<b>________________________________________</b>",
+            "",
+            "<b>GROK'S TAKE</b>",
+            f"<i>{grok_summary}</i>",
+            "",
+            "<i>Stocks, Commodities & Metals in next message...</i>",
+        ])
+
+        msg2 = "\n".join(lines2)
+
+        # Build message 3: Stocks, Commodities, Precious Metals
+        lines3 = []
+
+        # Stock Picks Section
+        if stock_picks:
+            lines3.extend([
+                "<b>========================================</b>",
+                "<b>   TOP 5 STOCK PICKS</b>",
+                "<b>========================================</b>",
+                "",
+            ])
+
+            for i, pick in enumerate(stock_picks, 1):
+                emoji = "🟢" if pick.direction == "BULLISH" else "🔴"
+                lines3.append(f"{emoji} <b>{i}. {pick.ticker}</b> - {pick.direction}")
+                lines3.append(f"   <i>{pick.reason}</i>")
+                if pick.target or pick.stop_loss:
+                    targets = []
+                    if pick.target:
+                        targets.append(f"Target: {pick.target}")
+                    if pick.stop_loss:
+                        targets.append(f"Stop: {pick.stop_loss}")
+                    lines3.append(f"   <b>{' | '.join(targets)}</b>")
+                lines3.append("")
+
+            if picks_changes:
+                lines3.extend([
+                    "<b>Changes from last report:</b>",
+                    f"<i>{picks_changes}</i>",
+                    "",
+                ])
+
+        # Commodity Movers Section
+        if commodities:
+            lines3.extend([
+                "<b>________________________________________</b>",
+                "",
+                "<b>TOP 5 COMMODITY MOVERS</b>",
+                "",
+            ])
+
+            for i, c in enumerate(commodities, 1):
+                emoji = "📈" if c.direction == "UP" else "📉"
+                lines3.append(f"{emoji} <b>{i}. {c.name}</b> ({c.change})")
+                lines3.append(f"   <i>Why: {c.reason}</i>")
+                if c.outlook:
+                    lines3.append(f"   <b>Outlook:</b> <i>{c.outlook}</i>")
+                lines3.append("")
+
+        # Precious Metals Section
+        if precious_metals and (precious_metals.gold_outlook or precious_metals.silver_outlook):
+            lines3.extend([
+                "<b>________________________________________</b>",
+                "",
+                "<b>PRECIOUS METALS (Weekly)</b>",
+                "",
+            ])
+
+            # Gold
+            gold_emoji = "🟢" if precious_metals.gold_direction == "BULLISH" else "🔴" if precious_metals.gold_direction == "BEARISH" else "🟡"
+            lines3.extend([
+                f"{gold_emoji} <b>GOLD</b>: {precious_metals.gold_direction}",
+                f"<i>{precious_metals.gold_outlook}</i>",
+                "",
+            ])
+
+            # Silver
+            silver_emoji = "🟢" if precious_metals.silver_direction == "BULLISH" else "🔴" if precious_metals.silver_direction == "BEARISH" else "🟡"
+            lines3.extend([
+                f"{silver_emoji} <b>SILVER</b>: {precious_metals.silver_direction}",
+                f"<i>{precious_metals.silver_outlook}</i>",
+                "",
+            ])
+
+            # Platinum
+            plat_emoji = "🟢" if precious_metals.platinum_direction == "BULLISH" else "🔴" if precious_metals.platinum_direction == "BEARISH" else "🟡"
+            lines3.extend([
+                f"{plat_emoji} <b>PLATINUM</b>: {precious_metals.platinum_direction}",
+                f"<i>{precious_metals.platinum_outlook}</i>",
+                "",
+            ])
+
+        # Disclaimer
+        lines3.extend([
+            "<b>========================================</b>",
+            "",
+            "<b>DISCLAIMER</b>",
+            "<i>Grok and JARVIS are giving their best guesses,",
+            "not financial advice. All trades are YOUR",
+            "responsibility. DYOR. NFA.</i>",
+            "",
+            "<i>Powered by JARVIS AI</i>",
+            f"<i>Predictions tracked internally for accuracy</i>",
+        ])
+
+        msg3 = "\n".join(lines3)
+
+        return [msg1, msg2, msg3]
+
+    async def _post_to_telegram(self, messages: List[str]):
+        """Post report messages to Telegram."""
+        for i, msg in enumerate(messages):
+            try:
+                async with self._session.post(
+                    f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                    data={
+                        "chat_id": self.chat_id,
+                        "text": msg,
+                        "parse_mode": "HTML",
+                        "disable_web_page_preview": "true",
+                    }
+                ) as resp:
+                    result = await resp.json()
+                    if not result.get("ok"):
+                        logger.error(f"Telegram error on message {i+1}: {result}")
+
+                # Small delay between messages
+                if i < len(messages) - 1:
+                    await asyncio.sleep(0.5)
+
+            except Exception as e:
+                logger.error(f"Failed to post message {i+1} to Telegram: {e}")
 
 
 async def run_sentiment_reporter():

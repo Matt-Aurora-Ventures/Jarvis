@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Run all Jarvis Buy Bot components:
+Run all Jarvis Bot components:
 - Buy tracker (real-time buy notifications)
-- Sentiment reporter (30-minute sentiment reports)
+- Sentiment reporter (Telegram every 30 min with Grok analysis)
+- Twitter poster (Twitter every 30 min using Claude voice)
 """
 
 import asyncio
@@ -24,6 +25,7 @@ def load_env():
     """Load environment variables."""
     env_files = [
         project_root / "tg_bot" / ".env",
+        project_root / "bots" / "twitter" / ".env",
         project_root / ".env",
     ]
     for env_path in env_files:
@@ -47,18 +49,21 @@ async def main():
     load_env()
 
     print("=" * 50)
-    print("  JARVIS BUY BOT - FULL SUITE")
+    print("  JARVIS FULL SUITE")
     print("=" * 50)
     print()
 
     # Import components
     from bots.buy_tracker.bot import JarvisBuyBot
     from bots.buy_tracker.sentiment_report import SentimentReportGenerator
+    from bots.twitter.sentiment_poster import SentimentTwitterPoster
+    from bots.twitter.twitter_client import TwitterClient, TwitterCredentials
+    from bots.twitter.claude_content import ClaudeContentGenerator
 
     # Initialize buy bot
     buy_bot = JarvisBuyBot()
 
-    # Initialize sentiment reporter
+    # Initialize Telegram sentiment reporter (Grok analysis)
     sentiment_reporter = SentimentReportGenerator(
         bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", ""),
         chat_id=os.environ.get("TELEGRAM_BUY_BOT_CHAT_ID", ""),
@@ -66,17 +71,42 @@ async def main():
         interval_minutes=30,
     )
 
+    # Initialize Twitter sentiment poster (Claude voice)
+    twitter_creds = TwitterCredentials(
+        api_key=os.environ.get("X_API_KEY", ""),
+        api_secret=os.environ.get("X_API_SECRET", ""),
+        access_token=os.environ.get("X_ACCESS_TOKEN", ""),
+        access_token_secret=os.environ.get("X_ACCESS_TOKEN_SECRET", ""),
+        bearer_token=os.environ.get("X_BEARER_TOKEN", ""),
+        oauth2_client_id=os.environ.get("X_OAUTH2_CLIENT_ID", ""),
+        oauth2_client_secret=os.environ.get("X_OAUTH2_CLIENT_SECRET", ""),
+        oauth2_access_token=os.environ.get("X_OAUTH2_ACCESS_TOKEN", ""),
+        oauth2_refresh_token=os.environ.get("X_OAUTH2_REFRESH_TOKEN", ""),
+    )
+    twitter_client = TwitterClient(twitter_creds)
+    claude_client = ClaudeContentGenerator(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+
+    twitter_poster = SentimentTwitterPoster(
+        twitter_client=twitter_client,
+        claude_client=claude_client,
+        interval_minutes=30,
+    )
+
     print("Starting components:")
     print("  - Buy Tracker (real-time notifications)")
-    print("  - Sentiment Reporter (every 30 min)")
+    print("  - Sentiment Reporter -> Telegram (every 30 min, Grok analysis)")
+    print("  - Sentiment Poster -> Twitter (every 30 min, Claude voice)")
+    print()
+    print("Flow: Grok -> Predictions File -> Claude -> Twitter")
     print()
     print("=" * 50)
     print()
 
-    # Run both concurrently
+    # Run all concurrently
     await asyncio.gather(
         buy_bot.start(),
         sentiment_reporter.start(),
+        twitter_poster.start(),
     )
 
 

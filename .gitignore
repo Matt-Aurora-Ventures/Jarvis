@@ -153,6 +153,11 @@ data/trader/
 data/hyperliquid/
 data/youtube/
 
+# === BOT RUNTIME DATA ===
+# Predictions history and other runtime data
+bots/buy_tracker/predictions_history.json
+*_history.json
+
 # === JUNK DIRECTORIES ===
 # Temporary/orphan directories
 \#/

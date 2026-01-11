@@ -1,0 +1,13 @@
+# JARVIS Twitter Bot Dependencies
+
+# Official X SDK (primary)
+xdk>=0.1.0
+
+# Tweepy for media uploads (v1.1 API still required)
+tweepy>=4.14.0
+
+# Async HTTP
+aiohttp>=3.9.0
+
+# Environment variables
+python-dotenv>=1.0.0
