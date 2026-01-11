@@ -5,6 +5,11 @@ on:
     branches: [main]
   release:
     types: [published]
+  workflow_dispatch:  # Allow manual trigger
+
+# NOTE: This workflow is DISABLED by default.
+# To enable: Go to Settings > Secrets and Variables > Actions > Variables
+# Add a new variable: DEPLOY_ENABLED = true
 
 env:
   REGISTRY: ghcr.io
@@ -17,8 +22,9 @@ jobs:
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     environment: staging
+    continue-on-error: true  # Don't fail workflow if deploy fails
 
     steps:
       - uses: actions/checkout@v4
@@ -94,8 +100,9 @@ jobs:
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' && vars.DEPLOY_ENABLED == 'true'
     environment: production
+    continue-on-error: true
     needs: []
 
     steps:

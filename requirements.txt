@@ -11,11 +11,11 @@ pytesseract>=0.3.10
 Pillow>=10.0.0
 opencv-python>=4.8.0
 numpy>=1.24.0
-pyobjc-core>=9.2.0  # Required for macOS
-pyobjc>=9.2.0  # Required for macOS
-python-xlib>=0.33  # Required for Linux
-pythoncom>=1.0.0  # Required for Windows
-pywin32>=300.0.0  # Required for Windows
+# Platform-specific dependencies (install only on correct OS)
+pyobjc-core>=9.2.0; sys_platform == 'darwin'
+pyobjc>=9.2.0; sys_platform == 'darwin'
+python-xlib>=0.33; sys_platform == 'linux'
+pywin32>=300; sys_platform == 'win32'
 pynput>=1.7.6
 requests>=2.31.0
 beautifulsoup4>=4.12.0
