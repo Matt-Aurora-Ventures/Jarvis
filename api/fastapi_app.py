@@ -147,6 +147,7 @@ def create_app() -> FastAPI:
     # Health check
     @app.get("/api/health")
     async def health_check():
+        import platform
         import psutil
         import time
 
@@ -154,7 +155,9 @@ def create_app() -> FastAPI:
         try:
             cpu_percent = psutil.cpu_percent(interval=0.1)
             memory = psutil.virtual_memory()
-            disk = psutil.disk_usage("/")
+            # Use appropriate path for disk check
+            disk_path = "C:\\" if platform.system() == "Windows" else "/"
+            disk = psutil.disk_usage(disk_path)
         except Exception:
             cpu_percent = 0
             memory = None
@@ -162,25 +165,61 @@ def create_app() -> FastAPI:
 
         # Check provider availability
         providers_status = {}
+        providers_healthy = True
         try:
             from core import providers
             provider_check = providers.check_providers()
             for name, status in provider_check.items():
-                providers_status[name] = status.get("available", False)
+                is_available = status.get("available", False)
+                providers_status[name] = is_available
+                if not is_available:
+                    providers_healthy = False
+        except Exception:
+            providers_healthy = False
+
+        # Check voice system
+        voice_status = {"available": False, "tts": False, "stt": False, "microphone": False}
+        try:
+            from core.voice import run_voice_diagnostics
+            diag = run_voice_diagnostics()
+            voice_status = {
+                "available": diag.microphone_available and diag.tts_available,
+                "tts": diag.tts_available,
+                "stt": diag.stt_available,
+                "microphone": diag.microphone_available,
+                "wake_word": diag.wake_word_available,
+            }
         except Exception:
             pass
 
+        # Check database
+        database_ok = True
+        try:
+            from core import state
+            state.read_state()
+        except Exception:
+            database_ok = False
+
+        # Determine overall status
+        all_healthy = providers_healthy and database_ok
+        overall_status = "healthy" if all_healthy else "degraded"
+        if not database_ok:
+            overall_status = "unhealthy"
+
         return {
-            "status": "healthy",
-            "version": "4.1.0",
+            "status": overall_status,
+            "version": "4.1.1",
             "timestamp": time.time(),
+            "platform": platform.system(),
             "services": {
                 "staking": True,
                 "credits": True,
                 "treasury": True,
-                "voice": True,
+                "voice": voice_status["available"],
                 "sentiment": True,
+                "database": database_ok,
             },
+            "voice": voice_status,
             "providers": providers_status,
             "system": {
                 "cpu_percent": cpu_percent,

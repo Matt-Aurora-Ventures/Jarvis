@@ -210,32 +210,50 @@ Details:
 Approve this improvement?
 """
         
-        # Display macOS dialog
-        script = f'''
+        # Cross-platform dialog
+        import platform
+        system = platform.system().lower()
+
+        try:
+            if system == "darwin":
+                # macOS: use osascript
+                script = f'''
 display dialog "{question.replace('"', '\\"')}" ¬
     buttons {{"Reject", "Approve"}} ¬
     default button "Approve" ¬
     with title "Jarvis Improvement Suggestion" ¬
     giving up after 30
 '''
-        
-        try:
-            result = subprocess.run(
-                ["osascript", "-e", script],
-                capture_output=True,
-                text=True,
-                timeout=35,
-            )
-            
-            # Check which button was clicked
-            if "Approve" in result.stdout:
-                return True
-            elif "gave up:true" in result.stdout:
-                # User didn't respond - default to reject
-                return False
+                result = subprocess.run(
+                    ["osascript", "-e", script],
+                    capture_output=True,
+                    text=True,
+                    timeout=35,
+                )
+                if "Approve" in result.stdout:
+                    return True
+                elif "gave up:true" in result.stdout:
+                    return False
+                else:
+                    return False
             else:
-                return False
-        
+                # Windows/Linux: use tkinter
+                try:
+                    import tkinter as tk
+                    from tkinter import messagebox
+                    root = tk.Tk()
+                    root.withdraw()
+                    result = messagebox.askyesno(
+                        "Jarvis Improvement Suggestion",
+                        question,
+                        default=messagebox.YES
+                    )
+                    root.destroy()
+                    return result
+                except Exception:
+                    # Fallback: auto-reject if no GUI available
+                    print(f"Warning: No GUI available for approval prompt")
+                    return False
         except Exception as e:
             print(f"Warning: User prompt failed: {e}")
             return False
