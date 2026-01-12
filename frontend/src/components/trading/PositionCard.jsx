@@ -1,11 +1,74 @@
 import React from 'react'
-import { Target, Zap, RefreshCw, Clock, XCircle } from 'lucide-react'
+import { Target, Zap, RefreshCw, Clock, XCircle, Loader } from 'lucide-react'
 import { formatCryptoPrice, formatUSD, formatPercent, formatDuration } from '../../lib/format'
 
 /**
  * PositionCard - Display active trading position
  */
-function PositionCard({ position, onExit, onRefresh }) {
+function PositionCard({ position, onExit, onRefresh, loading = false, error = null }) {
+  // Loading state
+  if (loading) {
+    return (
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title">
+            <Target className="card-title-icon" size={20} />
+            Active Position
+          </div>
+        </div>
+        <div className="card-body">
+          <div className="position-loading">
+            <Loader size={32} className="spin" style={{ color: 'var(--text-tertiary)' }} />
+            <p style={{ color: 'var(--text-secondary)', marginTop: '1rem' }}>
+              Loading position...
+            </p>
+          </div>
+        </div>
+        <style jsx>{`
+          .position-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+          }
+          .spin {
+            animation: spin 1s linear infinite;
+          }
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title">
+            <Target className="card-title-icon" size={20} />
+            Active Position
+          </div>
+        </div>
+        <div className="card-body text-center">
+          <XCircle size={32} style={{ color: 'var(--color-error)', margin: '1rem auto' }} />
+          <p style={{ color: 'var(--color-error)' }}>Failed to load position</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-tertiary)', marginBottom: '1rem' }}>
+            {error}
+          </p>
+          <button onClick={onRefresh} className="btn btn-secondary btn-sm">
+            <RefreshCw size={14} />
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (!position?.has_position) {
     return (
       <div className="card">

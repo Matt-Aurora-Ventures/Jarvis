@@ -99,6 +99,38 @@ export function MarketIndicators({ className = '' }) {
   const VolatilityIcon = volatilityConfig.icon
   const TrendIcon = trendConfig.icon
 
+  // Loading state
+  if (data.loading) {
+    return (
+      <div className={`market-indicators ${className}`}>
+        <div className="indicators-header">
+          <h3>Market Conditions</h3>
+        </div>
+        <div className="indicators-grid loading">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className={`indicator-card ${i === 4 ? 'fear-greed' : ''}`}>
+              <div className="skeleton skeleton-box" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
+              <div style={{ flex: 1 }}>
+                <div className="skeleton skeleton-text" style={{ width: '50%', height: '12px', marginBottom: '6px' }} />
+                <div className="skeleton skeleton-text" style={{ width: '70%', height: '16px' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+        <style jsx>{`
+          .market-indicators { background: var(--bg-secondary); border-radius: 12px; padding: 16px; }
+          .indicators-header { margin-bottom: 16px; }
+          .indicators-header h3 { margin: 0; font-size: 14px; font-weight: 600; }
+          .indicators-grid.loading { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+          .indicator-card { display: flex; align-items: center; gap: 10px; padding: 12px; background: var(--bg-primary); border-radius: 8px; }
+          .indicator-card.fear-greed { grid-column: 1 / -1; }
+          .skeleton { background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+          @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        `}</style>
+      </div>
+    )
+  }
+
   return (
     <div className={`market-indicators ${className}`}>
       <div className="indicators-header">

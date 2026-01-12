@@ -5,7 +5,34 @@ import { formatUSD, formatPercent } from '../../lib/format'
 /**
  * StatsGrid - Display key metrics in a grid
  */
-function StatsGrid({ walletData, sniperData }) {
+function StatsGrid({ walletData, sniperData, loading = false }) {
+  // Show skeleton loading state
+  if (loading) {
+    return (
+      <div className="stats-grid">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="stat-card fade-in">
+            <div className="skeleton skeleton-text" style={{ width: '60%', height: '14px', marginBottom: '8px' }} />
+            <div className="skeleton skeleton-text" style={{ width: '80%', height: '24px', marginBottom: '8px' }} />
+            <div className="skeleton skeleton-text" style={{ width: '40%', height: '14px' }} />
+          </div>
+        ))}
+        <style jsx>{`
+          .skeleton {
+            background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 4px;
+          }
+          @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+          }
+        `}</style>
+      </div>
+    )
+  }
+
   const stats = [
     {
       label: 'Portfolio Value',
