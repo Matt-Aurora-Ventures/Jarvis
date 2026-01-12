@@ -183,3 +183,29 @@ api_keys.json
 keys.json
 .env
 .env.*
+
+# === GROK IMAGINE ===
+# Browser session and cookies (contains auth tokens)
+bots/grok_imagine/x_cookies.json
+bots/grok_imagine/browser_profile/
+bots/grok_imagine/*.png
+bots/grok_imagine/generated/
+
+# === TWITTER BOT ===
+# Runtime data and drafts
+bots/twitter/sentiment_report_data.json
+bots/twitter/thread_draft.txt
+bots/twitter/thread_jarvis_voice.txt
+
+# === CLAUDE CODE ===
+.claude/
+
+# === TEMP FILES ===
+.tmp_shadowwire/
+nul
+
+# === JARVIS WAKEUP IMAGES ===
+# Generated images (not source code)
+jarvis_wakeup*.jpg
+jarvis_wakeup*.png
+open\ source\ everything*.png

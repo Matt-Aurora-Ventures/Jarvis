@@ -185,14 +185,31 @@ class TradingEngine:
     HISTORY_FILE = Path(__file__).parent / '.trade_history.json'
 
     # Default TP/SL percentages by sentiment grade
+    # MANDATORY: Every trade MUST have TP/SL set based on grade
     TP_SL_CONFIG = {
-        'A': {'take_profit': 0.30, 'stop_loss': 0.10},   # 30% TP, 10% SL
+        'A+': {'take_profit': 0.30, 'stop_loss': 0.08},  # 30% TP, 8% SL - highest conviction
+        'A': {'take_profit': 0.30, 'stop_loss': 0.08},   # 30% TP, 8% SL
         'A-': {'take_profit': 0.25, 'stop_loss': 0.10},
-        'B+': {'take_profit': 0.20, 'stop_loss': 0.08},
-        'B': {'take_profit': 0.15, 'stop_loss': 0.08},
-        'C+': {'take_profit': 0.10, 'stop_loss': 0.05},
-        'C': {'take_profit': 0.08, 'stop_loss': 0.05},
+        'B+': {'take_profit': 0.20, 'stop_loss': 0.10},  # 20% TP, 10% SL
+        'B': {'take_profit': 0.18, 'stop_loss': 0.12},   # 18% TP, 12% SL
+        'B-': {'take_profit': 0.15, 'stop_loss': 0.12},
+        'C+': {'take_profit': 0.12, 'stop_loss': 0.15},
+        'C': {'take_profit': 0.10, 'stop_loss': 0.15},   # 10% TP, 15% SL - lower conviction
+        'C-': {'take_profit': 0.08, 'stop_loss': 0.15},
+        'D': {'take_profit': 0.05, 'stop_loss': 0.20},   # Very risky
+        'F': {'take_profit': 0.05, 'stop_loss': 0.20},   # DO NOT TRADE
     }
+
+    # Grade emoji mappings for UI
+    GRADE_EMOJI = {
+        'A+': '🟢🟢', 'A': '🟢🟢', 'A-': '🟢',
+        'B+': '🟢', 'B': '🟡', 'B-': '🟡',
+        'C+': '🟡', 'C': '🟠', 'C-': '🟠',
+        'D': '🔴', 'F': '🔴🔴'
+    }
+
+    # Admin ID for trade execution (MUST match)
+    ADMIN_USER_ID = 8527130908
 
     # Position sizing by risk level (% of portfolio)
     POSITION_SIZE = {
@@ -272,7 +289,10 @@ class TradingEngine:
             logger.error(f"Failed to save state: {e}")
 
     def is_admin(self, user_id: int) -> bool:
-        """Check if user is authorized to trade."""
+        """Check if user is authorized to trade. Admin only."""
+        # MUST be the authorized admin ID
+        if user_id == self.ADMIN_USER_ID:
+            return True
         return user_id in self.admin_user_ids
 
     def add_admin(self, user_id: int):
@@ -326,7 +346,8 @@ class TradingEngine:
         Returns:
             Tuple of (take_profit_price, stop_loss_price)
         """
-        config = self.TP_SL_CONFIG.get(sentiment_grade, {'take_profit': 0.15, 'stop_loss': 0.08})
+        # Default: +20% TP, -10% SL if grade not found
+        config = self.TP_SL_CONFIG.get(sentiment_grade, {'take_profit': 0.20, 'stop_loss': 0.10})
 
         tp_pct = custom_tp if custom_tp else config['take_profit']
         sl_pct = custom_sl if custom_sl else config['stop_loss']
@@ -399,10 +420,19 @@ class TradingEngine:
         Returns:
             Tuple of (success, message, position)
         """
-        # Check admin auth
-        if self.admin_user_ids:
-            if not user_id or not self.is_admin(user_id):
-                return False, "Unauthorized", None
+        # MANDATORY ADMIN CHECK - Only authorized admins can execute trades
+        if not user_id:
+            logger.warning("Trade rejected: No user_id provided")
+            return False, "⛔ Admin only - please authenticate", None
+
+        if not self.is_admin(user_id):
+            logger.warning(f"Trade rejected: User {user_id} is not authorized")
+            return False, "⛔ Admin only - you are not authorized to trade", None
+
+        # MANDATORY TP/SL VALIDATION - Every trade must have TP/SL
+        if sentiment_grade in ['D', 'F']:
+            logger.warning(f"Trade rejected: Grade {sentiment_grade} is too risky")
+            return False, f"⛔ Trade blocked: Grade {sentiment_grade} is too risky", None
 
         # Check existing positions
         existing = [p for p in self.positions.values()

@@ -1417,43 +1417,72 @@ Be specific about price targets and key levels to watch."""
             "<b>========================================</b>",
             "",
             "<b>DISCLAIMER</b>",
-            "<i>Grok and JARVIS are giving their best guesses,",
-            "not financial advice. All trades are YOUR",
-            "responsibility. DYOR. NFA.</i>",
+            "<i>Grok and JARVIS are giving their best guesses, not financial advice. All trades are YOUR responsibility. DYOR. NFA.</i>",
             "",
-            "<i>Powered by JARVIS AI</i>",
-            f"<i>Predictions tracked internally for accuracy</i>",
+            "<i>Powered by JARVIS AI - Predictions tracked internally for accuracy</i>",
         ])
 
         msg3 = "\n".join(lines3)
 
         return [msg1, msg2, msg3]
 
+    def _split_message(self, msg: str, max_len: int = 4000) -> List[str]:
+        """Split a message into chunks that fit Telegram's limit (4096 chars)."""
+        if len(msg) <= max_len:
+            return [msg]
+
+        chunks = []
+        lines = msg.split("\n")
+        current_chunk = []
+        current_len = 0
+
+        for line in lines:
+            # +1 for the newline
+            line_len = len(line) + 1
+            if current_len + line_len > max_len:
+                if current_chunk:
+                    chunks.append("\n".join(current_chunk))
+                current_chunk = [line]
+                current_len = line_len
+            else:
+                current_chunk.append(line)
+                current_len += line_len
+
+        if current_chunk:
+            chunks.append("\n".join(current_chunk))
+
+        return chunks
+
     async def _post_to_telegram(self, messages: List[str], tokens: List[TokenSentiment] = None):
         """Post report messages to Telegram with ape buttons for tradeable assets."""
+        msg_num = 0
         for i, msg in enumerate(messages):
-            try:
-                payload = {
-                    "chat_id": self.chat_id,
-                    "text": msg,
-                    "parse_mode": "HTML",
-                    "disable_web_page_preview": "true",
-                }
+            # Split long messages
+            chunks = self._split_message(msg)
 
-                async with self._session.post(
-                    f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
-                    json=payload
-                ) as resp:
-                    result = await resp.json()
-                    if not result.get("ok"):
-                        logger.error(f"Telegram error on message {i+1}: {result}")
+            for chunk in chunks:
+                msg_num += 1
+                try:
+                    payload = {
+                        "chat_id": self.chat_id,
+                        "text": chunk,
+                        "parse_mode": "HTML",
+                        "disable_web_page_preview": "true",
+                    }
 
-                # Small delay between messages
-                if i < len(messages) - 1:
-                    await asyncio.sleep(0.5)
+                    async with self._session.post(
+                        f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                        json=payload
+                    ) as resp:
+                        result = await resp.json()
+                        if not result.get("ok"):
+                            logger.error(f"Telegram error on message {msg_num}: {result}")
 
-            except Exception as e:
-                logger.error(f"Failed to post message {i+1} to Telegram: {e}")
+                    # Small delay between messages
+                    await asyncio.sleep(0.3)
+
+                except Exception as e:
+                    logger.error(f"Failed to post message {msg_num} to Telegram: {e}")
 
         # Post ape buttons for bullish crypto tokens with TP/SL profiles
         await self._post_ape_buttons(tokens)
@@ -1533,10 +1562,16 @@ Be specific about price targets and key levels to watch."""
                     # Create simple buttons with Grok targets
                     keyboard = self._create_grok_ape_keyboard(t)
 
+                    # Escape HTML in reasoning and truncate safely
+                    import html
+                    reasoning = html.escape(t.grok_reasoning[:80]) if t.grok_reasoning else "Grok analysis pending"
+                    if len(t.grok_reasoning) > 80:
+                        reasoning += "..."
+
                     token_msg = (
-                        f"<b>🪙 {t.symbol}</b> ({t.grok_verdict})\n"
-                        f"💰 ${t.price_usd:.8f}\n"
-                        f"📊 {t.grok_reasoning[:80]}...\n\n"
+                        f"<b>{html.escape(t.symbol)}</b> ({t.grok_verdict})\n"
+                        f"${t.price_usd:.8f}\n"
+                        f"{reasoning}\n\n"
                         f"<b>Grok Targets:</b>\n"
                         f"{targets_str}"
                     )
@@ -1782,27 +1817,72 @@ Treasury: <code>{treasury_status['address'][:12]}...{treasury_status['address'][
             logger.debug(f"Could not post treasury status: {e}")
 
     async def _get_treasury_status(self) -> Optional[Dict[str, Any]]:
-        """Get current treasury status."""
+        """Get current treasury status from blockchain."""
         try:
-            from bots.treasury.wallet import SecureWallet
+            from bots.treasury.trading import TreasuryTrader
 
-            wallet = SecureWallet()
-            treasury = wallet.get_treasury()
+            trader = TreasuryTrader()
+            initialized, msg = await trader._ensure_initialized()
 
-            if treasury:
-                # Get current SOL price
-                sol_price = 100  # Placeholder - would fetch from API
-                balance_usd = treasury.balance_sol * sol_price
+            if initialized and trader._engine:
+                balance_sol, balance_usd = await trader._engine.get_portfolio_value()
+                address = os.environ.get("TREASURY_WALLET_ADDRESS", "")
 
                 return {
-                    "address": treasury.address,
-                    "balance_sol": treasury.balance_sol,
+                    "address": address,
+                    "balance_sol": balance_sol,
                     "balance_usd": balance_usd,
                     "positions": 0,  # Would get from trading engine
                     "pnl_24h": 0.0,  # Would calculate from trade history
                 }
+            else:
+                logger.debug(f"Treasury init failed: {msg}")
+
         except Exception as e:
             logger.debug(f"Treasury not available: {e}")
+
+        # Fallback: Try to fetch balance directly via RPC
+        try:
+            treasury_addr = os.environ.get("TREASURY_WALLET_ADDRESS", "")
+            helius_rpc = os.environ.get("HELIUS_RPC_URL", "")
+
+            if treasury_addr and helius_rpc and self._session:
+                # Fetch SOL balance via RPC
+                payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "getBalance",
+                    "params": [treasury_addr]
+                }
+                async with self._session.post(helius_rpc, json=payload) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        lamports = data.get("result", {}).get("value", 0)
+                        balance_sol = lamports / 1_000_000_000
+
+                        # Fetch SOL price
+                        sol_price = 100  # Default
+                        try:
+                            async with self._session.get(
+                                "https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112"
+                            ) as price_resp:
+                                if price_resp.status == 200:
+                                    price_data = await price_resp.json()
+                                    pairs = price_data.get("pairs", [])
+                                    if pairs:
+                                        sol_price = float(pairs[0].get("priceUsd", 100) or 100)
+                        except:
+                            pass
+
+                        return {
+                            "address": treasury_addr,
+                            "balance_sol": balance_sol,
+                            "balance_usd": balance_sol * sol_price,
+                            "positions": 0,
+                            "pnl_24h": 0.0,
+                        }
+        except Exception as e:
+            logger.debug(f"RPC balance fetch failed: {e}")
 
         return None
 

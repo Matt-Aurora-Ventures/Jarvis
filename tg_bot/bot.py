@@ -41,6 +41,28 @@ from tg_bot.services.signal_service import get_signal_service
 from tg_bot.services.cost_tracker import get_tracker
 from tg_bot.services import digest_formatter as fmt
 
+# Ape trading buttons with mandatory TP/SL
+try:
+    from bots.buy_tracker.ape_buttons import (
+        parse_ape_callback,
+        create_trade_setup,
+        fetch_token_price,
+        RiskProfile,
+        RISK_PROFILE_CONFIG,
+    )
+    APE_BUTTONS_AVAILABLE = True
+except ImportError:
+    APE_BUTTONS_AVAILABLE = False
+    parse_ape_callback = None
+
+# Full sentiment report generator
+try:
+    from bots.buy_tracker.sentiment_report import SentimentReportGenerator
+    SENTIMENT_REPORT_AVAILABLE = True
+except ImportError:
+    SENTIMENT_REPORT_AVAILABLE = False
+    SentimentReportGenerator = None
+
 # Self-improving integration (optional)
 try:
     from core.self_improving import integration as self_improving
@@ -803,6 +825,521 @@ async def paper(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =============================================================================
+# Treasury Trading Commands
+# =============================================================================
+
+ADMIN_USER_ID = 8527130908  # Authorized admin
+
+
+@admin_only
+async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /report - Send full sentiment report with trading buttons.
+
+    Uses the SentimentReportGenerator for beautiful multi-message reports with:
+    - TOP 10 tokens with Grok AI sentiment analysis
+    - APE trading buttons (5%/2%/1% allocation x Safe/Med/Degen risk)
+    - Market/macro analysis
+    - XStocks/PreStocks tokenized equities
+    - Treasury status
+    """
+    config = get_config()
+    chat_id = update.effective_chat.id
+
+    # Use full SentimentReportGenerator if available
+    if SENTIMENT_REPORT_AVAILABLE:
+        await update.message.reply_text(
+            "📊 _Generating full Jarvis Sentiment Report..._\n_This includes Grok AI analysis, market data, and trading buttons._",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+        try:
+            import aiohttp
+
+            # Ensure env vars are loaded for treasury status
+            env_path = Path(__file__).parent / ".env"
+            if env_path.exists():
+                with open(env_path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            key, value = line.split("=", 1)
+                            os.environ.setdefault(key.strip(), value.strip())
+
+            # Get tokens and API keys from environment
+            bot_token = config.telegram_token
+            xai_key = os.environ.get("XAI_API_KEY", "")
+
+            # Create the generator
+            generator = SentimentReportGenerator(
+                bot_token=bot_token,
+                chat_id=str(chat_id),
+                xai_api_key=xai_key,
+                interval_minutes=30,  # Not used for single report
+            )
+
+            # Create session (normally done by start())
+            generator._session = aiohttp.ClientSession()
+
+            try:
+                # Generate and post the full report
+                await generator.generate_and_post_report()
+                logger.info(f"Full sentiment report posted to chat {chat_id}")
+            finally:
+                # Clean up session
+                await generator._session.close()
+
+        except Exception as e:
+            logger.error(f"Full report generation failed: {e}")
+            # Fall back to simplified report
+            await _generate_simple_report(update, context)
+    else:
+        # Fall back to simplified report
+        await update.message.reply_text(
+            "📊 _Generating Jarvis Trading Report..._",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        await _generate_simple_report(update, context)
+
+
+async def _generate_simple_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Generate simplified report when SentimentReportGenerator is not available."""
+    service = get_signal_service()
+    tracker = get_tracker()
+    config = get_config()
+
+    try:
+        # Get top 10 trending
+        signals_list = await service.get_trending_tokens(limit=10)
+
+        if not signals_list:
+            await update.message.reply_text(
+                "❌ *Error*\n\nCould not fetch signals.\nCheck /status for data source availability.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
+
+        # Add Grok sentiment to top 5 if rate limit allows
+        for i, sig in enumerate(signals_list[:5]):
+            can_check, _ = tracker.can_make_sentiment_call()
+            if can_check and config.has_grok():
+                enhanced = await service.get_comprehensive_signal(
+                    sig.address,
+                    symbol=sig.symbol,
+                    include_sentiment=True,
+                )
+                signals_list[i] = enhanced
+
+        # Get treasury info
+        try:
+            engine = await _get_treasury_engine()
+            _, portfolio_usd = await engine.get_portfolio_value()
+            mode = "🟢 LIVE" if not engine.dry_run else "🟡 PAPER"
+        except Exception:
+            portfolio_usd = 0
+            mode = "⚪ OFFLINE"
+
+        # Build the full report as ONE message
+        message = _build_full_trading_report(signals_list, portfolio_usd, mode)
+
+        # Build trading buttons for top 3 tokens
+        keyboard_rows = []
+        for sig in signals_list[:3]:
+            grade = _grade_for_signal(sig)
+            grade_emoji = _get_grade_emoji(grade)
+            keyboard_rows.append([
+                InlineKeyboardButton(
+                    f"📈 {sig.symbol} 1%",
+                    callback_data=f"trade_pct:{sig.address}:1:{grade}"
+                ),
+                InlineKeyboardButton(
+                    f"📈 {sig.symbol} 2%",
+                    callback_data=f"trade_pct:{sig.address}:2:{grade}"
+                ),
+                InlineKeyboardButton(
+                    f"📈 {sig.symbol} 5%",
+                    callback_data=f"trade_pct:{sig.address}:5:{grade}"
+                ),
+            ])
+
+        keyboard_rows.append([
+            InlineKeyboardButton("🔄 Refresh", callback_data="refresh_report"),
+            InlineKeyboardButton("💼 Positions", callback_data="show_positions_detail"),
+        ])
+
+        await update.message.reply_text(
+            message,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard_rows),
+            disable_web_page_preview=True,
+        )
+
+    except Exception as e:
+        logger.error(f"Report generation failed: {e}")
+        await update.message.reply_text(
+            f"❌ *Error*\n\nFailed to generate report: {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
+def _build_full_trading_report(signals_list, portfolio_usd: float, mode: str) -> str:
+    """Build a complete, non-fragmented trading report."""
+    now = datetime.now(timezone.utc)
+    lines = []
+
+    # Header
+    lines.append("═" * 28)
+    lines.append("🤖 *JARVIS TRADING REPORT*")
+    lines.append(f"📅 {now.strftime('%Y-%m-%d %H:%M')} UTC")
+    lines.append("═" * 28)
+    lines.append("")
+
+    # Treasury Status
+    lines.append("💰 *TREASURY STATUS*")
+    lines.append(f"   Balance: ${portfolio_usd:,.2f}")
+    lines.append(f"   Mode: {mode}")
+    lines.append("")
+
+    # Market Summary
+    strong_buys = [s for s in signals_list if s.signal == "STRONG_BUY"]
+    buys = [s for s in signals_list if s.signal == "BUY"]
+    sells = [s for s in signals_list if s.signal in ["SELL", "STRONG_SELL"]]
+
+    lines.append("📊 *MARKET OVERVIEW*")
+    lines.append(f"   🟢 Strong Buy: {len(strong_buys)}")
+    lines.append(f"   🟢 Buy: {len(buys)}")
+    lines.append(f"   🔴 Avoid: {len(sells)}")
+    lines.append("")
+
+    # TOP 10 Tokens
+    lines.append("─" * 28)
+    lines.append("📈 *TOP 10 TRENDING TOKENS*")
+    lines.append("─" * 28)
+    lines.append("")
+
+    for i, sig in enumerate(signals_list[:10], 1):
+        grade = _grade_for_signal(sig)
+        grade_emoji = _get_grade_emoji(grade)
+
+        # Token header with grade
+        lines.append(f"*{i}. {sig.symbol}* {grade_emoji} Grade: *{grade}*")
+
+        # Price and changes
+        price_str = fmt.format_price(sig.price_usd) if sig.price_usd else "$0.00"
+        change_1h = f"+{sig.price_change_1h:.1f}%" if sig.price_change_1h > 0 else f"{sig.price_change_1h:.1f}%"
+        change_24h = f"+{sig.price_change_24h:.1f}%" if sig.price_change_24h > 0 else f"{sig.price_change_24h:.1f}%"
+
+        lines.append(f"   💵 {price_str}")
+        lines.append(f"   📊 1h: {change_1h} | 24h: {change_24h}")
+
+        # Volume and Mcap
+        vol_str = fmt.format_volume(sig.volume_24h) if sig.volume_24h else "$0"
+        liq_str = fmt.format_volume(sig.liquidity_usd) if sig.liquidity_usd else "$0"
+        lines.append(f"   📈 Vol: {vol_str} | Liq: {liq_str}")
+
+        # Sentiment if available
+        if sig.sentiment and sig.sentiment != "neutral":
+            sent_emoji = "😀" if sig.sentiment == "positive" else "😟" if sig.sentiment == "negative" else "🤔"
+            lines.append(f"   {sent_emoji} Grok: {sig.sentiment.upper()}")
+
+        # TP/SL levels
+        tp_pct, sl_pct = _get_tp_sl_for_grade(grade)
+        lines.append(f"   🎯 TP: +{int(tp_pct*100)}% | SL: -{int(sl_pct*100)}%")
+
+        # Contract (shortened)
+        if sig.address:
+            short_addr = f"{sig.address[:6]}...{sig.address[-4:]}"
+            lines.append(f"   📋 `{sig.address}`")
+
+        # Links
+        lines.append(f"   🔗 [Chart]({fmt.get_dexscreener_link(sig.address)})")
+        lines.append("")
+
+    # Footer
+    lines.append("─" * 28)
+    lines.append("⚡ _Tap buttons above to trade_")
+    lines.append("_TP/SL auto-set based on grade_")
+
+    return "\n".join(lines)
+
+
+def _get_grade_emoji(grade: str) -> str:
+    """Get emoji for grade."""
+    emoji_map = {
+        'A+': '🟢🟢', 'A': '🟢🟢', 'A-': '🟢',
+        'B+': '🟢', 'B': '🟡', 'B-': '🟡',
+        'C+': '🟡', 'C': '🟠', 'C-': '🟠',
+        'D': '🔴', 'F': '🔴🔴'
+    }
+    return emoji_map.get(grade, '⚪')
+
+
+def _get_tp_sl_for_grade(grade: str) -> tuple:
+    """Get TP/SL percentages for grade."""
+    tp_sl_map = {
+        'A+': (0.30, 0.08), 'A': (0.30, 0.08), 'A-': (0.25, 0.10),
+        'B+': (0.20, 0.10), 'B': (0.18, 0.12), 'B-': (0.15, 0.12),
+        'C+': (0.12, 0.15), 'C': (0.10, 0.15), 'C-': (0.08, 0.15),
+        'D': (0.05, 0.20), 'F': (0.05, 0.20)
+    }
+    return tp_sl_map.get(grade, (0.20, 0.10))
+
+
+def _grade_for_signal(signal) -> str:
+    """
+    Calculate grade for a signal based on multiple factors.
+    Returns A+, A, B+, B, C, D, or F.
+    """
+    score = 0
+
+    # Signal type (+15 to -15)
+    signal_scores = {
+        'STRONG_BUY': 15, 'BUY': 10, 'NEUTRAL': 0,
+        'SELL': -10, 'STRONG_SELL': -15, 'AVOID': -20
+    }
+    score += signal_scores.get(signal.signal, 0)
+
+    # Sentiment (+10 to -10)
+    if hasattr(signal, 'sentiment') and signal.sentiment:
+        if signal.sentiment == 'positive':
+            score += 10
+        elif signal.sentiment == 'negative':
+            score -= 10
+
+    # Security score (+10 to -10)
+    if hasattr(signal, 'security_score'):
+        if signal.security_score >= 80:
+            score += 10
+        elif signal.security_score >= 60:
+            score += 5
+        elif signal.security_score < 40:
+            score -= 10
+
+    # Risk level
+    risk_scores = {'low': 5, 'medium': 0, 'high': -5, 'critical': -15}
+    if hasattr(signal, 'risk_level'):
+        score += risk_scores.get(signal.risk_level, 0)
+
+    # Liquidity bonus
+    if hasattr(signal, 'liquidity_usd') and signal.liquidity_usd:
+        if signal.liquidity_usd > 1_000_000:
+            score += 5
+        elif signal.liquidity_usd > 500_000:
+            score += 3
+
+    # Smart money signal
+    if hasattr(signal, 'smart_money_signal'):
+        if signal.smart_money_signal == 'bullish':
+            score += 5
+        elif signal.smart_money_signal == 'bearish':
+            score -= 5
+
+    # Convert score to grade
+    if score >= 25:
+        return 'A+'
+    elif score >= 20:
+        return 'A'
+    elif score >= 15:
+        return 'A-'
+    elif score >= 10:
+        return 'B+'
+    elif score >= 5:
+        return 'B'
+    elif score >= 0:
+        return 'B-'
+    elif score >= -5:
+        return 'C+'
+    elif score >= -10:
+        return 'C'
+    elif score >= -15:
+        return 'C-'
+    elif score >= -20:
+        return 'D'
+    else:
+        return 'F'
+
+
+@admin_only
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /balance - Show treasury balance and allocation.
+    """
+    try:
+        engine = await _get_treasury_engine()
+        sol_balance, usd_value = await engine.get_portfolio_value()
+        mode = "🟢 LIVE" if not engine.dry_run else "🟡 PAPER"
+
+        # Get wallet address
+        treasury = engine.wallet.get_treasury()
+        address = treasury.address if treasury else "Unknown"
+        short_addr = f"{address[:8]}...{address[-4:]}" if address else "N/A"
+
+        message = f"""
+💰 *TREASURY BALANCE*
+
+*Wallet:* `{short_addr}`
+*SOL:* `{sol_balance:.4f}` SOL
+*USD:* `${usd_value:,.2f}`
+
+*Mode:* {mode}
+*Max Positions:* {engine.max_positions}
+*Risk Level:* {engine.risk_level.value}
+
+⚠️ _Low balance warning: <0.05 SOL_
+"""
+
+        # Warning if low balance
+        if sol_balance < 0.05:
+            message += "\n🚨 *WARNING: Low balance!*"
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🔄 Refresh", callback_data="refresh_balance"),
+                InlineKeyboardButton("📊 Report", callback_data="refresh_report"),
+            ]
+        ])
+
+        await update.message.reply_text(
+            message,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard,
+        )
+
+    except Exception as e:
+        logger.error(f"Balance check failed: {e}")
+        await update.message.reply_text(
+            f"❌ *Error*\n\nFailed to get balance: {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
+@admin_only
+async def positions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /positions - Show open positions with P&L and sell buttons.
+    """
+    try:
+        engine = await _get_treasury_engine()
+        await engine.update_positions()
+        open_positions = engine.get_open_positions()
+
+        if not open_positions:
+            await update.message.reply_text(
+                "📋 *OPEN POSITIONS*\n\n_No open positions._\n\nUse /report to find trading opportunities.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
+
+        lines = ["📋 *OPEN POSITIONS*", ""]
+
+        keyboard_rows = []
+        total_pnl = 0
+
+        for pos in open_positions:
+            pnl_pct = pos.unrealized_pnl_pct
+            pnl_usd = pos.unrealized_pnl
+            total_pnl += pnl_usd
+
+            pnl_emoji = "🟢" if pnl_pct >= 0 else "🔴"
+
+            lines.append(f"*{pos.token_symbol}* {pnl_emoji}")
+            lines.append(f"   Entry: ${pos.entry_price:.8f}")
+            lines.append(f"   Current: ${pos.current_price:.8f}")
+            lines.append(f"   P&L: {pnl_pct:+.1f}% (${pnl_usd:+.2f})")
+            lines.append(f"   🎯 TP: ${pos.take_profit_price:.8f}")
+            lines.append(f"   🛑 SL: ${pos.stop_loss_price:.8f}")
+            lines.append(f"   ID: `{pos.id}`")
+            lines.append("")
+
+            # Add sell button for each position
+            keyboard_rows.append([
+                InlineKeyboardButton(
+                    f"🔴 SELL {pos.token_symbol}",
+                    callback_data=f"sell_pos:{pos.id}"
+                )
+            ])
+
+        # Summary
+        total_emoji = "🟢" if total_pnl >= 0 else "🔴"
+        lines.append(f"─" * 20)
+        lines.append(f"*Total P&L:* {total_emoji} ${total_pnl:+.2f}")
+
+        keyboard_rows.append([
+            InlineKeyboardButton("🔄 Refresh", callback_data="show_positions_detail"),
+        ])
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard_rows),
+        )
+
+    except Exception as e:
+        logger.error(f"Positions check failed: {e}")
+        await update.message.reply_text(
+            f"❌ *Error*\n\nFailed to get positions: {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
+@admin_only
+async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /settings - Show current TP/SL settings and trading config.
+    """
+    try:
+        engine = await _get_treasury_engine()
+        mode = "🟢 LIVE" if not engine.dry_run else "🟡 PAPER"
+
+        message = f"""
+⚙️ *TRADING SETTINGS*
+
+*Mode:* {mode}
+*Risk Level:* {engine.risk_level.value}
+*Max Positions:* {engine.max_positions}
+*Slippage:* 20% max (2000 bps)
+
+*TP/SL by Grade:*
+🟢 A+/A: +30% TP / -8% SL
+🟢 B+: +20% TP / -10% SL
+🟡 B: +18% TP / -12% SL
+🟠 C: +10% TP / -15% SL
+🔴 D/F: ⛔ DO NOT TRADE
+
+*Admin ID:* `{ADMIN_USER_ID}`
+*RPC:* Helius (Primary)
+
+_All trades require TP/SL - no exceptions_
+"""
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "🟢 Go LIVE" if engine.dry_run else "🟡 Go PAPER",
+                    callback_data="toggle_live_mode"
+                ),
+            ],
+            [
+                InlineKeyboardButton("📊 Report", callback_data="refresh_report"),
+                InlineKeyboardButton("💰 Balance", callback_data="refresh_balance"),
+            ]
+        ])
+
+        await update.message.reply_text(
+            message,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard,
+        )
+
+    except Exception as e:
+        logger.error(f"Settings check failed: {e}")
+        await update.message.reply_text(
+            f"❌ *Error*\n\nFailed to get settings: {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
+# =============================================================================
 # Callback Query Handler
 # =============================================================================
 
@@ -814,6 +1351,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     config = get_config()
     user_id = update.effective_user.id
+
+    # Log all callbacks for debugging
+    logger.info(f"Callback received: '{data}' from user {user_id}")
 
     # Menu navigation callbacks
     if data == "menu_trending":
@@ -959,6 +1499,532 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "refresh_trending":
         await _handle_trending_inline(query)
         return
+
+    # New trading callbacks
+    if data.startswith("trade_pct:"):
+        if not config.is_admin(user_id):
+            await query.message.reply_text(
+                "⛔ *Admin Only*\n\nYou are not authorized to trade.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            logger.warning(f"Unauthorized trade attempt by user {user_id}")
+            return
+
+        await _execute_trade_with_tp_sl(query, data)
+        return
+
+    if data.startswith("sell_pos:"):
+        if not config.is_admin(user_id):
+            await query.message.reply_text("⛔ *Admin Only*", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        position_id = data.split(":")[1]
+        await _close_position_callback(query, position_id)
+        return
+
+    if data == "refresh_report":
+        if not config.is_admin(user_id):
+            return
+        await _refresh_report_inline(query)
+        return
+
+    if data == "refresh_balance":
+        if not config.is_admin(user_id):
+            return
+        await _refresh_balance_inline(query)
+        return
+
+    if data == "show_positions_detail":
+        if not config.is_admin(user_id):
+            return
+        await _show_positions_inline(query)
+        return
+
+    if data == "toggle_live_mode":
+        if not config.is_admin(user_id):
+            return
+        await _toggle_live_mode(query)
+        return
+
+    # Ape button callbacks from sentiment reports (format: ape:{alloc}:{profile}:{type}:{symbol}:{contract})
+    if data.startswith("ape:"):
+        logger.info(f"Ape callback received: {data} from user {user_id}")
+
+        if not APE_BUTTONS_AVAILABLE:
+            await query.message.reply_text(
+                "❌ Ape trading module not available",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            logger.error("APE_BUTTONS_AVAILABLE is False")
+            return
+
+        if not config.is_admin(user_id):
+            await query.message.reply_text(
+                f"⛔ *Admin Only*\n\nUser ID {user_id} is not authorized.\nAdmin ID: {ADMIN_USER_ID}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            logger.warning(f"Unauthorized ape trade attempt by user {user_id}")
+            return
+
+        logger.info(f"Executing ape trade for admin {user_id}")
+        await _execute_ape_trade(query, data)
+        return
+
+
+async def _execute_ape_trade(query, callback_data: str):
+    """
+    Execute an ape trade from sentiment report buttons.
+
+    Callback format: ape:{alloc}:{profile}:{type}:{symbol}:{contract}
+    Example: ape:5:m:t:BONK:DezXAZ8z7P
+
+    All trades have MANDATORY TP/SL based on risk profile.
+    """
+    user_id = query.from_user.id
+
+    # Parse the callback
+    parsed = parse_ape_callback(callback_data)
+    if not parsed:
+        await query.message.reply_text(
+            "❌ Invalid trade button format",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    symbol = parsed["symbol"]
+    allocation_pct = parsed["allocation_percent"]
+    risk_profile = parsed["risk_profile"]
+    contract = parsed.get("contract", "")
+
+    # Get risk profile config
+    profile_config = RISK_PROFILE_CONFIG[risk_profile]
+    tp_pct = profile_config["tp_pct"]
+    sl_pct = profile_config["sl_pct"]
+    profile_label = profile_config["label"]
+
+    await query.edit_message_text(
+        f"⏳ *Processing APE Trade...*\n\n"
+        f"Token: {symbol}\n"
+        f"Allocation: {allocation_pct}%\n"
+        f"Profile: {profile_label}\n"
+        f"TP: +{int(tp_pct)}% | SL: -{int(sl_pct)}%",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    try:
+        # Get treasury engine
+        engine = await _get_treasury_engine()
+        balance_sol, balance_usd = await engine.get_portfolio_value()
+
+        if balance_sol <= 0:
+            await query.message.reply_text(
+                "❌ *Error*\n\nTreasury balance is zero.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        # Fetch current token price
+        price = await fetch_token_price(contract, symbol)
+        if price <= 0:
+            await query.message.reply_text(
+                f"❌ Could not fetch price for {symbol}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        # Create trade setup with TP/SL
+        trade_setup = create_trade_setup(
+            parsed_callback=parsed,
+            entry_price=price,
+            treasury_balance_sol=balance_sol,
+            direction="LONG",
+            grade=""
+        )
+
+        # Validate trade setup
+        is_valid, error_msg = trade_setup.validate()
+        if not is_valid:
+            await query.message.reply_text(
+                f"❌ *Invalid Trade Setup*\n\n{error_msg}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        # Calculate trade values
+        amount_sol = trade_setup.amount_sol
+        amount_usd = amount_sol * (balance_usd / balance_sol) if balance_sol > 0 else 0
+
+        mode = "🟢 LIVE" if not engine.dry_run else "🟡 PAPER"
+
+        # Execute trade via treasury engine
+        if engine.dry_run:
+            # Paper trade simulation
+            result = f"✅ *{mode} APE Trade Simulated*\n\n"
+            result += f"Token: *{symbol}*\n"
+            result += f"Entry: ${price:.8f}\n"
+            result += f"Amount: {amount_sol:.4f} SOL (~${amount_usd:.2f})\n"
+            result += f"Profile: {profile_label}\n"
+            result += f"TP: ${trade_setup.take_profit_price:.8f} (+{int(tp_pct)}%)\n"
+            result += f"SL: ${trade_setup.stop_loss_price:.8f} (-{int(sl_pct)}%)\n\n"
+            result += f"_Paper mode - no real trade executed_"
+        else:
+            # LIVE trade execution via Jupiter
+            from bots.treasury.jupiter import JupiterSwap
+
+            jupiter = JupiterSwap(
+                rpc_url=os.environ.get("HELIUS_RPC_URL", ""),
+                keypair=engine._wallet_keypair,
+            )
+
+            # SOL mint is constant
+            sol_mint = "So11111111111111111111111111111111111111112"
+
+            # Execute swap
+            tx_sig = await jupiter.swap(
+                input_mint=sol_mint,
+                output_mint=contract if len(contract) > 20 else "",
+                amount_in_lamports=int(amount_sol * 1_000_000_000),
+                slippage_bps=100,  # 1% slippage
+            )
+
+            if tx_sig:
+                result = f"✅ *{mode} APE Trade Executed!*\n\n"
+                result += f"Token: *{symbol}*\n"
+                result += f"Entry: ${price:.8f}\n"
+                result += f"Amount: {amount_sol:.4f} SOL (~${amount_usd:.2f})\n"
+                result += f"Profile: {profile_label}\n"
+                result += f"TP: ${trade_setup.take_profit_price:.8f} (+{int(tp_pct)}%)\n"
+                result += f"SL: ${trade_setup.stop_loss_price:.8f} (-{int(sl_pct)}%)\n\n"
+                result += f"[View TX](https://solscan.io/tx/{tx_sig})"
+            else:
+                result = f"❌ *Trade Failed*\n\nCould not execute swap for {symbol}"
+
+        await query.message.reply_text(result, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+
+    except Exception as e:
+        logger.error(f"Ape trade failed: {e}")
+        await query.message.reply_text(
+            f"❌ *Trade Error*\n\n{str(e)[:200]}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+
+async def _execute_trade_with_tp_sl(query, data: str):
+    """Execute a trade with TP/SL based on grade. ADMIN ONLY."""
+    # Parse: trade_pct:{token_address}:{percent}:{grade}
+    parts = data.split(":")
+    if len(parts) < 4:
+        await query.message.reply_text("❌ Invalid trade format", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    token_address = parts[1]
+    pct = float(parts[2])
+    grade = parts[3]
+
+    user_id = query.from_user.id
+
+    # Double-check admin
+    if user_id != ADMIN_USER_ID:
+        await query.message.reply_text(
+            "⛔ *Admin Only*\n\nUser ID does not match authorized admin.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        logger.warning(f"Trade blocked: User {user_id} != Admin {ADMIN_USER_ID}")
+        return
+
+    # Reject low grades
+    if grade in ['D', 'F']:
+        await query.message.reply_text(
+            f"⛔ *Trade Blocked*\n\nGrade {grade} is too risky to trade.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    try:
+        engine = await _get_treasury_engine()
+        _, portfolio_usd = await engine.get_portfolio_value()
+
+        if portfolio_usd <= 0:
+            await query.message.reply_text(
+                "❌ *Error*\n\nTreasury balance is zero.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        # Calculate trade amount
+        amount_usd = portfolio_usd * (pct / 100.0)
+
+        # Get token info
+        service = get_signal_service()
+        signal = await service.get_comprehensive_signal(token_address, include_sentiment=False)
+
+        if not signal:
+            await query.message.reply_text("❌ Could not fetch token data", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        # Get TP/SL from grade
+        tp_pct, sl_pct = _get_tp_sl_for_grade(grade)
+
+        # Update message to show executing
+        await query.edit_message_text(
+            f"⏳ *Executing Trade...*\n\n"
+            f"Token: {signal.symbol}\n"
+            f"Amount: ${amount_usd:.2f} ({pct}%)\n"
+            f"TP: +{int(tp_pct*100)}% | SL: -{int(sl_pct*100)}%\n"
+            f"Mode: {'🟢 LIVE' if not engine.dry_run else '🟡 PAPER'}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+        # Execute via trading engine
+        from bots.treasury.trading import TradeDirection
+
+        success, msg, position = await engine.open_position(
+            token_mint=token_address,
+            token_symbol=signal.symbol,
+            direction=TradeDirection.LONG,
+            amount_usd=amount_usd,
+            sentiment_grade=grade,
+            sentiment_score=signal.sentiment_score if hasattr(signal, 'sentiment_score') else 0,
+            custom_tp=tp_pct,
+            custom_sl=sl_pct,
+            user_id=user_id,
+        )
+
+        if success and position:
+            mode = "🟢 LIVE" if not engine.dry_run else "🟡 PAPER"
+            result_msg = f"""
+✅ *TRADE EXECUTED*
+
+*Token:* {signal.symbol}
+*Size:* {pct}% (~${amount_usd:.2f})
+*Entry:* ${position.entry_price:.8f}
+*Amount:* {position.amount:.4f} tokens
+
+*Risk Controls:*
+🎯 TP: ${position.take_profit_price:.8f} (+{int(tp_pct*100)}%)
+🛑 SL: ${position.stop_loss_price:.8f} (-{int(sl_pct*100)}%)
+
+*Mode:* {mode}
+*Position ID:* `{position.id}`
+
+_TP/SL orders active - monitoring price_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📋 Positions", callback_data="show_positions_detail")],
+                [InlineKeyboardButton("📊 Report", callback_data="refresh_report")],
+            ])
+
+            await query.edit_message_text(
+                result_msg,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard
+            )
+        else:
+            await query.edit_message_text(
+                f"❌ *Trade Failed*\n\n{msg}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+    except Exception as e:
+        logger.error(f"Trade execution failed: {e}")
+        await query.edit_message_text(
+            f"❌ *Trade Failed*\n\n{str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+
+async def _close_position_callback(query, position_id: str):
+    """Close a position via callback. ADMIN ONLY."""
+    try:
+        engine = await _get_treasury_engine()
+        success, msg = await engine.close_position(position_id, user_id=query.from_user.id)
+
+        if success:
+            await query.edit_message_text(
+                f"✅ *Position Closed*\n\n{msg}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await query.edit_message_text(
+                f"❌ *Close Failed*\n\n{msg}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+    except Exception as e:
+        logger.error(f"Position close failed: {e}")
+        await query.edit_message_text(
+            f"❌ *Error*\n\n{str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+
+async def _refresh_report_inline(query):
+    """Refresh the trading report inline."""
+    await query.edit_message_text(
+        "📊 _Refreshing report..._",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    service = get_signal_service()
+    tracker = get_tracker()
+    config = get_config()
+
+    try:
+        signals_list = await service.get_trending_tokens(limit=10)
+
+        if not signals_list:
+            await query.edit_message_text(
+                "❌ Could not fetch signals",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        # Add sentiment to top 3
+        for i, sig in enumerate(signals_list[:3]):
+            can_check, _ = tracker.can_make_sentiment_call()
+            if can_check and config.has_grok():
+                enhanced = await service.get_comprehensive_signal(
+                    sig.address, symbol=sig.symbol, include_sentiment=True
+                )
+                signals_list[i] = enhanced
+
+        try:
+            engine = await _get_treasury_engine()
+            _, portfolio_usd = await engine.get_portfolio_value()
+            mode = "🟢 LIVE" if not engine.dry_run else "🟡 PAPER"
+        except Exception:
+            portfolio_usd = 0
+            mode = "⚪ OFFLINE"
+
+        message = _build_full_trading_report(signals_list, portfolio_usd, mode)
+
+        keyboard_rows = []
+        for sig in signals_list[:3]:
+            grade = _grade_for_signal(sig)
+            keyboard_rows.append([
+                InlineKeyboardButton(f"📈 {sig.symbol} 1%", callback_data=f"trade_pct:{sig.address}:1:{grade}"),
+                InlineKeyboardButton(f"📈 {sig.symbol} 2%", callback_data=f"trade_pct:{sig.address}:2:{grade}"),
+                InlineKeyboardButton(f"📈 {sig.symbol} 5%", callback_data=f"trade_pct:{sig.address}:5:{grade}"),
+            ])
+
+        keyboard_rows.append([
+            InlineKeyboardButton("🔄 Refresh", callback_data="refresh_report"),
+            InlineKeyboardButton("💼 Positions", callback_data="show_positions_detail"),
+        ])
+
+        await query.edit_message_text(
+            message,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard_rows),
+            disable_web_page_preview=True,
+        )
+
+    except Exception as e:
+        logger.error(f"Report refresh failed: {e}")
+        await query.edit_message_text(f"❌ Error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+async def _refresh_balance_inline(query):
+    """Refresh balance inline."""
+    try:
+        engine = await _get_treasury_engine()
+        sol_balance, usd_value = await engine.get_portfolio_value()
+        mode = "🟢 LIVE" if not engine.dry_run else "🟡 PAPER"
+
+        treasury = engine.wallet.get_treasury()
+        address = treasury.address if treasury else "Unknown"
+        short_addr = f"{address[:8]}...{address[-4:]}" if address else "N/A"
+
+        message = f"""
+💰 *TREASURY BALANCE*
+
+*Wallet:* `{short_addr}`
+*SOL:* `{sol_balance:.4f}` SOL
+*USD:* `${usd_value:,.2f}`
+
+*Mode:* {mode}
+"""
+        if sol_balance < 0.05:
+            message += "\n🚨 *WARNING: Low balance!*"
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🔄 Refresh", callback_data="refresh_balance"),
+                InlineKeyboardButton("📊 Report", callback_data="refresh_report"),
+            ]
+        ])
+
+        await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+
+    except Exception as e:
+        await query.edit_message_text(f"❌ Error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+async def _show_positions_inline(query):
+    """Show positions inline."""
+    try:
+        engine = await _get_treasury_engine()
+        await engine.update_positions()
+        open_positions = engine.get_open_positions()
+
+        if not open_positions:
+            await query.edit_message_text(
+                "📋 *OPEN POSITIONS*\n\n_No open positions._",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        lines = ["📋 *OPEN POSITIONS*", ""]
+        keyboard_rows = []
+        total_pnl = 0
+
+        for pos in open_positions:
+            pnl_pct = pos.unrealized_pnl_pct
+            pnl_usd = pos.unrealized_pnl
+            total_pnl += pnl_usd
+
+            pnl_emoji = "🟢" if pnl_pct >= 0 else "🔴"
+            lines.append(f"*{pos.token_symbol}* {pnl_emoji}")
+            lines.append(f"   P&L: {pnl_pct:+.1f}% (${pnl_usd:+.2f})")
+            lines.append(f"   TP: ${pos.take_profit_price:.8f}")
+            lines.append(f"   SL: ${pos.stop_loss_price:.8f}")
+            lines.append("")
+
+            keyboard_rows.append([
+                InlineKeyboardButton(f"🔴 SELL {pos.token_symbol}", callback_data=f"sell_pos:{pos.id}")
+            ])
+
+        total_emoji = "🟢" if total_pnl >= 0 else "🔴"
+        lines.append(f"*Total P&L:* {total_emoji} ${total_pnl:+.2f}")
+
+        keyboard_rows.append([
+            InlineKeyboardButton("🔄 Refresh", callback_data="show_positions_detail"),
+        ])
+
+        await query.edit_message_text(
+            "\n".join(lines),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard_rows)
+        )
+
+    except Exception as e:
+        await query.edit_message_text(f"❌ Error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+async def _toggle_live_mode(query):
+    """Toggle between live and paper trading. ADMIN ONLY."""
+    try:
+        engine = await _get_treasury_engine()
+        engine.dry_run = not engine.dry_run
+        mode = "🟢 LIVE TRADING" if not engine.dry_run else "🟡 PAPER TRADING"
+
+        await query.edit_message_text(
+            f"✅ *Mode Changed*\n\nNow in: *{mode}*",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    except Exception as e:
+        await query.edit_message_text(f"❌ Error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
 async def _handle_trending_inline(query):
@@ -1395,6 +2461,13 @@ def main():
     app.add_handler(CommandHandler("reload", reload))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
+
+    # Treasury Trading Commands
+    app.add_handler(CommandHandler("report", report))
+    app.add_handler(CommandHandler("balance", balance))
+    app.add_handler(CommandHandler("positions", positions))
+    app.add_handler(CommandHandler("settings", settings))
+
     app.add_handler(CallbackQueryHandler(button_callback))
 
     # Welcome new members

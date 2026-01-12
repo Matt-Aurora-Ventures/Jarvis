@@ -6,6 +6,7 @@ Run this script to get new OAuth 2.0 tokens.
 import os
 import sys
 import webbrowser
+import winreg
 import hashlib
 import base64
 import secrets
@@ -104,6 +105,35 @@ def exchange_code(code: str) -> dict:
         return None
 
 
+def _find_firefox_path() -> str:
+    """Return a Firefox executable path if available (avoid Nightly)."""
+    env_path = os.environ.get("FIREFOX_PATH")
+    if env_path and Path(env_path).exists():
+        return env_path
+
+    candidates = [
+        r"C:\Program Files\Mozilla Firefox\firefox.exe",
+        r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
+        r"C:\Program Files\Firefox Developer Edition\firefox.exe",
+    ]
+    for path in candidates:
+        if Path(path).exists():
+            return path
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"Software\Microsoft\Windows\CurrentVersion\App Paths\firefox.exe"
+        ) as key:
+            path = winreg.QueryValue(key, None)
+            if path and Path(path).exists():
+                return path
+    except OSError:
+        pass
+
+    return ""
+
+
 def main():
     print("=" * 50)
     print("X OAuth 2.0 Authentication for @Jarvis_lifeos")
@@ -133,8 +163,15 @@ def main():
     print(auth_url)
     print()
 
-    # Open browser
-    webbrowser.open(auth_url)
+    # Open Firefox explicitly (avoid Nightly)
+    firefox_path = _find_firefox_path()
+    if firefox_path:
+        browser = webbrowser.BackgroundBrowser(firefox_path)
+        browser.open(auth_url, new=1)
+        print(f"Using Firefox at: {firefox_path}")
+    else:
+        print("Firefox not found. Set FIREFOX_PATH to firefox.exe if needed.")
+        webbrowser.open(auth_url, new=1)
 
     # Start local server to receive callback
     print("Waiting for callback on http://localhost:8888/callback ...")
