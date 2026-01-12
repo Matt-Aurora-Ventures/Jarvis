@@ -24,8 +24,16 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 class GrokImagine:
     """Automates Grok Imagine via Playwright browser automation."""
 
-    def __init__(self, headless: bool = False):
+    def __init__(self, headless: bool = True, timeout: int = 30000):
+        """
+        Initialize Grok Imagine automation.
+
+        Args:
+            headless: Run browser in headless mode (default True for servers)
+            timeout: Default timeout in milliseconds for operations
+        """
         self.headless = headless
+        self.timeout = timeout
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
