@@ -1,15 +1,18 @@
 """
-Alert System - Price alerts, notifications, and scheduled messages.
+Alert System - Price alerts, notifications, and webhooks.
 """
 
 import asyncio
 import logging
-import json
-from typing import Dict, List, Optional, Callable, Any
-from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
+from typing import Dict, List, Optional, Any, Callable, Tuple
+from dataclasses import dataclass, field
 from enum import Enum
+import json
+import sqlite3
+from pathlib import Path
+from contextlib import contextmanager
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +21,22 @@ class AlertType(Enum):
     """Types of alerts."""
     PRICE_ABOVE = "price_above"
     PRICE_BELOW = "price_below"
-    PRICE_CHANGE_PERCENT = "price_change_percent"
+    PRICE_CHANGE_PCT = "price_change_pct"
     VOLUME_SPIKE = "volume_spike"
+    RSI_OVERBOUGHT = "rsi_overbought"
+    RSI_OVERSOLD = "rsi_oversold"
+    MA_CROSS = "ma_cross"
+    WHALE_MOVEMENT = "whale_movement"
+    LIQUIDITY_CHANGE = "liquidity_change"
     CUSTOM = "custom"
+
+
+class AlertPriority(Enum):
+    """Alert priority levels."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 
 class AlertStatus(Enum):
@@ -29,157 +45,319 @@ class AlertStatus(Enum):
     TRIGGERED = "triggered"
     EXPIRED = "expired"
     CANCELLED = "cancelled"
+    SNOOZED = "snoozed"
+
+
+class NotificationChannel(Enum):
+    """Notification channels."""
+    CONSOLE = "console"
+    WEBHOOK = "webhook"
+    TELEGRAM = "telegram"
+    DISCORD = "discord"
+    EMAIL = "email"
+    PUSH = "push"
+
+
+@dataclass
+class AlertCondition:
+    """Alert trigger condition."""
+    alert_type: AlertType
+    symbol: str
+    threshold: float
+    comparison: str = "gte"
+    secondary_threshold: Optional[float] = None
+    time_window_minutes: int = 0
 
 
 @dataclass
 class Alert:
-    """An alert definition."""
+    """An alert configuration."""
     id: str
-    user_id: str
-    alert_type: AlertType
-    token_symbol: str
-    token_mint: str
-    condition_value: float
-    message: str = ""
-    status: AlertStatus = AlertStatus.ACTIVE
-    created_at: str = ""
-    triggered_at: Optional[str] = None
-    expires_at: Optional[str] = None
-    repeat: bool = False
+    name: str
+    condition: AlertCondition
+    priority: AlertPriority
+    channels: List[NotificationChannel]
+    status: AlertStatus
+    created_at: str
+    expires_at: Optional[str]
     cooldown_minutes: int = 60
-    last_trigger: Optional[str] = None
+    max_triggers: int = 0
+    trigger_count: int = 0
+    last_triggered: Optional[str] = None
+    message_template: str = ""
+    webhook_url: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AlertTrigger:
+    """A triggered alert event."""
+    alert_id: str
+    alert_name: str
+    symbol: str
+    alert_type: AlertType
+    trigger_value: float
+    threshold: float
+    message: str
+    priority: AlertPriority
+    timestamp: str
+    channels_notified: List[str]
+    notification_status: Dict[str, bool]
+
+
+class AlertDB:
+    """SQLite storage for alerts."""
+
+    def __init__(self, db_path: Path):
+        self.db_path = db_path
+        self._init_db()
+
+    def _init_db(self):
+        """Initialize database schema."""
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS alerts (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    alert_type TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    threshold REAL,
+                    comparison TEXT,
+                    secondary_threshold REAL,
+                    time_window_minutes INTEGER,
+                    priority TEXT,
+                    channels_json TEXT,
+                    status TEXT,
+                    created_at TEXT,
+                    expires_at TEXT,
+                    cooldown_minutes INTEGER,
+                    max_triggers INTEGER,
+                    trigger_count INTEGER DEFAULT 0,
+                    last_triggered TEXT,
+                    message_template TEXT,
+                    webhook_url TEXT,
+                    metadata_json TEXT
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS alert_triggers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    alert_id TEXT NOT NULL,
+                    alert_name TEXT,
+                    symbol TEXT,
+                    alert_type TEXT,
+                    trigger_value REAL,
+                    threshold REAL,
+                    message TEXT,
+                    priority TEXT,
+                    timestamp TEXT,
+                    channels_notified_json TEXT,
+                    notification_status_json TEXT
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS webhook_configs (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    url TEXT NOT NULL,
+                    channel TEXT,
+                    headers_json TEXT,
+                    active INTEGER DEFAULT 1,
+                    created_at TEXT
+                )
+            """)
+
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_symbol ON alerts(symbol)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status)")
+
+            conn.commit()
+
+    @contextmanager
+    def _get_connection(self):
+        """Get database connection."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+        finally:
+            conn.close()
 
 
 class AlertManager:
     """
-    Manage price and custom alerts.
+    Manage alerts and notifications.
 
     Usage:
         manager = AlertManager()
 
-        # Create alert
-        alert_id = manager.create_alert(
-            user_id="123",
-            alert_type=AlertType.PRICE_ABOVE,
-            token_symbol="$SOL",
-            token_mint="So11...",
-            condition_value=200.0,
-            message="SOL hit $200!"
+        # Create price alert
+        alert = await manager.create_alert(
+            name="SOL Above $100",
+            condition=AlertCondition(
+                alert_type=AlertType.PRICE_ABOVE,
+                symbol="SOL",
+                threshold=100.0
+            ),
+            channels=[NotificationChannel.CONSOLE]
         )
 
-        # Check alerts against current prices
-        triggered = await manager.check_alerts({"So11...": 205.0})
+        # Check alerts
+        await manager.check_alerts({"SOL": 105.0})
     """
 
-    def __init__(self, storage_path: Optional[Path] = None):
-        self.storage_path = storage_path or Path(__file__).parent.parent / "data" / "alerts.json"
-        self.alerts: Dict[str, Alert] = {}
-        self._callbacks: List[Callable] = []
-        self._load()
+    def __init__(self, db_path: Optional[Path] = None):
+        db_path = db_path or Path(__file__).parent.parent / "data" / "alerts.db"
+        self.db = AlertDB(db_path)
+        self._alerts: Dict[str, Alert] = {}
+        self._webhooks: Dict[str, Dict] = {}
+        self._price_history: Dict[str, List[Tuple[float, str]]] = {}
+        self._custom_handlers: Dict[str, Callable] = {}
+        self._notification_handlers: Dict[NotificationChannel, Callable] = {}
+        self._load_alerts()
+        self._setup_default_handlers()
 
-    def _load(self):
-        """Load alerts from storage."""
-        if self.storage_path.exists():
-            try:
-                with open(self.storage_path) as f:
-                    data = json.load(f)
-                    for alert_data in data.get("alerts", []):
-                        alert_data["alert_type"] = AlertType(alert_data["alert_type"])
-                        alert_data["status"] = AlertStatus(alert_data["status"])
-                        alert = Alert(**alert_data)
-                        self.alerts[alert.id] = alert
-                logger.info(f"Loaded {len(self.alerts)} alerts")
-            except Exception as e:
-                logger.error(f"Failed to load alerts: {e}")
+    def _load_alerts(self):
+        """Load active alerts from database."""
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM alerts WHERE status = 'active'")
 
-    def _save(self):
-        """Save alerts to storage."""
-        try:
-            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-            data = {
-                "alerts": [
-                    {**asdict(a), "alert_type": a.alert_type.value, "status": a.status.value}
-                    for a in self.alerts.values()
-                ],
-                "last_updated": datetime.now(timezone.utc).isoformat()
-            }
-            with open(self.storage_path, "w") as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save alerts: {e}")
+            for row in cursor.fetchall():
+                condition = AlertCondition(
+                    alert_type=AlertType(row['alert_type']),
+                    symbol=row['symbol'],
+                    threshold=row['threshold'],
+                    comparison=row['comparison'] or 'gte',
+                    secondary_threshold=row['secondary_threshold'],
+                    time_window_minutes=row['time_window_minutes'] or 0
+                )
 
-    def on_alert_triggered(self, callback: Callable):
-        """Register callback for when alerts are triggered."""
-        self._callbacks.append(callback)
+                channels = json.loads(row['channels_json']) if row['channels_json'] else []
 
-    def create_alert(
+                alert = Alert(
+                    id=row['id'],
+                    name=row['name'],
+                    condition=condition,
+                    priority=AlertPriority(row['priority']),
+                    channels=[NotificationChannel(c) for c in channels],
+                    status=AlertStatus(row['status']),
+                    created_at=row['created_at'],
+                    expires_at=row['expires_at'],
+                    cooldown_minutes=row['cooldown_minutes'] or 60,
+                    max_triggers=row['max_triggers'] or 0,
+                    trigger_count=row['trigger_count'] or 0,
+                    last_triggered=row['last_triggered'],
+                    message_template=row['message_template'] or "",
+                    webhook_url=row['webhook_url'],
+                    metadata=json.loads(row['metadata_json']) if row['metadata_json'] else {}
+                )
+
+                self._alerts[alert.id] = alert
+
+        logger.info(f"Loaded {len(self._alerts)} active alerts")
+
+    def _setup_default_handlers(self):
+        """Setup default notification handlers."""
+        self._notification_handlers[NotificationChannel.CONSOLE] = self._notify_console
+
+    async def _notify_console(self, trigger: AlertTrigger):
+        """Console notification handler."""
+        priority_emoji = {
+            AlertPriority.LOW: "i",
+            AlertPriority.MEDIUM: "!",
+            AlertPriority.HIGH: "!!",
+            AlertPriority.CRITICAL: "!!!"
+        }
+        emoji = priority_emoji.get(trigger.priority, "")
+        print(f"[{emoji}] ALERT: {trigger.message}")
+
+    async def create_alert(
         self,
-        user_id: str,
-        alert_type: AlertType,
-        token_symbol: str,
-        token_mint: str,
-        condition_value: float,
-        message: str = "",
-        expires_hours: Optional[int] = None,
-        repeat: bool = False,
-        cooldown_minutes: int = 60
-    ) -> str:
-        """Create a new alert. Returns alert ID."""
-        import uuid
-
+        name: str,
+        condition: AlertCondition,
+        channels: List[NotificationChannel] = None,
+        priority: AlertPriority = AlertPriority.MEDIUM,
+        expires_at: Optional[datetime] = None,
+        cooldown_minutes: int = 60,
+        max_triggers: int = 0,
+        message_template: str = "",
+        webhook_url: str = "",
+        metadata: Dict[str, Any] = None
+    ) -> Alert:
+        """Create a new alert."""
         alert_id = str(uuid.uuid4())[:8]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).isoformat()
 
-        expires_at = None
-        if expires_hours:
-            expires_at = (now + timedelta(hours=expires_hours)).isoformat()
+        if channels is None:
+            channels = [NotificationChannel.CONSOLE]
+
+        if not message_template:
+            message_template = f"{condition.symbol} {condition.alert_type.value}: {{value}} (threshold: {{threshold}})"
 
         alert = Alert(
             id=alert_id,
-            user_id=user_id,
-            alert_type=alert_type,
-            token_symbol=token_symbol,
-            token_mint=token_mint,
-            condition_value=condition_value,
-            message=message or f"{token_symbol} alert triggered!",
-            created_at=now.isoformat(),
-            expires_at=expires_at,
-            repeat=repeat,
-            cooldown_minutes=cooldown_minutes
+            name=name,
+            condition=condition,
+            priority=priority,
+            channels=channels,
+            status=AlertStatus.ACTIVE,
+            created_at=now,
+            expires_at=expires_at.isoformat() if expires_at else None,
+            cooldown_minutes=cooldown_minutes,
+            max_triggers=max_triggers,
+            message_template=message_template,
+            webhook_url=webhook_url,
+            metadata=metadata or {}
         )
 
-        self.alerts[alert_id] = alert
-        self._save()
+        self._save_alert(alert)
+        self._alerts[alert_id] = alert
 
-        logger.info(f"Created alert {alert_id}: {alert_type.value} for {token_symbol}")
-        return alert_id
+        logger.info(f"Created alert {alert_id}: {name}")
+        return alert
 
-    def cancel_alert(self, alert_id: str) -> bool:
-        """Cancel an alert."""
-        if alert_id not in self.alerts:
-            return False
+    def _save_alert(self, alert: Alert):
+        """Save alert to database."""
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO alerts
+                (id, name, alert_type, symbol, threshold, comparison,
+                 secondary_threshold, time_window_minutes, priority, channels_json,
+                 status, created_at, expires_at, cooldown_minutes, max_triggers,
+                 trigger_count, last_triggered, message_template, webhook_url,
+                 metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                alert.id, alert.name, alert.condition.alert_type.value,
+                alert.condition.symbol, alert.condition.threshold,
+                alert.condition.comparison, alert.condition.secondary_threshold,
+                alert.condition.time_window_minutes, alert.priority.value,
+                json.dumps([c.value for c in alert.channels]),
+                alert.status.value, alert.created_at, alert.expires_at,
+                alert.cooldown_minutes, alert.max_triggers, alert.trigger_count,
+                alert.last_triggered, alert.message_template, alert.webhook_url,
+                json.dumps(alert.metadata)
+            ))
+            conn.commit()
 
-        self.alerts[alert_id].status = AlertStatus.CANCELLED
-        self._save()
-        return True
-
-    def get_user_alerts(self, user_id: str) -> List[Alert]:
-        """Get all alerts for a user."""
-        return [a for a in self.alerts.values() if a.user_id == user_id]
-
-    def get_active_alerts(self) -> List[Alert]:
-        """Get all active alerts."""
-        return [a for a in self.alerts.values() if a.status == AlertStatus.ACTIVE]
-
-    async def check_alerts(self, current_prices: Dict[str, float]) -> List[Alert]:
-        """
-        Check all alerts against current prices.
-        Returns list of triggered alerts.
-        """
-        triggered = []
+    async def check_alerts(
+        self,
+        prices: Dict[str, float],
+        volumes: Dict[str, float] = None,
+        indicators: Dict[str, Dict] = None
+    ) -> List[AlertTrigger]:
+        """Check all active alerts against current data."""
         now = datetime.now(timezone.utc)
+        triggered = []
 
-        for alert in list(self.alerts.values()):
+        for alert_id, alert in list(self._alerts.items()):
             if alert.status != AlertStatus.ACTIVE:
                 continue
 
@@ -188,371 +366,208 @@ class AlertManager:
                 expires = datetime.fromisoformat(alert.expires_at.replace('Z', '+00:00'))
                 if now > expires:
                     alert.status = AlertStatus.EXPIRED
+                    self._save_alert(alert)
                     continue
 
             # Check cooldown
-            if alert.last_trigger:
-                last = datetime.fromisoformat(alert.last_trigger.replace('Z', '+00:00'))
+            if alert.last_triggered:
+                last = datetime.fromisoformat(alert.last_triggered.replace('Z', '+00:00'))
                 if (now - last).total_seconds() < alert.cooldown_minutes * 60:
                     continue
 
-            # Get current price
-            price = current_prices.get(alert.token_mint)
-            if price is None:
+            # Check max triggers
+            if alert.max_triggers > 0 and alert.trigger_count >= alert.max_triggers:
+                alert.status = AlertStatus.TRIGGERED
+                self._save_alert(alert)
                 continue
 
             # Check condition
+            symbol = alert.condition.symbol
+            current_value = None
             should_trigger = False
 
-            if alert.alert_type == AlertType.PRICE_ABOVE:
-                should_trigger = price >= alert.condition_value
+            if alert.condition.alert_type in [AlertType.PRICE_ABOVE, AlertType.PRICE_BELOW]:
+                current_value = prices.get(symbol)
+                if current_value:
+                    should_trigger = self._check_threshold(
+                        current_value,
+                        alert.condition.threshold,
+                        alert.condition.alert_type
+                    )
 
-            elif alert.alert_type == AlertType.PRICE_BELOW:
-                should_trigger = price <= alert.condition_value
+            elif alert.condition.alert_type == AlertType.RSI_OVERBOUGHT:
+                if indicators and symbol in indicators:
+                    rsi = indicators[symbol].get('rsi')
+                    if rsi is not None:
+                        current_value = rsi
+                        should_trigger = rsi >= alert.condition.threshold
 
-            elif alert.alert_type == AlertType.PRICE_CHANGE_PERCENT:
-                # Would need baseline price - simplified here
-                pass
+            elif alert.condition.alert_type == AlertType.RSI_OVERSOLD:
+                if indicators and symbol in indicators:
+                    rsi = indicators[symbol].get('rsi')
+                    if rsi is not None:
+                        current_value = rsi
+                        should_trigger = rsi <= alert.condition.threshold
 
-            if should_trigger:
-                alert.triggered_at = now.isoformat()
-                alert.last_trigger = now.isoformat()
+            if should_trigger and current_value is not None:
+                trigger = await self._trigger_alert(alert, current_value)
+                if trigger:
+                    triggered.append(trigger)
 
-                if not alert.repeat:
-                    alert.status = AlertStatus.TRIGGERED
-
-                triggered.append(alert)
-
-                # Call callbacks
-                for callback in self._callbacks:
-                    try:
-                        if asyncio.iscoroutinefunction(callback):
-                            await callback(alert, price)
-                        else:
-                            callback(alert, price)
-                    except Exception as e:
-                        logger.error(f"Alert callback error: {e}")
-
-        self._save()
         return triggered
 
+    def _check_threshold(
+        self,
+        value: float,
+        threshold: float,
+        alert_type: AlertType
+    ) -> bool:
+        """Check if value meets threshold condition."""
+        if alert_type == AlertType.PRICE_ABOVE:
+            return value >= threshold
+        elif alert_type == AlertType.PRICE_BELOW:
+            return value <= threshold
+        return False
 
-# === DCA SCHEDULER ===
-
-@dataclass
-class DCASchedule:
-    """A DCA schedule definition."""
-    id: str
-    user_id: str
-    token_mint: str
-    token_symbol: str
-    amount_usd: float
-    frequency: str  # daily, weekly, monthly
-    day_of_week: Optional[int] = None  # 0=Monday, 6=Sunday (for weekly)
-    day_of_month: Optional[int] = None  # 1-28 (for monthly)
-    hour: int = 12  # Hour to execute (UTC)
-    enabled: bool = True
-    created_at: str = ""
-    last_executed: Optional[str] = None
-    next_execution: Optional[str] = None
-    total_invested: float = 0.0
-    total_tokens: float = 0.0
-
-
-class DCAScheduler:
-    """
-    Dollar Cost Averaging scheduler.
-
-    Usage:
-        scheduler = DCAScheduler()
-
-        # Create weekly DCA for SOL
-        schedule_id = scheduler.create_schedule(
-            user_id="123",
-            token_mint="So11...",
-            token_symbol="$SOL",
-            amount_usd=50.0,
-            frequency="weekly",
-            day_of_week=0  # Monday
-        )
-
-        # Check and execute due schedules
-        executed = await scheduler.execute_due_schedules(execute_fn)
-    """
-
-    def __init__(self, storage_path: Optional[Path] = None):
-        self.storage_path = storage_path or Path(__file__).parent.parent / "data" / "dca_schedules.json"
-        self.schedules: Dict[str, DCASchedule] = {}
-        self._load()
-
-    def _load(self):
-        """Load schedules from storage."""
-        if self.storage_path.exists():
-            try:
-                with open(self.storage_path) as f:
-                    data = json.load(f)
-                    for sched_data in data.get("schedules", []):
-                        sched = DCASchedule(**sched_data)
-                        self.schedules[sched.id] = sched
-                logger.info(f"Loaded {len(self.schedules)} DCA schedules")
-            except Exception as e:
-                logger.error(f"Failed to load schedules: {e}")
-
-    def _save(self):
-        """Save schedules to storage."""
-        try:
-            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-            data = {
-                "schedules": [asdict(s) for s in self.schedules.values()],
-                "last_updated": datetime.now(timezone.utc).isoformat()
-            }
-            with open(self.storage_path, "w") as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save schedules: {e}")
-
-    def _calculate_next_execution(self, schedule: DCASchedule) -> str:
-        """Calculate next execution time."""
+    async def _trigger_alert(self, alert: Alert, trigger_value: float) -> Optional[AlertTrigger]:
+        """Trigger an alert and send notifications."""
         now = datetime.now(timezone.utc)
 
-        if schedule.frequency == "daily":
-            next_time = now.replace(hour=schedule.hour, minute=0, second=0, microsecond=0)
-            if next_time <= now:
-                next_time += timedelta(days=1)
+        message = alert.message_template.format(
+            symbol=alert.condition.symbol,
+            value=trigger_value,
+            threshold=alert.condition.threshold,
+            alert_type=alert.condition.alert_type.value,
+            name=alert.name
+        )
 
-        elif schedule.frequency == "weekly":
-            days_ahead = schedule.day_of_week - now.weekday()
-            if days_ahead <= 0:
-                days_ahead += 7
-            next_time = now + timedelta(days=days_ahead)
-            next_time = next_time.replace(hour=schedule.hour, minute=0, second=0, microsecond=0)
+        trigger = AlertTrigger(
+            alert_id=alert.id,
+            alert_name=alert.name,
+            symbol=alert.condition.symbol,
+            alert_type=alert.condition.alert_type,
+            trigger_value=trigger_value,
+            threshold=alert.condition.threshold,
+            message=message,
+            priority=alert.priority,
+            timestamp=now.isoformat(),
+            channels_notified=[c.value for c in alert.channels],
+            notification_status={}
+        )
 
-        elif schedule.frequency == "monthly":
-            next_time = now.replace(
-                day=min(schedule.day_of_month or 1, 28),
-                hour=schedule.hour, minute=0, second=0, microsecond=0
-            )
-            if next_time <= now:
-                # Move to next month
-                if now.month == 12:
-                    next_time = next_time.replace(year=now.year + 1, month=1)
+        # Send notifications
+        for channel in alert.channels:
+            try:
+                if channel in self._notification_handlers:
+                    await self._notification_handlers[channel](trigger)
+                    trigger.notification_status[channel.value] = True
                 else:
-                    next_time = next_time.replace(month=now.month + 1)
-
-        else:
-            next_time = now + timedelta(days=1)
-
-        return next_time.isoformat()
-
-    def create_schedule(
-        self,
-        user_id: str,
-        token_mint: str,
-        token_symbol: str,
-        amount_usd: float,
-        frequency: str,
-        day_of_week: Optional[int] = None,
-        day_of_month: Optional[int] = None,
-        hour: int = 12
-    ) -> str:
-        """Create a DCA schedule. Returns schedule ID."""
-        import uuid
-
-        schedule_id = str(uuid.uuid4())[:8]
-
-        schedule = DCASchedule(
-            id=schedule_id,
-            user_id=user_id,
-            token_mint=token_mint,
-            token_symbol=token_symbol,
-            amount_usd=amount_usd,
-            frequency=frequency,
-            day_of_week=day_of_week,
-            day_of_month=day_of_month,
-            hour=hour,
-            created_at=datetime.now(timezone.utc).isoformat()
-        )
-
-        schedule.next_execution = self._calculate_next_execution(schedule)
-
-        self.schedules[schedule_id] = schedule
-        self._save()
-
-        logger.info(f"Created DCA schedule {schedule_id}: {amount_usd} USD {frequency} for {token_symbol}")
-        return schedule_id
-
-    def get_due_schedules(self) -> List[DCASchedule]:
-        """Get schedules that are due for execution."""
-        now = datetime.now(timezone.utc)
-        due = []
-
-        for schedule in self.schedules.values():
-            if not schedule.enabled:
-                continue
-
-            if schedule.next_execution:
-                next_exec = datetime.fromisoformat(schedule.next_execution.replace('Z', '+00:00'))
-                if next_exec <= now:
-                    due.append(schedule)
-
-        return due
-
-    async def execute_due_schedules(
-        self,
-        execute_fn: Callable[[DCASchedule], Any]
-    ) -> List[DCASchedule]:
-        """
-        Execute all due DCA schedules.
-
-        Args:
-            execute_fn: Async function that executes the buy. Should return tokens received.
-        """
-        due = self.get_due_schedules()
-        executed = []
-
-        for schedule in due:
-            try:
-                logger.info(f"Executing DCA {schedule.id}: {schedule.amount_usd} USD for {schedule.token_symbol}")
-
-                tokens_received = await execute_fn(schedule)
-
-                schedule.last_executed = datetime.now(timezone.utc).isoformat()
-                schedule.total_invested += schedule.amount_usd
-                schedule.total_tokens += tokens_received or 0
-                schedule.next_execution = self._calculate_next_execution(schedule)
-
-                executed.append(schedule)
-
+                    trigger.notification_status[channel.value] = False
             except Exception as e:
-                logger.error(f"DCA execution failed for {schedule.id}: {e}")
+                logger.error(f"Failed to send {channel.value} notification: {e}")
+                trigger.notification_status[channel.value] = False
 
-        self._save()
-        return executed
+        # Update alert state
+        alert.trigger_count += 1
+        alert.last_triggered = now.isoformat()
+        self._save_alert(alert)
 
-    def toggle_schedule(self, schedule_id: str, enabled: bool) -> bool:
-        """Enable or disable a schedule."""
-        if schedule_id not in self.schedules:
+        # Save trigger
+        self._save_trigger(trigger)
+
+        logger.info(f"Alert triggered: {alert.name} - {message}")
+        return trigger
+
+    def _save_trigger(self, trigger: AlertTrigger):
+        """Save alert trigger to database."""
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO alert_triggers
+                (alert_id, alert_name, symbol, alert_type, trigger_value,
+                 threshold, message, priority, timestamp, channels_notified_json,
+                 notification_status_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                trigger.alert_id, trigger.alert_name, trigger.symbol,
+                trigger.alert_type.value, trigger.trigger_value,
+                trigger.threshold, trigger.message, trigger.priority.value,
+                trigger.timestamp, json.dumps(trigger.channels_notified),
+                json.dumps(trigger.notification_status)
+            ))
+            conn.commit()
+
+    def add_webhook(self, channel: str, url: str, name: str = ""):
+        """Add webhook configuration."""
+        webhook_id = str(uuid.uuid4())[:8]
+
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO webhook_configs (id, name, url, channel, active, created_at)
+                VALUES (?, ?, ?, ?, 1, ?)
+            """, (
+                webhook_id, name or channel, url, channel,
+                datetime.now(timezone.utc).isoformat()
+            ))
+            conn.commit()
+
+        self._webhooks[channel] = {'name': name, 'url': url, 'channel': channel}
+        logger.info(f"Added webhook for {channel}")
+
+    def set_notification_handler(self, channel: NotificationChannel, handler: Callable):
+        """Set custom notification handler for a channel."""
+        self._notification_handlers[channel] = handler
+
+    async def cancel_alert(self, alert_id: str) -> bool:
+        """Cancel an alert."""
+        alert = self._alerts.get(alert_id)
+        if not alert:
             return False
 
-        self.schedules[schedule_id].enabled = enabled
-        self._save()
+        alert.status = AlertStatus.CANCELLED
+        self._save_alert(alert)
+        del self._alerts[alert_id]
+
+        logger.info(f"Cancelled alert {alert_id}")
         return True
 
-    def delete_schedule(self, schedule_id: str) -> bool:
-        """Delete a schedule."""
-        if schedule_id not in self.schedules:
-            return False
+    def get_alert(self, alert_id: str) -> Optional[Alert]:
+        """Get alert by ID."""
+        return self._alerts.get(alert_id)
 
-        del self.schedules[schedule_id]
-        self._save()
-        return True
+    def get_active_alerts(self, symbol: Optional[str] = None) -> List[Alert]:
+        """Get all active alerts."""
+        alerts = [a for a in self._alerts.values() if a.status == AlertStatus.ACTIVE]
+        if symbol:
+            alerts = [a for a in alerts if a.condition.symbol == symbol.upper()]
+        return alerts
 
+    def get_trigger_history(self, alert_id: Optional[str] = None, limit: int = 100) -> List[Dict]:
+        """Get alert trigger history."""
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
 
-# === NOTIFICATION PREFERENCES ===
+            if alert_id:
+                cursor.execute("""
+                    SELECT * FROM alert_triggers WHERE alert_id = ?
+                    ORDER BY timestamp DESC LIMIT ?
+                """, (alert_id, limit))
+            else:
+                cursor.execute("""
+                    SELECT * FROM alert_triggers ORDER BY timestamp DESC LIMIT ?
+                """, (limit,))
 
-@dataclass
-class NotificationPrefs:
-    """User notification preferences."""
-    user_id: str
-    telegram_enabled: bool = True
-    twitter_enabled: bool = False
-    email_enabled: bool = False
-    email_address: str = ""
-    alert_types: List[str] = field(default_factory=lambda: ["price", "trade", "sentiment"])
-    quiet_hours_start: Optional[int] = None  # UTC hour
-    quiet_hours_end: Optional[int] = None
-    min_alert_interval_minutes: int = 5
-
-
-class NotificationManager:
-    """Manage notification preferences and delivery."""
-
-    def __init__(self, storage_path: Optional[Path] = None):
-        self.storage_path = storage_path or Path(__file__).parent.parent / "data" / "notification_prefs.json"
-        self.prefs: Dict[str, NotificationPrefs] = {}
-        self._load()
-
-    def _load(self):
-        """Load preferences from storage."""
-        if self.storage_path.exists():
-            try:
-                with open(self.storage_path) as f:
-                    data = json.load(f)
-                    for prefs_data in data.get("preferences", []):
-                        prefs = NotificationPrefs(**prefs_data)
-                        self.prefs[prefs.user_id] = prefs
-            except Exception as e:
-                logger.error(f"Failed to load notification prefs: {e}")
-
-    def _save(self):
-        """Save preferences to storage."""
-        try:
-            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-            data = {
-                "preferences": [asdict(p) for p in self.prefs.values()],
-                "last_updated": datetime.now(timezone.utc).isoformat()
-            }
-            with open(self.storage_path, "w") as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save notification prefs: {e}")
-
-    def get_prefs(self, user_id: str) -> NotificationPrefs:
-        """Get or create preferences for a user."""
-        if user_id not in self.prefs:
-            self.prefs[user_id] = NotificationPrefs(user_id=user_id)
-            self._save()
-        return self.prefs[user_id]
-
-    def update_prefs(self, user_id: str, **kwargs) -> NotificationPrefs:
-        """Update preferences for a user."""
-        prefs = self.get_prefs(user_id)
-        for key, value in kwargs.items():
-            if hasattr(prefs, key):
-                setattr(prefs, key, value)
-        self._save()
-        return prefs
-
-    def should_notify(self, user_id: str, alert_type: str) -> bool:
-        """Check if user should receive notification."""
-        prefs = self.get_prefs(user_id)
-
-        # Check alert type
-        if alert_type not in prefs.alert_types:
-            return False
-
-        # Check quiet hours
-        if prefs.quiet_hours_start is not None and prefs.quiet_hours_end is not None:
-            now_hour = datetime.now(timezone.utc).hour
-            if prefs.quiet_hours_start <= now_hour < prefs.quiet_hours_end:
-                return False
-
-        return True
+            return [dict(row) for row in cursor.fetchall()]
 
 
-# === SINGLETON INSTANCES ===
-
-_alert_manager: Optional[AlertManager] = None
-_dca_scheduler: Optional[DCAScheduler] = None
-_notification_manager: Optional[NotificationManager] = None
+# Singleton
+_manager: Optional[AlertManager] = None
 
 
 def get_alert_manager() -> AlertManager:
-    global _alert_manager
-    if _alert_manager is None:
-        _alert_manager = AlertManager()
-    return _alert_manager
-
-
-def get_dca_scheduler() -> DCAScheduler:
-    global _dca_scheduler
-    if _dca_scheduler is None:
-        _dca_scheduler = DCAScheduler()
-    return _dca_scheduler
-
-
-def get_notification_manager() -> NotificationManager:
-    global _notification_manager
-    if _notification_manager is None:
-        _notification_manager = NotificationManager()
-    return _notification_manager
+    """Get singleton alert manager."""
+    global _manager
+    if _manager is None:
+        _manager = AlertManager()
+    return _manager
