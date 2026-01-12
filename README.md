@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-4.0.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.1.2-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1108%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
@@ -1877,6 +1877,20 @@ This README is the capability index; the authoritative release log lives in `CHA
 ## 🗺️ Roadmap
 
 ### Completed ✓
+
+**v4.1.2 - Cross-Platform & UI/UX Improvements (January 2026)**
+- [x] Full Windows/Linux cross-platform support for computer control module
+- [x] Fixed WinError 2 spam from macOS-specific commands (osascript, pbpaste, etc.)
+- [x] Cross-platform notifications using native APIs (Windows toast, macOS notification center)
+- [x] Cross-platform dialogs using tkinter fallback on Windows/Linux
+- [x] Enhanced health check API with voice system status and database checks
+- [x] Standardized API error responses with error codes (VOICE_xxx, TRADE_xxx, etc.)
+- [x] Global error handlers for Flask and FastAPI endpoints
+- [x] Voice dependencies installed: faster-whisper, openwakeword
+- [x] Frontend: ThemeToggle added to top navigation
+- [x] Frontend: Keyboard shortcuts modal with full shortcut documentation
+- [x] Frontend: Enhanced VoiceOrb with real-time audio visualization and animated rings
+- [x] Frontend: Extended skeleton loading components (Position, Chart, Stats, Table, Message)
 
 **v4.1.1 - Daemon Stability & Module Fixes (January 2026)**
 - [x] Fixed `core/memory` module - Added `get_recent_entries()` and `summarize_entries()` functions
