@@ -133,11 +133,12 @@ class JarvisBuyBot:
         except Exception as e:
             raise RuntimeError(f"Failed to connect bot: {e}")
 
-        # Start Application for callback handling FIRST (before any messages)
+        # Start Application (but don't poll to avoid conflicts with other bots)
         await self.app.initialize()
         await self.app.start()
-        await self.app.updater.start_polling(allowed_updates=["callback_query"])
-        logger.info("Callback handler ready")
+        # Note: Polling disabled to avoid conflicts. Ape buttons won't work.
+        # await self.app.updater.start_polling(allowed_updates=["callback_query"])
+        logger.info("Buy bot started (polling disabled - ape buttons inactive)")
 
         # Send startup message
         await self._send_startup_message()
@@ -148,6 +149,7 @@ class JarvisBuyBot:
             helius_api_key=self.config.helius_api_key,
             min_buy_usd=self.config.min_buy_usd,
             on_buy=self._on_buy_detected,
+            pair_address=self.config.pair_address,
         )
 
         self._running = True
@@ -172,12 +174,17 @@ class JarvisBuyBot:
 
     async def _send_startup_message(self):
         """Send startup notification to the chat."""
+        pair_info = ""
+        if self.config.pair_address:
+            pair_info = f"🔗 Pair: <code>{self.config.pair_address[:8]}...{self.config.pair_address[-4:]}</code>\n"
+
         message = (
             f"🤖 <b>{self.config.bot_name}</b>\n\n"
             f"✅ Bot started successfully!\n\n"
             f"📊 Tracking: <b>${self.config.token_symbol}</b>\n"
+            f"{pair_info}"
             f"💰 Min buy: <b>${self.config.min_buy_usd:.2f}</b>\n\n"
-            f"<i>Watching for buys...</i>"
+            f"<i>Watching for buys on LP pair...</i>"
         )
 
         try:

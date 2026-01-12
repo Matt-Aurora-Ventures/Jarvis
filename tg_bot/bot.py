@@ -95,38 +95,22 @@ async def _get_treasury_engine():
     if _TREASURY_ENGINE:
         return _TREASURY_ENGINE
 
-    from bots.treasury.wallet import SecureWallet
-    from bots.treasury.jupiter import JupiterClient
-    from bots.treasury.trading import TradingEngine, RiskLevel
+    from bots.treasury.trading import TreasuryTrader
 
-    wallet_password = os.environ.get("JARVIS_WALLET_PASSWORD")
-    if not wallet_password:
-        raise RuntimeError("JARVIS_WALLET_PASSWORD not set")
+    # Use TreasuryTrader which handles encrypted keypair loading
+    trader = TreasuryTrader()
+    initialized, msg = await trader._ensure_initialized()
 
-    wallet = SecureWallet(wallet_password)
-    treasury = wallet.get_treasury()
-    if not treasury:
-        raise RuntimeError("Treasury wallet not initialized")
+    if not initialized:
+        raise RuntimeError(f"Treasury wallet not initialized: {msg}")
 
-    rpc_url = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
-    jupiter = JupiterClient(rpc_url)
+    # Check if live mode is enabled
+    live_mode = os.environ.get("TREASURY_LIVE_MODE", "false").lower() in ("1", "true", "yes", "on")
+    if trader._engine:
+        trader._engine.dry_run = not live_mode
 
-    config = get_config()
-    admin_ids = _get_treasury_admin_ids(config)
-    dry_run = os.environ.get("TREASURY_DRY_RUN", "true").lower() in ("1", "true", "yes", "on")
-
-    engine = TradingEngine(
-        wallet=wallet,
-        jupiter=jupiter,
-        admin_user_ids=admin_ids,
-        risk_level=RiskLevel.MODERATE,
-        max_positions=5,
-        dry_run=dry_run,
-    )
-
-    await engine.initialize_order_manager()
-    _TREASURY_ENGINE = engine
-    return engine
+    _TREASURY_ENGINE = trader._engine
+    return _TREASURY_ENGINE
 
 
 # =============================================================================

@@ -60,8 +60,10 @@ class TransactionMonitor:
         helius_api_key: str,
         min_buy_usd: float = 5.0,
         on_buy: Optional[Callable[[BuyTransaction], None]] = None,
+        pair_address: str = "",
     ):
         self.token_address = token_address
+        self.pair_address = pair_address  # LP pair address where trades happen
         self.helius_api_key = helius_api_key
         self.min_buy_usd = min_buy_usd
         self.on_buy = on_buy
@@ -99,7 +101,11 @@ class TransactionMonitor:
         self._running = True
         self._session = aiohttp.ClientSession()
 
-        logger.info(f"Starting transaction monitor for {self.token_address}")
+        # Log what we're monitoring
+        if self.pair_address:
+            logger.info(f"Starting transaction monitor for pair {self.pair_address}")
+        else:
+            logger.info(f"Starting transaction monitor for token {self.token_address}")
 
         # Initial data fetch
         await self._update_prices()
@@ -158,11 +164,14 @@ class TransactionMonitor:
     async def _transaction_poll_loop(self):
         """Poll for recent transactions (fallback to WebSocket)."""
         first_run = True
+        poll_count = 0
 
         while self._running:
             try:
-                # Get recent signatures for the token
+                # Get recent signatures for the pair/token
                 signatures = await self._get_recent_signatures()
+                poll_count += 1
+                new_count = 0
 
                 for sig_info in signatures:
                     sig = sig_info.get("signature")
@@ -171,6 +180,8 @@ class TransactionMonitor:
                     if self._is_already_processed(sig):
                         continue
 
+                    new_count += 1
+
                     # On first run, just mark existing signatures as processed
                     if first_run:
                         self._mark_as_processed(sig)
@@ -178,14 +189,29 @@ class TransactionMonitor:
 
                     # Parse transaction
                     buy = await self._parse_transaction(sig)
-                    if buy and buy.usd_amount >= self.min_buy_usd:
-                        logger.info(f"Buy detected: ${buy.usd_amount:.2f} by {buy.buyer_short}")
-                        self._mark_as_processed(sig)
-                        if self.on_buy:
-                            await self._safe_callback(buy)
+                    if buy:
+                        if buy.usd_amount >= self.min_buy_usd:
+                            logger.info(f"Buy detected: ${buy.usd_amount:.2f} by {buy.buyer_short} ({buy.sol_amount:.4f} SOL)")
+                            self._mark_as_processed(sig)
+                            if self.on_buy:
+                                await self._safe_callback(buy)
+                        else:
+                            logger.info(f"Buy below threshold: ${buy.usd_amount:.2f} < ${self.min_buy_usd} by {buy.buyer_short}")
+                            self._mark_as_processed(sig)
                     else:
-                        # Mark non-buy transactions too to avoid reprocessing
+                        # Mark non-buy transactions too (likely sells or other tx types)
+                        logger.debug(f"Non-buy transaction: {sig[:12]}...")
                         self._mark_as_processed(sig)
+
+                # Log status periodically
+                if first_run and new_count > 0:
+                    logger.info(f"Initialized with {new_count} existing transactions (skipped)")
+                elif poll_count % 15 == 0:  # Every ~30 seconds
+                    logger.info(f"Poll #{poll_count}: {len(self._processed_signatures)} txns tracked, min=${self.min_buy_usd}")
+
+                # Log new transactions found (for debugging)
+                if new_count > 0 and not first_run:
+                    logger.info(f"Found {new_count} new transaction(s) to process")
 
                 first_run = False
                 await asyncio.sleep(2)  # Poll every 2 seconds
@@ -195,15 +221,18 @@ class TransactionMonitor:
                 await asyncio.sleep(5)
 
     async def _get_recent_signatures(self) -> List[Dict]:
-        """Get recent transaction signatures for the token."""
+        """Get recent transaction signatures for the pair/token."""
         try:
+            # Use pair address if available, otherwise fall back to token address
+            watch_address = self.pair_address if self.pair_address else self.token_address
+
             payload = {
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "getSignaturesForAddress",
                 "params": [
-                    self.token_address,
-                    {"limit": 20}
+                    watch_address,
+                    {"limit": 30}  # Increased limit for more coverage
                 ]
             }
 
@@ -237,31 +266,47 @@ class TransactionMonitor:
             # Check for token transfers
             token_transfers = tx.get("tokenTransfers", [])
             native_transfers = tx.get("nativeTransfers", [])
+            fee_payer = tx.get("feePayer")
 
-            # Find token buy (SOL out, token in)
+            # Find token transfer where fee_payer RECEIVES the token (buy)
             token_in = None
-            sol_out = 0
-
             for transfer in token_transfers:
                 if transfer.get("mint") == self.token_address:
-                    token_in = transfer
-                    break
+                    to_user = transfer.get("toUserAccount", "")
+                    from_user = transfer.get("fromUserAccount", "")
+
+                    # Buy = fee_payer receives token
+                    if to_user == fee_payer:
+                        token_in = transfer
+                        break
+                    # Sell = fee_payer sends token (skip)
+                    elif from_user == fee_payer:
+                        return None
 
             if not token_in:
                 return None
 
-            # Calculate SOL spent
-            fee_payer = tx.get("feePayer")
+            # Calculate SOL spent (fee_payer sends SOL)
+            sol_out = 0
+            sol_in = 0
             for transfer in native_transfers:
-                if transfer.get("fromUserAccount") == fee_payer:
-                    sol_out += transfer.get("amount", 0) / 1e9  # Convert lamports to SOL
+                from_user = transfer.get("fromUserAccount", "")
+                to_user = transfer.get("toUserAccount", "")
+                amount = transfer.get("amount", 0) / 1e9  # Convert lamports to SOL
 
-            if sol_out <= 0:
+                if from_user == fee_payer:
+                    sol_out += amount
+                if to_user == fee_payer:
+                    sol_in += amount
+
+            # Net SOL spent (exclude transaction fees returned, etc)
+            net_sol_spent = sol_out - sol_in
+            if net_sol_spent <= 0.001:  # Minimum 0.001 SOL to count as buy
                 return None
 
             # Calculate amounts
             token_amount = float(token_in.get("tokenAmount", 0))
-            usd_amount = sol_out * self._sol_price_usd
+            usd_amount = net_sol_spent * self._sol_price_usd
 
             # Get buyer position (if we have supply data)
             buyer_position_pct = 0
@@ -273,7 +318,7 @@ class TransactionMonitor:
                 signature=signature,
                 buyer_wallet=fee_payer,
                 token_amount=token_amount,
-                sol_amount=sol_out,
+                sol_amount=net_sol_spent,
                 usd_amount=usd_amount,
                 price_per_token=self._token_price_usd,
                 buyer_position_pct=buyer_position_pct,

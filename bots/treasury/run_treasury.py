@@ -7,15 +7,17 @@ import os
 import sys
 import asyncio
 import logging
+import json
+import base64
 from pathlib import Path
 from dotenv import load_dotenv
 
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from bots.treasury.wallet import SecureWallet, WalletManager
+from bots.treasury.wallet import SecureWallet, WalletManager, WalletInfo
 from bots.treasury.jupiter import JupiterClient
-from bots.treasury.trading import TradingEngine, RiskLevel
+from bots.treasury.trading import TradingEngine, RiskLevel, _SimpleWallet
 from bots.treasury.telegram_ui import TradingUI
 
 # Configure logging
@@ -34,11 +36,61 @@ class TreasuryBot:
     """
 
     def __init__(self):
-        self.wallet: SecureWallet = None
+        self.wallet = None  # Can be SecureWallet or _SimpleWallet
         self.jupiter: JupiterClient = None
         self.engine: TradingEngine = None
         self.ui: TradingUI = None
         self._running = False
+
+    def _load_encrypted_keypair(self, keypair_path: Path, password: str):
+        """Load and decrypt keypair from treasury_keypair.json."""
+        if not password:
+            logger.warning("No password provided for keypair decryption")
+            return None
+
+        def pad_base64(s):
+            """Add padding to base64 string if needed."""
+            return s + '=' * (4 - len(s) % 4) if len(s) % 4 else s
+
+        try:
+            with open(keypair_path) as f:
+                data = json.load(f)
+
+            if 'encrypted_key' in data and 'salt' in data and 'nonce' in data:
+                salt = base64.b64decode(pad_base64(data['salt']))
+                nonce = base64.b64decode(pad_base64(data['nonce']))
+                encrypted_key = base64.b64decode(pad_base64(data['encrypted_key']))
+
+                # Try PyNaCl decryption
+                try:
+                    import nacl.secret
+                    import nacl.pwhash
+
+                    key = nacl.pwhash.argon2id.kdf(
+                        nacl.secret.SecretBox.KEY_SIZE,
+                        password.encode(),
+                        salt,
+                        opslimit=nacl.pwhash.argon2id.OPSLIMIT_MODERATE,
+                        memlimit=nacl.pwhash.argon2id.MEMLIMIT_MODERATE,
+                    )
+
+                    box = nacl.secret.SecretBox(key)
+                    decrypted = box.decrypt(encrypted_key, nonce)
+
+                    from solders.keypair import Keypair
+                    return Keypair.from_bytes(decrypted)
+
+                except ImportError:
+                    logger.warning("PyNaCl not installed")
+
+            elif isinstance(data, list):
+                from solders.keypair import Keypair
+                return Keypair.from_bytes(bytes(data))
+
+        except Exception as e:
+            logger.error(f"Failed to load keypair: {e}")
+
+        return None
 
     async def initialize(self):
         """Initialize all components."""
@@ -55,9 +107,6 @@ class TreasuryBot:
         if not bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN not set")
 
-        if not wallet_password:
-            raise ValueError("JARVIS_WALLET_PASSWORD not set")
-
         # Parse admin IDs
         admin_ids = []
         if admin_ids_str:
@@ -65,29 +114,49 @@ class TreasuryBot:
 
         logger.info(f"Initializing Treasury Bot with {len(admin_ids)} admins")
 
-        # Initialize wallet
-        self.wallet = SecureWallet(wallet_password)
+        # Try to load keypair from data/treasury_keypair.json first
+        keypair_path = Path(__file__).parent.parent.parent / 'data' / 'treasury_keypair.json'
+        treasury_address = None
 
-        # Check for existing treasury or create new
-        treasury = self.wallet.get_treasury()
-        if not treasury:
-            logger.info("Creating new treasury wallet...")
-            treasury = self.wallet.create_wallet(label="Jarvis Treasury", is_treasury=True)
-            logger.info(f"Treasury wallet created: {treasury.address}")
-        else:
-            logger.info(f"Using existing treasury: {treasury.address}")
+        if keypair_path.exists():
+            try:
+                keypair = self._load_encrypted_keypair(keypair_path, wallet_password)
+                if keypair:
+                    treasury_address = str(keypair.pubkey())
+                    logger.info(f"Loaded treasury keypair: {treasury_address[:8]}...")
+                    self.wallet = _SimpleWallet(keypair, treasury_address)
+            except Exception as e:
+                logger.warning(f"Failed to load keypair: {e}")
+
+        # Fallback to SecureWallet
+        if not self.wallet:
+            if not wallet_password:
+                raise ValueError("JARVIS_WALLET_PASSWORD not set")
+
+            self.wallet = SecureWallet(wallet_password)
+            treasury = self.wallet.get_treasury()
+            if not treasury:
+                logger.info("Creating new treasury wallet...")
+                treasury = self.wallet.create_wallet(label="Jarvis Treasury", is_treasury=True)
+                logger.info(f"Treasury wallet created: {treasury.address}")
+            else:
+                treasury_address = treasury.address
+                logger.info(f"Using existing treasury: {treasury.address}")
 
         # Initialize Jupiter client
         self.jupiter = JupiterClient(rpc_url)
 
         # Initialize trading engine
+        # Check env for live mode override
+        live_mode = os.environ.get('TREASURY_LIVE_MODE', '').lower() == 'true'
+
         self.engine = TradingEngine(
             wallet=self.wallet,
             jupiter=self.jupiter,
             admin_user_ids=admin_ids,
             risk_level=RiskLevel.MODERATE,
             max_positions=5,
-            dry_run=True  # Start in dry run mode for safety
+            dry_run=not live_mode  # Live mode if TREASURY_LIVE_MODE=true
         )
 
         # Initialize limit order manager
