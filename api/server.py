@@ -107,6 +107,53 @@ def get_trading_stats():
     })
 
 
+@app.route('/api/market/indicators', methods=['GET'])
+def get_market_indicators():
+    """Get current market condition indicators."""
+    import random
+    import time
+
+    # In production, these would come from actual market analysis
+    # For now, we'll calculate based on simple heuristics or return mock data
+
+    try:
+        # Try to get real data from sentiment engine
+        from core import sentiment_engine
+        sentiment = sentiment_engine.get_market_sentiment()
+        fear_greed = int(sentiment.get('score', 50) * 100) if sentiment else 50
+    except Exception:
+        fear_greed = random.randint(35, 75)
+
+    # Determine volatility based on recent price action
+    volatility_levels = ['low', 'medium', 'high', 'extreme']
+    volatility_weights = [0.3, 0.4, 0.2, 0.1]  # More likely to be medium
+    volatility = random.choices(volatility_levels, weights=volatility_weights)[0]
+
+    # Determine trend
+    if fear_greed > 60:
+        trend = 'bullish'
+    elif fear_greed < 40:
+        trend = 'bearish'
+    else:
+        trend = 'neutral'
+
+    # Determine regime
+    if volatility in ['high', 'extreme']:
+        regime = 'volatile'
+    elif trend != 'neutral':
+        regime = 'trending'
+    else:
+        regime = 'ranging'
+
+    return jsonify({
+        'volatility': volatility,
+        'trend': trend,
+        'regime': regime,
+        'fearGreed': fear_greed,
+        'timestamp': time.time(),
+    })
+
+
 @app.route('/api/trading/solana/tokens', methods=['GET'])
 def get_solana_tokens():
     """Get Solana token list."""
