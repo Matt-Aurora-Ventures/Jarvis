@@ -105,12 +105,11 @@ Your suggestion:"""
             pass
             
     def _notify_user(self, message: str) -> None:
-        """Send macOS notification with suggestion."""
-        import subprocess
+        """Send system notification with suggestion."""
         try:
-            script = f'''display notification "{message[:150]}" with title "Jarvis Suggestion"'''
-            subprocess.run(["osascript", "-e", script], capture_output=True, timeout=5)
-        except Exception as e:
+            from core.platform import send_notification
+            send_notification("Jarvis Suggestion", message[:150])
+        except Exception:
             pass
 
 

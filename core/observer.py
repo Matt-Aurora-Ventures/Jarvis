@@ -88,29 +88,15 @@ class DeepObserver(threading.Thread):
         self._session_start = time.time()
 
     def _get_frontmost_app(self) -> tuple:
-        """Get current app and window."""
+        """Get current app and window (cross-platform)."""
         try:
-            import subprocess
-            script = '''
-            tell application "System Events"
-                set frontApp to name of first application process whose frontmost is true
-                set frontWindow to ""
-                try
-                    tell process frontApp
-                        set frontWindow to name of front window
-                    end tell
-                end try
-                return frontApp & "||" & frontWindow
-            end tell
-            '''
-            result = subprocess.run(
-                ["osascript", "-e", script],
-                capture_output=True, text=True, timeout=2
-            )
-            if result.stdout and "||" in result.stdout:
-                parts = result.stdout.strip().split("||", 1)
-                return parts[0], parts[1] if len(parts) > 1 else ""
-        except Exception as e:
+            from core.platform import get_active_window_info
+            info = get_active_window_info()
+            app_name = info.get("app_name", "")
+            window = info.get("window", "")
+            if app_name:
+                return app_name, window
+        except Exception:
             pass
         return self._current_app, self._current_window
 

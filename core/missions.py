@@ -436,9 +436,8 @@ def _run_prompt_pack_builder() -> Optional[Dict[str, str]]:
         metadata={"prompt_count": len(prompts), "prompt_ids": added},
     )
     try:
-        import subprocess
-        script = 'display notification "Prompt pack ready." with title "Jarvis"'
-        subprocess.run(["osascript", "-e", script], capture_output=True, timeout=5)
+        from core.platform import send_notification
+        send_notification("Jarvis", "Prompt pack ready.")
     except Exception:
         pass
     return {"doc_id": doc.doc_id, "summary": doc.summary}
@@ -610,10 +609,8 @@ def _run_learn_mode() -> Optional[Dict[str, str]]:
         learn_mode_last_run=time.time(),
     )
     try:
-        import subprocess
-
-        script = 'display notification "Learn mode summary ready." with title "Jarvis"'
-        subprocess.run(["osascript", "-e", script], capture_output=True, timeout=5)
+        from core.platform import send_notification
+        send_notification("Jarvis", "Learn mode summary ready.")
     except Exception:
         pass
     return {"doc_id": doc.doc_id, "summary": doc.summary, "note_path": str(note_path)}

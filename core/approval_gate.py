@@ -160,13 +160,11 @@ class ApprovalGate:
     def _notify_user(self, proposal: TradeProposal):
         """Send notification to user about pending approval."""
         msg = f"Trade Approval Needed: {proposal.side} {proposal.size:.4f} {proposal.symbol} @ ${proposal.price:.2f}"
-        
-        # macOS notification
+
+        # Cross-platform notification
         try:
-            subprocess.run([
-                'osascript', '-e',
-                f'display notification "{msg}" with title "Jarvis Trading" sound name "Glass"'
-            ], check=False, capture_output=True, timeout=5)
+            from core.platform import send_notification
+            send_notification("Jarvis Trading", msg)
         except Exception as e:
             log.debug(f"Notification failed: {e}")
         
@@ -248,10 +246,8 @@ class ApprovalGate:
         
         # Send urgent notification
         try:
-            subprocess.run([
-                'osascript', '-e',
-                f'display notification "Kill switch activated - {count} trades cancelled" with title "⚠️ JARVIS EMERGENCY" sound name "Sosumi"'
-            ], check=False, capture_output=True, timeout=5)
+            from core.platform import send_notification
+            send_notification("JARVIS EMERGENCY", f"Kill switch activated - {count} trades cancelled")
         except Exception:
             pass
         

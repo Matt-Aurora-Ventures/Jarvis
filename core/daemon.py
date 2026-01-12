@@ -65,19 +65,10 @@ def _should_run_report(
 
 
 def _send_notification(title: str, message: str) -> None:
-    """Send a macOS notification."""
-    if sys.platform != "darwin":
-        return
+    """Send a system notification (cross-platform)."""
     try:
-        from core import safe_subprocess
-        # Sanitize inputs to prevent osascript injection
-        safe_title = title.replace('\\', '\\\\').replace('"', '\\"')
-        safe_message = message.replace('\\', '\\\\').replace('"', '\\"')
-        script = f'display notification "{safe_message}" with title "{safe_title}"'
-        safe_subprocess.run_command_safe(
-            ["osascript", "-e", script],
-            timeout=5,
-        )
+        from core.platform import send_notification
+        send_notification(title, message)
     except Exception:
         pass
 

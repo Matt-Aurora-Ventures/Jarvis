@@ -100,8 +100,8 @@ class ResourceMonitor(threading.Thread):
             return
         self._last_notify = time.time()
         try:
-            script = f'display notification "{message[:180]}" with title "{title}"'
-            subprocess.run(["osascript", "-e", script], capture_output=True, timeout=5)
+            from core.platform import send_notification
+            send_notification(title, message[:180])
         except Exception:
             pass
 

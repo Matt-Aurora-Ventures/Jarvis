@@ -293,15 +293,10 @@ display dialog "{question.replace('"', '\\"')}" ¬
             return base_threshold + 0.2  # 0.9 (very selective)
     
     def _send_notification(self, title: str, message: str):
-        """Send macOS notification."""
+        """Send system notification (cross-platform)."""
         try:
-            script = f'display notification "{message}" with title "{title}"'
-            subprocess.run(
-                ["osascript", "-e", script],
-                capture_output=True,
-                check=False,
-                timeout=5,
-            )
+            from core.platform import send_notification
+            send_notification(title, message)
         except Exception:
             pass
     

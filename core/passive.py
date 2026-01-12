@@ -230,60 +230,36 @@ class AppSwitchTracker:
             self._sessions = [s for s in self._sessions if s.start_time >= before]
 
 
-def _run_osascript(script: str) -> str:
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", script],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=2,
-        )
-        return (result.stdout or "").strip()
-    except Exception as e:
-        return ""
-
-
 def get_frontmost_app() -> tuple[str, str]:
-    script = (
-        'tell application "System Events"\n'
-        "set frontApp to name of first application process whose frontmost is true\n"
-        "set frontWindow to \"\"\n"
-        "tell process frontApp\n"
-        "try\n"
-        "set frontWindow to name of front window\n"
-        "end try\n"
-        "end tell\n"
-        "end tell\n"
-        "return frontApp & \"||\" & frontWindow\n"
-    )
-    raw = _run_osascript(script)
-    if "||" in raw:
-        app, window = raw.split("||", 1)
-        return app.strip(), window.strip()
-    return raw.strip(), ""
+    """Get the frontmost app and window title (cross-platform)."""
+    try:
+        from core.platform import get_active_window_info
+        info = get_active_window_info()
+        app_name = info.get("app_name", "Unknown")
+        window = info.get("window", "")
+        return app_name, window
+    except Exception:
+        return "Unknown", ""
 
 
 def get_visible_apps(limit: int = 8) -> List[str]:
-    script = 'tell application "System Events" to get name of every process whose visible is true'
-    raw = _run_osascript(script)
-    if not raw:
+    """Get list of visible apps (cross-platform)."""
+    try:
+        from core.computer import get_window_list
+        windows = get_window_list()
+        apps = list(set(w.get("app", "") for w in windows if w.get("app")))
+        return apps[:limit]
+    except Exception:
         return []
-    parts = [p.strip() for p in raw.split(",") if p.strip()]
-    return parts[:limit]
 
 
 def capture_screen_thumbnail(output_path: Path, max_size: int = 200) -> bool:
     """Capture a tiny thumbnail of the screen for context (very lightweight)."""
     try:
+        from core.computer import take_screenshot
         temp_path = output_path.with_suffix(".tmp.png")
-        result = subprocess.run(
-            ["screencapture", "-x", "-t", "png", str(temp_path)],
-            capture_output=True,
-            check=False,
-            timeout=5,
-        )
-        if result.returncode != 0 or not temp_path.exists():
+        success, result_path = take_screenshot(str(temp_path))
+        if not success or not temp_path.exists():
             return False
 
         try:
@@ -293,10 +269,10 @@ def capture_screen_thumbnail(output_path: Path, max_size: int = 200) -> bool:
             img.save(output_path, "PNG", optimize=True)
             temp_path.unlink()
             return True
-        except Exception as e:
+        except Exception:
             temp_path.rename(output_path)
             return True
-    except Exception as e:
+    except Exception:
         return False
 
 

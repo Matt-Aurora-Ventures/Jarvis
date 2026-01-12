@@ -1,4 +1,7 @@
-import subprocess
+"""
+Cross-platform observation utilities for LifeOS.
+"""
+
 import threading
 import time
 from dataclasses import dataclass
@@ -6,60 +9,40 @@ from typing import Optional
 
 from core import input_broker
 
-def _run_osascript(script: str) -> str:
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", script],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return (result.stdout or "").strip()
-    except Exception as e:
-        return ""
-
 
 def frontmost_app_window() -> tuple[str, str]:
-    script = (
-        'tell application "System Events"\n'
-        "set frontApp to name of first application process whose frontmost is true\n"
-        "set frontWindow to \"\"\n"
-        "tell process frontApp\n"
-        "try\n"
-        "set frontWindow to name of front window\n"
-        "end try\n"
-        "end tell\n"
-        "end tell\n"
-        "return frontApp & \"||\" & frontWindow\n"
-    )
-    raw = _run_osascript(script)
-    if "||" in raw:
-        app, window = raw.split("||", 1)
-        return app.strip(), window.strip()
-    return raw.strip(), ""
+    """Get the frontmost app and window title (cross-platform)."""
+    try:
+        from core.platform import get_active_window_info
+        info = get_active_window_info()
+        app_name = info.get("app_name", "")
+        window = info.get("window", "")
+        return app_name, window
+    except Exception:
+        return "", ""
 
 
 def visible_apps(limit: int = 8) -> list[str]:
-    script = (
-        'tell application "System Events" to get name of every process whose visible is true'
-    )
-    raw = _run_osascript(script)
-    if not raw:
+    """Get list of visible apps (cross-platform)."""
+    try:
+        from core.computer import get_window_list
+        windows = get_window_list()
+        apps = list(set(w.get("app", "") for w in windows if w.get("app")))
+        return apps[:limit]
+    except Exception:
         return []
-    parts = [part.strip() for part in raw.split(",") if part.strip()]
-    return parts[:limit]
 
 
 def mouse_position() -> Optional[tuple[int, int]]:
     try:
         from pynput import mouse
-    except Exception as e:
+    except Exception:
         return None
     try:
         controller = mouse.Controller()
         position = controller.position
         return int(position[0]), int(position[1])
-    except Exception as e:
+    except Exception:
         return None
 
 
