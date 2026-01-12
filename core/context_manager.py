@@ -53,6 +53,9 @@ class ConversationContext:
     mentioned_topics: List[str] = field(default_factory=list)
     action_history: List[Dict[str, Any]] = field(default_factory=list)
     session_start: float = 0.0
+    conversation_summaries: List[Dict[str, str]] = field(default_factory=list)
+    key_facts: List[Dict[str, Any]] = field(default_factory=list)
+    user_corrections: List[Dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -154,22 +157,36 @@ def update_activity(app: str, window: str, screen_content: str = "") -> None:
 def add_conversation_message(role: str, content: str) -> None:
     """Add a message to conversation context."""
     ctx = load_conversation_context()
-    
+
     ctx.recent_messages.append({
         "role": role,
-        "content": content[:500],  # Limit size
+        "content": content[:800],  # Increased limit
         "timestamp": time.time(),
     })
-    
-    # Keep last 20 messages
-    ctx.recent_messages = ctx.recent_messages[-20:]
-    
-    # Extract topics from content
+
+    # Keep last 30 messages (increased from 20)
+    ctx.recent_messages = ctx.recent_messages[-30:]
+
+    # Auto-summarize when we have too many messages
+    if len(ctx.recent_messages) >= 25:
+        _auto_summarize_context(ctx)
+
+    # Extract topics from content with importance scoring
     topics = _extract_topics(content)
     for topic in topics:
         if topic not in ctx.mentioned_topics:
-            ctx.mentioned_topics = [topic] + ctx.mentioned_topics[:19]
-    
+            ctx.mentioned_topics = [topic] + ctx.mentioned_topics[:29]  # Keep 30 topics
+
+    # Extract key facts from user messages
+    if role == "user":
+        facts = _extract_key_facts(content)
+        for fact in facts:
+            ctx.key_facts.append({
+                "fact": fact,
+                "timestamp": time.time(),
+            })
+        ctx.key_facts = ctx.key_facts[-50:]  # Keep 50 facts
+
     save_conversation_context(ctx)
 
 
@@ -277,16 +294,16 @@ def _extract_topics(text: str) -> List[str]:
                   "itself", "they", "them", "their", "theirs", "themselves",
                   "what", "which", "who", "whom", "this", "that", "these", "those",
                   "am", "and", "but", "if", "or", "because", "until", "while"}
-    
+
     words = text.lower().split()
     topics = []
-    
+
     for word in words:
         # Clean word
         clean = ''.join(c for c in word if c.isalnum())
         if len(clean) > 3 and clean not in stop_words:
             topics.append(clean)
-    
+
     # Return unique topics
     seen = set()
     unique = []
@@ -294,8 +311,133 @@ def _extract_topics(text: str) -> List[str]:
         if t not in seen:
             seen.add(t)
             unique.append(t)
-    
+
     return unique[:10]
+
+
+def _extract_key_facts(text: str) -> List[str]:
+    """Extract key facts from user input that should be remembered.
+
+    Looks for statements like:
+    - "I am...", "I'm...", "My name is..."
+    - "I work at...", "I like...", "I prefer..."
+    - Statements containing names, preferences, or personal info
+    """
+    import re
+
+    facts = []
+    lowered = text.lower()
+
+    # Personal identity patterns
+    identity_patterns = [
+        r"(?:i am|i'm|my name is|call me)\s+([^,.!?]+)",
+        r"(?:i work at|i work for|i'm at)\s+([^,.!?]+)",
+        r"(?:i live in|i'm from|i'm based in)\s+([^,.!?]+)",
+    ]
+
+    for pattern in identity_patterns:
+        match = re.search(pattern, lowered)
+        if match:
+            facts.append(text[match.start():match.end()])
+
+    # Preference patterns
+    preference_patterns = [
+        r"(?:i prefer|i like|i want|i need|i always)\s+([^,.!?]+)",
+        r"(?:don't|do not)\s+(?:like|want|need)\s+([^,.!?]+)",
+    ]
+
+    for pattern in preference_patterns:
+        match = re.search(pattern, lowered)
+        if match:
+            facts.append(text[match.start():match.end()])
+
+    # Remember/note patterns - explicit memory requests
+    remember_patterns = [
+        r"(?:remember that|note that|keep in mind|don't forget)\s+(.+)",
+        r"(?:my|the)\s+\w+\s+(?:is|are)\s+([^,.!?]+)",
+    ]
+
+    for pattern in remember_patterns:
+        match = re.search(pattern, lowered)
+        if match:
+            facts.append(text[match.start():match.end()])
+
+    return facts[:5]  # Max 5 facts per message
+
+
+def _auto_summarize_context(ctx: 'ConversationContext') -> None:
+    """Auto-summarize old messages to preserve context without bloat."""
+    if len(ctx.recent_messages) < 20:
+        return
+
+    # Take oldest 10 messages and create a summary
+    old_messages = ctx.recent_messages[:10]
+
+    # Build a simple summary
+    topics = set()
+    actions = []
+    user_requests = []
+
+    for msg in old_messages:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+
+        # Extract topics
+        for topic in _extract_topics(content):
+            topics.add(topic)
+
+        # Track user requests
+        if role == "user":
+            user_requests.append(content[:100])
+
+    summary = {
+        "timestamp": time.time(),
+        "message_count": len(old_messages),
+        "topics": list(topics)[:15],
+        "key_requests": user_requests[:5],
+    }
+
+    ctx.conversation_summaries.append(summary)
+    ctx.conversation_summaries = ctx.conversation_summaries[-10:]  # Keep 10 summaries
+
+    # Remove summarized messages
+    ctx.recent_messages = ctx.recent_messages[10:]
+
+
+def add_user_correction(original: str, correction: str) -> None:
+    """Record when user corrects Jarvis - important for learning."""
+    ctx = load_conversation_context()
+    ctx.user_corrections.append({
+        "original": original[:200],
+        "correction": correction[:200],
+        "timestamp": time.time(),
+    })
+    ctx.user_corrections = ctx.user_corrections[-20:]  # Keep 20 corrections
+    save_conversation_context(ctx)
+
+
+def get_key_facts_summary() -> str:
+    """Get a summary of key facts about the user."""
+    ctx = load_conversation_context()
+    if not ctx.key_facts:
+        return ""
+
+    recent_facts = ctx.key_facts[-10:]
+    return "\n".join(f"- {f['fact']}" for f in recent_facts)
+
+
+def get_conversation_summaries_text() -> str:
+    """Get summarized history from older conversations."""
+    ctx = load_conversation_context()
+    if not ctx.conversation_summaries:
+        return ""
+
+    lines = []
+    for summary in ctx.conversation_summaries[-3:]:  # Last 3 summaries
+        topics = ", ".join(summary.get("topics", [])[:5])
+        lines.append(f"Previous discussion: {topics}")
+
+    return "\n".join(lines)
 
 
 def clear_session_context() -> None:

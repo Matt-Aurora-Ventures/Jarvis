@@ -32,7 +32,8 @@ def _truncate(text: str, limit: int = 800) -> str:
     return text[:limit].rstrip() + "..."
 
 
-def _recent_chat(turns: int = 6) -> List[Dict[str, str]]:
+def _recent_chat(turns: int = 10) -> List[Dict[str, str]]:
+    """Get recent chat entries. Increased from 6 to 10 for better context."""
     entries = memory.get_recent_entries()
     chat = [
         entry
@@ -659,6 +660,16 @@ def generate_response(
 
     if activity_summary and "No recent activity" not in activity_summary:
         prompt += f"Recent Activity:\n{activity_summary}\n\n"
+
+    # Key facts about the user (things they've told us)
+    key_facts = context_manager.get_key_facts_summary()
+    if key_facts:
+        prompt += f"Key facts about the user:\n{key_facts}\n\n"
+
+    # Summarized older conversations for long-term context
+    conversation_summaries = context_manager.get_conversation_summaries_text()
+    if conversation_summaries:
+        prompt += f"Earlier conversation context:\n{conversation_summaries}\n\n"
 
     # Self-improving lessons (what I learned from past mistakes)
     if self_improving_context:
