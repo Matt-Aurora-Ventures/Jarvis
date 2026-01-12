@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-4.1.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.1.3-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1108%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
@@ -1877,6 +1877,21 @@ This README is the capability index; the authoritative release log lives in `CHA
 ## 🗺️ Roadmap
 
 ### Completed ✓
+
+**v4.1.3 - Enhanced UI Components & Context System (January 2026)**
+- [x] Enhanced conversation context retention with key facts extraction
+- [x] Automatic conversation summarization for long-term memory
+- [x] Voice and trading WebSocket endpoints for real-time updates
+- [x] useVoiceWebSocket React hook with auto-reconnect
+- [x] Loading states for PositionCard, StatsGrid, and MarketIndicators
+- [x] ErrorBoundary component with HOC and hook utilities
+- [x] ConnectionStatus component with multiple variants
+- [x] Notification/Toast system with provider and hook
+- [x] Trade confirmation dialogs with countdown timer
+- [x] Slippage control component with presets
+- [x] Breadcrumb navigation with auto-generation
+- [x] Collapsible sections for settings pages
+- [x] Market indicators API endpoint (/api/market/indicators)
 
 **v4.1.2 - Cross-Platform & UI/UX Improvements (January 2026)**
 - [x] Full Windows/Linux cross-platform support for computer control module
