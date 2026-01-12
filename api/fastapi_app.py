@@ -14,8 +14,12 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from api.errors import make_error_response
 
 # Configure logging
 logging.basicConfig(
@@ -137,6 +141,32 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Global exception handlers for standardized error responses
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        error_map = {
+            400: "VAL_001",
+            401: "AUTH_001",
+            403: "AUTH_004",
+            404: "SYS_002",
+            429: "PROV_002",
+            500: "SYS_003",
+            503: "SYS_002",
+        }
+        error_code = error_map.get(exc.status_code, "SYS_003")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=make_error_response(error_code, str(exc.detail))
+        )
+
+    @app.exception_handler(Exception)
+    async def general_exception_handler(request: Request, exc: Exception):
+        logger.error(f"Unhandled exception: {exc}")
+        return JSONResponse(
+            status_code=500,
+            content=make_error_response("SYS_003", "Internal server error")
+        )
 
     # Include routers
     _include_routers(app)

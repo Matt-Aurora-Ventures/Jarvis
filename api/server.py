@@ -14,11 +14,28 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core import config, solana_scanner, trading_coliseum
 from scripts import monitor_tts_costs
+from api.errors import flask_error, flask_success, make_error_response
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+# Global error handlers for standardized responses
+@app.errorhandler(400)
+def bad_request(e):
+    return flask_error("VAL_001", str(e.description) if hasattr(e, 'description') else None, http_status=400)
+
+
+@app.errorhandler(404)
+def not_found(e):
+    return flask_error("SYS_002", "Endpoint not found", http_status=404)
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    return flask_error("SYS_003", "Internal server error", http_status=500)
 
 
 @app.route('/api/stats', methods=['GET'])
