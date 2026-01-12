@@ -42,6 +42,8 @@ class ConnectionManager:
             "staking": [],
             "credits": [],
             "treasury": [],
+            "voice": [],
+            "trading": [],
         }
 
     async def connect(self, websocket: WebSocket, channel: str):
@@ -392,6 +394,68 @@ def _setup_websockets(app: FastAPI):
         except WebSocketDisconnect:
             manager.disconnect(websocket, "treasury")
 
+    @app.websocket("/ws/voice")
+    async def websocket_voice(websocket: WebSocket):
+        """WebSocket for real-time voice status updates."""
+        await manager.connect(websocket, "voice")
+        try:
+            # Send initial voice status
+            try:
+                from core.voice import run_voice_diagnostics
+                from core import config
+                cfg = config.load_config()
+                voice_cfg = cfg.get("voice", {})
+                diag = run_voice_diagnostics()
+                await websocket.send_json({
+                    "type": "voice_status",
+                    "data": {
+                        "enabled": voice_cfg.get("speak_responses", True),
+                        "listening": False,
+                        "speaking": False,
+                        "processing": False,
+                        "tts_available": diag.tts_available,
+                        "stt_available": diag.stt_available,
+                        "microphone_available": diag.microphone_available,
+                        "wake_word_enabled": diag.wake_word_available,
+                    }
+                })
+            except Exception as e:
+                await websocket.send_json({
+                    "type": "voice_status",
+                    "data": {"enabled": False, "error": str(e)}
+                })
+
+            while True:
+                data = await websocket.receive_text()
+                if data == "ping":
+                    await websocket.send_json({"type": "pong"})
+                elif data == "status":
+                    # Resend current status
+                    try:
+                        from core import state
+                        daemon_state = state.read_state()
+                        voice_state = daemon_state.get("voice", {})
+                        await websocket.send_json({
+                            "type": "voice_status",
+                            "data": voice_state
+                        })
+                    except Exception:
+                        pass
+        except WebSocketDisconnect:
+            manager.disconnect(websocket, "voice")
+
+    @app.websocket("/ws/trading")
+    async def websocket_trading(websocket: WebSocket):
+        """WebSocket for real-time trading updates (positions, orders, prices)."""
+        await manager.connect(websocket, "trading")
+        try:
+            while True:
+                data = await websocket.receive_text()
+                if data == "ping":
+                    await websocket.send_json({"type": "pong"})
+        except WebSocketDisconnect:
+            manager.disconnect(websocket, "trading")
+
 
 # =============================================================================
 # Broadcast Helpers (for use by services)
@@ -411,6 +475,24 @@ async def broadcast_credits_update(user_id: str, data: Dict[str, Any]):
 async def broadcast_treasury_update(data: Dict[str, Any]):
     """Broadcast a treasury update."""
     await manager.broadcast("treasury", {"type": "treasury_update", "data": data})
+
+
+async def broadcast_voice_status(data: Dict[str, Any]):
+    """Broadcast voice status update (listening, speaking, processing)."""
+    await manager.broadcast("voice", {"type": "voice_status", "data": data})
+
+
+async def broadcast_voice_transcript(text: str, is_final: bool = False):
+    """Broadcast voice transcription in real-time."""
+    await manager.broadcast("voice", {
+        "type": "voice_transcript",
+        "data": {"text": text, "is_final": is_final}
+    })
+
+
+async def broadcast_trading_update(update_type: str, data: Dict[str, Any]):
+    """Broadcast trading update (position, order, price)."""
+    await manager.broadcast("trading", {"type": update_type, "data": data})
 
 
 # =============================================================================
