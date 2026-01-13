@@ -910,6 +910,44 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def uptime(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /uptime command - show bot uptime (admin only)."""
+    try:
+        import os
+        import psutil
+        from datetime import datetime, timedelta
+        
+        # Get process start time
+        process = psutil.Process(os.getpid())
+        start_time = datetime.fromtimestamp(process.create_time())
+        uptime_delta = datetime.now() - start_time
+        
+        # Format uptime
+        days = uptime_delta.days
+        hours, remainder = divmod(uptime_delta.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        uptime_str = ""
+        if days > 0:
+            uptime_str += f"{days}d "
+        uptime_str += f"{hours}h {minutes}m {seconds}s"
+        
+        lines = [
+            "<b>⏱️ Bot Uptime</b>",
+            "",
+            f"<b>Uptime:</b> {uptime_str}",
+            f"<b>Started:</b> {start_time.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"<b>PID:</b> {os.getpid()}",
+        ]
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except ImportError:
+        await update.message.reply_text("psutil not installed", parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Uptime error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def metrics(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /metrics command - show system metrics (admin only)."""
     try:
@@ -3214,6 +3252,7 @@ def main():
     app.add_handler(CommandHandler("wallet", wallet))
     app.add_handler(CommandHandler("logs", logs))
     app.add_handler(CommandHandler("metrics", metrics))
+    app.add_handler(CommandHandler("uptime", uptime))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
 
