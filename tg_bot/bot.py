@@ -834,14 +834,37 @@ async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def flags(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /flags command - show feature flags (admin only)."""
+    """Handle /flags command - show feature flags (admin only).
+    
+    Usage:
+    - /flags - Show all flags
+    - /flags enable <name> - Enable a flag
+    - /flags disable <name> - Disable a flag
+    """
     try:
         from core.feature_flags import get_feature_flags
         ff = get_feature_flags()
         
+        # Check for enable/disable subcommands
+        if context.args:
+            action = context.args[0].lower()
+            if action in ("enable", "disable") and len(context.args) > 1:
+                flag_name = context.args[1]
+                if flag_name not in ff.flags:
+                    await update.message.reply_text(f"Unknown flag: {flag_name}", parse_mode=ParseMode.HTML)
+                    return
+                
+                if action == "enable":
+                    ff.enable(flag_name)
+                    await update.message.reply_text(f"✅ Enabled: <code>{flag_name}</code>", parse_mode=ParseMode.HTML)
+                else:
+                    ff.disable(flag_name)
+                    await update.message.reply_text(f"❌ Disabled: <code>{flag_name}</code>", parse_mode=ParseMode.HTML)
+                return
+        
         all_flags = ff.get_all_flags()
         
-        lines = ["<b>Feature Flags</b>", ""]
+        lines = ["<b>Feature Flags</b>", "", "<i>Use: /flags enable|disable &lt;name&gt;</i>", ""]
         
         for name, flag in sorted(all_flags.items()):
             state = flag["state"]
