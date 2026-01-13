@@ -66,8 +66,8 @@ class FreeTrendingAPI:
         if cached:
             return cached[:limit]
         
-        # Try DexScreener first
-        tokens = await self._get_dexscreener_trending()
+        # Try gainers as trending (has full data) since token-profiles lacks symbol/name
+        tokens = await self._get_dexscreener_gainers()
         
         if not tokens:
             tokens = await self._get_geckoterminal_trending()
