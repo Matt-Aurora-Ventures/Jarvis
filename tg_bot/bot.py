@@ -842,6 +842,31 @@ async def flags(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /audit command - show recent audit entries (admin only)."""
+    try:
+        from core.audit_logger import get_audit_logger
+        audit_log = get_audit_logger()
+        
+        entries = audit_log.get_entries(limit=10)
+        
+        if not entries:
+            await update.message.reply_text("No audit entries yet.", parse_mode=ParseMode.HTML)
+            return
+        
+        lines = ["<b>Recent Audit Log</b>", ""]
+        
+        for entry in reversed(entries):
+            status = "✅" if entry.success else "❌"
+            time_str = entry.timestamp.split("T")[1][:8] if "T" in entry.timestamp else ""
+            lines.append(f"{status} <code>{time_str}</code> {entry.category}:{entry.action}")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Audit error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /brain command - show self-improving system stats (admin only)."""
     if not SELF_IMPROVING_AVAILABLE:
@@ -2829,6 +2854,7 @@ def main():
     app.add_handler(CommandHandler("score", score))
     app.add_handler(CommandHandler("health", health))
     app.add_handler(CommandHandler("flags", flags))
+    app.add_handler(CommandHandler("audit", audit))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
 
