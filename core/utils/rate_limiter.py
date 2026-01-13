@@ -171,8 +171,8 @@ class MultiRateLimiter:
         with self._lock:
             stats = {}
             for key, limiter in self._limiters.items():
-                bucket = limiter._bucket
-                window = limiter._window
+                bucket = limiter.bucket
+                window = limiter.window
                 stats[key] = {
                     "tokens_available": round(bucket.tokens, 2),
                     "bucket_capacity": bucket.capacity,
