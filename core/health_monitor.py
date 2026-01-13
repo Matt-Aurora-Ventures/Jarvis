@@ -128,6 +128,14 @@ class HealthMonitor:
             critical=False,
         ))
 
+        # DexScreener API check (free)
+        self.register_check(HealthCheck(
+            name="dexscreener",
+            check_fn=self._check_dexscreener,
+            interval_seconds=120,
+            critical=False,
+        ))
+
     async def _check_database(self) -> HealthCheckResult:
         """Check database connectivity."""
         start = time.time()
@@ -221,6 +229,37 @@ class HealthMonitor:
                 name="memory",
                 status=HealthStatus.UNKNOWN,
                 message="psutil not available",
+                latency_ms=(time.time() - start) * 1000,
+                last_check=datetime.now(timezone.utc).isoformat(),
+            )
+
+    async def _check_dexscreener(self) -> HealthCheckResult:
+        """Check DexScreener API availability (free, no key)."""
+        start = time.time()
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                async with session.get("https://api.dexscreener.com/latest/dex/pairs/solana") as resp:
+                    if resp.status == 200:
+                        return HealthCheckResult(
+                            name="dexscreener",
+                            status=HealthStatus.HEALTHY,
+                            message="API responding",
+                            latency_ms=(time.time() - start) * 1000,
+                            last_check=datetime.now(timezone.utc).isoformat(),
+                        )
+                    return HealthCheckResult(
+                        name="dexscreener",
+                        status=HealthStatus.DEGRADED,
+                        message=f"HTTP {resp.status}",
+                        latency_ms=(time.time() - start) * 1000,
+                        last_check=datetime.now(timezone.utc).isoformat(),
+                    )
+        except Exception as e:
+            return HealthCheckResult(
+                name="dexscreener",
+                status=HealthStatus.UNHEALTHY,
+                message=str(e)[:50],
                 latency_ms=(time.time() - start) * 1000,
                 last_check=datetime.now(timezone.utc).isoformat(),
             )
