@@ -3658,6 +3658,7 @@ def main():
 
     # Treasury Trading Commands
     app.add_handler(CommandHandler("report", report))
+    app.add_handler(CommandHandler("sentiment", report))  # Alias for /report
     app.add_handler(CommandHandler("balance", balance))
     app.add_handler(CommandHandler("positions", positions))
     app.add_handler(CommandHandler("settings", settings))

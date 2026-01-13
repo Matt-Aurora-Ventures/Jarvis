@@ -1318,6 +1318,7 @@ python bot.py
 | `/chart <addr>` | Chart links | Public |
 | `/liquidity <addr>` | Liquidity info | Public |
 | `/age <addr>` | Token age | Public |
+| `/summary <addr>` | Full overview | Public |
 | `/gainers` | Top 10 price gainers | Public |
 | `/newpairs` | New trading pairs | Public |
 | `/signals` | Master Signal Report (Top 10) | Admin |
