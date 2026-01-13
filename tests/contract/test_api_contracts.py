@@ -1,7 +1,10 @@
 """API contract tests to ensure frontend/backend compatibility."""
 import pytest
-from pydantic import ValidationError
 from typing import Any, Dict
+
+# Skip if pydantic or fastapi not available
+pytest.importorskip("pydantic")
+pytest.importorskip("fastapi")
 
 
 class TestHealthContract:
