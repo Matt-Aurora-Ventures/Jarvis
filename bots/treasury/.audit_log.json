@@ -62,5 +62,23 @@
       "tx_signature": "39FMxT9w2o7FJ4uuQkzQUXK6E9WeKWjdEC3LooQMG9UPbFSjrFXgaR4vqrj1CoVNZVRnyL3rnd2Yd3UcKMzKeMHL",
       "dry_run": false
     }
+  },
+  {
+    "timestamp": "2026-01-13T19:02:58.369755",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "9a31c69e",
+      "token": "MWHALE",
+      "token_mint": "7TBD7QD9kyzwADErHusNtVWzSBdtG8j4aYJuXadNpump",
+      "amount_usd": 0.5605238457420001,
+      "entry_price": 3.152e-05,
+      "tp_price": 3.6248e-05,
+      "sl_price": 2.9944e-05,
+      "sentiment_grade": "B",
+      "tx_signature": "5p8Tq68sunXdVkyV3eAQdGbGXqrR7yhiugTsY7xANECSXKwFvHJEREn6zY58GwczG6F4RSHJuUt4RcoW3X7vcjTr",
+      "dry_run": false
+    }
   }
 ]
