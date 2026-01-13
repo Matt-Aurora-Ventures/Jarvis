@@ -2868,6 +2868,19 @@ def main():
     print("Bot started! Press Ctrl+C to stop.")
     print("=" * 50 + "\n")
 
+    # Start background services (TP/SL monitoring, health checks)
+    async def startup_tasks(app):
+        try:
+            # Initialize health monitoring
+            from core.health_monitor import get_health_monitor
+            monitor = get_health_monitor()
+            await monitor.start_monitoring()
+            print("Health monitoring: STARTED")
+        except Exception as e:
+            print(f"Health monitoring: FAILED - {e}")
+
+    app.post_init = startup_tasks
+
     # Run
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
