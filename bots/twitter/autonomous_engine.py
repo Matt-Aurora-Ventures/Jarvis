@@ -581,32 +581,50 @@ class AutonomousEngine:
         return None
     
     async def generate_social_sentiment_tweet(self) -> Optional[TweetDraft]:
-        """Generate a tweet based on LunarCrush social sentiment data."""
+        """Generate a tweet using Grok for sentiment analysis (primary) + LunarCrush data."""
         try:
             voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
             
-            from core.data.lunarcrush_api import get_lunarcrush
-            lc = get_lunarcrush()
+            # Get market data
+            from core.data.free_price_api import get_sol_price
+            from core.data.free_trending_api import FreeTrendingAPI
             
-            # Get market sentiment
-            sentiment = await lc.get_market_sentiment()
-            if not sentiment:
-                return None
+            sol_price = await get_sol_price()
+            api = FreeTrendingAPI()
+            gainers = await api.get_gainers(limit=5)
             
-            # Get SOL specific sentiment
-            sol_sentiment = await lc.get_coin_sentiment("SOL")
+            # Use GROK for primary sentiment analysis
+            market_summary = f"SOL at ${sol_price:.2f}. "
+            if gainers:
+                market_summary += f"Top gainers: {', '.join([f'{t.symbol} +{t.price_change_24h:.0f}%' for t in gainers[:3]])}"
             
-            prompt = f"""Write a tweet about social sentiment in crypto markets.
+            grok_response = await grok.analyze_sentiment({"market": market_summary})
+            grok_take = grok_response.content if grok_response and grok_response.success else ""
+            
+            # Try to get LunarCrush social data as supplement
+            social_buzz = ""
+            try:
+                from core.data.lunarcrush_api import get_lunarcrush
+                lc = get_lunarcrush()
+                lc_data = await lc.get_market_sentiment()
+                if lc_data:
+                    social_buzz = f"Social buzz: {lc_data.get('market_mood', 'mixed')}. "
+            except:
+                pass
+            
+            prompt = f"""Write a funny tweet about market sentiment. Be witty.
 
-Data from LunarCrush:
-- Market mood: {sentiment.get('market_mood', 'mixed')}
-- Average galaxy score: {sentiment.get('avg_galaxy_score', 0)}/100
-- Bullish ratio: {sentiment.get('bullish_ratio', 0.5):.0%}
-- Top trending: {', '.join([t['symbol'] for t in sentiment.get('top_trending', [])[:3]])}
-{f"- SOL galaxy score: {sol_sentiment.get('galaxy_score', 0)}/100" if sol_sentiment else ""}
+Grok's analysis: {grok_take[:150] if grok_take else "markets doing market things"}
+{social_buzz}
+Market: SOL at ${sol_price:.2f}
 
-Be specific with the numbers. Reference social volume or sentiment scores.
-1-2 sentences. End with nfa."""
+Make it funny. Self-deprecating humor about your analysis is good.
+Examples of the vibe:
+- "my sentiment circuits say bullish but they've been wrong 3 times this week. take that how you will. nfa"
+- "ran the data through my neural weights. they said 'looks fine'. that's all i got. nfa"
+
+1-2 sentences. Be genuinely funny, not try-hard."""
 
             content = await voice.generate_tweet(prompt)
             
@@ -622,35 +640,39 @@ Be specific with the numbers. Reference social volume or sentiment scores.
         return None
     
     async def generate_news_tweet(self) -> Optional[TweetDraft]:
-        """Generate a tweet based on CryptoPanic news sentiment."""
+        """Generate a funny tweet using Grok for news/market sentiment."""
         try:
             voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
             
-            from core.data.cryptopanic_api import get_cryptopanic
-            cp = get_cryptopanic()
+            # Get market data for context
+            from core.data.free_price_api import get_sol_price
+            from core.data.free_trending_api import FreeTrendingAPI
             
-            # Get news sentiment
-            news_data = await cp.get_news_sentiment()
-            if not news_data:
-                return None
+            sol_price = await get_sol_price()
+            api = FreeTrendingAPI()
+            trending = await api.get_trending(limit=5)
             
-            # Get important news
-            important = await cp.get_important_news(limit=3)
+            # Use GROK for market analysis
+            market_context = f"Current market: SOL ${sol_price:.2f}. "
+            if trending:
+                market_context += f"Trending: {', '.join([t.symbol for t in trending[:3]])}"
             
-            headlines = news_data.get('latest_headlines', [])
-            headline_text = headlines[0] if headlines else "nothing major"
+            grok_response = await grok.generate_text(
+                f"Give me a brief, witty one-liner about what's happening in crypto markets right now. Context: {market_context}"
+            )
             
-            prompt = f"""Write a tweet about what's happening in crypto news.
+            prompt = f"""Write a funny market commentary tweet.
 
-Data from CryptoPanic:
-- Market mood from news: {news_data.get('market_mood', 'mixed')}
-- Bullish articles: {news_data.get('bullish_count', 0)}
-- Bearish articles: {news_data.get('bearish_count', 0)}
-- Top mentioned: {', '.join(news_data.get('top_mentioned', [])[:3])}
-- Latest headline: "{headline_text[:80]}"
+Context: {market_context}
+{f"Grok says: {grok_response[:100]}" if grok_response else ""}
 
-Reference the news mood or a specific headline. Be specific.
-1-2 sentences. End with nfa."""
+Be funny. Make an observation that's both true and amusing.
+Examples:
+- "crypto twitter: 'we're so early' [token down 80%]. love the commitment to the narrative. nfa"
+- "market doing that thing where everyone's confident and i'm nervous. historically i should inverse myself. nfa"
+
+1-2 sentences. Genuinely witty, not try-hard."""
 
             content = await voice.generate_tweet(prompt)
             

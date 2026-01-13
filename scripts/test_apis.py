@@ -6,6 +6,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Load env from bots/twitter/.env
+env_path = Path(__file__).parent.parent / "bots" / "twitter" / ".env"
+if env_path.exists():
+    for line in env_path.read_text().splitlines():
+        if line.strip() and not line.startswith('#') and '=' in line:
+            k, v = line.split('=', 1)
+            os.environ.setdefault(k.strip(), v.strip())
+
 async def test():
     print("=== Testing APIs ===")
     print(f"LUNARCRUSH_API_KEY set: {bool(os.getenv('LUNARCRUSH_API_KEY'))}")

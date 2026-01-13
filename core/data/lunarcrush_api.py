@@ -13,8 +13,8 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-# LunarCrush API v3 (free public endpoints)
-LUNARCRUSH_API = "https://lunarcrush.com/api3"
+# LunarCrush API v4 (MCP server compatible)
+LUNARCRUSH_API = "https://lunarcrush.com/api4/public"
 
 
 class LunarCrushAPI:
