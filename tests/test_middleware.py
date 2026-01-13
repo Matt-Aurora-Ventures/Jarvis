@@ -1,8 +1,12 @@
 """Tests for API middleware."""
 import pytest
+from unittest.mock import patch, MagicMock
+
+# Skip entire module if fastapi not installed
+pytest.importorskip("fastapi")
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
 
 
 class TestRateLimitMiddleware:

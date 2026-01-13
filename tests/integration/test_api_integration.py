@@ -1,6 +1,10 @@
 """Integration tests for API endpoints."""
 import pytest
 import asyncio
+
+# Skip entire module if fastapi not installed
+pytest.importorskip("fastapi")
+
 from httpx import AsyncClient
 from fastapi.testclient import TestClient
 
