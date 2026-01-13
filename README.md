@@ -1314,6 +1314,15 @@ python bot.py
 | `/signals` | Master Signal Report (Top 10) | Admin |
 | `/analyze <token>` | Full analysis with Grok | Admin |
 | `/digest` | Comprehensive digest | Admin |
+| `/health` | System health status | Admin |
+| `/flags` | View/toggle feature flags | Admin |
+| `/config` | View/set configuration | Admin |
+| `/score` | Treasury scorecard (P&L) | Admin |
+| `/orders` | Active TP/SL orders | Admin |
+| `/system` | Full system overview | Admin |
+| `/wallet` | Treasury wallet info | Admin |
+| `/logs` | Recent log entries | Admin |
+| `/audit` | Audit log entries | Admin |
 
 ### Master Signal Report
 
