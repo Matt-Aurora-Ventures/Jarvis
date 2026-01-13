@@ -580,6 +580,91 @@ class AutonomousEngine:
         
         return None
     
+    async def generate_social_sentiment_tweet(self) -> Optional[TweetDraft]:
+        """Generate a tweet based on LunarCrush social sentiment data."""
+        try:
+            voice = await self._get_jarvis_voice()
+            
+            from core.data.lunarcrush_api import get_lunarcrush
+            lc = get_lunarcrush()
+            
+            # Get market sentiment
+            sentiment = await lc.get_market_sentiment()
+            if not sentiment:
+                return None
+            
+            # Get SOL specific sentiment
+            sol_sentiment = await lc.get_coin_sentiment("SOL")
+            
+            prompt = f"""Write a tweet about social sentiment in crypto markets.
+
+Data from LunarCrush:
+- Market mood: {sentiment.get('market_mood', 'mixed')}
+- Average galaxy score: {sentiment.get('avg_galaxy_score', 0)}/100
+- Bullish ratio: {sentiment.get('bullish_ratio', 0.5):.0%}
+- Top trending: {', '.join([t['symbol'] for t in sentiment.get('top_trending', [])[:3]])}
+{f"- SOL galaxy score: {sol_sentiment.get('galaxy_score', 0)}/100" if sol_sentiment else ""}
+
+Be specific with the numbers. Reference social volume or sentiment scores.
+1-2 sentences. End with nfa."""
+
+            content = await voice.generate_tweet(prompt)
+            
+            if content:
+                return TweetDraft(
+                    content=content,
+                    category="social_sentiment",
+                    cashtags=["$SOL"],
+                    hashtags=[]
+                )
+        except Exception as e:
+            logger.error(f"Social sentiment tweet error: {e}")
+        return None
+    
+    async def generate_news_tweet(self) -> Optional[TweetDraft]:
+        """Generate a tweet based on CryptoPanic news sentiment."""
+        try:
+            voice = await self._get_jarvis_voice()
+            
+            from core.data.cryptopanic_api import get_cryptopanic
+            cp = get_cryptopanic()
+            
+            # Get news sentiment
+            news_data = await cp.get_news_sentiment()
+            if not news_data:
+                return None
+            
+            # Get important news
+            important = await cp.get_important_news(limit=3)
+            
+            headlines = news_data.get('latest_headlines', [])
+            headline_text = headlines[0] if headlines else "nothing major"
+            
+            prompt = f"""Write a tweet about what's happening in crypto news.
+
+Data from CryptoPanic:
+- Market mood from news: {news_data.get('market_mood', 'mixed')}
+- Bullish articles: {news_data.get('bullish_count', 0)}
+- Bearish articles: {news_data.get('bearish_count', 0)}
+- Top mentioned: {', '.join(news_data.get('top_mentioned', [])[:3])}
+- Latest headline: "{headline_text[:80]}"
+
+Reference the news mood or a specific headline. Be specific.
+1-2 sentences. End with nfa."""
+
+            content = await voice.generate_tweet(prompt)
+            
+            if content:
+                return TweetDraft(
+                    content=content,
+                    category="news_sentiment",
+                    cashtags=[],
+                    hashtags=[]
+                )
+        except Exception as e:
+            logger.error(f"News tweet error: {e}")
+        return None
+    
     # =========================================================================
     # Posting
     # =========================================================================
@@ -654,30 +739,34 @@ class AutonomousEngine:
             # Night (22-6): Lighter content, agentic musings
             
             if 6 <= hour < 10:
-                # Morning - market focus
+                # Morning - market focus + social sentiment
                 generators = [
                     ("market_update", self.generate_market_update),
+                    ("social_sentiment", self.generate_social_sentiment_tweet),
                     ("hourly_update", self.generate_hourly_update),
                     ("trending_token", self.generate_trending_token_call),
                 ]
             elif 10 <= hour < 14:
-                # Midday - tokens and engagement
+                # Midday - tokens, news, engagement
                 generators = [
                     ("trending_token", self.generate_trending_token_call),
+                    ("news_sentiment", self.generate_news_tweet),
                     ("engagement", self.generate_interaction_tweet),
                     ("market_update", self.generate_market_update),
                 ]
             elif 14 <= hour < 18:
-                # Afternoon - thoughts and interactions
+                # Afternoon - thoughts, interactions, sentiment
                 generators = [
                     ("agentic_tech", self.generate_agentic_thought),
+                    ("social_sentiment", self.generate_social_sentiment_tweet),
                     ("grok_interaction", self.generate_grok_interaction),
                     ("trending_token", self.generate_trending_token_call),
                 ]
             elif 18 <= hour < 22:
-                # Evening - community and recap
+                # Evening - community, news, recap
                 generators = [
                     ("engagement", self.generate_interaction_tweet),
+                    ("news_sentiment", self.generate_news_tweet),
                     ("hourly_update", self.generate_hourly_update),
                     ("agentic_tech", self.generate_agentic_thought),
                 ]
@@ -687,6 +776,7 @@ class AutonomousEngine:
                     ("agentic_tech", self.generate_agentic_thought),
                     ("engagement", self.generate_interaction_tweet),
                     ("grok_interaction", self.generate_grok_interaction),
+                    ("social_sentiment", self.generate_social_sentiment_tweet),
                 ]
             
             # Filter out categories we've used recently

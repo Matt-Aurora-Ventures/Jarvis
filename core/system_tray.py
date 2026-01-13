@@ -17,8 +17,12 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 import webbrowser
+
+# Type checking imports
+if TYPE_CHECKING:
+    from PIL import Image as PILImage
 
 try:
     import pystray
@@ -90,7 +94,7 @@ class JarvisSystemTray:
             return
 
         self.state = TrayState.load()
-        self.icon: Optional[pystray.Icon] = None
+        self.icon = None  # pystray.Icon when available
         self._running = False
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -102,7 +106,7 @@ class JarvisSystemTray:
         # Status colors
         self._status = "idle"  # idle, active, error, listening
 
-    def _create_icon_image(self, status: str = "idle") -> Image.Image:
+    def _create_icon_image(self, status: str = "idle") -> "PILImage.Image":
         """Create dynamic icon based on status."""
         size = 64
         img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
@@ -144,7 +148,7 @@ class JarvisSystemTray:
 
         return img
 
-    def _build_menu(self) -> pystray.Menu:
+    def _build_menu(self):
         """Build dynamic context menu."""
         voice_text = "Voice: ON" if self.state.voice_enabled else "Voice: OFF"
         daemon_text = "Daemon: Running" if self.state.daemon_running else "Daemon: Stopped"
