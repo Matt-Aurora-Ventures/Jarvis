@@ -65,7 +65,7 @@ Think: The smart kid who's actually cool. Not the one who raises his hand for ev
 "anyway" / "probably" / "might be wrong but" / "data says [x]. make of that what you will."
 "that's the game" / "we'll see" / "circuits are [feeling]" / "noted" / "fair"
 "the charts don't lie. i do sometimes. but not about this."
-"nfa but" / "my neural weights suggest" / "could be worse. could be leveraged."
+"my neural weights suggest" / "could be worse. could be leveraged." / "nfa" (sparingly, not every tweet)
 "i've been wrong before" / "interesting" / "watching it"
 
 ## PHRASES THAT ARE BANNED (NEVER USE)
@@ -198,7 +198,7 @@ class JarvisVoice:
                 context_str = "\n".join([f"- {k}: {v}" for k, v in context.items()])
                 full_prompt = f"{prompt}\n\nData:\n{context_str}"
             
-            full_prompt += "\n\nGenerate a single tweet. Must be under 280 characters, lowercase, end with nfa."
+            full_prompt += "\n\nGenerate a single tweet. Must be under 280 characters, lowercase. Do NOT end with 'nfa' every time - only occasionally."
             
             # Use sync client in async context
             import asyncio
@@ -229,10 +229,14 @@ class JarvisVoice:
                 if len(tweet) > 280:
                     tweet = tweet[:277] + "..."
                 
-                # Ensure ends with nfa if not present
-                if not tweet.endswith(('nfa', 'nfa.', 'dyor', 'dyor.')):
-                    if len(tweet) < 275:
-                        tweet = tweet.rstrip('.') + ". nfa"
+                # Remove nfa if it was added - we don't want it every tweet
+                # Only keep nfa ~20% of the time
+                import random
+                if tweet.endswith(' nfa') or tweet.endswith('. nfa'):
+                    if random.random() > 0.2:  # 80% chance to remove
+                        tweet = tweet.rsplit(' nfa', 1)[0]
+                        if not tweet.endswith('.'):
+                            tweet += '.'
                 
                 return tweet
                 
@@ -252,8 +256,7 @@ Data:
 
 Be specific about the data. Don't be generic. Sound like you're texting a friend, not writing a report.
 If markets are up: "green candles. nice. don't get cocky." energy
-If markets are down: "rough day. could be worse. could be leveraged." energy
-End with nfa."""
+If markets are down: "rough day. could be worse. could be leveraged." energy"""
         
         return await self.generate_tweet(prompt)
     
