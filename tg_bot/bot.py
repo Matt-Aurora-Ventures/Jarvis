@@ -941,6 +941,53 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Audit error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
+async def liquidity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /liquidity command - get token liquidity info (public)."""
+    try:
+        if not context.args:
+            await update.message.reply_text("Usage: /liquidity <token_address>", parse_mode=ParseMode.HTML)
+            return
+        
+        token_address = context.args[0].strip()
+        
+        from core.data.free_price_api import get_token_price
+        price_data = await get_token_price(token_address)
+        
+        if not price_data:
+            await update.message.reply_text("Token not found.", parse_mode=ParseMode.HTML)
+            return
+        
+        lines = [f"<b>💧 {price_data.symbol} Liquidity</b>", ""]
+        
+        if price_data.liquidity:
+            lines.append(f"<b>Total Liquidity:</b> ${price_data.liquidity:,.0f}")
+            
+            # Liquidity quality assessment
+            if price_data.liquidity >= 100000:
+                quality = "🟢 Strong"
+            elif price_data.liquidity >= 25000:
+                quality = "🟡 Moderate"
+            elif price_data.liquidity >= 5000:
+                quality = "🟠 Low"
+            else:
+                quality = "🔴 Very Low"
+            
+            lines.append(f"<b>Quality:</b> {quality}")
+            
+            if price_data.volume_24h and price_data.liquidity > 0:
+                turnover = price_data.volume_24h / price_data.liquidity
+                lines.append(f"<b>24h Turnover:</b> {turnover:.2f}x")
+        else:
+            lines.append("No liquidity data available")
+        
+        lines.append("")
+        lines.append(f"<i>Source: {price_data.source}</i>")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Liquidity error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
 async def chart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /chart command - get chart links for a token (public)."""
     try:
@@ -3476,6 +3523,7 @@ def main():
     app.add_handler(CommandHandler("mcap", mcap))
     app.add_handler(CommandHandler("volume", volume))
     app.add_handler(CommandHandler("chart", chart))
+    app.add_handler(CommandHandler("liquidity", liquidity))
     app.add_handler(CommandHandler("price", price))
     app.add_handler(CommandHandler("gainers", gainers))
     app.add_handler(CommandHandler("newpairs", newpairs))
