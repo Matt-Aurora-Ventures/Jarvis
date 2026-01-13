@@ -326,3 +326,14 @@ Generate the thread (separate each tweet with ---):"""
     def can_generate_image(self) -> bool:
         """Check if we can generate more images today"""
         return self.get_daily_image_count() < 6
+
+
+# Singleton
+_grok_client: Optional[GrokClient] = None
+
+def get_grok_client() -> GrokClient:
+    """Get the singleton Grok client."""
+    global _grok_client
+    if _grok_client is None:
+        _grok_client = GrokClient()
+    return _grok_client

@@ -1,5 +1,34 @@
-"""Caching utilities."""
-from core.cache.redis_cache import RedisCache, cache, get_cache
-from core.cache.memory_cache import MemoryCache, LRUCache
+"""
+JARVIS Cache Module
 
-__all__ = ["RedisCache", "cache", "get_cache", "MemoryCache", "LRUCache"]
+Caching utilities with TTL, LRU eviction, and async support.
+"""
+
+from .decorators import (
+    # Classes
+    CacheBackend,
+    CacheEntry,
+    CacheManager,
+    MemoryCache,
+
+    # Decorators
+    cached,
+    cache,
+    cache_aside,
+
+    # Utilities
+    get_cache_manager,
+    make_cache_key,
+)
+
+__all__ = [
+    "CacheBackend",
+    "CacheEntry",
+    "CacheManager",
+    "MemoryCache",
+    "cached",
+    "cache",
+    "cache_aside",
+    "get_cache_manager",
+    "make_cache_key",
+]

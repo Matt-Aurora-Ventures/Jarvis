@@ -1,4 +1,27 @@
-"""Background task management."""
-from core.tasks.queue import TaskQueue, TaskStatus, get_task_queue
+"""
+JARVIS Task Queue Module
 
-__all__ = ["TaskQueue", "TaskStatus", "get_task_queue"]
+Async task queue for background job processing.
+"""
+
+from .queue import (
+    TaskQueue,
+    TaskStatus,
+    TaskResult,
+    Task,
+    task,
+    get_task_queue,
+    start_task_queue,
+    stop_task_queue,
+)
+
+__all__ = [
+    "TaskQueue",
+    "TaskStatus",
+    "TaskResult",
+    "Task",
+    "task",
+    "get_task_queue",
+    "start_task_queue",
+    "stop_task_queue",
+]

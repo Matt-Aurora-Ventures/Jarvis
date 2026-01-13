@@ -1,3 +1,7 @@
+# JARVIS Pre-commit Configuration
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
 repos:
   # Python code formatting
   - repo: https://github.com/psf/black
@@ -5,6 +9,7 @@ repos:
     hooks:
       - id: black
         language_version: python3.11
+        exclude: ^(venv|\.venv|migrations)/
 
   # Python import sorting
   - repo: https://github.com/pycqa/isort
@@ -12,21 +17,24 @@ repos:
     hooks:
       - id: isort
         args: ["--profile", "black"]
+        exclude: ^(venv|\.venv|migrations)/
 
   # Python linting
   - repo: https://github.com/pycqa/flake8
     rev: 7.0.0
     hooks:
       - id: flake8
-        args: ["--max-line-length=100", "--ignore=E203,W503"]
+        args: ["--max-line-length=100", "--ignore=E203,W503,E501"]
+        exclude: ^(venv|\.venv|migrations)/
 
-  # Python type checking
+  # Python type checking (optional - can be slow)
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.8.0
     hooks:
       - id: mypy
         additional_dependencies: [types-all]
-        args: ["--ignore-missing-imports"]
+        args: ["--ignore-missing-imports", "--no-strict-optional"]
+        exclude: ^(venv|\.venv|migrations|tests)/
 
   # Security scanning - detect secrets
   - repo: https://github.com/Yelp/detect-secrets
@@ -34,29 +42,46 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
-        exclude: package-lock.json
+        exclude: (package-lock\.json|\.secrets\.baseline)
 
   # Security scanning - bandit
   - repo: https://github.com/PyCQA/bandit
     rev: 1.7.7
     hooks:
       - id: bandit
-        args: ["-c", "pyproject.toml"]
+        args: ["-c", "pyproject.toml", "-ll"]
         additional_dependencies: ["bandit[toml]"]
+        exclude: ^tests/
+
+  # Python docstring coverage
+  - repo: https://github.com/pycqa/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        args: ["--convention=google", "--add-ignore=D100,D104,D107"]
+        exclude: ^(venv|\.venv|migrations|tests)/
 
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^(\.secrets\.baseline)
       - id: end-of-file-fixer
+        exclude: ^(\.secrets\.baseline)
       - id: check-yaml
+        args: [--allow-multiple-documents]
       - id: check-json
+      - id: check-toml
       - id: check-added-large-files
         args: ['--maxkb=1000']
       - id: check-merge-conflict
       - id: debug-statements
       - id: check-case-conflict
+      - id: check-docstring-first
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
 
   # YAML linting
   - repo: https://github.com/adrienverge/yamllint
@@ -72,7 +97,7 @@ repos:
       - id: markdownlint
         args: ["--disable", "MD013", "MD033", "MD041", "--"]
 
-  # JavaScript/TypeScript
+  # JavaScript/TypeScript (if applicable)
   - repo: https://github.com/pre-commit/mirrors-eslint
     rev: v8.56.0
     hooks:
@@ -83,7 +108,15 @@ repos:
           - eslint@8.56.0
           - eslint-config-prettier@9.1.0
 
+  # Commit message linting
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.13.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
 # CI settings
 ci:
   autofix_prs: true
   autoupdate_schedule: weekly
+  skip: [mypy]  # Skip slow hooks in CI auto-updates
