@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-4.2.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.3.0-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1108%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
