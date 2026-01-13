@@ -109,7 +109,9 @@ class JupiterClient:
     - Best route discovery across all DEXs
     - Price quotes with slippage protection
     - Transaction building and simulation
+    - Dynamic priority fee calculation (per guide recommendations)
     - Support for limit orders via DCA
+    - Transaction confirmation with retry logic (per guide)
     """
 
     JUPITER_API = "https://quote-api.jup.ag/v6"
@@ -120,6 +122,16 @@ class JupiterClient:
     SOL_MINT = "So11111111111111111111111111111111111111112"
     USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
     USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+
+    # Priority fee configuration (per Solana Trading Bot Guide)
+    DEFAULT_PRIORITY_FEE = 10000  # 10,000 micro lamports
+    MIN_PRIORITY_FEE = 1000       # 1,000 micro lamports
+    MAX_PRIORITY_FEE = 1000000    # 1,000,000 micro lamports (1 lamport/CU)
+
+    # Transaction confirmation settings (per guide)
+    TX_CONFIRM_TIMEOUT = 30  # seconds
+    TX_MAX_RETRIES = 3
+    TX_RETRY_DELAY = 2  # seconds between retries
 
     def __init__(self, rpc_url: str = None):
         """
@@ -134,6 +146,7 @@ class JupiterClient:
         )
         self._session: Optional[aiohttp.ClientSession] = None
         self._token_cache: Dict[str, TokenInfo] = {}
+        self._recent_priority_fees: List[int] = []  # Track recent fees for dynamic calculation
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
@@ -364,6 +377,195 @@ class JupiterClient:
 
         except Exception as e:
             return False, str(e)
+
+    async def confirm_transaction(
+        self,
+        signature: str,
+        timeout: int = None,
+        commitment: str = 'confirmed'
+    ) -> Tuple[bool, str]:
+        """
+        Wait for transaction confirmation with timeout.
+
+        Per Solana Trading Bot Guide: "Always confirm transactions with appropriate
+        timeout handling to detect dropped or failed transactions."
+
+        Args:
+            signature: Transaction signature to confirm
+            timeout: Timeout in seconds (default: TX_CONFIRM_TIMEOUT)
+            commitment: Commitment level ('processed', 'confirmed', 'finalized')
+
+        Returns:
+            Tuple of (success, status_or_error)
+        """
+        session = await self._get_session()
+        timeout = timeout or self.TX_CONFIRM_TIMEOUT
+        start_time = asyncio.get_event_loop().time()
+
+        while True:
+            elapsed = asyncio.get_event_loop().time() - start_time
+            if elapsed >= timeout:
+                return False, "Transaction confirmation timeout"
+
+            try:
+                async with session.post(self.rpc_url, json={
+                    'jsonrpc': '2.0',
+                    'id': 1,
+                    'method': 'getSignatureStatuses',
+                    'params': [[signature], {'searchTransactionHistory': True}]
+                }) as resp:
+                    data = await resp.json()
+                    result = data.get('result', {})
+                    statuses = result.get('value', [])
+
+                    if statuses and statuses[0]:
+                        status = statuses[0]
+
+                        # Check for error
+                        if status.get('err'):
+                            return False, f"Transaction failed: {status['err']}"
+
+                        # Check confirmation level
+                        conf_status = status.get('confirmationStatus', '')
+                        if commitment == 'processed' and conf_status:
+                            return True, conf_status
+                        elif commitment == 'confirmed' and conf_status in ['confirmed', 'finalized']:
+                            return True, conf_status
+                        elif commitment == 'finalized' and conf_status == 'finalized':
+                            return True, conf_status
+
+            except Exception as e:
+                logger.warning(f"Error checking tx status: {e}")
+
+            await asyncio.sleep(0.5)
+
+    async def send_transaction_with_retry(
+        self,
+        transaction_bytes: bytes,
+        max_retries: int = None
+    ) -> Tuple[bool, str]:
+        """
+        Send transaction with automatic retry on transient failures.
+
+        Per Solana Trading Bot Guide: "Implement retry logic with fresh blockhashes
+        for transactions that fail due to blockhash expiry."
+
+        Args:
+            transaction_bytes: Signed transaction bytes
+            max_retries: Maximum retry attempts (default: TX_MAX_RETRIES)
+
+        Returns:
+            Tuple of (success, signature_or_error)
+        """
+        import base64
+
+        max_retries = max_retries or self.TX_MAX_RETRIES
+        session = await self._get_session()
+
+        for attempt in range(max_retries + 1):
+            try:
+                async with session.post(self.rpc_url, json={
+                    'jsonrpc': '2.0',
+                    'id': 1,
+                    'method': 'sendTransaction',
+                    'params': [
+                        base64.b64encode(transaction_bytes).decode(),
+                        {
+                            'encoding': 'base64',
+                            'preflightCommitment': 'confirmed',
+                            'maxRetries': 0  # We handle retries ourselves
+                        }
+                    ]
+                }) as resp:
+                    data = await resp.json()
+
+                    if 'error' in data:
+                        error_msg = data['error'].get('message', 'Unknown error')
+
+                        # Check if retryable error
+                        if any(x in error_msg.lower() for x in ['blockhash', 'expired', 'timeout']):
+                            if attempt < max_retries:
+                                logger.warning(f"Retryable tx error (attempt {attempt + 1}): {error_msg}")
+                                await asyncio.sleep(self.TX_RETRY_DELAY)
+                                continue
+
+                        return False, error_msg
+
+                    signature = data.get('result', '')
+                    if signature:
+                        # Wait for confirmation
+                        confirmed, status = await self.confirm_transaction(signature)
+                        if confirmed:
+                            logger.info(f"Transaction confirmed: {signature[:12]}... ({status})")
+                            return True, signature
+                        else:
+                            if attempt < max_retries:
+                                logger.warning(f"Tx not confirmed (attempt {attempt + 1}): {status}")
+                                await asyncio.sleep(self.TX_RETRY_DELAY)
+                                continue
+                            return False, status
+
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(f"Tx send error (attempt {attempt + 1}): {e}")
+                    await asyncio.sleep(self.TX_RETRY_DELAY)
+                    continue
+                return False, str(e)
+
+        return False, "Max retries exceeded"
+
+    async def get_dynamic_priority_fee(self) -> int:
+        """
+        Calculate dynamic priority fee based on recent network conditions.
+
+        Per Solana Trading Bot Guide: "Performant bots dynamically calculate
+        the appropriate fee based on recent network conditions, analyzing
+        recent transactions to bid just enough to be competitive without overpaying."
+
+        Returns:
+            Priority fee in micro lamports
+        """
+        session = await self._get_session()
+
+        try:
+            # Get recent prioritization fees from the network
+            async with session.post(self.rpc_url, json={
+                'jsonrpc': '2.0',
+                'id': 1,
+                'method': 'getRecentPrioritizationFees',
+                'params': []
+            }) as resp:
+                data = await resp.json()
+                fees = data.get('result', [])
+
+                if not fees:
+                    logger.debug("No recent fees, using default")
+                    return self.DEFAULT_PRIORITY_FEE
+
+                # Extract prioritization fees from recent slots
+                recent_fees = [f.get('prioritizationFee', 0) for f in fees[-20:]]
+                recent_fees = [f for f in recent_fees if f > 0]
+
+                if not recent_fees:
+                    return self.DEFAULT_PRIORITY_FEE
+
+                # Calculate competitive fee (75th percentile to beat most txs)
+                sorted_fees = sorted(recent_fees)
+                percentile_75_idx = int(len(sorted_fees) * 0.75)
+                competitive_fee = sorted_fees[percentile_75_idx]
+
+                # Add 20% buffer to ensure inclusion
+                buffered_fee = int(competitive_fee * 1.2)
+
+                # Clamp to min/max bounds
+                final_fee = max(self.MIN_PRIORITY_FEE, min(buffered_fee, self.MAX_PRIORITY_FEE))
+
+                logger.debug(f"Dynamic priority fee: {final_fee} micro lamports (network 75th: {competitive_fee})")
+                return final_fee
+
+        except Exception as e:
+            logger.warning(f"Failed to get dynamic priority fee: {e}, using default")
+            return self.DEFAULT_PRIORITY_FEE
 
     async def execute_swap(
         self,

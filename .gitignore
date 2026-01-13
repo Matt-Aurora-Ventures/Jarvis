@@ -38,10 +38,12 @@ lifeos/logs/
 lifeos/models/
 lifeos/memory/
 lifeos/reports/
+logs/
 /data/
 *.log
 *.log.*
 *.pid
+*-audit.json
 
 # === DATABASES ===
 *.db
@@ -187,6 +189,8 @@ keys.json
 # === GROK IMAGINE ===
 # Browser session and cookies (contains auth tokens)
 bots/grok_imagine/x_cookies.json
+bots/grok_imagine/grok_cookies.json
+bots/grok_imagine/*_cookies.json
 bots/grok_imagine/browser_profile/
 bots/grok_imagine/*.png
 bots/grok_imagine/generated/
@@ -209,3 +213,18 @@ nul
 jarvis_wakeup*.jpg
 jarvis_wakeup*.png
 open\ source\ everything*.png
+
+# === HYPERLIQUID API ===
+# CRITICAL: Never commit Hyperliquid/Alchemy API keys
+hyperliquid_api_key*
+*hyperliquid*.key
+data/hyperliquid/
+core/data_sources/.hyperliquid_credentials*
+.hyperliquid_cache/
+
+# === TEMP FILES ===
+# Temporary scripts and data files
+temp_*.py
+temp_*.js
+temp_*.json
+temp_*.txt

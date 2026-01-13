@@ -243,12 +243,11 @@ Return ONLY a JSON object: {{"tweets": ["tweet1", "tweet2", "tweet3"]}}"""
     ) -> Optional[str]:
         """Post a tweet and return the tweet ID."""
         try:
-            result = await self.twitter.post_tweet(text, reply_to_id=reply_to)
-            if result.get("success"):
-                return result.get("tweet_id")
-            else:
-                logger.error(f"Tweet failed: {result.get('error')}")
-                return None
+            result = await self.twitter.post_tweet(text, reply_to=reply_to)
+            if result and result.success:
+                return result.tweet_id
+            logger.error(f"Tweet failed: {result.error if result else 'unknown error'}")
+            return None
         except Exception as e:
             logger.error(f"Tweet error: {e}")
             return None

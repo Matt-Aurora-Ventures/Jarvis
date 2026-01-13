@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jarvis-config
+  labels:
+    app: jarvis
+data:
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  CORS_ORIGINS: "https://jarvis.example.com"
+  REDIS_URL: "redis://jarvis-redis:6379"
+  DATABASE_URL: "sqlite:///app/data/jarvis.db"
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_REQUESTS: "100"
+  RATE_LIMIT_WINDOW: "60"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jarvis-secrets
+  labels:
+    app: jarvis
+type: Opaque
+stringData:
+  JWT_SECRET_KEY: "change-me-in-production"
+  # Add other secrets as needed
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jarvis-data-pvc
+  labels:
+    app: jarvis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard

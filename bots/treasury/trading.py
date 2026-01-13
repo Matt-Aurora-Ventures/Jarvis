@@ -179,10 +179,18 @@ class TradingEngine:
     - Position sizing based on risk level
     - Full trade history and reporting
     - Real-time P&L tracking
+    - Spending caps and audit logging (per guide)
     """
 
     POSITIONS_FILE = Path(__file__).parent / '.positions.json'
     HISTORY_FILE = Path(__file__).parent / '.trade_history.json'
+    AUDIT_LOG_FILE = Path(__file__).parent / '.audit_log.json'
+    DAILY_VOLUME_FILE = Path(__file__).parent / '.daily_volume.json'
+
+    # CRITICAL: Spending caps to protect treasury (per guide)
+    MAX_TRADE_USD = 100.0      # Maximum single trade size
+    MAX_DAILY_USD = 500.0      # Maximum daily trading volume
+    MAX_POSITION_PCT = 0.20    # Max 20% of portfolio in single position
 
     # Default TP/SL percentages by sentiment grade
     # MANDATORY: Every trade MUST have TP/SL set based on grade
@@ -274,6 +282,99 @@ class TradingEngine:
                     self.trade_history = [Position.from_dict(p) for p in data]
             except Exception as e:
                 logger.error(f"Failed to load history: {e}")
+
+    def _get_daily_volume(self) -> float:
+        """Get total trading volume for today (UTC)."""
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        try:
+            if self.DAILY_VOLUME_FILE.exists():
+                with open(self.DAILY_VOLUME_FILE) as f:
+                    data = json.load(f)
+                    if data.get('date') == today:
+                        return data.get('volume_usd', 0.0)
+        except Exception as e:
+            logger.debug(f"Failed to load daily volume: {e}")
+        return 0.0
+
+    def _add_daily_volume(self, amount_usd: float):
+        """Add to daily trading volume."""
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        current = self._get_daily_volume()
+        try:
+            with open(self.DAILY_VOLUME_FILE, 'w') as f:
+                json.dump({'date': today, 'volume_usd': current + amount_usd}, f)
+        except Exception as e:
+            logger.error(f"Failed to save daily volume: {e}")
+
+    def _check_spending_limits(self, amount_usd: float, portfolio_usd: float) -> Tuple[bool, str]:
+        """
+        Check if trade passes spending limits.
+
+        Per guide: "Implement spending caps to protect treasury from
+        runaway losses or accidental large trades."
+
+        Returns:
+            Tuple of (allowed, reason)
+        """
+        # Check single trade limit
+        if amount_usd > self.MAX_TRADE_USD:
+            return False, f"Trade ${amount_usd:.2f} exceeds max single trade ${self.MAX_TRADE_USD}"
+
+        # Check daily limit
+        daily_volume = self._get_daily_volume()
+        if daily_volume + amount_usd > self.MAX_DAILY_USD:
+            remaining = self.MAX_DAILY_USD - daily_volume
+            return False, f"Daily limit reached. Used ${daily_volume:.2f}/{self.MAX_DAILY_USD}. Remaining: ${remaining:.2f}"
+
+        # Check position concentration
+        if portfolio_usd > 0:
+            position_pct = amount_usd / portfolio_usd
+            if position_pct > self.MAX_POSITION_PCT:
+                return False, f"Position {position_pct*100:.1f}% exceeds max {self.MAX_POSITION_PCT*100:.0f}% of portfolio"
+
+        return True, ""
+
+    def _log_audit(
+        self,
+        action: str,
+        details: Dict[str, Any],
+        user_id: int = None,
+        success: bool = True
+    ):
+        """
+        Log trade action to audit log.
+
+        Per guide: "Maintain comprehensive audit trails for all
+        trading operations for regulatory compliance and debugging."
+        """
+        try:
+            # Load existing log
+            audit_log = []
+            if self.AUDIT_LOG_FILE.exists():
+                with open(self.AUDIT_LOG_FILE) as f:
+                    audit_log = json.load(f)
+
+            # Add new entry
+            entry = {
+                'timestamp': datetime.utcnow().isoformat(),
+                'action': action,
+                'user_id': user_id,
+                'success': success,
+                'details': details,
+            }
+            audit_log.append(entry)
+
+            # Keep last 1000 entries
+            if len(audit_log) > 1000:
+                audit_log = audit_log[-1000:]
+
+            with open(self.AUDIT_LOG_FILE, 'w') as f:
+                json.dump(audit_log, f, indent=2)
+
+            logger.info(f"AUDIT: {action} | user={user_id} | success={success}")
+
+        except Exception as e:
+            logger.error(f"Failed to write audit log: {e}")
 
     def _save_state(self):
         """Save positions and history to disk."""
@@ -438,20 +539,36 @@ class TradingEngine:
         existing = [p for p in self.positions.values()
                    if p.token_mint == token_mint and p.is_open]
         if existing:
+            self._log_audit("OPEN_POSITION_REJECTED", {"token": token_symbol, "reason": "duplicate"}, user_id, False)
             return False, f"Already have position in {token_symbol}", None
 
         if len([p for p in self.positions.values() if p.is_open]) >= self.max_positions:
+            self._log_audit("OPEN_POSITION_REJECTED", {"token": token_symbol, "reason": "max_positions"}, user_id, False)
             return False, "Maximum positions reached", None
 
         # Get current price
         current_price = await self.jupiter.get_token_price(token_mint)
         if current_price <= 0:
+            self._log_audit("OPEN_POSITION_REJECTED", {"token": token_symbol, "reason": "no_price"}, user_id, False)
             return False, "Failed to get token price", None
+
+        # Get portfolio value for limit checks
+        _, portfolio_usd = await self.get_portfolio_value()
 
         # Calculate position size
         if not amount_usd:
-            _, portfolio_usd = await self.get_portfolio_value()
             amount_usd = self.calculate_position_size(portfolio_usd)
+
+        # CRITICAL: Check spending limits before proceeding
+        allowed, limit_reason = self._check_spending_limits(amount_usd, portfolio_usd)
+        if not allowed:
+            self._log_audit("OPEN_POSITION_REJECTED", {
+                "token": token_symbol,
+                "reason": "spending_limit",
+                "limit_reason": limit_reason,
+                "amount_usd": amount_usd,
+            }, user_id, False)
+            return False, f"⛔ {limit_reason}", None
 
         # Calculate TP/SL
         tp_price, sl_price = self.get_tp_sl_levels(
@@ -488,6 +605,22 @@ class TradingEngine:
             position.status = TradeStatus.OPEN
             self.positions[position_id] = position
             self._save_state()
+
+            # Track daily volume even in dry run
+            self._add_daily_volume(amount_usd)
+
+            # Audit log
+            self._log_audit("OPEN_POSITION", {
+                "position_id": position_id,
+                "token": token_symbol,
+                "token_mint": token_mint,
+                "amount_usd": amount_usd,
+                "entry_price": current_price,
+                "tp_price": tp_price,
+                "sl_price": sl_price,
+                "sentiment_grade": sentiment_grade,
+                "dry_run": True,
+            }, user_id, True)
 
             logger.info(f"[DRY RUN] Opened position {position_id}: {token_symbol}")
             return True, f"[DRY RUN] Position opened", position
@@ -534,10 +667,31 @@ class TradingEngine:
             self.positions[position_id] = position
             self._save_state()
 
+            # Track daily volume
+            self._add_daily_volume(amount_usd)
+
+            # Audit log
+            self._log_audit("OPEN_POSITION", {
+                "position_id": position_id,
+                "token": token_symbol,
+                "token_mint": token_mint,
+                "amount_usd": amount_usd,
+                "entry_price": current_price,
+                "tp_price": tp_price,
+                "sl_price": sl_price,
+                "sentiment_grade": sentiment_grade,
+                "tx_signature": result.signature,
+                "dry_run": False,
+            }, user_id, True)
+
             logger.info(f"Opened position {position_id}: {token_symbol} @ ${current_price}")
             return True, f"Position opened: {result.signature}", position
 
         except Exception as e:
+            self._log_audit("OPEN_POSITION_FAILED", {
+                "token": token_symbol,
+                "error": str(e),
+            }, user_id, False)
             logger.error(f"Failed to open position: {e}")
             return False, f"Error: {str(e)}", None
 
@@ -560,14 +714,27 @@ class TradingEngine:
         """
         if self.admin_user_ids:
             if not user_id or not self.is_admin(user_id):
+                self._log_audit("CLOSE_POSITION_REJECTED", {
+                    "position_id": position_id,
+                    "reason": "unauthorized",
+                }, user_id, False)
                 return False, "Unauthorized"
 
         if position_id not in self.positions:
+            self._log_audit("CLOSE_POSITION_REJECTED", {
+                "position_id": position_id,
+                "reason": "not_found",
+            }, user_id, False)
             return False, "Position not found"
 
         position = self.positions[position_id]
 
         if not position.is_open:
+            self._log_audit("CLOSE_POSITION_REJECTED", {
+                "position_id": position_id,
+                "token": position.token_symbol,
+                "reason": "already_closed",
+            }, user_id, False)
             return False, "Position already closed"
 
         # Get current price
@@ -585,6 +752,18 @@ class TradingEngine:
             self.trade_history.append(position)
             del self.positions[position_id]
             self._save_state()
+
+            # Audit log for dry run close
+            self._log_audit("CLOSE_POSITION", {
+                "position_id": position_id,
+                "token": position.token_symbol,
+                "entry_price": position.entry_price,
+                "exit_price": current_price,
+                "pnl_usd": position.pnl_usd,
+                "pnl_pct": position.pnl_pct,
+                "reason": reason,
+                "dry_run": True,
+            }, user_id, True)
 
             logger.info(f"[DRY RUN] Closed position {position_id}: P&L ${position.pnl_usd:+.2f}")
             return True, f"[DRY RUN] Closed with P&L: ${position.pnl_usd:+.2f} ({position.pnl_pct:+.1f}%)"
@@ -608,6 +787,13 @@ class TradingEngine:
                 self.trade_history.append(position)
                 del self.positions[position_id]
                 self._save_state()
+
+                self._log_audit("CLOSE_POSITION", {
+                    "position_id": position_id,
+                    "token": position.token_symbol,
+                    "reason": "no_balance",
+                    "dry_run": False,
+                }, user_id, True)
                 return True, "Position closed (no balance)"
 
             # Get quote token -> SOL
@@ -622,11 +808,21 @@ class TradingEngine:
             )
 
             if not quote:
+                self._log_audit("CLOSE_POSITION_FAILED", {
+                    "position_id": position_id,
+                    "token": position.token_symbol,
+                    "error": "no_quote",
+                }, user_id, False)
                 return False, "Failed to get close quote"
 
             result = await self.jupiter.execute_swap(quote, self.wallet)
 
             if not result.success:
+                self._log_audit("CLOSE_POSITION_FAILED", {
+                    "position_id": position_id,
+                    "token": position.token_symbol,
+                    "error": result.error,
+                }, user_id, False)
                 return False, f"Close failed: {result.error}"
 
             # Update position
@@ -640,10 +836,28 @@ class TradingEngine:
             del self.positions[position_id]
             self._save_state()
 
+            # Audit log for successful close
+            self._log_audit("CLOSE_POSITION", {
+                "position_id": position_id,
+                "token": position.token_symbol,
+                "token_mint": position.token_mint,
+                "entry_price": position.entry_price,
+                "exit_price": current_price,
+                "pnl_usd": position.pnl_usd,
+                "pnl_pct": position.pnl_pct,
+                "reason": reason,
+                "tx_signature": result.signature,
+                "dry_run": False,
+            }, user_id, True)
+
             logger.info(f"Closed position {position_id}: P&L ${position.pnl_usd:+.2f}")
             return True, f"Closed: {result.signature}, P&L: ${position.pnl_usd:+.2f}"
 
         except Exception as e:
+            self._log_audit("CLOSE_POSITION_FAILED", {
+                "position_id": position_id,
+                "error": str(e),
+            }, user_id, False)
             logger.error(f"Failed to close position: {e}")
             return False, f"Error: {str(e)}"
 
@@ -773,9 +987,31 @@ class _SimpleWallet:
         """Get token balances for the wallet."""
         return {}
 
-    def sign_transaction(self, tx):
+    def sign_transaction(self, address: str, transaction) -> bytes:
         """Sign a transaction with the keypair."""
-        return tx.sign([self._keypair])
+        tx_bytes = transaction
+        if isinstance(transaction, (bytes, bytearray)):
+            tx_bytes = bytes(transaction)
+        if isinstance(tx_bytes, (bytes, bytearray)):
+            try:
+                from solders.transaction import VersionedTransaction
+
+                versioned = VersionedTransaction.from_bytes(tx_bytes)
+                signed_tx = VersionedTransaction(versioned.message, [self._keypair])
+                return bytes(signed_tx)
+            except Exception:
+                signature = self._keypair.sign_message(tx_bytes)
+                return bytes(signature)
+
+        if hasattr(transaction, "sign"):
+            transaction.sign([self._keypair])
+            try:
+                return bytes(transaction)
+            except Exception:
+                return b""
+
+        signature = self._keypair.sign_message(transaction)
+        return bytes(signature)
 
     @property
     def keypair(self):
@@ -813,9 +1049,20 @@ class TreasuryTrader:
             return True, "Already initialized"
 
         try:
+            try:
+                from dotenv import load_dotenv
+                root = Path(__file__).resolve().parents[2]
+                for env_path in (root / "tg_bot" / ".env", root / ".env"):
+                    if env_path.exists():
+                        load_dotenv(env_path, override=False)
+            except Exception:
+                pass
+
             # Try to load keypair from treasury_keypair.json first
             from pathlib import Path
-            keypair_path = Path(__file__).resolve().parents[2] / "data" / "treasury_keypair.json"
+            default_path = Path(__file__).resolve().parents[2] / "data" / "treasury_keypair.json"
+            env_path = os.environ.get("TREASURY_WALLET_PATH", "").strip()
+            keypair_path = Path(env_path) if env_path else default_path
 
             wallet = None
             treasury_address = None
@@ -854,13 +1101,21 @@ class TreasuryTrader:
             # Initialize Jupiter client
             jupiter = JupiterClient()
 
-            # Create trading engine (start in live mode, not dry run)
+            admin_ids = []
+            admin_ids_str = os.environ.get("TREASURY_ADMIN_IDS") or os.environ.get("TELEGRAM_ADMIN_IDS", "")
+            if admin_ids_str:
+                admin_ids = [int(x.strip()) for x in admin_ids_str.split(",") if x.strip().isdigit()]
+
+            # Create trading engine (respect TREASURY_LIVE_MODE)
+            live_mode = os.environ.get("TREASURY_LIVE_MODE", "false").lower() in ("1", "true", "yes", "on")
             self._engine = TradingEngine(
                 wallet=wallet,
                 jupiter=jupiter,
-                dry_run=False,  # Live trading
+                dry_run=not live_mode,
                 max_positions=10,
+                admin_user_ids=admin_ids,
             )
+            await self._engine.initialize_order_manager()
 
             self._initialized = True
             logger.info(f"TreasuryTrader initialized with wallet {treasury_address[:8]}...")
@@ -877,6 +1132,7 @@ class TreasuryTrader:
         take_profit_price: float,
         stop_loss_price: float,
         token_symbol: str = "",
+        user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Execute a buy trade with take profit and stop loss.
@@ -897,6 +1153,12 @@ class TreasuryTrader:
             return {
                 "success": False,
                 "error": init_msg,
+                "tx_signature": "",
+            }
+        if user_id is None:
+            return {
+                "success": False,
+                "error": "User ID required for trade authorization",
                 "tx_signature": "",
             }
 
@@ -945,6 +1207,7 @@ class TreasuryTrader:
                 sentiment_grade="B",  # Default grade
                 custom_tp=tp_pct,
                 custom_sl=sl_pct,
+                user_id=user_id,
             )
 
             if success and position:
@@ -1033,17 +1296,16 @@ class TreasuryTrader:
         import base64
         import hashlib
 
-        password = os.environ.get('JARVIS_WALLET_PASSWORD', '')
-        if not password:
-            logger.warning("JARVIS_WALLET_PASSWORD not set - cannot decrypt keypair")
-            return None
-
         try:
             with open(keypair_path) as f:
                 data = json.load(f)
 
             # Check if this is an encrypted format
             if 'encrypted_key' in data and 'salt' in data and 'nonce' in data:
+                password = os.environ.get('JARVIS_WALLET_PASSWORD', '')
+                if not password:
+                    logger.warning("JARVIS_WALLET_PASSWORD not set - cannot decrypt keypair")
+                    return None
                 salt = base64.b64decode(data['salt'])
                 nonce = base64.b64decode(data['nonce'])
                 encrypted_key = base64.b64decode(data['encrypted_key'])

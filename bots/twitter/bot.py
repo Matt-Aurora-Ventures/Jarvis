@@ -207,9 +207,14 @@ class JarvisTwitterBot:
     async def _post_tweet(self, content: TweetContent) -> Optional[TweetResult]:
         """Post a tweet with optional image"""
         media_ids = None
+        video_path = self._resolve_video_path(content)
 
         # Generate image if needed
-        if content.should_include_image and content.image_prompt:
+        if video_path:
+            media_id = await self.twitter.upload_media(file_path=video_path)
+            if media_id:
+                media_ids = [media_id]
+        elif content.should_include_image and content.image_prompt:
             if self.state.images_today < self.config.max_images_per_day:
                 from .grok_client import ImageResponse
                 image_result = await self.grok.generate_image(
@@ -244,6 +249,22 @@ class JarvisTwitterBot:
             logger.error(f"Failed to post tweet: {result.error}")
 
         return result
+
+    @staticmethod
+    def _resolve_video_path(content: TweetContent) -> Optional[str]:
+        if not content.should_include_image:
+            return None
+        video_path = os.environ.get("X_VIDEO_PATH", "").strip()
+        if video_path and Path(video_path).exists():
+            return video_path
+        video_dir = os.environ.get("X_VIDEO_DIR", "").strip()
+        if not video_dir:
+            return None
+        path = Path(video_dir)
+        if not path.exists() or not path.is_dir():
+            return None
+        candidates = sorted(path.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
+        return str(candidates[0]) if candidates else None
 
     async def _check_mentions(self):
         """Check and respond to mentions"""

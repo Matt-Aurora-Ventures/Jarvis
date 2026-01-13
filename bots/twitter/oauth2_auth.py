@@ -27,7 +27,7 @@ for env_path in [Path(__file__).parent / '.env', Path(__file__).parent.parent.pa
 
 CLIENT_ID = os.environ.get('X_OAUTH2_CLIENT_ID')
 CLIENT_SECRET = os.environ.get('X_OAUTH2_CLIENT_SECRET')
-REDIRECT_URI = "http://localhost:8888/callback"
+REDIRECT_URI = os.environ.get("X_OAUTH2_REDIRECT_URI", "http://localhost:8888/callback")
 
 # PKCE
 code_verifier = secrets.token_urlsafe(32)

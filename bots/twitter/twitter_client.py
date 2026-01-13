@@ -10,8 +10,24 @@ import asyncio
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Telegram sync (lazy import to avoid circular deps)
+_telegram_sync = None
+
+def _get_telegram_sync():
+    """Lazy load telegram sync to avoid import issues."""
+    global _telegram_sync
+    if _telegram_sync is None:
+        try:
+            from bots.twitter.telegram_sync import get_telegram_sync
+            _telegram_sync = get_telegram_sync()
+        except Exception as e:
+            logger.debug(f"Telegram sync not available: {e}")
+            _telegram_sync = False  # Mark as unavailable
+    return _telegram_sync if _telegram_sync else None
 
 # Try to import official xdk first, fall back to tweepy
 try:
@@ -62,12 +78,18 @@ class TwitterCredentials:
     @classmethod
     def from_env(cls) -> "TwitterCredentials":
         """Load credentials from environment variables"""
+        try:
+            from dotenv import load_dotenv
+            env_path = Path(__file__).parent / ".env"
+            load_dotenv(env_path, override=False)
+        except Exception:
+            pass
         return cls(
-            api_key=os.getenv("TWITTER_API_KEY", "") or os.getenv("X_API_KEY", ""),
-            api_secret=os.getenv("TWITTER_API_SECRET", "") or os.getenv("X_API_SECRET", ""),
-            access_token=os.getenv("TWITTER_ACCESS_TOKEN", "") or os.getenv("X_ACCESS_TOKEN", ""),
-            access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET", "") or os.getenv("X_ACCESS_TOKEN_SECRET", ""),
-            bearer_token=os.getenv("TWITTER_BEARER_TOKEN") or os.getenv("X_BEARER_TOKEN"),
+            api_key=os.getenv("X_API_KEY", "") or os.getenv("TWITTER_API_KEY", ""),
+            api_secret=os.getenv("X_API_SECRET", "") or os.getenv("TWITTER_API_SECRET", ""),
+            access_token=os.getenv("X_ACCESS_TOKEN", "") or os.getenv("TWITTER_ACCESS_TOKEN", ""),
+            access_token_secret=os.getenv("X_ACCESS_TOKEN_SECRET", "") or os.getenv("TWITTER_ACCESS_TOKEN_SECRET", ""),
+            bearer_token=os.getenv("X_BEARER_TOKEN") or os.getenv("TWITTER_BEARER_TOKEN"),
             oauth2_client_id=os.getenv("X_OAUTH2_CLIENT_ID"),
             oauth2_client_secret=os.getenv("X_OAUTH2_CLIENT_SECRET"),
             oauth2_access_token=os.getenv("X_OAUTH2_ACCESS_TOKEN"),
@@ -103,13 +125,34 @@ class TwitterClient:
         self._user_id: Optional[str] = None
         self._use_oauth2 = False  # Whether to use OAuth 2.0 for posting
 
+    def _get_expected_username(self) -> str:
+        expected = (
+            os.getenv("X_EXPECTED_USERNAME")
+            or os.getenv("TWITTER_EXPECTED_USERNAME")
+            or "jarvis_lifeos"
+        )
+        expected = expected.strip().lstrip("@").lower()
+        if expected in ("", "any", "*"):
+            return ""
+        return expected
+
+    @staticmethod
+    def _username_matches(username: Optional[str], expected: str) -> bool:
+        if not expected:
+            return True
+        if not username:
+            return False
+        return username.lower() == expected
+
     def connect(self) -> bool:
         """Initialize the X API connection"""
-        if not self.credentials.is_valid():
+        if not (self.credentials.is_valid() or self.credentials.has_oauth2()):
             logger.error("Invalid X credentials - check environment variables")
             return False
 
         try:
+            expected = self._get_expected_username()
+
             # Check if we have OAuth 2.0 for @Jarvis_lifeos
             if self.credentials.has_oauth2():
                 # Verify OAuth 2.0 token
@@ -120,6 +163,16 @@ class TwitterClient:
                     user = resp.json().get("data", {})
                     self._username = user.get("username")
                     self._user_id = user.get("id")
+                    if not self._username_matches(self._username, expected):
+                        logger.error(
+                            "OAuth 2.0 account mismatch: expected @%s, got @%s",
+                            expected or "any",
+                            self._username or "unknown",
+                        )
+                        self._use_oauth2 = False
+                        self._username = None
+                        self._user_id = None
+                        return False
                     self._use_oauth2 = True
                     logger.info(f"Connected to X as @{self._username} (via OAuth 2.0)")
                 elif resp.status_code == 401:
@@ -132,7 +185,9 @@ class TwitterClient:
                         self._use_oauth2 = False
 
             # Also init tweepy for media uploads (v1.1 API)
-            if HAS_TWEEPY:
+            tweepy_username = None
+            tweepy_user_id = None
+            if HAS_TWEEPY and self.credentials.is_valid():
                 auth = tweepy.OAuth1UserHandler(
                     self.credentials.api_key,
                     self.credentials.api_secret,
@@ -151,6 +206,36 @@ class TwitterClient:
                     wait_on_rate_limit=True
                 )
 
+                try:
+                    me = self._tweepy_client.get_me()
+                    if me and me.data:
+                        tweepy_username = me.data.username
+                        tweepy_user_id = str(me.data.id)
+                except Exception as e:
+                    logger.warning(f"Failed to verify tweepy account: {e}")
+
+                if tweepy_username and not self._username_matches(tweepy_username, expected):
+                    logger.error(
+                        "Tweepy account mismatch: expected @%s, got @%s",
+                        expected or "any",
+                        tweepy_username,
+                    )
+                    self._tweepy_api = None
+                    self._tweepy_client = None
+                    if not self._use_oauth2:
+                        return False
+
+                if self._use_oauth2 and self._username and tweepy_username:
+                    if tweepy_username.lower() != self._username.lower():
+                        logger.error(
+                            "Tweepy account does not match OAuth 2.0 account (@%s vs @%s). "
+                            "Disabling tweepy to prevent cross-account posting.",
+                            tweepy_username,
+                            self._username,
+                        )
+                        self._tweepy_api = None
+                        self._tweepy_client = None
+
             # If OAuth 2.0 worked, we're done
             if self._use_oauth2 and self._username:
                 return True
@@ -162,13 +247,11 @@ class TwitterClient:
                 return False
 
             # Only fallback to tweepy if no OAuth 2.0 credentials exist
-            if self._tweepy_client:
-                me = self._tweepy_client.get_me()
-                if me and me.data:
-                    self._username = me.data.username
-                    self._user_id = str(me.data.id)
-                    logger.info(f"Connected to X as @{self._username} (via tweepy)")
-                    return True
+            if self._tweepy_client and tweepy_username:
+                self._username = tweepy_username
+                self._user_id = tweepy_user_id
+                logger.info(f"Connected to X as @{self._username} (via tweepy)")
+                return True
 
             logger.error("Failed to verify X credentials")
             return False
@@ -232,7 +315,8 @@ class TwitterClient:
         text: str,
         media_ids: Optional[List[str]] = None,
         reply_to: Optional[str] = None,
-        quote_tweet_id: Optional[str] = None
+        quote_tweet_id: Optional[str] = None,
+        sync_to_telegram: bool = True
     ) -> TweetResult:
         """
         Post a tweet using OAuth 2.0 (for @Jarvis_lifeos)
@@ -242,6 +326,7 @@ class TwitterClient:
             media_ids: List of media IDs to attach
             reply_to: Tweet ID to reply to
             quote_tweet_id: Tweet ID to quote
+            sync_to_telegram: If True, push to Telegram (default True for main tweets)
 
         Returns:
             TweetResult with success status and tweet info
@@ -292,6 +377,11 @@ class TwitterClient:
                     tweet_id = data.get("id")
                     url = f"https://x.com/{self._username}/status/{tweet_id}"
                     logger.info(f"Tweet posted via OAuth 2.0: {url}")
+
+                    # Sync to Telegram (only for main tweets, not replies)
+                    if sync_to_telegram and not reply_to:
+                        await self._sync_to_telegram(text, url)
+
                     return TweetResult(success=True, tweet_id=tweet_id, url=url)
                 elif response.status_code == 401:
                     # Token expired, refresh and retry
@@ -323,6 +413,11 @@ class TwitterClient:
                     tweet_id = response.data["id"]
                     url = f"https://x.com/{self._username}/status/{tweet_id}"
                     logger.info(f"Tweet posted via tweepy: {url}")
+
+                    # Sync to Telegram (only for main tweets, not replies)
+                    if sync_to_telegram and not reply_to:
+                        await self._sync_to_telegram(text, url)
+
                     return TweetResult(success=True, tweet_id=tweet_id, url=url)
 
             return TweetResult(success=False, error="No SDK available to post")
@@ -330,6 +425,20 @@ class TwitterClient:
         except Exception as e:
             logger.error(f"Failed to post tweet: {e}")
             return TweetResult(success=False, error=str(e))
+
+    async def _sync_to_telegram(self, tweet_text: str, tweet_url: str) -> bool:
+        """Sync tweet to Telegram channel."""
+        try:
+            tg_sync = _get_telegram_sync()
+            if tg_sync and tg_sync.enabled:
+                return await tg_sync.push_tweet(
+                    tweet_text=tweet_text,
+                    tweet_url=tweet_url,
+                    username=self._username or "Jarvis_lifeos"
+                )
+        except Exception as e:
+            logger.warning(f"Telegram sync failed (non-critical): {e}")
+        return False
 
     async def upload_media(
         self,
@@ -353,13 +462,20 @@ class TwitterClient:
         try:
             loop = asyncio.get_event_loop()
 
+            ext = os.path.splitext(file_path)[1].lower()
+            is_video = ext in {".mp4", ".mov", ".m4v", ".gif"}
+
             # Upload media via v1.1 API
             media = await loop.run_in_executor(
                 None,
-                lambda: self._tweepy_api.media_upload(filename=file_path)
+                lambda: self._tweepy_api.media_upload(
+                    filename=file_path,
+                    chunked=is_video,
+                    media_category="tweet_video" if is_video else None,
+                )
             )
 
-            if alt_text:
+            if alt_text and not is_video:
                 await loop.run_in_executor(
                     None,
                     lambda: self._tweepy_api.create_media_metadata(

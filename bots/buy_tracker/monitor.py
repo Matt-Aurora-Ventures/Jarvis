@@ -346,12 +346,20 @@ class TransactionMonitor:
 class HeliusWebSocketMonitor(TransactionMonitor):
     """
     Enhanced monitor using Helius WebSocket for real-time updates.
+
+    Features robust reconnection with exponential backoff per guide recommendations.
     """
+
+    # Reconnection configuration (per Solana Trading Bot Guide)
+    INITIAL_BACKOFF_SECONDS = 1
+    MAX_BACKOFF_SECONDS = 60
+    BACKOFF_MULTIPLIER = 2
 
     async def start(self):
         """Start WebSocket monitoring."""
         self._running = True
         self._session = aiohttp.ClientSession()
+        self._reconnect_attempts = 0
 
         logger.info(f"Starting Helius WebSocket monitor for {self.token_address}")
 
@@ -361,12 +369,23 @@ class HeliusWebSocketMonitor(TransactionMonitor):
         asyncio.create_task(self._price_update_loop())
         asyncio.create_task(self._websocket_loop())
 
+    def _calculate_backoff(self) -> float:
+        """Calculate exponential backoff delay."""
+        delay = self.INITIAL_BACKOFF_SECONDS * (self.BACKOFF_MULTIPLIER ** self._reconnect_attempts)
+        return min(delay, self.MAX_BACKOFF_SECONDS)
+
     async def _websocket_loop(self):
-        """Connect and listen to Helius WebSocket."""
+        """Connect and listen to Helius WebSocket with robust reconnection."""
         while self._running:
             try:
-                async with self._session.ws_connect(self.ws_url) as ws:
+                async with self._session.ws_connect(
+                    self.ws_url,
+                    heartbeat=30,  # Keep-alive ping every 30s
+                    timeout=aiohttp.ClientTimeout(total=60)
+                ) as ws:
                     self._ws = ws
+                    self._reconnect_attempts = 0  # Reset on successful connection
+                    logger.info("WebSocket connected successfully")
 
                     # Subscribe to account updates for the token
                     subscribe_msg = {
@@ -387,10 +406,30 @@ class HeliusWebSocketMonitor(TransactionMonitor):
                         elif msg.type == aiohttp.WSMsgType.ERROR:
                             logger.error(f"WebSocket error: {ws.exception()}")
                             break
+                        elif msg.type == aiohttp.WSMsgType.CLOSED:
+                            logger.warning(f"WebSocket closed: code={ws.close_code}")
+                            break
 
+            except aiohttp.WSServerHandshakeError as e:
+                # Server rejected handshake (common error code handling)
+                logger.error(f"WebSocket handshake failed: {e}")
+                self._reconnect_attempts += 1
+            except aiohttp.ClientError as e:
+                # Network-level errors (ECONNRESET, etc.)
+                logger.error(f"WebSocket client error: {e}")
+                self._reconnect_attempts += 1
+            except asyncio.TimeoutError:
+                logger.warning("WebSocket connection timeout")
+                self._reconnect_attempts += 1
             except Exception as e:
-                logger.error(f"WebSocket error: {e}")
-                await asyncio.sleep(5)
+                logger.error(f"WebSocket unexpected error: {type(e).__name__}: {e}")
+                self._reconnect_attempts += 1
+
+            # Exponential backoff before reconnect
+            if self._running:
+                backoff = self._calculate_backoff()
+                logger.info(f"Reconnecting in {backoff:.1f}s (attempt {self._reconnect_attempts})")
+                await asyncio.sleep(backoff)
 
     async def _handle_ws_message(self, data: Dict):
         """Handle incoming WebSocket message."""

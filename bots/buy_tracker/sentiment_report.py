@@ -3,17 +3,27 @@ Sentiment Report Generator - Automated 10-token sentiment analysis using Grok + 
 
 Posts beautiful sentiment reports to Telegram every 30 minutes.
 Includes macro events, geopolitical analysis, and traditional market sentiment.
+
+Architecture follows the 2026 Financial Sentiment Bot Guide:
+- Multi-stage Grok pipeline (filter → score → synthesize)
+- Cluster detection for manipulation
+- Influence-weighted sentiment scoring
+- EU AI Act compliant labeling
+
+See: docs/GROK_COMPLIANCE_REGULATORY_GUIDE.md
 """
 
 import asyncio
 import logging
 import os
 import json
+import re
 import aiohttp
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from collections import Counter
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Import ape buttons with TP/SL profiles
@@ -144,6 +154,133 @@ class PredictionRecord:
 
 
 @dataclass
+class MarketRegime:
+    """Track overall market conditions for regime-aware trading."""
+    btc_trend: str = "NEUTRAL"  # BULLISH/BEARISH/NEUTRAL
+    sol_trend: str = "NEUTRAL"
+    btc_change_24h: float = 0.0
+    sol_change_24h: float = 0.0
+    risk_level: str = "NORMAL"  # LOW/NORMAL/HIGH/EXTREME
+    regime: str = "NEUTRAL"  # BULL/BEAR/NEUTRAL - overall market regime
+
+    def is_bearish(self) -> bool:
+        """Check if we're in a bearish regime."""
+        return self.regime == "BEAR" or (self.btc_change_24h < -5 and self.sol_change_24h < -5)
+
+    def is_bullish(self) -> bool:
+        """Check if we're in a bullish regime."""
+        return self.regime == "BULL" or (self.btc_change_24h > 3 and self.sol_change_24h > 3)
+
+
+# =============================================================================
+# MANIPULATION DETECTION (per 2026 Financial Sentiment Bot Guide)
+# =============================================================================
+
+class ManipulationDetector:
+    """
+    Detect coordinated pump/dump schemes and market manipulation.
+
+    Per guide: "Cluster Detection involves identifying inorganic activity
+    where numerous low-follower accounts post identical or nearly identical
+    content within a very short timeframe."
+    """
+
+    # Thresholds for manipulation detection
+    MIN_CLUSTER_SIZE = 5           # Min identical posts to flag
+    LOW_FOLLOWER_THRESHOLD = 500   # Accounts below this are suspicious
+    TIME_WINDOW_MINUTES = 30       # Window for cluster detection
+
+    @staticmethod
+    def detect_clusters(posts: List[Dict]) -> Tuple[bool, str]:
+        """
+        Detect if posts show signs of coordinated manipulation.
+
+        Args:
+            posts: List of post data with content and author info
+
+        Returns:
+            Tuple of (is_manipulation, reason)
+        """
+        if len(posts) < ManipulationDetector.MIN_CLUSTER_SIZE:
+            return False, ""
+
+        # Check for identical/near-identical content
+        content_counts = Counter()
+        low_follower_posts = []
+
+        for post in posts:
+            content = post.get('content', '').lower().strip()
+            # Normalize content (remove URLs, mentions for comparison)
+            normalized = re.sub(r'https?://\S+', '', content)
+            normalized = re.sub(r'@\w+', '', normalized)
+            normalized = re.sub(r'#\w+', '', normalized)
+            normalized = ' '.join(normalized.split())  # Normalize whitespace
+
+            if len(normalized) > 20:  # Only meaningful content
+                content_counts[normalized] += 1
+
+            # Track low-follower accounts
+            followers = post.get('followers', 0)
+            if followers < ManipulationDetector.LOW_FOLLOWER_THRESHOLD:
+                low_follower_posts.append(post)
+
+        # Check for content clusters
+        for content, count in content_counts.most_common(3):
+            if count >= ManipulationDetector.MIN_CLUSTER_SIZE:
+                return True, f"Cluster detected: {count} near-identical posts"
+
+        # Check for suspicious ratio of low-follower posts
+        if len(posts) > 0:
+            low_follower_ratio = len(low_follower_posts) / len(posts)
+            if low_follower_ratio > 0.8 and len(posts) > 10:
+                return True, f"Suspicious: {low_follower_ratio*100:.0f}% low-follower accounts"
+
+        return False, ""
+
+    @staticmethod
+    def calculate_influence_weight(followers: int, is_verified: bool = False) -> float:
+        """
+        Calculate influence weight for a post author.
+
+        Per guide: "Posts from prominent figures or organizations in the
+        crypto industry should be given more weight."
+
+        Returns:
+            Weight multiplier (0.1 to 3.0)
+        """
+        base_weight = 1.0
+
+        # Follower-based weighting
+        if followers >= 100000:
+            base_weight = 2.5
+        elif followers >= 50000:
+            base_weight = 2.0
+        elif followers >= 10000:
+            base_weight = 1.5
+        elif followers >= 5000:
+            base_weight = 1.2
+        elif followers >= 1000:
+            base_weight = 1.0
+        elif followers >= 500:
+            base_weight = 0.5
+        else:
+            base_weight = 0.2  # Heavy discount for low-follower accounts
+
+        # Verification bonus
+        if is_verified:
+            base_weight *= 1.3
+
+        return min(base_weight, 3.0)  # Cap at 3x
+
+
+# EU AI Act compliance label
+EU_AI_ACT_DISCLOSURE = (
+    "_This analysis was generated by JARVIS AI using xAI Grok and on-chain data. "
+    "AI-generated content may contain errors. DYOR. NFA._"
+)
+
+
+@dataclass
 class TokenSentiment:
     """Sentiment data for a single token."""
     symbol: str
@@ -176,27 +313,52 @@ class TokenSentiment:
     grok_target_degen: str = ""   # Moon target
     grok_grade: str = ""          # Grade (A+, A, B+, etc.)
 
-    def calculate_sentiment(self, include_grok: bool = True):
+    # NEW: Confidence-based position sizing (0.0 to 1.0)
+    confidence: float = 0.5  # How confident are we in this call?
+    position_size_modifier: float = 1.0  # Multiply default position by this
+    stop_loss_pct: float = -10.0  # Default -10% stop (tighter than before)
+    chasing_pump: bool = False  # Flag if token already pumped 50%+
+
+    def calculate_sentiment(self, include_grok: bool = True, market_regime: MarketRegime = None):
         """
         Calculate sentiment from metrics + Grok AI score.
 
-        Enhanced with learnings from accuracy analysis (84.6% accuracy):
-        - Strong sell pressure detection (ratio < 0.7x = heavily bearish)
-        - Extreme momentum bonuses (>100% pumps)
-        - Profit-taking warning (big gains + sell pressure)
-        - Better grade thresholds based on performance data
+        POST-MORTEM IMPROVEMENTS (Jan 2026):
+        - STRICTER bullish criteria: buy/sell > 1.5x required
+        - NO bullish on already-pumped tokens (+50%)
+        - Market regime awareness: bearish macro = bias toward neutral/bearish
+        - Confidence-based position sizing
+        - Tighter stop losses (-10% default)
         """
         score = 0.0
+        confidence = 0.5  # Base confidence
 
-        # === PRICE MOMENTUM (weight: 25%) ===
-        # Enhanced: Extreme pumps get bonus, extreme dumps get extra penalty
+        # === CHASING PUMP DETECTION ===
+        # CRITICAL: Don't call bullish on tokens that already pumped 50%+
+        # These are profit-taking opportunities, not entries
+        if self.change_24h > 50:
+            self.chasing_pump = True
+            # Penalize heavily - we learned this the hard way
+            score -= 0.20
+            confidence -= 0.2
+        elif self.change_24h > 30:
+            # Moderate pump - be cautious
+            self.chasing_pump = True
+            score -= 0.10
+            confidence -= 0.1
+
+        # === PRICE MOMENTUM (weight: 20%, reduced from 25%) ===
+        # More conservative momentum scoring
         if self.change_24h > 100:
-            # Extreme pump - strong momentum signal (learned: these often continue)
-            score += 0.30
+            # Extreme pump - DON'T chase, but note momentum
+            score += 0.10  # Reduced from 0.30
         elif self.change_24h > 50:
-            score += 0.27
+            score += 0.08  # Reduced from 0.27
+        elif self.change_24h > 20:
+            score += 0.15
         elif self.change_24h > 10:
-            score += 0.25
+            score += 0.20  # Sweet spot - healthy growth
+            confidence += 0.1
         elif self.change_24h > 5:
             score += 0.15
         elif self.change_24h > 0:
@@ -205,55 +367,74 @@ class TokenSentiment:
             score -= 0.08
         elif self.change_24h > -10:
             score -= 0.15
-        elif self.change_24h > -30:
+        elif self.change_24h > -20:
             score -= 0.25
         else:
             # Extreme dump - heavy penalty
             score -= 0.35
+            confidence -= 0.2
 
-        # === BUY/SELL RATIO (weight: 35%) ===
-        # Increased weight - this was our most predictive indicator
+        # === BUY/SELL RATIO (weight: 40%, increased - most predictive) ===
+        # STRICTER: Now require 1.5x for bullish signal
         self.buy_sell_ratio = self.buys_24h / max(self.sells_24h, 1)
 
         if self.buy_sell_ratio > 3:
             # Extreme buying pressure - very bullish
-            score += 0.35
+            score += 0.40
+            confidence += 0.2
         elif self.buy_sell_ratio > 2:
-            score += 0.30
+            score += 0.32
+            confidence += 0.15
         elif self.buy_sell_ratio > 1.5:
+            # NEW MINIMUM for bullish consideration
             score += 0.22
+            confidence += 0.1
         elif self.buy_sell_ratio > 1.2:
-            score += 0.15
+            # Weak buy pressure - neutral at best
+            score += 0.10
         elif self.buy_sell_ratio > 1:
-            score += 0.08
+            # Balanced - neutral
+            score += 0.0
         elif self.buy_sell_ratio > 0.8:
-            score -= 0.10
+            # Starting to see sell pressure
+            score -= 0.15
+            confidence -= 0.1
         elif self.buy_sell_ratio > 0.7:
             # Warning zone - sellers gaining control
-            score -= 0.18
+            score -= 0.25
+            confidence -= 0.15
         elif self.buy_sell_ratio > 0.5:
-            # Heavy sell pressure - strongly bearish (learned: sub-0.7x = danger)
-            score -= 0.28
-        else:
-            # Extreme sell pressure - capitulation signal
+            # Heavy sell pressure - strongly bearish
             score -= 0.35
+            confidence -= 0.2
+        else:
+            # Extreme sell pressure - capitulation
+            score -= 0.45
+            confidence -= 0.3
 
-        # === PROFIT-TAKING DETECTION ===
-        # Learned: Big gains + weak buy ratio = profit-taking, bearish signal
-        if self.change_24h > 50 and self.buy_sell_ratio < 0.8:
-            # Token pumped but sellers dominating - likely profit-taking
-            score -= 0.15  # Penalty for profit-taking pattern
-        elif self.change_24h > 30 and self.buy_sell_ratio < 0.7:
-            # Moderate pump with heavy selling - bearish divergence
-            score -= 0.12
+        # === PROFIT-TAKING DETECTION (enhanced) ===
+        # Big gains + weak buy ratio = EXIT signal, not entry
+        if self.change_24h > 50 and self.buy_sell_ratio < 1.0:
+            # Token pumped but no buying pressure - profit-taking in progress
+            score -= 0.25  # Heavier penalty
+            confidence -= 0.2
+        elif self.change_24h > 30 and self.buy_sell_ratio < 0.8:
+            # Moderate pump with selling - bearish divergence
+            score -= 0.18
+            confidence -= 0.15
+        elif self.change_24h > 20 and self.buy_sell_ratio < 0.7:
+            # Even smaller pumps with heavy selling = danger
+            score -= 0.15
+            confidence -= 0.1
 
         # === VOLUME HEALTH (weight: 15%) ===
         vol_to_mcap = (self.volume_24h / max(self.mcap, 1)) * 100
         if vol_to_mcap > 100:
-            # Extreme volume - strong interest (could be pump or dump)
-            score += 0.18
+            # Extreme volume - could be pump OR dump
+            score += 0.12
         elif vol_to_mcap > 50:
             score += 0.15
+            confidence += 0.05
         elif vol_to_mcap > 20:
             score += 0.08
         elif vol_to_mcap > 10:
@@ -261,42 +442,88 @@ class TokenSentiment:
         elif vol_to_mcap < 5:
             # Low volume = low conviction
             score -= 0.12
+            confidence -= 0.1
 
         # === LIQUIDITY (weight: 10%) ===
         if self.liquidity > 100000:
             score += 0.1
+            confidence += 0.05
         elif self.liquidity > 50000:
             score += 0.05
         elif self.liquidity > 20000:
             score += 0.02
         elif self.liquidity < 10000:
-            # Low liquidity - higher risk
+            # Low liquidity - higher risk, reduce confidence
             score -= 0.12
+            confidence -= 0.15
 
         # === GROK AI SCORE (weight: 15%) ===
-        # Slightly reduced - technical signals more reliable
         if include_grok and self.grok_score != 0:
             score += self.grok_score * 0.15
+            # Grok agreement boosts confidence
+            if (self.grok_score > 0 and score > 0) or (self.grok_score < 0 and score < 0):
+                confidence += 0.1
+
+        # === MARKET REGIME ADJUSTMENT ===
+        # In bearish macro, bias toward neutral/bearish
+        if market_regime:
+            if market_regime.is_bearish():
+                # Bearish macro - be more conservative on microcaps
+                if score > 0:
+                    score *= 0.7  # Reduce bullish scores by 30%
+                else:
+                    score *= 1.2  # Amplify bearish scores by 20%
+                confidence -= 0.1
+            elif market_regime.is_bullish():
+                # Bullish macro - slightly more optimistic
+                if score > 0:
+                    score *= 1.1  # Boost bullish by 10%
+                confidence += 0.05
 
         self.sentiment_score = max(-1, min(1, score))
+        self.confidence = max(0.1, min(1.0, confidence))
+
+        # === POSITION SIZING BY CONFIDENCE ===
+        # High confidence = normal position, low = smaller or skip
+        if self.confidence >= 0.7:
+            self.position_size_modifier = 1.0  # Full position
+        elif self.confidence >= 0.5:
+            self.position_size_modifier = 0.7  # 70% position
+        elif self.confidence >= 0.3:
+            self.position_size_modifier = 0.4  # 40% position
+        else:
+            self.position_size_modifier = 0.0  # Skip - too risky
+
+        # === STOP LOSS (tighter - 10% default) ===
+        if self.confidence >= 0.7:
+            self.stop_loss_pct = -10.0  # Standard stop
+        elif self.confidence >= 0.5:
+            self.stop_loss_pct = -8.0   # Tighter for medium confidence
+        else:
+            self.stop_loss_pct = -5.0   # Very tight for low confidence
 
         # === GRADE ASSIGNMENT ===
-        # Refined thresholds based on accuracy data
-        if self.sentiment_score > 0.45:
+        # STRICTER thresholds - require higher scores for bullish calls
+        if self.sentiment_score > 0.55 and self.buy_sell_ratio >= 1.5 and not self.chasing_pump:
             self.sentiment_label = "BULLISH"
-            self.grade = "A" if self.sentiment_score > 0.55 else "A-"
-        elif self.sentiment_score > 0.20:
+            self.grade = "A" if self.sentiment_score > 0.65 else "A-"
+        elif self.sentiment_score > 0.35 and self.buy_sell_ratio >= 1.2:
             self.sentiment_label = "SLIGHTLY BULLISH"
-            self.grade = "B+" if self.sentiment_score > 0.32 else "B"
+            self.grade = "B+" if self.sentiment_score > 0.45 else "B"
         elif self.sentiment_score > -0.20:
             self.sentiment_label = "NEUTRAL"
-            self.grade = "C+" if self.sentiment_score > 0.05 else "C"
+            self.grade = "C+" if self.sentiment_score > 0.1 else "C"
         elif self.sentiment_score > -0.40:
             self.sentiment_label = "SLIGHTLY BEARISH"
             self.grade = "C-" if self.sentiment_score > -0.30 else "D+"
         else:
             self.sentiment_label = "BEARISH"
             self.grade = "D" if self.sentiment_score > -0.55 else "F"
+
+        # Override: If chasing pump, max grade is B (not bullish)
+        if self.chasing_pump and self.sentiment_label == "BULLISH":
+            self.sentiment_label = "SLIGHTLY BULLISH"
+            self.grade = "B"
 
 
 class SentimentReportGenerator:
@@ -340,9 +567,74 @@ class SentimentReportGenerator:
         if self._session:
             await self._session.close()
 
+    async def _get_market_regime(self) -> MarketRegime:
+        """Fetch BTC/SOL trends to determine market regime."""
+        regime = MarketRegime()
+
+        try:
+            # Fetch BTC data
+            async with self._session.get(
+                "https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112"
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    pairs = data.get("pairs", [])
+                    if pairs:
+                        regime.sol_change_24h = pairs[0].get("priceChange", {}).get("h24", 0) or 0
+
+            # Fetch BTC via coingecko-style endpoint or use known wrapped BTC
+            async with self._session.get(
+                "https://api.dexscreener.com/latest/dex/search?q=bitcoin"
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    pairs = data.get("pairs", [])
+                    # Find BTC pair
+                    for pair in pairs:
+                        base = pair.get("baseToken", {})
+                        if base.get("symbol", "").upper() in ["BTC", "WBTC", "TBTC"]:
+                            regime.btc_change_24h = pair.get("priceChange", {}).get("h24", 0) or 0
+                            break
+
+            # Determine trends
+            if regime.btc_change_24h > 3:
+                regime.btc_trend = "BULLISH"
+            elif regime.btc_change_24h < -3:
+                regime.btc_trend = "BEARISH"
+            else:
+                regime.btc_trend = "NEUTRAL"
+
+            if regime.sol_change_24h > 3:
+                regime.sol_trend = "BULLISH"
+            elif regime.sol_change_24h < -3:
+                regime.sol_trend = "BEARISH"
+            else:
+                regime.sol_trend = "NEUTRAL"
+
+            # Overall regime determination
+            if regime.btc_change_24h < -5 or regime.sol_change_24h < -7:
+                regime.regime = "BEAR"
+                regime.risk_level = "HIGH"
+            elif regime.btc_change_24h > 5 and regime.sol_change_24h > 5:
+                regime.regime = "BULL"
+                regime.risk_level = "LOW"
+            else:
+                regime.regime = "NEUTRAL"
+                regime.risk_level = "NORMAL"
+
+            logger.info(f"Market regime: {regime.regime} (BTC {regime.btc_change_24h:+.1f}%, SOL {regime.sol_change_24h:+.1f}%)")
+
+        except Exception as e:
+            logger.warning(f"Failed to get market regime: {e}")
+
+        return regime
+
     async def generate_and_post_report(self):
         """Generate sentiment report and post to Telegram."""
         try:
+            # NEW: Get market regime first (BTC/SOL trends)
+            market_regime = await self._get_market_regime()
+
             # Get top 10 tokens
             tokens = await self._get_trending_tokens(limit=10)
 
@@ -350,16 +642,16 @@ class SentimentReportGenerator:
                 logger.warning("No tokens found for sentiment report")
                 return
 
-            # Calculate initial technical sentiment (without Grok)
+            # Calculate initial technical sentiment (without Grok, WITH market regime)
             for token in tokens:
-                token.calculate_sentiment(include_grok=False)
+                token.calculate_sentiment(include_grok=False, market_regime=market_regime)
 
             # Have Grok evaluate each token individually
             await self._get_grok_token_scores(tokens)
 
-            # Recalculate final sentiment with Grok scores
+            # Recalculate final sentiment with Grok scores AND market regime
             for token in tokens:
-                token.calculate_sentiment(include_grok=True)
+                token.calculate_sentiment(include_grok=True, market_regime=market_regime)
 
             # Get Grok's overall market summary
             grok_summary = await self._get_grok_summary(tokens)
@@ -672,22 +964,34 @@ Give a 2 sentence microcap market outlook. Be direct, acknowledge the risk, but 
         if not self.xai_api_key:
             return macro
 
+        # Get current date for context
+        now = datetime.now(timezone.utc)
+        current_date = now.strftime("%B %d, %Y")  # e.g., "January 12, 2026"
+        current_day = now.strftime("%A")  # e.g., "Sunday"
+
         try:
-            prompt = """Analyze current macro events and geopolitics affecting crypto markets.
+            prompt = f"""TODAY IS {current_day}, {current_date} (UTC).
+
+Analyze current macro events and geopolitics affecting crypto markets.
+
+IMPORTANT: All dates and events you mention MUST be:
+- On or after {current_date}
+- Actually scheduled/real events (not hypothetical)
+- Verified upcoming events, not past ones
 
 Provide analysis for THREE timeframes:
 
-1. SHORT TERM (Next 24 hours):
+1. SHORT TERM (Next 24 hours from {current_date}):
 - Any scheduled economic data releases (CPI, jobs, Fed speakers)?
 - Immediate geopolitical risks or catalysts?
-- What should traders watch TODAY?
+- What should traders watch TODAY ({current_day})?
 
-2. MEDIUM TERM (Next 3 days):
+2. MEDIUM TERM (Next 3 days from {current_date}):
 - Any major events coming this week?
 - Developing geopolitical situations?
 - Key support/resistance levels to watch?
 
-3. LONG TERM (1 week to 1 month):
+3. LONG TERM (1 week to 1 month from {current_date}):
 - Major macro themes playing out?
 - Upcoming Fed meetings, halving events, regulatory deadlines?
 - Big picture trends affecting risk assets?
@@ -696,9 +1000,10 @@ Format your response EXACTLY like this:
 SHORT|[Your 24h analysis in 2-3 sentences]
 MEDIUM|[Your 3-day analysis in 2-3 sentences]
 LONG|[Your 1w-1m analysis in 2-3 sentences]
-EVENTS|[Comma-separated list of key dates/events to watch]
+EVENTS|[Comma-separated list of key dates/events to watch - ALL DATES MUST BE ON OR AFTER {current_date}]
 
-Be specific and actionable. Focus on what actually matters for crypto traders."""
+Be specific and actionable. Focus on what actually matters for crypto traders.
+DOUBLE CHECK: All events must be FUTURE events from {current_date}, not past events."""
 
             async with self._session.post(
                 "https://api.x.ai/v1/chat/completions",
@@ -739,7 +1044,9 @@ Be specific and actionable. Focus on what actually matters for crypto traders.""
                         elif key == "LONG":
                             macro.long_term = value
                         elif key == "EVENTS":
-                            macro.key_events = [e.strip() for e in value.split(",")]
+                            # Filter events to validate they're not past dates
+                            raw_events = [e.strip() for e in value.split(",")]
+                            macro.key_events = self._validate_future_events(raw_events)
 
                     logger.info("Grok completed macro analysis")
 
@@ -747,6 +1054,60 @@ Be specific and actionable. Focus on what actually matters for crypto traders.""
             logger.error(f"Macro analysis failed: {e}")
 
         return macro
+
+    def _validate_future_events(self, events: List[str]) -> List[str]:
+        """
+        Validate that events contain future dates, not past ones.
+        Filter out events with clearly past dates.
+
+        This is a safety check because Grok sometimes returns outdated events.
+        """
+        import re
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        current_year = now.year
+        current_month = now.month
+        current_day = now.day
+
+        validated = []
+        past_months = ["january", "february", "march", "april", "may", "june",
+                       "july", "august", "september", "october", "november", "december"]
+
+        for event in events:
+            event_lower = event.lower()
+
+            # Check for explicit year mentions
+            year_match = re.search(r'\b(20\d{2})\b', event)
+            if year_match:
+                event_year = int(year_match.group(1))
+                if event_year < current_year:
+                    logger.warning(f"Filtered past event (year {event_year}): {event}")
+                    continue
+
+            # Check for month + day patterns that might be past
+            # Example: "Jan 15" when we're in Feb
+            for i, month in enumerate(past_months):
+                if month in event_lower:
+                    month_num = i + 1
+                    # If month is before current month in the same year context, it's past
+                    day_match = re.search(rf'{month}\s+(\d{{1,2}})', event_lower)
+                    if day_match:
+                        event_day = int(day_match.group(1))
+                        # Assume current year if no year specified
+                        if month_num < current_month:
+                            logger.warning(f"Filtered likely past event (month {month}): {event}")
+                            continue
+                        elif month_num == current_month and event_day < current_day:
+                            logger.warning(f"Filtered past event (day {event_day}): {event}")
+                            continue
+
+            validated.append(event)
+
+        if len(validated) < len(events):
+            logger.info(f"Date validation: kept {len(validated)}/{len(events)} events")
+
+        return validated
 
     async def _get_traditional_markets(self) -> TraditionalMarkets:
         """Get DXY and US stocks sentiment from Grok."""
@@ -983,18 +1344,104 @@ Respond with ONLY the formatted lines."""
 
         return movers[:5]
 
+    async def _fetch_live_commodity_prices(self) -> Dict[str, float]:
+        """
+        Fetch live commodity prices from our data sources module.
+
+        Per GROK_COMPLIANCE_REGULATORY_GUIDE.md: "Use live API feeds for critical price data"
+        This prevents Grok from using stale training data (e.g., Gold at $2,050 vs actual ~$4,600).
+        """
+        prices = {}
+
+        try:
+            # Try to use our dedicated commodity price module
+            from core.data_sources.commodity_prices import get_commodity_client
+
+            client = get_commodity_client()
+
+            # Fetch prices in parallel
+            gold_task = client.get_gold_price()
+            silver_task = client.get_silver_price()
+            platinum_task = client.get_platinum_price()
+
+            gold_result, silver_result, platinum_result = await asyncio.gather(
+                gold_task, silver_task, platinum_task,
+                return_exceptions=True
+            )
+
+            if gold_result and not isinstance(gold_result, Exception):
+                prices['gold'] = gold_result.price_usd
+                logger.info(f"Live gold price: ${gold_result.price_usd:,.2f}")
+
+            if silver_result and not isinstance(silver_result, Exception):
+                prices['silver'] = silver_result.price_usd
+                logger.info(f"Live silver price: ${silver_result.price_usd:,.2f}")
+
+            if platinum_result and not isinstance(platinum_result, Exception):
+                prices['platinum'] = platinum_result.price_usd
+                logger.info(f"Live platinum price: ${platinum_result.price_usd:,.2f}")
+
+        except ImportError:
+            logger.warning("commodity_prices module not available, using fallback")
+
+        except Exception as e:
+            logger.error(f"Failed to fetch live commodity prices: {e}")
+
+        # Fallback: Try CoinGecko for tokenized gold (PAXG)
+        if 'gold' not in prices:
+            try:
+                async with self._session.get(
+                    "https://api.coingecko.com/api/v3/simple/price",
+                    params={'ids': 'pax-gold', 'vs_currencies': 'usd'}
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if 'pax-gold' in data:
+                            prices['gold'] = data['pax-gold']['usd']
+                            logger.info(f"PAXG proxy gold price: ${prices['gold']:,.2f}")
+            except Exception as e:
+                logger.debug(f"CoinGecko fallback failed: {e}")
+
+        return prices
+
     async def _get_precious_metals_outlook(self) -> PreciousMetalsOutlook:
-        """Get weekly outlook for Gold, Silver, and Platinum."""
+        """
+        Get weekly outlook for Gold, Silver, and Platinum.
+
+        CRITICAL: Uses live price data to avoid Grok's stale training data.
+        Per GROK_COMPLIANCE_REGULATORY_GUIDE.md: "Use live API feeds for critical price data"
+        """
         outlook = PreciousMetalsOutlook()
+
+        # First, fetch LIVE prices to include in the Grok prompt
+        # This prevents Grok from using outdated training data (e.g., Gold at $2,050 vs actual ~$4,600)
+        live_prices = await self._fetch_live_commodity_prices()
+        price_context = ""
+        if live_prices:
+            # Format prices safely (handle None/string values)
+            def fmt_price(val):
+                if isinstance(val, (int, float)):
+                    return f"${val:,.2f}"
+                return "N/A"
+
+            price_context = f"""
+CURRENT LIVE PRICES (as of {datetime.now(timezone.utc).strftime('%H:%M UTC')}):
+- Gold (XAU): {fmt_price(live_prices.get('gold'))}
+- Silver (XAG): {fmt_price(live_prices.get('silver'))}
+- Platinum (XPT): {fmt_price(live_prices.get('platinum'))}
+
+IMPORTANT: Use these LIVE prices for your analysis. Do NOT use your training data prices.
+"""
 
         if not self.xai_api_key:
             return outlook
 
         try:
-            prompt = """Provide your WEEKLY OUTLOOK for precious metals: Gold, Silver, and Platinum.
+            prompt = f"""{price_context}
+Provide your WEEKLY OUTLOOK for precious metals: Gold, Silver, and Platinum.
 
 For each metal analyze:
-- Current price action and trend
+- Current price action and trend (use the LIVE prices above)
 - Key drivers (Fed policy, dollar strength, inflation, industrial demand)
 - Support/resistance levels
 - Direction for next week (BULLISH/BEARISH/NEUTRAL)
@@ -1205,9 +1652,24 @@ Be specific about price targets and key levels to watch."""
             else:
                 mcap_str = f"${t.mcap:.0f}"
 
+            # Confidence indicator
+            conf_icon = ""
+            if hasattr(t, 'confidence'):
+                if t.confidence >= 0.7:
+                    conf_icon = " [HIGH]"
+                elif t.confidence >= 0.5:
+                    conf_icon = " [MED]"
+                else:
+                    conf_icon = " [LOW]"
+
+            # Chasing pump warning
+            pump_warn = ""
+            if hasattr(t, 'chasing_pump') and t.chasing_pump:
+                pump_warn = " ⚠️PUMP"
+
             # Build token entry with contract and DexScreener link
             entry = (
-                f"{emoji} <b>{i}. {t.symbol}</b>  {t.grade} {grok_icon}\n"
+                f"{emoji} <b>{i}. {t.symbol}</b>  {t.grade}{conf_icon}{pump_warn} {grok_icon}\n"
                 f"   {price_str}  <code>{t.change_24h:+.1f}%</code> {trend}\n"
                 f"   MCap: <code>{mcap_str}</code> | B/S: <code>{t.buy_sell_ratio:.2f}x</code> | Vol: <code>${t.volume_24h/1000:.0f}K</code>"
             )
@@ -1412,12 +1874,14 @@ Be specific about price targets and key levels to watch."""
                 "",
             ])
 
-        # Disclaimer
+        # Disclaimer - EU AI Act Compliant
         lines3.extend([
             "<b>========================================</b>",
             "",
             "<b>DISCLAIMER</b>",
             "<i>Grok and JARVIS are giving their best guesses, not financial advice. All trades are YOUR responsibility. DYOR. NFA.</i>",
+            "",
+            f"{EU_AI_ACT_DISCLOSURE}",
             "",
             "<i>Powered by JARVIS AI - Predictions tracked internally for accuracy</i>",
         ])

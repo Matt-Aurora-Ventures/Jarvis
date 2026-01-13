@@ -44,10 +44,10 @@ launched on bags.fm. solana native.
 🔗 <b>LINKS</b>
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-🌐 jarvislife.io
-🐦 x.com/Jarvis_lifeos
-💻 github.com/Matt-Aurora-Ventures/Jarvis
-📱 @kr8tivai
+🌐 <a href="https://jarvislife.io">jarvislife.io</a>
+🐦 <a href="https://x.com/Jarvis_lifeos">x.com/Jarvis_lifeos</a>
+💻 <a href="https://github.com/Matt-Aurora-Ventures/Jarvis">github.com/Matt-Aurora-Ventures/Jarvis</a>
+📱 <a href="https://t.me/kr8tivai">@kr8tivai</a>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 ❓ <b>FAQ</b>
@@ -73,6 +73,25 @@ def get_faq_keyboard(show_faq: bool = False) -> InlineKeyboardMarkup:
     else:
         button = InlineKeyboardButton("ℹ️ What is Jarvis?", callback_data="show_faq")
     return InlineKeyboardMarkup([[button]])
+
+
+def _parse_admin_ids(value: str) -> set[int]:
+    ids = set()
+    for item in value.split(","):
+        item = item.strip()
+        if item.isdigit():
+            ids.add(int(item))
+    return ids
+
+
+def _get_admin_ids() -> set[int]:
+    ids_str = os.environ.get("TREASURY_ADMIN_IDS") or os.environ.get("TELEGRAM_ADMIN_IDS", "")
+    return _parse_admin_ids(ids_str) if ids_str else set()
+
+
+def _is_admin(user_id: int) -> bool:
+    admin_ids = _get_admin_ids()
+    return user_id in admin_ids if admin_ids else False
 
 
 class JarvisBuyBot:
@@ -133,12 +152,22 @@ class JarvisBuyBot:
         except Exception as e:
             raise RuntimeError(f"Failed to connect bot: {e}")
 
-        # Start Application (but don't poll to avoid conflicts with other bots)
+        # Start Application (polling optional)
         await self.app.initialize()
         await self.app.start()
-        # Note: Polling disabled to avoid conflicts. Ape buttons won't work.
-        # await self.app.updater.start_polling(allowed_updates=["callback_query"])
-        logger.info("Buy bot started (polling disabled - ape buttons inactive)")
+        enable_polling = os.environ.get("BUY_BOT_ENABLE_POLLING", "auto").lower()
+        main_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if self.app.updater:
+            if enable_polling in ("1", "true", "yes", "on"):
+                await self.app.updater.start_polling(allowed_updates=["callback_query"])
+                logger.info("Buy bot started (polling enabled)")
+            elif enable_polling == "auto" and self.config.bot_token and self.config.bot_token != main_token:
+                await self.app.updater.start_polling(allowed_updates=["callback_query"])
+                logger.info("Buy bot started (polling enabled - separate token)")
+            else:
+                logger.info("Buy bot started (polling disabled to avoid token conflicts)")
+        else:
+            logger.info("Buy bot started (no updater available; callbacks inactive)")
 
         # Send startup message
         await self._send_startup_message()
@@ -308,6 +337,16 @@ class JarvisBuyBot:
         query = update.callback_query
         callback_data = query.data
         chat_id = query.message.chat_id
+        user_id = query.from_user.id
+
+        if not _is_admin(user_id):
+            await self.bot.send_message(
+                chat_id=chat_id,
+                text="Admin only. Trade request blocked.",
+                parse_mode=ParseMode.HTML,
+            )
+            logger.warning(f"Unauthorized ape trade attempt by user {user_id}")
+            return
 
         logger.info(f"APE CALLBACK RECEIVED: {callback_data}")
 
@@ -377,6 +416,7 @@ class JarvisBuyBot:
         query = update.callback_query
         callback_data = query.data
         chat_id = query.message.chat_id
+        user_id = query.from_user.id
 
         logger.info(f"CONFIRM CALLBACK: {callback_data}")
 
@@ -418,10 +458,32 @@ class JarvisBuyBot:
 
             # Execute the trade
             try:
+                if not _is_admin(user_id):
+                    await self.bot.send_message(
+                        chat_id=chat_id,
+                        text="Admin only. Trade request blocked.",
+                        parse_mode=ParseMode.HTML,
+                    )
+                    logger.warning(f"Unauthorized trade confirm by user {user_id}")
+                    return
+
+                from bots.treasury.trading import TreasuryTrader
+
+                trader = TreasuryTrader()
+                balance_sol, _ = await trader.get_balance()
+                if balance_sol <= 0:
+                    await self.bot.send_message(
+                        chat_id=chat_id,
+                        text="ƒ?O Treasury balance unavailable or zero.",
+                        parse_mode=ParseMode.HTML,
+                    )
+                    return
+
                 result = await execute_ape_trade(
                     callback_data=original_callback,
                     entry_price=0.0,
-                    treasury_balance_sol=0.1,
+                    treasury_balance_sol=balance_sol,
+                    user_id=user_id,
                 )
 
                 if result.success:

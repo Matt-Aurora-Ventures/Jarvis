@@ -44,10 +44,6 @@ class TreasuryBot:
 
     def _load_encrypted_keypair(self, keypair_path: Path, password: str):
         """Load and decrypt keypair from treasury_keypair.json."""
-        if not password:
-            logger.warning("No password provided for keypair decryption")
-            return None
-
         def pad_base64(s):
             """Add padding to base64 string if needed."""
             return s + '=' * (4 - len(s) % 4) if len(s) % 4 else s
@@ -57,6 +53,9 @@ class TreasuryBot:
                 data = json.load(f)
 
             if 'encrypted_key' in data and 'salt' in data and 'nonce' in data:
+                if not password:
+                    logger.warning("No password provided for keypair decryption")
+                    return None
                 salt = base64.b64decode(pad_base64(data['salt']))
                 nonce = base64.b64decode(pad_base64(data['nonce']))
                 encrypted_key = base64.b64decode(pad_base64(data['encrypted_key']))

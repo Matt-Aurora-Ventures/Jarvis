@@ -19,6 +19,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
@@ -32,7 +33,9 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     ChatMemberHandler,
+    MessageHandler,
     ContextTypes,
+    filters,
 )
 from telegram.constants import ParseMode, ChatMemberStatus
 
@@ -40,20 +43,21 @@ from tg_bot.config import get_config, reload_config
 from tg_bot.services.signal_service import get_signal_service
 from tg_bot.services.cost_tracker import get_tracker
 from tg_bot.services import digest_formatter as fmt
+from tg_bot.services.chat_responder import ChatResponder
 
 # Ape trading buttons with mandatory TP/SL
 try:
     from bots.buy_tracker.ape_buttons import (
+        execute_ape_trade,
+        get_risk_config,
         parse_ape_callback,
-        create_trade_setup,
-        fetch_token_price,
-        RiskProfile,
-        RISK_PROFILE_CONFIG,
     )
     APE_BUTTONS_AVAILABLE = True
 except ImportError:
     APE_BUTTONS_AVAILABLE = False
     parse_ape_callback = None
+    execute_ape_trade = None
+    get_risk_config = None
 
 # Full sentiment report generator
 try:
@@ -82,6 +86,53 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
 
 _TREASURY_ENGINE = None
+_CHAT_RESPONDER = None
+_LAST_REPLY_AT: dict[int, float] = {}
+
+
+def _get_chat_responder() -> ChatResponder:
+    global _CHAT_RESPONDER
+    if _CHAT_RESPONDER is None:
+        _CHAT_RESPONDER = ChatResponder()
+    return _CHAT_RESPONDER
+
+
+def _get_reply_mode() -> str:
+    mode = os.environ.get("TG_REPLY_MODE", "mentions").lower()
+    if mode not in ("mentions", "all", "off"):
+        return "mentions"
+    return mode
+
+
+def _should_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    if not update.message or not update.message.text:
+        return False
+    if update.effective_user and update.effective_user.is_bot:
+        return False
+
+    chat_type = update.effective_chat.type if update.effective_chat else ""
+    mode = _get_reply_mode()
+    if mode == "off":
+        return False
+
+    # Always reply in private chats.
+    if chat_type == "private":
+        return True
+
+    if mode == "all":
+        return True
+
+    # Mentions or replies in group chats.
+    text = update.message.text or ""
+    bot_username = getattr(context.bot, "username", "")
+    if bot_username and f"@{bot_username}" in text:
+        return True
+
+    reply_to = update.message.reply_to_message
+    if reply_to and reply_to.from_user and reply_to.from_user.id == context.bot.id:
+        return True
+
+    return False
 
 
 def _parse_admin_ids(value: str) -> List[int]:
@@ -97,7 +148,14 @@ def _get_treasury_admin_ids(config) -> List[int]:
     ids_str = os.environ.get("TREASURY_ADMIN_IDS", "")
     if ids_str:
         return _parse_admin_ids(ids_str)
-    return list(config.admin_ids)
+    ids = list(config.admin_ids)
+    if ids:
+        return ids
+    return [DEFAULT_ADMIN_USER_ID]
+
+
+def _is_treasury_admin(config, user_id: int) -> bool:
+    return user_id in _get_treasury_admin_ids(config)
 
 
 def _grade_for_signal(signal) -> str:
@@ -828,7 +886,7 @@ async def paper(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Treasury Trading Commands
 # =============================================================================
 
-ADMIN_USER_ID = 8527130908  # Authorized admin
+DEFAULT_ADMIN_USER_ID = 8527130908  # Legacy fallback if env not set
 
 
 @admin_only
@@ -1290,6 +1348,9 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         engine = await _get_treasury_engine()
         mode = "🟢 LIVE" if not engine.dry_run else "🟡 PAPER"
+        config = get_config()
+        admin_ids = _get_treasury_admin_ids(config)
+        admin_line = ", ".join(str(admin_id) for admin_id in admin_ids) if admin_ids else "None"
 
         message = f"""
 ⚙️ *TRADING SETTINGS*
@@ -1306,7 +1367,7 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🟠 C: +10% TP / -15% SL
 🔴 D/F: ⛔ DO NOT TRADE
 
-*Admin ID:* `{ADMIN_USER_ID}`
+*Admin IDs:* `{admin_line}`
 *RPC:* Helius (Primary)
 
 _All trades require TP/SL - no exceptions_
@@ -1468,7 +1529,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Trading callbacks
     if data.startswith("trade_"):
-        if not config.is_admin(user_id):
+        if not _is_treasury_admin(config, user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
 
@@ -1477,7 +1538,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data.startswith("buy_"):
-        if not config.is_admin(user_id):
+        if not _is_treasury_admin(config, user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
 
@@ -1502,7 +1563,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # New trading callbacks
     if data.startswith("trade_pct:"):
-        if not config.is_admin(user_id):
+        if not _is_treasury_admin(config, user_id):
             await query.message.reply_text(
                 "⛔ *Admin Only*\n\nYou are not authorized to trade.",
                 parse_mode=ParseMode.MARKDOWN
@@ -1514,7 +1575,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data.startswith("sell_pos:"):
-        if not config.is_admin(user_id):
+        if not _is_treasury_admin(config, user_id):
             await query.message.reply_text("⛔ *Admin Only*", parse_mode=ParseMode.MARKDOWN)
             return
 
@@ -1523,25 +1584,25 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "refresh_report":
-        if not config.is_admin(user_id):
+        if not _is_treasury_admin(config, user_id):
             return
         await _refresh_report_inline(query)
         return
 
     if data == "refresh_balance":
-        if not config.is_admin(user_id):
+        if not _is_treasury_admin(config, user_id):
             return
         await _refresh_balance_inline(query)
         return
 
     if data == "show_positions_detail":
-        if not config.is_admin(user_id):
+        if not _is_treasury_admin(config, user_id):
             return
         await _show_positions_inline(query)
         return
 
     if data == "toggle_live_mode":
-        if not config.is_admin(user_id):
+        if not _is_treasury_admin(config, user_id):
             return
         await _toggle_live_mode(query)
         return
@@ -1558,9 +1619,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("APE_BUTTONS_AVAILABLE is False")
             return
 
-        if not config.is_admin(user_id):
+        if not _is_treasury_admin(config, user_id):
             await query.message.reply_text(
-                f"⛔ *Admin Only*\n\nUser ID {user_id} is not authorized.\nAdmin ID: {ADMIN_USER_ID}",
+                f"⛔ *Admin Only*\n\nUser ID {user_id} is not authorized.",
                 parse_mode=ParseMode.MARKDOWN
             )
             logger.warning(f"Unauthorized ape trade attempt by user {user_id}")
@@ -1582,12 +1643,11 @@ async def _execute_ape_trade(query, callback_data: str):
     """
     user_id = query.from_user.id
 
-    # Parse the callback
     parsed = parse_ape_callback(callback_data)
     if not parsed:
         await query.message.reply_text(
-            "❌ Invalid trade button format",
-            parse_mode=ParseMode.MARKDOWN
+            "Invalid trade button format.",
+            parse_mode=ParseMode.MARKDOWN,
         )
         return
 
@@ -1595,117 +1655,92 @@ async def _execute_ape_trade(query, callback_data: str):
     allocation_pct = parsed["allocation_percent"]
     risk_profile = parsed["risk_profile"]
     contract = parsed.get("contract", "")
+    asset_type = parsed.get("asset_type", "token")
 
-    # Get risk profile config
-    profile_config = RISK_PROFILE_CONFIG[risk_profile]
+    if not contract:
+        await query.message.reply_text(
+            "Missing token address for trade. Please refresh the report.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    profile_config = get_risk_config(asset_type, risk_profile)
     tp_pct = profile_config["tp_pct"]
     sl_pct = profile_config["sl_pct"]
     profile_label = profile_config["label"]
 
     await query.edit_message_text(
-        f"⏳ *Processing APE Trade...*\n\n"
-        f"Token: {symbol}\n"
-        f"Allocation: {allocation_pct}%\n"
-        f"Profile: {profile_label}\n"
-        f"TP: +{int(tp_pct)}% | SL: -{int(sl_pct)}%",
-        parse_mode=ParseMode.MARKDOWN
+        (
+            "Processing ape trade...\n\n"
+            f"Token: {symbol}\n"
+            f"Allocation: {allocation_pct}%\n"
+            f"Profile: {profile_label}\n"
+            f"TP: +{int(tp_pct)}% | SL: -{int(sl_pct)}%"
+        ),
+        parse_mode=ParseMode.MARKDOWN,
     )
 
     try:
-        # Get treasury engine
         engine = await _get_treasury_engine()
         balance_sol, balance_usd = await engine.get_portfolio_value()
 
         if balance_sol <= 0:
             await query.message.reply_text(
-                "❌ *Error*\n\nTreasury balance is zero.",
-                parse_mode=ParseMode.MARKDOWN
+                "Treasury balance is zero.",
+                parse_mode=ParseMode.MARKDOWN,
             )
             return
 
-        # Fetch current token price
-        price = await fetch_token_price(contract, symbol)
-        if price <= 0:
-            await query.message.reply_text(
-                f"❌ Could not fetch price for {symbol}",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-
-        # Create trade setup with TP/SL
-        trade_setup = create_trade_setup(
-            parsed_callback=parsed,
-            entry_price=price,
+        result = await execute_ape_trade(
+            callback_data=callback_data,
+            entry_price=0.0,
             treasury_balance_sol=balance_sol,
-            direction="LONG",
-            grade=""
+            user_id=user_id,
         )
 
-        # Validate trade setup
-        is_valid, error_msg = trade_setup.validate()
-        if not is_valid:
+        if not result.trade_setup:
             await query.message.reply_text(
-                f"❌ *Invalid Trade Setup*\n\n{error_msg}",
-                parse_mode=ParseMode.MARKDOWN
+                result.error or "Trade failed.",
+                parse_mode=ParseMode.MARKDOWN,
             )
             return
 
-        # Calculate trade values
-        amount_sol = trade_setup.amount_sol
-        amount_usd = amount_sol * (balance_usd / balance_sol) if balance_sol > 0 else 0
+        setup = result.trade_setup
+        amount_usd = setup.amount_sol * (balance_usd / balance_sol) if balance_sol > 0 else 0.0
+        mode = "LIVE" if not engine.dry_run else "PAPER"
 
-        mode = "🟢 LIVE" if not engine.dry_run else "🟡 PAPER"
-
-        # Execute trade via treasury engine
-        if engine.dry_run:
-            # Paper trade simulation
-            result = f"✅ *{mode} APE Trade Simulated*\n\n"
-            result += f"Token: *{symbol}*\n"
-            result += f"Entry: ${price:.8f}\n"
-            result += f"Amount: {amount_sol:.4f} SOL (~${amount_usd:.2f})\n"
-            result += f"Profile: {profile_label}\n"
-            result += f"TP: ${trade_setup.take_profit_price:.8f} (+{int(tp_pct)}%)\n"
-            result += f"SL: ${trade_setup.stop_loss_price:.8f} (-{int(sl_pct)}%)\n\n"
-            result += f"_Paper mode - no real trade executed_"
+        if result.success:
+            result_text = (
+                f"TRADE EXECUTED ({mode})\n\n"
+                f"Token: {setup.symbol}\n"
+                f"Entry: ${setup.entry_price:.8f}\n"
+                f"Amount: {setup.amount_sol:.4f} SOL (~${amount_usd:.2f})\n"
+                f"Profile: {profile_label}\n"
+                f"TP: ${setup.take_profit_price:.8f} (+{int(tp_pct)}%)\n"
+                f"SL: ${setup.stop_loss_price:.8f} (-{int(sl_pct)}%)"
+            )
+            if result.tx_signature:
+                result_text += f"\n\nTX: https://solscan.io/tx/{result.tx_signature}"
         else:
-            # LIVE trade execution via Jupiter
-            from bots.treasury.jupiter import JupiterSwap
-
-            jupiter = JupiterSwap(
-                rpc_url=os.environ.get("HELIUS_RPC_URL", ""),
-                keypair=engine._wallet_keypair,
+            result_text = (
+                f"TRADE FAILED ({mode})\n\n"
+                f"Token: {setup.symbol}\n"
+                f"Allocation: {allocation_pct}%\n"
+                f"Profile: {profile_label}\n"
+                f"Reason: {result.error or 'Unknown error'}"
             )
 
-            # SOL mint is constant
-            sol_mint = "So11111111111111111111111111111111111111112"
-
-            # Execute swap
-            tx_sig = await jupiter.swap(
-                input_mint=sol_mint,
-                output_mint=contract if len(contract) > 20 else "",
-                amount_in_lamports=int(amount_sol * 1_000_000_000),
-                slippage_bps=100,  # 1% slippage
-            )
-
-            if tx_sig:
-                result = f"✅ *{mode} APE Trade Executed!*\n\n"
-                result += f"Token: *{symbol}*\n"
-                result += f"Entry: ${price:.8f}\n"
-                result += f"Amount: {amount_sol:.4f} SOL (~${amount_usd:.2f})\n"
-                result += f"Profile: {profile_label}\n"
-                result += f"TP: ${trade_setup.take_profit_price:.8f} (+{int(tp_pct)}%)\n"
-                result += f"SL: ${trade_setup.stop_loss_price:.8f} (-{int(sl_pct)}%)\n\n"
-                result += f"[View TX](https://solscan.io/tx/{tx_sig})"
-            else:
-                result = f"❌ *Trade Failed*\n\nCould not execute swap for {symbol}"
-
-        await query.message.reply_text(result, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+        await query.message.reply_text(
+            result_text,
+            parse_mode=ParseMode.MARKDOWN,
+            disable_web_page_preview=True,
+        )
 
     except Exception as e:
         logger.error(f"Ape trade failed: {e}")
         await query.message.reply_text(
-            f"❌ *Trade Error*\n\n{str(e)[:200]}",
-            parse_mode=ParseMode.MARKDOWN
+            f"Trade error: {str(e)[:200]}",
+            parse_mode=ParseMode.MARKDOWN,
         )
 
 
@@ -1724,12 +1759,15 @@ async def _execute_trade_with_tp_sl(query, data: str):
     user_id = query.from_user.id
 
     # Double-check admin
-    if user_id != ADMIN_USER_ID:
+    config = get_config()
+    admin_ids = _get_treasury_admin_ids(config)
+
+    if user_id not in admin_ids:
         await query.message.reply_text(
-            "⛔ *Admin Only*\n\nUser ID does not match authorized admin.",
+            "Admin only. You are not authorized to trade.",
             parse_mode=ParseMode.MARKDOWN
         )
-        logger.warning(f"Trade blocked: User {user_id} != Admin {ADMIN_USER_ID}")
+        logger.warning(f"Trade blocked: unauthorized user {user_id}")
         return
 
     # Reject low grades
@@ -2402,6 +2440,84 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle non-command messages and respond when appropriate."""
+    if not update.message or not update.message.text:
+        return
+
+    text = update.message.text.strip()
+    user_id = update.effective_user.id if update.effective_user else 0
+    username = update.effective_user.username or "" if update.effective_user else ""
+
+    # Check if user is admin
+    admin_ids_str = os.environ.get("TELEGRAM_ADMIN_IDS", "")
+    admin_ids = [int(x.strip()) for x in admin_ids_str.split(",") if x.strip().isdigit()]
+    is_admin = user_id in admin_ids
+
+    # Terminal command handling (admin only) - prefix with > or /term
+    if text.startswith('>') or text.lower().startswith('/term '):
+        from tg_bot.services.terminal_handler import get_terminal_handler
+        handler = get_terminal_handler()
+
+        if not handler.is_admin(user_id):
+            # Silently ignore non-admin terminal attempts
+            return
+
+        # Extract command
+        if text.startswith('>'):
+            cmd = text[1:].strip()
+        else:
+            cmd = text[6:].strip()  # Remove '/term '
+
+        if not cmd:
+            await update.message.reply_text("Usage: > <command> or /term <command>")
+            return
+
+        # Execute and reply
+        await update.message.reply_text(f"Executing: `{cmd[:50]}{'...' if len(cmd) > 50 else ''}`", parse_mode="Markdown")
+        result = await handler.execute(cmd, user_id)
+        await update.message.reply_text(f"```\n{result}\n```", parse_mode="Markdown")
+        return
+
+    # Always listen to admin (Matt) - no @mention required
+    should_reply = _should_reply(update, context)
+    if is_admin and not should_reply:
+        # Check if this looks like talking to JARVIS or a command
+        jarvis_triggers = ['jarvis', 'j ', 'hey j', 'yo j', 'run ', 'execute', 'do ', 'can you', 'please ']
+        text_lower = text.lower()
+        if any(trigger in text_lower for trigger in jarvis_triggers):
+            should_reply = True
+
+    if not should_reply:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+
+    # Skip cooldown for admin
+    if not is_admin:
+        cooldown = int(os.environ.get("TG_REPLY_COOLDOWN_SECONDS", "12"))
+        now = time.time()
+        last = _LAST_REPLY_AT.get(chat_id, 0.0)
+        if now - last < cooldown:
+            return
+        _LAST_REPLY_AT[chat_id] = now
+
+    responder = _get_chat_responder()
+    reply = await responder.generate_reply(
+        text=text,
+        username=username,
+        chat_title=(update.effective_chat.title if update.effective_chat else ""),
+        is_private=update.effective_chat.type == "private" if update.effective_chat else False,
+        user_id=user_id,
+    )
+
+    if reply:
+        await update.message.reply_text(
+            reply,
+            disable_web_page_preview=True,
+        )
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -2469,6 +2585,7 @@ def main():
     app.add_handler(CommandHandler("settings", settings))
 
     app.add_handler(CallbackQueryHandler(button_callback))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Welcome new members
     app.add_handler(ChatMemberHandler(welcome_new_member, ChatMemberHandler.CHAT_MEMBER))

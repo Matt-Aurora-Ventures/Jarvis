@@ -538,6 +538,7 @@ async def execute_ape_trade(
     direction: str = "LONG",
     grade: str = "",
     max_slippage_pct: float = 20.0,  # Accept up to 20% slippage for volatile tokens
+    user_id: Optional[int] = None,
 ) -> TradeResult:
     """
     Execute an ape trade with MANDATORY TP/SL validation.
@@ -618,7 +619,7 @@ async def execute_ape_trade(
 
     # Execute trade based on asset type
     if trade_setup.asset_type == "token":
-        return await _execute_token_trade(trade_setup)
+        return await _execute_token_trade(trade_setup, user_id=user_id)
     elif trade_setup.asset_type == "stock":
         return TradeResult(
             success=False,
@@ -633,7 +634,7 @@ async def execute_ape_trade(
         )
 
 
-async def _execute_token_trade(setup: TradeSetup) -> TradeResult:
+async def _execute_token_trade(setup: TradeSetup, user_id: Optional[int] = None) -> TradeResult:
     """
     Execute a Solana token trade with TP/SL orders.
 
@@ -652,6 +653,7 @@ async def _execute_token_trade(setup: TradeSetup) -> TradeResult:
             take_profit_price=setup.take_profit_price,
             stop_loss_price=setup.stop_loss_price,
             token_symbol=setup.symbol,
+            user_id=user_id,
         )
 
         if result.get("success"):

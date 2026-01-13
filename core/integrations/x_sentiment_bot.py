@@ -212,6 +212,17 @@ class XSentimentBot:
         with open(POSTED_CACHE, 'w') as f:
             json.dump({"hashes": list(self._posted_hashes)[-1000:]}, f)
 
+    def _expected_username(self) -> str:
+        expected = (
+            os.environ.get("X_EXPECTED_USERNAME")
+            or os.environ.get("TWITTER_EXPECTED_USERNAME")
+            or "jarvis_lifeos"
+        )
+        expected = expected.strip().lstrip("@").lower()
+        if expected in ("", "*", "any"):
+            return ""
+        return expected
+
     def _hash_tweet(self, text: str) -> str:
         """Generate hash for deduplication."""
         return hashlib.md5(text.encode()).hexdigest()[:12]
@@ -236,6 +247,21 @@ class XSentimentBot:
                 access_token=self.credentials["access_token"],
                 access_token_secret=self.credentials["access_token_secret"],
             )
+            expected = self._expected_username()
+            if expected:
+                try:
+                    me = client.get_me()
+                    username = me.data.username if me and me.data else None
+                    if not username or username.lower() != expected:
+                        logger.error(
+                            "X account mismatch: expected @%s, got @%s",
+                            expected,
+                            username or "unknown",
+                        )
+                        return None
+                except Exception as e:
+                    logger.error(f"Failed to verify X account: {e}")
+                    return None
             return client
         except ImportError:
             logger.error("tweepy not installed. Run: pip install tweepy")

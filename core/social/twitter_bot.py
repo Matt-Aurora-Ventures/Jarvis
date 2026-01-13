@@ -196,6 +196,24 @@ class JarvisTwitterBot:
                 access_token_secret=self.credentials["access_secret"],
                 wait_on_rate_limit=True
             )
+            expected = self._expected_username()
+            if expected:
+                try:
+                    me = self.client.get_me()
+                    username = me.data.username if me and me.data else None
+                    if not username or username.lower() != expected:
+                        logger.error(
+                            "X account mismatch: expected @%s, got @%s",
+                            expected,
+                            username or "unknown",
+                        )
+                        self.client = None
+                        return
+                except Exception as e:
+                    logger.error(f"Failed to verify X account: {e}")
+                    self.client = None
+                    return
+
             logger.info("Twitter client initialized successfully")
 
         except ImportError:
@@ -204,6 +222,18 @@ class JarvisTwitterBot:
         except Exception as e:
             logger.error(f"Failed to initialize Twitter client: {e}")
             self.client = None
+
+    @staticmethod
+    def _expected_username() -> str:
+        expected = (
+            os.environ.get("X_EXPECTED_USERNAME")
+            or os.environ.get("TWITTER_EXPECTED_USERNAME")
+            or ""
+        )
+        expected = expected.strip().lstrip("@").lower()
+        if expected in ("", "any", "*"):
+            return ""
+        return expected
 
     async def run(self):
         """Main bot loop"""
@@ -554,11 +584,15 @@ def get_twitter_bot() -> Optional[JarvisTwitterBot]:
 
     if _twitter_bot_instance is None:
         # Try to load from environment
-        bearer_token = os.environ.get("TWITTER_BEARER_TOKEN")
-        api_key = os.environ.get("TWITTER_API_KEY")
-        api_secret = os.environ.get("TWITTER_API_SECRET")
-        access_token = os.environ.get("TWITTER_ACCESS_TOKEN")
-        access_secret = os.environ.get("TWITTER_ACCESS_SECRET")
+        bearer_token = os.environ.get("X_BEARER_TOKEN") or os.environ.get("TWITTER_BEARER_TOKEN")
+        api_key = os.environ.get("X_API_KEY") or os.environ.get("TWITTER_API_KEY")
+        api_secret = os.environ.get("X_API_SECRET") or os.environ.get("TWITTER_API_SECRET")
+        access_token = os.environ.get("X_ACCESS_TOKEN") or os.environ.get("TWITTER_ACCESS_TOKEN")
+        access_secret = (
+            os.environ.get("X_ACCESS_TOKEN_SECRET")
+            or os.environ.get("TWITTER_ACCESS_TOKEN_SECRET")
+            or os.environ.get("TWITTER_ACCESS_SECRET")
+        )
 
         if all([bearer_token, api_key, api_secret, access_token, access_secret]):
             _twitter_bot_instance = JarvisTwitterBot(

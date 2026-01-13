@@ -69,8 +69,10 @@ def load_config() -> BuyBotConfig:
         except Exception:
             pass
 
+    buy_bot_token = os.environ.get("TELEGRAM_BUY_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+
     return BuyBotConfig(
-        bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", ""),
+        bot_token=buy_bot_token,
         chat_id=os.environ.get("TELEGRAM_BUY_BOT_CHAT_ID", ""),
         token_address=token_address,
         token_symbol=os.environ.get("BUY_BOT_TOKEN_SYMBOL", "KR8TIV"),

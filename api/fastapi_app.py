@@ -16,10 +16,21 @@ from typing import Any, Dict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.errors import make_error_response
+
+# Import new middleware
+try:
+    from api.middleware.rate_limit import RateLimitMiddleware
+    from api.middleware.security_headers import SecurityHeadersMiddleware
+    from api.middleware.request_tracing import RequestTracingMiddleware
+    from api.middleware.body_limit import BodySizeLimitMiddleware
+    HAS_MIDDLEWARE = True
+except ImportError:
+    HAS_MIDDLEWARE = False
 
 # Configure logging
 logging.basicConfig(
@@ -143,6 +154,26 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Add security and performance middleware
+    if HAS_MIDDLEWARE:
+        # Request tracing (adds X-Request-ID)
+        app.add_middleware(RequestTracingMiddleware)
+        
+        # Security headers (X-Frame-Options, CSP, etc.)
+        app.add_middleware(SecurityHeadersMiddleware)
+        
+        # Rate limiting
+        if os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true":
+            app.add_middleware(RateLimitMiddleware, enabled=True)
+        
+        # Request body size limit (10MB default)
+        app.add_middleware(BodySizeLimitMiddleware, max_size=10 * 1024 * 1024)
+        
+        logger.info("Security middleware enabled")
+
+    # GZip compression for responses
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
 
     # Global exception handlers for standardized error responses
     @app.exception_handler(StarletteHTTPException)

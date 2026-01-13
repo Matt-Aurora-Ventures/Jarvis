@@ -1,0 +1,33 @@
+[run]
+source = core,api
+omit = 
+    tests/*
+    */__pycache__/*
+    */migrations/*
+    */.venv/*
+    */venv/*
+branch = True
+parallel = True
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    def __str__
+    raise NotImplementedError
+    raise AssertionError
+    if TYPE_CHECKING:
+    if __name__ == .__main__.:
+    @abstractmethod
+    @abc.abstractmethod
+
+fail_under = 60
+show_missing = True
+precision = 2
+
+[html]
+directory = coverage_html
+title = Jarvis Coverage Report
+
+[xml]
+output = coverage.xml

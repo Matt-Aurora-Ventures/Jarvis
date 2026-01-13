@@ -1,11 +1,23 @@
 """
 JARVIS Twitter Bot Configuration
 Environment variables and settings
+
+Loads configuration from .env file using python-dotenv.
 """
 
 import os
 from dataclasses import dataclass, field
 from typing import Dict, Optional
+from pathlib import Path
+
+# Load .env file from the twitter bot directory
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    pass  # dotenv not installed, rely on system env vars
 
 
 @dataclass
@@ -16,24 +28,35 @@ class TwitterConfig:
     access_token: str = ""
     access_token_secret: str = ""
     bearer_token: str = ""
+    oauth2_client_id: str = ""
+    oauth2_client_secret: str = ""
+    oauth2_access_token: str = ""
+    oauth2_refresh_token: str = ""
+    expected_username: str = ""
 
     @classmethod
     def from_env(cls) -> "TwitterConfig":
         return cls(
-            api_key=os.getenv("TWITTER_API_KEY", ""),
-            api_secret=os.getenv("TWITTER_API_SECRET", ""),
-            access_token=os.getenv("TWITTER_ACCESS_TOKEN", ""),
-            access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET", ""),
-            bearer_token=os.getenv("TWITTER_BEARER_TOKEN", "")
+            api_key=os.getenv("X_API_KEY", "") or os.getenv("TWITTER_API_KEY", ""),
+            api_secret=os.getenv("X_API_SECRET", "") or os.getenv("TWITTER_API_SECRET", ""),
+            access_token=os.getenv("X_ACCESS_TOKEN", "") or os.getenv("TWITTER_ACCESS_TOKEN", ""),
+            access_token_secret=os.getenv("X_ACCESS_TOKEN_SECRET", "") or os.getenv("TWITTER_ACCESS_TOKEN_SECRET", ""),
+            bearer_token=os.getenv("X_BEARER_TOKEN", "") or os.getenv("TWITTER_BEARER_TOKEN", ""),
+            oauth2_client_id=os.getenv("X_OAUTH2_CLIENT_ID", ""),
+            oauth2_client_secret=os.getenv("X_OAUTH2_CLIENT_SECRET", ""),
+            oauth2_access_token=os.getenv("X_OAUTH2_ACCESS_TOKEN", ""),
+            oauth2_refresh_token=os.getenv("X_OAUTH2_REFRESH_TOKEN", ""),
+            expected_username=os.getenv("X_EXPECTED_USERNAME", "") or os.getenv("TWITTER_EXPECTED_USERNAME", ""),
         )
 
     def is_valid(self) -> bool:
-        return all([
+        has_oauth1 = all([
             self.api_key,
             self.api_secret,
             self.access_token,
-            self.access_token_secret
+            self.access_token_secret,
         ])
+        return has_oauth1 or bool(self.oauth2_access_token)
 
 
 @dataclass
@@ -116,12 +139,20 @@ ENV_TEMPLATE = """
 # JARVIS Twitter Bot Environment Variables
 # Copy to .env file and fill in your credentials
 
-# Twitter API (get from developer.twitter.com)
-TWITTER_API_KEY=your_api_key_here
-TWITTER_API_SECRET=your_api_secret_here
-TWITTER_ACCESS_TOKEN=your_access_token_here
-TWITTER_ACCESS_TOKEN_SECRET=your_access_token_secret_here
-TWITTER_BEARER_TOKEN=your_bearer_token_here
+# X API (get from developer.twitter.com)
+X_API_KEY=your_api_key_here
+X_API_SECRET=your_api_secret_here
+X_ACCESS_TOKEN=your_access_token_here
+X_ACCESS_TOKEN_SECRET=your_access_token_secret_here
+X_BEARER_TOKEN=your_bearer_token_here
+X_EXPECTED_USERNAME=jarvis_lifeos
+
+# OAuth 2.0 (optional, recommended for posting)
+X_OAUTH2_CLIENT_ID=your_client_id_here
+X_OAUTH2_CLIENT_SECRET=your_client_secret_here
+X_OAUTH2_ACCESS_TOKEN=your_access_token_here
+X_OAUTH2_REFRESH_TOKEN=your_refresh_token_here
+X_OAUTH2_REDIRECT_URI=http://localhost:8888/callback
 
 # xAI Grok API (get from x.ai)
 XAI_API_KEY=your_xai_api_key_here

@@ -12,13 +12,15 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlencode, parse_qs, urlparse
 import requests
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+env_path = Path(__file__).parent / ".env"
+load_dotenv(env_path)
 
 # OAuth 2.0 credentials
 CLIENT_ID = os.getenv("X_OAUTH2_CLIENT_ID")
 CLIENT_SECRET = os.getenv("X_OAUTH2_CLIENT_SECRET")
-REDIRECT_URI = "http://127.0.0.1:8000/callback"
+REDIRECT_URI = os.getenv("X_OAUTH2_REDIRECT_URI", "http://localhost:8888/callback")
 
 # PKCE code verifier and challenge
 code_verifier = secrets.token_urlsafe(32)
@@ -128,7 +130,11 @@ def main():
 
     # Start local server to receive callback
     print("\nWaiting for authorization callback...")
-    server = HTTPServer(("127.0.0.1", 8000), CallbackHandler)
+    # Parse port from redirect URI
+    from urllib.parse import urlparse
+    parsed_uri = urlparse(REDIRECT_URI)
+    port = parsed_uri.port or 8888
+    server = HTTPServer(("127.0.0.1", port), CallbackHandler)
 
     while auth_code is None:
         server.handle_request()
