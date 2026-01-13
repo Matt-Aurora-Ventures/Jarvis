@@ -4,6 +4,50 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [4.3.0] - 2026-01-13
+
+### 🏗️ **Infrastructure Improvements Release**
+
+Major core infrastructure modules and admin command enhancements.
+
+### 🆕 New Features
+
+#### Core Infrastructure Modules
+- **Audit Logger** (`core/audit_logger.py`): Comprehensive audit trail with hash chain support
+- **Feature Flags** (`core/feature_flags.py`): Runtime toggles with percentage rollouts
+- **Health Monitor** (`core/health_monitor.py`): System health checks with K8s probes
+- **Config Hot Reload** (`core/config_hot_reload.py`): Runtime configuration updates
+
+#### 9 New Admin Commands
+| Command | Description |
+|---------|-------------|
+| `/health` | System health status |
+| `/flags` | View/toggle feature flags |
+| `/config` | View/set configuration |
+| `/score` | Treasury scorecard (P&L) |
+| `/orders` | Active TP/SL orders |
+| `/system` | Full system overview |
+| `/wallet` | Treasury wallet info |
+| `/logs` | Recent log entries |
+| `/audit` | Audit log entries |
+
+#### Runtime Toggles
+- `/flags enable <name>` - Enable feature flag
+- `/flags disable <name>` - Disable feature flag
+- `/config set <key> <value>` - Set config value
+
+#### Trading Improvements
+- **Order Persistence**: TP/SL orders saved to `data/limit_orders.json`
+- **Background Health Monitoring**: Auto-starts on bot startup
+
+#### Menu Buttons
+- All admin commands accessible via inline keyboard buttons
+
+### 🧪 Tests
+- 16 new tests for core infrastructure modules (all passing)
+
+---
+
 # [3.6.0] - 2026-01-09
 
 ### 🚀 **Ralph Wiggum Loop Enhancements**
