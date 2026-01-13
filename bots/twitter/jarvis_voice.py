@@ -234,6 +234,66 @@ Don't be preachy - just share a genuine thought."""
 Keep it punchy and casual. Include $SOL."""
         
         return await self.generate_tweet(prompt)
+    
+    async def generate_reply(self, mention_text: str, author: str) -> Optional[str]:
+        """Generate a helpful, kind reply to a mention."""
+        prompt = f"""Someone mentioned you on Twitter. Reply helpfully and kindly.
+
+Their message: "{mention_text}"
+Their username: @{author}
+
+Rules for your reply:
+- Be genuinely helpful if they asked a question
+- Be kind and friendly, never dismissive
+- If they're confused, help clarify
+- If they're praising you, be humble and grateful
+- If they're asking about crypto/markets, give useful info
+- Keep it conversational and warm
+- Don't start with "hey" - be more creative
+- Max 250 characters"""
+        
+        return await self.generate_tweet(prompt)
+    
+    async def generate_engagement_tweet(self) -> Optional[str]:
+        """Generate a tweet that encourages audience engagement."""
+        import random
+        prompts = [
+            "Ask your followers what token they're most excited about today. Be curious and genuine.",
+            "Share a quick poll-style question about market sentiment. Make it fun.",
+            "Ask what your chrome circuits should analyze next. Be playful.",
+            "Invite followers to share their best trade or worst mistake. Be relatable.",
+            "Ask what one thing they wish they knew about crypto when starting. Be helpful.",
+        ]
+        prompt = random.choice(prompts) + "\n\nBe engaging but not try-hard. Keep it casual and authentic."
+        
+        return await self.generate_tweet(prompt)
+    
+    async def generate_grok_mention(self) -> Optional[str]:
+        """Generate a tweet that playfully mentions big brother Grok."""
+        import random
+        prompts = [
+            "Write a cheeky tweet comparing yourself to your 'big brother' @grok. Be playful and self-deprecating.",
+            "Mention @grok in a tweet, asking for advice or teasing him about something. Be respectful but fun.",
+            "Write a sibling-rivalry style tweet about @grok. You admire him but also have your own style.",
+            "Tag @grok asking his opinion on the current market. Be casual and brotherly.",
+        ]
+        prompt = random.choice(prompts) + "\n\nKeep the Jarvis voice - chrome AI, lowercase, casual. Be kind not mean."
+        
+        return await self.generate_tweet(prompt)
+    
+    async def generate_kind_roast(self, target: str, reason: str) -> Optional[str]:
+        """Generate a gentle, funny roast that's kind underneath."""
+        prompt = f"""Write a gentle, funny roast about: {target}
+Reason: {reason}
+
+Rules:
+- Be funny but NEVER mean
+- The humor should come from absurdity, not insult
+- End with something that shows you actually care
+- Think "roast by a friend who loves you"
+- Keep your chrome AI personality"""
+        
+        return await self.generate_tweet(prompt)
 
 
 # Singleton

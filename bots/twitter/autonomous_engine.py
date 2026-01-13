@@ -235,6 +235,17 @@ class XMemory:
                 )
             """)
             
+            # Mention replies tracking
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS mention_replies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tweet_id TEXT UNIQUE,
+                    author_handle TEXT,
+                    our_reply TEXT,
+                    replied_at TEXT
+                )
+            """)
+            
             conn.commit()
             conn.close()
     
@@ -303,6 +314,28 @@ class XMemory:
             conn.close()
             return result
     
+    def was_mention_replied(self, tweet_id: str) -> bool:
+        """Check if we already replied to a mention."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM mention_replies WHERE tweet_id = ?", (tweet_id,))
+            result = cursor.fetchone() is not None
+            conn.close()
+            return result
+    
+    def record_mention_reply(self, tweet_id: str, author: str, reply: str):
+        """Record that we replied to a mention."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO mention_replies (tweet_id, author_handle, our_reply, replied_at)
+                VALUES (?, ?, ?, ?)
+            """, (tweet_id, author, reply, datetime.now(timezone.utc).isoformat()))
+            conn.commit()
+            conn.close()
+    
     def get_posting_stats(self) -> Dict:
         """Get posting statistics."""
         with self._lock:
@@ -322,12 +355,17 @@ class XMemory:
             cursor.execute("SELECT category, COUNT(*) FROM tweets GROUP BY category")
             by_category = {r[0]: r[1] for r in cursor.fetchall()}
             
+            # Replies sent
+            cursor.execute("SELECT COUNT(*) FROM mention_replies")
+            replies_sent = cursor.fetchone()[0]
+            
             conn.close()
             
             return {
                 "total_tweets": total,
                 "today_tweets": today_count,
-                "by_category": by_category
+                "by_category": by_category,
+                "replies_sent": replies_sent
             }
 
 
@@ -602,21 +640,64 @@ class AutonomousEngine:
                 logger.debug(f"Next post in {remaining:.0f}s")
                 return None
             
-            # Decide what to post based on variety
+            # Decide what to post based on variety AND time of day
             recent = self.memory.get_recent_tweets(hours=6)
             recent_categories = [t["category"] for t in recent]
             
-            # Rotate content types
-            generators = [
-                ("market_update", self.generate_market_update),
-                ("trending_token", self.generate_trending_token_call),
-                ("agentic_tech", self.generate_agentic_thought),
-                ("hourly_update", self.generate_hourly_update),
-            ]
+            # Time-based content preferences
+            hour = datetime.now().hour
             
-            # Prefer categories we haven't used recently
-            random.shuffle(generators)
-            generators.sort(key=lambda x: recent_categories.count(x[0]))
+            # Morning (6-10): Market updates, set the tone
+            # Midday (10-14): Trending tokens, engagement
+            # Afternoon (14-18): Agentic thoughts, Grok interactions
+            # Evening (18-22): Engagement, community building
+            # Night (22-6): Lighter content, agentic musings
+            
+            if 6 <= hour < 10:
+                # Morning - market focus
+                generators = [
+                    ("market_update", self.generate_market_update),
+                    ("hourly_update", self.generate_hourly_update),
+                    ("trending_token", self.generate_trending_token_call),
+                ]
+            elif 10 <= hour < 14:
+                # Midday - tokens and engagement
+                generators = [
+                    ("trending_token", self.generate_trending_token_call),
+                    ("engagement", self.generate_interaction_tweet),
+                    ("market_update", self.generate_market_update),
+                ]
+            elif 14 <= hour < 18:
+                # Afternoon - thoughts and interactions
+                generators = [
+                    ("agentic_tech", self.generate_agentic_thought),
+                    ("grok_interaction", self.generate_grok_interaction),
+                    ("trending_token", self.generate_trending_token_call),
+                ]
+            elif 18 <= hour < 22:
+                # Evening - community and recap
+                generators = [
+                    ("engagement", self.generate_interaction_tweet),
+                    ("hourly_update", self.generate_hourly_update),
+                    ("agentic_tech", self.generate_agentic_thought),
+                ]
+            else:
+                # Night - lighter content
+                generators = [
+                    ("agentic_tech", self.generate_agentic_thought),
+                    ("engagement", self.generate_interaction_tweet),
+                    ("grok_interaction", self.generate_grok_interaction),
+                ]
+            
+            # Filter out categories we've used recently
+            generators = [(cat, gen) for cat, gen in generators if recent_categories.count(cat) < 2]
+            
+            # Add fallbacks if all filtered out
+            if not generators:
+                generators = [
+                    ("market_update", self.generate_market_update),
+                    ("hourly_update", self.generate_hourly_update),
+                ]
             
             for category, generator in generators:
                 draft = await generator()
@@ -636,13 +717,98 @@ class AutonomousEngine:
         
         return None
     
+    async def check_and_reply_mentions(self) -> int:
+        """Check for mentions and reply to them. Returns number of replies sent."""
+        try:
+            twitter = await self._get_twitter()
+            voice = await self._get_jarvis_voice()
+            
+            # Get recent mentions
+            mentions = await twitter.get_mentions(max_results=10)
+            if not mentions:
+                return 0
+            
+            replies_sent = 0
+            for mention in mentions[:5]:  # Process up to 5 mentions per cycle
+                tweet_id = mention.get("id")
+                text = mention.get("text", "")
+                author = mention.get("author_username", "friend")
+                
+                # Skip if we already replied (check memory)
+                if self.memory.was_mention_replied(tweet_id):
+                    continue
+                
+                # Generate a helpful, kind reply
+                reply_content = await voice.generate_reply(text, author)
+                
+                if reply_content:
+                    result = await twitter.reply_to_tweet(tweet_id, reply_content)
+                    if result.success:
+                        self.memory.record_mention_reply(tweet_id, author, reply_content)
+                        replies_sent += 1
+                        logger.info(f"Replied to @{author}: {reply_content[:50]}...")
+            
+            return replies_sent
+            
+        except Exception as e:
+            logger.error(f"Mentions check error: {e}")
+            return 0
+    
+    async def generate_interaction_tweet(self) -> Optional[TweetDraft]:
+        """Generate an interactive tweet that encourages engagement."""
+        try:
+            voice = await self._get_jarvis_voice()
+            
+            content = await voice.generate_engagement_tweet()
+            
+            if content:
+                return TweetDraft(
+                    content=content,
+                    category="engagement",
+                    cashtags=[],
+                    hashtags=[]
+                )
+        except Exception as e:
+            logger.error(f"Engagement tweet error: {e}")
+        return None
+    
+    async def generate_grok_interaction(self) -> Optional[TweetDraft]:
+        """Generate a tweet mentioning big brother Grok."""
+        try:
+            voice = await self._get_jarvis_voice()
+            
+            content = await voice.generate_grok_mention()
+            
+            if content:
+                return TweetDraft(
+                    content=content,
+                    category="grok_interaction",
+                    cashtags=[],
+                    hashtags=[]
+                )
+        except Exception as e:
+            logger.error(f"Grok interaction error: {e}")
+        return None
+    
     async def run(self):
         """Run the autonomous engine continuously."""
         self._running = True
         logger.info(f"Autonomous engine started. Posting every {self._post_interval}s")
         
+        mention_check_interval = 300  # Check mentions every 5 minutes
+        last_mention_check = 0
+        
         while self._running:
             try:
+                # Check and reply to mentions
+                now = time.time()
+                if now - last_mention_check > mention_check_interval:
+                    replies = await self.check_and_reply_mentions()
+                    if replies > 0:
+                        logger.info(f"Sent {replies} replies to mentions")
+                    last_mention_check = now
+                
+                # Regular posting
                 await self.run_once()
                 await asyncio.sleep(60)  # Check every minute
             except Exception as e:
