@@ -906,6 +906,35 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def metrics(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /metrics command - show system metrics (admin only)."""
+    try:
+        import psutil
+        import os
+        
+        # Get system metrics
+        cpu = psutil.cpu_percent(interval=0.5)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        
+        lines = [
+            "<b>📊 System Metrics</b>",
+            "",
+            f"💻 <b>CPU:</b> {cpu:.1f}%",
+            f"🧠 <b>Memory:</b> {mem.percent:.1f}% ({mem.used / 1024 / 1024 / 1024:.1f}GB / {mem.total / 1024 / 1024 / 1024:.1f}GB)",
+            f"💾 <b>Disk:</b> {disk.percent:.1f}% ({disk.used / 1024 / 1024 / 1024:.1f}GB / {disk.total / 1024 / 1024 / 1024:.1f}GB)",
+            "",
+            f"🐍 <b>Python PID:</b> {os.getpid()}",
+        ]
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except ImportError:
+        await update.message.reply_text("psutil not installed", parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Metrics error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /logs command - show recent log entries (admin only)."""
     try:
@@ -3162,6 +3191,7 @@ def main():
     app.add_handler(CommandHandler("system", system))
     app.add_handler(CommandHandler("wallet", wallet))
     app.add_handler(CommandHandler("logs", logs))
+    app.add_handler(CommandHandler("metrics", metrics))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
 
