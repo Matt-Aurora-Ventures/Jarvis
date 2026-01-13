@@ -357,6 +357,9 @@ class AutonomousEngine:
         if self._twitter_client is None:
             from bots.twitter.twitter_client import TwitterClient
             self._twitter_client = TwitterClient()
+            # Connect to X API
+            if not self._twitter_client.connect():
+                logger.error("Failed to connect to X API")
         return self._twitter_client
     
     def set_image_params(self, **kwargs):
@@ -585,8 +588,8 @@ Be brief and punchy. Include $SOL. Max 250 chars."""
                 
                 img_response = await grok.generate_image(full_prompt, style=params.style)
                 if img_response.success and img_response.image_data:
-                    # Upload to Twitter
-                    media_result = await twitter.upload_media(img_response.image_data)
+                    # Upload to Twitter (use upload_media_from_bytes for raw bytes)
+                    media_result = await twitter.upload_media_from_bytes(img_response.image_data)
                     if media_result:
                         media_id = media_result
             

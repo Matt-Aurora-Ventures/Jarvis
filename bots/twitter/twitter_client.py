@@ -84,11 +84,21 @@ class TwitterCredentials:
             load_dotenv(env_path, override=False)
         except Exception:
             pass
+        
+        # Prefer JARVIS-specific tokens for @Jarvis_lifeos account
+        # These are OAuth 1.0a tokens that work directly with the account
+        jarvis_access = os.getenv("JARVIS_ACCESS_TOKEN")
+        jarvis_secret = os.getenv("JARVIS_ACCESS_TOKEN_SECRET")
+        
+        # Use Jarvis tokens if available, otherwise fall back to X_ACCESS_TOKEN
+        access_token = jarvis_access or os.getenv("X_ACCESS_TOKEN", "") or os.getenv("TWITTER_ACCESS_TOKEN", "")
+        access_secret = jarvis_secret or os.getenv("X_ACCESS_TOKEN_SECRET", "") or os.getenv("TWITTER_ACCESS_TOKEN_SECRET", "")
+        
         return cls(
             api_key=os.getenv("X_API_KEY", "") or os.getenv("TWITTER_API_KEY", ""),
             api_secret=os.getenv("X_API_SECRET", "") or os.getenv("TWITTER_API_SECRET", ""),
-            access_token=os.getenv("X_ACCESS_TOKEN", "") or os.getenv("TWITTER_ACCESS_TOKEN", ""),
-            access_token_secret=os.getenv("X_ACCESS_TOKEN_SECRET", "") or os.getenv("TWITTER_ACCESS_TOKEN_SECRET", ""),
+            access_token=access_token,
+            access_token_secret=access_secret,
             bearer_token=os.getenv("X_BEARER_TOKEN") or os.getenv("TWITTER_BEARER_TOKEN"),
             oauth2_client_id=os.getenv("X_OAUTH2_CLIENT_ID"),
             oauth2_client_secret=os.getenv("X_OAUTH2_CLIENT_SECRET"),
@@ -240,18 +250,17 @@ class TwitterClient:
             if self._use_oauth2 and self._username:
                 return True
 
-            # If OAuth 2.0 credentials exist but failed, DO NOT fallback to tweepy
-            # This prevents posting to wrong account (@aurora_ventures instead of @Jarvis_lifeos)
-            if self.credentials.has_oauth2():
-                logger.error("OAuth 2.0 authentication failed - will not fallback to tweepy to prevent posting to wrong account")
-                return False
-
-            # Only fallback to tweepy if no OAuth 2.0 credentials exist
+            # If tweepy connected to the expected account, allow it even if OAuth 2.0 failed
+            # This handles the case where OAuth 2.0 tokens expired but JARVIS_ACCESS_TOKEN works
             if self._tweepy_client and tweepy_username:
-                self._username = tweepy_username
-                self._user_id = tweepy_user_id
-                logger.info(f"Connected to X as @{self._username} (via tweepy)")
-                return True
+                if self._username_matches(tweepy_username, expected):
+                    self._username = tweepy_username
+                    self._user_id = tweepy_user_id
+                    logger.info(f"Connected to X as @{self._username} (via tweepy with Jarvis tokens)")
+                    return True
+                else:
+                    logger.error(f"Tweepy connected to wrong account: @{tweepy_username}, expected @{expected}")
+                    return False
 
             logger.error("Failed to verify X credentials")
             return False
@@ -397,8 +406,8 @@ class TwitterClient:
                     # Do NOT fallback to tweepy - return error instead
                     return TweetResult(success=False, error=error_msg)
 
-            # Only use tweepy if OAuth 2.0 is not configured
-            if self._tweepy_client and not self.credentials.has_oauth2():
+            # Use tweepy if OAuth 2.0 is not active (either not configured or failed to connect)
+            if self._tweepy_client and not self._use_oauth2:
                 response = await loop.run_in_executor(
                     None,
                     lambda: self._tweepy_client.create_tweet(
