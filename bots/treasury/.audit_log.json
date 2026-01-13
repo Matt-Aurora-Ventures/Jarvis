@@ -1,0 +1,66 @@
+[
+  {
+    "timestamp": "2026-01-13T06:22:38.151878",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "e90867f9",
+      "token": "BONK",
+      "token_mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "amount_usd": 0.6510930000000001,
+      "entry_price": 1.046e-05,
+      "tp_price": 1.3598000000000001e-05,
+      "sl_price": 9.414e-06,
+      "sentiment_grade": "B",
+      "tx_signature": "3HZrm5qRiitdD8SRo5HpZjqpbemebkGVhaZHDs7aqBiP6Cx36QvRgFKGL8uFxXTZNi1P8VRHxt1meYRrCwFDSh9v",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-13T06:44:08.300839",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "BONK",
+      "reason": "duplicate"
+    }
+  },
+  {
+    "timestamp": "2026-01-13T06:44:39.921969",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "fe6a7d21",
+      "token": "DYLDO",
+      "token_mint": "9wUvkDxkskLHXLLiWoJiNUbT3bUpC9yF7bt99Uj1B2fY",
+      "amount_usd": 0.653814753664,
+      "entry_price": 0.0004132,
+      "tp_price": 0.00047517999999999996,
+      "sl_price": 0.00039254,
+      "sentiment_grade": "B",
+      "tx_signature": "5FERYQkov6C5AFfJtXywcuhzCJj4sVkAS75KqJMc5XR6Q9s9PjyL7rzwpezddKfQSXnKL7vt5fjZPUNuEpnDqsV6",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-13T06:48:55.417230",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "515b841f",
+      "token": "jeff",
+      "token_mint": "G4nnWeNt2uBGg4LpkccxUTJhNqUhWsaEhigkVfWYpump",
+      "amount_usd": 0.6066917756319999,
+      "entry_price": 0.0003609,
+      "tp_price": 0.0005411999999999999,
+      "sl_price": 0.00030668,
+      "sentiment_grade": "B",
+      "tx_signature": "39FMxT9w2o7FJ4uuQkzQUXK6E9WeKWjdEC3LooQMG9UPbFSjrFXgaR4vqrj1CoVNZVRnyL3rnd2Yd3UcKMzKeMHL",
+      "dry_run": false
+    }
+  }
+]

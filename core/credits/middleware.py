@@ -35,13 +35,23 @@ logger = logging.getLogger("jarvis.credits.middleware")
 class MeteringResult:
     """Result of metering check."""
     allowed: bool
-    user_id: str
-    endpoint: str
-    credits_required: int
+    user_id: str = ""
+    endpoint: str = ""
+    credits_required: int = 0
     balance_before: int = 0
     balance_after: int = 0
     request_id: str = ""
     error: Optional[str] = None
+    remaining: int = -1  # Remaining balance after deduction (-1 = not set)
+    cost: int = 0  # Alias for credits_required
+
+    def __post_init__(self):
+        # Handle cost alias
+        if self.cost and not self.credits_required:
+            self.credits_required = self.cost
+        # Set remaining from balance_after if not explicitly set
+        if self.remaining == -1:
+            self.remaining = self.balance_after if self.balance_after else self.balance_before
 
 
 class CreditMeteringMiddleware:
@@ -92,8 +102,17 @@ class CreditMeteringMiddleware:
         self.allow_negative = allow_negative
         self.rate_limit = rate_limit_per_minute
 
+        # Endpoint costs mapping
+        self.endpoint_costs: Dict[str, int] = {}
+
         # Rate limiting state
         self._request_counts: Dict[str, list] = {}
+
+    def get_endpoint_cost(self, endpoint: str) -> int:
+        """Get the credit cost for an endpoint."""
+        if endpoint in self.endpoint_costs:
+            return self.endpoint_costs[endpoint]
+        return get_endpoint_cost(endpoint)
 
     def _ensure_manager(self):
         """Ensure credit manager is available."""

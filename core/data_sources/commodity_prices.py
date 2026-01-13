@@ -66,6 +66,12 @@ class CommodityPriceClient:
         'crude_oil': 'CL=F',
         'natural_gas': 'NG=F',
     }
+    YAHOO_FINANCE_BY_SYMBOL = {
+        'XAU': 'GC=F',
+        'XAG': 'SI=F',
+        'XPT': 'PL=F',
+        'XPD': 'PA=F',
+    }
 
     # Cache duration
     CACHE_TTL_SECONDS = 300  # 5 minutes
@@ -144,7 +150,11 @@ class CommodityPriceClient:
         if price is None:
             price = await self._fetch_coingecko_commodity(symbol, name)
 
-        # 4. Final fallback: Yahoo Finance via scraping (not recommended for production)
+        # 4. Final fallback: Yahoo Finance chart API
+        if price is None:
+            price = await self._fetch_yahoo_finance(symbol, name)
+
+        # 5. Final fallback: no data available
         if price is None:
             logger.warning(f"All API sources failed for {symbol}, price data unavailable")
 
@@ -243,6 +253,47 @@ class CommodityPriceClient:
             logger.debug(f"CoinGecko failed for {symbol}: {e}")
 
         return None
+
+    async def _fetch_yahoo_finance(self, symbol: str, name: str) -> Optional[CommodityPrice]:
+        """Fetch commodity price from Yahoo Finance chart API."""
+        session = await self._get_session()
+
+        ticker = self.YAHOO_FINANCE_BY_SYMBOL.get(symbol)
+        if not ticker:
+            return None
+
+        try:
+            urls = [
+                f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
+                f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}",
+            ]
+            params = {"interval": "1d", "range": "5d"}
+            headers = {"User-Agent": "Mozilla/5.0 (compatible; JarvisBot/1.0)"}
+
+            for url in urls:
+                async with session.get(url, params=params, headers=headers) as resp:
+                    if resp.status != 200:
+                        continue
+                    data = await resp.json()
+                    result = (data.get("chart", {}) or {}).get("result")
+                    if not result:
+                        continue
+                    meta = result[0].get("meta", {})
+                    price = meta.get("regularMarketPrice")
+                    change_pct = meta.get("regularMarketChangePercent", 0.0)
+                    if price is None:
+                        continue
+                    return CommodityPrice(
+                        symbol=symbol,
+                        name=name,
+                        price_usd=float(price),
+                        change_24h=float(change_pct or 0.0),
+                        last_updated=datetime.utcnow(),
+                        source="yahoo finance",
+                    )
+        except Exception as e:
+            logger.debug(f"Yahoo Finance failed for {symbol}: {e}")
+            return None
 
     async def get_all_precious_metals(self) -> Dict[str, CommodityPrice]:
         """Get all precious metals prices."""

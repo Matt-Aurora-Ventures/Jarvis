@@ -4,7 +4,8 @@ Treasury Risk Management.
 Implements safety controls for autonomous trading:
 
 Hard Limits:
-- Position size: Max 5% per trade
+- Position size: Max 25% per trade (updated from video learnings)
+- Max notional: $10M USD cap per position
 - Total exposure: Max 50% of active wallet
 - Daily loss: Max 5%
 - Weekly loss: Max 10%
@@ -14,6 +15,12 @@ Circuit Breakers:
 - Auto-pause on 3 consecutive losses
 - Auto-pause on rapid drawdown
 - Manual override capability
+
+Cooldown System:
+- 30-minute default cooldown after trade closure
+- 60-minute cooldown after losses
+- 120-minute cooldown after consecutive losses
+- Integrated with core.trading.cooldown module
 """
 
 import logging
@@ -23,7 +30,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+# Import cooldown system
+try:
+    from core.trading.cooldown import CooldownManager, CooldownConfig, CooldownType
+    COOLDOWN_AVAILABLE = True
+except ImportError:
+    COOLDOWN_AVAILABLE = False
+
+if TYPE_CHECKING:
+    from core.trading.cooldown import CooldownManager
 
 logger = logging.getLogger("jarvis.treasury.risk")
 
@@ -48,9 +65,14 @@ class RiskLimits:
     """Risk limit configuration."""
 
     # Position limits (as percentage of active wallet)
-    max_position_size_pct: float = 0.05  # 5% per position
+    # Updated from video learnings: Never use 100% balance, max 25% per trade
+    max_position_size_pct: float = 0.25  # 25% per position (updated from 5%)
     max_total_exposure_pct: float = 0.50  # 50% total exposure
-    max_single_token_pct: float = 0.20   # 20% in any single token
+    max_single_token_pct: float = 0.25   # 25% in any single token (updated from 20%)
+
+    # Absolute position limits (prevents single large trade)
+    max_notional_usd: float = 10_000_000  # $10M cap per position
+    min_position_usd: float = 100         # Minimum $100 per trade
 
     # Loss limits (as percentage of starting balance)
     max_daily_loss_pct: float = 0.05     # 5% daily
@@ -66,11 +88,21 @@ class RiskLimits:
     max_slippage_bps: int = 200  # 2%
     max_price_impact_pct: float = 3.0
 
+    # Circuit breaker settings
+    max_consecutive_losses: int = 3
+
+    # Cooldown settings (in minutes)
+    default_cooldown_minutes: int = 30
+    loss_cooldown_minutes: int = 60
+    consecutive_loss_cooldown_minutes: int = 120
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "max_position_size_pct": self.max_position_size_pct,
             "max_total_exposure_pct": self.max_total_exposure_pct,
             "max_single_token_pct": self.max_single_token_pct,
+            "max_notional_usd": self.max_notional_usd,
+            "min_position_usd": self.min_position_usd,
             "max_daily_loss_pct": self.max_daily_loss_pct,
             "max_weekly_loss_pct": self.max_weekly_loss_pct,
             "max_monthly_loss_pct": self.max_monthly_loss_pct,
@@ -79,6 +111,9 @@ class RiskLimits:
             "min_trade_interval_seconds": self.min_trade_interval_seconds,
             "max_slippage_bps": self.max_slippage_bps,
             "max_price_impact_pct": self.max_price_impact_pct,
+            "default_cooldown_minutes": self.default_cooldown_minutes,
+            "loss_cooldown_minutes": self.loss_cooldown_minutes,
+            "consecutive_loss_cooldown_minutes": self.consecutive_loss_cooldown_minutes,
         }
 
 
@@ -86,17 +121,31 @@ class RiskLimits:
 class CircuitBreaker:
     """Circuit breaker for emergency stops."""
 
-    state: CircuitState = CircuitState.CLOSED
+    _state: CircuitState = CircuitState.CLOSED
     triggered_at: Optional[datetime] = None
     trigger_reason: str = ""
     consecutive_losses: int = 0
     auto_reset_after_hours: int = 24
     manual_override: bool = False
+    cooldown_end: Optional[datetime] = None  # For half-open transition
 
     # Trigger thresholds
     max_consecutive_losses: int = 3
     rapid_drawdown_pct: float = 0.10  # 10% in 1 hour
     rapid_drawdown_window_hours: int = 1
+
+    @property
+    def state(self) -> str:
+        """Return state as string for backwards compatibility."""
+        return self._state.value
+
+    @state.setter
+    def state(self, value):
+        """Set state from string or enum."""
+        if isinstance(value, CircuitState):
+            self._state = value
+        else:
+            self._state = CircuitState(value)
 
     def trip(self, reason: str):
         """Trip the circuit breaker."""
@@ -136,11 +185,34 @@ class CircuitBreaker:
             return True
 
         self.check_auto_reset()
-        return self.state in (CircuitState.CLOSED, CircuitState.HALF_OPEN)
+        return self._state in (CircuitState.CLOSED, CircuitState.HALF_OPEN)
+
+    def record_loss(self):
+        """Record a trading loss."""
+        self.consecutive_losses += 1
+        if self.consecutive_losses >= self.max_consecutive_losses:
+            self.trip(f"Consecutive losses: {self.consecutive_losses}")
+
+    def record_win(self):
+        """Record a trading win, resets consecutive loss counter."""
+        self.consecutive_losses = 0
+
+    def check_state(self):
+        """Check and update state based on cooldown."""
+        if self._state == CircuitState.OPEN:
+            if self.cooldown_end and datetime.now(timezone.utc) >= self.cooldown_end:
+                self._state = CircuitState.HALF_OPEN
+                logger.info("Circuit breaker entering HALF_OPEN state")
+            else:
+                self.check_auto_reset()
+
+    def get_status(self) -> Dict[str, Any]:
+        """Alias for to_dict."""
+        return self.to_dict()
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "state": self.state.value,
+            "state": self.state,
             "triggered_at": self.triggered_at.isoformat() if self.triggered_at else None,
             "trigger_reason": self.trigger_reason,
             "consecutive_losses": self.consecutive_losses,
@@ -160,6 +232,19 @@ class TradeRecord:
     pnl: int  # Profit/loss in lamports
     success: bool
 
+    # Aliases for test compatibility
+    @property
+    def token(self) -> str:
+        return self.token_mint
+
+    @property
+    def amount(self) -> int:
+        return self.amount_in
+
+
+# Alias for backwards compatibility
+TradeRecordResult = TradeRecord
+
 
 class RiskManager:
     """
@@ -170,17 +255,20 @@ class RiskManager:
     - P&L by time period
     - Trade frequency
     - Circuit breaker state
+    - Cooldown periods per symbol
 
     Validates:
     - Proposed trades against limits
     - Current exposure levels
     - Loss thresholds
+    - Cooldown status
     """
 
     def __init__(
         self,
         limits: RiskLimits = None,
         db_path: str = None,
+        enable_cooldown: bool = True,
     ):
         """
         Initialize risk manager.
@@ -188,6 +276,7 @@ class RiskManager:
         Args:
             limits: Risk limit configuration
             db_path: Path to trade log database
+            enable_cooldown: Enable cooldown system integration
         """
         self.limits = limits or RiskLimits()
         self.circuit_breaker = CircuitBreaker()
@@ -203,6 +292,17 @@ class RiskManager:
         self._starting_balance_weekly: int = 0
         self._starting_balance_monthly: int = 0
         self._last_trade_time: Optional[datetime] = None
+
+        # Initialize cooldown manager if available
+        self._cooldown_manager: Optional["CooldownManager"] = None
+        if enable_cooldown and COOLDOWN_AVAILABLE:
+            cooldown_config = CooldownConfig(
+                default_cooldown_minutes=self.limits.default_cooldown_minutes,
+                loss_cooldown_minutes=self.limits.loss_cooldown_minutes,
+                consecutive_loss_cooldown_minutes=self.limits.consecutive_loss_cooldown_minutes,
+            )
+            self._cooldown_manager = CooldownManager(config=cooldown_config)
+            logger.info("Cooldown system initialized")
 
     def _init_database(self):
         """Initialize trade logging database."""
@@ -265,28 +365,35 @@ class RiskManager:
 
     def validate_trade(
         self,
-        token_mint: str,
-        side: str,
-        amount: int,
-        current_balance: int,
+        token_mint: str = None,
+        side: str = "",
+        amount: int = 0,
+        current_balance: int = 0,
         price_impact_pct: float = 0,
+        amount_usd: float = 0,  # USD value for notional limits
+        # Aliases for test compatibility
+        token: str = None,
+        balance: int = None,
     ) -> tuple[bool, str]:
         """
         Validate a proposed trade against risk limits.
 
-        Args:
-            token_mint: Token being traded
-            side: "buy" or "sell"
-            amount: Trade amount in lamports
-            current_balance: Current wallet balance
-            price_impact_pct: Expected price impact
-
         Returns:
             Tuple of (is_valid, rejection_reason)
         """
+        # Handle parameter aliases
+        token_mint = token_mint or token or ""
+        current_balance = balance if balance is not None else current_balance
+
         # Check circuit breaker
         if not self.circuit_breaker.is_trading_allowed():
             return False, f"Circuit breaker active: {self.circuit_breaker.trigger_reason}"
+
+        # Check cooldown (if enabled)
+        if self._cooldown_manager and side == "buy":
+            can_trade, cooldown_msg = self._cooldown_manager.can_trade(token_mint)
+            if not can_trade:
+                return False, cooldown_msg
 
         # Check trade interval
         if self._last_trade_time:
@@ -294,10 +401,17 @@ class RiskManager:
             if elapsed < self.limits.min_trade_interval_seconds:
                 return False, f"Trade interval too short: {elapsed:.0f}s < {self.limits.min_trade_interval_seconds}s"
 
+        # Check notional USD limits
+        if amount_usd > 0:
+            if amount_usd > self.limits.max_notional_usd:
+                return False, f"Notional too large: ${amount_usd:,.0f} > ${self.limits.max_notional_usd:,.0f}"
+            if amount_usd < self.limits.min_position_usd:
+                return False, f"Position too small: ${amount_usd:.2f} < ${self.limits.min_position_usd:.0f}"
+
         # Check position size
         max_position = int(current_balance * self.limits.max_position_size_pct)
         if amount > max_position:
-            return False, f"Position too large: {amount} > {max_position} ({self.limits.max_position_size_pct*100}%)"
+            return False, f"Position size too large: {amount} > {max_position} ({self.limits.max_position_size_pct*100}%)"
 
         # Check total exposure
         total_exposure = sum(self._active_positions.values())
@@ -329,31 +443,28 @@ class RiskManager:
         if not loss_check[0]:
             return loss_check
 
-        return True, "Trade approved"
+        return True, ""
 
     def record_trade(
         self,
-        token_mint: str,
-        side: str,
-        amount_in: int,
-        amount_out: int,
-        success: bool,
+        token_mint: str = None,
+        side: str = "",
+        amount_in: int = 0,
+        amount_out: int = 0,
+        success: bool = True,
         signature: str = None,
-    ) -> TradeRecord:
-        """
-        Record a completed trade.
+        # Aliases for test compatibility
+        token: str = None,
+        amount: int = None,
+        price: float = None,
+    ) -> "TradeRecordResult":
+        """Record a completed trade."""
+        # Handle aliases
+        token_mint = token_mint or token or ""
+        if amount is not None:
+            amount_in = amount
+            amount_out = int(amount * (price or 1.0))
 
-        Args:
-            token_mint: Token traded
-            side: "buy" or "sell"
-            amount_in: Input amount
-            amount_out: Output amount
-            success: Whether trade succeeded
-            signature: Transaction signature
-
-        Returns:
-            TradeRecord
-        """
         now = datetime.now(timezone.utc)
         pnl = amount_out - amount_in if side == "sell" else 0
 
@@ -382,6 +493,30 @@ class RiskManager:
                 self.circuit_breaker.consecutive_losses = 0
             elif side == "sell":
                 self._active_positions[token_mint] = max(0, self._active_positions.get(token_mint, 0) - amount_in)
+
+                # Register cooldown on position close (key insight from video learnings)
+                if self._cooldown_manager:
+                    if pnl < 0:
+                        # Loss cooldown
+                        if self.circuit_breaker.consecutive_losses >= 2:
+                            self._cooldown_manager.record_closure(
+                                token_mint,
+                                CooldownType.CONSECUTIVE_LOSS if COOLDOWN_AVAILABLE else None,
+                                pnl_pct=(pnl / amount_in * 100) if amount_in > 0 else 0,
+                            )
+                        else:
+                            self._cooldown_manager.record_closure(
+                                token_mint,
+                                CooldownType.LOSS if COOLDOWN_AVAILABLE else None,
+                                pnl_pct=(pnl / amount_in * 100) if amount_in > 0 else 0,
+                            )
+                    else:
+                        # Win cooldown (standard)
+                        self._cooldown_manager.record_closure(
+                            token_mint,
+                            CooldownType.STANDARD if COOLDOWN_AVAILABLE else None,
+                            pnl_pct=(pnl / amount_in * 100) if amount_in > 0 else 0,
+                        )
 
                 if pnl < 0:
                     self.circuit_breaker.consecutive_losses += 1
@@ -489,12 +624,36 @@ class RiskManager:
             "win_rate": winning_trades / trade_count if trade_count > 0 else 0,
         }
 
+    def record_trade_result(
+        self,
+        signature: str,
+        pnl: int = 0,
+        success: bool = True,
+        exit_price: float = None,  # For test compatibility
+    ):
+        """Record the result of a previously recorded trade."""
+        if pnl > 0:
+            self.circuit_breaker.record_win()
+        elif pnl < 0:
+            self.circuit_breaker.record_loss()
+
+        # Update database
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE treasury_trades SET pnl = ?, success = ? WHERE signature = ?",
+            (pnl, 1 if success else 0, signature),
+        )
+        conn.commit()
+        conn.close()
+
     def get_risk_status(self) -> Dict[str, Any]:
         """Get comprehensive risk status."""
         return {
             "limits": self.limits.to_dict(),
             "circuit_breaker": self.circuit_breaker.to_dict(),
             "active_positions": self._active_positions,
+            "open_positions": self._active_positions,  # Alias for tests
             "total_exposure": sum(self._active_positions.values()),
             "last_trade_time": self._last_trade_time.isoformat() if self._last_trade_time else None,
             "pnl_daily": self.get_pnl("daily"),
@@ -510,3 +669,54 @@ class RiskManager:
         """Resume trading after stop."""
         self.circuit_breaker.reset(manual=override)
         logger.info(f"Trading resumed (override={override})")
+
+    def get_cooldown_status(self, symbol: str = None) -> Dict[str, Any]:
+        """
+        Get cooldown status for a symbol or all symbols.
+
+        Args:
+            symbol: Optional symbol to check, or all if None
+
+        Returns:
+            Dict with cooldown information
+        """
+        if not self._cooldown_manager:
+            return {"enabled": False, "message": "Cooldown system not available"}
+
+        if symbol:
+            can_trade, message = self._cooldown_manager.can_trade(symbol)
+            remaining = self._cooldown_manager.get_remaining_cooldown(symbol)
+            return {
+                "enabled": True,
+                "symbol": symbol,
+                "can_trade": can_trade,
+                "message": message,
+                "remaining_minutes": remaining,
+            }
+
+        return {
+            "enabled": True,
+            "active_cooldowns": self._cooldown_manager.get_active_cooldowns(),
+        }
+
+    def clear_cooldown(self, symbol: str) -> bool:
+        """
+        Manually clear cooldown for a symbol (admin override).
+
+        Args:
+            symbol: Symbol to clear cooldown for
+
+        Returns:
+            True if cleared, False if not available
+        """
+        if not self._cooldown_manager:
+            return False
+
+        self._cooldown_manager.clear_cooldown(symbol)
+        logger.info(f"Cooldown cleared for {symbol}")
+        return True
+
+    @property
+    def cooldown_manager(self) -> Optional["CooldownManager"]:
+        """Get the cooldown manager instance."""
+        return self._cooldown_manager

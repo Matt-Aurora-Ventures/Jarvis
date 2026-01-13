@@ -54,6 +54,28 @@ class TradeRouterConfig:
 
 
 @dataclass
+class TradeIntent:
+    """Intent to execute a trade."""
+    
+    input_mint: str
+    output_mint: str
+    amount: int  # In smallest unit (lamports for SOL)
+    slippage_bps: int = 50
+    user_wallet: str = ""
+    priority: str = "normal"  # low, normal, high
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "input_mint": self.input_mint,
+            "output_mint": self.output_mint,
+            "amount": self.amount,
+            "slippage_bps": self.slippage_bps,
+            "user_wallet": self.user_wallet,
+            "priority": self.priority,
+        }
+
+
+@dataclass
 class TradeResult:
     """Result of a trade execution."""
 

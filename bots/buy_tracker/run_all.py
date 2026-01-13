@@ -41,6 +41,7 @@ def load_env():
 async def main():
     """Run all bot components."""
     import logging
+    import subprocess
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -59,6 +60,20 @@ async def main():
     from bots.twitter.sentiment_poster import SentimentTwitterPoster
     from bots.twitter.twitter_client import TwitterClient, TwitterCredentials
     from bots.twitter.claude_content import ClaudeContentGenerator
+
+    tg_bot_proc = None
+
+    # Ensure the main Telegram bot is running to process callback buttons
+    run_main_bot = os.environ.get("RUN_MAIN_TG_BOT", "auto").lower()
+    if run_main_bot not in ("0", "false", "no", "off"):
+        tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if tg_token:
+            env = os.environ.copy()
+            env["PYTHONPATH"] = str(project_root) + os.pathsep + env.get("PYTHONPATH", "")
+            tg_bot_proc = subprocess.Popen(
+                [sys.executable, str(project_root / "tg_bot" / "bot.py")],
+                env=env,
+            )
 
     # Initialize buy bot
     buy_bot = JarvisBuyBot()
@@ -96,18 +111,24 @@ async def main():
     print("  - Buy Tracker (real-time notifications)")
     print("  - Sentiment Reporter -> Telegram (every 30 min, Grok analysis)")
     print("  - Sentiment Poster -> Twitter (every 30 min, Claude voice)")
+    if tg_bot_proc:
+        print("  - Telegram Main Bot (callback handler)")
     print()
     print("Flow: Grok -> Predictions File -> Claude -> Twitter")
     print()
     print("=" * 50)
     print()
 
-    # Run all concurrently
-    await asyncio.gather(
-        buy_bot.start(),
-        sentiment_reporter.start(),
-        twitter_poster.start(),
-    )
+    try:
+        # Run all concurrently
+        await asyncio.gather(
+            buy_bot.start(),
+            sentiment_reporter.start(),
+            twitter_poster.start(),
+        )
+    finally:
+        if tg_bot_proc and tg_bot_proc.poll() is None:
+            tg_bot_proc.terminate()
 
 
 if __name__ == "__main__":

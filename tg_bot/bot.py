@@ -135,6 +135,65 @@ def _should_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     return False
 
 
+def _is_message_for_jarvis(text: str, update: Update) -> bool:
+    """
+    Determine if a message seems directed at Jarvis.
+    
+    Returns True if:
+    - Message mentions Jarvis by name
+    - Message is a question
+    - Message is a direct request/command
+    - Message is a reply to Jarvis
+    - Message is in a private chat
+    """
+    text_lower = text.lower().strip()
+    
+    # Private chats - always respond
+    if update.effective_chat and update.effective_chat.type == "private":
+        return True
+    
+    # Reply to Jarvis's message
+    if update.message and update.message.reply_to_message:
+        reply_to = update.message.reply_to_message
+        if reply_to.from_user and reply_to.from_user.is_bot:
+            return True
+    
+    # Direct mentions of Jarvis
+    jarvis_names = ["jarvis", "j", "hey jarvis", "yo jarvis", "@jarvis"]
+    for name in jarvis_names:
+        if text_lower.startswith(name) or f" {name}" in text_lower:
+            return True
+    
+    # Questions (likely seeking response)
+    if text_lower.endswith("?"):
+        # But filter out rhetorical/conversational questions not for bot
+        rhetorical = ["right?", "you know?", "innit?", "huh?", "yeah?", "no?"]
+        if not any(text_lower.endswith(r) for r in rhetorical):
+            return True
+    
+    # Direct commands/requests
+    command_starters = [
+        "can you", "could you", "would you", "please", "tell me", "show me",
+        "what is", "what's", "who is", "who's", "how do", "how does", "how to",
+        "explain", "analyze", "check", "look at", "find", "search", "get me",
+        "give me", "help", "do you know", "do you think", "what do you"
+    ]
+    for starter in command_starters:
+        if text_lower.startswith(starter):
+            return True
+    
+    # Technical/trading queries that Jarvis should answer
+    trading_keywords = [
+        "price", "chart", "token", "coin", "trade", "buy", "sell", "position",
+        "treasury", "wallet", "balance", "sentiment", "signal", "analysis"
+    ]
+    if any(kw in text_lower for kw in trading_keywords) and "?" in text:
+        return True
+    
+    # Otherwise, don't respond to general chatter
+    return False
+
+
 def _parse_admin_ids(value: str) -> List[int]:
     ids = []
     for item in value.split(","):
@@ -290,28 +349,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start(update, context)
 
 
-async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Welcome new members to the group with links and getting started info.
-    Triggered when someone joins the chat.
-    """
-    # Check if this is a new member joining (not leaving or other status changes)
-    if update.chat_member is None:
-        return
-
-    old_status = update.chat_member.old_chat_member.status
-    new_status = update.chat_member.new_chat_member.status
-
-    # Only welcome if someone is joining (was not a member, now is a member)
-    was_member = old_status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
-    is_member = new_status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
-
-    if was_member or not is_member:
-        return  # Not a new join
-
-    new_user = update.chat_member.new_chat_member.user
-    first_name = new_user.first_name or "fren"
-
+async def _send_welcome(context: ContextTypes.DEFAULT_TYPE, chat_id: int, first_name: str):
+    """Send the welcome message to a new member."""
     welcome_message = f"""
 ━━━━━━━━━━━━━━━━━━━━━━
 *welcome, {first_name}* 🤖
@@ -350,16 +389,51 @@ ask questions anytime
 *lets build* ⚡
 ━━━━━━━━━━━━━━━━━━━━━━
 """
-
     try:
         await context.bot.send_message(
-            chat_id=update.effective_chat.id,
+            chat_id=chat_id,
             text=welcome_message,
             parse_mode=ParseMode.MARKDOWN,
             disable_web_page_preview=True,
         )
+        logger.info(f"Sent welcome message to {first_name} in chat {chat_id}")
     except Exception as e:
         logger.error(f"Failed to send welcome message: {e}")
+
+
+async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Welcome new members to the group with links and getting started info.
+    Triggered when someone joins the chat via NEW_CHAT_MEMBERS.
+    """
+    logger.info(f"Welcome handler triggered")
+
+    # Handle NEW_CHAT_MEMBERS (simpler, more reliable)
+    if update.message and update.message.new_chat_members:
+        for new_user in update.message.new_chat_members:
+            if new_user.is_bot:
+                continue  # Don't welcome bots
+            first_name = new_user.first_name or "fren"
+            await _send_welcome(context, update.effective_chat.id, first_name)
+        return
+
+    # Fallback: Handle chat_member updates (requires admin)
+    if update.chat_member is None:
+        return
+
+    old_status = update.chat_member.old_chat_member.status
+    new_status = update.chat_member.new_chat_member.status
+
+    # Only welcome if someone is joining (was not a member, now is a member)
+    was_member = old_status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
+    is_member = new_status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
+
+    if was_member or not is_member:
+        return  # Not a new join
+
+    new_user = update.chat_member.new_chat_member.user
+    first_name = new_user.first_name or "fren"
+    await _send_welcome(context, update.effective_chat.id, first_name)
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -657,6 +731,47 @@ async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Configuration reloaded from environment.",
         parse_mode=ParseMode.MARKDOWN,
     )
+
+
+@admin_only
+async def keystatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /keystatus command - show key manager status (admin only)."""
+    try:
+        from core.security.key_manager import get_key_manager
+        km = get_key_manager()
+        status = km.verify_key_access()
+        
+        # Format status
+        pw_status = "SET" if status["password_available"] else "NOT SET"
+        treasury_status = "ACCESSIBLE" if status["treasury_accessible"] else "NOT ACCESSIBLE"
+        
+        lines = [
+            "*Key Manager Status*",
+            "",
+            f"*Password:* `{pw_status}`",
+            f"*Treasury:* `{treasury_status}`",
+        ]
+        
+        if status.get("treasury_address"):
+            addr = status["treasury_address"]
+            lines.append(f"*Address:* `{addr[:8]}...{addr[-6:]}`")
+        
+        lines.append("")
+        lines.append("*Key Locations:*")
+        
+        for name, info in status["locations"].items():
+            exists = "YES" if info["exists"] else "NO"
+            lines.append(f"  {name}: {exists}")
+        
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"*Key Manager Error*\n\n`{str(e)[:100]}`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
 @admin_only
@@ -1709,10 +1824,13 @@ async def _execute_ape_trade(query, callback_data: str):
         amount_usd = setup.amount_sol * (balance_usd / balance_sol) if balance_sol > 0 else 0.0
         mode = "LIVE" if not engine.dry_run else "PAPER"
 
+        # Sanitize symbol for safe output
+        safe_symbol = setup.symbol.encode('ascii', 'replace').decode('ascii')
+        
         if result.success:
             result_text = (
                 f"TRADE EXECUTED ({mode})\n\n"
-                f"Token: {setup.symbol}\n"
+                f"Token: {safe_symbol}\n"
                 f"Entry: ${setup.entry_price:.8f}\n"
                 f"Amount: {setup.amount_sol:.4f} SOL (~${amount_usd:.2f})\n"
                 f"Profile: {profile_label}\n"
@@ -1722,12 +1840,14 @@ async def _execute_ape_trade(query, callback_data: str):
             if result.tx_signature:
                 result_text += f"\n\nTX: https://solscan.io/tx/{result.tx_signature}"
         else:
+            # Sanitize error message
+            safe_error = str(result.error or 'Unknown error').encode('ascii', 'replace').decode('ascii')
             result_text = (
                 f"TRADE FAILED ({mode})\n\n"
-                f"Token: {setup.symbol}\n"
+                f"Token: {safe_symbol}\n"
                 f"Allocation: {allocation_pct}%\n"
                 f"Profile: {profile_label}\n"
-                f"Reason: {result.error or 'Unknown error'}"
+                f"Reason: {safe_error}"
             )
 
         await query.message.reply_text(
@@ -2440,6 +2560,55 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+# Spam patterns - instant ban
+SPAM_PATTERNS = [
+    "want to buy",
+    "buying sol wallet",
+    "buy a sol wallet",
+    "buy sol wallet",
+    "purchase wallet",
+    "dm me for",
+    "contact me on whatsapp",
+    "telegram @",
+    "t.me/",
+    "make money fast",
+    "investment opportunity",
+    "guaranteed profit",
+    "double your",
+]
+
+async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, user_id: int) -> bool:
+    """Check for spam and ban user if detected. Returns True if spam was detected."""
+    text_lower = text.lower()
+
+    for pattern in SPAM_PATTERNS:
+        if pattern in text_lower:
+            try:
+                chat_id = update.effective_chat.id
+                message_id = update.message.message_id
+                username = update.effective_user.username or "unknown"
+
+                # Delete the message
+                await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+
+                # Ban the user
+                await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+
+                logger.warning(f"SPAM BANNED: user={user_id} @{username} pattern='{pattern}' text='{text[:50]}'")
+                print(f"[SPAM] Banned user {user_id} (@{username}) for: {pattern}", flush=True)
+
+                # Notify chat
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"Banned spammer @{username}. Stay vigilant.",
+                )
+                return True
+            except Exception as e:
+                logger.error(f"Failed to ban spammer: {e}")
+                return False
+    return False
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle non-command messages and respond when appropriate."""
     if not update.message or not update.message.text:
@@ -2447,12 +2616,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text.strip()
     user_id = update.effective_user.id if update.effective_user else 0
+    import sys
+    print(f"[MSG] user_id={user_id} text={text[:60]}", flush=True)
+    sys.stdout.flush()
+    logger.info(f"Message from {user_id}: {text[:60]}")
     username = update.effective_user.username or "" if update.effective_user else ""
 
     # Check if user is admin
     admin_ids_str = os.environ.get("TELEGRAM_ADMIN_IDS", "")
     admin_ids = [int(x.strip()) for x in admin_ids_str.split(",") if x.strip().isdigit()]
     is_admin = user_id in admin_ids
+
+    # Spam detection - skip for admin
+    if not is_admin:
+        is_spam = await check_and_ban_spam(update, context, text, user_id)
+        if is_spam:
+            return  # Message was spam, user banned, stop processing
 
     # Terminal command handling (admin only) - prefix with > or /term
     if text.startswith('>') or text.lower().startswith('/term '):
@@ -2479,12 +2658,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"```\n{result}\n```", parse_mode="Markdown")
         return
 
-    # Always listen to admin (Matt) - no @mention required, always respond
+    # Check if message seems directed at Jarvis
     should_reply = _should_reply(update, context)
+    
+    # Even for admin, only respond if message seems directed at Jarvis
     if is_admin:
-        # Admin always gets a response - JARVIS is always listening to Matt
-        should_reply = True
-
+        should_reply = _is_message_for_jarvis(text, update)
+    
     if not should_reply:
         return
 
@@ -2500,13 +2680,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _LAST_REPLY_AT[chat_id] = now
 
     responder = _get_chat_responder()
-    reply = await responder.generate_reply(
-        text=text,
-        username=username,
-        chat_title=(update.effective_chat.title if update.effective_chat else ""),
-        is_private=update.effective_chat.type == "private" if update.effective_chat else False,
-        user_id=user_id,
-    )
+    logger.info(f"Generating reply for admin={is_admin} user={user_id}")
+    try:
+        reply = await responder.generate_reply(
+            text=text,
+            username=username,
+            chat_title=(update.effective_chat.title if update.effective_chat else ""),
+            is_private=update.effective_chat.type == "private" if update.effective_chat else False,
+            user_id=user_id,
+        )
+        logger.info(f"Reply generated: {reply[:50] if reply else 'EMPTY'}")
+    except Exception as e:
+        logger.error(f"Reply generation failed: {e}")
+        reply = None
 
     if reply:
         await update.message.reply_text(
@@ -2572,6 +2758,7 @@ def main():
     app.add_handler(CommandHandler("analyze", analyze))
     app.add_handler(CommandHandler("digest", digest))
     app.add_handler(CommandHandler("reload", reload))
+    app.add_handler(CommandHandler("keystatus", keystatus))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
 
@@ -2584,7 +2771,9 @@ def main():
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Welcome new members
+    # Welcome new members - use StatusUpdate for reliability (doesn't require admin)
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
+    # Also keep ChatMemberHandler as backup (requires admin privileges)
     app.add_handler(ChatMemberHandler(welcome_new_member, ChatMemberHandler.CHAT_MEMBER))
 
     # Error handler

@@ -640,12 +640,15 @@ async def _execute_token_trade(setup: TradeSetup, user_id: Optional[int] = None)
 
     This integrates with the treasury trading system.
     """
+    logger.info(f"_execute_token_trade called: {setup.symbol}, user={user_id}")
     try:
         # Import treasury trading module
         from bots.treasury.trading import TreasuryTrader
 
+        logger.info("Creating TreasuryTrader...")
         trader = TreasuryTrader()
 
+        logger.info(f"Calling execute_buy_with_tp_sl: {setup.contract_address}, {setup.amount_sol} SOL")
         # Execute buy with TP/SL
         result = await trader.execute_buy_with_tp_sl(
             token_mint=setup.contract_address or "",

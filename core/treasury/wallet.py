@@ -80,15 +80,36 @@ DEFAULT_ALLOCATIONS = [
     ),
 ]
 
+# Alias for backwards compatibility (list form)
+DEFAULT_ALLOCATIONS_LIST = DEFAULT_ALLOCATIONS
+
+# Dict form for tests expecting {WalletType: percentage}
+DEFAULT_ALLOCATION = {
+    WalletType.RESERVE: 0.60,
+    WalletType.ACTIVE: 0.30,
+    WalletType.PROFIT: 0.10,
+}
+
+
+@dataclass
+class WalletConfig:
+    """Configuration for treasury wallet system."""
+    rpc_url: str = field(default_factory=lambda: os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com"))
+    rebalance_threshold: float = 0.05  # 5% deviation triggers rebalance
+    min_rebalance_interval_hours: int = 24
+    enable_auto_rebalance: bool = True
+    max_slippage_bps: int = 50  # 0.5% max slippage
+    reserve_multisig_threshold: int = 2  # Signers needed for reserve
+
 
 @dataclass
 class WalletBalance:
     """Current balance of a wallet."""
-    wallet_type: WalletType
-    address: str
     sol_balance: int  # In lamports
     token_balances: Dict[str, int] = field(default_factory=dict)  # mint -> amount
     last_updated: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    wallet_type: Optional[WalletType] = None
+    address: str = ""
 
     @property
     def sol_balance_decimal(self) -> Decimal:
@@ -96,10 +117,10 @@ class WalletBalance:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "wallet_type": self.wallet_type.value,
+            "wallet_type": self.wallet_type.value if self.wallet_type else None,
             "address": self.address,
-            "sol_balance_lamports": self.sol_balance,
-            "sol_balance": float(self.sol_balance_decimal),
+            "sol_balance": self.sol_balance,
+            "sol_balance_decimal": float(self.sol_balance_decimal),
             "token_balances": self.token_balances,
             "last_updated": self.last_updated.isoformat(),
         }

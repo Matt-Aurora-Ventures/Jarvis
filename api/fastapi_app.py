@@ -22,6 +22,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.errors import make_error_response
 
+# Performance: Use orjson for faster JSON responses
+try:
+    from fastapi.responses import ORJSONResponse
+    DEFAULT_RESPONSE_CLASS = ORJSONResponse
+except ImportError:
+    DEFAULT_RESPONSE_CLASS = JSONResponse
+
 # Import new middleware
 try:
     from api.middleware.rate_limit import RateLimitMiddleware
@@ -138,12 +145,22 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Jarvis API",
         description="JARVIS Trading & Automation Platform API",
-        version="3.7.0",
+        version="4.2.0",
         lifespan=lifespan,
         docs_url="/api/docs",
         redoc_url="/api/redoc",
         openapi_url="/api/openapi.json",
+        default_response_class=DEFAULT_RESPONSE_CLASS,  # Use orjson for 3-10x faster JSON
     )
+    
+    # OpenTelemetry instrumentation
+    try:
+        from core.observability import setup_telemetry, instrument_fastapi
+        setup_telemetry(service_name="jarvis-api", service_version="4.2.0")
+        from core.observability.otel_setup import instrument_fastapi
+        instrument_fastapi(app)
+    except ImportError:
+        pass
 
     # CORS configuration
     origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
@@ -314,6 +331,28 @@ def create_app() -> FastAPI:
             "startup_ok": daemon_state.get("startup_ok", 0),
             "startup_failed": daemon_state.get("startup_failed", 0),
         }
+
+    @app.get("/api/metrics")
+    async def prometheus_metrics():
+        """Prometheus metrics endpoint."""
+        from fastapi.responses import PlainTextResponse
+        try:
+            from core.monitoring.metrics import metrics
+            return PlainTextResponse(
+                content=metrics.collect_all(),
+                media_type="text/plain"
+            )
+        except ImportError:
+            return PlainTextResponse(content="# Metrics not available", media_type="text/plain")
+
+    @app.get("/api/traces")
+    async def recent_traces():
+        """Get recent distributed traces."""
+        try:
+            from core.monitoring.tracing import tracer
+            return {"traces": tracer.get_recent_traces(limit=50)}
+        except ImportError:
+            return {"traces": [], "error": "Tracing not available"}
 
     return app
 

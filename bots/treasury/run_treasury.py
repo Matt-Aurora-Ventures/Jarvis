@@ -114,7 +114,8 @@ class TreasuryBot:
         logger.info(f"Initializing Treasury Bot with {len(admin_ids)} admins")
 
         # Try to load keypair from data/treasury_keypair.json first
-        keypair_path = Path(__file__).parent.parent.parent / 'data' / 'treasury_keypair.json'
+        env_wallet_path = os.environ.get('TREASURY_WALLET_PATH', '').strip()
+        keypair_path = Path(env_wallet_path) if env_wallet_path else Path(__file__).parent.parent.parent / 'data' / 'treasury_keypair.json'
         treasury_address = None
 
         if keypair_path.exists():

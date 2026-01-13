@@ -77,12 +77,19 @@ class CreditPackage:
     id: str
     name: str
     credits: int
-    price_cents: int  # Price in cents USD
+    price_cents: int = 0  # Price in cents USD
     description: str = ""
     active: bool = True
     popular: bool = False  # Show as recommended
     bonus_credits: int = 0  # Extra credits included
     stripe_price_id: Optional[str] = None  # Stripe price ID
+    tier: str = ""  # For test compatibility
+    price_usd: float = 0.0  # Alias for test compatibility
+
+    def __post_init__(self):
+        # Convert price_usd to price_cents if provided
+        if self.price_usd and not self.price_cents:
+            self.price_cents = int(self.price_usd * 100)
 
     @property
     def price_dollars(self) -> float:
@@ -228,6 +235,9 @@ DEFAULT_PACKAGES = [
         description="For teams and high-volume users",
     ),
 ]
+
+# Alias for backwards compatibility
+CREDIT_PACKAGES = DEFAULT_PACKAGES
 
 
 # =============================================================================

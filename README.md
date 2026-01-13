@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-4.1.3-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.2.0-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1108%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
@@ -51,6 +51,40 @@
 - [Contributing](#-contributing)
 - [Security](#-security)
 - [License](#-license)
+
+---
+
+## 🚀 Recent Updates (v4.2.0 - January 2026)
+
+### Treasury Trading System - LIVE
+- **Live Treasury Buys via Telegram**: Click-to-buy buttons with mandatory TP/SL
+- **Jupiter Lite API Integration**: DNS-resilient trading (fallback when quote-api fails)
+- **Hardwired Key Manager**: Centralized key persistence - keys never get lost
+- **Transaction Signing Fix**: Proper `VersionedTransaction` signing with `solders`
+
+### Telegram Bot Enhancements
+- **Smart Response Filtering**: Jarvis only responds to messages directed at him
+- **Sentiment Reports with Buy Buttons**: Real-time trading from reports
+- **Admin-Only Trading**: Treasury trades restricted to authorized users
+- **Unicode Error Fixes**: Clean response handling for all token names
+
+### Security & Infrastructure
+- **KeyManager Module**: `core/security/key_manager.py` - singleton key management
+- **Credential Loader**: Unified bot credential management
+- **RBAC System**: Role-based access control foundation
+- **Pre-commit Hooks**: Automated code quality checks
+
+### Trading Signals & Risk
+- **Decision Matrix**: Multi-signal trade decision framework
+- **Cooldown System**: Configurable cooldowns after trade closures
+- **Risk Management**: Position sizing (max 25%), loss limits, circuit breakers
+- **CoinGlass Integration**: Liquidation data for contrarian signals
+
+### Observability
+- **Metrics Module**: Prometheus-compatible metrics
+- **Tracing Module**: Distributed tracing support
+- **Alerting System**: Multi-channel alert routing
+- **Grafana Dashboards**: Pre-built monitoring dashboards
 
 ---
 

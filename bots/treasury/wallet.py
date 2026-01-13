@@ -280,10 +280,17 @@ class SecureWallet:
                 tx_bytes = bytes(transaction)
                 try:
                     from solders.transaction import VersionedTransaction
+                    from solders.message import to_bytes_versioned
 
                     versioned = VersionedTransaction.from_bytes(tx_bytes)
-                    signed_tx = VersionedTransaction(versioned.message, [keypair])
-                    return bytes(signed_tx)
+                    # Sign message using to_bytes_versioned (correct way for VersionedTransaction)
+                    message_bytes = to_bytes_versioned(versioned.message)
+                    signature = keypair.sign_message(message_bytes)
+                    # Replace placeholder signature in place
+                    sigs = list(versioned.signatures)
+                    sigs[0] = signature
+                    versioned.signatures = sigs
+                    return bytes(versioned)
                 except Exception:
                     signature = keypair.sign_message(tx_bytes)
                     return bytes(signature)

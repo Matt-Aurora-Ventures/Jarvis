@@ -1,6 +1,13 @@
 """
 Jarvis Trading Engine
 Connects sentiment analysis to trade execution with risk management
+
+Integrates:
+- Liquidation-based signals (CoinGlass)
+- Dual MA reversal strategy
+- Meta-labeling for signal quality
+- Cooldown system (tracks closures, not entries)
+- Decision matrix for multi-signal confirmation
 """
 
 import os
@@ -16,6 +23,35 @@ from pathlib import Path
 
 from .wallet import SecureWallet, WalletInfo
 from .jupiter import JupiterClient, SwapQuote, SwapResult, LimitOrderManager
+
+# Import new trading modules
+try:
+    from core.trading.decision_matrix import DecisionMatrix, TradeDecision, DecisionType
+    from core.trading.signals.liquidation import LiquidationAnalyzer, LiquidationSignal
+    from core.trading.signals.dual_ma import DualMAAnalyzer, DualMASignal
+    from core.trading.signals.meta_labeler import MetaLabeler
+    from core.trading.cooldown import CooldownManager, CooldownType
+    SIGNALS_AVAILABLE = True
+except ImportError:
+    SIGNALS_AVAILABLE = False
+    # Fallback types for type hints when signals not available
+    LiquidationSignal = None
+    DualMASignal = None
+    DecisionMatrix = None
+    TradeDecision = None
+    DecisionType = None
+    MetaLabeler = None
+    CooldownManager = None
+    CooldownType = None
+    LiquidationAnalyzer = None
+    DualMAAnalyzer = None
+
+# Import CoinGlass for liquidation data
+try:
+    from integrations.coinglass.client import CoinGlassClient
+    COINGLASS_AVAILABLE = True
+except ImportError:
+    COINGLASS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +270,8 @@ class TradingEngine:
         admin_user_ids: List[int] = None,
         risk_level: RiskLevel = RiskLevel.MODERATE,
         max_positions: int = 5,
-        dry_run: bool = True  # Start in dry run mode
+        dry_run: bool = True,  # Start in dry run mode
+        enable_signals: bool = True,  # Enable advanced signal analysis
     ):
         """
         Initialize trading engine.
@@ -246,6 +283,7 @@ class TradingEngine:
             risk_level: Default position sizing
             max_positions: Maximum concurrent positions
             dry_run: If True, simulate trades without execution
+            enable_signals: Enable advanced signal analysis (liquidation, MA, etc.)
         """
         self.wallet = wallet
         self.jupiter = jupiter
@@ -257,6 +295,24 @@ class TradingEngine:
         self.positions: Dict[str, Position] = {}
         self.trade_history: List[Position] = []
         self.order_manager: Optional[LimitOrderManager] = None
+
+        # Initialize advanced signal analyzers
+        self._decision_matrix: Optional[DecisionMatrix] = None
+        self._liquidation_analyzer: Optional[LiquidationAnalyzer] = None
+        self._ma_analyzer: Optional[DualMAAnalyzer] = None
+        self._meta_labeler: Optional[MetaLabeler] = None
+        self._coinglass: Optional[CoinGlassClient] = None
+
+        if enable_signals and SIGNALS_AVAILABLE:
+            self._decision_matrix = DecisionMatrix()
+            self._liquidation_analyzer = LiquidationAnalyzer()
+            self._ma_analyzer = DualMAAnalyzer()
+            self._meta_labeler = MetaLabeler()
+            logger.info("Advanced signal analyzers initialized")
+
+        if enable_signals and COINGLASS_AVAILABLE:
+            self._coinglass = CoinGlassClient()
+            logger.info("CoinGlass client initialized")
 
         # Load existing state
         self._load_state()
@@ -491,6 +547,219 @@ class TradingEngine:
             return TradeDirection.SHORT, f"Strong bearish signal - avoid"
 
         return TradeDirection.NEUTRAL, "Signal not strong enough"
+
+    async def analyze_liquidation_signal(
+        self,
+        symbol: str = "BTC",
+    ) -> Tuple[TradeDirection, str, Optional[LiquidationSignal]]:
+        """
+        Analyze liquidation data for contrarian trading signals.
+
+        Key insight from video learnings:
+        - Go LONG after large long liquidations (weak hands flushed)
+        - Go SHORT after large short liquidations
+
+        Args:
+            symbol: Trading symbol (BTC, ETH, SOL)
+
+        Returns:
+            Tuple of (direction, reasoning, signal)
+        """
+        if not self._coinglass or not self._liquidation_analyzer:
+            return TradeDirection.NEUTRAL, "Liquidation analysis not available", None
+
+        try:
+            # Fetch liquidation data from CoinGlass
+            liq_data = await self._coinglass.get_liquidations(symbol, interval="5m", limit=12)
+
+            if not liq_data:
+                return TradeDirection.NEUTRAL, "No liquidation data available", None
+
+            # Convert to internal format
+            from core.trading.signals.liquidation import Liquidation
+            liquidations = []
+            for ld in liq_data:
+                # Long liquidations
+                if ld.long_liquidations > 0:
+                    liquidations.append(Liquidation(
+                        timestamp=ld.timestamp,
+                        symbol=symbol,
+                        side='long',
+                        size_usd=ld.long_liquidations,
+                        price=0,  # Not available from aggregated data
+                        exchange='aggregated',
+                    ))
+                # Short liquidations
+                if ld.short_liquidations > 0:
+                    liquidations.append(Liquidation(
+                        timestamp=ld.timestamp,
+                        symbol=symbol,
+                        side='short',
+                        size_usd=ld.short_liquidations,
+                        price=0,
+                        exchange='aggregated',
+                    ))
+
+            # Analyze for signal
+            signal = self._liquidation_analyzer.analyze(liquidations)
+
+            if not signal:
+                return TradeDirection.NEUTRAL, "No liquidation signal detected", None
+
+            # Convert signal direction
+            if signal.direction == 'long':
+                direction = TradeDirection.LONG
+                reason = f"Liquidation signal: {signal.reasoning} (confidence: {signal.confidence:.0%})"
+            elif signal.direction == 'short':
+                direction = TradeDirection.SHORT
+                reason = f"Liquidation signal: {signal.reasoning} (confidence: {signal.confidence:.0%})"
+            else:
+                direction = TradeDirection.NEUTRAL
+                reason = signal.reasoning
+
+            return direction, reason, signal
+
+        except Exception as e:
+            logger.error(f"Error analyzing liquidation signal: {e}")
+            return TradeDirection.NEUTRAL, f"Liquidation analysis error: {e}", None
+
+    async def analyze_ma_signal(
+        self,
+        prices: List[float],
+        symbol: str = "BTC",
+    ) -> Tuple[TradeDirection, str, Optional[DualMASignal]]:
+        """
+        Analyze dual moving average signal.
+
+        Key insight from video learnings:
+        - Fast MA 7-13, Slow MA 30-45
+        - Use 100 SMA as trend filter (NOT 200)
+        - Only trade in direction of trend
+
+        Args:
+            prices: List of price data (most recent last)
+            symbol: Trading symbol
+
+        Returns:
+            Tuple of (direction, reasoning, signal)
+        """
+        if not self._ma_analyzer:
+            return TradeDirection.NEUTRAL, "MA analysis not available", None
+
+        try:
+            signal = self._ma_analyzer.analyze(prices, symbol)
+
+            if not signal:
+                return TradeDirection.NEUTRAL, "No MA signal detected", None
+
+            if signal.direction == 'long':
+                direction = TradeDirection.LONG
+            elif signal.direction == 'short':
+                direction = TradeDirection.SHORT
+            else:
+                direction = TradeDirection.NEUTRAL
+
+            reason = f"MA signal: {signal.reasoning} (strength: {signal.strength:.0%})"
+            return direction, reason, signal
+
+        except Exception as e:
+            logger.error(f"Error analyzing MA signal: {e}")
+            return TradeDirection.NEUTRAL, f"MA analysis error: {e}", None
+
+    async def get_combined_signal(
+        self,
+        token_mint: str,
+        symbol: str,
+        sentiment_score: float,
+        sentiment_grade: str,
+        prices: Optional[List[float]] = None,
+    ) -> Tuple[TradeDirection, str, float]:
+        """
+        Get combined signal from all sources using decision matrix.
+
+        Combines:
+        - Sentiment analysis
+        - Liquidation signals
+        - MA signals
+        - Meta-labeling
+
+        Args:
+            token_mint: Token address
+            symbol: Trading symbol
+            sentiment_score: Sentiment score
+            sentiment_grade: Sentiment grade
+            prices: Optional price history for MA analysis
+
+        Returns:
+            Tuple of (direction, reasoning, confidence)
+        """
+        if not self._decision_matrix:
+            # Fall back to sentiment-only
+            direction, reason = await self.analyze_sentiment_signal(
+                token_mint, sentiment_score, sentiment_grade
+            )
+            return direction, reason, 0.5
+
+        signals = []
+        reasons = []
+
+        # 1. Sentiment signal
+        sent_dir, sent_reason = await self.analyze_sentiment_signal(
+            token_mint, sentiment_score, sentiment_grade
+        )
+        if sent_dir != TradeDirection.NEUTRAL:
+            signals.append(('sentiment', sent_dir.value.lower(), sentiment_score))
+            reasons.append(sent_reason)
+
+        # 2. Liquidation signal
+        liq_dir, liq_reason, liq_signal = await self.analyze_liquidation_signal(symbol)
+        if liq_dir != TradeDirection.NEUTRAL and liq_signal:
+            signals.append(('liquidation', liq_dir.value.lower(), liq_signal.confidence))
+            reasons.append(liq_reason)
+
+        # 3. MA signal (if prices available)
+        if prices and len(prices) >= 100:
+            ma_dir, ma_reason, ma_signal = await self.analyze_ma_signal(prices, symbol)
+            if ma_dir != TradeDirection.NEUTRAL and ma_signal:
+                signals.append(('ma', ma_dir.value.lower(), ma_signal.strength))
+                reasons.append(ma_reason)
+
+        # 4. Use decision matrix to combine
+        if not signals:
+            return TradeDirection.NEUTRAL, "No signals detected", 0.0
+
+        # Simple majority vote with confidence weighting
+        long_score = sum(conf for _, dir, conf in signals if dir == 'long')
+        short_score = sum(conf for _, dir, conf in signals if dir == 'short')
+
+        if long_score > short_score and long_score > 0.5:
+            direction = TradeDirection.LONG
+            confidence = long_score / len(signals)
+        elif short_score > long_score and short_score > 0.5:
+            direction = TradeDirection.SHORT
+            confidence = short_score / len(signals)
+        else:
+            direction = TradeDirection.NEUTRAL
+            confidence = 0.0
+
+        combined_reason = " | ".join(reasons)
+        return direction, combined_reason, confidence
+
+    async def get_liquidation_summary(self, symbol: str = "BTC") -> Dict[str, Any]:
+        """
+        Get 24h liquidation summary for a symbol.
+
+        Returns:
+            Dict with liquidation statistics and bias
+        """
+        if not self._coinglass:
+            return {"error": "CoinGlass not available"}
+
+        try:
+            return await self._coinglass.get_liquidation_summary(symbol)
+        except Exception as e:
+            logger.error(f"Error fetching liquidation summary: {e}")
+            return {"error": str(e)}
 
     async def open_position(
         self,
@@ -918,6 +1187,8 @@ class TradingEngine:
         """Clean shutdown."""
         if self.order_manager:
             await self.order_manager.stop_monitoring()
+        if self._coinglass:
+            await self._coinglass.close()
         await self.jupiter.close()
         self._save_state()
 
@@ -969,16 +1240,32 @@ class _SimpleWallet:
                         lamports = data.get("result", {}).get("value", 0)
                         sol_balance = lamports / 1e9
 
-                        # Get SOL price from Jupiter
+                        # Get SOL price from Jupiter, fallback to CoinGecko
                         sol_mint = "So11111111111111111111111111111111111111112"
                         price_url = f"https://price.jup.ag/v6/price?ids={sol_mint}"
-                        async with session.get(price_url) as price_resp:
-                            if price_resp.status == 200:
-                                price_data = await price_resp.json()
-                                sol_price = price_data.get("data", {}).get(sol_mint, {}).get("price", 0)
-                                return sol_balance, sol_balance * sol_price
+                        sol_price = 0.0
+                        try:
+                            async with session.get(price_url) as price_resp:
+                                if price_resp.status == 200:
+                                    price_data = await price_resp.json()
+                                    sol_price = float(
+                                        price_data.get("data", {}).get(sol_mint, {}).get("price", 0) or 0
+                                    )
+                        except Exception as price_err:
+                            logger.warning(f"Jupiter price fetch failed, falling back: {price_err}")
 
-                        return sol_balance, 0.0
+                        if sol_price <= 0:
+                            try:
+                                cg_url = "https://api.coingecko.com/api/v3/simple/price"
+                                params = {"ids": "solana", "vs_currencies": "usd"}
+                                async with session.get(cg_url, params=params) as cg_resp:
+                                    if cg_resp.status == 200:
+                                        cg_data = await cg_resp.json()
+                                        sol_price = float(cg_data.get("solana", {}).get("usd", 0) or 0)
+                            except Exception as cg_err:
+                                logger.warning(f"CoinGecko price fetch failed: {cg_err}")
+
+                        return sol_balance, sol_balance * sol_price if sol_price > 0 else 0.0
         except Exception as e:
             logger.error(f"Failed to get balance: {e}")
             return 0.0, 0.0
@@ -1049,35 +1336,66 @@ class TreasuryTrader:
             return True, "Already initialized"
 
         try:
+            # Use centralized KeyManager for robust key loading
             try:
-                from dotenv import load_dotenv
+                from core.security.key_manager import get_key_manager
+                key_manager = get_key_manager()
+                keypair = key_manager.load_treasury_keypair()
+                
+                if keypair:
+                    treasury_address = str(keypair.pubkey())
+                    wallet = _SimpleWallet(keypair, treasury_address)
+                    logger.info(f"Loaded treasury via KeyManager: {treasury_address[:8]}...")
+                else:
+                    wallet = None
+                    treasury_address = None
+            except ImportError:
+                # Fallback to legacy loading if KeyManager not available
+                logger.warning("KeyManager not available, using legacy loader")
+                wallet = None
+                treasury_address = None
+                
                 root = Path(__file__).resolve().parents[2]
-                for env_path in (root / "tg_bot" / ".env", root / ".env"):
-                    if env_path.exists():
-                        load_dotenv(env_path, override=False)
-            except Exception:
-                pass
-
-            # Try to load keypair from treasury_keypair.json first
-            from pathlib import Path
-            default_path = Path(__file__).resolve().parents[2] / "data" / "treasury_keypair.json"
-            env_path = os.environ.get("TREASURY_WALLET_PATH", "").strip()
-            keypair_path = Path(env_path) if env_path else default_path
-
-            wallet = None
-            treasury_address = None
-
-            if keypair_path.exists():
+                env_paths = (root / "tg_bot" / ".env", root / ".env")
                 try:
-                    keypair = self._load_encrypted_keypair(keypair_path)
-                    if keypair:
-                        treasury_address = str(keypair.pubkey())
-                        logger.info(f"Loaded treasury keypair: {treasury_address[:8]}...")
+                    from dotenv import load_dotenv
+                    for env_path in env_paths:
+                        if env_path.exists():
+                            load_dotenv(env_path, override=False)
+                except Exception:
+                    pass
 
-                        # Create a minimal wallet wrapper that works with TradingEngine
-                        wallet = _SimpleWallet(keypair, treasury_address)
-                except Exception as kp_err:
-                    logger.warning(f"Keypair load failed: {kp_err}")
+                if not os.environ.get("JARVIS_WALLET_PASSWORD"):
+                    for env_path in env_paths:
+                        if not env_path.exists():
+                            continue
+                        try:
+                            for line in env_path.read_text(encoding="utf-8").splitlines():
+                                line = line.strip()
+                                if not line or line.startswith("#") or "=" not in line:
+                                    continue
+                                key, value = line.split("=", 1)
+                                key = key.strip()
+                                value = value.strip().strip('"').strip("'")
+                                if key and key not in os.environ:
+                                    os.environ[key] = value
+                        except Exception:
+                            continue
+
+                # Try to load keypair from treasury_keypair.json first
+                default_path = Path(__file__).resolve().parents[2] / "data" / "treasury_keypair.json"
+                env_path_str = os.environ.get("TREASURY_WALLET_PATH", "").strip()
+                keypair_path = Path(env_path_str) if env_path_str else default_path
+
+                if keypair_path.exists():
+                    try:
+                        keypair = self._load_encrypted_keypair(keypair_path)
+                        if keypair:
+                            treasury_address = str(keypair.pubkey())
+                            logger.info(f"Loaded treasury keypair: {treasury_address[:8]}...")
+                            wallet = _SimpleWallet(keypair, treasury_address)
+                    except Exception as kp_err:
+                        logger.warning(f"Keypair load failed: {kp_err}")
 
             # Fallback to SecureWallet if direct load failed
             if not wallet:
@@ -1164,13 +1482,16 @@ class TreasuryTrader:
 
         try:
             # Resolve partial contract address if needed
+            logger.info(f"Resolving token: mint={token_mint}, symbol={token_symbol}")
             full_mint = await self._resolve_token_mint(token_mint, token_symbol)
             if not full_mint:
+                logger.error(f"Failed to resolve token address for {token_symbol or token_mint}")
                 return {
                     "success": False,
                     "error": f"Could not resolve token address for {token_symbol or token_mint}",
                     "tx_signature": "",
                 }
+            logger.info(f"Resolved to: {full_mint}")
 
             # Get current price for position sizing
             current_price = await self._engine.jupiter.get_token_price(full_mint)
@@ -1242,15 +1563,18 @@ class TreasuryTrader:
         """
         # If it looks like a full Solana address, return as-is
         if len(partial_mint) >= 32:
+            logger.info(f"Token mint already full length: {partial_mint[:12]}...")
             return partial_mint
 
         # Try to search by symbol using DexScreener
         import aiohttp
 
+        logger.info(f"Resolving partial mint '{partial_mint}' with symbol '{symbol}'")
         try:
             async with aiohttp.ClientSession() as session:
                 search_term = symbol or partial_mint
                 url = f"https://api.dexscreener.com/latest/dex/search?q={search_term}"
+                logger.info(f"DexScreener search: {url}")
 
                 async with session.get(url, timeout=5) as resp:
                     if resp.status == 200:

@@ -228,7 +228,7 @@ class JarvisTwitterBot:
         expected = (
             os.environ.get("X_EXPECTED_USERNAME")
             or os.environ.get("TWITTER_EXPECTED_USERNAME")
-            or ""
+            or "jarvis_lifeos"
         )
         expected = expected.strip().lstrip("@").lower()
         if expected in ("", "any", "*"):

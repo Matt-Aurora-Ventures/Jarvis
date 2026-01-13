@@ -60,6 +60,10 @@ browser-data/
 chrome-data/
 session/
 sessions/
+browser_profile/
+*_cookies.json
+grok_cookies.json
+x_cookies.json
 
 # === TRANSCRIPTS & PERSONAL DATA ===
 transcripts/

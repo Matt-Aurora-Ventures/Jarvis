@@ -10,6 +10,10 @@ Modules:
 - Market data: birdeye, dexscreener, geckoterminal
 - Wallet and execution infrastructure
 - Sentiment and signal aggregation
+- NEW: Signal analyzers (liquidation, dual MA, meta-labeling)
+- NEW: Decision matrix for multi-signal confirmation
+- NEW: Cooldown system for trade management
+- NEW: Backtesting and robustness testing framework
 """
 
 # DEX Integrations
@@ -206,6 +210,66 @@ from core.lut_daemon import (
     stop_lut_daemon,
 )
 
+# NEW: Signal Analyzers (from video learnings)
+try:
+    from core.trading.signals.liquidation import (
+        LiquidationAnalyzer,
+        LiquidationSignal,
+        Liquidation,
+    )
+    from core.trading.signals.dual_ma import (
+        DualMAAnalyzer,
+        DualMASignal,
+        TrendFilter,
+    )
+    from core.trading.signals.meta_labeler import (
+        MetaLabeler,
+        MetaLabelResult,
+        MarketRegime,
+    )
+    SIGNAL_ANALYZERS_AVAILABLE = True
+except ImportError:
+    SIGNAL_ANALYZERS_AVAILABLE = False
+
+# NEW: Decision Matrix
+try:
+    from core.trading.decision_matrix import (
+        DecisionMatrix,
+        TradeDecision,
+        DecisionType,
+        EntryConditions,
+        ExitConditions,
+    )
+    DECISION_MATRIX_AVAILABLE = True
+except ImportError:
+    DECISION_MATRIX_AVAILABLE = False
+
+# NEW: Cooldown System
+try:
+    from core.trading.cooldown import (
+        CooldownManager,
+        CooldownConfig,
+        CooldownType,
+        CooldownEvent,
+    )
+    COOLDOWN_AVAILABLE = True
+except ImportError:
+    COOLDOWN_AVAILABLE = False
+
+# NEW: Backtesting Framework
+try:
+    from core.trading.backtesting import (
+        StrategyValidator,
+        WalkForwardTester,
+        PerformanceMetrics,
+        calculate_sharpe,
+        calculate_sortino,
+        calculate_calmar,
+    )
+    BACKTESTING_AVAILABLE = True
+except ImportError:
+    BACKTESTING_AVAILABLE = False
+
 __all__ = [
     # Jupiter
     "fetch_quote",
@@ -320,4 +384,37 @@ __all__ = [
     "stop_trading_daemon",
     "start_lut_daemon",
     "stop_lut_daemon",
+    # NEW: Signal Analyzers
+    "LiquidationAnalyzer",
+    "LiquidationSignal",
+    "Liquidation",
+    "DualMAAnalyzer",
+    "DualMASignal",
+    "TrendFilter",
+    "MetaLabeler",
+    "MetaLabelResult",
+    "MarketRegime",
+    # NEW: Decision Matrix
+    "DecisionMatrix",
+    "TradeDecision",
+    "DecisionType",
+    "EntryConditions",
+    "ExitConditions",
+    # NEW: Cooldown System
+    "CooldownManager",
+    "CooldownConfig",
+    "CooldownType",
+    "CooldownEvent",
+    # NEW: Backtesting
+    "StrategyValidator",
+    "WalkForwardTester",
+    "PerformanceMetrics",
+    "calculate_sharpe",
+    "calculate_sortino",
+    "calculate_calmar",
+    # Availability flags
+    "SIGNAL_ANALYZERS_AVAILABLE",
+    "DECISION_MATRIX_AVAILABLE",
+    "COOLDOWN_AVAILABLE",
+    "BACKTESTING_AVAILABLE",
 ]

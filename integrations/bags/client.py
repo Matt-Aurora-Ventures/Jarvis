@@ -120,6 +120,30 @@ class SwapResult:
         }
 
 
+@dataclass
+class PartnerStats:
+    """Partner statistics from Bags.fm."""
+
+    partner_id: str
+    total_volume: int
+    total_trades: int
+    total_fees_earned: int
+    period_start: datetime
+    period_end: datetime
+    top_pairs: List[Dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "partner_id": self.partner_id,
+            "total_volume": self.total_volume,
+            "total_trades": self.total_trades,
+            "total_fees_earned": self.total_fees_earned,
+            "period_start": self.period_start.isoformat(),
+            "period_end": self.period_end.isoformat(),
+            "top_pairs": self.top_pairs,
+        }
+
+
 # =============================================================================
 # Bags.fm Client
 # =============================================================================

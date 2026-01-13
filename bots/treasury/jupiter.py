@@ -114,9 +114,13 @@ class JupiterClient:
     - Transaction confirmation with retry logic (per guide)
     """
 
-    JUPITER_API = "https://quote-api.jup.ag/v6"
+    # Use lite-api for DNS resilience (works when quote-api DNS fails)
+    JUPITER_API = "https://lite-api.jup.ag/swap/v1"
+    JUPITER_API_FALLBACK = "https://quote-api.jup.ag/v6"
     JUPITER_PRICE_API = "https://price.jup.ag/v6"
     JUPITER_TOKEN_API = "https://token.jup.ag"
+    DEXSCREENER_API = "https://api.dexscreener.com/latest"
+    COINGECKO_SIMPLE_API = "https://api.coingecko.com/api/v3/simple/price"
 
     # Common token addresses
     SOL_MINT = "So11111111111111111111111111111111111111112"
@@ -158,6 +162,61 @@ class JupiterClient:
         """Close the client session."""
         if self._session and not self._session.closed:
             await self._session.close()
+
+    async def _fetch_dexscreener_pairs(self, mint: str) -> List[Dict]:
+        """Fetch DexScreener pairs for a mint, filtered to Solana."""
+        session = await self._get_session()
+        base_url = os.environ.get("DEXSCREENER_API_URL", self.DEXSCREENER_API).rstrip("/")
+        url = f"{base_url}/dex/tokens/{mint}"
+
+        try:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return []
+                data = await resp.json()
+                pairs = data.get("pairs") or []
+                return [p for p in pairs if p.get("chainId") == "solana"]
+        except Exception as e:
+            logger.warning(f"DexScreener failed for {mint[:8]}...: {e}")
+            return []
+
+    @staticmethod
+    def _pick_best_pair(pairs: List[Dict]) -> Optional[Dict]:
+        """Pick the most liquid pair from DexScreener data."""
+        if not pairs:
+            return None
+
+        def liquidity(pair: Dict) -> float:
+            try:
+                return float(pair.get("liquidity", {}).get("usd", 0) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        return max(pairs, key=liquidity)
+
+    @staticmethod
+    def _pair_price_usd(pair: Dict) -> float:
+        """Parse a USD price from a DexScreener pair."""
+        raw = pair.get("priceUsd") or pair.get("price")
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return 0.0
+
+    async def _fetch_coingecko_price(self, asset_id: str) -> float:
+        """Fetch USD price for a CoinGecko asset id."""
+        session = await self._get_session()
+        try:
+            async with session.get(
+                self.COINGECKO_SIMPLE_API,
+                params={"ids": asset_id, "vs_currencies": "usd"},
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return float(data.get(asset_id, {}).get("usd", 0) or 0)
+        except Exception as e:
+            logger.warning(f"CoinGecko failed for {asset_id}: {e}")
+        return 0.0
 
     async def get_token_info(self, mint: str) -> Optional[TokenInfo]:
         """Get token information by mint address."""
@@ -201,6 +260,46 @@ class JupiterClient:
         except Exception as e:
             logger.error(f"Failed to get token info for {mint[:8]}...: {e}")
 
+        # Fallback: DexScreener token data
+        pairs = await self._fetch_dexscreener_pairs(mint)
+        best = self._pick_best_pair(pairs)
+        if best:
+            base = best.get("baseToken", {}) or {}
+            token = TokenInfo(
+                address=mint,
+                symbol=base.get("symbol", "UNKNOWN"),
+                name=base.get("name", ""),
+                decimals=9,
+                price_usd=self._pair_price_usd(best),
+                logo_uri=base.get("logoURI", ""),
+            )
+            self._token_cache[mint] = token
+            return token
+
+        # Fallback: known mints
+        if mint == self.SOL_MINT:
+            sol_price = await self._fetch_coingecko_price("solana")
+            token = TokenInfo(
+                address=mint,
+                symbol="SOL",
+                name="Solana",
+                decimals=9,
+                price_usd=sol_price,
+            )
+            self._token_cache[mint] = token
+            return token
+
+        if mint in (self.USDC_MINT, self.USDT_MINT):
+            token = TokenInfo(
+                address=mint,
+                symbol="USDC" if mint == self.USDC_MINT else "USDT",
+                name="USD Coin" if mint == self.USDC_MINT else "Tether USD",
+                decimals=6,
+                price_usd=1.0,
+            )
+            self._token_cache[mint] = token
+            return token
+
         return None
 
     async def get_token_price(self, mint: str) -> float:
@@ -214,9 +313,29 @@ class JupiterClient:
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    return data.get('data', {}).get(mint, {}).get('price', 0.0)
+                    price = data.get('data', {}).get(mint, {}).get('price', 0.0)
+                    if price:
+                        return float(price)
         except Exception as e:
-            logger.error(f"Failed to get price for {mint[:8]}...: {e}")
+            logger.warning(f"Primary price source failed for {mint[:8]}...: {e}")
+
+        # Stablecoin fallback
+        if mint in (self.USDC_MINT, self.USDT_MINT):
+            return 1.0
+
+        # SOL fallback via CoinGecko
+        if mint == self.SOL_MINT:
+            sol_price = await self._fetch_coingecko_price("solana")
+            if sol_price > 0:
+                return sol_price
+
+        # DexScreener fallback
+        pairs = await self._fetch_dexscreener_pairs(mint)
+        best = self._pick_best_pair(pairs)
+        if best:
+            price = self._pair_price_usd(best)
+            if price > 0:
+                return price
 
         return 0.0
 
