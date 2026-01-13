@@ -941,6 +941,60 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Audit error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
+async def age(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /age command - get token creation age (public)."""
+    try:
+        if not context.args:
+            await update.message.reply_text("Usage: /age <token_address>", parse_mode=ParseMode.HTML)
+            return
+        
+        token_address = context.args[0].strip()
+        
+        from core.data.free_price_api import get_token_price
+        price_data = await get_token_price(token_address)
+        
+        if not price_data:
+            await update.message.reply_text("Token not found.", parse_mode=ParseMode.HTML)
+            return
+        
+        lines = [f"<b>⏰ {price_data.symbol} Age</b>", ""]
+        
+        if hasattr(price_data, 'created_at') and price_data.created_at:
+            from datetime import datetime, timezone
+            created = datetime.fromisoformat(price_data.created_at.replace('Z', '+00:00'))
+            now = datetime.now(timezone.utc)
+            age = now - created
+            
+            if age.days > 0:
+                age_str = f"{age.days} days"
+            elif age.seconds > 3600:
+                age_str = f"{age.seconds // 3600} hours"
+            else:
+                age_str = f"{age.seconds // 60} minutes"
+            
+            lines.append(f"<b>Age:</b> {age_str}")
+            lines.append(f"<b>Created:</b> {created.strftime('%Y-%m-%d %H:%M UTC')}")
+            
+            # Age assessment
+            if age.days < 1:
+                warning = "⚠️ Very new - high risk"
+            elif age.days < 7:
+                warning = "🟠 Less than a week old"
+            elif age.days < 30:
+                warning = "🟡 Less than a month old"
+            else:
+                warning = "🟢 Established"
+            
+            lines.append(f"<b>Status:</b> {warning}")
+        else:
+            lines.append("Age data not available")
+            lines.append("<i>Try DexScreener for creation date</i>")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Age error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
 async def liquidity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /liquidity command - get token liquidity info (public)."""
     try:
@@ -3524,6 +3578,7 @@ def main():
     app.add_handler(CommandHandler("volume", volume))
     app.add_handler(CommandHandler("chart", chart))
     app.add_handler(CommandHandler("liquidity", liquidity))
+    app.add_handler(CommandHandler("age", age))
     app.add_handler(CommandHandler("price", price))
     app.add_handler(CommandHandler("gainers", gainers))
     app.add_handler(CommandHandler("newpairs", newpairs))
