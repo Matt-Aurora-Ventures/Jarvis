@@ -2479,14 +2479,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"```\n{result}\n```", parse_mode="Markdown")
         return
 
-    # Always listen to admin (Matt) - no @mention required
+    # Always listen to admin (Matt) - no @mention required, always respond
     should_reply = _should_reply(update, context)
-    if is_admin and not should_reply:
-        # Check if this looks like talking to JARVIS or a command
-        jarvis_triggers = ['jarvis', 'j ', 'hey j', 'yo j', 'run ', 'execute', 'do ', 'can you', 'please ']
-        text_lower = text.lower()
-        if any(trigger in text_lower for trigger in jarvis_triggers):
-            should_reply = True
+    if is_admin:
+        # Admin always gets a response - JARVIS is always listening to Matt
+        should_reply = True
 
     if not should_reply:
         return
