@@ -1,0 +1,328 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "tags": [],
+      "targetBlank": true,
+      "title": "Overview",
+      "url": "/d/jarvis-overview"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "panels": [],
+      "title": "Bot Health Summary",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [
+            {"options": {"healthy": {"color": "green", "index": 0, "text": "Healthy"}}, "type": "value"},
+            {"options": {"degraded": {"color": "yellow", "index": 1, "text": "Degraded"}}, "type": "value"},
+            {"options": {"unhealthy": {"color": "red", "index": 2, "text": "Unhealthy"}}, "type": "value"}
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}]
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "none", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "targets": [
+        {"expr": "bot_status{bot=\"telegram\"}", "legendFormat": "Status"}
+      ],
+      "title": "Telegram Bot",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [
+            {"options": {"healthy": {"color": "green", "index": 0, "text": "Healthy"}}, "type": "value"},
+            {"options": {"degraded": {"color": "yellow", "index": 1, "text": "Degraded"}}, "type": "value"},
+            {"options": {"unhealthy": {"color": "red", "index": 2, "text": "Unhealthy"}}, "type": "value"}
+          ]
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "none"},
+      "targets": [
+        {"expr": "bot_status{bot=\"twitter\"}", "legendFormat": "Status"}
+      ],
+      "title": "Twitter Bot",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [
+            {"options": {"healthy": {"color": "green", "index": 0, "text": "Healthy"}}, "type": "value"},
+            {"options": {"degraded": {"color": "yellow", "index": 1, "text": "Degraded"}}, "type": "value"},
+            {"options": {"unhealthy": {"color": "red", "index": 2, "text": "Unhealthy"}}, "type": "value"}
+          ]
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "none"},
+      "targets": [
+        {"expr": "bot_status{bot=\"treasury\"}", "legendFormat": "Status"}
+      ],
+      "title": "Treasury Bot",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [
+            {"options": {"healthy": {"color": "green", "index": 0, "text": "Healthy"}}, "type": "value"},
+            {"options": {"degraded": {"color": "yellow", "index": 1, "text": "Degraded"}}, "type": "value"},
+            {"options": {"unhealthy": {"color": "red", "index": 2, "text": "Unhealthy"}}, "type": "value"}
+          ]
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "none"},
+      "targets": [
+        {"expr": "bot_status{bot=\"buy_tracker\"}", "legendFormat": "Status"}
+      ],
+      "title": "Buy Tracker",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5},
+      "id": 101,
+      "panels": [],
+      "title": "Telegram Bot Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 6},
+      "id": 10,
+      "targets": [
+        {"expr": "rate(telegram_messages_total[5m])", "legendFormat": "Messages/sec"},
+        {"expr": "rate(telegram_commands_total[5m])", "legendFormat": "Commands/sec"}
+      ],
+      "title": "Telegram Message Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "ms"}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 6},
+      "id": 11,
+      "targets": [
+        {"expr": "histogram_quantile(0.95, rate(telegram_response_time_seconds_bucket[5m])) * 1000", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.50, rate(telegram_response_time_seconds_bucket[5m])) * 1000", "legendFormat": "p50"}
+      ],
+      "title": "Telegram Response Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 6},
+      "id": 12,
+      "targets": [
+        {"expr": "rate(telegram_errors_total[5m])", "legendFormat": "Errors/sec"}
+      ],
+      "title": "Telegram Errors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 12},
+      "id": 13,
+      "options": {"showHeader": true},
+      "targets": [
+        {"expr": "topk(10, sum by(command) (telegram_commands_total))", "format": "table"}
+      ],
+      "title": "Top Commands",
+      "transformations": [
+        {"id": "organize", "options": {"excludeByName": {"Time": true}, "renameByName": {"Value": "Count", "command": "Command"}}}
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 18},
+      "id": 102,
+      "panels": [],
+      "title": "Twitter Bot Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 19},
+      "id": 20,
+      "targets": [
+        {"expr": "rate(twitter_tweets_total[1h]) * 3600", "legendFormat": "Tweets/hour"},
+        {"expr": "rate(twitter_replies_total[1h]) * 3600", "legendFormat": "Replies/hour"}
+      ],
+      "title": "Twitter Post Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 19},
+      "id": 21,
+      "targets": [
+        {"expr": "twitter_engagement_likes", "legendFormat": "Likes"},
+        {"expr": "twitter_engagement_retweets", "legendFormat": "Retweets"},
+        {"expr": "twitter_engagement_replies", "legendFormat": "Replies"}
+      ],
+      "title": "Twitter Engagement",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 19},
+      "id": 22,
+      "targets": [
+        {"expr": "twitter_rate_limit_remaining", "legendFormat": "API Calls Remaining"},
+        {"expr": "twitter_rate_limit_reset_seconds", "legendFormat": "Reset In (s)"}
+      ],
+      "title": "Twitter Rate Limits",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 25},
+      "id": 103,
+      "panels": [],
+      "title": "Treasury Bot Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "currencyUSD"}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 26},
+      "id": 30,
+      "targets": [
+        {"expr": "treasury_balance_usd", "legendFormat": "Total Balance"}
+      ],
+      "title": "Treasury Balance",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 26},
+      "id": 31,
+      "targets": [
+        {"expr": "rate(treasury_trades_total[1h]) * 3600", "legendFormat": "{{status}}"}
+      ],
+      "title": "Trade Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "currencyUSD"}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 26},
+      "id": 32,
+      "targets": [
+        {"expr": "treasury_pnl_24h", "legendFormat": "24h P&L"}
+      ],
+      "title": "24h P&L",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32},
+      "id": 104,
+      "panels": [],
+      "title": "Buy Tracker Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 33},
+      "id": 40,
+      "targets": [
+        {"expr": "rate(buy_tracker_transactions_total[5m])", "legendFormat": "Transactions/sec"}
+      ],
+      "title": "Transaction Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 33},
+      "id": 41,
+      "targets": [
+        {"expr": "rate(buy_tracker_alerts_total[5m])", "legendFormat": "{{type}}"}
+      ],
+      "title": "Alerts by Type",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["jarvis", "bots"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "JARVIS - Bots Dashboard",
+  "uid": "jarvis-bots",
+  "version": 1
+}

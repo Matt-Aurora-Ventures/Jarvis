@@ -886,16 +886,53 @@ Examples:
                 if self.memory.was_mention_replied(tweet_id):
                     continue
                 
-                # Get tuned voice for this user
-                user_memory = autonomy.memory.get_user(scored.user_id)
+                # Get conversation context if this is part of a thread
+                mention_data = next((m for m in mentions if str(m.get("id")) == tweet_id), {})
+                conversation_id = mention_data.get("conversation_id", tweet_id)
+                
+                # Get existing conversation context from memory
+                conv_context = autonomy.memory.get_conversation_context(str(conversation_id))
+                user_context = autonomy.memory.get_user_context(scored.user_id)
+                
+                # Build context for reply generation
+                context_parts = []
+                if user_context:
+                    context_parts.append(f"About @{scored.username}: {user_context}")
+                if conv_context:
+                    context_parts.append(f"Previous conversation:\n{conv_context}")
+                
+                context = "\n".join(context_parts) if context_parts else None
                 
                 # Generate reply with context-aware voice
-                reply_content = await voice.generate_reply(scored.text, scored.username)
+                reply_content = await voice.generate_reply(
+                    scored.text, 
+                    scored.username,
+                    context=context
+                )
                 
                 if reply_content:
                     result = await twitter.reply_to_tweet(tweet_id, reply_content)
                     if result.success:
+                        # Record to local memory
                         self.memory.record_mention_reply(tweet_id, scored.username, reply_content)
+                        
+                        # Remember user and conversation in autonomy memory
+                        autonomy.memory.remember_user(scored.user_id, scored.username)
+                        autonomy.memory.remember_conversation(
+                            thread_id=str(conversation_id),
+                            user_id=scored.user_id,
+                            topic=self._extract_topic(scored.text),
+                            message=scored.text,
+                            is_from_user=True
+                        )
+                        autonomy.memory.remember_conversation(
+                            thread_id=str(conversation_id),
+                            user_id=scored.user_id,
+                            topic=self._extract_topic(scored.text),
+                            message=reply_content,
+                            is_from_user=False
+                        )
+                        
                         autonomy.record_reply_sent(tweet_id, scored.user_id, scored.username)
                         autonomy.prioritizer.mark_replied(tweet_id)
                         replies_sent += 1
@@ -910,6 +947,23 @@ Examples:
         except Exception as e:
             logger.error(f"Mentions check error: {e}")
             return 0
+    
+    def _extract_topic(self, text: str) -> str:
+        """Extract topic from text for conversation tracking"""
+        # Look for cashtags first
+        import re
+        cashtags = re.findall(r'\$[A-Za-z]+', text)
+        if cashtags:
+            return cashtags[0]
+        
+        # Check for common topics
+        text_lower = text.lower()
+        topics = ["price", "market", "pump", "dump", "alpha", "signal", "trade", "sol", "btc", "eth"]
+        for topic in topics:
+            if topic in text_lower:
+                return topic
+        
+        return "general"
     
     async def generate_interaction_tweet(self) -> Optional[TweetDraft]:
         """Generate an interactive tweet that encourages engagement."""

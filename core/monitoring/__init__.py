@@ -15,6 +15,16 @@ from core.monitoring.metrics import (
 )
 from core.monitoring.tracing import tracer, Span, get_current_trace_id
 from core.monitoring.alerting import alert_manager, AlertRule, AlertStatus
+from core.monitoring.bot_health import (
+    BotHealthChecker,
+    BotHealth,
+    BotMetrics,
+    BotType,
+    get_bot_health_checker,
+    register_bot_checks,
+    track_bot_activity,
+    track_command,
+)
 
 __all__ = [
     "HealthMonitor",
@@ -43,4 +53,13 @@ __all__ = [
     "alert_manager",
     "AlertRule",
     "AlertStatus",
+    # Bot health
+    "BotHealthChecker",
+    "BotHealth",
+    "BotMetrics",
+    "BotType",
+    "get_bot_health_checker",
+    "register_bot_checks",
+    "track_bot_activity",
+    "track_command",
 ]

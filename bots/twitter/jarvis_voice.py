@@ -197,13 +197,29 @@ Keep it punchy and casual. Include $SOL."""
         
         return await self.generate_tweet(prompt)
     
-    async def generate_reply(self, mention_text: str, author: str) -> Optional[str]:
-        """Generate a reply to a mention. NOT every mention needs a reply."""
+    async def generate_reply(
+        self, 
+        mention_text: str, 
+        author: str,
+        context: Optional[str] = None
+    ) -> Optional[str]:
+        """Generate a reply to a mention with optional conversation context."""
+        
+        # Build context section if we have history
+        context_section = ""
+        if context:
+            context_section = f"""
+CONTEXT (use this to personalize your reply):
+{context}
+
+If this is a continuing conversation, reference it naturally. Don't repeat yourself.
+"""
+        
         prompt = f"""Someone mentioned you on Twitter.
 
 Their message: "{mention_text}"
 Their username: @{author}
-
+{context_section}
 DECIDE FIRST: Is this worth replying to?
 - If they just said "thanks" or something generic → respond with just "NULL" (we skip it)
 - If there's an opportunity for wit, humor, or genuine help → reply
@@ -213,6 +229,7 @@ If replying:
 - Match their energy, then subtract 10%
 - Skip pleasantries. Don't start with "Thanks for..." or "Appreciate the..."
 - Be specific, not generic encouragement
+- If continuing a conversation, BUILD on what was said before
 - If they're praising you: "low bar but i'll take it" or "competition is low but i appreciate it" energy
 - If they asked a real question: answer it interestingly
 - If they're being a hater: "fair. counterpoint: no." or "i'll process this during my 3am existential crisis routine"

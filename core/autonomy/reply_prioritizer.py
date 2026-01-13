@@ -199,10 +199,14 @@ class ReplyPrioritizer:
             if memory_system:
                 user_memory = memory_system.get_user(mention.get("user_id", ""))
             
+            # Handle both 'username' and 'author_username' keys
+            username = mention.get("username") or mention.get("author_username") or "unknown"
+            user_id = mention.get("user_id") or mention.get("author_id") or ""
+            
             score = self.score_mention(
-                tweet_id=mention.get("id", ""),
-                user_id=mention.get("user_id", ""),
-                username=mention.get("username", ""),
+                tweet_id=str(mention.get("id", "")),
+                user_id=str(user_id),
+                username=username,
                 text=mention.get("text", ""),
                 follower_count=mention.get("follower_count", 0),
                 is_verified=mention.get("is_verified", False),

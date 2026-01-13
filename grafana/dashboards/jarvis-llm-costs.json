@@ -1,0 +1,361 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "tags": [],
+      "targetBlank": true,
+      "title": "Overview",
+      "url": "/d/jarvis-overview"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "panels": [],
+      "title": "Cost Overview",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "unit": "currencyUSD",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 50}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 1},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area"},
+      "targets": [
+        {"expr": "sum(increase(llm_cost_usd_total[24h]))", "legendFormat": "Total"}
+      ],
+      "title": "24h Total Cost",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "unit": "currencyUSD",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 50},
+              {"color": "red", "value": 200}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 1},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area"},
+      "targets": [
+        {"expr": "sum(increase(llm_cost_usd_total[7d]))", "legendFormat": "Total"}
+      ],
+      "title": "7-Day Total Cost",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 1},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "area"},
+      "targets": [
+        {"expr": "sum(increase(llm_requests_total[24h]))", "legendFormat": "Total"}
+      ],
+      "title": "24h Requests",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 1},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "area"},
+      "targets": [
+        {"expr": "sum(increase(llm_tokens_total[24h]))", "legendFormat": "Total"}
+      ],
+      "title": "24h Tokens",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 7},
+      "id": 101,
+      "panels": [],
+      "title": "Cost by Provider",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "currencyUSD"}
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 10,
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right"},
+        "pieType": "pie"
+      },
+      "targets": [
+        {"expr": "sum by(provider) (increase(llm_cost_usd_total[24h]))", "legendFormat": "{{provider}}"}
+      ],
+      "title": "Cost by Provider (24h)",
+      "type": "piechart"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "currencyUSD"}
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 11,
+      "targets": [
+        {"expr": "sum by(provider) (rate(llm_cost_usd_total[1h]) * 3600)", "legendFormat": "{{provider}}"}
+      ],
+      "title": "Hourly Cost by Provider",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 16},
+      "id": 102,
+      "panels": [],
+      "title": "Usage by Model",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 17},
+      "id": 20,
+      "targets": [
+        {"expr": "sum by(model) (rate(llm_requests_total[5m]))", "legendFormat": "{{model}}"}
+      ],
+      "title": "Request Rate by Model",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 17},
+      "id": 21,
+      "targets": [
+        {"expr": "sum by(model) (rate(llm_tokens_total[5m]))", "legendFormat": "{{model}}"}
+      ],
+      "title": "Token Rate by Model",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 25},
+      "id": 22,
+      "options": {"showHeader": true},
+      "targets": [
+        {"expr": "topk(10, sum by(model) (increase(llm_cost_usd_total[24h])))", "format": "table", "instant": true}
+      ],
+      "title": "Top Models by Cost (24h)",
+      "transformations": [
+        {"id": "organize", "options": {"excludeByName": {"Time": true}, "renameByName": {"Value": "Cost ($)", "model": "Model"}}}
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 33},
+      "id": 103,
+      "panels": [],
+      "title": "Token Breakdown",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 34},
+      "id": 30,
+      "targets": [
+        {"expr": "sum(rate(llm_input_tokens_total[5m]))", "legendFormat": "Input Tokens"},
+        {"expr": "sum(rate(llm_output_tokens_total[5m]))", "legendFormat": "Output Tokens"}
+      ],
+      "title": "Token Rate (Input vs Output)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 34},
+      "id": 31,
+      "targets": [
+        {"expr": "avg(llm_tokens_per_request)", "legendFormat": "Avg Tokens/Request"}
+      ],
+      "title": "Average Tokens per Request",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 42},
+      "id": 104,
+      "panels": [],
+      "title": "Latency & Performance",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "s"}
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 43},
+      "id": 40,
+      "targets": [
+        {"expr": "histogram_quantile(0.50, rate(llm_latency_seconds_bucket[5m]))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, rate(llm_latency_seconds_bucket[5m]))", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, rate(llm_latency_seconds_bucket[5m]))", "legendFormat": "p99"}
+      ],
+      "title": "LLM Request Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short"}
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 43},
+      "id": 41,
+      "targets": [
+        {"expr": "sum(rate(llm_errors_total[5m])) by (error_type)", "legendFormat": "{{error_type}}"}
+      ],
+      "title": "LLM Errors by Type",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 51},
+      "id": 105,
+      "panels": [],
+      "title": "Cost Projections",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "currencyUSD"}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 52},
+      "id": 50,
+      "options": {"colorMode": "value"},
+      "targets": [
+        {"expr": "sum(rate(llm_cost_usd_total[1h])) * 24 * 30", "legendFormat": "Projected Monthly"}
+      ],
+      "title": "Projected Monthly Cost",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "currencyUSD"}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 52},
+      "id": 51,
+      "options": {"colorMode": "value"},
+      "targets": [
+        {"expr": "sum(rate(llm_cost_usd_total[24h])) * 24", "legendFormat": "Daily Avg"}
+      ],
+      "title": "Daily Cost (Rolling Avg)",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short", "decimals": 4}
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 52},
+      "id": 52,
+      "options": {"colorMode": "value"},
+      "targets": [
+        {"expr": "sum(increase(llm_cost_usd_total[24h])) / sum(increase(llm_requests_total[24h]))", "legendFormat": "Avg Cost"}
+      ],
+      "title": "Avg Cost per Request",
+      "type": "stat"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 38,
+  "tags": ["jarvis", "llm", "costs"],
+  "templating": {
+    "list": [
+      {
+        "current": {"text": "All", "value": "$__all"},
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "definition": "label_values(llm_cost_usd_total, provider)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "provider",
+        "options": [],
+        "query": {"query": "label_values(llm_cost_usd_total, provider)"},
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": {"text": "All", "value": "$__all"},
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "definition": "label_values(llm_cost_usd_total, model)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "model",
+        "options": [],
+        "query": {"query": "label_values(llm_cost_usd_total, model)"},
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "JARVIS - LLM Costs",
+  "uid": "jarvis-llm-costs",
+  "version": 1
+}
