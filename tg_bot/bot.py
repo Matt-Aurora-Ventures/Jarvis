@@ -941,6 +941,59 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Audit error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
+async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /summary command - full token overview (public)."""
+    try:
+        if not context.args:
+            await update.message.reply_text("Usage: /summary <token_address>", parse_mode=ParseMode.HTML)
+            return
+        
+        token_address = context.args[0].strip()
+        
+        from core.data.free_price_api import get_token_price
+        price_data = await get_token_price(token_address)
+        
+        if not price_data:
+            await update.message.reply_text("Token not found.", parse_mode=ParseMode.HTML)
+            return
+        
+        lines = [f"<b>📋 {price_data.symbol} Summary</b>", ""]
+        
+        # Price
+        lines.append(f"<b>Price:</b> ${price_data.price_usd:.8f}")
+        
+        # Liquidity with quality
+        if price_data.liquidity:
+            liq = price_data.liquidity
+            if liq >= 100000:
+                liq_grade = "🟢"
+            elif liq >= 25000:
+                liq_grade = "🟡"
+            else:
+                liq_grade = "🔴"
+            lines.append(f"<b>Liquidity:</b> ${liq:,.0f} {liq_grade}")
+        
+        # Volume
+        if price_data.volume_24h:
+            lines.append(f"<b>24h Vol:</b> ${price_data.volume_24h:,.0f}")
+            if price_data.liquidity and price_data.liquidity > 0:
+                turnover = price_data.volume_24h / price_data.liquidity
+                lines.append(f"<b>Turnover:</b> {turnover:.2f}x")
+        
+        # Price change
+        if hasattr(price_data, 'price_change_24h') and price_data.price_change_24h:
+            change = price_data.price_change_24h
+            emoji = "📈" if change > 0 else "📉"
+            lines.append(f"<b>24h Change:</b> {emoji} {change:+.2f}%")
+        
+        lines.append("")
+        lines.append(f"<a href='https://dexscreener.com/solana/{token_address}'>View Chart</a>")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    except Exception as e:
+        await update.message.reply_text(f"Summary error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
 async def age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /age command - get token creation age (public)."""
     try:
@@ -3579,6 +3632,7 @@ def main():
     app.add_handler(CommandHandler("chart", chart))
     app.add_handler(CommandHandler("liquidity", liquidity))
     app.add_handler(CommandHandler("age", age))
+    app.add_handler(CommandHandler("summary", summary))
     app.add_handler(CommandHandler("price", price))
     app.add_handler(CommandHandler("gainers", gainers))
     app.add_handler(CommandHandler("newpairs", newpairs))
