@@ -909,6 +909,70 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Audit error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
+async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /price command - get token price (public)."""
+    try:
+        if not context.args:
+            await update.message.reply_text("Usage: /price <token_address>", parse_mode=ParseMode.HTML)
+            return
+        
+        token_address = context.args[0].strip()
+        
+        from core.data.free_price_api import get_token_price
+        price_data = await get_token_price(token_address)
+        
+        if not price_data:
+            await update.message.reply_text("Token not found or no price data.", parse_mode=ParseMode.HTML)
+            return
+        
+        change_emoji = "📈" if price_data.price_change_24h and price_data.price_change_24h > 0 else "📉"
+        
+        lines = [
+            f"<b>💰 {price_data.symbol}</b> ({price_data.name})",
+            "",
+            f"<b>Price:</b> ${price_data.price_usd:.8f}",
+        ]
+        
+        if price_data.price_change_24h:
+            lines.append(f"{change_emoji} <b>24h:</b> {price_data.price_change_24h:+.2f}%")
+        if price_data.volume_24h:
+            lines.append(f"📊 <b>Volume:</b> ${price_data.volume_24h:,.0f}")
+        if price_data.liquidity:
+            lines.append(f"💧 <b>Liquidity:</b> ${price_data.liquidity:,.0f}")
+        
+        lines.append("")
+        lines.append(f"<i>Source: {price_data.source}</i>")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Price error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+async def gainers(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /gainers command - show top gainers (public)."""
+    try:
+        from core.data.free_trending_api import get_top_gainers
+        
+        tokens = await get_top_gainers(limit=10)
+        
+        if not tokens:
+            await update.message.reply_text("No gainers data available.", parse_mode=ParseMode.HTML)
+            return
+        
+        lines = ["<b>🚀 Top Gainers (24h)</b>", ""]
+        
+        for token in tokens[:10]:
+            emoji = "🟢" if token.price_change_24h > 0 else "🔴"
+            lines.append(f"{emoji} <b>{token.symbol}</b>: ${token.price_usd:.6f} ({token.price_change_24h:+.1f}%)")
+        
+        lines.append("")
+        lines.append(f"<i>Source: {tokens[0].source if tokens else 'N/A'}</i>")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Gainers error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
 @admin_only
 async def uptime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /uptime command - show bot uptime (admin only)."""
@@ -3237,6 +3301,8 @@ def main():
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("costs", costs))
     app.add_handler(CommandHandler("trending", trending))
+    app.add_handler(CommandHandler("price", price))
+    app.add_handler(CommandHandler("gainers", gainers))
     app.add_handler(CommandHandler("signals", signals))
     app.add_handler(CommandHandler("analyze", analyze))
     app.add_handler(CommandHandler("digest", digest))
