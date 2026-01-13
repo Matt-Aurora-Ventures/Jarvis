@@ -902,6 +902,34 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /wallet command - show treasury wallet info (admin only)."""
+    try:
+        from core.security.key_manager import get_key_manager
+        km = get_key_manager()
+        
+        address = km.get_treasury_address()
+        status = km.get_status_report()
+        
+        lines = ["<b>💼 Treasury Wallet</b>", ""]
+        
+        if address:
+            lines.append(f"<b>Address:</b> <code>{address[:8]}...{address[-6:]}</code>")
+            lines.append(f"<b>Full:</b> <code>{address}</code>")
+            lines.append("")
+            lines.append(f"<a href='https://solscan.io/account/{address}'>View on Solscan</a>")
+        else:
+            lines.append("⚠️ Wallet not initialized")
+        
+        lines.append("")
+        lines.append(f"<b>Status:</b> {status.get('status', 'unknown')}")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    except Exception as e:
+        await update.message.reply_text(f"Wallet error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def system(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /system command - comprehensive system status (admin only)."""
     try:
@@ -3084,6 +3112,7 @@ def main():
     app.add_handler(CommandHandler("config", config_cmd))
     app.add_handler(CommandHandler("orders", orders))
     app.add_handler(CommandHandler("system", system))
+    app.add_handler(CommandHandler("wallet", wallet))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
 
