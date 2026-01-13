@@ -909,6 +909,34 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Audit error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
+async def chart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /chart command - get chart links for a token (public)."""
+    try:
+        if not context.args:
+            await update.message.reply_text("Usage: /chart <token_address>", parse_mode=ParseMode.HTML)
+            return
+        
+        token_address = context.args[0].strip()
+        
+        from core.data.free_price_api import get_token_price
+        price_data = await get_token_price(token_address)
+        
+        symbol = price_data.symbol if price_data else "Token"
+        
+        lines = [
+            f"<b>📈 {symbol} Charts</b>",
+            "",
+            f"<a href='https://dexscreener.com/solana/{token_address}'>DexScreener</a>",
+            f"<a href='https://www.geckoterminal.com/solana/pools/{token_address}'>GeckoTerminal</a>",
+            f"<a href='https://birdeye.so/token/{token_address}?chain=solana'>Birdeye</a>",
+            f"<a href='https://solscan.io/token/{token_address}'>Solscan</a>",
+        ]
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    except Exception as e:
+        await update.message.reply_text(f"Chart error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
 async def volume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /volume command - get token 24h volume (public)."""
     try:
@@ -3415,6 +3443,7 @@ def main():
     app.add_handler(CommandHandler("solprice", solprice))
     app.add_handler(CommandHandler("mcap", mcap))
     app.add_handler(CommandHandler("volume", volume))
+    app.add_handler(CommandHandler("chart", chart))
     app.add_handler(CommandHandler("price", price))
     app.add_handler(CommandHandler("gainers", gainers))
     app.add_handler(CommandHandler("newpairs", newpairs))
