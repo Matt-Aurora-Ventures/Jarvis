@@ -343,6 +343,10 @@ _Use the buttons below for quick access:_
             InlineKeyboardButton("📊 Score", callback_data="menu_score"),
             InlineKeyboardButton("⚙️ Config", callback_data="menu_config"),
         ])
+        keyboard.append([
+            InlineKeyboardButton("🖥️ System", callback_data="menu_system"),
+            InlineKeyboardButton("📋 Orders", callback_data="menu_orders"),
+        ])
 
     await update.message.reply_text(
         message.strip(),
@@ -1883,6 +1887,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update.message = query.message
         context.args = []
         await config_cmd(update, context)
+        return
+
+    if data == "menu_system":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await system(update, context)
+        return
+
+    if data == "menu_orders":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await orders(update, context)
         return
 
     # Trading callbacks
