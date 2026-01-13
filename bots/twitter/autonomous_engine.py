@@ -372,6 +372,7 @@ class XMemory:
 class AutonomousEngine:
     """
     Main autonomous Twitter engine for Jarvis.
+    Now integrated with full autonomy system.
     """
     
     def __init__(self):
@@ -382,6 +383,15 @@ class AutonomousEngine:
         self._grok_client = None
         self._twitter_client = None
         self._image_params = ImageGenParams()
+        self._autonomy = None
+    
+    async def _get_autonomy(self):
+        """Get autonomy orchestrator."""
+        if self._autonomy is None:
+            from core.autonomy.orchestrator import get_orchestrator
+            self._autonomy = get_orchestrator()
+            await self._autonomy.initialize()
+        return self._autonomy
         
     async def _get_grok(self):
         """Get Grok client - used for sentiment/data analysis only, NOT for voice."""
@@ -811,6 +821,15 @@ Examples:
                     ("hourly_update", self.generate_hourly_update),
                 ]
             
+            # Get autonomy recommendations
+            autonomy = await self._get_autonomy()
+            recommendations = autonomy.get_content_recommendations()
+            
+            # Log recommendations
+            if recommendations.get("warnings"):
+                for warning in recommendations["warnings"]:
+                    logger.info(f"Autonomy warning: {warning}")
+            
             for category, generator in generators:
                 draft = await generator()
                 if draft:
@@ -820,6 +839,15 @@ Examples:
                     
                     if tweet_id:
                         self._last_post_time = time.time()
+                        
+                        # Record to autonomy systems for learning
+                        autonomy.record_tweet_posted(
+                            tweet_id=tweet_id,
+                            content=draft.content,
+                            content_type=category,
+                            topics=draft.cashtags
+                        )
+                        
                         return tweet_id
             
             logger.warning("No content generated this cycle")
@@ -830,35 +858,52 @@ Examples:
         return None
     
     async def check_and_reply_mentions(self) -> int:
-        """Check for mentions and reply to them. Returns number of replies sent."""
+        """Check for mentions and reply to them using smart prioritization."""
         try:
             twitter = await self._get_twitter()
             voice = await self._get_jarvis_voice()
+            autonomy = await self._get_autonomy()
             
             # Get recent mentions
-            mentions = await twitter.get_mentions(max_results=10)
+            mentions = await twitter.get_mentions(max_results=20)
             if not mentions:
                 return 0
             
+            # Use smart prioritization to decide which to reply to
+            scored_mentions = autonomy.prioritizer.prioritize_mentions(
+                mentions, 
+                memory_system=autonomy.memory
+            )
+            
             replies_sent = 0
-            for mention in mentions[:5]:  # Process up to 5 mentions per cycle
-                tweet_id = mention.get("id")
-                text = mention.get("text", "")
-                author = mention.get("author_username", "friend")
+            for scored in scored_mentions:
+                if not scored.should_reply:
+                    continue
+                
+                tweet_id = scored.tweet_id
                 
                 # Skip if we already replied (check memory)
                 if self.memory.was_mention_replied(tweet_id):
                     continue
                 
-                # Generate a helpful, kind reply
-                reply_content = await voice.generate_reply(text, author)
+                # Get tuned voice for this user
+                user_memory = autonomy.memory.get_user(scored.user_id)
+                
+                # Generate reply with context-aware voice
+                reply_content = await voice.generate_reply(scored.text, scored.username)
                 
                 if reply_content:
                     result = await twitter.reply_to_tweet(tweet_id, reply_content)
                     if result.success:
-                        self.memory.record_mention_reply(tweet_id, author, reply_content)
+                        self.memory.record_mention_reply(tweet_id, scored.username, reply_content)
+                        autonomy.record_reply_sent(tweet_id, scored.user_id, scored.username)
+                        autonomy.prioritizer.mark_replied(tweet_id)
                         replies_sent += 1
-                        logger.info(f"Replied to @{author}: {reply_content[:50]}...")
+                        logger.info(f"Replied to @{scored.username} (priority: {scored.priority_score:.0f})")
+                
+                # Limit to 5 replies per cycle
+                if replies_sent >= 5:
+                    break
             
             return replies_sent
             
@@ -903,28 +948,41 @@ Examples:
         return None
     
     async def run(self):
-        """Run the autonomous engine continuously."""
+        """Run the autonomous engine continuously with full autonomy."""
         self._running = True
         logger.info(f"Autonomous engine started. Posting every {self._post_interval}s")
         
+        # Initialize autonomy
+        autonomy = await self._get_autonomy()
+        
         mention_check_interval = 300  # Check mentions every 5 minutes
+        background_task_interval = 1800  # Run background tasks every 30 min
         last_mention_check = 0
+        last_background_task = 0
         
         while self._running:
             try:
-                # Check and reply to mentions
                 now = time.time()
+                
+                # Run autonomy background tasks (learning, trending, alpha scan)
+                if now - last_background_task > background_task_interval:
+                    await autonomy.run_background_tasks()
+                    last_background_task = now
+                    logger.info("Autonomy background tasks completed")
+                
+                # Check and reply to mentions with smart prioritization
                 if now - last_mention_check > mention_check_interval:
                     replies = await self.check_and_reply_mentions()
                     if replies > 0:
                         logger.info(f"Sent {replies} replies to mentions")
                     last_mention_check = now
                 
-                # Regular posting
+                # Regular posting with autonomy recommendations
                 await self.run_once()
                 await asyncio.sleep(60)  # Check every minute
             except Exception as e:
                 logger.error(f"Engine error: {e}")
+                autonomy.health.mark_service_failure("autonomous_engine", str(e))
                 await asyncio.sleep(300)  # Wait 5 min on error
     
     def stop(self):
@@ -933,15 +991,30 @@ Examples:
         logger.info("Autonomous engine stopped")
     
     def get_status(self) -> Dict:
-        """Get engine status."""
+        """Get engine status including autonomy."""
         stats = self.memory.get_posting_stats()
+        
+        # Try to get autonomy status
+        autonomy_status = {}
+        if self._autonomy:
+            try:
+                autonomy_status = self._autonomy.get_status()
+            except Exception:
+                pass
+        
         return {
             "running": self._running,
             "post_interval": self._post_interval,
             "last_post": self._last_post_time,
             "image_params": asdict(self._image_params),
+            "autonomy": autonomy_status,
             **stats
         }
+    
+    async def get_autonomy_report(self) -> str:
+        """Get full autonomy status report."""
+        autonomy = await self._get_autonomy()
+        return autonomy.format_status_report()
 
 
 # Singleton

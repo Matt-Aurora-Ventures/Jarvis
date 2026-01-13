@@ -142,15 +142,91 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
 
+    # OpenAPI tags for documentation organization
+    tags_metadata = [
+        {
+            "name": "health",
+            "description": "System health and status endpoints",
+        },
+        {
+            "name": "staking",
+            "description": "Token staking operations and rewards",
+        },
+        {
+            "name": "credits",
+            "description": "Credit system and billing operations",
+        },
+        {
+            "name": "treasury",
+            "description": "Treasury management and trading operations",
+        },
+        {
+            "name": "trading",
+            "description": "Trading execution and order management",
+        },
+        {
+            "name": "voice",
+            "description": "Voice command and TTS/STT operations",
+        },
+        {
+            "name": "websocket",
+            "description": "Real-time WebSocket connections",
+        },
+    ]
+
     app = FastAPI(
-        title="Jarvis API",
-        description="JARVIS Trading & Automation Platform API",
-        version="4.2.0",
+        title="JARVIS API",
+        description="""
+# JARVIS Trading & Automation Platform API
+
+JARVIS is an autonomous AI trading and life automation platform.
+
+## Features
+
+- **Trading**: Execute trades on Solana DEXs (Jupiter, Raydium)
+- **Treasury**: Manage treasury wallets and distributions
+- **Staking**: Token staking with dynamic APY
+- **Credits**: Usage-based billing system
+- **Voice**: Voice commands and TTS responses
+- **Real-time**: WebSocket feeds for live updates
+
+## Authentication
+
+Most endpoints require authentication via:
+- JWT Bearer token in Authorization header
+- API key in X-API-Key header
+
+## Rate Limits
+
+| Tier | Requests/min | Requests/hour |
+|------|--------------|---------------|
+| Free | 10 | 100 |
+| Starter | 50 | 500 |
+| Pro | 200 | 2000 |
+| Whale | 1000 | 10000 |
+
+## WebSocket Channels
+
+- `/ws/trading` - Trade execution updates
+- `/ws/staking` - Staking rewards updates
+- `/ws/treasury` - Treasury activity
+- `/ws/credits` - Credit usage
+- `/ws/voice` - Voice command responses
+        """,
+        version="4.3.0",
         lifespan=lifespan,
         docs_url="/api/docs",
         redoc_url="/api/redoc",
         openapi_url="/api/openapi.json",
-        default_response_class=DEFAULT_RESPONSE_CLASS,  # Use orjson for 3-10x faster JSON
+        default_response_class=DEFAULT_RESPONSE_CLASS,
+        openapi_tags=tags_metadata,
+        contact={
+            "name": "JARVIS Support",
+            "url": "https://github.com/Matt-Aurora-Ventures/Jarvis",
+        },
+        license_info={
+            "name": "Proprietary",
+        },
     )
     
     # OpenTelemetry instrumentation

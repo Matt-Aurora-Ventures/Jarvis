@@ -6,6 +6,7 @@ Provides health checks, alerts, metrics, and system monitoring.
 
 from core.monitoring.health import HealthMonitor, ComponentHealth, SystemHealth
 from core.monitoring.alerts import AlertManager, Alert, AlertSeverity
+from core.monitoring.dashboard import create_health_router, get_health_router
 from core.monitoring.metrics import (
     metrics, Counter, Gauge, Histogram,
     http_requests, http_latency, active_connections,
@@ -22,6 +23,8 @@ __all__ = [
     "AlertManager",
     "Alert",
     "AlertSeverity",
+    "create_health_router",
+    "get_health_router",
     "metrics",
     "Counter",
     "Gauge", 

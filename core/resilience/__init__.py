@@ -1,17 +1,56 @@
-"""Resilience patterns for fault tolerance."""
-from core.resilience.retry import retry_with_backoff, RetryConfig, with_retry
-from core.resilience.circuit_breaker import CircuitBreaker, CircuitState
-from core.resilience.fallback import with_fallback, FallbackChain
-from core.resilience.degradation import GracefulDegradation, degrade_gracefully
+"""
+JARVIS Resilience Patterns
+
+Provides fault tolerance and reliability:
+- Retry with exponential backoff
+- Circuit breaker pattern
+- Bulkhead isolation
+- Timeout handling
+"""
+
+from core.resilience.retry import (
+    RetryPolicy,
+    RetryExhausted,
+    RetryStats,
+    RetryContext,
+    retry,
+    retry_async,
+    retry_sync,
+    AGGRESSIVE_RETRY,
+    CONSERVATIVE_RETRY,
+    API_RETRY,
+    RPC_RETRY,
+)
+
+from core.resilience.circuit_breaker import (
+    CircuitBreaker,
+    CircuitState,
+    CircuitStats,
+    CircuitOpenError,
+    circuit_breaker,
+    get_circuit_breaker,
+    get_all_circuits,
+)
 
 __all__ = [
-    "retry_with_backoff",
-    "RetryConfig", 
-    "with_retry",
+    # Retry
+    "RetryPolicy",
+    "RetryExhausted",
+    "RetryStats",
+    "RetryContext",
+    "retry",
+    "retry_async",
+    "retry_sync",
+    "AGGRESSIVE_RETRY",
+    "CONSERVATIVE_RETRY",
+    "API_RETRY",
+    "RPC_RETRY",
+    # Circuit Breaker
     "CircuitBreaker",
     "CircuitState",
-    "with_fallback",
-    "FallbackChain",
-    "GracefulDegradation",
-    "degrade_gracefully",
+    "CircuitStats",
+    "CircuitOpenError",
+    "circuit_breaker",
+    "get_circuit_breaker",
+    "get_all_circuits",
 ]
