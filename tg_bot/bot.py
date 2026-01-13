@@ -875,6 +875,36 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /orders command - show active TP/SL orders (admin only)."""
+    try:
+        from bots.treasury.trading import TreasuryTrader
+        trader = TreasuryTrader()
+        
+        if not trader._engine or not trader._engine.order_manager:
+            await update.message.reply_text("Order manager not initialized.", parse_mode=ParseMode.HTML)
+            return
+        
+        active = trader._engine.order_manager.get_active_orders()
+        
+        if not active:
+            await update.message.reply_text("<b>No active orders</b>", parse_mode=ParseMode.HTML)
+            return
+        
+        lines = [f"<b>Active Orders ({len(active)})</b>", ""]
+        
+        for order in active:
+            order_type = order.get('type', 'UNKNOWN')
+            target = order.get('target_price', 0)
+            emoji = "🎯" if order_type == "TAKE_PROFIT" else "🛑"
+            lines.append(f"{emoji} <code>{order['id']}</code>: {order_type} @ ${target:.6f}")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Orders error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def config_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /config command - show current configuration (admin only)."""
     try:
@@ -2929,6 +2959,7 @@ def main():
     app.add_handler(CommandHandler("flags", flags))
     app.add_handler(CommandHandler("audit", audit))
     app.add_handler(CommandHandler("config", config_cmd))
+    app.add_handler(CommandHandler("orders", orders))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
 
