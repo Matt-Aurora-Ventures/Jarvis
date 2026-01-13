@@ -16,6 +16,14 @@ from core.data.deletion import DataDeletionService, get_deletion_service
 from core.data.validation import DataValidator, get_data_validator
 from core.data.aggregator import TradeAggregator, get_trade_aggregator
 
+# Free API modules (no API keys required)
+from core.data.free_price_api import (
+    FreePriceAPI, get_free_price_api, get_token_price, get_sol_price, TokenPrice
+)
+from core.data.free_trending_api import (
+    FreeTrendingAPI, get_free_trending_api, get_trending_tokens, get_top_gainers, TrendingToken
+)
+
 __all__ = [
     "DataAnonymizer",
     "get_anonymizer",
@@ -27,4 +35,15 @@ __all__ = [
     "get_data_validator",
     "TradeAggregator",
     "get_trade_aggregator",
+    # Free APIs
+    "FreePriceAPI",
+    "get_free_price_api",
+    "get_token_price",
+    "get_sol_price",
+    "TokenPrice",
+    "FreeTrendingAPI",
+    "get_free_trending_api",
+    "get_trending_tokens",
+    "get_top_gainers",
+    "TrendingToken",
 ]
