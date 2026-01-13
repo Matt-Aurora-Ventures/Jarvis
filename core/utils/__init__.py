@@ -20,6 +20,15 @@ from core.utils.connection_pool import (
     close_all_sessions,
 )
 
+from core.utils.timeout import (
+    TimeoutError,
+    with_timeout,
+    with_timeout_default,
+    timeout,
+    race,
+    retry_with_timeout,
+)
+
 __all__ = [
     # Rate limiting
     "RateLimiter",
@@ -35,4 +44,11 @@ __all__ = [
     "get_connection_pool",
     "get_session",
     "close_all_sessions",
+    # Timeout utilities
+    "TimeoutError",
+    "with_timeout",
+    "with_timeout_default",
+    "timeout",
+    "race",
+    "retry_with_timeout",
 ]
