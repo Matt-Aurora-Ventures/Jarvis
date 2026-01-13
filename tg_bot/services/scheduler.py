@@ -1,9 +1,14 @@
 """
 Scheduler for hourly sentiment digests.
+
+Pushes to:
+1. Broadcast chat (main group) if configured
+2. All individual subscribers
 """
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
@@ -18,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class DigestScheduler:
-    """Scheduler for sending hourly digests to subscribers."""
+    """Scheduler for sending hourly digests to subscribers and broadcast chat."""
 
     def __init__(
         self,
@@ -28,6 +33,7 @@ class DigestScheduler:
         send_message: Callable,
         hour: int = 14,
         minute: int = 0,
+        broadcast_chat_id: Optional[int] = None,
     ):
         self.claude = claude
         self.token_service = token_service
@@ -36,6 +42,20 @@ class DigestScheduler:
         self.hour = hour
         self.minute = minute
         self.scheduler: Optional[AsyncIOScheduler] = None
+
+        # Broadcast chat - main group to push digests to
+        self.broadcast_chat_id = broadcast_chat_id
+        if not self.broadcast_chat_id:
+            # Try to load from environment
+            chat_id_str = os.getenv("TELEGRAM_BROADCAST_CHAT_ID") or os.getenv("TELEGRAM_BUY_BOT_CHAT_ID")
+            if chat_id_str:
+                try:
+                    self.broadcast_chat_id = int(chat_id_str.strip())
+                except ValueError:
+                    pass
+
+        if self.broadcast_chat_id:
+            logger.info(f"Broadcast chat configured: {self.broadcast_chat_id}")
 
     def start(self):
         """Start the scheduler."""
@@ -95,11 +115,22 @@ class DigestScheduler:
 
             message += "\n_Reply /sentiment <token> for details._"
 
+            # Send to broadcast chat FIRST (main group)
+            if self.broadcast_chat_id:
+                try:
+                    await self.send_message(self.broadcast_chat_id, message, parse_mode="Markdown")
+                    logger.info(f"Digest sent to broadcast chat {self.broadcast_chat_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to send digest to broadcast chat: {e}")
+
             # Send to all subscribers
             subscribers = self.subscriber_db.get_active_subscribers()
             logger.info(f"Sending digest to {len(subscribers)} subscribers")
 
             for sub in subscribers:
+                # Skip if this is the broadcast chat (avoid duplicate)
+                if self.broadcast_chat_id and sub.chat_id == self.broadcast_chat_id:
+                    continue
                 try:
                     await self.send_message(sub.chat_id, message, parse_mode="Markdown")
                 except Exception as e:

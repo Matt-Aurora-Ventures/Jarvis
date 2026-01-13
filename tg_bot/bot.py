@@ -794,6 +794,54 @@ async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /health command - show system health (admin only)."""
+    try:
+        from core.health_monitor import get_health_monitor
+        monitor = get_health_monitor()
+        
+        # Run all checks
+        await monitor.run_all_checks()
+        report = monitor.get_health_report()
+        
+        status_emoji = {"healthy": "✅", "degraded": "⚠️", "unhealthy": "❌", "unknown": "❓"}
+        
+        lines = [
+            f"<b>System Health: {status_emoji.get(report['status'], '❓')} {report['status'].upper()}</b>",
+            "",
+        ]
+        
+        for name, check in report["checks"].items():
+            emoji = status_emoji.get(check["status"], "❓")
+            lines.append(f"{emoji} <b>{name}</b>: {check['message']} ({check['latency_ms']:.0f}ms)")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Health check error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
+async def flags(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /flags command - show feature flags (admin only)."""
+    try:
+        from core.feature_flags import get_feature_flags
+        ff = get_feature_flags()
+        
+        all_flags = ff.get_all_flags()
+        
+        lines = ["<b>Feature Flags</b>", ""]
+        
+        for name, flag in sorted(all_flags.items()):
+            state = flag["state"]
+            emoji = "✅" if state == "on" else "❌" if state == "off" else "⚡"
+            lines.append(f"{emoji} <code>{name}</code>: {state}")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Feature flags error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /brain command - show self-improving system stats (admin only)."""
     if not SELF_IMPROVING_AVAILABLE:
@@ -2779,6 +2827,8 @@ def main():
     app.add_handler(CommandHandler("reload", reload))
     app.add_handler(CommandHandler("keystatus", keystatus))
     app.add_handler(CommandHandler("score", score))
+    app.add_handler(CommandHandler("health", health))
+    app.add_handler(CommandHandler("flags", flags))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
 

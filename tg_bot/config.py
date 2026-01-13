@@ -75,6 +75,11 @@ class BotConfig:
     # === SCHEDULER ===
     digest_hours: List[int] = field(default_factory=lambda: [8, 14, 20])  # UTC hours for digests
 
+    # === BROADCAST CHAT ===
+    # Main group chat to push sentiment digests to
+    # Set via TELEGRAM_BROADCAST_CHAT_ID="-1001234567890"
+    broadcast_chat_id: Optional[int] = field(default_factory=lambda: _parse_broadcast_chat_id())
+
     # === PAPER TRADING ===
     paper_starting_balance: float = 100.0  # SOL
     paper_max_position_pct: float = 0.20
@@ -142,6 +147,17 @@ def _parse_admin_ids() -> Set[int]:
         if id_str.isdigit():
             ids.add(int(id_str))
     return ids
+
+
+def _parse_broadcast_chat_id() -> Optional[int]:
+    """Parse broadcast chat ID from environment variable."""
+    chat_id_str = os.getenv("TELEGRAM_BROADCAST_CHAT_ID") or os.getenv("TELEGRAM_BUY_BOT_CHAT_ID")
+    if not chat_id_str:
+        return None
+    try:
+        return int(chat_id_str.strip())
+    except ValueError:
+        return None
 
 
 _config: Optional[BotConfig] = None
