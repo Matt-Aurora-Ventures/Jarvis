@@ -1,4 +1,4 @@
-"""Send a single sentiment report with buy buttons to Telegram."""
+"""Send a single sentiment report to Telegram (no buttons)."""
 import asyncio
 import os
 import sys
@@ -21,7 +21,7 @@ if env_path.exists():
             os.environ.setdefault(key.strip(), value.strip().strip('"'))
 
 
-async def send_report():
+async def send_report(with_buttons: bool = False):
     import aiohttp
     from bots.buy_tracker.sentiment_report import SentimentReportGenerator
     
@@ -33,13 +33,17 @@ async def send_report():
         print('Missing TELEGRAM_BOT_TOKEN or TELEGRAM_BUY_BOT_CHAT_ID')
         return
     
-    print('Generating sentiment report with buy buttons...')
+    print('Generating sentiment report (no buttons)...')
     generator = SentimentReportGenerator(
         bot_token=bot_token,
         chat_id=chat_id,
         xai_api_key=xai_key,
         interval_minutes=30,
     )
+    
+    # Disable ape buttons by monkey-patching
+    if not with_buttons:
+        generator._post_ape_buttons_section = lambda *a, **kw: asyncio.sleep(0)
     
     generator._session = aiohttp.ClientSession()
     
@@ -51,4 +55,6 @@ async def send_report():
 
 
 if __name__ == "__main__":
-    asyncio.run(send_report())
+    # Default: no buttons
+    with_buttons = "--buttons" in sys.argv
+    asyncio.run(send_report(with_buttons=with_buttons))
