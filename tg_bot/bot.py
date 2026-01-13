@@ -1273,8 +1273,45 @@ async def newpairs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"New pairs error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
+async def losers(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /losers command - get top losers (public)."""
+    try:
+        from core.data.free_trending_api import get_free_trending_api
+        api = get_free_trending_api()
+        
+        # Get gainers but sort by lowest change (losers)
+        tokens = await api.get_top_gainers(limit=20)
+        
+        if not tokens:
+            await update.message.reply_text("No data available.", parse_mode=ParseMode.HTML)
+            return
+        
+        # Sort by price change ascending (most negative first)
+        losers_list = sorted(
+            [t for t in tokens if hasattr(t, 'price_change_24h') and t.price_change_24h < 0],
+            key=lambda x: x.price_change_24h
+        )[:10]
+        
+        if not losers_list:
+            await update.message.reply_text("No losers found in recent data.", parse_mode=ParseMode.HTML)
+            return
+        
+        lines = ["<b>📉 Top 10 Losers (24h)</b>", ""]
+        
+        for i, token in enumerate(losers_list, 1):
+            change = token.price_change_24h
+            lines.append(f"{i}. <b>{token.symbol}</b>: {change:+.1f}%")
+        
+        lines.append("")
+        lines.append(f"<i>Source: {losers_list[0].source if losers_list else 'N/A'}</i>")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Losers error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
 async def gainers(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /gainers command - show top gainers (public)."""
+    """Handle /gainers command - get top gainers (public)."""
     try:
         from core.data.free_trending_api import get_top_gainers
         
@@ -3635,6 +3672,7 @@ def main():
     app.add_handler(CommandHandler("summary", summary))
     app.add_handler(CommandHandler("price", price))
     app.add_handler(CommandHandler("gainers", gainers))
+    app.add_handler(CommandHandler("losers", losers))
     app.add_handler(CommandHandler("newpairs", newpairs))
     app.add_handler(CommandHandler("signals", signals))
     app.add_handler(CommandHandler("analyze", analyze))
