@@ -28,6 +28,12 @@ from core.jarvis_core import (
 
 from core.unified_config import config as unified_config
 
+# Infrastructure modules
+from core.audit_logger import get_audit_logger, AuditLogger, AuditCategory
+from core.feature_flags import get_feature_flags, is_feature_enabled, FeatureFlags
+from core.health_monitor import get_health_monitor, HealthMonitor, HealthStatus
+from core.config_hot_reload import get_config_manager, get_config, set_config
+
 from core.interfaces import (
     IPriceService,
     ISentimentService,
