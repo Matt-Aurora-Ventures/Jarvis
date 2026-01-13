@@ -1,0 +1,176 @@
+"""
+Run Jarvis Autonomous Twitter Bot
+
+This script starts the fully autonomous Twitter posting engine.
+Posts hourly with variety in content types.
+
+Usage:
+    python run_autonomous.py              # Run continuously
+    python run_autonomous.py --test       # Test content generation
+    python run_autonomous.py --once       # Post once and exit
+    python run_autonomous.py --status     # Show engine status
+"""
+
+import asyncio
+import argparse
+import logging
+import os
+import sys
+from pathlib import Path
+
+# Setup
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Load env
+env_path = Path(__file__).parent / ".env"
+if env_path.exists():
+    for line in env_path.read_text().splitlines():
+        if line.strip() and not line.startswith('#') and '=' in line:
+            k, v = line.split('=', 1)
+            os.environ.setdefault(k.strip(), v.strip().strip('"'))
+
+
+async def test_generation():
+    """Test all content generators."""
+    from bots.twitter.autonomous_engine import get_autonomous_engine
+    
+    engine = get_autonomous_engine()
+    
+    print("\n" + "="*60)
+    print("JARVIS AUTONOMOUS TWITTER - CONTENT TEST")
+    print("="*60)
+    
+    print("\n--- Market Update ---")
+    draft = await engine.generate_market_update()
+    if draft:
+        print(f"Content: {draft.content}")
+        print(f"Cashtags: {draft.cashtags}")
+        print(f"Contract: {draft.contract_address}")
+    else:
+        print("Failed to generate")
+    
+    print("\n--- Trending Token ---")
+    draft = await engine.generate_trending_token_call()
+    if draft:
+        print(f"Content: {draft.content}")
+        print(f"Category: {draft.category}")
+    else:
+        print("Failed to generate")
+    
+    print("\n--- Agentic Thought ---")
+    draft = await engine.generate_agentic_thought()
+    if draft:
+        print(f"Content: {draft.content}")
+    else:
+        print("Failed to generate")
+    
+    print("\n--- Hourly Update ---")
+    draft = await engine.generate_hourly_update()
+    if draft:
+        print(f"Content: {draft.content}")
+    else:
+        print("Failed to generate")
+    
+    print("\n" + "="*60)
+    print("TEST COMPLETE")
+    print("="*60)
+
+
+async def post_once():
+    """Post a single tweet."""
+    from bots.twitter.autonomous_engine import get_autonomous_engine
+    
+    engine = get_autonomous_engine()
+    engine._last_post_time = 0  # Force immediate post
+    
+    print("\nGenerating and posting tweet...")
+    tweet_id = await engine.run_once()
+    
+    if tweet_id:
+        print(f"SUCCESS: Posted tweet {tweet_id}")
+        print(f"URL: https://x.com/Jarvis_lifeos/status/{tweet_id}")
+    else:
+        print("FAILED: No tweet posted")
+
+
+async def show_status():
+    """Show engine status."""
+    from bots.twitter.autonomous_engine import get_autonomous_engine
+    
+    engine = get_autonomous_engine()
+    status = engine.get_status()
+    
+    print("\n" + "="*60)
+    print("JARVIS AUTONOMOUS TWITTER - STATUS")
+    print("="*60)
+    print(f"Running: {status['running']}")
+    print(f"Post Interval: {status['post_interval']}s ({status['post_interval']//60} min)")
+    print(f"Total Tweets: {status['total_tweets']}")
+    print(f"Today's Tweets: {status['today_tweets']}")
+    print(f"\nBy Category:")
+    for cat, count in status.get('by_category', {}).items():
+        print(f"  {cat}: {count}")
+    print(f"\nImage Params:")
+    for k, v in status.get('image_params', {}).items():
+        print(f"  {k}: {v}")
+    print("="*60)
+
+
+async def run_continuously():
+    """Run the autonomous engine continuously."""
+    from bots.twitter.autonomous_engine import get_autonomous_engine
+    
+    engine = get_autonomous_engine()
+    
+    print("\n" + "="*60)
+    print("JARVIS AUTONOMOUS TWITTER ENGINE")
+    print("="*60)
+    print(f"Posting interval: {engine._post_interval}s (1 hour)")
+    print("Press Ctrl+C to stop")
+    print("="*60 + "\n")
+    
+    try:
+        await engine.run()
+    except KeyboardInterrupt:
+        print("\nStopping engine...")
+        engine.stop()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Jarvis Autonomous Twitter Bot")
+    parser.add_argument("--test", action="store_true", help="Test content generation")
+    parser.add_argument("--once", action="store_true", help="Post once and exit")
+    parser.add_argument("--status", action="store_true", help="Show engine status")
+    parser.add_argument("--interval", type=int, default=3600, help="Post interval in seconds")
+    
+    args = parser.parse_args()
+    
+    if args.test:
+        asyncio.run(test_generation())
+    elif args.once:
+        asyncio.run(post_once())
+    elif args.status:
+        asyncio.run(show_status())
+    else:
+        # Set interval if provided
+        if args.interval != 3600:
+            from bots.twitter.autonomous_engine import get_autonomous_engine
+            engine = get_autonomous_engine()
+            engine.set_post_interval(args.interval)
+        
+        asyncio.run(run_continuously())
+
+
+if __name__ == "__main__":
+    main()

@@ -1729,6 +1729,128 @@ async def upgrades(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def xbot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /xbot command - control the autonomous X/Twitter bot (admin only).
+    
+    Usage:
+        /xbot status - Show bot status
+        /xbot tweet - Generate and post a tweet now
+        /xbot preview - Preview next tweet without posting
+        /xbot interval <seconds> - Set posting interval
+        /xbot image <style> - Set image style (cyberpunk, solana, professional, neon)
+    """
+    try:
+        from bots.twitter.autonomous_engine import get_autonomous_engine
+        engine = get_autonomous_engine()
+        
+        if not context.args:
+            status = engine.get_status()
+            lines = [
+                "<b>X Bot Status</b>",
+                "",
+                f"<b>Running:</b> {status['running']}",
+                f"<b>Post Interval:</b> {status['post_interval']}s ({status['post_interval']//60} min)",
+                f"<b>Total Tweets:</b> {status['total_tweets']}",
+                f"<b>Today:</b> {status['today_tweets']}",
+                "",
+                "<b>Commands:</b>",
+                "/xbot status - Show status",
+                "/xbot tweet - Post now",
+                "/xbot preview - Preview without posting",
+                "/xbot interval &lt;seconds&gt; - Set interval",
+            ]
+            await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+            return
+        
+        cmd = context.args[0].lower()
+        
+        if cmd == "status":
+            status = engine.get_status()
+            lines = [
+                "<b>X Bot Status</b>",
+                "",
+                f"<b>Running:</b> {status['running']}",
+                f"<b>Post Interval:</b> {status['post_interval']}s",
+                f"<b>Total Tweets:</b> {status['total_tweets']}",
+                f"<b>Today:</b> {status['today_tweets']}",
+            ]
+            if status.get('by_category'):
+                lines.append("\n<b>By Category:</b>")
+                for cat, count in status['by_category'].items():
+                    lines.append(f"  {cat}: {count}")
+            await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+        
+        elif cmd == "tweet":
+            await update.message.reply_text("generating and posting tweet...", parse_mode=ParseMode.HTML)
+            engine._last_post_time = 0  # Force immediate
+            tweet_id = await engine.run_once()
+            if tweet_id:
+                await update.message.reply_text(
+                    f"<b>posted!</b>\n\nhttps://x.com/Jarvis_lifeos/status/{tweet_id}",
+                    parse_mode=ParseMode.HTML
+                )
+            else:
+                await update.message.reply_text("failed to post. check logs.", parse_mode=ParseMode.HTML)
+        
+        elif cmd == "preview":
+            await update.message.reply_text("generating preview...", parse_mode=ParseMode.HTML)
+            
+            # Try each generator
+            draft = await engine.generate_market_update()
+            if not draft:
+                draft = await engine.generate_trending_token_call()
+            if not draft:
+                draft = await engine.generate_agentic_thought()
+            if not draft:
+                draft = await engine.generate_hourly_update()
+            
+            if draft:
+                lines = [
+                    "<b>Preview Tweet</b>",
+                    "",
+                    f"<b>Category:</b> {draft.category}",
+                    f"<b>Content:</b>",
+                    draft.content,
+                ]
+                if draft.contract_address:
+                    lines.append(f"\n<b>Contract:</b> <code>{draft.contract_address[:30]}...</code>")
+                await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+            else:
+                await update.message.reply_text("failed to generate preview.", parse_mode=ParseMode.HTML)
+        
+        elif cmd == "interval":
+            if len(context.args) < 2:
+                await update.message.reply_text("Usage: /xbot interval <seconds>", parse_mode=ParseMode.HTML)
+                return
+            try:
+                seconds = int(context.args[1])
+                engine.set_post_interval(seconds)
+                await update.message.reply_text(
+                    f"post interval set to {seconds}s ({seconds//60} min)",
+                    parse_mode=ParseMode.HTML
+                )
+            except ValueError:
+                await update.message.reply_text("invalid number", parse_mode=ParseMode.HTML)
+        
+        elif cmd == "image":
+            if len(context.args) < 2:
+                await update.message.reply_text(
+                    "Usage: /xbot image <style>\nStyles: cyberpunk, solana, professional, neon",
+                    parse_mode=ParseMode.HTML
+                )
+                return
+            style = context.args[1].lower()
+            engine.set_image_params(color_scheme=style)
+            await update.message.reply_text(f"image style set to: {style}", parse_mode=ParseMode.HTML)
+        
+        else:
+            await update.message.reply_text("unknown command. use /xbot for help.", parse_mode=ParseMode.HTML)
+            
+    except Exception as e:
+        await update.message.reply_text(f"X Bot error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /brain command - show self-improving system stats (admin only)."""
     if not SELF_IMPROVING_AVAILABLE:
@@ -3903,6 +4025,7 @@ def main():
     app.add_handler(CommandHandler("remember", remember))
     app.add_handler(CommandHandler("modstats", modstats))
     app.add_handler(CommandHandler("upgrades", upgrades))
+    app.add_handler(CommandHandler("xbot", xbot))
     app.add_handler(CommandHandler("paper", paper))
 
     # Treasury Trading Commands
