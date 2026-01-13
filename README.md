@@ -1312,6 +1312,9 @@ python bot.py
 | `/status` | Check API status | Public |
 | `/trending` | Top 5 trending tokens | Public |
 | `/price <addr>` | Token price lookup | Public |
+| `/solprice` | Quick SOL price | Public |
+| `/mcap <addr>` | Market cap/liquidity | Public |
+| `/volume <addr>` | 24h volume | Public |
 | `/gainers` | Top 10 price gainers | Public |
 | `/newpairs` | New trading pairs | Public |
 | `/signals` | Master Signal Report (Top 10) | Admin |
