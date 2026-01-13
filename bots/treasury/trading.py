@@ -23,6 +23,7 @@ from pathlib import Path
 
 from .wallet import SecureWallet, WalletInfo
 from .jupiter import JupiterClient, SwapQuote, SwapResult, LimitOrderManager
+from .scorekeeper import get_scorekeeper, Scorekeeper
 
 # Import new trading modules
 try:
@@ -954,6 +955,27 @@ class TradingEngine:
             }, user_id, True)
 
             logger.info(f"Opened position {position_id}: {token_symbol} @ ${current_price}")
+            
+            # Track in scorekeeper for persistent P&L tracking
+            try:
+                scorekeeper = get_scorekeeper()
+                scorekeeper.open_position(
+                    position_id=position_id,
+                    symbol=token_symbol,
+                    token_mint=token_mint,
+                    entry_price=current_price,
+                    entry_amount_sol=amount_usd / await self.jupiter.get_token_price(JupiterClient.SOL_MINT),
+                    entry_amount_tokens=position.amount,
+                    take_profit_price=tp_price,
+                    stop_loss_price=sl_price,
+                    tp_order_id=position.tp_order_id,
+                    sl_order_id=position.sl_order_id,
+                    tx_signature=result.signature,
+                    user_id=user_id or 0,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to track in scorekeeper: {e}")
+            
             return True, f"Position opened: {result.signature}", position
 
         except Exception as e:
@@ -1120,6 +1142,30 @@ class TradingEngine:
             }, user_id, True)
 
             logger.info(f"Closed position {position_id}: P&L ${position.pnl_usd:+.2f}")
+            
+            # Track in scorekeeper
+            try:
+                scorekeeper = get_scorekeeper()
+                # Determine close type based on price vs TP/SL
+                close_type = "manual"
+                if position.exit_price >= position.take_profit_price:
+                    close_type = "tp"
+                elif position.exit_price <= position.stop_loss_price:
+                    close_type = "sl"
+                
+                sol_price = await self.jupiter.get_token_price(JupiterClient.SOL_MINT)
+                exit_sol = position.pnl_usd / sol_price if sol_price > 0 else 0
+                
+                scorekeeper.close_position(
+                    position_id=position_id,
+                    exit_price=position.exit_price,
+                    exit_amount_sol=exit_sol,
+                    close_type=close_type,
+                    tx_signature=result.signature,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to track close in scorekeeper: {e}")
+            
             return True, f"Closed: {result.signature}, P&L: ${position.pnl_usd:+.2f}"
 
         except Exception as e:

@@ -775,6 +775,25 @@ async def keystatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /score command - show treasury scorecard (admin only)."""
+    try:
+        from bots.treasury.scorekeeper import get_scorekeeper
+        scorekeeper = get_scorekeeper()
+        
+        summary = scorekeeper.format_telegram_summary()
+        await update.message.reply_text(
+            summary,
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"*Scorekeeper Error*\n\n`{str(e)[:100]}`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
+@admin_only
 async def brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /brain command - show self-improving system stats (admin only)."""
     if not SELF_IMPROVING_AVAILABLE:
@@ -2759,6 +2778,7 @@ def main():
     app.add_handler(CommandHandler("digest", digest))
     app.add_handler(CommandHandler("reload", reload))
     app.add_handler(CommandHandler("keystatus", keystatus))
+    app.add_handler(CommandHandler("score", score))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
 
