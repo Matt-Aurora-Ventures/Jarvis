@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from core.cache.memory_cache import LRUCache
+from core.utils.rate_limiter import get_rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +123,9 @@ class FreePriceAPI:
     async def _try_dexscreener(self, token_address: str) -> Optional[TokenPrice]:
         """Try DexScreener API (free, no key required)."""
         try:
+            # Rate limit
+            await get_rate_limiter().wait_and_acquire("dexscreener")
+            
             session = await self._get_session()
             url = f"{self.DEXSCREENER_API}/tokens/{token_address}"
             
@@ -157,6 +161,8 @@ class FreePriceAPI:
     async def _try_geckoterminal(self, token_address: str) -> Optional[TokenPrice]:
         """Try GeckoTerminal API (free, no key required)."""
         try:
+            await get_rate_limiter().wait_and_acquire("geckoterminal")
+            
             session = await self._get_session()
             url = f"{self.GECKOTERMINAL_API}/networks/solana/tokens/{token_address}"
             
@@ -186,6 +192,8 @@ class FreePriceAPI:
     async def _try_jupiter(self, token_address: str) -> Optional[TokenPrice]:
         """Try Jupiter Price API (free, no key required)."""
         try:
+            await get_rate_limiter().wait_and_acquire("jupiter")
+            
             session = await self._get_session()
             url = f"{self.JUPITER_PRICE_API}/price?ids={token_address}"
             
