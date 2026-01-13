@@ -909,6 +909,43 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Audit error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
+async def mcap(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /mcap command - get token market cap (public)."""
+    try:
+        if not context.args:
+            await update.message.reply_text("Usage: /mcap <token_address>", parse_mode=ParseMode.HTML)
+            return
+        
+        token_address = context.args[0].strip()
+        
+        from core.data.free_price_api import get_token_price
+        price_data = await get_token_price(token_address)
+        
+        if not price_data:
+            await update.message.reply_text("Token not found.", parse_mode=ParseMode.HTML)
+            return
+        
+        # Estimate market cap from liquidity (rough estimate)
+        lines = [
+            f"<b>📊 {price_data.symbol}</b>",
+            "",
+            f"<b>Price:</b> ${price_data.price_usd:.8f}",
+        ]
+        
+        if price_data.liquidity:
+            # FDV estimate: liquidity * 2 is a rough proxy
+            fdv_estimate = price_data.liquidity * 2
+            lines.append(f"<b>Liquidity:</b> ${price_data.liquidity:,.0f}")
+            lines.append(f"<b>FDV Est:</b> ~${fdv_estimate:,.0f}")
+        
+        if price_data.volume_24h:
+            lines.append(f"<b>24h Vol:</b> ${price_data.volume_24h:,.0f}")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Mcap error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
 async def solprice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /solprice command - get current SOL price (public)."""
     try:
@@ -3345,6 +3382,7 @@ def main():
     app.add_handler(CommandHandler("costs", costs))
     app.add_handler(CommandHandler("trending", trending))
     app.add_handler(CommandHandler("solprice", solprice))
+    app.add_handler(CommandHandler("mcap", mcap))
     app.add_handler(CommandHandler("price", price))
     app.add_handler(CommandHandler("gainers", gainers))
     app.add_handler(CommandHandler("newpairs", newpairs))
