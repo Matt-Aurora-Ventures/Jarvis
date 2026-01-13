@@ -909,6 +909,37 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Audit error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
+async def volume(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /volume command - get token 24h volume (public)."""
+    try:
+        if not context.args:
+            await update.message.reply_text("Usage: /volume <token_address>", parse_mode=ParseMode.HTML)
+            return
+        
+        token_address = context.args[0].strip()
+        
+        from core.data.free_price_api import get_token_price
+        price_data = await get_token_price(token_address)
+        
+        if not price_data:
+            await update.message.reply_text("Token not found.", parse_mode=ParseMode.HTML)
+            return
+        
+        lines = [f"<b>📊 {price_data.symbol} Volume</b>", ""]
+        
+        if price_data.volume_24h:
+            lines.append(f"<b>24h Volume:</b> ${price_data.volume_24h:,.0f}")
+            if price_data.liquidity:
+                vol_liq_ratio = price_data.volume_24h / price_data.liquidity if price_data.liquidity > 0 else 0
+                lines.append(f"<b>Vol/Liq Ratio:</b> {vol_liq_ratio:.2f}x")
+        else:
+            lines.append("No volume data available")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Volume error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
 async def mcap(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /mcap command - get token market cap (public)."""
     try:
@@ -3383,6 +3414,7 @@ def main():
     app.add_handler(CommandHandler("trending", trending))
     app.add_handler(CommandHandler("solprice", solprice))
     app.add_handler(CommandHandler("mcap", mcap))
+    app.add_handler(CommandHandler("volume", volume))
     app.add_handler(CommandHandler("price", price))
     app.add_handler(CommandHandler("gainers", gainers))
     app.add_handler(CommandHandler("newpairs", newpairs))
