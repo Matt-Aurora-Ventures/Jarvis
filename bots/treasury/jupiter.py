@@ -801,7 +801,10 @@ class LimitOrderManager:
     """
     Manages limit orders, take profit, and stop loss triggers.
     Uses price monitoring and executes via Jupiter when triggered.
+    Orders are persisted to disk for reliability across restarts.
     """
+
+    ORDERS_FILE = Path(os.getenv("DATA_DIR", "data")) / "limit_orders.json"
 
     def __init__(self, jupiter: JupiterClient, wallet):
         self.jupiter = jupiter
@@ -809,6 +812,26 @@ class LimitOrderManager:
         self.orders: Dict[str, Dict] = {}
         self._running = False
         self._monitor_task: Optional[asyncio.Task] = None
+        self._load_orders()
+
+    def _load_orders(self):
+        """Load orders from disk."""
+        if self.ORDERS_FILE.exists():
+            try:
+                with open(self.ORDERS_FILE) as f:
+                    self.orders = json.load(f)
+                logger.info(f"Loaded {len(self.orders)} orders from disk")
+            except Exception as e:
+                logger.warning(f"Failed to load orders: {e}")
+
+    def _save_orders(self):
+        """Save orders to disk."""
+        self.ORDERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(self.ORDERS_FILE, 'w') as f:
+                json.dump(self.orders, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save orders: {e}")
 
     async def create_take_profit(
         self,
@@ -844,6 +867,7 @@ class LimitOrderManager:
             'result': None
         }
 
+        self._save_orders()
         logger.info(f"Created take profit order {order_id}: sell at ${target_price}")
         return order_id
 
@@ -881,6 +905,7 @@ class LimitOrderManager:
             'result': None
         }
 
+        self._save_orders()
         logger.info(f"Created stop loss order {order_id}: sell at ${stop_price}")
         return order_id
 
@@ -888,6 +913,7 @@ class LimitOrderManager:
         """Cancel an order."""
         if order_id in self.orders:
             self.orders[order_id]['status'] = 'CANCELLED'
+            self._save_orders()
             logger.info(f"Cancelled order {order_id}")
             return True
         return False
@@ -980,12 +1006,14 @@ class LimitOrderManager:
 
             order['status'] = 'COMPLETED' if result.success else 'FAILED'
             order['result'] = result.to_dict()
+            self._save_orders()
 
             logger.info(f"Order {order_id} {'completed' if result.success else 'failed'}")
 
         except Exception as e:
             order['status'] = 'FAILED'
             order['result'] = {'error': str(e)}
+            self._save_orders()
             logger.error(f"Order {order_id} execution failed: {e}")
 
     def get_active_orders(self) -> List[Dict]:
