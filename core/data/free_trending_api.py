@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from core.cache.memory_cache import LRUCache
+from core.utils.rate_limiter import get_rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,7 @@ class FreeTrendingAPI:
     async def _get_dexscreener_trending(self) -> List[TrendingToken]:
         """Get DexScreener boosted/trending tokens."""
         try:
+            await get_rate_limiter().wait_and_acquire("dexscreener")
             session = await self._get_session()
             # Get token profiles which shows popular tokens
             url = f"{self.DEXSCREENER_API}/token-profiles/latest/v1"
@@ -140,6 +142,7 @@ class FreeTrendingAPI:
     async def _get_dexscreener_gainers(self) -> List[TrendingToken]:
         """Get DexScreener top gainers for Solana."""
         try:
+            await get_rate_limiter().wait_and_acquire("dexscreener")
             session = await self._get_session()
             # Search for Solana pairs sorted by volume
             url = f"{self.DEXSCREENER_API}/latest/dex/search?q=solana"
@@ -186,6 +189,7 @@ class FreeTrendingAPI:
     async def _get_dexscreener_new_pairs(self) -> List[TrendingToken]:
         """Get newly created Solana pairs."""
         try:
+            await get_rate_limiter().wait_and_acquire("dexscreener")
             session = await self._get_session()
             url = f"{self.DEXSCREENER_API}/latest/dex/pairs/solana"
             
@@ -227,6 +231,7 @@ class FreeTrendingAPI:
     async def _get_geckoterminal_trending(self) -> List[TrendingToken]:
         """Get GeckoTerminal trending tokens."""
         try:
+            await get_rate_limiter().wait_and_acquire("geckoterminal")
             session = await self._get_session()
             url = f"{self.GECKOTERMINAL_API}/networks/solana/trending_pools"
             
