@@ -351,6 +351,10 @@ _Use the buttons below for quick access:_
             InlineKeyboardButton("💼 Wallet", callback_data="menu_wallet"),
             InlineKeyboardButton("📝 Logs", callback_data="menu_logs"),
         ])
+        keyboard.append([
+            InlineKeyboardButton("📊 Metrics", callback_data="menu_metrics"),
+            InlineKeyboardButton("📋 Audit", callback_data="menu_audit"),
+        ])
 
     await update.message.reply_text(
         message.strip(),
@@ -2063,6 +2067,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update.message = query.message
         context.args = []
         await logs(update, context)
+        return
+
+    if data == "menu_metrics":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await metrics(update, context)
+        return
+
+    if data == "menu_audit":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await audit(update, context)
         return
 
     # Trading callbacks
