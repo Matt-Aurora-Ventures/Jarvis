@@ -254,16 +254,42 @@ class ConsoleBridge:
     def complete_request(self, request_id: str, result: str):
         """Mark a request as completed with result."""
         requests = self._load_requests()
+        user_id = None
         for r in requests:
             if r["id"] == request_id:
                 r["status"] = "completed"
                 r["result"] = result
                 r["completed_at"] = datetime.now(timezone.utc).isoformat()
+                user_id = r.get("user_id")
                 
                 # Store the response in memory
                 self.memory.add_message(r["user_id"], "jarvis", "assistant", result)
                 break
         self._save_requests(requests)
+        return user_id
+    
+    async def send_telegram_feedback(self, request_id: str, message: str, chat_id: str = None):
+        """Send feedback to Telegram about a request."""
+        import aiohttp
+        import os
+        
+        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        if not chat_id:
+            chat_id = os.environ.get('TELEGRAM_BUY_BOT_CHAT_ID')
+        
+        if not bot_token or not chat_id:
+            return False
+        
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json={
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "HTML"
+            }) as resp:
+                data = await resp.json()
+                return data.get("ok", False)
     
     def is_coding_request(self, message: str) -> bool:
         """Detect if a message is a coding/development request."""
