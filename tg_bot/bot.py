@@ -981,10 +981,38 @@ async def orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def config_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /config command - show current configuration (admin only)."""
+    """Handle /config command - show/set configuration (admin only).
+    
+    Usage:
+    - /config - Show all config
+    - /config set <key> <value> - Set a config value
+    """
     try:
         from core.config_hot_reload import get_config_manager
         cfg = get_config_manager()
+        
+        # Check for set subcommand
+        if context.args and len(context.args) >= 3:
+            if context.args[0].lower() == "set":
+                key = context.args[1]
+                value = " ".join(context.args[2:])
+                
+                # Parse value type
+                if value.lower() == "true":
+                    value = True
+                elif value.lower() == "false":
+                    value = False
+                else:
+                    try:
+                        value = float(value) if "." in value else int(value)
+                    except ValueError:
+                        pass
+                
+                if cfg.set(key, value):
+                    await update.message.reply_text(f"✅ Set <code>{key}</code> = {value}", parse_mode=ParseMode.HTML)
+                else:
+                    await update.message.reply_text(f"❌ Failed to set {key}", parse_mode=ParseMode.HTML)
+                return
         
         # Show key config values
         trading = cfg.get_by_prefix("trading")
@@ -993,15 +1021,17 @@ async def config_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines = [
             "<b>Current Configuration</b>",
             "",
+            "<i>Use: /config set &lt;key&gt; &lt;value&gt;</i>",
+            "",
             "<b>Trading:</b>",
         ]
         for k, v in sorted(trading.items()):
-            lines.append(f"  <code>{k.split('.')[-1]}</code>: {v}")
+            lines.append(f"  <code>{k}</code>: {v}")
         
         lines.append("")
         lines.append("<b>Bot:</b>")
         for k, v in sorted(bot_cfg.items()):
-            lines.append(f"  <code>{k.split('.')[-1]}</code>: {v}")
+            lines.append(f"  <code>{k}</code>: {v}")
         
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
     except Exception as e:
