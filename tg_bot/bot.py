@@ -347,6 +347,10 @@ _Use the buttons below for quick access:_
             InlineKeyboardButton("🖥️ System", callback_data="menu_system"),
             InlineKeyboardButton("📋 Orders", callback_data="menu_orders"),
         ])
+        keyboard.append([
+            InlineKeyboardButton("💼 Wallet", callback_data="menu_wallet"),
+            InlineKeyboardButton("📝 Logs", callback_data="menu_logs"),
+        ])
 
     await update.message.reply_text(
         message.strip(),
@@ -2012,6 +2016,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update.message = query.message
         context.args = []
         await orders(update, context)
+        return
+
+    if data == "menu_wallet":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await wallet(update, context)
+        return
+
+    if data == "menu_logs":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await logs(update, context)
         return
 
     # Trading callbacks
