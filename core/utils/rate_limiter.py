@@ -165,6 +165,23 @@ class MultiRateLimiter:
     async def wait_and_acquire(self, key: str) -> bool:
         """Wait and acquire for a specific key."""
         return await self.get(key).wait_and_acquire()
+    
+    def get_stats(self) -> dict:
+        """Get stats for all configured rate limiters."""
+        with self._lock:
+            stats = {}
+            for key, limiter in self._limiters.items():
+                bucket = limiter._bucket
+                window = limiter._window
+                stats[key] = {
+                    "tokens_available": round(bucket.tokens, 2),
+                    "bucket_capacity": bucket.capacity,
+                    "rate_per_sec": bucket.rate,
+                    "window_requests": len(window.requests),
+                    "window_max": window.max_requests,
+                    "window_seconds": window.window_seconds
+                }
+            return stats
 
 
 # Singleton instance

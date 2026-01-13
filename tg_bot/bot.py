@@ -885,6 +885,38 @@ async def flags(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def ratelimits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /ratelimits command - show API rate limiter stats (admin only)."""
+    try:
+        from core.utils.rate_limiter import get_rate_limiter
+        
+        limiter = get_rate_limiter()
+        stats = limiter.get_stats()
+        
+        if not stats:
+            await update.message.reply_text("No rate limiters configured.", parse_mode=ParseMode.HTML)
+            return
+        
+        lines = ["<b>📊 API Rate Limiter Stats</b>", ""]
+        
+        for api, data in sorted(stats.items()):
+            tokens = data["tokens_available"]
+            capacity = data["bucket_capacity"]
+            pct = (tokens / capacity * 100) if capacity > 0 else 0
+            window_used = data["window_requests"]
+            window_max = data["window_max"]
+            
+            status = "🟢" if pct > 50 else "🟡" if pct > 20 else "🔴"
+            lines.append(f"{status} <b>{api}</b>")
+            lines.append(f"   Tokens: {tokens}/{capacity} ({pct:.0f}%)")
+            lines.append(f"   Window: {window_used}/{window_max} req/{data['window_seconds']}s")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Rate limits error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /audit command - show recent audit entries (admin only)."""
     try:
@@ -3456,6 +3488,7 @@ def main():
     app.add_handler(CommandHandler("health", health))
     app.add_handler(CommandHandler("flags", flags))
     app.add_handler(CommandHandler("audit", audit))
+    app.add_handler(CommandHandler("ratelimits", ratelimits))
     app.add_handler(CommandHandler("config", config_cmd))
     app.add_handler(CommandHandler("orders", orders))
     app.add_handler(CommandHandler("system", system))
