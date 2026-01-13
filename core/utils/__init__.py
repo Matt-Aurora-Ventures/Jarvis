@@ -29,6 +29,15 @@ from core.utils.timeout import (
     retry_with_timeout,
 )
 
+from core.utils.decorators import (
+    retry,
+    log_calls,
+    memoize,
+    singleton,
+    deprecated,
+    measure_time,
+)
+
 __all__ = [
     # Rate limiting
     "RateLimiter",
@@ -51,4 +60,11 @@ __all__ = [
     "timeout",
     "race",
     "retry_with_timeout",
+    # Decorators
+    "retry",
+    "log_calls",
+    "memoize",
+    "singleton",
+    "deprecated",
+    "measure_time",
 ]
