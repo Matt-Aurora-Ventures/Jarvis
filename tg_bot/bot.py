@@ -902,6 +902,32 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /logs command - show recent log entries (admin only)."""
+    try:
+        from pathlib import Path
+        log_file = Path("logs/jarvis.log")
+        
+        if not log_file.exists():
+            await update.message.reply_text("No log file found.", parse_mode=ParseMode.HTML)
+            return
+        
+        # Read last 20 lines
+        lines = log_file.read_text().strip().split("\n")[-20:]
+        
+        output = ["<b>📋 Recent Logs</b>", ""]
+        for line in lines:
+            # Truncate long lines
+            if len(line) > 80:
+                line = line[:77] + "..."
+            output.append(f"<code>{line}</code>")
+        
+        await update.message.reply_text("\n".join(output), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Logs error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /wallet command - show treasury wallet info (admin only)."""
     try:
@@ -3113,6 +3139,7 @@ def main():
     app.add_handler(CommandHandler("orders", orders))
     app.add_handler(CommandHandler("system", system))
     app.add_handler(CommandHandler("wallet", wallet))
+    app.add_handler(CommandHandler("logs", logs))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
 
