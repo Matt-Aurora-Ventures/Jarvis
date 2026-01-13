@@ -1320,6 +1320,7 @@ python bot.py
 | `/age <addr>` | Token age | Public |
 | `/summary <addr>` | Full overview | Public |
 | `/gainers` | Top 10 price gainers | Public |
+| `/losers` | Top 10 biggest losers | Public |
 | `/newpairs` | New trading pairs | Public |
 | `/signals` | Master Signal Report (Top 10) | Admin |
 | `/analyze <token>` | Full analysis with Grok | Admin |
