@@ -1315,6 +1315,7 @@ python bot.py
 | `/solprice` | Quick SOL price | Public |
 | `/mcap <addr>` | Market cap/liquidity | Public |
 | `/volume <addr>` | 24h volume | Public |
+| `/chart <addr>` | Chart links | Public |
 | `/gainers` | Top 10 price gainers | Public |
 | `/newpairs` | New trading pairs | Public |
 | `/signals` | Master Signal Report (Top 10) | Admin |
