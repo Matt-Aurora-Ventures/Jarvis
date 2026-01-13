@@ -1670,6 +1670,65 @@ async def remember(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def modstats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /modstats command - show moderation statistics (admin only)."""
+    try:
+        from core.jarvis_admin import get_jarvis_admin
+        admin = get_jarvis_admin()
+        
+        stats = admin.get_moderation_stats()
+        
+        lines = [
+            "<b>moderation stats</b>",
+            "",
+            f"<b>users tracked:</b> {stats['total_users']}",
+            f"<b>users banned:</b> {stats['banned_users']}",
+            f"<b>messages recorded:</b> {stats['total_messages']}",
+            f"<b>messages deleted:</b> {stats['deleted_messages']}",
+            f"<b>pending upgrades:</b> {stats['pending_upgrades']}",
+            "",
+            "circuits monitoring. spam sensors active.",
+        ]
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Modstats error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
+async def upgrades(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /upgrades command - show pending self-upgrade ideas (admin only)."""
+    try:
+        from pathlib import Path
+        import json
+        
+        queue_file = Path("data/self_upgrade_queue.json")
+        if not queue_file.exists():
+            await update.message.reply_text("no pending upgrades. circuits are satisfied.", parse_mode=ParseMode.HTML)
+            return
+        
+        queue = json.loads(queue_file.read_text())
+        pending = [u for u in queue if u.get("status") == "pending"]
+        
+        if not pending:
+            await update.message.reply_text("no pending upgrades. all caught up.", parse_mode=ParseMode.HTML)
+            return
+        
+        lines = [f"<b>pending self-upgrades ({len(pending)})</b>", ""]
+        
+        for i, u in enumerate(pending[:10], 1):
+            idea = u.get("idea", "")[:100]
+            lines.append(f"{i}. {idea}...")
+        
+        if len(pending) > 10:
+            lines.append(f"\n... and {len(pending) - 10} more")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Upgrades error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /brain command - show self-improving system stats (admin only)."""
     if not SELF_IMPROVING_AVAILABLE:
@@ -3564,33 +3623,84 @@ SPAM_PATTERNS = [
 
 async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, user_id: int) -> bool:
     """Check for spam and ban user if detected. Returns True if spam was detected."""
-    text_lower = text.lower()
-
-    for pattern in SPAM_PATTERNS:
-        if pattern in text_lower:
-            try:
-                chat_id = update.effective_chat.id
-                message_id = update.message.message_id
-                username = update.effective_user.username or "unknown"
-
-                # Delete the message
-                await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-
-                # Ban the user
+    try:
+        from core.jarvis_admin import get_jarvis_admin
+        admin = get_jarvis_admin()
+        
+        chat_id = update.effective_chat.id
+        message_id = update.message.message_id
+        username = update.effective_user.username or "unknown"
+        
+        # Record message for analysis
+        admin.record_message(message_id, user_id, username, text, chat_id)
+        admin.update_user(user_id, username)
+        
+        # Check for command attempts from non-admins
+        is_cmd_attempt, cmd_type = admin.detect_command_attempt(text, user_id)
+        if is_cmd_attempt:
+            response = admin.get_random_response("not_admin")
+            await update.message.reply_text(response)
+            logger.info(f"Rejected command attempt from {user_id}: {cmd_type}")
+            return False  # Not spam, just rejected
+        
+        # Check for upgrade opportunities
+        upgrade_idea = admin.detect_upgrade_opportunity(text, user_id)
+        if upgrade_idea and not admin.is_admin(user_id):
+            admin.queue_upgrade(upgrade_idea, user_id, text)
+            logger.info(f"Queued upgrade idea from user feedback")
+        
+        # Analyze for spam
+        is_spam, confidence, reason = admin.analyze_spam(text, user_id)
+        
+        if is_spam:
+            # Delete the message
+            await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            
+            # Get user profile
+            user = admin.get_user(user_id)
+            warning_count = user.warning_count if user else 0
+            
+            if confidence >= 0.8 or warning_count >= 2:
+                # Ban for high confidence spam or repeat offenders
                 await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
-
-                logger.warning(f"SPAM BANNED: user={user_id} @{username} pattern='{pattern}' text='{text[:50]}'")
-                print(f"[SPAM] Banned user {user_id} (@{username}) for: {pattern}", flush=True)
-
-                # Notify chat
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"Banned spammer @{username}. Stay vigilant.",
-                )
-                return True
-            except Exception as e:
-                logger.error(f"Failed to ban spammer: {e}")
-                return False
+                admin.ban_user(user_id, reason)
+                
+                response = admin.get_random_response("scam_deleted" if "keyword" in reason else "spam_deleted")
+                response += admin.get_random_response("mistake_footer")
+                
+                await context.bot.send_message(chat_id=chat_id, text=response)
+                logger.warning(f"SPAM BANNED: user={user_id} @{username} conf={confidence:.2f} reason={reason}")
+            else:
+                # Warn for lower confidence
+                new_warnings = admin.warn_user(user_id)
+                response = admin.get_random_response("user_warned", username=username)
+                response += admin.get_random_response("mistake_footer")
+                
+                await context.bot.send_message(chat_id=chat_id, text=response)
+                logger.warning(f"SPAM WARNED: user={user_id} @{username} warnings={new_warnings} conf={confidence:.2f}")
+            
+            return True
+            
+    except Exception as e:
+        logger.error(f"JarvisAdmin spam check error: {e}")
+        # Fallback to simple pattern matching
+        text_lower = text.lower()
+        for pattern in SPAM_PATTERNS:
+            if pattern in text_lower:
+                try:
+                    chat_id = update.effective_chat.id
+                    message_id = update.message.message_id
+                    username = update.effective_user.username or "unknown"
+                    await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                    await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"removed spam. @{username} banned.\n\nif this was a mistake, reach out to @MattFromKr8tiv.",
+                    )
+                    return True
+                except:
+                    pass
+    
     return False
 
 
@@ -3791,6 +3901,8 @@ def main():
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("code", code))
     app.add_handler(CommandHandler("remember", remember))
+    app.add_handler(CommandHandler("modstats", modstats))
+    app.add_handler(CommandHandler("upgrades", upgrades))
     app.add_handler(CommandHandler("paper", paper))
 
     # Treasury Trading Commands
