@@ -332,8 +332,16 @@ _Use the buttons below for quick access:_
             InlineKeyboardButton("📋 Digest", callback_data="menu_digest"),
         ])
         keyboard.append([
-            InlineKeyboardButton("🧠 Brain Stats", callback_data="menu_brain"),
+            InlineKeyboardButton("🧠 Brain", callback_data="menu_brain"),
             InlineKeyboardButton("🔄 Reload", callback_data="menu_reload"),
+        ])
+        keyboard.append([
+            InlineKeyboardButton("❤️ Health", callback_data="menu_health"),
+            InlineKeyboardButton("🎚️ Flags", callback_data="menu_flags"),
+        ])
+        keyboard.append([
+            InlineKeyboardButton("📊 Score", callback_data="menu_score"),
+            InlineKeyboardButton("⚙️ Config", callback_data="menu_config"),
         ])
 
     await update.message.reply_text(
@@ -1761,6 +1769,42 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update.message = query.message
         context.args = []
         await reload(update, context)
+        return
+
+    if data == "menu_health":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await health(update, context)
+        return
+
+    if data == "menu_flags":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await flags(update, context)
+        return
+
+    if data == "menu_score":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await score(update, context)
+        return
+
+    if data == "menu_config":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        update.message = query.message
+        context.args = []
+        await config_cmd(update, context)
         return
 
     # Trading callbacks
