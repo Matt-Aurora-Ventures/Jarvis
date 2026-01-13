@@ -948,6 +948,31 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Price error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
+async def newpairs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /newpairs command - show new trading pairs (public)."""
+    try:
+        from core.data.free_trending_api import get_free_trending_api
+        
+        api = get_free_trending_api()
+        tokens = await api.get_new_pairs(limit=10)
+        
+        if not tokens:
+            await update.message.reply_text("No new pairs data available.", parse_mode=ParseMode.HTML)
+            return
+        
+        lines = ["<b>🆕 New Trading Pairs</b>", ""]
+        
+        for token in tokens[:10]:
+            lines.append(f"• <b>{token.symbol}</b>: ${token.price_usd:.6f} | Liq: ${token.liquidity:,.0f}")
+        
+        lines.append("")
+        lines.append(f"<i>Source: {tokens[0].source if tokens else 'N/A'}</i>")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"New pairs error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
 async def gainers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /gainers command - show top gainers (public)."""
     try:
@@ -3303,6 +3328,7 @@ def main():
     app.add_handler(CommandHandler("trending", trending))
     app.add_handler(CommandHandler("price", price))
     app.add_handler(CommandHandler("gainers", gainers))
+    app.add_handler(CommandHandler("newpairs", newpairs))
     app.add_handler(CommandHandler("signals", signals))
     app.add_handler(CommandHandler("analyze", analyze))
     app.add_handler(CommandHandler("digest", digest))
