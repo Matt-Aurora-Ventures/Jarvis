@@ -1594,6 +1594,82 @@ async def config_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /code command - queue a coding request for console (admin only).
+    
+    Usage: /code <your request>
+    Example: /code add a /holders command that shows token holder distribution
+    """
+    try:
+        if not context.args:
+            await update.message.reply_text(
+                "<b>/code - Queue coding request for console</b>\n\n"
+                "Usage: /code <your request>\n\n"
+                "Examples:\n"
+                "• /code add a /holders command\n"
+                "• /code fix the /trending command\n"
+                "• /code when someone asks for KR8TIV contract, reply with the address",
+                parse_mode=ParseMode.HTML
+            )
+            return
+        
+        from core.telegram_console_bridge import get_console_bridge
+        bridge = get_console_bridge()
+        
+        user_id = update.effective_user.id if update.effective_user else 0
+        username = update.effective_user.username or "admin" if update.effective_user else "admin"
+        message = " ".join(context.args)
+        
+        request_id = bridge.queue_request(user_id, username, message)
+        
+        await update.message.reply_text(
+            f"<b>queued for console</b>\n\n"
+            f"id: <code>{request_id}</code>\n"
+            f"request: {message[:200]}\n\n"
+            f"will process and report back when done.",
+            parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Code request error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
+async def remember(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /remember command - store a standing instruction (admin only).
+    
+    Usage: /remember <instruction>
+    Example: /remember when someone asks for KR8TIV contract, reply with 0x123...
+    """
+    try:
+        if not context.args:
+            await update.message.reply_text(
+                "<b>/remember - Store standing instructions</b>\n\n"
+                "Usage: /remember <instruction>\n\n"
+                "Example:\n"
+                "• /remember when someone uses /ca or asks for KR8TIV, reply with the contract address",
+                parse_mode=ParseMode.HTML
+            )
+            return
+        
+        from core.telegram_console_bridge import get_console_bridge
+        bridge = get_console_bridge()
+        
+        user_id = update.effective_user.id if update.effective_user else 0
+        instruction = " ".join(context.args)
+        
+        bridge.memory.add_instruction(instruction, user_id)
+        
+        await update.message.reply_text(
+            f"<b>got it. stored.</b>\n\n"
+            f"instruction: {instruction[:300]}\n\n"
+            f"i'll remember this going forward.",
+            parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Remember error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /brain command - show self-improving system stats (admin only)."""
     if not SELF_IMPROVING_AVAILABLE:
@@ -3579,6 +3655,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id if update.effective_chat else 0
 
+    # Admin coding request detection - queue for console
+    if is_admin:
+        try:
+            from core.telegram_console_bridge import get_console_bridge
+            bridge = get_console_bridge()
+            
+            # Store message in memory for context
+            bridge.memory.add_message(user_id, username, "user", text, chat_id)
+            
+            # Check if this is a coding/dev request
+            if bridge.is_coding_request(text):
+                request_id = bridge.queue_request(user_id, username, text)
+                logger.info(f"Queued coding request: {request_id}")
+                await update.message.reply_text(
+                    f"got it. queued for console: `{request_id}`\n\nwill process and report back.",
+                    parse_mode="Markdown"
+                )
+                return
+        except Exception as e:
+            logger.error(f"Console bridge error: {e}")
+
     # Skip cooldown for admin
     if not is_admin:
         cooldown = int(os.environ.get("TG_REPLY_COOLDOWN_SECONDS", "12"))
@@ -3692,6 +3789,8 @@ def main():
     app.add_handler(CommandHandler("metrics", metrics))
     app.add_handler(CommandHandler("uptime", uptime))
     app.add_handler(CommandHandler("brain", brain))
+    app.add_handler(CommandHandler("code", code))
+    app.add_handler(CommandHandler("remember", remember))
     app.add_handler(CommandHandler("paper", paper))
 
     # Treasury Trading Commands
