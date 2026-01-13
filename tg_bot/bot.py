@@ -909,6 +909,24 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Audit error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
+async def solprice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /solprice command - get current SOL price (public)."""
+    try:
+        from core.data.free_price_api import get_sol_price
+        
+        sol_price = await get_sol_price()
+        
+        if sol_price > 0:
+            await update.message.reply_text(
+                f"<b>◎ SOL Price:</b> ${sol_price:.2f}",
+                parse_mode=ParseMode.HTML
+            )
+        else:
+            await update.message.reply_text("Unable to fetch SOL price.", parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"SOL price error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /price command - get token price (public)."""
     try:
@@ -3326,6 +3344,7 @@ def main():
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("costs", costs))
     app.add_handler(CommandHandler("trending", trending))
+    app.add_handler(CommandHandler("solprice", solprice))
     app.add_handler(CommandHandler("price", price))
     app.add_handler(CommandHandler("gainers", gainers))
     app.add_handler(CommandHandler("newpairs", newpairs))
