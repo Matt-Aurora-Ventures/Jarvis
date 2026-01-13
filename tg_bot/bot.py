@@ -875,6 +875,54 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def system(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /system command - comprehensive system status (admin only)."""
+    try:
+        lines = ["<b>🤖 JARVIS System Status</b>", ""]
+        
+        # Health status
+        try:
+            from core.health_monitor import get_health_monitor
+            monitor = get_health_monitor()
+            await monitor.run_all_checks()
+            health = monitor.get_overall_status()
+            emoji = {"healthy": "✅", "degraded": "⚠️", "unhealthy": "❌"}.get(health.value, "❓")
+            lines.append(f"{emoji} <b>Health:</b> {health.value.upper()}")
+        except Exception:
+            lines.append("❓ <b>Health:</b> Unknown")
+        
+        # Feature flags
+        try:
+            from core.feature_flags import get_feature_flags
+            ff = get_feature_flags()
+            enabled = len(ff.get_enabled_flags())
+            total = len(ff.flags)
+            lines.append(f"🎚️ <b>Features:</b> {enabled}/{total} enabled")
+        except Exception:
+            pass
+        
+        # Scorekeeper
+        try:
+            from bots.treasury.scorekeeper import get_scorekeeper
+            sk = get_scorekeeper()
+            summary = sk.get_summary()
+            lines.append(f"📊 <b>Win Rate:</b> {summary['win_rate']}")
+            lines.append(f"💰 <b>Total P&L:</b> {summary['total_pnl_sol']} SOL")
+            lines.append(f"📈 <b>Open Positions:</b> {summary['open_positions']}")
+        except Exception:
+            pass
+        
+        # Bot uptime info
+        import datetime
+        lines.append("")
+        lines.append(f"🕐 <b>Time:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"System error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /orders command - show active TP/SL orders (admin only)."""
     try:
@@ -2960,6 +3008,7 @@ def main():
     app.add_handler(CommandHandler("audit", audit))
     app.add_handler(CommandHandler("config", config_cmd))
     app.add_handler(CommandHandler("orders", orders))
+    app.add_handler(CommandHandler("system", system))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
 
