@@ -867,6 +867,35 @@ async def audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def config_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /config command - show current configuration (admin only)."""
+    try:
+        from core.config_hot_reload import get_config_manager
+        cfg = get_config_manager()
+        
+        # Show key config values
+        trading = cfg.get_by_prefix("trading")
+        bot_cfg = cfg.get_by_prefix("bot")
+        
+        lines = [
+            "<b>Current Configuration</b>",
+            "",
+            "<b>Trading:</b>",
+        ]
+        for k, v in sorted(trading.items()):
+            lines.append(f"  <code>{k.split('.')[-1]}</code>: {v}")
+        
+        lines.append("")
+        lines.append("<b>Bot:</b>")
+        for k, v in sorted(bot_cfg.items()):
+            lines.append(f"  <code>{k.split('.')[-1]}</code>: {v}")
+        
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Config error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@admin_only
 async def brain(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /brain command - show self-improving system stats (admin only)."""
     if not SELF_IMPROVING_AVAILABLE:
@@ -2855,6 +2884,7 @@ def main():
     app.add_handler(CommandHandler("health", health))
     app.add_handler(CommandHandler("flags", flags))
     app.add_handler(CommandHandler("audit", audit))
+    app.add_handler(CommandHandler("config", config_cmd))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("paper", paper))
 
