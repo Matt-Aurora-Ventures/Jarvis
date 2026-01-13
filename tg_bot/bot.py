@@ -1280,7 +1280,7 @@ async def losers(update: Update, context: ContextTypes.DEFAULT_TYPE):
         api = get_free_trending_api()
         
         # Get gainers but sort by lowest change (losers)
-        tokens = await api.get_top_gainers(limit=20)
+        tokens = await api.get_gainers(limit=20)
         
         if not tokens:
             await update.message.reply_text("No data available.", parse_mode=ParseMode.HTML)
