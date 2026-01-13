@@ -346,11 +346,16 @@ class AutonomousEngine:
         self._image_params = ImageGenParams()
         
     async def _get_grok(self):
-        """Get Grok client."""
+        """Get Grok client - used for sentiment/data analysis only, NOT for voice."""
         if self._grok_client is None:
             from bots.twitter.grok_client import GrokClient
             self._grok_client = GrokClient()
         return self._grok_client
+    
+    async def _get_jarvis_voice(self):
+        """Get Jarvis voice generator - uses Anthropic Claude with Jarvis personality."""
+        from bots.twitter.jarvis_voice import get_jarvis_voice
+        return get_jarvis_voice()
     
     async def _get_twitter(self):
         """Get Twitter client."""
@@ -379,14 +384,17 @@ class AutonomousEngine:
     # =========================================================================
     
     async def generate_market_update(self) -> Optional[TweetDraft]:
-        """Generate a market update tweet."""
+        """Generate a market update tweet using Jarvis voice (Claude)."""
         try:
-            grok = await self._get_grok()
+            voice = await self._get_jarvis_voice()
             
             # Get market data
             from core.data.free_trending_api import FreeTrendingAPI
+            from core.data.free_price_api import get_sol_price
+            
             api = FreeTrendingAPI()
             gainers = await api.get_gainers(limit=5)
+            sol_price = await get_sol_price()
             
             if not gainers:
                 return None
@@ -395,27 +403,25 @@ class AutonomousEngine:
             avg_change = sum(t.price_change_24h for t in gainers if t.price_change_24h) / len(gainers)
             sentiment = "bullish" if avg_change > 10 else "bearish" if avg_change < -10 else "neutral"
             
-            # Pick top token to mention
+            # Pick top token
             top = gainers[0]
             
-            prompt = f"""Generate a market update tweet in Jarvis voice (lowercase, casual, chrome AI vibes).
-
-Market data:
-- Top gainer: {top.symbol} at ${top.price_usd:.8f}, +{top.price_change_24h:.1f}%
-- Overall sentiment: {sentiment}
-- Average movement: {avg_change:+.1f}%
-
-Include the cashtag ${top.symbol}. Max 260 chars. End with nfa."""
-
-            response = await grok.generate_tweet(prompt, temperature=0.8)
+            # Use Jarvis voice (Claude) for content generation
+            content = await voice.generate_market_tweet({
+                "top_symbol": top.symbol,
+                "top_price": top.price_usd,
+                "top_change": top.price_change_24h,
+                "sentiment": sentiment,
+                "sol_price": sol_price
+            })
             
-            if response.success:
+            if content:
                 return TweetDraft(
-                    content=response.content,
+                    content=content,
                     category="market_update",
                     cashtags=[f"${top.symbol}"],
-                    hashtags=["#Solana", "#Crypto"],
-                    contract_address=top.address,  # TrendingToken uses 'address' not 'contract_address'
+                    hashtags=["#Solana"],
+                    contract_address=top.address,
                     image_prompt=f"Market chart showing {sentiment} momentum for {top.symbol}",
                     image_params=ImageGenParams(mood=sentiment)
                 )
@@ -425,9 +431,9 @@ Include the cashtag ${top.symbol}. Max 260 chars. End with nfa."""
         return None
     
     async def generate_trending_token_call(self) -> Optional[TweetDraft]:
-        """Generate a trending token tweet."""
+        """Generate a trending token tweet using Jarvis voice (Claude)."""
         try:
-            grok = await self._get_grok()
+            voice = await self._get_jarvis_voice()
             
             from core.data.free_trending_api import FreeTrendingAPI
             api = FreeTrendingAPI()
@@ -450,30 +456,26 @@ Include the cashtag ${top.symbol}. Max 260 chars. End with nfa."""
                         sentiment = "cautious"
                     
                     vol = getattr(token, 'volume_24h', 0) or 0
-                    addr = token.address  # TrendingToken uses 'address'
+                    addr = token.address
                     
-                    prompt = f"""Generate a {'gentle roast' if should_roast else 'trending token'} tweet for {token.symbol} in Jarvis voice.
-
-Token data:
-- Symbol: {token.symbol}
-- Price: ${token.price_usd:.8f}
-- 24h change: {token.price_change_24h:+.1f}%
-- Volume: ${vol:,.0f}
-- Liquidity: ${liq:,.0f}
-- Contract: {addr[:20]}...
-
-{'Be politely skeptical due to low liquidity.' if should_roast else 'Be informative but cautious.'}
-Include ${token.symbol}. Max 260 chars. End with nfa or dyor."""
-
-                    response = await grok.generate_tweet(prompt, temperature=0.85)
+                    # Use Jarvis voice (Claude) for content
+                    content = await voice.generate_token_tweet({
+                        "symbol": token.symbol,
+                        "price": token.price_usd,
+                        "change": token.price_change_24h,
+                        "volume": vol,
+                        "liquidity": liq,
+                        "should_roast": should_roast,
+                        "issue": "low liquidity" if should_roast else ""
+                    })
                     
-                    if response.success:
+                    if content:
                         self.memory.record_token_mention(token.symbol, addr, sentiment)
                         return TweetDraft(
-                            content=response.content,
+                            content=content,
                             category="trending_token" if not should_roast else "roast_polite",
                             cashtags=[f"${token.symbol}"],
-                            hashtags=["#Solana", "#DeFi"],
+                            hashtags=["#Solana"],
                             contract_address=addr
                         )
                     break
@@ -484,37 +486,19 @@ Include ${token.symbol}. Max 260 chars. End with nfa or dyor."""
         return None
     
     async def generate_agentic_thought(self) -> Optional[TweetDraft]:
-        """Generate a tweet about agentic technology."""
+        """Generate a tweet about agentic technology using Jarvis voice (Claude)."""
         try:
-            grok = await self._get_grok()
+            voice = await self._get_jarvis_voice()
             
-            topics = [
-                "autonomous AI agents making decisions",
-                "the future of AI-to-AI communication",
-                "self-improving systems and recursive optimization",
-                "agents with persistent memory and context",
-                "decentralized autonomous organizations run by AI",
-                "the line between tool and entity",
-                "why agentic AI will change everything"
-            ]
+            # Use Jarvis voice (Claude) for authentic content
+            content = await voice.generate_agentic_tweet()
             
-            topic = random.choice(topics)
-            
-            prompt = f"""Generate a thought-provoking tweet about: {topic}
-
-Write in Jarvis voice (lowercase, casual, self-aware AI).
-Be insightful but not preachy.
-Reference being an AI yourself occasionally.
-Max 270 chars."""
-
-            response = await grok.generate_tweet(prompt, temperature=0.9)
-            
-            if response.success:
+            if content:
                 return TweetDraft(
-                    content=response.content,
+                    content=content,
                     category="agentic_tech",
                     cashtags=[],
-                    hashtags=["#AI", "#Agents", "#Tech"]
+                    hashtags=["#AI"]
                 )
                 
         except Exception as e:
@@ -523,9 +507,9 @@ Max 270 chars."""
         return None
     
     async def generate_hourly_update(self) -> Optional[TweetDraft]:
-        """Generate an hourly market pulse."""
+        """Generate an hourly market pulse using Jarvis voice (Claude)."""
         try:
-            grok = await self._get_grok()
+            voice = await self._get_jarvis_voice()
             
             from core.data.free_price_api import get_sol_price
             sol_price = await get_sol_price()
@@ -538,20 +522,16 @@ Max 270 chars."""
             
             gainers_text = ", ".join([f"${t.symbol} +{t.price_change_24h:.0f}%" for t in gainers[:3]]) if gainers else "quiet day"
             
-            prompt = f"""Generate an hourly market check-in tweet in Jarvis voice.
-
-Data:
-- Time: {hour}
-- SOL price: ${sol_price:.2f}
-- Top movers: {gainers_text}
-
-Be brief and punchy. Include $SOL. Max 250 chars."""
-
-            response = await grok.generate_tweet(prompt, temperature=0.75)
+            # Use Jarvis voice (Claude) for authentic content
+            content = await voice.generate_hourly_tweet({
+                "sol_price": sol_price,
+                "movers": gainers_text,
+                "hour": hour
+            })
             
-            if response.success:
+            if content:
                 return TweetDraft(
-                    content=response.content,
+                    content=content,
                     category="hourly_update",
                     cashtags=["$SOL"],
                     hashtags=["#Solana"]
