@@ -1316,6 +1316,8 @@ python bot.py
 | `/mcap <addr>` | Market cap/liquidity | Public |
 | `/volume <addr>` | 24h volume | Public |
 | `/chart <addr>` | Chart links | Public |
+| `/liquidity <addr>` | Liquidity info | Public |
+| `/age <addr>` | Token age | Public |
 | `/gainers` | Top 10 price gainers | Public |
 | `/newpairs` | New trading pairs | Public |
 | `/signals` | Master Signal Report (Top 10) | Admin |
