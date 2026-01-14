@@ -329,6 +329,12 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
             self._handle_brain_health()
         elif path == "/api/brain/trust":
             self._handle_brain_trust()
+        # Price Alerts endpoints
+        elif path == "/api/alerts":
+            self._handle_alerts_list()
+        elif path.startswith("/api/alerts/"):
+            alert_id = path.split("/api/alerts/")[1]
+            self._handle_alert_get(alert_id)
         else:
             self._send_json({"error": "Not found"}, 404)
 
@@ -367,6 +373,29 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
         # Phase 1: Trade execution
         elif path == "/api/trade":
             self._handle_trade()
+        # Price Alerts endpoints
+        elif path == "/api/alerts":
+            self._handle_alerts_create()
+        else:
+            self._send_json({"error": "Not found"}, 404)
+
+    def do_PATCH(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path.startswith("/api/alerts/"):
+            alert_id = path.split("/api/alerts/")[1]
+            self._handle_alert_update(alert_id)
+        else:
+            self._send_json({"error": "Not found"}, 404)
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path.startswith("/api/alerts/"):
+            alert_id = path.split("/api/alerts/")[1]
+            self._handle_alert_delete(alert_id)
         else:
             self._send_json({"error": "Not found"}, 404)
 
@@ -1978,6 +2007,155 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
             }
             
             self._send_json(result)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    # =========================================================================
+    # PRICE ALERTS API
+    # =========================================================================
+
+    def _get_alerts_manager(self):
+        """Get or create the price alerts manager."""
+        try:
+            from core.price_alerts import PriceAlertManager
+            if not hasattr(self, '_alerts_manager'):
+                self._alerts_manager = PriceAlertManager()
+            return self._alerts_manager
+        except ImportError:
+            return None
+
+    def _handle_alerts_list(self):
+        """Get all price alerts."""
+        try:
+            alerts_file = ROOT / "data" / "alerts.json"
+            history_file = ROOT / "data" / "alerts_history.json"
+
+            alerts = _read_json_file(alerts_file, {"alerts": []})
+            history = _read_json_file(history_file, {"history": []})
+
+            self._send_json({
+                "alerts": alerts.get("alerts", []),
+                "history": history.get("history", [])[-50:]  # Last 50 triggers
+            })
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_alert_get(self, alert_id: str):
+        """Get a specific alert."""
+        try:
+            alerts_file = ROOT / "data" / "alerts.json"
+            data = _read_json_file(alerts_file, {"alerts": []})
+
+            alert = next((a for a in data.get("alerts", []) if a.get("id") == alert_id), None)
+
+            if alert:
+                self._send_json(alert)
+            else:
+                self._send_json({"error": "Alert not found"}, 404)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_alerts_create(self):
+        """Create a new price alert."""
+        try:
+            body = self._read_body()
+
+            import uuid
+            import time as time_module
+
+            alert = {
+                "id": str(uuid.uuid4())[:8],
+                "symbol": body.get("symbol", "").upper(),
+                "mint": body.get("mint", ""),
+                "type": body.get("type", "PRICE_ABOVE"),
+                "threshold": float(body.get("threshold", 0)),
+                "repeatInterval": int(body.get("repeatInterval", 300)),
+                "notifyTelegram": body.get("notifyTelegram", True),
+                "notifyWebhook": body.get("notifyWebhook", True),
+                "enabled": True,
+                "triggered": False,
+                "lastTriggered": None,
+                "currentPrice": None,
+                "createdAt": time_module.time(),
+            }
+
+            # Validate required fields
+            if not alert["symbol"]:
+                self._send_json({"error": "Symbol is required"}, 400)
+                return
+            if alert["threshold"] <= 0:
+                self._send_json({"error": "Threshold must be positive"}, 400)
+                return
+
+            # Load existing alerts
+            alerts_file = ROOT / "data" / "alerts.json"
+            data = _read_json_file(alerts_file, {"alerts": []})
+
+            # Add new alert
+            data["alerts"].append(alert)
+
+            # Save
+            _write_json_file(alerts_file, data)
+
+            self._send_json({"success": True, "alert": alert})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_alert_update(self, alert_id: str):
+        """Update an existing alert."""
+        try:
+            body = self._read_body()
+
+            alerts_file = ROOT / "data" / "alerts.json"
+            data = _read_json_file(alerts_file, {"alerts": []})
+
+            # Find alert
+            alert_idx = next((i for i, a in enumerate(data["alerts"]) if a.get("id") == alert_id), None)
+
+            if alert_idx is None:
+                self._send_json({"error": "Alert not found"}, 404)
+                return
+
+            # Update fields
+            alert = data["alerts"][alert_idx]
+            if "enabled" in body:
+                alert["enabled"] = bool(body["enabled"])
+            if "threshold" in body:
+                alert["threshold"] = float(body["threshold"])
+            if "repeatInterval" in body:
+                alert["repeatInterval"] = int(body["repeatInterval"])
+            if "notifyTelegram" in body:
+                alert["notifyTelegram"] = bool(body["notifyTelegram"])
+            if "notifyWebhook" in body:
+                alert["notifyWebhook"] = bool(body["notifyWebhook"])
+
+            data["alerts"][alert_idx] = alert
+
+            # Save
+            _write_json_file(alerts_file, data)
+
+            self._send_json({"success": True, "alert": alert})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_alert_delete(self, alert_id: str):
+        """Delete an alert."""
+        try:
+            alerts_file = ROOT / "data" / "alerts.json"
+            data = _read_json_file(alerts_file, {"alerts": []})
+
+            # Filter out the alert
+            original_count = len(data["alerts"])
+            data["alerts"] = [a for a in data["alerts"] if a.get("id") != alert_id]
+
+            if len(data["alerts"]) == original_count:
+                self._send_json({"error": "Alert not found"}, 404)
+                return
+
+            # Save
+            _write_json_file(alerts_file, data)
+
+            self._send_json({"success": True, "deleted": alert_id})
         except Exception as e:
             self._send_json({"error": str(e)}, 500)
 

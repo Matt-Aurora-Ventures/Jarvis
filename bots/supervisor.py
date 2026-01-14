@@ -353,6 +353,20 @@ async def create_telegram_bot():
                 proc.kill()
 
 
+async def create_autonomous_x_engine():
+    """Create and run the autonomous X (Twitter) posting engine."""
+    from bots.twitter.autonomous_engine import AutonomousEngine
+
+    # Check for required credentials
+    x_api_key = os.environ.get("X_API_KEY", "")
+    if not x_api_key:
+        logger.warning("No X_API_KEY set, skipping autonomous X engine")
+        return
+
+    engine = AutonomousEngine()
+    await engine.start()
+
+
 async def main():
     """Main entry point with robust supervision."""
     logging.basicConfig(
@@ -388,6 +402,7 @@ async def main():
     supervisor.register("sentiment_reporter", create_sentiment_reporter, min_backoff=10.0, max_backoff=120.0)
     supervisor.register("twitter_poster", create_twitter_poster, min_backoff=30.0, max_backoff=300.0)
     supervisor.register("telegram_bot", create_telegram_bot, min_backoff=10.0, max_backoff=60.0)
+    supervisor.register("autonomous_x", create_autonomous_x_engine, min_backoff=30.0, max_backoff=300.0)
 
     print("Registered components:")
     for name in supervisor.components:

@@ -6,8 +6,10 @@ Docs: https://cryptopanic.com/developers/api/
 """
 
 import os
+import asyncio
 import logging
 import aiohttp
+import time
 from typing import Optional, Dict, List, Any
 from datetime import datetime
 
@@ -19,7 +21,11 @@ CRYPTOPANIC_API = "https://cryptopanic.com/api/v1"
 
 class CryptoPanicAPI:
     """CryptoPanic news and sentiment API client."""
-    
+
+    # Rate limiting: ~1 request per second to be safe
+    MIN_REQUEST_INTERVAL = 1.0
+    _last_request_time = 0.0
+
     def __init__(self):
         self.api_key = os.getenv("CRYPTOPANIC_API_KEY", "")
         self._session: Optional[aiohttp.ClientSession] = None
@@ -35,33 +41,47 @@ class CryptoPanicAPI:
         if self._session and not self._session.closed:
             await self._session.close()
     
+    async def _rate_limit(self):
+        """Apply rate limiting between requests."""
+        now = time.time()
+        elapsed = now - CryptoPanicAPI._last_request_time
+        if elapsed < self.MIN_REQUEST_INTERVAL:
+            await asyncio.sleep(self.MIN_REQUEST_INTERVAL - elapsed)
+        CryptoPanicAPI._last_request_time = time.time()
+
     async def _get(self, endpoint: str, params: Optional[Dict] = None) -> Optional[Dict]:
         """Make GET request to CryptoPanic API."""
         if not self.api_key:
             logger.warning("CRYPTOPANIC_API_KEY not set")
             return None
-        
+
         cache_key = f"{endpoint}:{params}"
-        
-        # Check cache
+
+        # Check cache first (before rate limiting)
         if cache_key in self._cache:
             cached, timestamp = self._cache[cache_key]
             if datetime.now().timestamp() - timestamp < self._cache_ttl:
                 return cached
-        
+
+        # Apply rate limiting
+        await self._rate_limit()
+
         try:
             session = await self._get_session()
             url = f"{CRYPTOPANIC_API}/{endpoint}"
-            
+
             # Add auth token
             params = params or {}
             params["auth_token"] = self.api_key
-            
+
             async with session.get(url, params=params, timeout=10) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     self._cache[cache_key] = (data, datetime.now().timestamp())
                     return data
+                elif resp.status == 429:
+                    logger.warning("CryptoPanic API rate limited")
+                    return None
                 else:
                     logger.warning(f"CryptoPanic API error: {resp.status}")
                     return None

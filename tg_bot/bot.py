@@ -16,6 +16,7 @@ Security:
 """
 
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -1415,6 +1416,67 @@ async def metrics(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def clistats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /clistats command - show CLI execution metrics (admin only)."""
+    try:
+        from tg_bot.services.claude_cli_handler import ClaudeCLIHandler
+
+        handler = ClaudeCLIHandler()
+        metrics = handler.get_metrics()
+
+        lines = [
+            "<b>🤖 CLI Execution Stats</b>",
+            "",
+            f"📊 <b>Total Executions:</b> {metrics.get('total', 0)}",
+            f"✅ <b>Successful:</b> {metrics.get('successful', 0)}",
+            f"❌ <b>Failed:</b> {metrics.get('failed', 0)}",
+            f"📈 <b>Success Rate:</b> {metrics.get('success_rate', 'N/A')}",
+            f"⏱️ <b>Avg Duration:</b> {metrics.get('avg_duration', 'N/A')}",
+            f"🕐 <b>Last Execution:</b> {metrics.get('last_execution', 'Never')}",
+            "",
+            "<i>Note: Stats reset when bot restarts</i>"
+        ]
+
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"CLI stats error: {str(e)[:100]}", parse_mode=ParseMode.HTML)
+
+
+@admin_only
+async def cliqueue(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /queue command - show CLI queue status (admin only)."""
+    try:
+        from tg_bot.services.claude_cli_handler import ClaudeCLIHandler
+
+        handler = ClaudeCLIHandler()
+        status = handler.get_queue_status()
+
+        lines = [
+            "<b>📋 CLI Queue Status</b>",
+            "",
+            f"📊 <b>Queue Depth:</b> {status.get('depth', 0)}/{status.get('max_depth', 3)}",
+            f"🔒 <b>Locked:</b> {'Yes' if status.get('is_locked') else 'No'}",
+        ]
+
+        pending = status.get('pending', [])
+        if pending:
+            lines.append("")
+            lines.append("<b>Pending Commands:</b>")
+            for i, cmd in enumerate(pending, 1):
+                preview = cmd.get('prompt_preview', 'Unknown')
+                queued = cmd.get('queued_at', 'Unknown')[:19]
+                lines.append(f"{i}. <code>{preview}</code>")
+                lines.append(f"   Queued: {queued}")
+        else:
+            lines.append("")
+            lines.append("<i>No pending commands</i>")
+
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        await update.message.reply_text(f"Queue status error: {str(e)[:100]}", parse_mode=ParseMode.HTML)
+
+
+@admin_only
 async def logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /logs command - show recent log entries (admin only)."""
     try:
@@ -1607,7 +1669,7 @@ async def config_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /code command - queue a coding request for console (admin only).
+    """Handle /code command - execute coding request via Claude CLI (admin only).
     
     Usage: /code <your request>
     Example: /code add a /holders command that shows token holder distribution
@@ -1615,34 +1677,63 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not context.args:
             await update.message.reply_text(
-                "<b>/code - Queue coding request for console</b>\n\n"
+                "<b>/code - Execute coding request via Claude CLI</b>\n\n"
                 "Usage: /code <your request>\n\n"
                 "Examples:\n"
                 "• /code add a /holders command\n"
                 "• /code fix the /trending command\n"
-                "• /code when someone asks for KR8TIV contract, reply with the address",
+                "• /code refactor the sentiment analysis",
                 parse_mode=ParseMode.HTML
             )
             return
         
+        from tg_bot.services.claude_cli_handler import get_claude_cli_handler
         from core.telegram_console_bridge import get_console_bridge
+        
+        cli_handler = get_claude_cli_handler()
         bridge = get_console_bridge()
         
         user_id = update.effective_user.id if update.effective_user else 0
         username = update.effective_user.username or "admin" if update.effective_user else "admin"
         message = " ".join(context.args)
+        chat_id = update.effective_chat.id if update.effective_chat else 0
         
-        request_id = bridge.queue_request(user_id, username, message)
+        # Store in memory
+        bridge.memory.add_message(user_id, username, "user", message, chat_id)
         
-        await update.message.reply_text(
-            f"<b>queued for console</b>\n\n"
-            f"id: <code>{request_id}</code>\n"
-            f"request: {message[:200]}\n\n"
-            f"will process and report back when done.",
+        # Send confirmation
+        confirm_msg = await update.message.reply_text(
+            "🔄 <b>Processing coding request...</b>\n\n"
+            f"<i>{message[:200]}{'...' if len(message) > 200 else ''}</i>",
             parse_mode=ParseMode.HTML
         )
+        
+        # Execute via Claude CLI
+        async def send_status(msg: str):
+            try:
+                await confirm_msg.edit_text(msg, parse_mode=ParseMode.HTML)
+            except:
+                pass
+        
+        success, summary, output = await cli_handler.execute(
+            message, user_id, send_update=send_status
+        )
+        
+        # Send result
+        status_emoji = "✅" if success else "⚠️"
+        result_msg = (
+            f"{status_emoji} <b>Coding Task Complete</b>\n\n"
+            f"<b>Summary:</b>\n{summary}\n\n"
+            f"<b>Details:</b>\n<pre>{output[:2000]}</pre>"
+        )
+        
+        await update.message.reply_text(result_msg, parse_mode=ParseMode.HTML)
+        
+        # Store response
+        bridge.memory.add_message(user_id, "jarvis", "assistant", summary, chat_id)
+        
     except Exception as e:
-        await update.message.reply_text(f"Code request error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(f"⚠️ Code error: {str(e)[:200]}", parse_mode=ParseMode.HTML)
 
 
 @admin_only
@@ -2945,6 +3036,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _toggle_live_mode(query)
         return
 
+    # Expand button callbacks from sentiment reports (format: expand:{section})
+    if data.startswith("expand:"):
+        logger.info(f"Expand callback received: {data} from user {user_id}")
+        section = data.replace("expand:", "")
+        await _handle_expand_section(query, section, config, user_id)
+        return
+
     # Ape button callbacks from sentiment reports (format: ape:{alloc}:{profile}:{type}:{symbol}:{contract})
     if data.startswith("ape:"):
         logger.info(f"Ape callback received: {data} from user {user_id}")
@@ -2970,6 +3068,367 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
+async def _handle_expand_section(query, section: str, config, user_id: int):
+    """
+    Handle expand button clicks from sentiment report sections.
+
+    Loads saved section data from temp files and posts buy buttons.
+
+    Sections: trending, stocks, indexes, top_picks
+    """
+    import tempfile
+    from pathlib import Path
+
+    # Check if user is treasury admin for trading
+    if not _is_treasury_admin(config, user_id):
+        await query.message.reply_text(
+            "⛔ *Admin Only*\n\nYou must be a treasury admin to view trading options.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    temp_dir = Path(tempfile.gettempdir())
+
+    try:
+        if section == "trending":
+            # Load trending tokens data
+            data_file = temp_dir / "jarvis_trending_tokens.json"
+            if not data_file.exists():
+                await query.message.reply_text(
+                    "📊 No trending data available. Please wait for the next report.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
+            with open(data_file) as f:
+                tokens = json.load(f)
+
+            await query.message.reply_text(
+                "🔥 *TRENDING TOKENS - Trading Options*\n\n"
+                "_Select allocation and risk profile:_",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+            # Post buy buttons for each token with JARVIS insights
+            for token in tokens[:5]:
+                contract_short = token["contract"][:10] if token["contract"] else ""
+                keyboard = _create_ape_keyboard(
+                    symbol=token["symbol"],
+                    asset_type="token",
+                    contract=token["contract"],
+                )
+
+                price_str = f"${token['price_usd']:.8f}" if token['price_usd'] < 0.01 else f"${token['price_usd']:.4f}"
+                change = token["change_24h"]
+                change_emoji = "🟢" if change > 0 else "🔴"
+
+                # JARVIS quick insight for microcaps based on price action & verdict
+                verdict = token.get("verdict", "NEUTRAL")
+                if verdict == "BULLISH" and change > 20:
+                    insight = "momentum strong. late entry risk but uptrend confirmed"
+                elif verdict == "BULLISH":
+                    insight = "signals say long. manage size accordingly"
+                elif verdict == "BEARISH":
+                    insight = "signals say caution. wait for better entry or skip"
+                elif change > 50:
+                    insight = "parabolic move. high risk. could moon or dump. gambling tier"
+                elif change > 20:
+                    insight = "solid pump. momentum play if you believe. nfa"
+                elif change > 5:
+                    insight = "starting to move. early if it continues"
+                elif change > 0:
+                    insight = "slight green. nothing exciting yet"
+                elif change > -10:
+                    insight = "small dip. might be entry. might be start of dump"
+                else:
+                    insight = "major correction. either dead or opportunity. dyor"
+
+                await query.message.reply_text(
+                    f"🛒 *{token['symbol']}*\n"
+                    f"Price: {price_str} {change_emoji} {change:+.1f}%\n"
+                    f"Signal: {verdict}\n"
+                    f"💭 _{insight}_",
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=keyboard
+                )
+                await asyncio.sleep(0.2)
+
+        elif section == "stocks":
+            # Load stocks data
+            data_file = temp_dir / "jarvis_stocks.json"
+            if not data_file.exists():
+                await query.message.reply_text(
+                    "📊 No stocks data available. Please wait for the next report.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
+            with open(data_file) as f:
+                stocks = json.load(f)
+
+            await query.message.reply_text(
+                "📈 *TOKENIZED STOCKS - Trading Options*\n\n"
+                "_Trade US equities on Solana:_",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+            # Post buy buttons for each stock
+            for stock in stocks[:5]:
+                keyboard = _create_ape_keyboard(
+                    symbol=stock["symbol"],
+                    asset_type="stock",
+                    contract=stock["mint"],
+                )
+
+                await query.message.reply_text(
+                    f"🛒 *{stock['symbol']}* ({stock['underlying']})\n"
+                    f"{stock['name']}",
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=keyboard
+                )
+                await asyncio.sleep(0.2)
+
+        elif section == "indexes":
+            # Load indexes data
+            data_file = temp_dir / "jarvis_indexes.json"
+            if not data_file.exists():
+                await query.message.reply_text(
+                    "📊 No indexes data available. Please wait for the next report.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
+            with open(data_file) as f:
+                indexes = json.load(f)
+
+            await query.message.reply_text(
+                "📊 *INDEXES & COMMODITIES - Trading Options*\n\n"
+                "_Diversified market exposure:_",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+            # Post buy buttons for each index
+            for index in indexes:
+                keyboard = _create_ape_keyboard(
+                    symbol=index["symbol"],
+                    asset_type="stock",  # Treated as stock for trading
+                    contract=index["mint"],
+                )
+
+                type_emoji = "📊" if index["type"] == "index" else "🥇" if index["type"] == "commodity" else "📄"
+
+                await query.message.reply_text(
+                    f"🛒 {type_emoji} *{index['symbol']}* ({index['underlying']})\n"
+                    f"{index['name']}",
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=keyboard
+                )
+                await asyncio.sleep(0.2)
+
+        elif section == "top_picks":
+            # Load top picks data
+            data_file = temp_dir / "jarvis_top_picks.json"
+            if not data_file.exists():
+                await query.message.reply_text(
+                    "🏆 No top picks data available. Please wait for the next report.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
+            with open(data_file) as f:
+                picks = json.load(f)
+
+            await query.message.reply_text(
+                "🏆 *JARVIS TOP 5 - Trading Options*\n\n"
+                "_Highest conviction picks across all assets:_",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+            # Post buy buttons for top 5 picks
+            for i, pick in enumerate(picks[:5]):
+                asset_type = "token" if pick["asset_class"] == "token" else "stock"
+                keyboard = _create_ape_keyboard(
+                    symbol=pick["symbol"],
+                    asset_type=asset_type,
+                    contract=pick["contract"],
+                )
+
+                # Conviction color
+                if pick["conviction"] >= 80:
+                    conv_emoji = "🟢"
+                elif pick["conviction"] >= 60:
+                    conv_emoji = "🟡"
+                else:
+                    conv_emoji = "🟠"
+
+                # Medal for top 3
+                medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"#{i+1}"
+
+                await query.message.reply_text(
+                    f"{medal} *{pick['symbol']}* ({pick['asset_class'].upper()}) {conv_emoji} {pick['conviction']}/100\n"
+                    f"📝 {pick['reasoning'][:60]}...",
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=keyboard
+                )
+                await asyncio.sleep(0.2)
+
+        elif section == "bluechip":
+            # Load blue-chip Solana tokens data
+            data_file = temp_dir / "jarvis_bluechip_tokens.json"
+            if not data_file.exists():
+                await query.message.reply_text(
+                    "💎 No blue-chip data available. Please wait for the next report.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
+            with open(data_file) as f:
+                tokens = json.load(f)
+
+            await query.message.reply_text(
+                "💎 *SOLANA BLUE CHIPS - Trading Options*\n\n"
+                "_High liquidity tokens with proven history:_",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+            # Post buy buttons for each blue-chip token with JARVIS insights
+            for token in tokens[:10]:
+                keyboard = _create_ape_keyboard(
+                    symbol=token["symbol"],
+                    asset_type="token",
+                    contract=token["contract"],
+                )
+
+                price_str = f"${token['price_usd']:.8f}" if token['price_usd'] < 0.01 else f"${token['price_usd']:.2f}"
+                change = token["change_24h"]
+                change_emoji = "🟢" if change > 0 else "🔴"
+
+                # Format market cap
+                mcap = token.get("mcap", 0)
+                if mcap >= 1_000_000_000:
+                    mcap_str = f"${mcap / 1_000_000_000:.1f}B"
+                elif mcap >= 1_000_000:
+                    mcap_str = f"${mcap / 1_000_000:.0f}M"
+                else:
+                    mcap_str = f"${mcap / 1_000:.0f}K"
+
+                category = token.get("category", "Other")
+                cat_emoji = {"L1": "⚡", "DeFi": "💱", "Infrastructure": "🛠️", "Meme": "🐕"}.get(category, "📊")
+
+                # JARVIS quick insight based on price action
+                if change > 10:
+                    insight = "momentum play. might be late but strength is strength"
+                elif change > 3:
+                    insight = "trending up. reasonable entry if you believe the thesis"
+                elif change > 0:
+                    insight = "steady. not exciting but not concerning either"
+                elif change > -3:
+                    insight = "slight dip. could be accumulation zone"
+                elif change > -10:
+                    insight = "pullback. dca territory if you're already in"
+                else:
+                    insight = "significant drop. either opportunity or warning. dyor"
+
+                await query.message.reply_text(
+                    f"🛒 {cat_emoji} *{token['symbol']}* ({category})\n"
+                    f"Price: {price_str} {change_emoji} {change:+.1f}%\n"
+                    f"MCap: {mcap_str}\n"
+                    f"💭 _{insight}_",
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=keyboard
+                )
+                await asyncio.sleep(0.2)
+
+        else:
+            await query.message.reply_text(
+                f"Unknown section: {section}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+    except Exception as e:
+        logger.error(f"Error handling expand section {section}: {e}")
+        await query.message.reply_text(
+            f"❌ Error loading {section} data: {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+
+def _create_ape_keyboard(symbol: str, asset_type: str, contract: str) -> InlineKeyboardMarkup:
+    """Create an APE trading keyboard for a given asset."""
+    contract_short = contract[:10] if contract else ""
+    type_char = "t" if asset_type == "token" else "s"
+
+    # Store full contract in lookup file for later retrieval
+    # (Telegram callback_data is limited to 64 bytes, so we truncate and lookup)
+    if contract and len(contract) > 10:
+        import tempfile
+        from pathlib import Path
+        lookup_file = Path(tempfile.gettempdir()) / "jarvis_contract_lookup.json"
+        try:
+            lookup = {}
+            if lookup_file.exists():
+                with open(lookup_file) as f:
+                    lookup = json.load(f)
+            lookup[contract_short] = contract
+            with open(lookup_file, "w") as f:
+                json.dump(lookup, f)
+            logger.debug(f"Saved contract lookup: {contract_short} -> {contract}")
+        except Exception as e:
+            logger.error(f"Failed to save contract lookup: {e}")
+
+    buttons = []
+
+    # Row 1: 5% allocation options
+    buttons.append([
+        InlineKeyboardButton(
+            text="5% 🛡️ Safe",
+            callback_data=f"ape:5:s:{type_char}:{symbol}:{contract_short}"[:64]
+        ),
+        InlineKeyboardButton(
+            text="5% ⚖️ Med",
+            callback_data=f"ape:5:m:{type_char}:{symbol}:{contract_short}"[:64]
+        ),
+        InlineKeyboardButton(
+            text="5% 🔥 Degen",
+            callback_data=f"ape:5:d:{type_char}:{symbol}:{contract_short}"[:64]
+        ),
+    ])
+
+    # Row 2: 2% allocation options
+    buttons.append([
+        InlineKeyboardButton(
+            text="2% 🛡️ Safe",
+            callback_data=f"ape:2:s:{type_char}:{symbol}:{contract_short}"[:64]
+        ),
+        InlineKeyboardButton(
+            text="2% ⚖️ Med",
+            callback_data=f"ape:2:m:{type_char}:{symbol}:{contract_short}"[:64]
+        ),
+        InlineKeyboardButton(
+            text="2% 🔥 Degen",
+            callback_data=f"ape:2:d:{type_char}:{symbol}:{contract_short}"[:64]
+        ),
+    ])
+
+    # Row 3: 1% allocation options
+    buttons.append([
+        InlineKeyboardButton(
+            text="1% 🛡️ Safe",
+            callback_data=f"ape:1:s:{type_char}:{symbol}:{contract_short}"[:64]
+        ),
+        InlineKeyboardButton(
+            text="1% ⚖️ Med",
+            callback_data=f"ape:1:m:{type_char}:{symbol}:{contract_short}"[:64]
+        ),
+        InlineKeyboardButton(
+            text="1% 🔥 Degen",
+            callback_data=f"ape:1:d:{type_char}:{symbol}:{contract_short}"[:64]
+        ),
+    ])
+
+    return InlineKeyboardMarkup(buttons)
+
+
 async def _execute_ape_trade(query, callback_data: str):
     """
     Execute an ape trade from sentiment report buttons.
@@ -2979,6 +3438,9 @@ async def _execute_ape_trade(query, callback_data: str):
 
     All trades have MANDATORY TP/SL based on risk profile.
     """
+    import tempfile
+    from pathlib import Path
+
     user_id = query.from_user.id
 
     parsed = parse_ape_callback(callback_data)
@@ -2992,8 +3454,23 @@ async def _execute_ape_trade(query, callback_data: str):
     symbol = parsed["symbol"]
     allocation_pct = parsed["allocation_percent"]
     risk_profile = parsed["risk_profile"]
-    contract = parsed.get("contract", "")
+    contract_short = parsed.get("contract", "")
     asset_type = parsed.get("asset_type", "token")
+
+    # Look up full contract from mapping (truncated for Telegram callback limit)
+    contract = contract_short
+    if contract_short and len(contract_short) <= 10:
+        lookup_file = Path(tempfile.gettempdir()) / "jarvis_contract_lookup.json"
+        try:
+            if lookup_file.exists():
+                with open(lookup_file) as f:
+                    lookup = json.load(f)
+                full_contract = lookup.get(contract_short, "")
+                if full_contract:
+                    contract = full_contract
+                    logger.info(f"Resolved contract: {contract_short} -> {contract}")
+        except Exception as e:
+            logger.error(f"Failed to lookup contract: {e}")
 
     if not contract:
         await query.message.reply_text(
@@ -3841,22 +4318,49 @@ async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE,
             user = admin.get_user(user_id)
             warning_count = user.warning_count if user else 0
             
-            if confidence >= 0.8 or warning_count >= 2:
+            if confidence >= 0.8 or warning_count >= 3:
                 # Ban for high confidence spam or repeat offenders
                 await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
                 admin.ban_user(user_id, reason)
-                
+
                 response = admin.get_random_response("scam_deleted" if "keyword" in reason else "spam_deleted")
                 response += admin.get_random_response("mistake_footer")
-                
+
                 await context.bot.send_message(chat_id=chat_id, text=response)
                 logger.warning(f"SPAM BANNED: user={user_id} @{username} conf={confidence:.2f} reason={reason}")
+            elif confidence >= 0.65 or warning_count >= 2:
+                # Mute for medium-high confidence or 2 warnings
+                from datetime import datetime, timedelta, timezone
+                mute_hours = 2 if warning_count < 2 else 6
+                until_date = datetime.now(timezone.utc) + timedelta(hours=mute_hours)
+                try:
+                    from telegram import ChatPermissions
+                    await context.bot.restrict_chat_member(
+                        chat_id=chat_id,
+                        user_id=user_id,
+                        permissions=ChatPermissions(can_send_messages=False),
+                        until_date=until_date
+                    )
+                    admin.mute_user(user_id, reason, mute_hours)
+                    response = admin.get_random_response("user_muted", username=username, hours=mute_hours)
+                    response += admin.get_random_response("mistake_footer")
+                    await context.bot.send_message(chat_id=chat_id, text=response)
+                    logger.warning(f"SPAM MUTED: user={user_id} @{username} hours={mute_hours} conf={confidence:.2f}")
+                except Exception as mute_err:
+                    logger.error(f"Failed to mute user: {mute_err}")
+                    # Fall back to warning
+                    new_warnings = admin.warn_user(user_id)
+                    response = admin.get_random_response("user_warned", username=username)
+                    await context.bot.send_message(chat_id=chat_id, text=response)
             else:
                 # Warn for lower confidence
                 new_warnings = admin.warn_user(user_id)
-                response = admin.get_random_response("user_warned", username=username)
+                if "rate_limited" in reason:
+                    response = admin.get_random_response("rate_limited", username=username)
+                else:
+                    response = admin.get_random_response("user_warned", username=username)
                 response += admin.get_random_response("mistake_footer")
-                
+
                 await context.bot.send_message(chat_id=chat_id, text=response)
                 logger.warning(f"SPAM WARNED: user={user_id} @{username} warnings={new_warnings} conf={confidence:.2f}")
             
@@ -3946,7 +4450,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id if update.effective_chat else 0
 
-    # Admin coding request detection - queue for console
+    # Admin coding request detection - execute via Claude CLI
     if is_admin:
         try:
             from core.telegram_console_bridge import get_console_bridge
@@ -3957,15 +4461,48 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Check if this is a coding/dev request
             if bridge.is_coding_request(text):
-                request_id = bridge.queue_request(user_id, username, text)
-                logger.info(f"Queued coding request: {request_id}")
-                await update.message.reply_text(
-                    f"got it. queued for console: `{request_id}`\n\nwill process and report back.",
-                    parse_mode="Markdown"
+                from tg_bot.services.claude_cli_handler import get_claude_cli_handler
+                cli_handler = get_claude_cli_handler()
+                
+                # Send confirmation
+                confirm_msg = await update.message.reply_text(
+                    "🔄 <b>Processing coding request...</b>\n\n"
+                    f"<i>{text[:200]}{'...' if len(text) > 200 else ''}</i>",
+                    parse_mode=ParseMode.HTML
                 )
+                
+                # Execute via Claude CLI
+                async def send_status(msg: str):
+                    try:
+                        await confirm_msg.edit_text(msg, parse_mode=ParseMode.HTML)
+                    except:
+                        pass
+                
+                success, summary, output = await cli_handler.execute(
+                    text, user_id, send_update=send_status
+                )
+                
+                # Send result back to Telegram
+                status_emoji = "✅" if success else "⚠️"
+                result_msg = (
+                    f"{status_emoji} <b>Coding Task Complete</b>\n\n"
+                    f"<b>Summary:</b>\n{summary}\n\n"
+                    f"<b>Details:</b>\n<pre>{output[:2000]}</pre>"
+                )
+                
+                await update.message.reply_text(result_msg, parse_mode=ParseMode.HTML)
+                
+                # Store response in memory
+                bridge.memory.add_message(user_id, "jarvis", "assistant", summary, chat_id)
+                
+                logger.info(f"Completed coding request for {user_id}: {success}")
                 return
         except Exception as e:
-            logger.error(f"Console bridge error: {e}")
+            logger.error(f"Claude CLI error: {e}")
+            await update.message.reply_text(
+                f"⚠️ Coding request failed: {str(e)[:200]}",
+                parse_mode=ParseMode.HTML
+            )
 
     # Skip cooldown for admin
     if not is_admin:
@@ -4078,6 +4615,10 @@ def main():
     app.add_handler(CommandHandler("wallet", wallet))
     app.add_handler(CommandHandler("logs", logs))
     app.add_handler(CommandHandler("metrics", metrics))
+    app.add_handler(CommandHandler("clistats", clistats))
+    app.add_handler(CommandHandler("stats", clistats))  # Alias for /clistats
+    app.add_handler(CommandHandler("queue", cliqueue))
+    app.add_handler(CommandHandler("q", cliqueue))  # Alias for /queue
     app.add_handler(CommandHandler("uptime", uptime))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("code", code))

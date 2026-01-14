@@ -1,16 +1,40 @@
-"""Sentiment-triggered trading with @xinsanityo signals."""
+"""
+Sentiment Trading Pipeline - Multi-source signal aggregation and evaluation.
+
+Integrates:
+- Social signals from trusted handles (@xinsanityo, etc.)
+- News events from CryptoPanic
+- Social sentiment from LunarCrush
+- Alpha signals from on-chain detection
+- Automated signal processing pipeline
+"""
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[1]
 SIGNALS_DIR = ROOT / "data" / "trader" / "sentiment_signals"
 CONFIG_PATH = ROOT / "data" / "trader" / "sentiment_config.json"
+PIPELINE_STATE_PATH = ROOT / "data" / "trader" / "pipeline_state.json"
+
+
+class SignalSource(Enum):
+    """Sources of trading signals."""
+    SOCIAL = "social"  # Twitter/X accounts
+    NEWS = "news"  # CryptoPanic, news feeds
+    ONCHAIN = "onchain"  # Alpha detector, whale moves
+    SENTIMENT = "sentiment"  # LunarCrush social sentiment
+    MANUAL = "manual"  # Manual entry
 
 
 @dataclass
@@ -46,10 +70,10 @@ class SentimentTradeConfig:
             self.trusted_handles = ["xinsanityo"]
 
 
-@dataclass 
+@dataclass
 class SentimentSignal:
     """A trading signal from social sentiment."""
-    
+
     handle: str
     token_symbol: str
     token_address: Optional[str]
@@ -58,9 +82,23 @@ class SentimentSignal:
     source_url: Optional[str]
     timestamp: float
     notes: str = ""
-    
+    source: SignalSource = SignalSource.SOCIAL
+    confidence: float = 50.0  # 0-100
+    social_score: float = 0.0  # LunarCrush score
+    news_sentiment: str = ""  # Aggregated news sentiment
+    corroborating_signals: int = 0  # Number of confirming signals
+
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["source"] = self.source.value
+        return d
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SentimentSignal":
+        """Create signal from dict, handling enum conversion."""
+        if "source" in data and isinstance(data["source"], str):
+            data["source"] = SignalSource(data["source"])
+        return cls(**data)
 
 
 def get_default_config() -> SentimentTradeConfig:
@@ -96,19 +134,23 @@ def load_recent_signals(days: int = 7) -> List[SentimentSignal]:
     """Load recent sentiment signals."""
     SIGNALS_DIR.mkdir(parents=True, exist_ok=True)
     signals = []
-    
+
     cutoff = time.time() - (days * 86400)
-    
+
     for path in sorted(SIGNALS_DIR.glob("signals_*.jsonl")):
         try:
             with open(path) as f:
                 for line in f:
                     data = json.loads(line.strip())
                     if data.get("timestamp", 0) >= cutoff:
-                        signals.append(SentimentSignal(**data))
-        except (json.JSONDecodeError, TypeError):
+                        # Handle old format without source field
+                        if "source" not in data:
+                            data["source"] = SignalSource.SOCIAL
+                        signals.append(SentimentSignal.from_dict(data))
+        except (json.JSONDecodeError, TypeError, KeyError) as e:
+            logger.debug(f"Error loading signal: {e}")
             continue
-    
+
     return sorted(signals, key=lambda s: s.timestamp, reverse=True)
 
 
@@ -233,6 +275,376 @@ def format_trade_plan(
     
     lines.append("=" * 50)
     return "\n".join(lines)
+
+
+class SentimentPipeline:
+    """
+    Automated sentiment trading pipeline.
+
+    Aggregates signals from:
+    - Social accounts (Twitter/X)
+    - News feeds (CryptoPanic)
+    - Social sentiment (LunarCrush)
+    - On-chain alpha (AlphaDetector)
+
+    Evaluates signals with multi-source confirmation.
+    """
+
+    def __init__(self, config: Optional[SentimentTradeConfig] = None):
+        self.config = config or get_default_config()
+        self._news_detector = None
+        self._alpha_detector = None
+        self._lunarcrush = None
+        self._cryptopanic = None
+        self._telegram = None
+        self.pending_signals: List[SentimentSignal] = []
+        self.last_scan = None
+
+    def _get_news_detector(self):
+        """Lazy load news detector."""
+        if self._news_detector is None:
+            try:
+                from core.autonomy.news_detector import get_news_detector
+                self._news_detector = get_news_detector()
+            except Exception as e:
+                logger.debug(f"News detector not available: {e}")
+        return self._news_detector
+
+    def _get_alpha_detector(self):
+        """Lazy load alpha detector."""
+        if self._alpha_detector is None:
+            try:
+                from core.autonomy.alpha_detector import get_alpha_detector
+                self._alpha_detector = get_alpha_detector()
+            except Exception as e:
+                logger.debug(f"Alpha detector not available: {e}")
+        return self._alpha_detector
+
+    def _get_lunarcrush(self):
+        """Lazy load LunarCrush API."""
+        if self._lunarcrush is None:
+            try:
+                from core.data.lunarcrush_api import get_lunarcrush
+                self._lunarcrush = get_lunarcrush()
+            except Exception as e:
+                logger.debug(f"LunarCrush not available: {e}")
+        return self._lunarcrush
+
+    def _get_cryptopanic(self):
+        """Lazy load CryptoPanic API."""
+        if self._cryptopanic is None:
+            try:
+                from core.data.cryptopanic_api import get_cryptopanic
+                self._cryptopanic = get_cryptopanic()
+            except Exception as e:
+                logger.debug(f"CryptoPanic not available: {e}")
+        return self._cryptopanic
+
+    def _get_telegram(self):
+        """Lazy load Telegram notifier."""
+        if self._telegram is None:
+            try:
+                from tg_bot.services.notifier import get_notifier
+                self._telegram = get_notifier()
+            except Exception:
+                pass
+        return self._telegram
+
+    async def scan_all_sources(self) -> List[SentimentSignal]:
+        """Scan all sources for trading signals."""
+        signals = []
+
+        # Scan news for token mentions
+        news_signals = await self._scan_news_signals()
+        signals.extend(news_signals)
+
+        # Scan alpha detector
+        alpha_signals = await self._scan_alpha_signals()
+        signals.extend(alpha_signals)
+
+        # Scan social sentiment for spikes
+        sentiment_signals = await self._scan_sentiment_spikes()
+        signals.extend(sentiment_signals)
+
+        # Enrich signals with cross-source confirmation
+        enriched = await self._enrich_signals(signals)
+
+        self.pending_signals = enriched
+        self.last_scan = time.time()
+
+        logger.info(f"Pipeline scan found {len(enriched)} signals")
+        return enriched
+
+    async def _scan_news_signals(self) -> List[SentimentSignal]:
+        """Convert news events to trading signals."""
+        signals = []
+        news_detector = self._get_news_detector()
+
+        if not news_detector:
+            return signals
+
+        try:
+            await news_detector.scan_news()
+
+            for event in news_detector.get_high_priority_events():
+                for token in event.tokens:
+                    signal = SentimentSignal(
+                        handle="news_detector",
+                        token_symbol=token,
+                        token_address=None,
+                        signal_type=event.sentiment if event.sentiment != "neutral" else "watch",
+                        conviction="high" if event.priority.value >= 2 else "medium",
+                        source_url=event.url,
+                        timestamp=time.time(),
+                        notes=event.title[:200],
+                        source=SignalSource.NEWS,
+                        confidence=event.confidence,
+                        news_sentiment=event.sentiment,
+                    )
+                    signals.append(signal)
+
+        except Exception as e:
+            logger.error(f"News signal scan error: {e}")
+
+        return signals
+
+    async def _scan_alpha_signals(self) -> List[SentimentSignal]:
+        """Convert alpha detections to trading signals."""
+        signals = []
+        alpha_detector = self._get_alpha_detector()
+
+        if not alpha_detector:
+            return signals
+
+        try:
+            alpha_signals = await alpha_detector.scan_for_alpha()
+
+            for alpha in alpha_signals:
+                if alpha.strength >= 60:
+                    signal = SentimentSignal(
+                        handle="alpha_detector",
+                        token_symbol=alpha.token,
+                        token_address=alpha.data.get("address"),
+                        signal_type="bullish" if alpha.strength > 70 else "watch",
+                        conviction="high" if alpha.strength > 80 else "medium",
+                        source_url=None,
+                        timestamp=time.time(),
+                        notes=alpha.description,
+                        source=SignalSource.ONCHAIN,
+                        confidence=alpha.strength,
+                    )
+                    signals.append(signal)
+
+        except Exception as e:
+            logger.error(f"Alpha signal scan error: {e}")
+
+        return signals
+
+    async def _scan_sentiment_spikes(self) -> List[SentimentSignal]:
+        """Detect social sentiment spikes via LunarCrush."""
+        signals = []
+        lunarcrush = self._get_lunarcrush()
+
+        if not lunarcrush:
+            return signals
+
+        try:
+            trending = await lunarcrush.get_trending_coins(20)
+
+            for coin in trending:
+                galaxy_score = coin.get("galaxy_score", 0)
+                sentiment = coin.get("sentiment", 50)
+
+                # High galaxy score with strong sentiment = signal
+                if galaxy_score > 85 or (galaxy_score > 70 and abs(sentiment - 50) > 20):
+                    signal_type = "bullish" if sentiment > 60 else "bearish" if sentiment < 40 else "watch"
+
+                    signal = SentimentSignal(
+                        handle="lunarcrush",
+                        token_symbol=coin.get("symbol", ""),
+                        token_address=None,
+                        signal_type=signal_type,
+                        conviction="high" if galaxy_score > 90 else "medium",
+                        source_url=None,
+                        timestamp=time.time(),
+                        notes=f"Galaxy: {galaxy_score}, Sentiment: {sentiment}",
+                        source=SignalSource.SENTIMENT,
+                        confidence=min(100, galaxy_score),
+                        social_score=galaxy_score,
+                    )
+                    signals.append(signal)
+
+        except Exception as e:
+            logger.error(f"Sentiment spike scan error: {e}")
+
+        return signals
+
+    async def _enrich_signals(self, signals: List[SentimentSignal]) -> List[SentimentSignal]:
+        """Enrich signals with cross-source confirmation."""
+        # Group signals by token
+        by_token: Dict[str, List[SentimentSignal]] = {}
+        for signal in signals:
+            token = signal.token_symbol.upper()
+            if token not in by_token:
+                by_token[token] = []
+            by_token[token].append(signal)
+
+        enriched = []
+        for token, token_signals in by_token.items():
+            # Find corroborating signals from different sources
+            sources = set(s.source for s in token_signals)
+            corroborating = len(sources)
+
+            # Get LunarCrush data for the token
+            lunarcrush = self._get_lunarcrush()
+            social_score = 0.0
+            if lunarcrush:
+                try:
+                    coin_data = await lunarcrush.get_coin_sentiment(token)
+                    if coin_data:
+                        social_score = coin_data.get("galaxy_score", 0)
+                except Exception:
+                    pass
+
+            # Get news sentiment
+            cryptopanic = self._get_cryptopanic()
+            news_sentiment = ""
+            if cryptopanic:
+                try:
+                    news = await cryptopanic.get_news(currencies=token, limit=5)
+                    if news:
+                        bullish = sum(1 for n in news if n.get("sentiment") == "bullish")
+                        bearish = sum(1 for n in news if n.get("sentiment") == "bearish")
+                        if bullish > bearish:
+                            news_sentiment = "bullish"
+                        elif bearish > bullish:
+                            news_sentiment = "bearish"
+                        else:
+                            news_sentiment = "mixed"
+                except Exception:
+                    pass
+
+            # Update each signal with enriched data
+            for signal in token_signals:
+                signal.corroborating_signals = corroborating
+                if social_score and not signal.social_score:
+                    signal.social_score = social_score
+                if news_sentiment and not signal.news_sentiment:
+                    signal.news_sentiment = news_sentiment
+
+                # Boost confidence for multi-source confirmation
+                if corroborating > 1:
+                    signal.confidence = min(100, signal.confidence + (corroborating - 1) * 10)
+
+                enriched.append(signal)
+
+        return enriched
+
+    async def evaluate_and_alert(self) -> List[Dict[str, Any]]:
+        """Evaluate pending signals and send alerts for tradeable ones."""
+        alerts = []
+
+        for signal in self.pending_signals:
+            evaluation = evaluate_signal_for_trade(signal, self.config)
+
+            if evaluation["should_trade"] or (signal.confidence >= 80 and signal.corroborating_signals > 1):
+                alert = {
+                    "signal": signal.to_dict(),
+                    "evaluation": evaluation,
+                    "action": "TRADE" if evaluation["should_trade"] else "WATCH",
+                }
+                alerts.append(alert)
+
+                # Log the signal
+                log_signal(signal)
+
+                # Send Telegram alert
+                await self._send_alert(signal, evaluation)
+
+        return alerts
+
+    async def _send_alert(self, signal: SentimentSignal, evaluation: Dict[str, Any]):
+        """Send alert to Telegram."""
+        telegram = self._get_telegram()
+        if not telegram:
+            return
+
+        try:
+            action = "🚀 TRADE SIGNAL" if evaluation["should_trade"] else "👀 WATCH"
+            sentiment_emoji = "🟢" if signal.signal_type == "bullish" else "🔴" if signal.signal_type == "bearish" else "⚪"
+
+            msg = (
+                f"{action}\n\n"
+                f"Token: ${signal.token_symbol}\n"
+                f"Signal: {sentiment_emoji} {signal.signal_type.upper()}\n"
+                f"Conviction: {signal.conviction.upper()}\n"
+                f"Confidence: {signal.confidence:.0f}%\n"
+                f"Source: {signal.source.value}\n"
+            )
+
+            if signal.corroborating_signals > 1:
+                msg += f"Corroborating sources: {signal.corroborating_signals}\n"
+
+            if signal.social_score:
+                msg += f"Social Score: {signal.social_score:.0f}\n"
+
+            if signal.news_sentiment:
+                msg += f"News: {signal.news_sentiment}\n"
+
+            if evaluation["should_trade"]:
+                msg += (
+                    f"\nTrade Plan:\n"
+                    f"Position: {evaluation['position_size_pct']*100:.0f}%\n"
+                    f"Stop: {evaluation['stop_loss_pct']*100:.0f}%\n"
+                    f"Target: {evaluation['take_profit_pct']*100:.0f}%\n"
+                )
+
+            if signal.notes:
+                msg += f"\n{signal.notes[:100]}"
+
+            await telegram.send_message(msg)
+
+        except Exception as e:
+            logger.error(f"Alert send error: {e}")
+
+    def get_summary(self) -> Dict[str, Any]:
+        """Get pipeline summary."""
+        if not self.pending_signals:
+            return {"status": "no_signals", "last_scan": self.last_scan}
+
+        by_source = {}
+        by_type = {}
+        tokens = set()
+
+        for signal in self.pending_signals:
+            source = signal.source.value
+            by_source[source] = by_source.get(source, 0) + 1
+            by_type[signal.signal_type] = by_type.get(signal.signal_type, 0) + 1
+            tokens.add(signal.token_symbol)
+
+        tradeable = [s for s in self.pending_signals if s.confidence >= 70 and s.signal_type == "bullish"]
+
+        return {
+            "total_signals": len(self.pending_signals),
+            "by_source": by_source,
+            "by_type": by_type,
+            "unique_tokens": len(tokens),
+            "tradeable_count": len(tradeable),
+            "top_tokens": list(tokens)[:10],
+            "last_scan": self.last_scan,
+        }
+
+
+# Singleton pipeline
+_pipeline: Optional[SentimentPipeline] = None
+
+
+def get_sentiment_pipeline() -> SentimentPipeline:
+    """Get singleton sentiment pipeline."""
+    global _pipeline
+    if _pipeline is None:
+        _pipeline = SentimentPipeline()
+    return _pipeline
 
 
 # Initialize default config

@@ -321,6 +321,26 @@ def setup_default_commands(registry: CommandRegistry):
         examples=["/status", "/ping"]
     ))
 
+    registry.register(Command(
+        name="stats",
+        description="Show CLI execution stats (admin only)",
+        aliases=["metrics", "perf"],
+        category=CommandCategory.ADMIN,
+        admin_only=True,
+        usage="/stats",
+        examples=["/stats", "/metrics"]
+    ))
+
+    registry.register(Command(
+        name="queue",
+        description="Show CLI command queue status (admin only)",
+        aliases=["q", "pending"],
+        category=CommandCategory.ADMIN,
+        admin_only=True,
+        usage="/queue",
+        examples=["/queue", "/q"]
+    ))
+
     logger.info(f"Registered {len(registry.get_all_commands())} default commands")
 
 

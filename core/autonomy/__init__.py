@@ -15,6 +15,7 @@ from core.autonomy.voice_tuner import VoiceTuner, get_voice_tuner
 from core.autonomy.thread_generator import ThreadGenerator, get_thread_generator
 from core.autonomy.quote_strategy import QuoteStrategy, get_quote_strategy
 from core.autonomy.analytics import PerformanceAnalytics, get_analytics
+from core.autonomy.news_detector import NewsEventDetector, get_news_detector
 
 __all__ = [
     "SelfLearning", "get_self_learning",
@@ -29,4 +30,5 @@ __all__ = [
     "ThreadGenerator", "get_thread_generator",
     "QuoteStrategy", "get_quote_strategy",
     "PerformanceAnalytics", "get_analytics",
+    "NewsEventDetector", "get_news_detector",
 ]

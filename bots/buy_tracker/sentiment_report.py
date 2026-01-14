@@ -39,6 +39,7 @@ from core.tokenized_equities_universe import (
 # Import enhanced market data for trending tokens and conviction picks
 from core.enhanced_market_data import (
     fetch_trending_solana_tokens,
+    fetch_high_liquidity_tokens,
     fetch_backed_stocks,
     fetch_backed_indexes,
     get_grok_conviction_picks,
@@ -46,6 +47,7 @@ from core.enhanced_market_data import (
     BackedAsset,
     ConvictionPick,
     BACKED_XSTOCKS,
+    HIGH_LIQUIDITY_SOLANA_TOKENS,
 )
 
 logger = logging.getLogger(__name__)
@@ -1963,13 +1965,16 @@ Be specific about price targets and key levels to watch."""
         # Section 1: Trending Solana Tokens (with expand button)
         await self._post_trending_tokens_section()
 
-        # Section 2: Tokenized Stocks (with expand button)
+        # Section 2: Solana Blue Chips - High liquidity tokens (with expand button)
+        await self._post_bluechip_tokens_section()
+
+        # Section 3: Tokenized Stocks (with expand button)
         await self._post_xstocks_section()
 
-        # Section 3: Indexes, Commodities & Bonds (with expand button)
+        # Section 4: Indexes, Commodities & Bonds (with expand button)
         await self._post_indexes_section()
 
-        # Section 4: TOP 10 BEST TRADES across all classes (with expand button)
+        # Section 5: TOP 10 BEST TRADES across all classes (with expand button)
         await self._post_grok_conviction_picks(tokens)
 
         # Final: Treasury status breakdown
@@ -2146,7 +2151,7 @@ Be specific about price targets and key levels to watch."""
         return InlineKeyboardMarkup(buttons)
 
     async def _post_xstocks_section(self):
-        """Post tokenized stocks section with JARVIS analysis and buy buttons."""
+        """Post tokenized stocks section with JARVIS analysis and expand button."""
         try:
             # Get stocks from BACKED_XSTOCKS registry (verified mint addresses)
             stocks = [
@@ -2159,7 +2164,7 @@ Be specific about price targets and key levels to watch."""
                 logger.debug("No stocks available")
                 return
 
-            # Featured stocks for buy buttons (top tech + defensive)
+            # Featured stocks (top tech + defensive)
             featured = ["AAPLx", "NVDAx", "TSLAx", "MSFTx", "GOOGx"]
 
             # Build stock list (show top 15)
@@ -2178,61 +2183,47 @@ Be specific about price targets and key levels to watch."""
 📊 <b>TOKENIZED US STOCKS</b>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🤖 <b>JARVIS Analysis:</b>
-Trade equities 24/7 on Solana blockchain
-Backed by real shares via xStocks.fi
-Lower fees than traditional brokers
+🤖 <b>JARVIS Sentiment:</b> 📈 BULLISH ON EQUITIES
+Trade US stocks 24/7 on Solana blockchain
+Real shares backing via xStocks.fi protocol
+Lower fees vs traditional brokers
 
 <b>Available ({len(stocks)} stocks):</b>
 {stocks_text}
 """
+            # Save stocks data for expand handler
+            import tempfile
+            stocks_data = []
+            for symbol in featured:
+                if symbol in BACKED_XSTOCKS:
+                    info = BACKED_XSTOCKS[symbol]
+                    stocks_data.append({
+                        "symbol": symbol,
+                        "name": info["name"],
+                        "underlying": info["underlying"],
+                        "mint": info["mint"],
+                    })
+            stocks_file = Path(tempfile.gettempdir()) / "jarvis_stocks.json"
+            with open(stocks_file, "w") as f:
+                json.dump(stocks_data, f)
+
+            # Create expand button
+            expand_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📊 Show Trading Options", callback_data="expand:stocks")]
+            ])
+
             async with self._session.post(
                 f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
                 json={
                     "chat_id": self.chat_id,
                     "text": section_msg,
                     "parse_mode": "HTML",
+                    "reply_markup": expand_keyboard.to_dict(),
                 }
             ) as resp:
                 result = await resp.json()
                 if not result.get("ok"):
                     logger.debug(f"Stocks section error: {result}")
-
-            await asyncio.sleep(0.3)
-
-            # Post buy buttons for featured stocks
-            for symbol in featured:
-                if symbol not in BACKED_XSTOCKS:
-                    continue
-                info = BACKED_XSTOCKS[symbol]
-                try:
-                    keyboard = create_ape_buttons_with_tp_sl(
-                        symbol=symbol,
-                        asset_type="stock",
-                        contract_address=info["mint"],
-                        entry_price=0.0,
-                        grade="",
-                    )
-
-                    stock_msg = f"🛒 <b>{symbol}</b> ({info['underlying']}) - {info['name']}"
-
-                    async with self._session.post(
-                        f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
-                        json={
-                            "chat_id": self.chat_id,
-                            "text": stock_msg,
-                            "parse_mode": "HTML",
-                            "reply_markup": keyboard.to_dict(),
-                        }
-                    ) as resp:
-                        result = await resp.json()
-                        if not result.get("ok"):
-                            logger.debug(f"Stock buy button error: {result}")
-
-                    await asyncio.sleep(0.2)
-
-                except Exception as e:
-                    logger.debug(f"Stock buy button error for {symbol}: {e}")
 
         except Exception as e:
             logger.error(f"Failed to post XStocks section: {e}")
@@ -2303,65 +2294,169 @@ Market Mood: {mood}
 
 {tokens_text}
 """
+            # Save trending data for expand handler
+            import tempfile
+            trending_data = []
+            for token in trending_tokens[:10]:
+                trending_data.append({
+                    "symbol": token.symbol,
+                    "contract": token.contract or "",
+                    "price_usd": token.price_usd,
+                    "change_24h": token.price_change_24h,
+                })
+            trending_file = Path(tempfile.gettempdir()) / "jarvis_trending_tokens.json"
+            with open(trending_file, "w") as f:
+                json.dump(trending_data, f)
+
+            # Create expand button
+            expand_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📈 Show Trading Options", callback_data="expand:trending")]
+            ])
+
             async with self._session.post(
                 f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
                 json={
                     "chat_id": self.chat_id,
                     "text": section_msg,
                     "parse_mode": "HTML",
+                    "reply_markup": expand_keyboard.to_dict(),
                 }
             ) as resp:
                 result = await resp.json()
                 if not result.get("ok"):
                     logger.debug(f"Trending section error: {result}")
 
-            await asyncio.sleep(0.3)
-
-            # Post buy buttons for top 5 trending tokens
-            for token in trending_tokens[:5]:
-                try:
-                    keyboard = create_ape_buttons_with_tp_sl(
-                        symbol=token.symbol,
-                        asset_type="token",
-                        contract_address=token.contract or "",
-                        entry_price=token.price_usd,
-                        grade="",
-                    )
-
-                    # Format price
-                    if token.price_usd >= 1:
-                        price_str = f"${token.price_usd:.2f}"
-                    elif token.price_usd >= 0.01:
-                        price_str = f"${token.price_usd:.4f}"
-                    else:
-                        price_str = f"${token.price_usd:.8f}"
-
-                    change_emoji = "🟢" if token.price_change_24h > 0 else "🔴"
-                    token_msg = f"🛒 <b>{token.symbol}</b> | {price_str} {change_emoji} {token.price_change_24h:+.1f}%"
-
-                    async with self._session.post(
-                        f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
-                        json={
-                            "chat_id": self.chat_id,
-                            "text": token_msg,
-                            "parse_mode": "HTML",
-                            "reply_markup": keyboard.to_dict(),
-                        }
-                    ) as resp:
-                        result = await resp.json()
-                        if not result.get("ok"):
-                            logger.debug(f"Token buy button error: {result}")
-
-                    await asyncio.sleep(0.2)
-
-                except Exception as e:
-                    logger.debug(f"Token buy button error for {token.symbol}: {e}")
-
         except Exception as e:
             logger.error(f"Failed to post trending tokens section: {e}")
 
+    async def _post_bluechip_tokens_section(self):
+        """Post high-liquidity Solana blue-chip tokens with buy buttons."""
+        try:
+            # Fetch blue-chip tokens with live data
+            bluechip_tokens, warnings = await fetch_high_liquidity_tokens()
+
+            if not bluechip_tokens:
+                logger.debug("No blue-chip tokens available")
+                return
+
+            # Calculate overall sentiment
+            green_count = sum(1 for t in bluechip_tokens if t.price_change_24h > 0)
+            avg_change = sum(t.price_change_24h for t in bluechip_tokens) / len(bluechip_tokens)
+
+            if avg_change > 5:
+                ecosystem_health = "🟢 STRONG"
+                health_desc = "Solana ecosystem showing strength"
+            elif avg_change > 0:
+                ecosystem_health = "🟢 HEALTHY"
+                health_desc = "Stable growth across established projects"
+            elif avg_change > -5:
+                ecosystem_health = "⚖️ CONSOLIDATING"
+                health_desc = "Blue chips holding ground"
+            else:
+                ecosystem_health = "🔴 UNDER PRESSURE"
+                health_desc = "Consider accumulating on weakness"
+
+            # Group by category
+            categories = {}
+            for token in bluechip_tokens:
+                info = HIGH_LIQUIDITY_SOLANA_TOKENS.get(token.symbol, {})
+                cat = info.get("category", "Other")
+                if cat not in categories:
+                    categories[cat] = []
+                categories[cat].append(token)
+
+            # Build categorized token list
+            token_lines = []
+            category_emojis = {
+                "L1": "⚡",
+                "DeFi": "💱",
+                "Infrastructure": "🛠️",
+                "Meme": "🐕",
+                "Other": "📊"
+            }
+
+            for cat in ["L1", "DeFi", "Infrastructure", "Meme"]:
+                if cat in categories:
+                    cat_emoji = category_emojis.get(cat, "📊")
+                    token_lines.append(f"\n{cat_emoji} <b>{cat}</b>")
+                    for token in categories[cat]:
+                        # Format price
+                        if token.price_usd >= 1:
+                            price_str = f"${token.price_usd:.2f}"
+                        elif token.price_usd >= 0.01:
+                            price_str = f"${token.price_usd:.4f}"
+                        else:
+                            price_str = f"${token.price_usd:.8f}"
+
+                        # Format market cap
+                        if token.mcap >= 1_000_000_000:
+                            mcap_str = f"${token.mcap / 1_000_000_000:.1f}B"
+                        elif token.mcap >= 1_000_000:
+                            mcap_str = f"${token.mcap / 1_000_000:.0f}M"
+                        else:
+                            mcap_str = f"${token.mcap / 1_000:.0f}K"
+
+                        change_emoji = "🟢" if token.price_change_24h > 0 else "🔴"
+                        token_lines.append(
+                            f"  • {token.symbol}: {price_str} {change_emoji} {token.price_change_24h:+.1f}% | {mcap_str}"
+                        )
+
+            tokens_text = "\n".join(token_lines)
+
+            # Section message with JARVIS analysis
+            section_msg = f"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💎 <b>SOLANA BLUE CHIPS</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🤖 <b>JARVIS Analysis:</b>
+Ecosystem Health: {ecosystem_health}
+{health_desc}
+📊 {green_count}/{len(bluechip_tokens)} positive | Avg: {avg_change:+.1f}%
+
+<i>High liquidity tokens with >$200M mcap & >1yr history</i>
+{tokens_text}
+"""
+            # Save blue-chip data for expand handler
+            import tempfile
+            bluechip_data = []
+            for token in bluechip_tokens:
+                info = HIGH_LIQUIDITY_SOLANA_TOKENS.get(token.symbol, {})
+                bluechip_data.append({
+                    "symbol": token.symbol,
+                    "contract": token.contract or "",
+                    "price_usd": token.price_usd,
+                    "change_24h": token.price_change_24h,
+                    "mcap": token.mcap,
+                    "category": info.get("category", "Other"),
+                })
+            bluechip_file = Path(tempfile.gettempdir()) / "jarvis_bluechip_tokens.json"
+            with open(bluechip_file, "w") as f:
+                json.dump(bluechip_data, f)
+
+            # Create expand button
+            expand_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("💎 Show Trading Options", callback_data="expand:bluechip")]
+            ])
+
+            async with self._session.post(
+                f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                json={
+                    "chat_id": self.chat_id,
+                    "text": section_msg,
+                    "parse_mode": "HTML",
+                    "reply_markup": expand_keyboard.to_dict(),
+                }
+            ) as resp:
+                result = await resp.json()
+                if not result.get("ok"):
+                    logger.debug(f"Blue-chip section error: {result}")
+
+        except Exception as e:
+            logger.error(f"Failed to post blue-chip tokens section: {e}")
+
     async def _post_indexes_section(self):
-        """Post indexes, commodities & bonds with JARVIS analysis and buy buttons."""
+        """Post indexes, commodities & bonds with JARVIS analysis and expand button."""
         try:
             # Get indexes from BACKED_XSTOCKS registry
             indexes = [
@@ -2391,74 +2486,52 @@ Market Mood: {mood}
 
             indexes_text = "\n".join(index_lines)
 
-            # Section message with JARVIS analysis
+            # Section message with JARVIS sentiment
             section_msg = f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📈 <b>INDEXES & COMMODITIES</b>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🤖 <b>JARVIS Analysis:</b>
-Diversified exposure to markets
+🤖 <b>JARVIS Sentiment:</b> ⚖️ BALANCED
+Diversified exposure to global markets
 Lower volatility than individual stocks
-Ideal for portfolio balance
+Ideal for portfolio hedging & balance
 
 <b>Available:</b>
 {indexes_text}
 """
+            # Save indexes data for expand handler
+            import tempfile
+            indexes_data = []
+            for symbol, info in indexes:
+                indexes_data.append({
+                    "symbol": symbol,
+                    "name": info["name"],
+                    "underlying": info["underlying"],
+                    "mint": info["mint"],
+                    "type": info["type"],
+                })
+            indexes_file = Path(tempfile.gettempdir()) / "jarvis_indexes.json"
+            with open(indexes_file, "w") as f:
+                json.dump(indexes_data, f)
+
+            # Create expand button
+            expand_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📈 Show Trading Options", callback_data="expand:indexes")]
+            ])
+
             async with self._session.post(
                 f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
                 json={
                     "chat_id": self.chat_id,
                     "text": section_msg,
                     "parse_mode": "HTML",
+                    "reply_markup": expand_keyboard.to_dict(),
                 }
             ) as resp:
                 result = await resp.json()
                 if not result.get("ok"):
                     logger.debug(f"Indexes section error: {result}")
-
-            await asyncio.sleep(0.3)
-
-            # Post buy buttons for all indexes (small list)
-            for symbol, info in indexes:
-                try:
-                    keyboard = create_ape_buttons_with_tp_sl(
-                        symbol=symbol,
-                        asset_type="stock",
-                        contract_address=info["mint"],
-                        entry_price=0.0,
-                        grade="",
-                    )
-
-                    # Determine emoji based on type
-                    if info["type"] == "index":
-                        type_emoji = "📊"
-                    elif info["type"] == "commodity":
-                        type_emoji = "🥇"
-                    elif info["type"] == "bond":
-                        type_emoji = "📄"
-                    else:
-                        type_emoji = "📈"
-
-                    index_msg = f"🛒 {type_emoji} <b>{symbol}</b> ({info['underlying']}) - {info['name']}"
-
-                    async with self._session.post(
-                        f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
-                        json={
-                            "chat_id": self.chat_id,
-                            "text": index_msg,
-                            "parse_mode": "HTML",
-                            "reply_markup": keyboard.to_dict(),
-                        }
-                    ) as resp:
-                        result = await resp.json()
-                        if not result.get("ok"):
-                            logger.debug(f"Index buy button error: {result}")
-
-                    await asyncio.sleep(0.2)
-
-                except Exception as e:
-                    logger.debug(f"Index buy button error for {symbol}: {e}")
 
         except Exception as e:
             logger.error(f"Failed to post indexes section: {e}")
@@ -2655,8 +2728,9 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
                 return
 
             # Store picks for expand handler (save to file for cross-process access)
+            import tempfile
             picks_data = []
-            for p in picks[:10]:
+            for p in picks[:5]:  # TOP 5 only
                 picks_data.append({
                     "symbol": p.symbol,
                     "asset_class": p.asset_class,
@@ -2670,14 +2744,25 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
                 })
 
             # Save to temp file for expand handler
-            import tempfile
             picks_file = Path(tempfile.gettempdir()) / "jarvis_top_picks.json"
             with open(picks_file, "w") as f:
                 json.dump(picks_data, f)
 
-            # Build picks list display
+            # Calculate unified sentiment across all picks
+            avg_conviction = sum(p.conviction_score for p in picks[:5]) / min(5, len(picks))
+            if avg_conviction >= 75:
+                unified_sentiment = "🟢 STRONG BUY"
+                sentiment_desc = "High confidence across multiple asset classes"
+            elif avg_conviction >= 60:
+                unified_sentiment = "🟡 MODERATE BUY"
+                sentiment_desc = "Reasonable opportunities with manageable risk"
+            else:
+                unified_sentiment = "🟠 CAUTIOUS"
+                sentiment_desc = "Selective positioning recommended"
+
+            # Build picks list display (TOP 5)
             pick_lines = []
-            for i, pick in enumerate(picks[:10]):
+            for i, pick in enumerate(picks[:5]):
                 # Conviction color
                 if pick.conviction_score >= 80:
                     conv_emoji = "🟢"
@@ -2697,98 +2782,53 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
                 else:
                     targets_str = ""
 
+                # Brief reasoning
+                reason_short = pick.reasoning[:50] + "..." if len(pick.reasoning) > 50 else pick.reasoning
                 pick_lines.append(
-                    f"{medal} <b>{pick.symbol}</b> ({pick.asset_class.upper()}) {conv_emoji} {pick.conviction_score}/100{targets_str}"
+                    f"{medal} <b>{pick.symbol}</b> ({pick.asset_class.upper()}) {conv_emoji} {pick.conviction_score}/100{targets_str}\n   └ <i>{reason_short}</i>"
                 )
 
-            picks_text = "\n".join(pick_lines)
+            picks_text = "\n\n".join(pick_lines)
 
-            # Build section message (beautified)
+            # Build section message - UNIFIED TOP 5
             section_msg = f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏆 <b>JARVIS TOP 10 PICKS</b>
+🏆 <b>JARVIS UNIFIED TOP 5</b>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🤖 <b>JARVIS Cross-Analysis:</b>
-Analyzing all assets: Tokens + Stocks + Indexes
+🤖 <b>JARVIS Unified Sentiment:</b> {unified_sentiment}
+{sentiment_desc}
+
+📊 <b>Cross-Asset Analysis:</b>
+Tokens + Stocks + Indexes combined ranking
 Conviction scored 1-100 (higher = stronger)
+Avg Conviction: {avg_conviction:.0f}/100
 
 {picks_text}
 
-📊 <b>Analysis Factors:</b>
+📈 <b>Analysis Factors:</b>
 • Momentum & volume trends
 • Technical patterns
-• Sentiment catalysts
+• Cross-market correlation
 • Risk/reward optimization
 """
+            # Create expand button
+            expand_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏆 Show Trading Options", callback_data="expand:top_picks")]
+            ])
+
             async with self._session.post(
                 f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
                 json={
                     "chat_id": self.chat_id,
                     "text": section_msg,
                     "parse_mode": "HTML",
+                    "reply_markup": expand_keyboard.to_dict(),
                 }
             ) as resp:
                 result = await resp.json()
                 if not result.get("ok"):
                     logger.debug(f"Top picks section error: {result}")
-
-            await asyncio.sleep(0.3)
-
-            # Post buy buttons for TOP 5 picks
-            for i, pick in enumerate(picks[:5]):
-                try:
-                    asset_type = "token" if pick.asset_class == "token" else "stock"
-
-                    keyboard = create_ape_buttons_with_tp_sl(
-                        symbol=pick.symbol,
-                        asset_type=asset_type,
-                        contract_address=pick.contract or "",
-                        entry_price=pick.entry_price,
-                        grade=str(pick.conviction_score),
-                    )
-
-                    # Conviction color
-                    if pick.conviction_score >= 80:
-                        conv_emoji = "🟢"
-                    elif pick.conviction_score >= 60:
-                        conv_emoji = "🟡"
-                    else:
-                        conv_emoji = "🟠"
-
-                    # Medal for top 3
-                    medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else ""
-
-                    # Format target/stop
-                    if pick.entry_price > 0 and pick.target_price > 0:
-                        target_pct = ((pick.target_price / pick.entry_price) - 1) * 100
-                        stop_pct = (1 - (pick.stop_loss / pick.entry_price)) * 100
-                        targets_str = f"\n🎯 TP: +{target_pct:.0f}% | 🛑 SL: -{stop_pct:.0f}%"
-                    else:
-                        targets_str = ""
-
-                    pick_msg = (
-                        f"{medal} 🛒 <b>{pick.symbol}</b> ({pick.asset_class.upper()}) {conv_emoji} {pick.conviction_score}/100{targets_str}\n"
-                        f"📝 {pick.reasoning[:80]}..."
-                    )
-
-                    async with self._session.post(
-                        f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
-                        json={
-                            "chat_id": self.chat_id,
-                            "text": pick_msg,
-                            "parse_mode": "HTML",
-                            "reply_markup": keyboard.to_dict(),
-                        }
-                    ) as resp:
-                        result = await resp.json()
-                        if not result.get("ok"):
-                            logger.debug(f"Top pick buy button error: {result}")
-
-                    await asyncio.sleep(0.2)
-
-                except Exception as e:
-                    logger.debug(f"Top pick error for {pick.symbol}: {e}")
 
         except Exception as e:
             logger.error(f"Failed to post Grok conviction picks: {e}")

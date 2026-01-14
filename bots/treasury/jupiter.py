@@ -829,12 +829,21 @@ class LimitOrderManager:
 
     ORDERS_FILE = Path(os.getenv("DATA_DIR", "data")) / "limit_orders.json"
 
-    def __init__(self, jupiter: JupiterClient, wallet):
+    def __init__(self, jupiter: JupiterClient, wallet, on_order_filled=None):
+        """
+        Initialize LimitOrderManager.
+
+        Args:
+            jupiter: JupiterClient for swaps
+            wallet: SecureWallet for signing
+            on_order_filled: Optional callback(order_id, order_type, result) called when orders execute
+        """
         self.jupiter = jupiter
         self.wallet = wallet
         self.orders: Dict[str, Dict] = {}
         self._running = False
         self._monitor_task: Optional[asyncio.Task] = None
+        self._on_order_filled = on_order_filled
         self._load_orders()
 
     def _load_orders(self):
@@ -883,7 +892,7 @@ class LimitOrderManager:
             'token_mint': token_mint,
             'amount': amount,
             'target_price': target_price,
-            'output_mint': JupiterClient.USDC_MINT,
+            'output_mint': JupiterClient.SOL_MINT,  # Sell to SOL for treasury
             'created_at': datetime.utcnow().isoformat(),
             'status': 'ACTIVE',
             'triggered_at': None,
@@ -921,7 +930,7 @@ class LimitOrderManager:
             'token_mint': token_mint,
             'amount': amount,
             'target_price': stop_price,
-            'output_mint': JupiterClient.USDC_MINT,
+            'output_mint': JupiterClient.SOL_MINT,  # Sell to SOL for treasury
             'created_at': datetime.utcnow().isoformat(),
             'status': 'ACTIVE',
             'triggered_at': None,
@@ -941,14 +950,17 @@ class LimitOrderManager:
             return True
         return False
 
-    async def start_monitoring(self, interval_seconds: int = 10):
-        """Start monitoring prices for order triggers."""
+    async def start_monitoring(self, interval_seconds: int = 5):
+        """Start monitoring prices for order triggers.
+
+        Default 5 seconds for responsive TP/SL on volatile tokens.
+        """
         if self._running:
             return
 
         self._running = True
         self._monitor_task = asyncio.create_task(self._monitor_loop(interval_seconds))
-        logger.info("Started order monitoring")
+        logger.info(f"Started order monitoring (interval: {interval_seconds}s)")
 
     async def stop_monitoring(self):
         """Stop monitoring."""
@@ -1022,6 +1034,7 @@ class LimitOrderManager:
             if not quote:
                 order['status'] = 'FAILED'
                 order['result'] = {'error': 'Failed to get quote'}
+                self._save_orders()
                 return
 
             # Execute swap
@@ -1032,6 +1045,23 @@ class LimitOrderManager:
             self._save_orders()
 
             logger.info(f"Order {order_id} {'completed' if result.success else 'failed'}")
+
+            # Notify callback for position closure / P&L tracking
+            if result.success and self._on_order_filled:
+                try:
+                    callback_result = self._on_order_filled(
+                        order_id=order_id,
+                        order_type=order['type'],  # 'TAKE_PROFIT' or 'STOP_LOSS'
+                        token_mint=order['token_mint'],
+                        exit_price=current_price,
+                        output_amount=quote.output_amount_ui,
+                        tx_signature=result.signature
+                    )
+                    # Handle async callbacks
+                    if asyncio.iscoroutine(callback_result):
+                        await callback_result
+                except Exception as cb_err:
+                    logger.error(f"Order filled callback failed: {cb_err}")
 
         except Exception as e:
             order['status'] = 'FAILED'
