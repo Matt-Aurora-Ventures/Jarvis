@@ -673,18 +673,20 @@ Good examples:
             trending = await api.get_trending(limit=5)
             
             # Use GROK for market analysis
-            market_context = f"Current market: SOL ${sol_price:.2f}. "
+            market_context = f"SOL ${sol_price:.2f}. "
             if trending:
                 market_context += f"Trending: {', '.join([t.symbol for t in trending[:3]])}"
             
-            grok_response = await grok.generate_text(
-                f"Give me a brief, witty one-liner about what's happening in crypto markets right now. Context: {market_context}"
+            grok_response = await grok.analyze_sentiment(
+                {"market": market_context, "trending": [t.symbol for t in (trending or [])[:3]]},
+                context_type="market"
             )
+            grok_take = grok_response.content[:100] if grok_response and grok_response.success else ""
             
             prompt = f"""Write a funny market commentary tweet.
 
 Context: {market_context}
-{f"Grok says: {grok_response[:100]}" if grok_response else ""}
+{f"Grok says: {grok_take}" if grok_take else ""}
 
 Be funny. Make an observation that's both true and amusing.
 Examples:
