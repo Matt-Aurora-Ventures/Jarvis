@@ -4,12 +4,14 @@ Handles content generation and image creation via xAI API
 """
 
 import os
+import json
 import logging
 import aiohttp
 import base64
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +42,39 @@ class GrokClient:
     BASE_URL = "https://api.x.ai/v1"
     CHAT_MODEL = "grok-3"
     IMAGE_MODEL = "grok-2-image"
+    STATE_FILE = Path(__file__).parent / ".grok_state.json"
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("XAI_API_KEY", "")
         self._session: Optional[aiohttp.ClientSession] = None
         self._daily_image_count = 0
         self._last_image_date: Optional[str] = None
+        self._load_state()  # Load persisted state on init
+
+    def _load_state(self):
+        """Load persisted state from file"""
+        try:
+            if self.STATE_FILE.exists():
+                data = json.loads(self.STATE_FILE.read_text())
+                self._last_image_date = data.get("last_image_date")
+                self._daily_image_count = data.get("daily_image_count", 0)
+                # Reset if it's a new day
+                today = datetime.now().strftime("%Y-%m-%d")
+                if self._last_image_date != today:
+                    self._daily_image_count = 0
+                    self._last_image_date = today
+        except Exception as e:
+            logger.warning(f"Could not load Grok state: {e}")
+
+    def _save_state(self):
+        """Persist state to file"""
+        try:
+            self.STATE_FILE.write_text(json.dumps({
+                "last_image_date": self._last_image_date,
+                "daily_image_count": self._daily_image_count
+            }))
+        except Exception as e:
+            logger.warning(f"Could not save Grok state: {e}")
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session"""
@@ -54,7 +83,8 @@ class GrokClient:
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json"
-                }
+                },
+                timeout=aiohttp.ClientTimeout(total=60)  # 60s timeout
             )
         return self._session
 
@@ -200,6 +230,7 @@ class GrokClient:
                     if b64_data:
                         image_bytes = base64.b64decode(b64_data)
                         self._daily_image_count += 1
+                        self._save_state()  # Persist count
                         logger.info(f"Image generated ({self._daily_image_count}/6 today)")
                         return ImageResponse(
                             success=True,

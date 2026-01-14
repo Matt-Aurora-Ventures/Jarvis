@@ -12,6 +12,7 @@ import Settings from '@/pages/Settings'
 import Research from '@/pages/Research'
 import VoiceControl from '@/pages/VoiceControl'
 import Roadmap from '@/pages/Roadmap'
+import Alerts from '@/pages/Alerts'
 
 /**
  * JARVIS Dashboard - Main Application Router
@@ -51,6 +52,9 @@ function App() {
 
           {/* Roadmap */}
           <Route path="roadmap" element={<Roadmap />} />
+
+          {/* Price Alerts */}
+          <Route path="alerts" element={<Alerts />} />
         </Route>
       </Routes>
     </BrowserRouter>

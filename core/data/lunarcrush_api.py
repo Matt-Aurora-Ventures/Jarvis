@@ -6,8 +6,10 @@ Docs: https://lunarcrush.com/developers/api/endpoints
 """
 
 import os
+import asyncio
 import logging
 import aiohttp
+import time
 from typing import Optional, Dict, List, Any
 from datetime import datetime, timedelta
 
@@ -19,12 +21,18 @@ LUNARCRUSH_API = "https://lunarcrush.com/api4/public"
 
 class LunarCrushAPI:
     """LunarCrush social sentiment API client."""
-    
+
+    # Rate limiting: 1000 calls/day = ~42/hour = 1 per 1.5 seconds minimum
+    MIN_REQUEST_INTERVAL = 1.5  # seconds between requests
+    _last_request_time = 0.0
+
     def __init__(self):
         self.api_key = os.getenv("LUNARCRUSH_API_KEY", "")
         self._session: Optional[aiohttp.ClientSession] = None
         self._cache: Dict[str, Any] = {}
         self._cache_ttl = 300  # 5 minutes
+        self._daily_calls = 0
+        self._daily_reset: Optional[datetime] = None
     
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -41,25 +49,49 @@ class LunarCrushAPI:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
     
+    async def _rate_limit(self):
+        """Apply rate limiting between requests."""
+        now = time.time()
+        elapsed = now - LunarCrushAPI._last_request_time
+        if elapsed < self.MIN_REQUEST_INTERVAL:
+            await asyncio.sleep(self.MIN_REQUEST_INTERVAL - elapsed)
+        LunarCrushAPI._last_request_time = time.time()
+
+        # Track daily calls
+        today = datetime.now().date()
+        if self._daily_reset is None or self._daily_reset.date() != today:
+            self._daily_calls = 0
+            self._daily_reset = datetime.now()
+
+        self._daily_calls += 1
+        if self._daily_calls > 900:  # Warn at 90% of limit
+            logger.warning(f"LunarCrush API nearing daily limit: {self._daily_calls}/1000")
+
     async def _get(self, endpoint: str, params: Optional[Dict] = None) -> Optional[Dict]:
         """Make GET request to LunarCrush API."""
         cache_key = f"{endpoint}:{params}"
-        
-        # Check cache
+
+        # Check cache first (before rate limiting)
         if cache_key in self._cache:
             cached, timestamp = self._cache[cache_key]
             if datetime.now().timestamp() - timestamp < self._cache_ttl:
                 return cached
-        
+
+        # Apply rate limiting
+        await self._rate_limit()
+
         try:
             session = await self._get_session()
             url = f"{LUNARCRUSH_API}/{endpoint}"
-            
+
             async with session.get(url, headers=self._get_headers(), params=params, timeout=10) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     self._cache[cache_key] = (data, datetime.now().timestamp())
                     return data
+                elif resp.status == 429:
+                    logger.warning("LunarCrush API rate limited")
+                    return None
                 else:
                     logger.warning(f"LunarCrush API error: {resp.status}")
                     return None

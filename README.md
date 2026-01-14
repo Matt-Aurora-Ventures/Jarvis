@@ -8,8 +8,8 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-4.5.0-blue)](CHANGELOG.md)
-[![Tests](https://img.shields.io/badge/Tests-1108%2B%20Passing-brightgreen)]()
+[![Version](https://img.shields.io/badge/Version-4.6.0-blue)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/Tests-1200%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -54,9 +54,62 @@
 
 ---
 
-## 🚀 Recent Updates (v4.5.0 - January 2026)
+## 🚀 Recent Updates (v4.6.0 - January 2026)
 
-### 🛡️ Bot Supervisor & Resilience System - NEW
+### 🧠 MASSIVE RELEASE: Autonomous Intelligence & Full-Stack Expansion
+
+**The largest single release in JARVIS history.** 7,750+ lines of new code across 105 new files.
+
+#### Core Autonomy System - NEW
+| Module | Description |
+|--------|-------------|
+| `action_executor.py` | **Crown jewel** - Bridges observation/learning to execution with priority queues |
+| `news_detector.py` | Real-time crypto news analysis with AI-powered filtering |
+| `enhanced_market_data.py` | 7+ data sources: CoinGecko, DeFiLlama, CoinMarketCap |
+| `resilient_fetcher.py` | Circuit breaker pattern, multi-source price fetching |
+| `whale_tracker.py` | Large transaction monitoring |
+| `price_alerts.py` | User-configurable price notifications |
+| `webhook_manager.py` | External integration hub with Discord/Slack support |
+
+#### X (Twitter) Bot - Major Expansion
+| Feature | Description |
+|---------|-------------|
+| Quote Tweets | Smart quote selection with engagement scoring |
+| Thread Generation | Multi-tweet narrative building |
+| Trend Analysis | Posts aligned with trending topics |
+| Engagement Tracking | Metrics collection for posted content |
+| Dynamic Intervals | Adjust posting based on engagement |
+
+#### 70+ New Frontend Components
+| Category | Components |
+|----------|------------|
+| **Trading** | AISuggestions, BacktestDashboard, LiveMarketFeed, TradingChart, StrategyBuilder |
+| **DeFi** | airdrop/, bridge/, defi/, lending/, liquidity/, staking/, yield/ |
+| **Analytics** | analytics/, portfolio/, profit/, risk/, roi/ |
+| **Market** | correlation/, heatmap/, orderbook/, screener/, sentiment/, volatility/ |
+| **On-Chain** | holders/, onchain/, smartmoney/, whale/ |
+| **Advanced** | arbitrage/, derivatives/, leverage/, liquidations/, mev/, options/, perpetuals/ |
+
+#### New Telegram Features
+- **Claude CLI Handler**: Natural language processing for commands
+- **20+ new commands**: Trading, alerts, system monitoring
+- **Inline keyboards**: Interactive button menus everywhere
+
+#### Stats
+| Metric | Value |
+|--------|-------|
+| Lines Added | 7,750+ |
+| New Files | 105 |
+| Modified Files | 49 |
+| New Components | 70+ |
+
+**Full details**: See [CHANGELOG.md](CHANGELOG.md)
+
+---
+
+## 🚀 Previous Updates (v4.5.0 - January 2026)
+
+### 🛡️ Bot Supervisor & Resilience System
 **Robust process management with auto-restart and monitoring** (`bots/supervisor.py`):
 
 | Feature | Description |

@@ -476,7 +476,7 @@ class JarvisBuyBot:
                 if balance_sol <= 0:
                     await self.bot.send_message(
                         chat_id=chat_id,
-                        text="ƒ?O Treasury balance unavailable or zero.",
+                        text="❌ Treasury balance unavailable or zero.",
                         parse_mode=ParseMode.HTML,
                     )
                     return
@@ -595,7 +595,7 @@ class JarvisBuyBot:
                             chat_id=chat_id,
                             text=msg,
                             parse_mode=ParseMode.HTML,
-                            reply_markup=keyboard.to_dict(),
+                            reply_markup=keyboard,
                         )
                         await asyncio.sleep(0.2)
 
@@ -615,7 +615,7 @@ class JarvisBuyBot:
                         chat_id=chat_id,
                         text=msg,
                         parse_mode=ParseMode.HTML,
-                        reply_markup=keyboard.to_dict(),
+                        reply_markup=keyboard,
                     )
                     await asyncio.sleep(0.2)
 
@@ -636,7 +636,7 @@ class JarvisBuyBot:
                         chat_id=chat_id,
                         text=msg,
                         parse_mode=ParseMode.HTML,
-                        reply_markup=keyboard.to_dict(),
+                        reply_markup=keyboard,
                     )
                     await asyncio.sleep(0.2)
 
@@ -672,7 +672,7 @@ class JarvisBuyBot:
                             chat_id=chat_id,
                             text=msg,
                             parse_mode=ParseMode.HTML,
-                            reply_markup=keyboard.to_dict(),
+                            reply_markup=keyboard,
                         )
                         await asyncio.sleep(0.2)
                 else:

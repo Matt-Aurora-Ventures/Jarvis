@@ -58,5 +58,27 @@ export { useLocalStorage } from './useLocalStorage'
 export { default as useCapabilities } from './useCapabilities'
 export { useRealtimePrice } from './useRealtimePrice'
 export { useWebSocketPrice, useSingleTokenPrice } from './useWebSocketPrice'
+export {
+  useMarketDataStream,
+  useTokenStream,
+  useMultiTokenStream,
+  StreamType,
+  ConnectionState
+} from './useMarketDataStream'
 export { useVoiceWebSocket, useVoiceStatus } from './useVoiceWebSocket'
 export { usePositionStats, usePositionHistory } from './usePositionStats'
+export { default as useElectron, platformNames } from './useElectron'
+export { useVoiceCommands, useSpeechRecognition } from './useVoiceCommands'
+export {
+  useMediaQuery,
+  useBreakpoint,
+  useIsMobile,
+  useIsTablet,
+  useIsDesktop,
+  useResponsiveValue,
+  useOrientation,
+  usePrefersDarkMode,
+  usePrefersReducedMotion,
+  useHasTouchScreen,
+  BREAKPOINTS
+} from './useMediaQuery'

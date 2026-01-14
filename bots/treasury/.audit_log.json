@@ -116,5 +116,23 @@
       "tx_signature": "5FZauRBLXKy7mXMU3AFVixSWn7TrSPRLi9r8VY2H1Rr7APSDDWvU2Q4i6b9Ejzhzytw4kD7ZR8J2WKhE8PrbnNFY",
       "dry_run": false
     }
+  },
+  {
+    "timestamp": "2026-01-14T05:45:57.816322",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "dfdc2e1f",
+      "token": "CLEPE",
+      "token_mint": "5sUsbK5kn1TyeWHiSox1e9AAgUDnZ8JqCMXXweP1pump",
+      "amount_usd": 14.888302055025,
+      "entry_price": 0.0009238,
+      "tp_price": 0.00120588,
+      "sl_price": 0.00083484,
+      "sentiment_grade": "B",
+      "tx_signature": "4ARd8gbBtr228AqmDET6K9FTWsAwwLJ7tenoBzzHGxXSfxb3WYgDsAxNwAdx3VeVjBzzggonLfSP7N8WguRKVyU6",
+      "dry_run": false
+    }
   }
 ]

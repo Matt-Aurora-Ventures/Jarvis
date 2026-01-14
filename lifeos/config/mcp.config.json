@@ -143,6 +143,141 @@
         "notebooklm-mcp@latest"
       ],
       "env": {}
+    },
+    {
+      "name": "solana-rpc",
+      "enabled": true,
+      "autostart": true,
+      "command": "node",
+      "args": [
+        "${HOME}/Documents/Jarvis context/mcp-servers/solana-rpc/dist/index.js"
+      ],
+      "env": {
+        "SOLANA_RPC_URL": "https://mainnet.helius-rpc.com/?api-key=95014bec-7a2f-46af-9750-48be929844f4",
+        "SOLANA_NETWORK": "mainnet-beta"
+      }
+    },
+    {
+      "name": "evm-rpc",
+      "enabled": true,
+      "autostart": true,
+      "command": "node",
+      "args": [
+        "${HOME}/Documents/Jarvis context/mcp-servers/evm-rpc/dist/index.js"
+      ],
+      "env": {
+        "EVM_RPC_URL": "https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}",
+        "EVM_CHAIN_ID": 1
+      }
+    },
+    {
+      "name": "claude-vibe-telegram",
+      "enabled": true,
+      "autostart": true,
+      "command": "claude-vibe-telegram",
+      "args": [],
+      "env": {
+        "TELEGRAM_BOT_TOKEN": "8047602125:AAES1dmr8sSyaxpLTxBJacVxfnLaLaqcLcE",
+        "TELEGRAM_ADMIN_IDS": "8527130908",
+        "CLAUDE_VIBE_DIR": "${HOME}/Desktop/LifeOS"
+      }
+    },
+    {
+      "name": "x-api",
+      "enabled": true,
+      "autostart": true,
+      "command": "node",
+      "args": [
+        "${HOME}/Documents/Jarvis context/mcp-servers/x-api/dist/index.js"
+      ],
+      "env": {
+        "X_API_KEY": "jgQMZlTpEAQx53vpdaUk3rSVM",
+        "X_API_SECRET": "dfFogyZXwsIP12oAFykzXpDjQbxJUHLf7xUs8iglHidwMRa22q",
+        "X_ACCESS_TOKEN": "1470407998447181838-O1hqvlBVmAonkb6ypeZj9xJmnULLqS",
+        "X_ACCESS_TOKEN_SECRET": "tBrMOp58VqMcrodUNqATiRPLrAqmuSoodpSp0c41Oo5gr",
+        "X_BEARER_TOKEN": "AAAAAAAAAAAAAAAAAAAAALYzvQEAAAAAKfKnhB4Py3HWksKwSEkoTUyx7ss%3DSJIZvXZET2cAH6fZN2H4UffmCaSF39Xx91rzm62fLJa6R62ewo"
+      }
+    },
+    {
+      "name": "brave-search",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env": {
+        "BRAVE_API_KEY": null
+      }
+    },
+    {
+      "name": "github",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_TOKEN": null
+      }
+    },
+    {
+      "name": "google-drive",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-google-drive"
+      ],
+      "env": {
+        "GOOGLE_CLIENT_ID": null,
+        "GOOGLE_CLIENT_SECRET": null,
+        "GOOGLE_REFRESH_TOKEN": null
+      }
+    },
+    {
+      "name": "notion",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-notion"
+      ],
+      "env": {
+        "NOTION_API_KEY": null
+      }
+    },
+    {
+      "name": "slack",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-slack"
+      ],
+      "env": {
+        "SLACK_BOT_TOKEN": null,
+        "SLACK_APP_TOKEN": null
+      }
+    },
+    {
+      "name": "postgres",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "DATABASE_URL": "postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DB_NAME}"
+      }
     }
   ]
 }

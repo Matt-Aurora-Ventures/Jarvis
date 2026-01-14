@@ -4,6 +4,452 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [4.6.0] - 2026-01-14
+
+### 🚀 **MASSIVE RELEASE: Autonomous Intelligence & Full-Stack Expansion**
+
+The largest single release in JARVIS history. 7,750+ lines of new code across 105 new files, transforming JARVIS from a trading assistant into a fully autonomous AI system with comprehensive frontend components.
+
+---
+
+## 🧠 Core Autonomy System
+
+### Action Executor (`core/autonomy/action_executor.py`) - **NEW**
+The crown jewel of this release. Bridges observation/learning to actual execution:
+- **ExecutableAction dataclass** with priority queuing, retry logic, delayed execution
+- **9 Action Types**: POST_TWEET, SEND_ALERT, UPDATE_CONFIG, RESEARCH_TOPIC, TRADE_SIGNAL, CREATE_CONTENT, ENGAGEMENT, SHELL_COMMAND, MEMORY_UPDATE
+- **Hypothesis-to-Action conversion** from ObservationalDaemon
+- **Goal-to-Action conversion** from MemoryDrivenBehaviorEngine
+- **Persistent queue** with disk storage (`data/execution/`)
+- **Execution logging** with JSONL audit trail
+- **Cooldown management** (30s minimum between executions)
+- **Pluggable handlers** for custom action types
+
+### News Detection System (`core/autonomy/news_detector.py`) - **NEW**
+Real-time crypto news analysis with AI-powered filtering:
+- Aggregates from CryptoPanic, LunarCrush, and social feeds
+- Sentiment scoring with bullish/bearish classification
+- Breaking news alerts with priority routing
+- Token mention extraction and trending detection
+
+### Alpha Signal Analyzer - **ENHANCED**
+- Improved signal confidence scoring
+- Better false positive filtering
+- Integration with enhanced market data
+
+---
+
+## 📊 Enhanced Market Intelligence
+
+### Enhanced Market Data (`core/enhanced_market_data.py`) - **NEW** (708 lines)
+Comprehensive multi-source market aggregation:
+- **7+ data sources**: CoinGecko, DeFiLlama, CoinMarketCap fallbacks
+- **Token metrics**: Price, volume, market cap, FDV, circulating supply
+- **DeFi metrics**: TVL, protocol rankings, yield opportunities
+- **Sentiment integration**: Fear & Greed Index, social metrics
+- **Caching layer** with TTL-based invalidation
+- **Rate limiting** per source with backoff
+
+### Resilient Price Fetcher (`core/price/resilient_fetcher.py`) - **NEW** (296 lines)
+Production-grade price fetching with fault tolerance:
+- Multiple fallback APIs (Jupiter, Raydium, BirdEye, DexScreener)
+- Circuit breaker pattern for failed sources
+- Weighted price averaging across sources
+- Health scoring per provider
+- Auto-recovery for degraded sources
+
+### Whale Tracker (`core/whale_tracker.py`) - **NEW** (91 lines)
+Large transaction monitoring:
+- Configurable whale threshold detection
+- Real-time wallet movement alerts
+- Integration with trading signals
+
+### Price Alerts System (`core/price_alerts.py`) - **NEW**
+User-configurable price notifications:
+- Above/below threshold triggers
+- Percentage change alerts
+- Multi-channel delivery (Telegram, desktop, webhook)
+
+### Webhook Manager (`core/webhook_manager.py`) - **NEW**
+External integration hub:
+- Inbound webhook receivers
+- Outbound webhook dispatching
+- Discord/Slack/custom endpoint support
+- Retry logic with exponential backoff
+
+---
+
+## 🐦 X (Twitter) Bot - Major Expansion
+
+### Autonomous Engine (`bots/twitter/autonomous_engine.py`) - **+1,200 lines**
+Massive enhancement to the autonomous posting system:
+- **Quote Tweet Generation**: Smart quote selection with engagement scoring
+- **Thread Generation**: Multi-tweet narrative building
+- **Trend Analysis Integration**: Posts aligned with trending topics
+- **Content Categories**: market_update, trending_token, agentic_thought, hourly_update, quote_tweet, thread
+- **Engagement Tracking**: Metrics collection for posted content
+- **Dynamic Interval Adjustment**: Based on engagement performance
+- **Media Attachment Support**: Charts, images with posts
+
+### Trend Analyzer (`bots/twitter/trend_analyzer.py`) - **NEW**
+Real-time trend detection:
+- Twitter trending topics API integration
+- Crypto-specific trend filtering
+- Trend velocity scoring
+- Best posting time recommendations
+
+### X Claude CLI Handler (`bots/twitter/x_claude_cli_handler.py`) - **NEW**
+Claude integration for tweet generation:
+- Direct Claude API for content creation
+- Personality-consistent tweet drafting
+- Content safety filtering
+
+### Jarvis Voice (`bots/twitter/jarvis_voice.py`) - **+215 lines**
+Enhanced voice/personality system:
+- Mood-based tweet variation
+- Time-of-day personality shifts
+- Market condition tone adaptation
+
+### Grok Client (`bots/twitter/grok_client.py`) - **ENHANCED**
+- **State persistence** for daily image count (`data/grok_state.json`)
+- Improved rate limit handling
+- Better error recovery
+
+---
+
+## 🤖 Bot Supervisor & Resilience
+
+### Bot Supervisor (`bots/supervisor.py`) - **NEW** (441 lines)
+Production-grade bot orchestration:
+- **Process Management**: Start/stop/restart individual bots
+- **Health Monitoring**: Per-bot health checks
+- **Auto-Recovery**: Crashed bot restart with backoff
+- **Resource Limits**: Memory/CPU caps per bot
+- **Graceful Shutdown**: Clean termination handling
+- **Status Dashboard**: Real-time bot status
+
+### Health Endpoint (`bots/health_endpoint.py`) - **NEW** (154 lines)
+HTTP health check server:
+- `/health` - Overall system health
+- `/ready` - Readiness probe (K8s compatible)
+- `/live` - Liveness probe
+- Per-component health breakdown
+
+---
+
+## 💰 Trading System Improvements
+
+### Sentiment Report (`bots/buy_tracker/sentiment_report.py`) - **+769 lines**
+Revolutionary sentiment-driven reporting:
+- **JARVIS AI Analysis**: Claude-powered market interpretation
+- **Multi-asset coverage**: Not just Solana, full crypto market
+- **Direct buy buttons**: One-click trading from reports
+- **Confidence scoring**: Per-signal reliability metrics
+- **Historical tracking**: Sentiment trend analysis
+
+### Ape Buttons (`bots/buy_tracker/ape_buttons.py`) - **+80 lines**
+Quick-trade button system:
+- Pre-configured trade sizes
+- Risk-adjusted position sizing
+- Confirmation dialogs
+
+### Jupiter Integration (`bots/treasury/jupiter.py`) - **+100 lines**
+Enhanced DEX aggregation:
+- Better route optimization
+- Slippage protection improvements
+- Transaction retry logic
+
+### Treasury Trading (`bots/treasury/trading.py`) - **+175 lines**
+Core trading logic improvements:
+- Position sizing refinements
+- Risk management enhancements
+- Order execution optimization
+
+### Sentiment Trading (`core/sentiment_trading.py`) - **+434 lines**
+AI-driven trading signals:
+- Multi-source sentiment aggregation
+- Signal confidence scoring
+- Automated trade execution based on sentiment
+
+---
+
+## 📱 Telegram Bot - Major Upgrade
+
+### Main Bot (`tg_bot/bot.py`) - **+674 lines**
+Massive functionality expansion:
+- **New commands**: 20+ new admin/user commands
+- **Inline keyboards**: Interactive button menus everywhere
+- **Claude integration**: AI-powered chat responses
+- **Trading UI**: Buy/sell directly from Telegram
+- **Alert management**: Configure alerts via chat
+- **System monitoring**: Bot status dashboards
+
+### Claude CLI Handler (`tg_bot/services/claude_cli_handler.py`) - **NEW**
+Direct Claude integration for Telegram:
+- Natural language processing for commands
+- Context-aware responses
+- Multi-turn conversation support
+
+### Chat Responder (`tg_bot/services/chat_responder.py`) - **+262 lines**
+Enhanced conversation handling:
+- Better context retention
+- Personality-consistent responses
+- Error handling improvements
+
+### Signal Service (`tg_bot/services/signal_service.py`) - **+89 lines**
+Trading signal delivery:
+- Signal formatting for Telegram
+- Priority-based delivery
+- Read receipt tracking
+
+---
+
+## 🎨 Frontend - 70+ New Components
+
+### Trading Components
+| Component | Description |
+|-----------|-------------|
+| `AISuggestions.jsx` | AI-powered trade recommendations |
+| `BacktestDashboard.jsx` | Historical strategy testing UI |
+| `LiveMarketFeed.jsx` | Real-time market data stream |
+| `LiveTrades.jsx` | Recent trade activity |
+| `MarketDepth.jsx` | Order book visualization |
+| `OrderPanel.jsx` | Trade execution interface |
+| `StrategyBuilder.jsx` | Visual strategy creation |
+| `TokenWatchlist.jsx` | Tracked tokens dashboard |
+| `TradingChart.jsx` | Advanced charting with indicators |
+
+### Analytics Components
+| Component | Description |
+|-----------|-------------|
+| `analytics/` | Performance dashboards, metrics |
+| `portfolio/` | Holdings overview, allocation |
+| `profit/` | P&L tracking, ROI calculations |
+| `risk/` | Risk assessment, exposure |
+| `roi/` | Return on investment analysis |
+
+### DeFi Components
+| Component | Description |
+|-----------|-------------|
+| `airdrop/` | Airdrop tracking and claiming |
+| `bridge/` | Cross-chain bridging UI |
+| `defi/` | DeFi protocol dashboards |
+| `lending/` | Lending protocol interfaces |
+| `liquidity/` | LP position management |
+| `staking/` | Staking calculators, dashboards |
+| `yield/` | Yield farming opportunities |
+
+### Market Analysis
+| Component | Description |
+|-----------|-------------|
+| `correlation/` | Asset correlation matrices |
+| `heatmap/` | Market heatmaps |
+| `orderbook/` | Order book analysis |
+| `orderflow/` | Order flow analysis |
+| `screener/` | Token screening tools |
+| `sentiment/` | Sentiment dashboards |
+| `volatility/` | Volatility analysis |
+
+### On-Chain Intelligence
+| Component | Description |
+|-----------|-------------|
+| `holders/` | Token holder analysis |
+| `onchain/` | On-chain metrics |
+| `smartmoney/` | Smart money tracking |
+| `whale/` | Whale activity monitoring |
+
+### Advanced Features
+| Component | Description |
+|-----------|-------------|
+| `arbitrage/` | Arbitrage opportunity finder |
+| `derivatives/` | Derivatives trading UI |
+| `leverage/` | Leveraged trading interfaces |
+| `liquidations/` | Liquidation tracking |
+| `mev/` | MEV protection/analysis |
+| `options/` | Options trading UI |
+| `perpetuals/` | Perps trading interface |
+
+### Utilities & UI
+| Component | Description |
+|-----------|-------------|
+| `alerts/` | Alert configuration UI |
+| `calculator/` | Trading calculators |
+| `calendar/` | Crypto events calendar |
+| `compare/` | Token comparison tools |
+| `explorer/` | Blockchain explorer |
+| `fees/` | Fee calculators |
+| `gas/` | Gas price tracking |
+| `journal/` | Trading journal |
+| `news/` | News aggregation |
+| `planner/` | Trade planning tools |
+| `settings/` | User preferences |
+| `tax/` | Tax calculation tools |
+| `wallet/` | Wallet management |
+| `watchlist/` | Custom watchlists |
+
+### Responsive & Mobile
+- `MobileNav.jsx` - Mobile navigation
+- `ResponsiveLayout.jsx` - Adaptive layouts
+- `ResponsiveCard.jsx` - Mobile-friendly cards
+- `ResponsiveTable.jsx` - Scrollable tables
+- `responsive.css` - Mobile breakpoints
+
+### System Components
+- `AutoUpdater.jsx` - Application updates
+- `NotificationCenter.jsx` - Notification hub
+- `StatusBar.jsx` - System status display
+
+### New Hooks
+| Hook | Description |
+|------|-------------|
+| `useElectron.js` | Electron IPC communication |
+| `useMarketDataStream.js` | Real-time market data |
+| `useMediaQuery.js` | Responsive breakpoints |
+| `useVoiceCommands.js` | Voice control integration |
+
+### New Pages
+- `Alerts.jsx` - Alert management page
+
+---
+
+## 🔧 Infrastructure Improvements
+
+### API Key Management (`core/secrets.py`) - **+69 lines**
+Enhanced key handling:
+- **14 API integrations** tracked
+- `validate_required_keys()` - Startup validation
+- `print_key_status()` - Debug key configuration
+- `list_configured_keys()` - Enumerate all keys
+
+### Rate Limiting - **System-wide**
+Implemented across all API clients:
+- **CryptoPanic**: 1 req/sec with caching
+- **LunarCrush**: 1.5 req/sec with daily tracking
+- **Grok**: Image generation limits persisted
+- **BirdEye**: Tiered rate limiting
+
+### Telegram Console Bridge (`core/telegram_console_bridge.py`) - **+234 lines**
+- Enhanced message routing
+- Better error handling
+- Improved state management
+
+### Electron Main Process (`frontend/electron/main.js`) - **+196 lines**
+- IPC handlers for market data
+- Window state persistence
+- Auto-updater integration
+
+---
+
+## 📁 New File Summary
+
+### Core (7 new files)
+```
+core/autonomy/action_executor.py
+core/autonomy/news_detector.py
+core/enhanced_market_data.py
+core/price/resilient_fetcher.py
+core/price_alerts.py
+core/webhook_manager.py
+core/whale_tracker.py
+```
+
+### Bots (4 new files)
+```
+bots/health_endpoint.py
+bots/supervisor.py
+bots/twitter/trend_analyzer.py
+bots/twitter/x_claude_cli_handler.py
+```
+
+### Frontend (80+ new files)
+```
+70+ component directories with index.js exports
+9 trading components
+4 new hooks
+1 new page
+3 responsive utilities
+```
+
+### Services (1 new file)
+```
+tg_bot/services/claude_cli_handler.py
+```
+
+### Scripts (2 new files)
+```
+scripts/send_progress_report.py
+scripts/send_vibe_code_v2.py
+```
+
+### Tests (2 new files)
+```
+tests/security_pentest.py
+tests/test_vibe_coding.py
+```
+
+---
+
+## 📊 Stats
+
+| Metric | Value |
+|--------|-------|
+| Lines Added | 7,750+ |
+| Lines Modified | 977 |
+| New Files | 105 |
+| Modified Files | 49 |
+| New Components | 70+ |
+| New Hooks | 4 |
+| New API Integrations | 3 |
+| New Bot Commands | 20+ |
+
+---
+
+## 🔄 Migration Notes
+
+1. **New dependencies**: Run `npm install` in frontend/
+2. **New data directories**: `data/execution/` created automatically
+3. **API keys**: New optional keys: COINGLASS_API_KEY, FINNHUB_API_KEY
+4. **Environment**: Check `validate_required_keys()` output on startup
+
+---
+
+## 🎯 What's Next (v4.7.0)
+
+- Multi-agent coordination
+- Advanced backtesting engine
+- Mobile app (React Native)
+- Plugin system for custom strategies
+
+---
+
+# [4.5.0] - 2026-01-14
+
+### 🤖 **Bot Supervisor & Resilience System**
+
+Production-ready bot orchestration with auto-recovery and health monitoring.
+
+### 🆕 New Features
+- **Bot Supervisor**: Manages all bot processes with auto-restart
+- **Health Endpoints**: HTTP health checks for monitoring
+- **Graceful Shutdown**: Clean process termination
+- **Resource Limits**: Memory/CPU caps per bot
+
+---
+
+# [4.4.0] - 2026-01-14
+
+### 📰 **Enhanced Sentiment Report with Direct Buy Buttons**
+
+JARVIS-analyzed market reports with one-click trading.
+
+### 🆕 New Features
+- **JARVIS Analysis**: AI-powered market interpretation
+- **Multi-Asset Coverage**: Full crypto market, not just Solana
+- **Buy Buttons**: Direct trading from sentiment reports
+- **Confidence Scoring**: Per-signal reliability metrics
+
+---
+
 # [4.3.0] - 2026-01-13
 
 ### 🏗️ **Infrastructure Improvements Release**

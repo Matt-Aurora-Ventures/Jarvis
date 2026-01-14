@@ -34,7 +34,9 @@ class AutonomyOrchestrator:
         self._thread_generator = None
         self._quote_strategy = None
         self._analytics = None
-    
+        self._news_detector = None
+        self._sentiment_pipeline = None
+
     # =========================================================================
     # Module Accessors (lazy loading)
     # =========================================================================
@@ -122,7 +124,23 @@ class AutonomyOrchestrator:
             from core.autonomy.analytics import get_analytics
             self._analytics = get_analytics()
         return self._analytics
-    
+
+    @property
+    def news(self):
+        """News event detector for monitoring crypto news."""
+        if self._news_detector is None:
+            from core.autonomy.news_detector import get_news_detector
+            self._news_detector = get_news_detector()
+        return self._news_detector
+
+    @property
+    def sentiment_pipeline(self):
+        """Sentiment trading pipeline for multi-source signal aggregation."""
+        if self._sentiment_pipeline is None:
+            from core.sentiment_trading import get_sentiment_pipeline
+            self._sentiment_pipeline = get_sentiment_pipeline()
+        return self._sentiment_pipeline
+
     # =========================================================================
     # Core Operations
     # =========================================================================
@@ -155,7 +173,13 @@ class AutonomyOrchestrator:
         
         # Scan for alpha
         tasks.append(self._scan_alpha())
-        
+
+        # Scan for news events
+        tasks.append(self._scan_news())
+
+        # Scan sentiment pipeline
+        tasks.append(self._scan_sentiment())
+
         # Health checks
         tasks.append(self._run_health_checks())
         
@@ -185,7 +209,25 @@ class AutonomyOrchestrator:
             await self.alpha.scan_for_alpha()
         except Exception as e:
             logger.debug(f"Alpha scan error: {e}")
-    
+
+    async def _scan_news(self):
+        """Scan for news events"""
+        try:
+            await self.news.scan_news()
+            # Process high priority alerts
+            await self.news.process_alerts()
+        except Exception as e:
+            logger.debug(f"News scan error: {e}")
+
+    async def _scan_sentiment(self):
+        """Scan sentiment pipeline for trading signals"""
+        try:
+            signals = await self.sentiment_pipeline.scan_all_sources()
+            if signals:
+                logger.info(f"Sentiment pipeline found {len(signals)} signals")
+        except Exception as e:
+            logger.debug(f"Sentiment pipeline error: {e}")
+
     async def _run_health_checks(self):
         """Run health checks"""
         try:

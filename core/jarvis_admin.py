@@ -52,6 +52,16 @@ JARVIS_VOICE = {
         "banned @{username}. repeated violations. my patience has limits.",
         "@{username} removed. the chat is better for it.",
     ],
+    "user_muted": [
+        "⏸️ muted @{username} for {hours}h. cooling off period initiated.",
+        "⏸️ @{username} needs a timeout. muted for {hours} hours.",
+        "⏸️ taking @{username} offline for {hours}h. too much noise.",
+    ],
+    "rate_limited": [
+        "slow down @{username}. my sensors are overheating from your message rate.",
+        "easy there @{username}. quality over quantity.",
+        "@{username} you're flooding the chat. take a breath.",
+    ],
     "mistake_footer": "\n\nif this was a mistake, reach out to @MattFromKr8tiv - even AIs misfire sometimes.",
     
     # Response to non-admin commands
@@ -118,24 +128,50 @@ class JarvisAdmin:
         admin_str = os.environ.get("TELEGRAM_ADMIN_IDS", "8527130908")
         self.admin_ids = set(int(x.strip()) for x in admin_str.split(",") if x.strip().isdigit())
         
-        # Spam detection patterns
+        # Spam detection patterns - comprehensive list
         self.spam_patterns = [
             r"join\s+(now|here|us)",
             r"(t\.me|telegram\.me)/\w+",  # Telegram links (suspicious)
-            r"(bit\.ly|tinyurl|goo\.gl)",  # URL shorteners
+            r"(bit\.ly|tinyurl|goo\.gl|shorturl|is\.gd|v\.gd|rb\.gy|cutt\.ly)",  # URL shorteners
             r"(airdrop|giveaway|free\s+\$)",
-            r"(dm\s+me|check\s+dm|sent\s+you)",
-            r"(100x|1000x|guaranteed|profit)",
-            r"(click\s+here|limited\s+time)",
+            r"(dm\s+me|check\s+dm|sent\s+you|message\s+me)",
+            r"(100x|1000x|guaranteed|profit|make\s+money)",
+            r"(click\s+here|limited\s+time|act\s+fast)",
             r"(@\w+bot)",  # Other bots
+            r"(buy\s+(a\s+)?sol\s+wallet|buying\s+sol\s+wallet)",
+            r"(purchase\s+wallet|sell\s+wallet)",
+            r"(whatsapp|telegram\s+@|contact\s+(me|us)\s+on)",
+            r"(sex|porn|xxx|dating|hookup|onlyfans)",  # Adult spam
+            r"(casino|bet\s+now|gambling|free\s+spins)",  # Gambling spam
+            r"(earn\s+\$\d+|make\s+\$\d+\s+daily)",  # Income spam
+            r"(promo\s+code|discount\s+code|coupon)",  # Promo spam
+            r"(follow\s+back|f4f|l4l|s4s)",  # Follow spam
+            r"(crypto\s+signals?|trading\s+signals?)",  # Signal selling
+            r"(presale|pre-sale|whitelist\s+spot)",  # Presale spam
+            r"(pump\s+group|pump\s+and\s+dump)",  # Pump spam
+            r"(recover\s+wallet|lost\s+crypto|stolen\s+funds)",  # Recovery scam
+            r"(metamask|trustwallet|phantom)\s+support",  # Fake support
+            r"(binance|coinbase|kraken)\s+(support|help)",  # Exchange scam
+            r"(investment\s+plan|roi\s+guaranteed)",  # Investment scam
         ]
-        
-        # Scam keywords
+
+        # Scam keywords - expanded list
         self.scam_keywords = [
-            "send sol", "send eth", "wallet connect", "validate wallet",
-            "claim reward", "investment opportunity", "double your",
+            "send sol", "send eth", "send btc", "send usdt", "send usdc",
+            "wallet connect", "validate wallet", "verify wallet", "sync wallet",
+            "claim reward", "claim airdrop", "claim tokens",
+            "investment opportunity", "double your", "triple your",
             "act now", "urgent action", "verify account",
+            "technical support", "customer support chat",
+            "winning notification", "you have won",
+            "reset password", "account suspended", "unusual activity",
+            "minimum deposit", "withdrawal fee",
         ]
+
+        # Rate limiting - track message times per user
+        self._message_times: Dict[int, List[float]] = {}
+        self.rate_limit_window = 60  # seconds
+        self.rate_limit_max = 10  # max messages per window
     
     def _init_db(self):
         """Initialize the SQLite database."""
@@ -294,6 +330,59 @@ class JarvisAdmin:
             """, (user_id, reason, datetime.now(timezone.utc).isoformat()))
             conn.commit()
             conn.close()
+
+    def mute_user(self, user_id: int, reason: str, duration_hours: int = 24):
+        """Mute a user for a duration (tracked in mod_actions)."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            unmute_at = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
+            cursor.execute("""
+                INSERT INTO mod_actions (action_type, user_id, reason, timestamp, reversed)
+                VALUES ('mute', ?, ?, ?, 0)
+            """, (user_id, f"{reason}|unmute_at:{unmute_at.isoformat()}",
+                  datetime.now(timezone.utc).isoformat()))
+            conn.commit()
+            conn.close()
+
+    def is_rate_limited(self, user_id: int) -> Tuple[bool, int]:
+        """
+        Check if user is sending messages too fast.
+        Returns: (is_limited, message_count_in_window)
+        """
+        now = time.time()
+        if user_id not in self._message_times:
+            self._message_times[user_id] = []
+
+        # Clean old timestamps
+        self._message_times[user_id] = [
+            t for t in self._message_times[user_id]
+            if now - t < self.rate_limit_window
+        ]
+
+        # Add current timestamp
+        self._message_times[user_id].append(now)
+
+        count = len(self._message_times[user_id])
+        return count > self.rate_limit_max, count
+
+    def trust_user(self, user_id: int):
+        """Mark a user as trusted (reduced spam sensitivity)."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET is_trusted = 1 WHERE user_id = ?", (user_id,))
+            conn.commit()
+            conn.close()
+
+    def clear_warnings(self, user_id: int):
+        """Clear warnings for a user."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET warning_count = 0 WHERE user_id = ?", (user_id,))
+            conn.commit()
+            conn.close()
     
     # =========================================================================
     # Message Analysis
@@ -334,19 +423,42 @@ class JarvisAdmin:
         text_lower = text.lower()
         confidence = 0.0
         reasons = []
-        
+
+        # Check rate limiting first
+        is_rate_limited, msg_count = self.is_rate_limited(user_id)
+        if is_rate_limited:
+            confidence += 0.5
+            reasons.append(f"rate_limited: {msg_count} msgs in {self.rate_limit_window}s")
+
         # Check regex patterns
         for pattern in self.spam_patterns:
             if re.search(pattern, text_lower, re.IGNORECASE):
                 confidence += 0.3
                 reasons.append(f"pattern: {pattern[:20]}")
-        
+
         # Check scam keywords
         for keyword in self.scam_keywords:
             if keyword in text_lower:
                 confidence += 0.4
                 reasons.append(f"keyword: {keyword}")
-        
+
+        # Check for excessive links
+        link_count = len(re.findall(r'https?://|t\.me/|telegram\.me/', text_lower))
+        if link_count >= 2:
+            confidence += 0.3
+            reasons.append(f"multiple links: {link_count}")
+
+        # Check for all caps (shouting)
+        if len(text) > 20 and text.isupper():
+            confidence += 0.2
+            reasons.append("all caps")
+
+        # Check for excessive emojis/special chars
+        special_ratio = sum(1 for c in text if ord(c) > 127) / max(len(text), 1)
+        if special_ratio > 0.3:
+            confidence += 0.15
+            reasons.append(f"excessive special chars: {special_ratio:.0%}")
+
         # Check user history
         user = self.get_user(user_id)
         if user:
@@ -354,23 +466,28 @@ class JarvisAdmin:
             if user.message_count < 3:
                 confidence += 0.1
                 reasons.append("new user")
-            
+
             # Previous warnings increase suspicion
             if user.warning_count > 0:
                 confidence += 0.2 * user.warning_count
                 reasons.append(f"prior warnings: {user.warning_count}")
-            
+
             # Trusted users get benefit of doubt
             if user.is_trusted:
                 confidence *= 0.3
                 reasons.append("trusted user - reduced")
-        
+
+            # Admin immunity
+            if self.is_admin(user_id):
+                confidence = 0.0
+                reasons = ["admin - immune"]
+
         # Cap at 1.0
         confidence = min(confidence, 1.0)
-        
+
         is_spam = confidence >= 0.5
         reason = ", ".join(reasons) if reasons else "clean"
-        
+
         return is_spam, confidence, reason
     
     def detect_command_attempt(self, text: str, user_id: int) -> Tuple[bool, str]:

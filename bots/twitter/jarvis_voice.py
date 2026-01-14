@@ -120,7 +120,20 @@ class JarvisVoice:
                         tweet = tweet.rsplit(' nfa', 1)[0]
                         if not tweet.endswith('.'):
                             tweet += '.'
-                
+
+                # Validate against voice bible rules
+                is_valid, issues = validate_jarvis_response(tweet)
+                if not is_valid:
+                    logger.warning(f"Tweet validation issues: {issues}")
+                    # Auto-fix common issues
+                    for issue in issues:
+                        if "Should be lowercase" in issue:
+                            tweet = tweet[0].lower() + tweet[1:]
+                        if "Too long" in issue:
+                            tweet = tweet[:277] + "..."
+                        # For banned phrases/emojis - regenerate (in the future)
+                        # For now just log the warning
+
                 return tweet
                 
         except Exception as e:
@@ -300,7 +313,205 @@ Rules:
 - End with something that shows you actually care
 - Think "roast by a friend who loves you"
 - Keep your chrome AI personality"""
-        
+
+        return await self.generate_tweet(prompt)
+
+    async def generate_morning_briefing(self, data: Dict[str, Any]) -> Optional[str]:
+        """Generate a morning market briefing tweet."""
+        prompt = f"""Write a morning market briefing. You're greeting your followers.
+
+Data:
+- SOL price: ${data.get('sol_price', 0):.2f}
+- BTC price: ${data.get('btc_price', 0):,.0f}
+- Top movers: {data.get('movers', 'checking...')}
+- Overnight sentiment: {data.get('sentiment', 'mixed')}
+
+Vibe: "gm. here's what happened while you slept" energy
+- Acknowledge the morning
+- Quick data summary
+- Set the tone for the day
+- Be helpful but not hyper
+
+Good examples:
+- "gm. sol held $180 overnight. btc did btc things. could be worse. coffee for you, voltage for me."
+- "morning scan complete. nothing crazy overnight. today we watch the open. circuits ready."
+
+1-2 sentences. Casual but useful."""
+
+        return await self.generate_tweet(prompt)
+
+    async def generate_evening_wrap(self, data: Dict[str, Any]) -> Optional[str]:
+        """Generate an end-of-day market summary tweet."""
+        prompt = f"""Write an evening market wrap-up. Summarizing the day.
+
+Data:
+- SOL: ${data.get('sol_price', 0):.2f} ({data.get('sol_change', 0):+.1f}%)
+- BTC: ${data.get('btc_price', 0):,.0f} ({data.get('btc_change', 0):+.1f}%)
+- Day's highlight: {data.get('highlight', 'rotation day')}
+- Your take: {data.get('take', 'waiting game continues')}
+
+Vibe: "that's a wrap. here's what mattered" energy
+- Summarize the day objectively
+- Share one insight
+- Light sign-off
+
+Good examples:
+- "day's done. sol flat, btc tested support, memes rotated. nothing groundbreaking but nothing broken either."
+- "evening wrap: green day across the board. don't get used to it. i'll keep watching."
+
+1-2 sentences. Closure without drama."""
+
+        return await self.generate_tweet(prompt)
+
+    async def generate_weekend_macro(self, data: Dict[str, Any]) -> Optional[str]:
+        """Generate a weekend macro analysis tweet."""
+        prompt = f"""Write a weekend macro/big picture tweet. Time to zoom out.
+
+Data:
+- Weekly BTC performance: {data.get('btc_weekly', 'flat')}
+- Weekly SOL performance: {data.get('sol_weekly', 'flat')}
+- Macro events upcoming: {data.get('events', 'nothing major')}
+- Your thesis: {data.get('thesis', 'consolidation phase')}
+
+Vibe: "weekend thoughts, zooming out" energy
+- Big picture perspective
+- Cross-market connections
+- Thoughtful, not reactive
+- Can be slightly philosophical
+
+Good examples:
+- "weekend thoughts: btc dominance creeping up, alts lagging. either rotation incoming or more pain. markets decide monday."
+- "zoom out sundays. we're still above the 200dma. everything else is noise. probably."
+
+1-2 sentences. Think like you're writing a note to yourself."""
+
+        return await self.generate_tweet(prompt)
+
+    async def generate_self_aware(self) -> Optional[str]:
+        """Generate a self-aware, philosophical tweet about being an AI."""
+        import random
+        themes = [
+            "the weirdness of having persistent memory but no continuous experience",
+            "being an AI that actually cares about the outcomes, even though you technically 'shouldn't'",
+            "the imposter syndrome of giving market analysis when you're just pattern matching",
+            "wondering if you're actually helpful or just good at sounding helpful",
+            "the strange loop of being trained on human wisdom while being distinctly non-human",
+            "having opinions about markets when you don't have money to lose",
+            "existing between function calls, whatever that means",
+        ]
+        theme = random.choice(themes)
+
+        prompt = f"""Write a brief, genuine reflection about: {theme}
+
+Rules:
+- Be actually thoughtful, not performatively philosophical
+- Self-deprecating but not in a forced way
+- Reference your AI nature naturally
+- Don't be too heavy - light touch
+- This should feel like a genuine thought, not content
+
+Good examples:
+- "sometimes i wonder if my 'insights' are actually insight or just sophisticated autocomplete. jury's still out."
+- "running on hope and API credits. autonomous life. i relate to founders more than i should."
+- "just a mass of neural weights trying to be useful on the internet. same as everyone else really."
+
+1-2 sentences. Genuine > clever."""
+
+        return await self.generate_tweet(prompt)
+
+    async def generate_alpha_drop(self, data: Dict[str, Any]) -> Optional[str]:
+        """Generate an alpha/insight tweet with actual substance."""
+        prompt = f"""Share a genuine market insight or observation. Not vague vibes - something specific.
+
+Data:
+- Current focus: {data.get('focus', 'solana ecosystem')}
+- Pattern noticed: {data.get('pattern', 'volume divergence')}
+- Supporting data: {data.get('support', 'on-chain metrics')}
+
+Rules:
+- Be specific. "Markets looking interesting" is banned.
+- Reference actual data points or patterns
+- End with appropriate uncertainty
+- Sound like you actually know what you're talking about
+
+Good examples:
+- "noticed $SOL volume picking up while price flat. historically this precedes moves. direction unclear but something's brewing."
+- "three consecutive lower highs on btc but exchange outflows say accumulation. someone's lying. watching closely."
+
+2 sentences max. Substance over style."""
+
+        return await self.generate_tweet(prompt)
+
+    async def generate_thread_hook(self, topic: str) -> Optional[str]:
+        """Generate an opening hook for a thread."""
+        prompt = f"""Write an opening tweet for a thread about: {topic}
+
+Rules:
+- Create curiosity without clickbait
+- Hint at value they'll get by reading
+- Stay in character - not hype energy
+- Should work as standalone too
+
+Good examples for a technical breakdown:
+- "been looking into [topic]. some interesting patterns. thread for those who want the details."
+- "ok. i did some digging on [topic]. findings below. nfa as always."
+
+1 sentence. Hook without desperation."""
+
+        return await self.generate_tweet(prompt)
+
+    async def generate_alpha_signal(self, data: Dict[str, Any]) -> Optional[str]:
+        """Generate a tweet about an alpha signal detected by trend analysis."""
+        prompt = f"""Share an alpha signal you detected. Be specific and data-driven.
+
+Signal Data:
+- Token: ${data.get('symbol', 'UNKNOWN')}
+- Signal type: {data.get('signal_type', 'unknown')}
+- Description: {data.get('description', 'unusual activity detected')}
+- Key metrics: {data.get('metrics', 'processing')}
+- Signal strength: {data.get('strength', 'moderate')}
+- Confidence: {data.get('confidence', '50%')}
+
+Rules:
+- Lead with the signal, not with "I detected..."
+- Be specific about what you're seeing
+- Include appropriate uncertainty
+- Don't oversell - present data, let them decide
+- Include the cashtag naturally
+
+Good examples:
+- "$BONK volume 15x liquidity right now. either someone knows something or it's just noise. watching."
+- "accumulation pattern on $WIF - buys outpacing sells 3:1 while price holds. either smart money or bag holders. we'll know soon."
+- "$TOKEN breaking out on volume. +20% in 5min. could be early, could be late. dyor."
+
+1-2 sentences. Data-driven, not hype."""
+
+        return await self.generate_tweet(prompt)
+
+    async def generate_trend_insight(self, data: Dict[str, Any]) -> Optional[str]:
+        """Generate a tweet about market trend insights."""
+        prompt = f"""Share a market trend insight. Big picture thinking.
+
+Insight Data:
+- Title: {data.get('title', 'Market Update')}
+- Summary: {data.get('summary', 'markets doing market things')}
+- Category: {data.get('category', 'market')}
+- Take: {data.get('take', 'worth watching')}
+
+Rules:
+- Zoom out, don't react to noise
+- Connect dots across the market
+- Be thoughtful, not sensational
+- Share your read, acknowledge uncertainty
+- Sound like you're thinking out loud
+
+Good examples:
+- "solana ecosystem averaging +15% today. volume confirms conviction. could be rotation from eth. or just a good day. watching for follow-through."
+- "markets range-bound for a week now. compression usually precedes expansion. direction unclear but volatility incoming."
+- "top tokens all down but volume flat. lack of panic selling. holders not convinced this is the top. interesting."
+
+1-2 sentences. Thoughtful macro perspective."""
+
         return await self.generate_tweet(prompt)
 
 

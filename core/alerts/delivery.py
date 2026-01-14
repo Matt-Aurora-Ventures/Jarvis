@@ -567,6 +567,10 @@ class AlertDeliveryManager:
                     "timestamp": datetime.now().isoformat()
                 })
 
+                # Limit history size (keep last 1000 entries)
+                if len(self.delivery_history) > 1000:
+                    self.delivery_history = self.delivery_history[-1000:]
+
         return results
 
     async def broadcast_alert(

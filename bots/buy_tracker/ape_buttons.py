@@ -213,6 +213,49 @@ class TradeResult:
 
 
 # =============================================================================
+# CONTRACT LOOKUP - Stores full contract for truncated callback data
+# =============================================================================
+
+def _save_contract_lookup(contract_short: str, contract_full: str):
+    """
+    Save contract address mapping for callback lookup.
+
+    Telegram callbacks are limited to 64 bytes, so we truncate contracts.
+    This saves the full address for trade execution.
+    """
+    import tempfile
+    from pathlib import Path
+
+    if not contract_short or not contract_full or len(contract_full) < 32:
+        return
+
+    lookup_file = Path(tempfile.gettempdir()) / "jarvis_contract_lookup.json"
+
+    try:
+        # Load existing
+        lookup = {}
+        if lookup_file.exists():
+            with open(lookup_file) as f:
+                lookup = json.load(f)
+
+        # Add/update mapping
+        lookup[contract_short] = contract_full
+
+        # Limit size (keep most recent 500)
+        if len(lookup) > 500:
+            keys = list(lookup.keys())
+            for k in keys[:100]:  # Remove oldest 100
+                del lookup[k]
+
+        # Save
+        with open(lookup_file, "w") as f:
+            json.dump(lookup, f)
+
+    except Exception as e:
+        logger.debug(f"Contract lookup save failed: {e}")
+
+
+# =============================================================================
 # BUTTON CREATION
 # =============================================================================
 
@@ -245,6 +288,10 @@ def create_ape_buttons_with_tp_sl(
 
     # Shorten contract for callback data (Telegram 64-byte limit)
     contract_short = contract_address[:10] if contract_address else ""
+
+    # Save full contract for trade execution lookup
+    if contract_address and contract_short:
+        _save_contract_lookup(contract_short, contract_address)
 
     # Header row with profile descriptions
     buttons.append([
@@ -392,6 +439,7 @@ def calculate_tp_sl_prices(
     entry_price: float,
     risk_profile: RiskProfile,
     direction: str = "LONG",
+    asset_type: str = "token",
 ) -> tuple[float, float]:
     """
     Calculate TP and SL prices from entry price and risk profile.
@@ -400,11 +448,13 @@ def calculate_tp_sl_prices(
         entry_price: Current/entry price
         risk_profile: Selected risk profile
         direction: "LONG" or "SHORT"
+        asset_type: "token", "stock", etc. - determines TP/SL percentages
 
     Returns:
         (take_profit_price, stop_loss_price)
     """
-    config = RISK_PROFILE_CONFIG[risk_profile]
+    # Use asset-appropriate config (stocks have lower targets)
+    config = get_risk_config(asset_type, risk_profile)
     tp_pct = config["tp_pct"] / 100
     sl_pct = config["sl_pct"] / 100
 
@@ -440,9 +490,10 @@ def create_trade_setup(
     """
     profile = parsed_callback["risk_profile"]
     allocation_pct = parsed_callback["allocation_percent"]
+    asset_type = parsed_callback.get("asset_type", "token")
 
-    # Calculate TP/SL prices
-    tp_price, sl_price = calculate_tp_sl_prices(entry_price, profile, direction)
+    # Calculate TP/SL prices (uses asset-appropriate config - stocks have lower targets)
+    tp_price, sl_price = calculate_tp_sl_prices(entry_price, profile, direction, asset_type)
 
     # Calculate trade amount
     amount_sol = treasury_balance_sol * (allocation_pct / 100)
@@ -556,6 +607,9 @@ async def execute_ape_trade(
     Returns:
         TradeResult with success/failure info
     """
+    import tempfile
+    from pathlib import Path
+
     # Parse callback
     parsed = parse_ape_callback(callback_data)
     if not parsed:
@@ -567,7 +621,25 @@ async def execute_ape_trade(
     # Fetch current price if not provided
     current_price = entry_price
     symbol = parsed.get("symbol", "")
-    contract = parsed.get("contract", "")
+    contract_short = parsed.get("contract", "")
+
+    # Look up full contract from mapping (truncated for Telegram callback limit)
+    contract = contract_short
+    if contract_short and len(contract_short) <= 10:
+        lookup_file = Path(tempfile.gettempdir()) / "jarvis_contract_lookup.json"
+        try:
+            if lookup_file.exists():
+                with open(lookup_file) as f:
+                    lookup = json.load(f)
+                full_contract = lookup.get(contract_short, "")
+                if full_contract:
+                    contract = full_contract
+                    logger.info(f"Resolved contract: {contract_short} -> {contract}")
+        except Exception as e:
+            logger.error(f"Failed to lookup contract: {e}")
+
+    # Update parsed with full contract for trade setup
+    parsed["contract"] = contract
 
     if current_price <= 0:
         logger.info(f"Fetching live price for {symbol} (contract: {contract})")

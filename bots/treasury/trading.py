@@ -25,6 +25,15 @@ from .wallet import SecureWallet, WalletInfo
 from .jupiter import JupiterClient, SwapQuote, SwapResult, LimitOrderManager
 from .scorekeeper import get_scorekeeper, Scorekeeper
 
+# Import centralized audit trail for security logging
+try:
+    from core.security.audit_trail import audit_trail, AuditEventType
+    AUDIT_TRAIL_AVAILABLE = True
+except ImportError:
+    AUDIT_TRAIL_AVAILABLE = False
+    audit_trail = None
+    AuditEventType = None
+
 # Import new trading modules
 try:
     from core.trading.decision_matrix import DecisionMatrix, TradeDecision, DecisionType
@@ -403,6 +412,10 @@ class TradingEngine:
 
         Per guide: "Maintain comprehensive audit trails for all
         trading operations for regulatory compliance and debugging."
+
+        Logs to both:
+        1. Local JSON file for quick access
+        2. Centralized audit trail for security monitoring
         """
         try:
             # Load existing log
@@ -429,6 +442,26 @@ class TradingEngine:
                 json.dump(audit_log, f, indent=2)
 
             logger.info(f"AUDIT: {action} | user={user_id} | success={success}")
+
+            # Also log to centralized audit trail for security monitoring
+            if AUDIT_TRAIL_AVAILABLE and audit_trail:
+                # Map action to audit event type
+                event_type = AuditEventType.TRADE_EXECUTE
+                if "WALLET" in action:
+                    event_type = AuditEventType.WALLET_ACCESS
+                elif "REJECTED" in action or "FAILED" in action:
+                    event_type = AuditEventType.SECURITY_ALERT if not success else AuditEventType.TRADE_EXECUTE
+
+                audit_trail.log(
+                    event_type=event_type,
+                    actor_id=str(user_id) if user_id else "system",
+                    action=action,
+                    resource_type="treasury_trade",
+                    resource_id=details.get("position_id", details.get("token", "unknown")),
+                    details=details,
+                    success=success,
+                    error_message=details.get("error", "") if not success else ""
+                )
 
         except Exception as e:
             logger.error(f"Failed to write audit log: {e}")
@@ -921,14 +954,19 @@ class TradingEngine:
 
             # Set up TP/SL orders
             if self.order_manager:
+                # Get token decimals for correct amount calculation
+                token_info = await self.jupiter.get_token_info(token_mint)
+                token_decimals = token_info.decimals if token_info else 9
+                amount_smallest_unit = int(position.amount * (10 ** token_decimals))
+
                 tp_id = await self.order_manager.create_take_profit(
                     token_mint,
-                    int(position.amount * (10 ** 9)),
+                    amount_smallest_unit,
                     tp_price
                 )
                 sl_id = await self.order_manager.create_stop_loss(
                     token_mint,
-                    int(position.amount * (10 ** 9)),
+                    amount_smallest_unit,
                     sl_price
                 )
                 position.tp_order_id = tp_id
@@ -1225,9 +1263,98 @@ class TradingEngine:
         )
 
     async def initialize_order_manager(self):
-        """Initialize the limit order manager."""
-        self.order_manager = LimitOrderManager(self.jupiter, self.wallet)
+        """Initialize the limit order manager with position closure callback."""
+        self.order_manager = LimitOrderManager(
+            self.jupiter,
+            self.wallet,
+            on_order_filled=self._handle_order_filled
+        )
         await self.order_manager.start_monitoring()
+
+    async def _handle_order_filled(
+        self,
+        order_id: str,
+        order_type: str,
+        token_mint: str,
+        exit_price: float,
+        output_amount: float,
+        tx_signature: str
+    ):
+        """
+        Handle TP/SL order filled callback.
+
+        Closes the position and updates P&L tracking.
+        """
+        # Find position by token_mint
+        position = None
+        position_id = None
+        for pid, pos in self.positions.items():
+            if pos.token_mint == token_mint and pos.is_open:
+                position = pos
+                position_id = pid
+                break
+
+        if not position:
+            logger.warning(f"Order {order_id} filled but no matching position found for {token_mint[:8]}...")
+            return
+
+        # Calculate P&L
+        pnl_pct = ((exit_price - position.entry_price) / position.entry_price) * 100
+        pnl_usd = position.amount_usd * (pnl_pct / 100)
+
+        # Determine close type
+        close_type = "tp" if order_type == "TAKE_PROFIT" else "sl"
+
+        # Update position
+        position.status = TradeStatus.CLOSED
+        position.closed_at = datetime.utcnow().isoformat()
+        position.exit_price = exit_price
+        position.pnl_pct = pnl_pct
+        position.pnl_usd = pnl_usd
+
+        # Cancel the other order (TP cancelled SL or vice versa)
+        if self.order_manager:
+            other_order_id = position.sl_order_id if order_type == "TAKE_PROFIT" else position.tp_order_id
+            if other_order_id:
+                await self.order_manager.cancel_order(other_order_id)
+
+        # Move to history
+        self.trade_history.append(position)
+        del self.positions[position_id]
+        self._save_state()
+
+        # Update scorekeeper
+        try:
+            scorekeeper = get_scorekeeper()
+            sol_price = await self.jupiter.get_token_price(JupiterClient.SOL_MINT)
+            exit_amount_sol = output_amount if sol_price <= 0 else output_amount
+
+            scorekeeper.close_position(
+                position_id=position_id,
+                exit_price=exit_price,
+                exit_amount_sol=exit_amount_sol,
+                close_type=close_type,
+                tx_signature=tx_signature
+            )
+        except Exception as e:
+            logger.warning(f"Failed to update scorekeeper: {e}")
+
+        # Audit log
+        self._log_audit(f"CLOSE_POSITION_{order_type}", {
+            "position_id": position_id,
+            "token": position.token_symbol,
+            "entry_price": position.entry_price,
+            "exit_price": exit_price,
+            "pnl_usd": pnl_usd,
+            "pnl_pct": pnl_pct,
+            "order_id": order_id,
+            "tx_signature": tx_signature,
+        }, None, True)
+
+        logger.info(
+            f"Position {position_id} closed via {order_type}: "
+            f"{position.token_symbol} P&L ${pnl_usd:+.2f} ({pnl_pct:+.1f}%)"
+        )
 
     async def shutdown(self):
         """Clean shutdown."""

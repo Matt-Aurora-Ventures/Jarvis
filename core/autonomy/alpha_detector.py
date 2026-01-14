@@ -33,8 +33,15 @@ class AlphaDetector:
     
     # Known whale wallets to monitor (Solana)
     WHALE_WALLETS = [
-        # Add known whale addresses here
+        # Major market makers and whales
+        "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1",  # Raydium
+        "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",  # Jupiter
+        "HWy1jotHpo6UqeQxx49dpYYdQB8wj9Qk9MdxwjLvDHB8",  # Large LP
+        "DVtLkMquREfrGgJv4yNdVz5H9gnZTSjUUoSYS2zKyEcQ",  # Known whale
     ]
+
+    # Max signals to keep in memory
+    MAX_RECENT_SIGNALS = 100
     
     # Thresholds
     VOLUME_SPIKE_THRESHOLD = 3.0  # 3x normal volume
@@ -87,9 +94,13 @@ class AlphaDetector:
         grok_signals = await self.ask_grok_for_alpha()
         signals.extend(grok_signals)
         
-        self.recent_signals = signals
+        # Add new signals, keeping within limit
+        self.recent_signals.extend(signals)
+        if len(self.recent_signals) > self.MAX_RECENT_SIGNALS:
+            self.recent_signals = self.recent_signals[-self.MAX_RECENT_SIGNALS:]
+
         self.last_scan = datetime.utcnow()
-        
+
         logger.info(f"Alpha scan found {len(signals)} signals")
         return signals
     
