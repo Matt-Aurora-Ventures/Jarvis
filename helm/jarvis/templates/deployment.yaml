@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jarvis.fullname" . }}-api
+  labels:
+    {{- include "jarvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- if not .Values.api.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "jarvis.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "jarvis.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "jarvis.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: api
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.api.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.api.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.name }}
+          env:
+            {{- toYaml .Values.api.env | nindent 12 }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.name }}
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.name }}
+                  key: REDIS_URL
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+{{- if .Values.telegramBot.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jarvis.fullname" . }}-telegram-bot
+  labels:
+    {{- include "jarvis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: telegram-bot
+spec:
+  replicas: {{ .Values.telegramBot.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "jarvis.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: telegram-bot
+  template:
+    metadata:
+      labels:
+        {{- include "jarvis.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: telegram-bot
+    spec:
+      serviceAccountName: {{ include "jarvis.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: telegram-bot
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.telegramBot.image.repository }}:{{ .Values.telegramBot.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.telegramBot.image.pullPolicy }}
+          resources:
+            {{- toYaml .Values.telegramBot.resources | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.name }}
+          env:
+            {{- toYaml .Values.telegramBot.env | nindent 12 }}
+{{- end }}

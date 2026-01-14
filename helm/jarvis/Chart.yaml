@@ -1,0 +1,23 @@
+apiVersion: v2
+name: jarvis
+description: JARVIS AI Assistant - Helm Chart
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - jarvis
+  - ai
+  - telegram
+  - trading
+  - solana
+
+home: https://github.com/your-org/jarvis
+sources:
+  - https://github.com/your-org/jarvis
+
+maintainers:
+  - name: JARVIS Team
+    email: team@jarvis.ai
+
+dependencies: []

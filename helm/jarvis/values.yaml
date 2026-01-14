@@ -1,0 +1,167 @@
+# JARVIS Helm Chart Values
+# Override these values in your environment-specific values files
+
+# Global settings
+global:
+  environment: production
+  logLevel: INFO
+
+# API deployment
+api:
+  replicaCount: 2
+
+  image:
+    repository: jarvis-api
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/rate-limit: "100"
+    hosts:
+      - host: api.jarvis.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: jarvis-tls
+        hosts:
+          - api.jarvis.local
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  livenessProbe:
+    httpGet:
+      path: /health/live
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+  env:
+    - name: LOG_LEVEL
+      value: "INFO"
+    - name: WORKERS
+      value: "4"
+
+# Telegram bot deployment
+telegramBot:
+  enabled: true
+  replicaCount: 1  # Only one bot instance
+
+  image:
+    repository: jarvis-telegram-bot
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  env: []
+
+# Treasury bot deployment
+treasuryBot:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: jarvis-treasury-bot
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  env: []
+
+# PostgreSQL (using subchart or external)
+postgresql:
+  enabled: true
+  auth:
+    username: jarvis
+    database: jarvis
+    existingSecret: jarvis-db-secret
+  primary:
+    persistence:
+      size: 10Gi
+
+# Redis (using subchart or external)
+redis:
+  enabled: true
+  auth:
+    existingSecret: jarvis-redis-secret
+  master:
+    persistence:
+      size: 1Gi
+
+# Secrets configuration
+secrets:
+  # If true, expects secrets to be created externally
+  external: false
+  # Secret name containing sensitive env vars
+  name: jarvis-secrets
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  readOnlyRootFilesystem: true
+
+# Node affinity/tolerations
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Network policies
+networkPolicy:
+  enabled: true

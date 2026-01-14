@@ -708,6 +708,125 @@ Examples:
             logger.error(f"News tweet error: {e}")
         return None
     
+    async def generate_comprehensive_market_tweet(self) -> Optional[TweetDraft]:
+        """Generate a comprehensive market sentiment tweet covering multiple asset classes."""
+        try:
+            voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
+            
+            from core.data.market_data_api import get_market_api
+            market_api = get_market_api()
+            
+            # Get comprehensive market overview
+            overview = await market_api.get_market_overview()
+            
+            # Build market summary for Grok analysis
+            summary_parts = []
+            
+            # Crypto
+            if overview.btc:
+                btc_dir = "up" if (overview.btc.change_pct or 0) > 0 else "down"
+                summary_parts.append(f"BTC ${overview.btc.price:,.0f} ({btc_dir} {abs(overview.btc.change_pct or 0):.1f}%)")
+            if overview.sol:
+                sol_dir = "up" if (overview.sol.change_pct or 0) > 0 else "down"
+                summary_parts.append(f"SOL ${overview.sol.price:.2f} ({sol_dir} {abs(overview.sol.change_pct or 0):.1f}%)")
+            
+            # Precious metals
+            if overview.gold:
+                summary_parts.append(f"Gold ${overview.gold.price:,.0f}")
+            if overview.silver:
+                summary_parts.append(f"Silver ${overview.silver.price:.2f}")
+            
+            # Commodities
+            if overview.oil:
+                summary_parts.append(f"Oil ${overview.oil.price:.2f}")
+            
+            # Fear & Greed
+            if overview.fear_greed:
+                summary_parts.append(f"Fear/Greed: {overview.fear_greed} ({overview.market_sentiment})")
+            
+            # Upcoming events
+            events_str = ", ".join(overview.upcoming_events[:2]) if overview.upcoming_events else ""
+            
+            market_summary = " | ".join(summary_parts)
+            
+            # Use Grok for cross-market analysis
+            grok_response = await grok.analyze_sentiment(
+                {"overview": market_summary, "sentiment": overview.market_sentiment, "events": events_str},
+                context_type="macro"
+            )
+            grok_take = grok_response.content[:150] if grok_response and grok_response.success else ""
+            
+            # Rotate between different focus areas
+            import random
+            focus = random.choice(["crypto_metals", "macro", "events", "cross_asset"])
+            
+            if focus == "crypto_metals":
+                prompt = f"""Write a tweet comparing crypto and precious metals sentiment.
+
+Data: {market_summary}
+Analysis: {grok_take}
+
+Connect the dots between gold/silver and crypto. What's the correlation saying?
+Example vibes:
+- "gold at $2650 while btc consolidates. boomers and degens agreeing on something for once."
+- "silver outperforming btc this week. my boomer portfolio is smug about it."
+
+2-3 sentences. Insightful, not generic."""
+
+            elif focus == "macro":
+                prompt = f"""Write a tweet about the broader macro picture.
+
+Data: {market_summary}
+Upcoming: {events_str}
+Sentiment: Fear/Greed at {overview.fear_greed} ({overview.market_sentiment})
+
+Give a thoughtful take on what the macro picture means for risk assets.
+Example vibes:
+- "fear/greed at {overview.fear_greed} with FOMC next week. historically this setup means... actually i don't know. nobody does."
+- "commodities, metals, and crypto all moving together. correlation is 1 until it isn't."
+
+2-3 sentences. Smart observation."""
+
+            elif focus == "events":
+                prompt = f"""Write a tweet about upcoming market events.
+
+Upcoming: {events_str}
+Current sentiment: {overview.market_sentiment}
+
+What should traders be watching? Give a useful preview.
+Example vibes:
+- "FOMC next week. reminder that whatever you think will happen probably won't. plan accordingly."
+- "jobs report friday. crypto acts like it doesn't care but definitely cares."
+
+2-3 sentences. Actually useful."""
+
+            else:  # cross_asset
+                prompt = f"""Write a tweet about cross-asset market dynamics.
+
+Full picture: {market_summary}
+{grok_take}
+
+What's the most interesting thing happening across markets right now?
+Example vibes:
+- "btc flat, gold up, oil down, fear/greed neutral. market is confused and i relate."
+- "interesting divergence: crypto rotating while tradfi stays bid. someone's wrong."
+
+2-3 sentences. Sharp observation."""
+
+            content = await voice.generate_tweet(prompt)
+            
+            if content:
+                return TweetDraft(
+                    content=content,
+                    category="comprehensive_market",
+                    cashtags=["$BTC", "$SOL"],
+                    hashtags=[]
+                )
+        except Exception as e:
+            logger.error(f"Comprehensive market tweet error: {e}")
+        return None
+    
     # =========================================================================
     # Posting
     # =========================================================================
@@ -782,44 +901,44 @@ Examples:
             # Night (22-6): Lighter content, agentic musings
             
             if 6 <= hour < 10:
-                # Morning - market focus + social sentiment
+                # Morning - comprehensive market focus
                 generators = [
+                    ("comprehensive_market", self.generate_comprehensive_market_tweet),
                     ("market_update", self.generate_market_update),
                     ("social_sentiment", self.generate_social_sentiment_tweet),
                     ("hourly_update", self.generate_hourly_update),
-                    ("trending_token", self.generate_trending_token_call),
                 ]
             elif 10 <= hour < 14:
-                # Midday - tokens, news, engagement
+                # Midday - tokens, news, comprehensive
                 generators = [
+                    ("comprehensive_market", self.generate_comprehensive_market_tweet),
                     ("trending_token", self.generate_trending_token_call),
                     ("news_sentiment", self.generate_news_tweet),
-                    ("engagement", self.generate_interaction_tweet),
                     ("market_update", self.generate_market_update),
                 ]
             elif 14 <= hour < 18:
-                # Afternoon - thoughts, interactions, sentiment
+                # Afternoon - thoughts, comprehensive, sentiment
                 generators = [
+                    ("comprehensive_market", self.generate_comprehensive_market_tweet),
                     ("agentic_tech", self.generate_agentic_thought),
                     ("social_sentiment", self.generate_social_sentiment_tweet),
-                    ("grok_interaction", self.generate_grok_interaction),
                     ("trending_token", self.generate_trending_token_call),
                 ]
             elif 18 <= hour < 22:
-                # Evening - community, news, recap
+                # Evening - comprehensive, news, recap
                 generators = [
-                    ("engagement", self.generate_interaction_tweet),
+                    ("comprehensive_market", self.generate_comprehensive_market_tweet),
                     ("news_sentiment", self.generate_news_tweet),
                     ("hourly_update", self.generate_hourly_update),
-                    ("agentic_tech", self.generate_agentic_thought),
+                    ("engagement", self.generate_interaction_tweet),
                 ]
             else:
-                # Night - lighter content
+                # Night - comprehensive, lighter content
                 generators = [
+                    ("comprehensive_market", self.generate_comprehensive_market_tweet),
                     ("agentic_tech", self.generate_agentic_thought),
-                    ("engagement", self.generate_interaction_tweet),
-                    ("grok_interaction", self.generate_grok_interaction),
                     ("social_sentiment", self.generate_social_sentiment_tweet),
+                    ("grok_interaction", self.generate_grok_interaction),
                 ]
             
             # Filter out categories we've used recently

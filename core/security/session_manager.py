@@ -1,13 +1,28 @@
-"""Secure session management."""
+"""
+JARVIS Secure Session Management
+
+Provides session management with timeout enforcement,
+secure token generation, and session lifecycle management.
+"""
 import secrets
 import time
 import hashlib
-from typing import Dict, Optional, Any
+import asyncio
+from typing import Dict, Optional, Any, List
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from enum import Enum
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class SessionState(Enum):
+    """Session lifecycle states."""
+    ACTIVE = "active"
+    IDLE = "idle"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
 
 
 @dataclass
@@ -172,4 +187,191 @@ class SecureSessionManager:
             logger.info(f"Removed oldest session for user {user_id} due to limit")
 
 
+class SessionTimeoutEnforcer:
+    """
+    Enforces session timeouts with background cleanup.
+
+    Features:
+    - Configurable absolute and idle timeouts
+    - Background cleanup task
+    - Session state tracking
+    - Async support
+
+    Usage:
+        enforcer = SessionTimeoutEnforcer(session_manager)
+        await enforcer.start()
+
+        # Check timeout
+        if enforcer.is_session_timed_out(session_id):
+            # Handle timeout
+    """
+
+    def __init__(
+        self,
+        manager: SecureSessionManager,
+        absolute_timeout: int = 86400,  # 24 hours
+        idle_timeout: int = 3600,  # 1 hour
+        cleanup_interval: int = 60  # 1 minute
+    ):
+        self.manager = manager
+        self.absolute_timeout = absolute_timeout
+        self.idle_timeout = idle_timeout
+        self.cleanup_interval = cleanup_interval
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self._session_states: Dict[str, SessionState] = {}
+
+    async def start(self) -> None:
+        """Start the timeout enforcement background task."""
+        if self._cleanup_task is None:
+            self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+            logger.info("Session timeout enforcer started")
+
+    async def stop(self) -> None:
+        """Stop the timeout enforcement."""
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self._cleanup_task = None
+            logger.info("Session timeout enforcer stopped")
+
+    def check_session(self, session_id: str) -> SessionState:
+        """Check the current state of a session."""
+        session = self.manager.sessions.get(session_id)
+
+        if not session:
+            return SessionState.EXPIRED
+
+        if not session.is_valid:
+            return SessionState.REVOKED
+
+        now = time.time()
+
+        # Check absolute timeout
+        if now - session.created_at > self.absolute_timeout:
+            self._session_states[session_id] = SessionState.EXPIRED
+            return SessionState.EXPIRED
+
+        # Check idle timeout
+        if now - session.last_activity > self.idle_timeout:
+            self._session_states[session_id] = SessionState.IDLE
+            return SessionState.IDLE
+
+        self._session_states[session_id] = SessionState.ACTIVE
+        return SessionState.ACTIVE
+
+    def is_session_timed_out(self, session_id: str) -> bool:
+        """Check if a session has timed out."""
+        state = self.check_session(session_id)
+        return state in (SessionState.EXPIRED, SessionState.IDLE, SessionState.REVOKED)
+
+    def get_remaining_time(self, session_id: str) -> Dict[str, int]:
+        """Get remaining time before timeouts."""
+        session = self.manager.sessions.get(session_id)
+
+        if not session:
+            return {"absolute": 0, "idle": 0}
+
+        now = time.time()
+
+        absolute_remaining = max(0, int(
+            self.absolute_timeout - (now - session.created_at)
+        ))
+        idle_remaining = max(0, int(
+            self.idle_timeout - (now - session.last_activity)
+        ))
+
+        return {
+            "absolute": absolute_remaining,
+            "idle": idle_remaining,
+            "effective": min(absolute_remaining, idle_remaining)
+        }
+
+    async def _cleanup_loop(self) -> None:
+        """Background task to enforce timeouts."""
+        while True:
+            try:
+                await asyncio.sleep(self.cleanup_interval)
+                await self._enforce_timeouts()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in session timeout enforcement: {e}")
+
+    async def _enforce_timeouts(self) -> int:
+        """Enforce timeouts on all sessions."""
+        expired_count = 0
+        now = time.time()
+
+        for session_id in list(self.manager.sessions.keys()):
+            session = self.manager.sessions.get(session_id)
+            if not session:
+                continue
+
+            # Check absolute timeout
+            if now - session.created_at > self.absolute_timeout:
+                self.manager.invalidate_session(session_id)
+                self._session_states[session_id] = SessionState.EXPIRED
+                expired_count += 1
+                logger.info(f"Session {session_id[:8]}... expired (absolute timeout)")
+                continue
+
+            # Check idle timeout
+            if now - session.last_activity > self.idle_timeout:
+                self.manager.invalidate_session(session_id)
+                self._session_states[session_id] = SessionState.IDLE
+                expired_count += 1
+                logger.info(f"Session {session_id[:8]}... expired (idle timeout)")
+
+        if expired_count > 0:
+            logger.info(f"Enforced timeout on {expired_count} sessions")
+
+        return expired_count
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get timeout enforcement statistics."""
+        states = {}
+        for state in SessionState:
+            states[state.value] = sum(
+                1 for s in self._session_states.values() if s == state
+            )
+
+        return {
+            "absolute_timeout": self.absolute_timeout,
+            "idle_timeout": self.idle_timeout,
+            "session_states": states,
+            "total_tracked": len(self._session_states)
+        }
+
+
+# Global instances
 session_manager = SecureSessionManager()
+timeout_enforcer: Optional[SessionTimeoutEnforcer] = None
+
+
+def get_session_manager() -> SecureSessionManager:
+    """Get the global session manager."""
+    return session_manager
+
+
+def get_timeout_enforcer() -> SessionTimeoutEnforcer:
+    """Get or create the global timeout enforcer."""
+    global timeout_enforcer
+    if timeout_enforcer is None:
+        timeout_enforcer = SessionTimeoutEnforcer(session_manager)
+    return timeout_enforcer
+
+
+async def start_session_management() -> None:
+    """Start session management with timeout enforcement."""
+    enforcer = get_timeout_enforcer()
+    await enforcer.start()
+
+
+async def stop_session_management() -> None:
+    """Stop session management."""
+    global timeout_enforcer
+    if timeout_enforcer:
+        await timeout_enforcer.stop()

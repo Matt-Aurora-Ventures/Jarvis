@@ -1,0 +1,394 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "title": "SLA Overview",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 99},
+              {"color": "green", "value": 99.9}
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 1},
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "title": "API Availability (30d)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "(1 - (sum(increase(http_requests_total{status=~\"5..\"}[30d])) / sum(increase(http_requests_total[30d])))) * 100",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 99},
+              {"color": "green", "value": 99.9}
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 1},
+      "id": 3,
+      "title": "Bot Availability (30d)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "(sum(bot_health_checks_passed[30d]) / sum(bot_health_checks_total[30d])) * 100",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 200},
+              {"color": "red", "value": 500}
+            ]
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 1},
+      "id": 4,
+      "title": "API P95 Latency (30d)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[30d])) by (le)) * 1000",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 1},
+      "id": 5,
+      "title": "Error Rate (30d)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "(sum(increase(http_requests_total{status=~\"5..\"}[30d])) / sum(increase(http_requests_total[30d]))) * 100",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 7},
+      "id": 6,
+      "title": "SLA Targets",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "line"}
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 99.9}
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 7,
+      "title": "Availability Over Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "(1 - (sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])))) * 100",
+          "legendFormat": "Availability"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {"mode": "line"}
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 200},
+              {"color": "red", "value": 500}
+            ]
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 8,
+      "title": "Latency Percentiles Over Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "P99"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 16},
+      "id": 9,
+      "title": "Error Budget",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 20},
+              {"color": "green", "value": 50}
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 17},
+      "id": 10,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "title": "Error Budget Remaining (99.9% SLA)",
+      "type": "gauge",
+      "targets": [
+        {
+          "expr": "100 - ((sum(increase(http_requests_total{status=~\"5..\"}[30d])) / sum(increase(http_requests_total[30d]))) / 0.001) * 100",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 6, "w": 16, "x": 8, "y": 17},
+      "id": 11,
+      "title": "Error Budget Consumption Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[1h])) / sum(rate(http_requests_total[1h])) * 100",
+          "legendFormat": "Error Rate %"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
+      "id": 12,
+      "title": "Service Level by Endpoint",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {"align": "auto", "displayMode": "auto"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 99},
+              {"color": "green", "value": 99.9}
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Availability"},
+            "properties": [
+              {"id": "unit", "value": "percent"},
+              {"id": "custom.displayMode", "value": "color-background"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P95 Latency"},
+            "properties": [{"id": "unit", "value": "ms"}]
+          }
+        ]
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+      "id": 13,
+      "title": "SLA by Endpoint",
+      "type": "table",
+      "targets": [
+        {
+          "expr": "(1 - (sum by (handler) (rate(http_requests_total{status=~\"5..\"}[24h])) / sum by (handler) (rate(http_requests_total[24h])))) * 100",
+          "format": "table",
+          "legendFormat": "Availability",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {"id": "organize", "options": {"excludeByName": {"Time": true}}}
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32},
+      "id": 14,
+      "title": "SLA Summary",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 33},
+      "id": 15,
+      "options": {
+        "content": "## SLA Targets\n\n| Metric | Target | Current |\n|--------|--------|----------|\n| API Availability | 99.9% | ${__field.availability}% |\n| P95 Latency | < 500ms | ${__field.p95_latency}ms |\n| Error Rate | < 0.1% | ${__field.error_rate}% |\n| Bot Uptime | 99.5% | ${__field.bot_uptime}% |\n\n### Error Budget (Monthly)\n- **Allowed Downtime (99.9%)**: 43.8 minutes/month\n- **Allowed Errors**: 0.1% of requests\n\n### Escalation Thresholds\n- **Warning**: Error budget < 50% remaining\n- **Critical**: Error budget < 20% remaining",
+        "mode": "markdown"
+      },
+      "title": "SLA Reference",
+      "type": "text"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 30,
+  "style": "dark",
+  "tags": ["sla", "jarvis", "availability"],
+  "templating": {"list": []},
+  "time": {"from": "now-30d", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "JARVIS - SLA Dashboard",
+  "uid": "jarvis-sla",
+  "version": 1
+}
