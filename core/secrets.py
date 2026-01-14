@@ -91,19 +91,86 @@ def get_birdeye_key() -> str:
     return get_key("birdeye_api_key", "BIRDEYE_API_KEY")
 
 
+def get_lunarcrush_key() -> str:
+    """Get LunarCrush API key for social metrics."""
+    return get_key("lunarcrush_api_key", "LUNARCRUSH_API_KEY")
+
+
+def get_cryptopanic_key() -> str:
+    """Get CryptoPanic API key for news."""
+    return get_key("cryptopanic_api_key", "CRYPTOPANIC_API_KEY")
+
+
+def get_finnhub_key() -> str:
+    """Get Finnhub API key for market news."""
+    return get_key("finnhub_api_key", "FINNHUB_API_KEY")
+
+
+def get_twitter_key() -> str:
+    """Get Twitter/X API key."""
+    return get_key("x_api_key", "X_API_KEY") or get_key("twitter_api_key", "TWITTER_API_KEY")
+
+
+def get_coinglass_key() -> str:
+    """Get Coinglass API key for derivatives data."""
+    return get_key("coinglass_api_key", "COINGLASS_API_KEY")
+
+
 def list_configured_keys() -> Dict[str, bool]:
     """List all API keys and whether they're configured.
 
     Returns dict like: {"groq": True, "openai": False, ...}
     """
     return {
+        # LLM providers
         "openrouter": bool(get_openrouter_key()),
         "groq": bool(get_groq_key()),
         "grok": bool(get_grok_key()),
         "gemini": bool(get_gemini_key()),
         "openai": bool(get_openai_key()),
         "anthropic": bool(get_anthropic_key()),
-        "brave": bool(get_brave_key()),
         "minimax": bool(get_minimax_key()),
+        # Data providers
         "birdeye": bool(get_birdeye_key()),
+        "lunarcrush": bool(get_lunarcrush_key()),
+        "cryptopanic": bool(get_cryptopanic_key()),
+        "finnhub": bool(get_finnhub_key()),
+        "coinglass": bool(get_coinglass_key()),
+        # Social/Search
+        "brave": bool(get_brave_key()),
+        "twitter": bool(get_twitter_key()),
     }
+
+
+def validate_required_keys(required: list = None) -> tuple:
+    """Validate that required API keys are configured.
+
+    Args:
+        required: List of key names to require. If None, checks all critical keys.
+
+    Returns:
+        (success: bool, missing: list of missing key names)
+    """
+    if required is None:
+        # Default critical keys for bot operation
+        required = ["anthropic", "grok", "twitter", "birdeye"]
+
+    configured = list_configured_keys()
+    missing = [key for key in required if not configured.get(key, False)]
+
+    return len(missing) == 0, missing
+
+
+def print_key_status():
+    """Print a formatted status of all configured keys."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    configured = list_configured_keys()
+    configured_count = sum(1 for v in configured.values() if v)
+    total = len(configured)
+
+    logger.info(f"API Keys: {configured_count}/{total} configured")
+    for key, is_set in configured.items():
+        status = "OK" if is_set else "MISSING"
+        logger.debug(f"  {key}: {status}")

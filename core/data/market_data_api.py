@@ -100,13 +100,15 @@ class MarketDataAPI:
     YAHOO_API = "https://query1.finance.yahoo.com/v8/finance/chart"
     BINANCE_API = "https://api.binance.com/api/v3"
     FEAR_GREED_API = "https://api.alternative.me/fng"
-    
+    FINNHUB_API = "https://finnhub.io/api/v1"
+
     # Rate limiting
     _last_yahoo_call = 0
     YAHOO_DELAY = 0.3  # 300ms between Yahoo calls
-    
+
     def __init__(self):
         self._session: Optional[aiohttp.ClientSession] = None
+        self._finnhub_key: str = os.getenv("FINNHUB_API_KEY", "")
     
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -350,10 +352,6 @@ class MarketDataAPI:
         cached = _market_cache.get(cache_key)
         if cached:
             return cached
-        
-        if not self._finnhub_key:
-            # Try to load from env
-            self._finnhub_key = os.getenv("FINNHUB_API_KEY", "")
         
         if not self._finnhub_key:
             logger.debug("No Finnhub API key - skipping news")

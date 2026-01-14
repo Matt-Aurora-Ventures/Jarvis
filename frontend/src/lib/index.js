@@ -6,6 +6,9 @@
 // API client
 export { default as api, apiClient } from './api'
 
+// Market API
+export { default as marketApi } from './marketApi'
+
 // Formatting utilities
 export * from './format'
 

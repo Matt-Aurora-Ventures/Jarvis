@@ -210,6 +210,139 @@ BACKED_XSTOCKS = {
 
 
 # =============================================================================
+# HIGH-LIQUIDITY SOLANA TOKENS (>$200M MCAP, >1 YEAR HISTORY)
+# =============================================================================
+
+# Established Solana ecosystem tokens for sentiment analysis
+# These are blue-chip tokens with proven liquidity and history
+HIGH_LIQUIDITY_SOLANA_TOKENS = {
+    # Native Solana
+    "SOL": {
+        "name": "Solana",
+        "mint": "So11111111111111111111111111111111111111112",
+        "category": "L1",
+        "description": "Native Solana token - foundation of the ecosystem",
+    },
+    # DeFi Giants
+    "JUP": {
+        "name": "Jupiter",
+        "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+        "category": "DeFi",
+        "description": "Leading Solana DEX aggregator",
+    },
+    "RAY": {
+        "name": "Raydium",
+        "mint": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
+        "category": "DeFi",
+        "description": "Premier Solana AMM and liquidity provider",
+    },
+    "ORCA": {
+        "name": "Orca",
+        "mint": "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE",
+        "category": "DeFi",
+        "description": "User-friendly Solana DEX",
+    },
+    "JTO": {
+        "name": "Jito",
+        "mint": "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL",
+        "category": "DeFi",
+        "description": "MEV infrastructure and liquid staking",
+    },
+    # Infrastructure
+    "PYTH": {
+        "name": "Pyth Network",
+        "mint": "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3",
+        "category": "Infrastructure",
+        "description": "Leading oracle network for DeFi",
+    },
+    "RENDER": {
+        "name": "Render",
+        "mint": "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof",
+        "category": "Infrastructure",
+        "description": "Decentralized GPU rendering network",
+    },
+    "HNT": {
+        "name": "Helium",
+        "mint": "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux",
+        "category": "Infrastructure",
+        "description": "Decentralized wireless network",
+    },
+    # Meme Blue Chips (established, high volume)
+    "BONK": {
+        "name": "Bonk",
+        "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        "category": "Meme",
+        "description": "Solana's original community dog coin",
+    },
+    "WIF": {
+        "name": "dogwifhat",
+        "mint": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+        "category": "Meme",
+        "description": "Iconic Solana meme token",
+    },
+}
+
+
+async def fetch_high_liquidity_tokens() -> Tuple[List[TrendingToken], List[str]]:
+    """
+    Fetch live data for established high-liquidity Solana tokens.
+
+    These are blue-chip tokens with >$200M market cap and >1 year history.
+    Used as stable alternatives to trending tokens for sentiment analysis.
+
+    Returns:
+        (tokens, warnings)
+    """
+    warnings = []
+    tokens = []
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            for symbol, info in HIGH_LIQUIDITY_SOLANA_TOKENS.items():
+                try:
+                    url = f"https://api.dexscreener.com/latest/dex/tokens/{info['mint']}"
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            pairs = data.get("pairs") or []
+                            if pairs:
+                                # Get the highest liquidity pair
+                                best_pair = max(pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
+                                tokens.append(TrendingToken(
+                                    symbol=symbol,
+                                    name=info["name"],
+                                    contract=info["mint"],
+                                    price_usd=float(best_pair.get("priceUsd") or 0),
+                                    price_change_24h=float(best_pair.get("priceChange", {}).get("h24") or 0),
+                                    volume_24h=float(best_pair.get("volume", {}).get("h24") or 0),
+                                    liquidity_usd=float(best_pair.get("liquidity", {}).get("usd") or 0),
+                                    mcap=float(best_pair.get("marketCap") or best_pair.get("fdv") or 0),
+                                    tx_count_24h=int(best_pair.get("txns", {}).get("h24", {}).get("buys", 0) or 0) +
+                                                int(best_pair.get("txns", {}).get("h24", {}).get("sells", 0) or 0),
+                                    rank=len(tokens) + 1,
+                                ))
+                        else:
+                            warnings.append(f"DexScreener returned {resp.status} for {symbol}")
+                except Exception as e:
+                    warnings.append(f"Failed to fetch {symbol}: {e}")
+
+                # Rate limit: small delay between requests
+                await asyncio.sleep(0.2)
+
+    except Exception as e:
+        warnings.append(f"High liquidity fetch failed: {e}")
+
+    # Sort by market cap descending
+    tokens.sort(key=lambda t: t.mcap, reverse=True)
+
+    # Update ranks
+    for i, token in enumerate(tokens):
+        token.rank = i + 1
+
+    return tokens, warnings
+
+
+# =============================================================================
 # TRENDING TOKENS FETCHER
 # =============================================================================
 

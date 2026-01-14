@@ -9,9 +9,26 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
-from core.jarvis_voice_bible import JARVIS_VOICE_BIBLE
+from core.jarvis_voice_bible import JARVIS_VOICE_BIBLE, validate_jarvis_response
 
 logger = logging.getLogger(__name__)
+
+
+# Thread quality checks
+BANNED_THREAD_STARTS = [
+    "here's",  # Overused thread opener
+    "ok so",
+    "okay so",
+    "alright so",
+    "1/",  # Number format is handled automatically
+    "thread:",
+]
+
+WEAK_HOOK_PATTERNS = [
+    r"^i (think|believe|feel)",  # Too passive for a hook
+    r"^this is (a|my)",  # Weak opener
+    r"^let me",  # Too formal
+]
 
 
 @dataclass
@@ -150,6 +167,58 @@ Remember: Each tweet MUST be under 280 characters. Jarvis voice. Lowercase."""
         
         return None
     
+    def _validate_tweet_content(self, content: str, position: int) -> tuple:
+        """Validate a single tweet in the thread"""
+        import re
+        issues = []
+
+        # Voice bible validation
+        is_valid, voice_issues = validate_jarvis_response(content)
+        if not is_valid:
+            issues.extend(voice_issues)
+
+        # Thread-specific checks
+        content_lower = content.lower()
+
+        # First tweet (hook) checks
+        if position == 1:
+            for banned in BANNED_THREAD_STARTS:
+                if content_lower.startswith(banned):
+                    issues.append(f"Weak thread start: '{banned}'")
+                    break
+
+            for pattern in WEAK_HOOK_PATTERNS:
+                if re.match(pattern, content_lower):
+                    issues.append("Weak hook - too passive")
+                    break
+
+        # Generic checks
+        if content_lower.startswith("i "):
+            # Too many threads start with "I" - weak
+            if position == 1:
+                issues.append("First tweet shouldn't start with 'I'")
+
+        return len(issues) == 0, issues
+
+    def _clean_tweet_content(self, content: str, position: int) -> str:
+        """Clean and fix common issues in tweet content"""
+        # Ensure lowercase start
+        if content and content[0].isupper():
+            content = content[0].lower() + content[1:]
+
+        # Remove common cruft
+        content = content.strip()
+
+        # Fix double spaces
+        while "  " in content:
+            content = content.replace("  ", " ")
+
+        # Ensure proper length
+        if len(content) > 280:
+            content = content[:277] + "..."
+
+        return content
+
     def _parse_thread_response(self, topic: str, response: str) -> Thread:
         """Parse the generated thread response"""
         thread = Thread(
@@ -157,27 +226,32 @@ Remember: Each tweet MUST be under 280 characters. Jarvis voice. Lowercase."""
             topic=topic,
             created_at=datetime.utcnow().isoformat()
         )
-        
+
         # Parse tweets by [N] format
         import re
         pattern = r'\[(\d+)\]\s*(.+?)(?=\[\d+\]|$)'
         matches = re.findall(pattern, response, re.DOTALL)
-        
+
         for pos, content in matches:
+            position = int(pos)
             content = content.strip()
-            # Clean up and validate length
-            if len(content) > 280:
-                content = content[:277] + "..."
-            
+
+            # Clean and validate
+            content = self._clean_tweet_content(content, position)
+            is_valid, issues = self._validate_tweet_content(content, position)
+
+            if not is_valid:
+                logger.warning(f"Thread tweet {position} issues: {issues}")
+
             tweet = ThreadTweet(
-                position=int(pos),
-                content=content.lower() if content and content[0].isupper() else content
+                position=position,
+                content=content
             )
             thread.tweets.append(tweet)
-        
+
         # Sort by position
         thread.tweets.sort(key=lambda t: t.position)
-        
+
         return thread
     
     async def should_be_thread(

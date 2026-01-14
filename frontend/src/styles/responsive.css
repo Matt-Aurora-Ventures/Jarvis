@@ -1,0 +1,522 @@
+/**
+ * JARVIS Responsive Styles
+ * Mobile-first responsive design utilities
+ */
+
+/* ============================================
+   Breakpoints Reference:
+   - xs: < 640px (mobile phones)
+   - sm: 640px+ (large phones, small tablets)
+   - md: 768px+ (tablets)
+   - lg: 1024px+ (laptops, desktops)
+   - xl: 1280px+ (large desktops)
+   - 2xl: 1536px+ (extra large screens)
+   ============================================ */
+
+/* Base Mobile Styles */
+:root {
+  --nav-height: 56px;
+  --sidebar-width: 240px;
+  --content-padding-mobile: 12px;
+  --content-padding-tablet: 20px;
+  --content-padding-desktop: 32px;
+}
+
+/* Touch-friendly tap targets */
+@media (max-width: 768px) {
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Larger touch targets for navigation */
+  .nav-link,
+  .btn {
+    padding: 12px 16px;
+  }
+}
+
+/* ============================================
+   Navigation Responsive
+   ============================================ */
+
+/* Mobile Navigation */
+@media (max-width: 768px) {
+  .top-nav {
+    flex-direction: column;
+    padding: 8px !important;
+    gap: 8px;
+  }
+
+  .top-nav nav {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    justify-content: flex-start !important;
+  }
+
+  .top-nav nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .top-nav nav .btn {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    padding: 8px 12px;
+  }
+
+  .top-nav nav .btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .nav-brand {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Hide status indicators on very small screens */
+  @media (max-width: 480px) {
+    .top-nav > div:last-child {
+      display: none;
+    }
+  }
+}
+
+/* Tablet Navigation */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .top-nav nav .btn span {
+    display: none;
+  }
+
+  .top-nav nav .btn {
+    padding: 10px;
+  }
+}
+
+/* ============================================
+   Grid Layouts
+   ============================================ */
+
+/* Responsive Grid */
+.responsive-grid {
+  display: grid;
+  gap: 16px;
+}
+
+/* 1 column on mobile, 2 on tablet, 3+ on desktop */
+@media (max-width: 640px) {
+  .responsive-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .responsive-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1025px) {
+  .responsive-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 641px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* ============================================
+   Cards & Containers
+   ============================================ */
+
+@media (max-width: 640px) {
+  .card,
+  .panel {
+    padding: 12px;
+    border-radius: 8px;
+  }
+
+  .card-header,
+  .panel-header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start !important;
+  }
+
+  .card-title {
+    font-size: 1rem;
+  }
+}
+
+/* ============================================
+   Forms
+   ============================================ */
+
+@media (max-width: 640px) {
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .form-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .form-actions .btn {
+    width: 100%;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}
+
+/* ============================================
+   Tables
+   ============================================ */
+
+@media (max-width: 768px) {
+  .responsive-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .responsive-table {
+    min-width: 600px;
+  }
+
+  /* Card-style tables on mobile */
+  .mobile-card-table {
+    display: block;
+  }
+
+  .mobile-card-table thead {
+    display: none;
+  }
+
+  .mobile-card-table tbody tr {
+    display: block;
+    padding: 12px;
+    margin-bottom: 12px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+  }
+
+  .mobile-card-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .mobile-card-table tbody td:last-child {
+    border-bottom: none;
+  }
+
+  .mobile-card-table tbody td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-right: 16px;
+  }
+}
+
+/* ============================================
+   Modal & Dialogs
+   ============================================ */
+
+@media (max-width: 640px) {
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-content {
+    max-height: 90vh;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  .modal-header {
+    position: sticky;
+    top: 0;
+    background: inherit;
+    z-index: 1;
+  }
+
+  .modal-body {
+    max-height: calc(90vh - 120px);
+    overflow-y: auto;
+  }
+}
+
+/* ============================================
+   Charts & Visualizations
+   ============================================ */
+
+@media (max-width: 640px) {
+  .chart-container {
+    height: 200px !important;
+  }
+
+  .chart-legend {
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.75rem;
+  }
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+
+/* Hide on mobile */
+@media (max-width: 640px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+/* Hide on tablet */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .hide-tablet {
+    display: none !important;
+  }
+}
+
+/* Hide on desktop */
+@media (min-width: 1025px) {
+  .hide-desktop {
+    display: none !important;
+  }
+}
+
+/* Show only on mobile */
+@media (min-width: 641px) {
+  .show-mobile-only {
+    display: none !important;
+  }
+}
+
+/* Responsive text */
+@media (max-width: 640px) {
+  .text-responsive {
+    font-size: 0.875rem;
+  }
+
+  h1.responsive {
+    font-size: 1.5rem;
+  }
+
+  h2.responsive {
+    font-size: 1.25rem;
+  }
+
+  h3.responsive {
+    font-size: 1rem;
+  }
+}
+
+/* Responsive spacing */
+@media (max-width: 640px) {
+  .p-responsive {
+    padding: 12px;
+  }
+
+  .m-responsive {
+    margin: 12px;
+  }
+
+  .gap-responsive {
+    gap: 12px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .p-responsive {
+    padding: 20px;
+  }
+
+  .m-responsive {
+    margin: 20px;
+  }
+
+  .gap-responsive {
+    gap: 16px;
+  }
+}
+
+@media (min-width: 1025px) {
+  .p-responsive {
+    padding: 32px;
+  }
+
+  .m-responsive {
+    margin: 32px;
+  }
+
+  .gap-responsive {
+    gap: 24px;
+  }
+}
+
+/* ============================================
+   Touch Interactions
+   ============================================ */
+
+@media (hover: none) and (pointer: coarse) {
+  /* Remove hover effects on touch devices */
+  .btn:hover,
+  .card:hover,
+  .nav-link:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* Add active states for touch feedback */
+  .btn:active,
+  .card:active,
+  .nav-link:active {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+}
+
+/* ============================================
+   Safe Areas (for notch devices)
+   ============================================ */
+
+@supports (padding: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .fixed-bottom {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ============================================
+   Scrolling
+   ============================================ */
+
+.scroll-smooth {
+  scroll-behavior: smooth;
+}
+
+.scroll-snap-x {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scroll-snap-x > * {
+  scroll-snap-align: start;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================
+   Dark Mode Specific
+   ============================================ */
+
+@media (prefers-color-scheme: dark) {
+  /* Ensure sufficient contrast on OLED screens */
+  :root {
+    --bg-primary: #0a0a0a;
+    --bg-secondary: #141414;
+  }
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .top-nav,
+  .sidebar,
+  .modal-overlay {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .card {
+    page-break-inside: avoid;
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+  }
+}

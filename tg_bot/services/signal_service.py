@@ -26,6 +26,14 @@ if str(jarvis_root) not in sys.path:
 from tg_bot.config import get_config
 from tg_bot.services.cost_tracker import get_tracker
 
+# Import news detector for news-aware signals
+try:
+    from core.autonomy.news_detector import get_news_detector, NewsEventType, EventPriority
+    NEWS_DETECTOR_AVAILABLE = True
+except ImportError:
+    NEWS_DETECTOR_AVAILABLE = False
+    get_news_detector = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -79,6 +87,11 @@ class TokenSignal:
     signal_score: float = 0.0
     signal_reasons: List[str] = field(default_factory=list)
 
+    # News events (from news detector)
+    news_events: List[Dict[str, Any]] = field(default_factory=list)
+    news_sentiment: str = "neutral"  # bullish, bearish, neutral
+    news_priority: str = "low"  # critical, high, medium, low
+
     # Metadata
     sources_used: List[str] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)
@@ -101,6 +114,9 @@ class TokenSignal:
             "signal": self.signal,
             "signal_score": self.signal_score,
             "signal_reasons": self.signal_reasons,
+            "news_sentiment": self.news_sentiment,
+            "news_priority": self.news_priority,
+            "news_events": self.news_events,
             "sources_used": self.sources_used,
         }
 
@@ -160,6 +176,9 @@ class SignalService:
             modules["signal_aggregator"] = True
         except ImportError:
             modules["signal_aggregator"] = False
+
+        # Check news detector
+        modules["news_detector"] = NEWS_DETECTOR_AVAILABLE
 
         return modules
 
@@ -240,6 +259,9 @@ class SignalService:
 
         if include_sentiment and self.config.has_grok():
             await self._fetch_sentiment(signal)
+
+        # 3. Fetch news events for the token
+        await self._fetch_news_events(signal)
 
         # Calculate final signal
         self._calculate_signal(signal)
@@ -339,6 +361,57 @@ class SignalService:
         except Exception as e:
             logger.warning(f"Grok sentiment failed: {e}")
 
+    async def _fetch_news_events(self, signal: TokenSignal):
+        """Fetch relevant news events for the token."""
+        if not NEWS_DETECTOR_AVAILABLE or not get_news_detector:
+            return
+
+        try:
+            detector = get_news_detector()
+
+            # Get events related to this token
+            events = detector.get_events_for_token(signal.symbol)
+
+            if events:
+                # Convert to dict format
+                signal.news_events = [
+                    {
+                        "title": e.title,
+                        "type": e.event_type.value,
+                        "priority": e.priority.name,
+                        "sentiment": e.sentiment,
+                        "confidence": e.confidence,
+                    }
+                    for e in events[:5]  # Limit to 5 events
+                ]
+
+                # Determine overall news sentiment
+                bullish_count = sum(1 for e in events if e.sentiment == "bullish")
+                bearish_count = sum(1 for e in events if e.sentiment == "bearish")
+
+                if bullish_count > bearish_count:
+                    signal.news_sentiment = "bullish"
+                elif bearish_count > bullish_count:
+                    signal.news_sentiment = "bearish"
+                else:
+                    signal.news_sentiment = "neutral"
+
+                # Determine highest priority
+                priorities = [e.priority.value for e in events]
+                if max(priorities) >= 3:
+                    signal.news_priority = "critical"
+                elif max(priorities) >= 2:
+                    signal.news_priority = "high"
+                elif max(priorities) >= 1:
+                    signal.news_priority = "medium"
+                else:
+                    signal.news_priority = "low"
+
+                signal.sources_used.append("news_detector")
+
+        except Exception as e:
+            logger.debug(f"News detector failed: {e}")
+
     def _calculate_signal(self, signal: TokenSignal):
         """Calculate aggregated signal score."""
         score = 0.0
@@ -408,6 +481,22 @@ class SignalService:
             reasons.append(f"Grok: NEGATIVE ({signal.sentiment_confidence:.0%})")
         elif signal.sentiment == "negative":
             score -= 8
+
+        # News events (10%)
+        if signal.news_events:
+            if signal.news_sentiment == "bullish":
+                score += 10
+                reasons.append(f"News: BULLISH ({len(signal.news_events)} events)")
+            elif signal.news_sentiment == "bearish":
+                score -= 10
+                reasons.append(f"News: bearish ({len(signal.news_events)} events)")
+
+            # Critical/high priority news gets extra weight
+            if signal.news_priority == "critical":
+                score += 5 if signal.news_sentiment == "bullish" else -10
+                reasons.append("BREAKING NEWS")
+            elif signal.news_priority == "high":
+                score += 3 if signal.news_sentiment == "bullish" else -5
 
         # Momentum bonuses
         if signal.dextools_hot_level > 0:

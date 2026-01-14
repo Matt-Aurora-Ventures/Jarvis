@@ -40,19 +40,27 @@ class ConsoleRequest:
 
 
 class TelegramMemory:
-    """Persistent memory for Telegram conversations."""
-    
+    """Persistent memory for Telegram conversations.
+
+    Features:
+    - Conversation history storage
+    - Learned facts/preferences per user
+    - Topic-based memory retrieval
+    - Standing instructions from admin
+    - Learning extraction from conversations
+    """
+
     def __init__(self, db_path: Path = MEMORY_DB):
         self.db_path = db_path
         self._lock = threading.Lock()
         self._init_db()
-    
+
     def _init_db(self):
-        """Initialize the SQLite database."""
+        """Initialize the SQLite database with all tables."""
         with self._lock:
             conn = sqlite3.connect(str(self.db_path))
             cursor = conn.cursor()
-            
+
             # Conversation history
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS messages (
@@ -65,7 +73,7 @@ class TelegramMemory:
                     chat_id INTEGER
                 )
             """)
-            
+
             # Learned facts/preferences
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS memories (
@@ -78,7 +86,7 @@ class TelegramMemory:
                     UNIQUE(user_id, key)
                 )
             """)
-            
+
             # Pending instructions from admin
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS instructions (
@@ -89,7 +97,32 @@ class TelegramMemory:
                     active INTEGER DEFAULT 1
                 )
             """)
-            
+
+            # Learnings extracted from conversations
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS learnings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    topic TEXT,
+                    content TEXT,
+                    source_type TEXT,  -- 'conversation', 'coding_result', 'feedback'
+                    source_id TEXT,
+                    created_at TEXT,
+                    confidence REAL DEFAULT 0.5
+                )
+            """)
+
+            # Topic index for faster retrieval
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_learnings_topic
+                ON learnings(topic)
+            """)
+
+            # Message index for context retrieval
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_messages_user_id
+                ON messages(user_id)
+            """)
+
             conn.commit()
             conn.close()
     
@@ -182,6 +215,184 @@ class TelegramMemory:
             rows = cursor.fetchall()
             conn.close()
             return [r[0] for r in rows]
+
+    def store_learning(
+        self,
+        topic: str,
+        content: str,
+        source_type: str = "conversation",
+        source_id: str = "",
+        confidence: float = 0.5
+    ):
+        """Store a learning extracted from conversations.
+
+        Args:
+            topic: Topic/category (e.g., 'trading', 'preferences', 'bugs')
+            content: What was learned
+            source_type: 'conversation', 'coding_result', 'feedback'
+            source_id: Reference ID (e.g., message ID)
+            confidence: Confidence level 0-1
+        """
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute(
+                """INSERT INTO learnings (topic, content, source_type, source_id, created_at, confidence)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (topic, content, source_type, source_id,
+                 datetime.now(timezone.utc).isoformat(), confidence)
+            )
+            conn.commit()
+            conn.close()
+
+    def get_learnings_by_topic(self, topic: str, limit: int = 10) -> List[Dict]:
+        """Get learnings related to a topic."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT topic, content, source_type, created_at, confidence
+                   FROM learnings
+                   WHERE topic LIKE ?
+                   ORDER BY confidence DESC, created_at DESC
+                   LIMIT ?""",
+                (f"%{topic}%", limit)
+            )
+            rows = cursor.fetchall()
+            conn.close()
+            return [
+                {
+                    "topic": r[0],
+                    "content": r[1],
+                    "source_type": r[2],
+                    "created_at": r[3],
+                    "confidence": r[4]
+                }
+                for r in rows
+            ]
+
+    def search_learnings(self, query: str, limit: int = 5) -> List[Dict]:
+        """Search learnings by content."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT topic, content, source_type, created_at, confidence
+                   FROM learnings
+                   WHERE content LIKE ? OR topic LIKE ?
+                   ORDER BY confidence DESC, created_at DESC
+                   LIMIT ?""",
+                (f"%{query}%", f"%{query}%", limit)
+            )
+            rows = cursor.fetchall()
+            conn.close()
+            return [
+                {
+                    "topic": r[0],
+                    "content": r[1],
+                    "source_type": r[2],
+                    "created_at": r[3],
+                    "confidence": r[4]
+                }
+                for r in rows
+            ]
+
+    def get_conversation_summary(self, user_id: int, limit: int = 50) -> str:
+        """Generate a summary of recent conversation topics.
+
+        Useful for building context without including full messages.
+        """
+        context = self.get_recent_context(user_id, limit=limit)
+        if not context:
+            return ""
+
+        # Extract key topics from messages
+        topics = set()
+        for msg in context:
+            content = msg.get("content", "").lower()
+            # Extract key words (simple heuristic)
+            words = content.split()
+            for word in words:
+                if len(word) > 4 and word.isalpha():
+                    topics.add(word)
+
+        # Get count of messages
+        user_count = sum(1 for m in context if m.get("role") == "user")
+        assistant_count = sum(1 for m in context if m.get("role") == "assistant")
+
+        return f"Recent conversation: {user_count} user messages, {assistant_count} responses. Topics: {', '.join(list(topics)[:10])}"
+
+    def extract_learnings_from_result(self, result: str, topic: str = "coding"):
+        """Extract learnings from a coding result.
+
+        Parses result for patterns like:
+        - Created/modified files
+        - Fixed bugs
+        - Added features
+        """
+        import re
+
+        patterns = [
+            (r'(?:created?|added?|wrote?)\s+["`]?([^"`\n]{1,80})["`]?', 'created'),
+            (r'(?:fixed?|resolved?)\s+(?:bug|issue|error)?\s*["`]?([^"`\n]{1,80})["`]?', 'fixed'),
+            (r'(?:modified?|updated?|changed?)\s+["`]?([^"`\n]{1,80})["`]?', 'modified'),
+        ]
+
+        for pattern, action in patterns:
+            matches = re.findall(pattern, result, re.IGNORECASE)
+            for match in matches[:3]:  # Max 3 per action
+                learning = f"{action}: {match.strip()}"
+                self.store_learning(
+                    topic=topic,
+                    content=learning,
+                    source_type="coding_result",
+                    confidence=0.7
+                )
+
+    def build_enhanced_context(self, user_id: int, current_request: str = "") -> str:
+        """Build enhanced context for CLI execution.
+
+        Combines:
+        - Recent conversation
+        - Relevant learnings
+        - Active instructions
+        - User preferences
+        """
+        parts = []
+
+        # 1. Recent conversation
+        context = self.get_recent_context(user_id, limit=10)
+        if context:
+            parts.append("## Recent Conversation")
+            for msg in context[-5:]:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")[:200]
+                parts.append(f"[{role}]: {content}")
+
+        # 2. Relevant learnings
+        if current_request:
+            # Extract key words for search
+            words = [w for w in current_request.lower().split() if len(w) > 3]
+            for word in words[:3]:
+                learnings = self.search_learnings(word, limit=2)
+                for learning in learnings:
+                    parts.append(f"[Previous learning] {learning['content']}")
+
+        # 3. User preferences
+        memories = self.get_memories(user_id)
+        if memories:
+            parts.append("## User Preferences")
+            for key, value in list(memories.items())[:5]:
+                parts.append(f"- {key}: {value}")
+
+        # 4. Active instructions
+        instructions = self.get_active_instructions()
+        if instructions:
+            parts.append("## Standing Instructions")
+            for instr in instructions[:3]:
+                parts.append(f"- {instr}")
+
+        return "\n".join(parts)
 
 
 class ConsoleBridge:
@@ -298,7 +509,12 @@ class ConsoleBridge:
             "update", "modify", "refactor", "debug", "test", "deploy",
             "code", "function", "class", "api", "endpoint", "command",
             "feature", "bug", "error", "issue", "make", "write",
-            "ralph wiggum", "cascade", "vibe code", "console"
+            "ralph wiggum", "cascade", "vibe code", "console",
+            "turn on", "turn off", "enable", "disable", "start", "stop",
+            "run", "execute", "please do", "can you", "help me",
+            "generate", "report", "send me", "show me", "get me",
+            "fetch", "pull", "push", "commit", "github", "repo",
+            "script", "bot", "handler", "service", "module"
         ]
         message_lower = message.lower()
         return any(kw in message_lower for kw in coding_keywords)

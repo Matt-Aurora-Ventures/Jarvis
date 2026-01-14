@@ -5,3 +5,4 @@
  */
 
 export { default as StakingDashboard } from './StakingDashboard';
+export { StakingCalculator } from './StakingCalculator';

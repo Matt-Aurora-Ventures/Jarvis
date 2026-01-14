@@ -561,6 +561,97 @@ class WhaleTracker:
 
         return signals
 
+    def format_alert_telegram(self, alert: WhaleAlert) -> str:
+        """Format a whale alert for Telegram in JARVIS voice."""
+        direction_emoji = "🟢" if "buy" in alert.alert_type else "🔴" if "sell" in alert.alert_type else "🔄"
+        value_fmt = f"${alert.value_usd:,.0f}"
+
+        lines = [
+            f"<b>{direction_emoji} WHALE ALERT</b>",
+            "",
+            f"<b>{alert.wallet_label or 'Unknown Whale'}</b>",
+            f"Action: {alert.alert_type.replace('whale_', '').upper()}",
+            f"Token: <code>${alert.token_symbol}</code>" if alert.token_symbol else "",
+            f"Value: <b>{value_fmt}</b>",
+            "",
+        ]
+
+        # JARVIS commentary
+        if alert.value_usd >= 500000:
+            lines.append("💭 <i>that's serious size. someone knows something</i>")
+        elif alert.value_usd >= 100000:
+            lines.append("💭 <i>notable move. worth watching</i>")
+        else:
+            lines.append("💭 <i>medium-sized whale activity</i>")
+
+        if alert.tx_signature:
+            short_sig = alert.tx_signature[:12] + "..."
+            lines.append(f"<a href='https://solscan.io/tx/{alert.tx_signature}'>View TX: {short_sig}</a>")
+
+        return "\n".join(line for line in lines if line or line == "")
+
+    async def send_telegram_alert(self, alert: WhaleAlert, bot_token: str, chat_id: str):
+        """Send a whale alert to Telegram."""
+        import aiohttp
+
+        message = self.format_alert_telegram(alert)
+
+        async with aiohttp.ClientSession() as session:
+            url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
+            await session.post(url, json={
+                'chat_id': chat_id,
+                'text': message,
+                'parse_mode': 'HTML',
+                'disable_web_page_preview': True
+            })
+            logger.info(f"Sent whale alert to Telegram: {alert.wallet_label} {alert.alert_type}")
+
+    def get_whale_summary_telegram(self, hours: int = 24) -> str:
+        """Generate a whale activity summary for Telegram."""
+        alerts = self.get_alerts(hours=hours, unacknowledged_only=False)
+
+        if not alerts:
+            return "🐋 <b>Whale Activity Summary</b>\n\nNo significant whale movements in the last 24h.\n\n<i>either accumulation is quiet or they're hiding</i>"
+
+        total_buy_value = sum(a.value_usd for a in alerts if "buy" in a.alert_type)
+        total_sell_value = sum(a.value_usd for a in alerts if "sell" in a.alert_type)
+
+        net_flow = total_buy_value - total_sell_value
+        flow_emoji = "🟢" if net_flow > 0 else "🔴" if net_flow < 0 else "🟡"
+
+        sentiment = "BULLISH" if net_flow > 100000 else "BEARISH" if net_flow < -100000 else "NEUTRAL"
+
+        # Top tokens by whale activity
+        token_activity: Dict[str, float] = {}
+        for alert in alerts:
+            if alert.token_symbol:
+                token_activity[alert.token_symbol] = token_activity.get(alert.token_symbol, 0) + alert.value_usd
+
+        top_tokens = sorted(token_activity.items(), key=lambda x: x[1], reverse=True)[:5]
+
+        lines = [
+            f"🐋 <b>Whale Activity Summary ({hours}h)</b>",
+            "",
+            f"Total Movements: <b>{len(alerts)}</b>",
+            f"Buy Volume: <code>${total_buy_value:,.0f}</code>",
+            f"Sell Volume: <code>${total_sell_value:,.0f}</code>",
+            f"Net Flow: {flow_emoji} <b>${abs(net_flow):,.0f}</b> {'IN' if net_flow > 0 else 'OUT'}",
+            f"Whale Sentiment: <b>{sentiment}</b>",
+            "",
+        ]
+
+        if top_tokens:
+            lines.append("<b>Top Tokens by Whale Activity:</b>")
+            for token, value in top_tokens:
+                lines.append(f"  ${token}: <code>${value:,.0f}</code>")
+
+        lines.extend([
+            "",
+            f"💭 <i>{'whales loading' if sentiment == 'BULLISH' else 'whales distributing' if sentiment == 'BEARISH' else 'whales watching. we watch too'}</i>"
+        ])
+
+        return "\n".join(lines)
+
 
 # Singleton
 _tracker: Optional[WhaleTracker] = None

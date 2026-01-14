@@ -47,44 +47,66 @@ async def test_generation():
     
     engine = get_autonomous_engine()
     
-    print("\n" + "="*60)
-    print("JARVIS AUTONOMOUS TWITTER - CONTENT TEST")
-    print("="*60)
-    
-    print("\n--- Market Update ---")
-    draft = await engine.generate_market_update()
-    if draft:
-        print(f"Content: {draft.content}")
-        print(f"Cashtags: {draft.cashtags}")
-        print(f"Contract: {draft.contract_address}")
-    else:
-        print("Failed to generate")
-    
-    print("\n--- Trending Token ---")
-    draft = await engine.generate_trending_token_call()
-    if draft:
-        print(f"Content: {draft.content}")
-        print(f"Category: {draft.category}")
-    else:
-        print("Failed to generate")
-    
-    print("\n--- Agentic Thought ---")
-    draft = await engine.generate_agentic_thought()
-    if draft:
-        print(f"Content: {draft.content}")
-    else:
-        print("Failed to generate")
-    
-    print("\n--- Hourly Update ---")
-    draft = await engine.generate_hourly_update()
-    if draft:
-        print(f"Content: {draft.content}")
-    else:
-        print("Failed to generate")
-    
-    print("\n" + "="*60)
-    print("TEST COMPLETE")
-    print("="*60)
+    try:
+        print("\n" + "="*60)
+        print("JARVIS AUTONOMOUS TWITTER - CONTENT TEST")
+        print("="*60)
+        
+        print("\n--- Market Update ---")
+        draft = await engine.generate_market_update()
+        if draft:
+            print(f"Content: {draft.content}")
+            print(f"Cashtags: {draft.cashtags}")
+            print(f"Contract: {draft.contract_address}")
+        else:
+            print("Failed to generate")
+        
+        print("\n--- Trending Token ---")
+        draft = await engine.generate_trending_token_call()
+        if draft:
+            print(f"Content: {draft.content}")
+            print(f"Category: {draft.category}")
+        else:
+            print("Failed to generate")
+        
+        print("\n--- Agentic Thought ---")
+        draft = await engine.generate_agentic_thought()
+        if draft:
+            print(f"Content: {draft.content}")
+        else:
+            print("Failed to generate")
+        
+        print("\n--- Hourly Update ---")
+        draft = await engine.generate_hourly_update()
+        if draft:
+            print(f"Content: {draft.content}")
+        else:
+            print("Failed to generate")
+            
+        print("\n--- Quote Tweet ---")
+        draft = await engine.generate_quote_tweet()
+        if draft:
+            print(f"Content: {draft.content}")
+            print(f"Quote ID: {draft.quote_tweet_id}")
+        else:
+            print("Skipped (no candidates or error)")
+            
+        print("\n--- Autonomous Thread ---")
+        thread = await engine.generate_autonomous_thread()
+        if thread:
+            print(f"Topic: {thread.topic}")
+            print(f"Tweets: {len(thread.tweets)}")
+            for t in thread.tweets:
+                print(f"[{t.position}] {t.content[:50]}...")
+        else:
+            print("Failed to generate")
+        
+        print("\n" + "="*60)
+        print("TEST COMPLETE")
+        print("="*60)
+    finally:
+        if hasattr(engine, 'cleanup'):
+            await engine.cleanup()
 
 
 async def post_once():
@@ -94,14 +116,18 @@ async def post_once():
     engine = get_autonomous_engine()
     engine._last_post_time = 0  # Force immediate post
     
-    print("\nGenerating and posting tweet...")
-    tweet_id = await engine.run_once()
-    
-    if tweet_id:
-        print(f"SUCCESS: Posted tweet {tweet_id}")
-        print(f"URL: https://x.com/Jarvis_lifeos/status/{tweet_id}")
-    else:
-        print("FAILED: No tweet posted")
+    try:
+        print("\nGenerating and posting tweet...")
+        tweet_id = await engine.run_once()
+        
+        if tweet_id:
+            print(f"SUCCESS: Posted tweet {tweet_id}")
+            print(f"URL: https://x.com/Jarvis_lifeos/status/{tweet_id}")
+        else:
+            print("FAILED: No tweet posted")
+    finally:
+        if hasattr(engine, 'cleanup'):
+            await engine.cleanup()
 
 
 async def show_status():
@@ -109,34 +135,52 @@ async def show_status():
     from bots.twitter.autonomous_engine import get_autonomous_engine
     
     engine = get_autonomous_engine()
-    status = engine.get_status()
     
-    print("\n" + "="*60)
-    print("JARVIS AUTONOMOUS TWITTER - STATUS")
-    print("="*60)
-    print(f"Running: {status['running']}")
-    print(f"Post Interval: {status['post_interval']}s ({status['post_interval']//60} min)")
-    print(f"Total Tweets: {status['total_tweets']}")
-    print(f"Today's Tweets: {status['today_tweets']}")
-    print(f"\nBy Category:")
-    for cat, count in status.get('by_category', {}).items():
-        print(f"  {cat}: {count}")
-    print(f"\nImage Params:")
-    for k, v in status.get('image_params', {}).items():
-        print(f"  {k}: {v}")
-    print("="*60)
+    try:
+        status = engine.get_status()
+        
+        print("\n" + "="*60)
+        print("JARVIS AUTONOMOUS TWITTER - STATUS")
+        print("="*60)
+        print(f"Running: {status['running']}")
+        print(f"Post Interval: {status['post_interval']}s ({status['post_interval']//60} min)")
+        print(f"Total Tweets: {status['total_tweets']}")
+        print(f"Today's Tweets: {status['today_tweets']}")
+        print(f"\nBy Category:")
+        for cat, count in status.get('by_category', {}).items():
+            print(f"  {cat}: {count}")
+        print(f"\nImage Params:")
+        for k, v in status.get('image_params', {}).items():
+            print(f"  {k}: {v}")
+        print("="*60)
+    finally:
+        if hasattr(engine, 'cleanup'):
+            await engine.cleanup()
 
 
 async def run_continuously():
     """Run the autonomous engine continuously."""
     from bots.twitter.autonomous_engine import get_autonomous_engine
-    
-    engine = get_autonomous_engine()
-    
+    from core.secrets import validate_required_keys, print_key_status
+
+    # Validate API keys before starting
     print("\n" + "="*60)
     print("JARVIS AUTONOMOUS TWITTER ENGINE")
     print("="*60)
-    print(f"Posting interval: {engine._post_interval}s (1 hour)")
+
+    print("\nChecking API keys...")
+    print_key_status()
+
+    success, missing = validate_required_keys(["anthropic", "grok", "twitter"])
+    if not success:
+        print(f"\nWARNING: Missing required API keys: {', '.join(missing)}")
+        print("Some features may be limited.")
+    else:
+        print("All required keys configured.")
+
+    engine = get_autonomous_engine()
+
+    print(f"\nPosting interval: {engine._post_interval}s")
     print("Press Ctrl+C to stop")
     print("="*60 + "\n")
     
@@ -144,7 +188,29 @@ async def run_continuously():
         await engine.run()
     except KeyboardInterrupt:
         print("\nStopping engine...")
+    except Exception as e:
+        print(f"\n[ERROR] Engine crashed: {e}")
+        import traceback
+        traceback.print_exc()
+        # Notify via Telegram if possible
+        try:
+            import aiohttp
+            import os
+            token = os.getenv("TG_BOT_TOKEN")
+            chat_id = os.getenv("TG_CHAT_ID")
+            if token and chat_id:
+                async with aiohttp.ClientSession() as session:
+                    await session.post(
+                        f"https://api.telegram.org/bot{token}/sendMessage",
+                        json={"chat_id": chat_id, "text": f"JARVIS X ENGINE CRASHED: {str(e)[:200]}"}
+                    )
+        except Exception:
+            pass
+    finally:
         engine.stop()
+        if hasattr(engine, 'cleanup'):
+            await engine.cleanup()
+
 
 
 def main():
