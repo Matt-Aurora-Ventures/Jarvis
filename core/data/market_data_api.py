@@ -1,6 +1,10 @@
 """
 Market Data API - Comprehensive market data from VERIFIED free sources.
-Covers: Crypto, Stocks, Precious Metals, Commodities, Financial News
+
+Sources (tested & reliable):
+- Yahoo Finance: Stocks, Indices, Futures (Gold, Silver, Oil), VIX, DXY
+- Binance: Crypto (BTC, ETH, SOL) - no rate limits
+- Alternative.me: Fear & Greed Index
 
 All data is fetched from reliable APIs - NO hardcoded estimates.
 If data cannot be fetched, it returns None rather than fake data.
@@ -17,7 +21,7 @@ from core.cache.memory_cache import LRUCache
 
 logger = logging.getLogger(__name__)
 
-_market_cache = LRUCache(maxsize=1000, ttl=180)  # 3 min cache for fresher data
+_market_cache = LRUCache(maxsize=1000, ttl=120)  # 2 min cache
 
 
 @dataclass
@@ -28,9 +32,10 @@ class AssetPrice:
     price: float
     change_24h: Optional[float] = None
     change_pct: Optional[float] = None
+    prev_close: Optional[float] = None
     source: str = "unknown"
     asset_class: str = "unknown"
-    verified: bool = True  # Only true if from real API
+    verified: bool = True
 
 
 @dataclass
@@ -46,22 +51,23 @@ class NewsItem:
 @dataclass
 class MarketOverview:
     """Complete market overview."""
-    # Crypto (from CoinGecko - reliable)
+    # Crypto
     btc: Optional[AssetPrice] = None
     eth: Optional[AssetPrice] = None
     sol: Optional[AssetPrice] = None
     
-    # Precious metals (from CoinGecko commodities)
+    # Precious metals (from futures)
     gold: Optional[AssetPrice] = None
     silver: Optional[AssetPrice] = None
     
     # Commodities
     oil: Optional[AssetPrice] = None
     
-    # Indices info
-    sp500_trend: str = "unknown"
-    nasdaq_trend: str = "unknown"
-    dxy_trend: str = "unknown"
+    # Indices
+    sp500: Optional[AssetPrice] = None
+    nasdaq: Optional[AssetPrice] = None
+    vix: Optional[AssetPrice] = None
+    dxy: Optional[AssetPrice] = None
     
     # Sentiment
     fear_greed: Optional[int] = None
@@ -82,32 +88,25 @@ class MarketOverview:
 
 class MarketDataAPI:
     """
-    Comprehensive market data from VERIFIED free APIs only.
+    Comprehensive market data from VERIFIED free APIs.
     
-    Sources (with fallbacks):
-    - Crypto: CoinCap → CoinGecko → Binance public API
-    - Metals: GoldAPI → Metals.dev
-    - Fear & Greed: Alternative.me
-    - News: Finnhub (requires free API key)
+    Primary Sources:
+    - Yahoo Finance: Indices, Futures, ETFs (with rate limiting)
+    - Binance: Crypto prices (generous limits)
+    - Alternative.me: Fear & Greed Index
     """
     
-    # Primary APIs (more generous rate limits)
-    COINCAP_API = "https://api.coincap.io/v2"
-    COINGECKO_API = "https://api.coingecko.com/api/v3"
+    # API endpoints
+    YAHOO_API = "https://query1.finance.yahoo.com/v8/finance/chart"
     BINANCE_API = "https://api.binance.com/api/v3"
-    
-    # Metals APIs
-    GOLDAPI_URL = "https://www.goldapi.io/api"
-    METALS_DEV_API = "https://api.metals.dev/v1"
-    
-    # Other
     FEAR_GREED_API = "https://api.alternative.me/fng"
-    FINNHUB_API = "https://finnhub.io/api/v1"
+    
+    # Rate limiting
+    _last_yahoo_call = 0
+    YAHOO_DELAY = 0.3  # 300ms between Yahoo calls
     
     def __init__(self):
         self._session: Optional[aiohttp.ClientSession] = None
-        self._finnhub_key = os.getenv("FINNHUB_API_KEY", "")
-        self._goldapi_key = os.getenv("GOLDAPI_KEY", "")
     
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -121,9 +120,38 @@ class MarketDataAPI:
         if self._session and not self._session.closed:
             await self._session.close()
     
+    async def _yahoo_fetch(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Fetch data from Yahoo Finance with rate limiting."""
+        import time
+        
+        # Rate limiting
+        now = time.time()
+        elapsed = now - MarketDataAPI._last_yahoo_call
+        if elapsed < self.YAHOO_DELAY:
+            await asyncio.sleep(self.YAHOO_DELAY - elapsed)
+        MarketDataAPI._last_yahoo_call = time.time()
+        
+        session = await self._get_session()
+        try:
+            url = f"{self.YAHOO_API}/{symbol}"
+            params = {"interval": "1d", "range": "1d"}
+            async with session.get(url, params=params) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    result = data.get("chart", {}).get("result", [{}])[0]
+                    meta = result.get("meta", {})
+                    return {
+                        "price": meta.get("regularMarketPrice", 0),
+                        "prev_close": meta.get("previousClose", 0),
+                        "change_pct": 0
+                    }
+        except Exception as e:
+            logger.warning(f"Yahoo fetch error for {symbol}: {e}")
+        return None
+    
     async def get_crypto_prices(self) -> Dict[str, AssetPrice]:
-        """Get major crypto prices with fallback chain: CoinCap → Binance → CoinGecko."""
-        cache_key = "crypto_prices_v3"
+        """Get crypto prices from Binance (most reliable, no rate limits)."""
+        cache_key = "crypto_v4"
         cached = _market_cache.get(cache_key)
         if cached:
             return cached
@@ -131,51 +159,30 @@ class MarketDataAPI:
         result = {}
         session = await self._get_session()
         
-        # Try CoinCap first (generous rate limits, no API key needed)
         try:
-            coins = ["bitcoin", "ethereum", "solana", "dogecoin"]
-            for coin_id in coins:
-                url = f"{self.COINCAP_API}/assets/{coin_id}"
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get("data"):
-                            d = data["data"]
-                            symbol = d.get("symbol", coin_id[:3].upper())
-                            result[symbol.lower()] = AssetPrice(
-                                symbol=symbol,
-                                name=d.get("name", coin_id.title()),
-                                price=round(float(d.get("priceUsd", 0)), 2),
-                                change_pct=round(float(d.get("changePercent24Hr", 0)), 2),
-                                source="coincap",
-                                asset_class="crypto",
-                                verified=True
-                            )
-                await asyncio.sleep(0.1)  # Small delay between requests
+            symbols = [
+                ("BTCUSDT", "BTC", "Bitcoin"),
+                ("ETHUSDT", "ETH", "Ethereum"),
+                ("SOLUSDT", "SOL", "Solana"),
+                ("DOGEUSDT", "DOGE", "Dogecoin")
+            ]
             
-            if result:
-                _market_cache.set(cache_key, result)
-                logger.info(f"CoinCap: BTC=${result.get('btc').price if result.get('btc') else 'N/A'}")
-                return result
-        except Exception as e:
-            logger.warning(f"CoinCap error: {e}")
-        
-        # Fallback to Binance public API (no auth needed)
-        try:
-            binance_symbols = [("BTCUSDT", "BTC", "Bitcoin"), ("ETHUSDT", "ETH", "Ethereum"), 
-                              ("SOLUSDT", "SOL", "Solana"), ("DOGEUSDT", "DOGE", "Dogecoin")]
-            
-            for binance_sym, symbol, name in binance_symbols:
+            for binance_sym, symbol, name in symbols:
                 url = f"{self.BINANCE_API}/ticker/24hr"
                 params = {"symbol": binance_sym}
                 async with session.get(url, params=params) as resp:
                     if resp.status == 200:
                         d = await resp.json()
+                        price = round(float(d.get("lastPrice", 0)), 2)
+                        change = round(float(d.get("priceChangePercent", 0)), 2)
+                        prev = round(float(d.get("prevClosePrice", 0)), 2)
+                        
                         result[symbol.lower()] = AssetPrice(
                             symbol=symbol,
                             name=name,
-                            price=round(float(d.get("lastPrice", 0)), 2),
-                            change_pct=round(float(d.get("priceChangePercent", 0)), 2),
+                            price=price,
+                            change_pct=change,
+                            prev_close=prev,
                             source="binance",
                             asset_class="crypto",
                             verified=True
@@ -183,101 +190,141 @@ class MarketDataAPI:
             
             if result:
                 _market_cache.set(cache_key, result)
-                logger.info(f"Binance: BTC=${result.get('btc').price if result.get('btc') else 'N/A'}")
+                btc = result.get("btc")
+                if btc:
+                    logger.info(f"Crypto: BTC=${btc.price:,.0f} ({btc.change_pct:+.1f}%)")
                 return result
+                
         except Exception as e:
-            logger.warning(f"Binance error: {e}")
-        
-        # Last resort: CoinGecko (strict rate limits)
-        try:
-            url = f"{self.COINGECKO_API}/simple/price"
-            params = {"ids": "bitcoin,ethereum,solana,dogecoin", "vs_currencies": "usd", "include_24hr_change": "true"}
-            async with session.get(url, params=params) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    mappings = [("bitcoin", "BTC", "Bitcoin"), ("ethereum", "ETH", "Ethereum"),
-                               ("solana", "SOL", "Solana"), ("dogecoin", "DOGE", "Dogecoin")]
-                    for coin_id, symbol, name in mappings:
-                        if coin_id in data:
-                            d = data[coin_id]
-                            result[symbol.lower()] = AssetPrice(
-                                symbol=symbol, name=name,
-                                price=round(d.get("usd", 0), 2),
-                                change_pct=round(d.get("usd_24h_change", 0), 2),
-                                source="coingecko", asset_class="crypto", verified=True
-                            )
-                    if result:
-                        _market_cache.set(cache_key, result)
-                        return result
-        except Exception as e:
-            logger.error(f"CoinGecko error: {e}")
+            logger.error(f"Binance error: {e}")
         
         return result
     
     async def get_precious_metals(self) -> Dict[str, AssetPrice]:
-        """Get precious metal prices from multiple sources: PAX Gold → Tether Gold."""
-        cache_key = "metals_v3"
+        """Get precious metal prices from Yahoo Finance futures (GC=F, SI=F)."""
+        cache_key = "metals_v4"
         cached = _market_cache.get(cache_key)
         if cached:
             return cached
         
         result = {}
-        session = await self._get_session()
         
-        # Try CoinCap for PAX Gold (PAXG - 1:1 with gold oz)
-        try:
-            url = f"{self.COINCAP_API}/assets/pax-gold"
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if data.get("data"):
-                        d = data["data"]
-                        price = round(float(d.get("priceUsd", 0)), 2)
-                        if price > 1000:  # Sanity check - gold should be > $1000/oz
-                            result["xau"] = AssetPrice(
-                                symbol="XAU",
-                                name="Gold",
-                                price=price,
-                                change_pct=round(float(d.get("changePercent24Hr", 0)), 2),
-                                source="coincap-paxg",
-                                asset_class="metal",
-                                verified=True
-                            )
-                            _market_cache.set(cache_key, result)
-                            logger.info(f"CoinCap PAXG: Gold=${price}")
-                            return result
-        except Exception as e:
-            logger.warning(f"CoinCap PAXG error: {e}")
+        # Gold Futures (GC=F)
+        gold_data = await self._yahoo_fetch("GC=F")
+        if gold_data and gold_data["price"] > 1000:
+            price = gold_data["price"]
+            prev = gold_data["prev_close"] or price
+            change_pct = ((price - prev) / prev * 100) if prev else 0
+            result["xau"] = AssetPrice(
+                symbol="XAU",
+                name="Gold",
+                price=round(price, 2),
+                change_pct=round(change_pct, 2),
+                prev_close=round(prev, 2),
+                source="yahoo-futures",
+                asset_class="metal",
+                verified=True
+            )
+            logger.info(f"Gold: ${price:,.2f} ({change_pct:+.1f}%)")
         
-        # Fallback: Binance PAXGUSDT
-        try:
-            url = f"{self.BINANCE_API}/ticker/24hr"
-            params = {"symbol": "PAXGUSDT"}
-            async with session.get(url, params=params) as resp:
-                if resp.status == 200:
-                    d = await resp.json()
-                    price = round(float(d.get("lastPrice", 0)), 2)
-                    if price > 1000:
-                        result["xau"] = AssetPrice(
-                            symbol="XAU",
-                            name="Gold",
-                            price=price,
-                            change_pct=round(float(d.get("priceChangePercent", 0)), 2),
-                            source="binance-paxg",
-                            asset_class="metal",
-                            verified=True
-                        )
-                        _market_cache.set(cache_key, result)
-                        logger.info(f"Binance PAXG: Gold=${price}")
-                        return result
-        except Exception as e:
-            logger.warning(f"Binance PAXG error: {e}")
+        # Silver Futures (SI=F)
+        silver_data = await self._yahoo_fetch("SI=F")
+        if silver_data and silver_data["price"] > 10:
+            price = silver_data["price"]
+            prev = silver_data["prev_close"] or price
+            change_pct = ((price - prev) / prev * 100) if prev else 0
+            result["xag"] = AssetPrice(
+                symbol="XAG",
+                name="Silver",
+                price=round(price, 2),
+                change_pct=round(change_pct, 2),
+                prev_close=round(prev, 2),
+                source="yahoo-futures",
+                asset_class="metal",
+                verified=True
+            )
+            logger.info(f"Silver: ${price:.2f} ({change_pct:+.1f}%)")
+        
+        if result:
+            _market_cache.set(cache_key, result)
+        
+        return result
+    
+    async def get_indices(self) -> Dict[str, AssetPrice]:
+        """Get major indices from Yahoo Finance (S&P 500, NASDAQ, VIX, DXY)."""
+        cache_key = "indices_v1"
+        cached = _market_cache.get(cache_key)
+        if cached:
+            return cached
+        
+        result = {}
+        indices = [
+            ("^GSPC", "SPX", "S&P 500", "index"),
+            ("^IXIC", "NDX", "NASDAQ", "index"),
+            ("^VIX", "VIX", "VIX", "volatility"),
+            ("DX-Y.NYB", "DXY", "Dollar Index", "currency"),
+        ]
+        
+        for yahoo_sym, symbol, name, asset_class in indices:
+            data = await self._yahoo_fetch(yahoo_sym)
+            if data and data["price"] > 0:
+                price = data["price"]
+                prev = data["prev_close"] or price
+                change_pct = ((price - prev) / prev * 100) if prev else 0
+                result[symbol.lower()] = AssetPrice(
+                    symbol=symbol,
+                    name=name,
+                    price=round(price, 2),
+                    change_pct=round(change_pct, 2),
+                    prev_close=round(prev, 2),
+                    source="yahoo-finance",
+                    asset_class=asset_class,
+                    verified=True
+                )
+        
+        if result:
+            _market_cache.set(cache_key, result)
+            spx = result.get("spx")
+            if spx:
+                logger.info(f"S&P 500: {spx.price:,.0f} ({spx.change_pct:+.1f}%)")
+        
+        return result
+    
+    async def get_commodities(self) -> Dict[str, AssetPrice]:
+        """Get commodity prices from Yahoo Finance (Oil futures)."""
+        cache_key = "commodities_v1"
+        cached = _market_cache.get(cache_key)
+        if cached:
+            return cached
+        
+        result = {}
+        
+        # Crude Oil Futures (CL=F)
+        oil_data = await self._yahoo_fetch("CL=F")
+        if oil_data and oil_data["price"] > 0:
+            price = oil_data["price"]
+            prev = oil_data["prev_close"] or price
+            change_pct = ((price - prev) / prev * 100) if prev else 0
+            result["oil"] = AssetPrice(
+                symbol="WTI",
+                name="Crude Oil",
+                price=round(price, 2),
+                change_pct=round(change_pct, 2),
+                prev_close=round(prev, 2),
+                source="yahoo-futures",
+                asset_class="commodity",
+                verified=True
+            )
+            logger.info(f"Oil: ${price:.2f} ({change_pct:+.1f}%)")
+        
+        if result:
+            _market_cache.set(cache_key, result)
         
         return result
     
     async def get_fear_greed(self) -> Optional[int]:
         """Get crypto fear & greed index (0-100) from Alternative.me."""
-        cache_key = "fear_greed_v2"
+        cache_key = "fear_greed_v3"
         cached = _market_cache.get(cache_key)
         if cached is not None:
             return cached
@@ -339,17 +386,17 @@ class MarketDataAPI:
         return []
     
     async def get_market_overview(self) -> MarketOverview:
-        """Get complete market overview from verified sources only."""
-        # Fetch all data concurrently
-        crypto_task = asyncio.create_task(self.get_crypto_prices())
-        metals_task = asyncio.create_task(self.get_precious_metals())
-        fear_greed_task = asyncio.create_task(self.get_fear_greed())
-        news_task = asyncio.create_task(self.get_market_news())
+        """Get complete market overview from verified sources."""
+        # Fetch crypto first (Binance - fast, no rate limits)
+        crypto = await self.get_crypto_prices()
         
-        crypto = await crypto_task
-        metals = await metals_task
-        fear_greed = await fear_greed_task
-        news = await news_task
+        # Fetch Fear & Greed (fast, single request)
+        fear_greed = await self.get_fear_greed()
+        
+        # Fetch Yahoo data sequentially (rate limited)
+        metals = await self.get_precious_metals()
+        indices = await self.get_indices()
+        commodities = await self.get_commodities()
         
         # Determine sentiment from fear/greed
         sentiment = "neutral"
@@ -363,22 +410,19 @@ class MarketDataAPI:
             elif fear_greed > 60:
                 sentiment = "greed"
         
-        # Track which sources we got data from
+        # Track data sources
         sources = []
         if crypto:
-            sources.append("coingecko")
-        if metals:
-            sources.append("coingecko-metals")
+            sources.append("binance")
+        if metals or indices or commodities:
+            sources.append("yahoo-finance")
         if fear_greed is not None:
             sources.append("alternative.me")
-        if news:
-            sources.append("finnhub")
         
-        # Real upcoming events (verified dates)
+        # Real upcoming events
         upcoming = []
         now = datetime.now()
         
-        # January 2026 events
         if now.month == 1 and now.year == 2026:
             if now.day < 29:
                 upcoming.append("FOMC Decision - Jan 29")
@@ -387,7 +431,6 @@ class MarketDataAPI:
             if now.day < 31:
                 upcoming.append("Core PCE - Jan 31")
         
-        # February 2026 events
         if now.month == 2 and now.year == 2026:
             if now.day < 7:
                 upcoming.append("Jobs Report - Feb 7")
@@ -398,10 +441,14 @@ class MarketDataAPI:
             sol=crypto.get("sol"),
             gold=metals.get("xau"),
             silver=metals.get("xag"),
+            oil=commodities.get("oil"),
+            sp500=indices.get("spx"),
+            nasdaq=indices.get("ndx"),
+            vix=indices.get("vix"),
+            dxy=indices.get("dxy"),
             fear_greed=fear_greed,
             market_sentiment=sentiment,
-            top_news=news,
-            upcoming_events=upcoming if upcoming else ["Check economic calendar for dates"],
+            upcoming_events=upcoming if upcoming else ["Check economic calendar"],
             data_sources=sources
         )
 

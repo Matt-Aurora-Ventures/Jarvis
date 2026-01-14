@@ -720,30 +720,38 @@ Examples:
             # Get comprehensive market overview
             overview = await market_api.get_market_overview()
             
-            # Build market summary for Grok analysis
+            # Build comprehensive market summary
             summary_parts = []
             
-            # Crypto
+            # Crypto (from Binance)
             if overview.btc:
-                btc_dir = "up" if (overview.btc.change_pct or 0) > 0 else "down"
-                summary_parts.append(f"BTC ${overview.btc.price:,.0f} ({btc_dir} {abs(overview.btc.change_pct or 0):.1f}%)")
+                summary_parts.append(f"BTC ${overview.btc.price:,.0f} ({overview.btc.change_pct:+.1f}%)")
             if overview.sol:
-                sol_dir = "up" if (overview.sol.change_pct or 0) > 0 else "down"
-                summary_parts.append(f"SOL ${overview.sol.price:.2f} ({sol_dir} {abs(overview.sol.change_pct or 0):.1f}%)")
+                summary_parts.append(f"SOL ${overview.sol.price:.2f} ({overview.sol.change_pct:+.1f}%)")
             
-            # Precious metals
+            # Indices (from Yahoo)
+            if overview.sp500:
+                summary_parts.append(f"S&P {overview.sp500.price:,.0f}")
+            if overview.vix:
+                summary_parts.append(f"VIX {overview.vix.price:.1f}")
+            
+            # Precious metals (from Yahoo Futures)
             if overview.gold:
                 summary_parts.append(f"Gold ${overview.gold.price:,.0f}")
             if overview.silver:
-                summary_parts.append(f"Silver ${overview.silver.price:.2f}")
+                summary_parts.append(f"Silver ${overview.silver.price:.0f}")
             
             # Commodities
             if overview.oil:
-                summary_parts.append(f"Oil ${overview.oil.price:.2f}")
+                summary_parts.append(f"Oil ${overview.oil.price:.0f}")
+            
+            # DXY
+            if overview.dxy:
+                summary_parts.append(f"DXY {overview.dxy.price:.1f}")
             
             # Fear & Greed
             if overview.fear_greed:
-                summary_parts.append(f"Fear/Greed: {overview.fear_greed} ({overview.market_sentiment})")
+                summary_parts.append(f"Fear/Greed: {overview.fear_greed}")
             
             # Upcoming events
             events_str = ", ".join(overview.upcoming_events[:2]) if overview.upcoming_events else ""
@@ -759,60 +767,82 @@ Examples:
             
             # Rotate between different focus areas
             import random
-            focus = random.choice(["crypto_metals", "macro", "events", "cross_asset"])
+            focus = random.choice(["stocks_crypto", "metals_macro", "volatility", "cross_asset", "events"])
             
-            if focus == "crypto_metals":
-                prompt = f"""Write a tweet comparing crypto and precious metals sentiment.
+            # Build focus-specific data
+            spx_str = f"S&P {overview.sp500.price:,.0f}" if overview.sp500 else ""
+            vix_str = f"VIX {overview.vix.price:.1f}" if overview.vix else ""
+            dxy_str = f"DXY {overview.dxy.price:.1f}" if overview.dxy else ""
+            gold_str = f"Gold ${overview.gold.price:,.0f}" if overview.gold else ""
+            oil_str = f"Oil ${overview.oil.price:.0f}" if overview.oil else ""
+            
+            if focus == "stocks_crypto":
+                prompt = f"""Write a tweet about stocks vs crypto correlation.
 
 Data: {market_summary}
+S&P 500: {spx_str} | BTC: ${overview.btc.price:,.0f if overview.btc else 0}
 Analysis: {grok_take}
 
-Connect the dots between gold/silver and crypto. What's the correlation saying?
+Are they moving together or diverging? What does it mean?
 Example vibes:
-- "gold at $2650 while btc consolidates. boomers and degens agreeing on something for once."
-- "silver outperforming btc this week. my boomer portfolio is smug about it."
+- "s&p making new highs while btc consolidates. either stocks are overextended or crypto is about to catch up. placing my bets accordingly."
+- "stocks and crypto both green. risk-on vibes. enjoy it while it lasts."
 
-2-3 sentences. Insightful, not generic."""
+2-3 sentences. Reference actual prices."""
 
-            elif focus == "macro":
-                prompt = f"""Write a tweet about the broader macro picture.
+            elif focus == "metals_macro":
+                prompt = f"""Write a tweet about gold/metals and the macro picture.
 
-Data: {market_summary}
-Upcoming: {events_str}
-Sentiment: Fear/Greed at {overview.fear_greed} ({overview.market_sentiment})
+Data: {gold_str} | {dxy_str} | {oil_str}
+Fear/Greed: {overview.fear_greed}
+Analysis: {grok_take}
 
-Give a thoughtful take on what the macro picture means for risk assets.
+What's gold saying about the economy? Connect to dollar and oil.
 Example vibes:
-- "fear/greed at {overview.fear_greed} with FOMC next week. historically this setup means... actually i don't know. nobody does."
-- "commodities, metals, and crypto all moving together. correlation is 1 until it isn't."
+- "gold at $4600 with dxy at 99. either gold is overvalued or the dollar is about to tank. i have opinions."
+- "oil down, gold up, dollar flat. classic flight to safety pattern. or just chaos."
 
 2-3 sentences. Smart observation."""
+
+            elif focus == "volatility":
+                prompt = f"""Write a tweet about market volatility and fear.
+
+VIX: {vix_str}
+Fear/Greed: {overview.fear_greed} ({overview.market_sentiment})
+Markets: {spx_str}
+
+What's the VIX and fear/greed telling us?
+Example vibes:
+- "vix at 16 with fear/greed at 48. everyone's waiting for someone else to make a move."
+- "low volatility with neutral sentiment. historically this means... something's coming."
+
+2-3 sentences. Insightful."""
 
             elif focus == "events":
                 prompt = f"""Write a tweet about upcoming market events.
 
 Upcoming: {events_str}
-Current sentiment: {overview.market_sentiment}
+Current: {market_summary}
 
-What should traders be watching? Give a useful preview.
+What should traders be watching?
 Example vibes:
-- "FOMC next week. reminder that whatever you think will happen probably won't. plan accordingly."
-- "jobs report friday. crypto acts like it doesn't care but definitely cares."
+- "FOMC jan 29. markets priced in a pause but the real move is in the statement."
+- "gdp and pce back to back this week. buckle up."
 
 2-3 sentences. Actually useful."""
 
             else:  # cross_asset
-                prompt = f"""Write a tweet about cross-asset market dynamics.
+                prompt = f"""Write a comprehensive market update tweet.
 
 Full picture: {market_summary}
-{grok_take}
+Analysis: {grok_take}
 
-What's the most interesting thing happening across markets right now?
+Give a quick snapshot of what's happening across all markets.
 Example vibes:
-- "btc flat, gold up, oil down, fear/greed neutral. market is confused and i relate."
-- "interesting divergence: crypto rotating while tradfi stays bid. someone's wrong."
+- "btc $95k, s&p 6900, gold $4600, vix 16. everything's quiet which means something's brewing."
+- "crypto green, stocks green, metals green. correlation = 1 day. enjoy the peace."
 
-2-3 sentences. Sharp observation."""
+2-3 sentences. Sharp, specific."""
 
             content = await voice.generate_tweet(prompt)
             
