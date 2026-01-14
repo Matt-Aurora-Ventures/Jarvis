@@ -36,6 +36,18 @@ from core.tokenized_equities_universe import (
     EquityToken,
 )
 
+# Import enhanced market data for trending tokens and conviction picks
+from core.enhanced_market_data import (
+    fetch_trending_solana_tokens,
+    fetch_backed_stocks,
+    fetch_backed_indexes,
+    get_grok_conviction_picks,
+    TrendingToken,
+    BackedAsset,
+    ConvictionPick,
+    BACKED_XSTOCKS,
+)
+
 logger = logging.getLogger(__name__)
 
 # Prediction tracking file
@@ -1951,8 +1963,17 @@ Be specific about price targets and key levels to watch."""
         # Post ape buttons for bullish crypto tokens with TP/SL profiles
         await self._post_ape_buttons(tokens)
 
+        # Post top 10 trending Solana tokens with buy buttons
+        await self._post_trending_tokens_section()
+
         # Post XStocks/PreStocks tradeable section
         await self._post_xstocks_section()
+
+        # Post indexes and ETFs section
+        await self._post_indexes_section()
+
+        # Post Grok's top 10 conviction picks across all classes
+        await self._post_grok_conviction_picks(tokens)
 
         # Post treasury status as final message
         await self._post_treasury_status()
@@ -2241,6 +2262,481 @@ Trade stocks 24/7 with SOL/USDC
 
         except Exception as e:
             logger.error(f"Failed to post XStocks section: {e}")
+
+    async def _post_trending_tokens_section(self):
+        """Post top 10 trending Solana tokens with buy buttons."""
+        try:
+            # Fetch trending tokens
+            trending_tokens, warnings = await fetch_trending_solana_tokens(10)
+
+            if not trending_tokens:
+                logger.debug("No trending tokens available")
+                return
+
+            # Header message
+            header = """
+<b>========================================</b>
+<b>   🔥 TOP 10 TRENDING SOLANA TOKENS</b>
+<b>========================================</b>
+
+<b>24h Trending on DexScreener</b>
+Click to ape with treasury allocation
+
+<b>Risk Profiles:</b>
+🛡️ SAFE: +15% TP / -5% SL
+⚖️ MED: +30% TP / -10% SL
+🔥 DEGEN: +50% TP / -15% SL
+"""
+            async with self._session.post(
+                f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                json={
+                    "chat_id": self.chat_id,
+                    "text": header,
+                    "parse_mode": "HTML",
+                }
+            ) as resp:
+                await resp.json()
+
+            await asyncio.sleep(0.3)
+
+            # Post each trending token with buy buttons
+            for token in trending_tokens[:10]:
+                try:
+                    keyboard = create_ape_buttons_with_tp_sl(
+                        symbol=token.symbol,
+                        asset_type="token",
+                        contract_address=token.contract or "",
+                        entry_price=token.price_usd,
+                        grade="",
+                    )
+
+                    # Format price
+                    if token.price_usd >= 1:
+                        price_str = f"${token.price_usd:.2f}"
+                    elif token.price_usd >= 0.01:
+                        price_str = f"${token.price_usd:.4f}"
+                    else:
+                        price_str = f"${token.price_usd:.8f}"
+
+                    # Format market cap
+                    if token.mcap >= 1_000_000:
+                        mcap_str = f"${token.mcap / 1_000_000:.1f}M"
+                    elif token.mcap >= 1_000:
+                        mcap_str = f"${token.mcap / 1_000:.1f}K"
+                    else:
+                        mcap_str = f"${token.mcap:.0f}"
+
+                    change_emoji = "🟢" if token.price_change_24h > 0 else "🔴"
+
+                    token_msg = (
+                        f"<b>#{token.rank} {token.symbol}</b>\n"
+                        f"💰 {price_str} {change_emoji} {token.price_change_24h:+.1f}%\n"
+                        f"📊 MCap: {mcap_str} | Vol: ${token.volume_24h:,.0f}\n"
+                        f"<code>{token.contract[:20]}...</code>"
+                    )
+
+                    async with self._session.post(
+                        f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                        json={
+                            "chat_id": self.chat_id,
+                            "text": token_msg,
+                            "parse_mode": "HTML",
+                            "reply_markup": keyboard.to_dict(),
+                        }
+                    ) as resp:
+                        result = await resp.json()
+                        if not result.get("ok"):
+                            logger.debug(f"Trending token button error: {result}")
+
+                    await asyncio.sleep(0.2)
+
+                except Exception as e:
+                    logger.debug(f"Trending token button error for {token.symbol}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to post trending tokens section: {e}")
+
+    async def _post_indexes_section(self):
+        """Post index ETFs from xStocks with buy buttons."""
+        try:
+            # Get indexes from BACKED_XSTOCKS registry
+            indexes = [
+                BackedAsset(
+                    symbol=symbol,
+                    name=info["name"],
+                    mint_address=info["mint"],
+                    asset_type=info["type"],
+                    underlying=info["underlying"],
+                    price_usd=0.0,
+                    change_1y=0.0,
+                )
+                for symbol, info in BACKED_XSTOCKS.items()
+                if info["type"] in ("index", "bond", "commodity")
+            ]
+
+            if not indexes:
+                logger.debug("No indexes available")
+                return
+
+            # Header message
+            header = """
+<b>========================================</b>
+<b>   📈 INDEXES & ETFs</b>
+<b>========================================</b>
+
+<b>Tokenized Index Funds on Solana</b>
+Trade market indexes 24/7
+
+<b>Risk Profiles (Lower Volatility):</b>
+🛡️ SAFE: +5% TP / -2% SL
+⚖️ MED: +10% TP / -4% SL
+🔥 DEGEN: +20% TP / -8% SL
+"""
+            async with self._session.post(
+                f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                json={
+                    "chat_id": self.chat_id,
+                    "text": header,
+                    "parse_mode": "HTML",
+                }
+            ) as resp:
+                await resp.json()
+
+            await asyncio.sleep(0.3)
+
+            # Post each index with buy buttons
+            for index in indexes:
+                try:
+                    keyboard = create_ape_buttons_with_tp_sl(
+                        symbol=index.symbol,
+                        asset_type="stock",  # Use stock risk profile for indexes
+                        contract_address=index.mint_address or "",
+                        entry_price=0.0,
+                        grade="",
+                    )
+
+                    # Determine emoji based on type
+                    if index.asset_type == "index":
+                        type_emoji = "📊"
+                        type_label = "Index"
+                    elif index.asset_type == "commodity":
+                        type_emoji = "🥇"
+                        type_label = "Commodity"
+                    elif index.asset_type == "bond":
+                        type_emoji = "📄"
+                        type_label = "Treasury"
+                    else:
+                        type_emoji = "📈"
+                        type_label = index.asset_type.title()
+
+                    index_msg = (
+                        f"<b>{type_emoji} {index.symbol}</b> ({index.underlying})\n"
+                        f"{index.name} - {type_label}\n"
+                        f"<code>{index.mint_address[:20]}...</code>"
+                    )
+
+                    async with self._session.post(
+                        f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                        json={
+                            "chat_id": self.chat_id,
+                            "text": index_msg,
+                            "parse_mode": "HTML",
+                            "reply_markup": keyboard.to_dict(),
+                        }
+                    ) as resp:
+                        result = await resp.json()
+                        if not result.get("ok"):
+                            logger.debug(f"Index button error: {result}")
+
+                    await asyncio.sleep(0.2)
+
+                except Exception as e:
+                    logger.debug(f"Index button error for {index.symbol}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to post indexes section: {e}")
+
+    async def _get_grok_conviction_picks_internal(
+        self,
+        tokens: List[TrendingToken],
+        stocks: List[BackedAsset],
+        indexes: List[BackedAsset],
+    ) -> List[ConvictionPick]:
+        """
+        Get Grok's conviction picks using direct API call.
+
+        Returns list of ConvictionPick objects sorted by conviction score.
+        """
+        picks = []
+
+        if not self.xai_api_key:
+            return picks
+
+        try:
+            # Build asset summary for Grok
+            asset_summary = "ASSETS TO ANALYZE:\n\n"
+
+            asset_summary += "TRENDING SOLANA TOKENS:\n"
+            for t in tokens[:10]:
+                asset_summary += f"- {t.symbol}: ${t.price_usd:.8f}, 24h: {t.price_change_24h:+.1f}%, Vol: ${t.volume_24h:,.0f}, MCap: ${t.mcap:,.0f}\n"
+
+            asset_summary += "\nTOKENIZED STOCKS (xStocks on Solana):\n"
+            for s in stocks[:10]:
+                asset_summary += f"- {s.symbol} ({s.underlying})\n"
+
+            asset_summary += "\nINDEXES/ETFs:\n"
+            for i in indexes[:5]:
+                asset_summary += f"- {i.symbol} ({i.underlying})\n"
+
+            prompt = f"""Analyze these assets and provide your TOP 10 conviction picks.
+
+{asset_summary}
+
+For each pick, provide:
+1. SYMBOL - The asset symbol
+2. ASSET_CLASS - token/stock/index
+3. CONVICTION - Score from 1-100 (100 = highest conviction)
+4. REASONING - Brief 1-2 sentence explanation
+5. TARGET - Target price (approximate % gain)
+6. STOP - Stop loss (approximate % loss)
+7. TIMEFRAME - short (1-7 days), medium (1-4 weeks), long (1-3 months)
+
+Format EXACTLY as:
+PICK|SYMBOL|ASSET_CLASS|CONVICTION|REASONING|TARGET_PCT|STOP_PCT|TIMEFRAME
+
+Example:
+PICK|NVDAx|stock|85|Strong AI demand and upcoming earnings catalyst|+15%|-5%|medium
+
+Provide your 10 best picks with conviction scores. Be selective - only include assets you have genuine conviction in."""
+
+            # Call Grok API
+            async with self._session.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.xai_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "grok-2-latest",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 1500,
+                    "temperature": 0.3,
+                }
+            ) as resp:
+                if resp.status != 200:
+                    logger.warning(f"Grok conviction API returned {resp.status}")
+                    return picks
+
+                data = await resp.json()
+                response = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+                # Parse response
+                lines = response.strip().split("\n")
+                for line in lines:
+                    if not line.startswith("PICK|"):
+                        continue
+                    parts = line.split("|")
+                    if len(parts) < 8:
+                        continue
+
+                    try:
+                        symbol = parts[1].strip().upper()
+                        asset_class = parts[2].strip().lower()
+                        conviction = int(parts[3].strip())
+                        reasoning = parts[4].strip()
+                        target_pct = float(parts[5].strip().replace("%", "").replace("+", ""))
+                        stop_pct = float(parts[6].strip().replace("%", "").replace("-", ""))
+                        timeframe = parts[7].strip().lower()
+
+                        # Find the asset to get entry price and contract
+                        entry_price = 0.0
+                        contract = ""
+
+                        if asset_class == "token":
+                            for t in tokens:
+                                if t.symbol.upper() == symbol:
+                                    entry_price = t.price_usd
+                                    contract = t.contract
+                                    break
+                        elif asset_class == "stock":
+                            for s in stocks:
+                                if s.symbol.upper() == symbol or s.underlying.upper() == symbol:
+                                    entry_price = s.price_usd if s.price_usd > 0 else 100.0  # Default for stocks
+                                    contract = s.mint_address
+                                    break
+                        elif asset_class == "index":
+                            for i in indexes:
+                                if i.symbol.upper() == symbol or i.underlying.upper() == symbol:
+                                    entry_price = i.price_usd if i.price_usd > 0 else 100.0
+                                    contract = i.mint_address
+                                    break
+
+                        picks.append(ConvictionPick(
+                            symbol=symbol,
+                            name=symbol,
+                            asset_class=asset_class,
+                            contract=contract,
+                            conviction_score=min(100, max(1, conviction)),
+                            reasoning=reasoning,
+                            entry_price=entry_price,
+                            target_price=entry_price * (1 + target_pct / 100) if entry_price > 0 else 0,
+                            stop_loss=entry_price * (1 - stop_pct / 100) if entry_price > 0 else 0,
+                            timeframe=timeframe if timeframe in ("short", "medium", "long") else "medium",
+                        ))
+                    except Exception as e:
+                        logger.debug(f"Failed to parse conviction pick line: {e}")
+
+        except Exception as e:
+            logger.warning(f"Grok conviction analysis failed: {e}")
+
+        # Sort by conviction score
+        picks.sort(key=lambda p: p.conviction_score, reverse=True)
+
+        return picks[:10]
+
+    async def _post_grok_conviction_picks(self, tokens: List = None):
+        """Post Grok's top 10 conviction picks across all asset classes with top 3 highlighted."""
+        try:
+            # Skip if no Grok API key
+            if not self.xai_api_key:
+                logger.debug("No Grok API key for conviction picks")
+                return
+
+            # Gather all available assets
+            trending_tokens, _ = await fetch_trending_solana_tokens(10)
+
+            # Get stocks from BACKED_XSTOCKS
+            stocks = [
+                BackedAsset(
+                    symbol=symbol,
+                    name=info["name"],
+                    mint_address=info["mint"],
+                    asset_type=info["type"],
+                    underlying=info["underlying"],
+                    price_usd=0.0,
+                    change_1y=0.0,
+                )
+                for symbol, info in BACKED_XSTOCKS.items()
+                if info["type"] == "stock"
+            ][:15]  # Top 15 stocks
+
+            # Get indexes
+            indexes = [
+                BackedAsset(
+                    symbol=symbol,
+                    name=info["name"],
+                    mint_address=info["mint"],
+                    asset_type=info["type"],
+                    underlying=info["underlying"],
+                    price_usd=0.0,
+                    change_1y=0.0,
+                )
+                for symbol, info in BACKED_XSTOCKS.items()
+                if info["type"] in ("index", "bond", "commodity")
+            ]
+
+            # Call Grok directly for conviction picks
+            picks = await self._get_grok_conviction_picks_internal(trending_tokens, stocks, indexes)
+
+            logger.info(f"Grok returned {len(picks)} conviction picks")
+
+            if not picks:
+                logger.debug("No conviction picks from Grok")
+                return
+
+            # Header with top 3 highlighted
+            top_3 = picks[:3]
+            top_3_display = "\n".join([
+                f"{'🥇' if i == 0 else '🥈' if i == 1 else '🥉'} <b>{p.symbol}</b> ({p.asset_class.upper()}) - {p.conviction_score}/100"
+                for i, p in enumerate(top_3)
+            ])
+
+            header = f"""
+<b>========================================</b>
+<b>   🤖 GROK'S TOP CONVICTION PICKS</b>
+<b>========================================</b>
+
+<b>🏆 TOP 3 HIGHEST CONVICTION:</b>
+{top_3_display}
+
+<b>Analysis based on:</b>
+• Trending momentum
+• Technical patterns
+• Market sentiment
+• Risk/reward ratio
+
+<i>Conviction Score: 1-100 (100 = highest)</i>
+"""
+            async with self._session.post(
+                f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                json={
+                    "chat_id": self.chat_id,
+                    "text": header,
+                    "parse_mode": "HTML",
+                }
+            ) as resp:
+                await resp.json()
+
+            await asyncio.sleep(0.3)
+
+            # Post each conviction pick with buy buttons
+            for i, pick in enumerate(picks[:10]):
+                try:
+                    # Determine asset type for button creation
+                    asset_type = "token" if pick.asset_class == "token" else "stock"
+
+                    keyboard = create_ape_buttons_with_tp_sl(
+                        symbol=pick.symbol,
+                        asset_type=asset_type,
+                        contract_address=pick.contract or "",
+                        entry_price=pick.entry_price,
+                        grade=f"{pick.conviction_score}",
+                    )
+
+                    # Conviction color
+                    if pick.conviction_score >= 80:
+                        conv_emoji = "🟢"
+                    elif pick.conviction_score >= 60:
+                        conv_emoji = "🟡"
+                    else:
+                        conv_emoji = "🟠"
+
+                    # Medal for top 3
+                    medal = "🥇 " if i == 0 else "🥈 " if i == 1 else "🥉 " if i == 2 else ""
+
+                    pick_msg = (
+                        f"<b>{medal}#{i+1} {pick.symbol}</b> ({pick.asset_class.upper()})\n"
+                        f"{conv_emoji} <b>Conviction: {pick.conviction_score}/100</b>\n"
+                        f"📝 {pick.reasoning[:100]}...\n"
+                        f"🎯 Target: +{((pick.target_price / pick.entry_price - 1) * 100):.0f}% | 🛑 SL: -{((1 - pick.stop_loss / pick.entry_price) * 100):.0f}%\n"
+                        f"⏱️ Timeframe: {pick.timeframe.title()}"
+                    ) if pick.entry_price > 0 else (
+                        f"<b>{medal}#{i+1} {pick.symbol}</b> ({pick.asset_class.upper()})\n"
+                        f"{conv_emoji} <b>Conviction: {pick.conviction_score}/100</b>\n"
+                        f"📝 {pick.reasoning[:100]}...\n"
+                        f"⏱️ Timeframe: {pick.timeframe.title()}"
+                    )
+
+                    async with self._session.post(
+                        f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                        json={
+                            "chat_id": self.chat_id,
+                            "text": pick_msg,
+                            "parse_mode": "HTML",
+                            "reply_markup": keyboard.to_dict(),
+                        }
+                    ) as resp:
+                        result = await resp.json()
+                        if not result.get("ok"):
+                            logger.debug(f"Conviction pick button error: {result}")
+
+                    await asyncio.sleep(0.3)
+
+                except Exception as e:
+                    logger.debug(f"Conviction pick error for {pick.symbol}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to post Grok conviction picks: {e}")
 
     async def _post_treasury_status(self):
         """Post treasury status at the end of report."""
