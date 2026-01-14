@@ -67,6 +67,18 @@ except ImportError:
     SENTIMENT_REPORT_AVAILABLE = False
     SentimentReportGenerator = None
 
+# Anti-scam protection
+try:
+    from bots.buy_tracker.antiscam import AntiScamProtection, create_antiscam_handler
+    ANTISCAM_AVAILABLE = True
+except ImportError:
+    ANTISCAM_AVAILABLE = False
+    AntiScamProtection = None
+    create_antiscam_handler = None
+
+# Global anti-scam instance
+_ANTISCAM: "AntiScamProtection | None" = None
+
 # Self-improving integration (optional)
 try:
     from core.self_improving import integration as self_improving
@@ -1696,6 +1708,51 @@ async def modstats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /unban command - restore posting ability for a muted user (admin only)."""
+    global _ANTISCAM
+
+    if not update.message or not context.args:
+        await update.message.reply_text(
+            "Usage: /unban <user_id>\n\nRestores posting ability for a user muted by anti-scam.",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    try:
+        user_id = int(context.args[0])
+        chat_id = update.effective_chat.id
+
+        if _ANTISCAM:
+            success = await _ANTISCAM.unban_user(chat_id, user_id)
+            if success:
+                await update.message.reply_text(
+                    f"User {user_id} has been unbanned. They can post again.",
+                    parse_mode=ParseMode.HTML
+                )
+            else:
+                await update.message.reply_text(
+                    f"Failed to unban user {user_id}. Check bot permissions.",
+                    parse_mode=ParseMode.HTML
+                )
+        else:
+            await update.message.reply_text(
+                "Anti-scam module not available.",
+                parse_mode=ParseMode.HTML
+            )
+    except ValueError:
+        await update.message.reply_text(
+            "Invalid user ID. Must be a number.",
+            parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"Error: {str(e)[:100]}",
+            parse_mode=ParseMode.HTML
+        )
+
+
+@admin_only
 async def upgrades(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /upgrades command - show pending self-upgrade ideas (admin only)."""
     try:
@@ -2434,11 +2491,11 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 *Max Positions:* {engine.max_positions}
 *Risk Level:* {engine.risk_level.value}
 
-⚠️ _Low balance warning: <0.05 SOL_
+⚠️ _Low balance warning: <{config.low_balance_threshold} SOL_
 """
 
-        # Warning if low balance
-        if sol_balance < 0.05:
+        # Warning if low balance (configurable via LOW_BALANCE_THRESHOLD env var)
+        if sol_balance < config.low_balance_threshold:
             message += "\n🚨 *WARNING: Low balance!*"
 
         keyboard = InlineKeyboardMarkup([
@@ -3268,8 +3325,10 @@ async def _refresh_balance_inline(query):
 
 *Mode:* {mode}
 """
-        if sol_balance < 0.05:
-            message += "\n🚨 *WARNING: Low balance!*"
+        # Low balance warning (configurable via LOW_BALANCE_THRESHOLD env var)
+        threshold = config.low_balance_threshold if config else 0.01
+        if sol_balance < threshold:
+            message += f"\n🚨 *WARNING: Low balance!* (< {threshold} SOL)"
 
         keyboard = InlineKeyboardMarkup([
             [
@@ -4024,6 +4083,7 @@ def main():
     app.add_handler(CommandHandler("code", code))
     app.add_handler(CommandHandler("remember", remember))
     app.add_handler(CommandHandler("modstats", modstats))
+    app.add_handler(CommandHandler("unban", unban))
     app.add_handler(CommandHandler("upgrades", upgrades))
     app.add_handler(CommandHandler("xbot", xbot))
     app.add_handler(CommandHandler("paper", paper))
@@ -4036,6 +4096,23 @@ def main():
     app.add_handler(CommandHandler("settings", settings))
 
     app.add_handler(CallbackQueryHandler(button_callback))
+
+    # Anti-scam protection (runs BEFORE regular message handler)
+    global _ANTISCAM
+    if ANTISCAM_AVAILABLE and config.admin_ids:
+        _ANTISCAM = AntiScamProtection(
+            bot=app.bot,
+            admin_ids=list(config.admin_ids),
+            auto_restrict=True,
+            auto_delete=True,
+            alert_admins=True,
+        )
+        antiscam_handler = create_antiscam_handler(_ANTISCAM)
+        app.add_handler(antiscam_handler, group=-1)  # Priority group - runs first
+        print("Anti-scam protection: ENABLED")
+    else:
+        print("Anti-scam protection: DISABLED (no antiscam module or admin IDs)")
+
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Welcome new members - use StatusUpdate for reliability (doesn't require admin)

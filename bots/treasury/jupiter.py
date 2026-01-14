@@ -304,39 +304,61 @@ class JupiterClient:
         return None
 
     async def get_token_price(self, mint: str) -> float:
-        """Get current token price in USD."""
-        session = await self._get_session()
+        """
+        Get current token price in USD.
 
-        try:
-            async with session.get(
-                f"{self.JUPITER_PRICE_API}/price",
-                params={'ids': mint}
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    price = data.get('data', {}).get(mint, {}).get('price', 0.0)
-                    if price:
-                        return float(price)
-        except Exception as e:
-            logger.warning(f"Primary price source failed for {mint[:8]}...: {e}")
+        Uses DexScreener as primary (more reliable) with Jupiter as fallback.
+        Includes caching to reduce API spam.
+        """
+        # Check price cache (30 second TTL)
+        cache_key = f"price_{mint}"
+        if hasattr(self, '_price_cache'):
+            cached = self._price_cache.get(cache_key)
+            if cached:
+                price, timestamp = cached
+                if (datetime.utcnow() - timestamp).total_seconds() < 30:
+                    return price
+        else:
+            self._price_cache = {}
 
-        # Stablecoin fallback
+        # Stablecoin fast path
         if mint in (self.USDC_MINT, self.USDT_MINT):
             return 1.0
 
-        # SOL fallback via CoinGecko
+        # SOL fast path via CoinGecko
         if mint == self.SOL_MINT:
             sol_price = await self._fetch_coingecko_price("solana")
             if sol_price > 0:
+                self._price_cache[cache_key] = (sol_price, datetime.utcnow())
                 return sol_price
 
-        # DexScreener fallback
+        # PRIMARY: DexScreener (more reliable than Jupiter price API)
         pairs = await self._fetch_dexscreener_pairs(mint)
         best = self._pick_best_pair(pairs)
         if best:
             price = self._pair_price_usd(best)
             if price > 0:
+                self._price_cache[cache_key] = (price, datetime.utcnow())
                 return price
+
+        # FALLBACK: Jupiter price API (only if DexScreener fails)
+        session = await self._get_session()
+        try:
+            async with session.get(
+                f"{self.JUPITER_PRICE_API}/price",
+                params={'ids': mint},
+                timeout=aiohttp.ClientTimeout(total=5)
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    price = data.get('data', {}).get(mint, {}).get('price', 0.0)
+                    if price:
+                        price = float(price)
+                        self._price_cache[cache_key] = (price, datetime.utcnow())
+                        return price
+        except Exception:
+            # Don't log - DexScreener already failed, Jupiter failing is expected
+            pass
 
         return 0.0
 

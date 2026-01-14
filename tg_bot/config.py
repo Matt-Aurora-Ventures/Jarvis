@@ -85,6 +85,11 @@ class BotConfig:
     paper_max_position_pct: float = 0.20
     paper_slippage_pct: float = 0.003
 
+    # === TREASURY ===
+    # Low balance warning threshold (in SOL)
+    # Set via LOW_BALANCE_THRESHOLD=0.01
+    low_balance_threshold: float = field(default_factory=lambda: float(os.getenv("LOW_BALANCE_THRESHOLD", "0.01")))
+
     # === SECURITY FLAGS ===
     log_api_calls: bool = False  # Never log actual API responses (could leak data)
     mask_addresses: bool = True  # Truncate addresses in logs

@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-4.4.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.5.0-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1108%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
@@ -54,9 +54,74 @@
 
 ---
 
-## 🚀 Recent Updates (v4.4.0 - January 2026)
+## 🚀 Recent Updates (v4.5.0 - January 2026)
 
-### 🤖 Complete Autonomy System - NEW
+### 🛡️ Bot Supervisor & Resilience System - NEW
+**Robust process management with auto-restart and monitoring** (`bots/supervisor.py`):
+
+| Feature | Description |
+|---------|-------------|
+| `BotSupervisor` | Central orchestrator managing all bot components |
+| Auto-Restart | Exponential backoff (5s → 300s) on crashes |
+| Health Monitoring | 60-second interval health checks for all components |
+| Component States | Tracks uptime, restart counts, consecutive failures |
+| Max Restart Protection | Stops after 100 restarts to prevent runaway loops |
+
+**Components Managed:**
+- `buy_bot` - Transaction tracking and monitoring
+- `sentiment_reporter` - Hourly market sentiment reports
+- `twitter_poster` - Automated Twitter/X posting
+- `telegram_bot` - Main Telegram bot with anti-scam
+
+### 🔒 Anti-Scam Protection - NEW
+**Automatic spam/scam detection and removal** (integrated in `tg_bot/bot.py`):
+
+| Feature | Description |
+|---------|-------------|
+| Pattern Detection | Regex-based scam phrase detection |
+| Auto-Restrict | Automatically restricts detected scammers |
+| Auto-Delete | Removes scam messages instantly |
+| Admin Alerts | Notifies admins of detected threats |
+| `/unban` Command | Admin command to restore false positives |
+
+### 📊 Health Endpoint & Monitoring - NEW
+**Kubernetes-style health probes** (`bots/health_endpoint.py`):
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/health` | Overall system health (JSON) |
+| `/ready` | Readiness probe for load balancers |
+| `/live` | Liveness probe for orchestrators |
+| `/metrics` | Prometheus-compatible metrics |
+
+### 💰 Resilient Price Fetching - NEW
+**Multi-source price fetching with circuit breaker** (`core/price/resilient_fetcher.py`):
+
+| Feature | Description |
+|---------|-------------|
+| DexScreener Primary | Most reliable source, used first |
+| Jupiter Fallback | Secondary source when DexScreener fails |
+| CoinGecko Tertiary | Final fallback for major tokens |
+| 30-Second Cache | Reduces API spam, improves performance |
+| Circuit Breaker | Tracks source health, avoids dead APIs |
+
+### 🔧 Configuration Improvements - NEW
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `LOW_BALANCE_THRESHOLD` | Treasury low balance warning | 0.01 SOL |
+| Sentiment Report Interval | Hourly reports | 60 minutes |
+
+### 🐛 Bug Fixes
+- Fixed Jupiter price.jup.ag DNS failures spamming logs
+- Changed price fetching to use DexScreener as primary source
+- Made low balance threshold configurable via environment
+- Reduced log noise from expected API fallbacks
+
+---
+
+## 🚀 Previous Updates (v4.4.0 - January 2026)
+
+### 🤖 Complete Autonomy System
 **12 autonomous modules for full self-operation** (`core/autonomy/`):
 
 | Module | Purpose |
