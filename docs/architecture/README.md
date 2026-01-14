@@ -119,3 +119,125 @@ Signal → Validation → Risk Check → Order → Execution → Settlement
 - Provider failures
 - High latency
 - Memory leaks
+
+---
+
+## LLM Provider Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    UnifiedLLM Interface                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                    LLM Router                         │  │
+│  │                                                       │  │
+│  │  TaskType.TRADING ───────► Groq (llama-3.3-70b)      │  │
+│  │  TaskType.CHAT    ───────► Ollama (local)            │  │
+│  │  TaskType.ANALYSIS ──────► OpenRouter (claude)       │  │
+│  │  TaskType.CODING  ───────► xAI (grok)                │  │
+│  │                                                       │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                          │                                  │
+│           ┌──────────────┼──────────────┐                  │
+│           ▼              ▼              ▼                   │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │   Groq      │ │   Ollama    │ │ OpenRouter  │           │
+│  │  Provider   │ │  Provider   │ │  Provider   │           │
+│  └─────────────┘ └─────────────┘ └─────────────┘           │
+│                          │                                  │
+│                          ▼                                  │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                 Cost Tracker                          │  │
+│  │  • Token counting • Cost calculation • Budget alerts │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Bot Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Bot Ecosystem                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+  │  Telegram Bot   │  │   Twitter Bot   │  │  Treasury Bot   │
+  ├─────────────────┤  ├─────────────────┤  ├─────────────────┤
+  │ • Chat commands │  │ • Mentions      │  │ • Auto-trading  │
+  │ • Trade alerts  │  │ • Sentiment     │  │ • Rebalancing   │
+  │ • Price queries │  │ • Engagement    │  │ • Risk mgmt     │
+  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘
+           │                    │                    │
+           └────────────────────┼────────────────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │    Bot Health         │
+                    │    Monitoring         │
+                    ├───────────────────────┤
+                    │ • Uptime tracking     │
+                    │ • Error logging       │
+                    │ • Metrics collection  │
+                    └───────────────────────┘
+```
+
+## Database Schema Overview
+
+```
+┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+│    users    │───────│ conversations│───────│  messages   │
+└─────────────┘       └─────────────┘       └─────────────┘
+      │
+      ├───────────────┬───────────────┬───────────────┐
+      ▼               ▼               ▼               ▼
+┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+│   trades    │ │   alerts    │ │  api_keys   │ │  webhooks   │
+└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
+
+Standalone Tables:
+┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+│  llm_usage  │ │  audit_log  │ │ bot_metrics │
+└─────────────┘ └─────────────┘ └─────────────┘
+```
+
+## Monitoring Stack
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Application   │────►│   Prometheus    │────►│    Grafana      │
+│    Metrics      │     │    Scraper      │     │   Dashboards    │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                                               │
+        ▼                                               ▼
+┌─────────────────┐                             ┌───────────────┐
+│  Log Aggregator │                             │  • Bot Health │
+├─────────────────┤                             │  • LLM Costs  │
+│ • Error rates   │                             │  • Trading    │
+│ • Latency p99   │─────────────────────────────│  • API Perf   │
+│ • Request logs  │        Alerting             └───────────────┘
+└─────────────────┘
+
+┌─────────────────┐
+│  Uptime Monitor │
+├─────────────────┤
+│ • Health checks │
+│ • Incidents     │
+│ • Status page   │
+└─────────────────┘
+```
+
+## Technology Stack
+
+| Layer | Technology |
+|-------|------------|
+| API Framework | FastAPI |
+| Async Runtime | asyncio, uvicorn |
+| Database | PostgreSQL / SQLite |
+| Cache | Redis / In-memory |
+| LLM Providers | Groq, Ollama, OpenRouter, xAI |
+| Blockchain | Solana (web3.py) |
+| DEX | Jupiter Aggregator |
+| Monitoring | Prometheus, Grafana |
+| Testing | pytest, locust |
+| Bots | python-telegram-bot, tweepy |

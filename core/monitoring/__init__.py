@@ -25,6 +25,49 @@ from core.monitoring.bot_health import (
     track_bot_activity,
     track_command,
 )
+from core.monitoring.metrics_collector import (
+    MetricsCollector,
+    ErrorRateStats,
+    LatencyStats,
+    AlertThreshold,
+    get_metrics_collector,
+    track_request,
+)
+from core.monitoring.uptime import (
+    UptimeMonitor,
+    ServiceStatus,
+    ServiceUptime,
+    HealthCheck,
+    CheckResult,
+    Incident,
+    UptimeStats,
+    get_uptime_monitor,
+    http_health_check,
+    database_health_check,
+    redis_health_check,
+    custom_health_check,
+)
+from core.monitoring.memory_alerts import (
+    MemoryMonitor,
+    MemorySnapshot,
+    MemoryAlert,
+    MemoryAlertLevel,
+    MemoryThresholds,
+    MemoryStats,
+    get_memory_monitor,
+    memory_check,
+)
+from core.monitoring.log_aggregator import (
+    LogAggregator,
+    LogEntry,
+    LogLevel,
+    LogQuery,
+    LogStats,
+    LogContext,
+    AggregatingHandler,
+    get_log_aggregator,
+    setup_log_aggregation,
+)
 
 __all__ = [
     "HealthMonitor",
@@ -62,4 +105,43 @@ __all__ = [
     "register_bot_checks",
     "track_bot_activity",
     "track_command",
+    # Metrics collector
+    "MetricsCollector",
+    "ErrorRateStats",
+    "LatencyStats",
+    "AlertThreshold",
+    "get_metrics_collector",
+    "track_request",
+    # Uptime monitoring
+    "UptimeMonitor",
+    "ServiceStatus",
+    "ServiceUptime",
+    "HealthCheck",
+    "CheckResult",
+    "Incident",
+    "UptimeStats",
+    "get_uptime_monitor",
+    "http_health_check",
+    "database_health_check",
+    "redis_health_check",
+    "custom_health_check",
+    # Memory monitoring
+    "MemoryMonitor",
+    "MemorySnapshot",
+    "MemoryAlert",
+    "MemoryAlertLevel",
+    "MemoryThresholds",
+    "MemoryStats",
+    "get_memory_monitor",
+    "memory_check",
+    # Log aggregation
+    "LogAggregator",
+    "LogEntry",
+    "LogLevel",
+    "LogQuery",
+    "LogStats",
+    "LogContext",
+    "AggregatingHandler",
+    "get_log_aggregator",
+    "setup_log_aggregation",
 ]

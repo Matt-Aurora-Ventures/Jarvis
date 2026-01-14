@@ -69,6 +69,17 @@ from .router import (
     quick_summarize,
 )
 
+# Cost tracking
+from .cost_tracker import (
+    LLMCostTracker,
+    UsageRecord,
+    UsageStats,
+    BudgetAlert,
+    MODEL_PRICING,
+    get_cost_tracker,
+    track_llm_cost,
+)
+
 __all__ = [
     # Structured outputs
     "StructuredLLM",
@@ -111,4 +122,13 @@ __all__ = [
     "quick_trade_analysis",
     "quick_sentiment",
     "quick_summarize",
+
+    # Cost tracking
+    "LLMCostTracker",
+    "UsageRecord",
+    "UsageStats",
+    "BudgetAlert",
+    "MODEL_PRICING",
+    "get_cost_tracker",
+    "track_llm_cost",
 ]

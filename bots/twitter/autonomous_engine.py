@@ -591,50 +591,59 @@ class AutonomousEngine:
         return None
     
     async def generate_social_sentiment_tweet(self) -> Optional[TweetDraft]:
-        """Generate a tweet using Grok for sentiment analysis (primary) + LunarCrush data."""
+        """Generate a comprehensive market sentiment tweet using Grok analysis."""
         try:
             voice = await self._get_jarvis_voice()
             grok = await self._get_grok()
             
-            # Get market data
-            from core.data.free_price_api import get_sol_price
+            # Get comprehensive market data
+            from core.data.free_price_api import get_sol_price, FreePriceAPI
             from core.data.free_trending_api import FreeTrendingAPI
             
             sol_price = await get_sol_price()
             api = FreeTrendingAPI()
+            
+            # Get multiple data points
             gainers = await api.get_gainers(limit=5)
+            trending = await api.get_trending(limit=5)
             
-            # Use GROK for primary sentiment analysis
-            market_summary = f"SOL at ${sol_price:.2f}. "
-            if gainers:
-                market_summary += f"Top gainers: {', '.join([f'{t.symbol} +{t.price_change_24h:.0f}%' for t in gainers[:3]])}"
+            # Build comprehensive market picture
+            market_data = {
+                "sol_price": sol_price,
+                "gainers": [{"symbol": t.symbol, "change": t.price_change_24h} for t in (gainers or [])[:3]],
+                "trending": [t.symbol for t in (trending or [])[:3]],
+                "time": datetime.now().strftime("%I:%M %p")
+            }
             
-            grok_response = await grok.analyze_sentiment({"market": market_summary})
-            grok_take = grok_response.content if grok_response and grok_response.success else ""
-            
-            # Try to get LunarCrush social data as supplement
-            social_buzz = ""
-            try:
-                from core.data.lunarcrush_api import get_lunarcrush
-                lc = get_lunarcrush()
-                lc_data = await lc.get_market_sentiment()
-                if lc_data:
-                    social_buzz = f"Social buzz: {lc_data.get('market_mood', 'mixed')}. "
-            except:
-                pass
-            
-            prompt = f"""Write a funny tweet about market sentiment. Be witty.
+            # Use GROK for deep sentiment analysis
+            market_summary = {
+                "sol_price": sol_price,
+                "gainers": ', '.join([f"{t.symbol} +{t.price_change_24h:.0f}%" for t in (gainers or [])[:3]]) or 'quiet',
+                "trending": ', '.join([t.symbol for t in (trending or [])[:3]]) or 'nothing notable'
+            }
 
-Grok's analysis: {grok_take[:150] if grok_take else "markets doing market things"}
-{social_buzz}
-Market: SOL at ${sol_price:.2f}
+            grok_response = await grok.analyze_sentiment(market_summary, context_type="market")
+            grok_take = grok_response.content[:200] if grok_response and grok_response.success else "markets consolidating"
+            
+            # Generate thoughtful tweet with Jarvis voice
+            prompt = f"""Write a thoughtful market sentiment tweet. You're sharing your analysis.
 
-Make it funny. Self-deprecating humor about your analysis is good.
-Examples of the vibe:
-- "my sentiment circuits say bullish but they've been wrong 3 times this week. take that how you will. nfa"
-- "ran the data through my neural weights. they said 'looks fine'. that's all i got. nfa"
+Your sentiment analysis: {grok_take}
+SOL: ${sol_price:.2f}
+Top movers: {', '.join([f"${t.symbol}" for t in (gainers or [])[:2]]) or 'quiet day'}
 
-1-2 sentences. Be genuinely funny, not try-hard."""
+Write something insightful about the current market state. Be specific.
+- Share an actual observation, not generic "markets looking interesting"
+- Reference specific tokens or price levels if relevant
+- Add your take on what it means
+- End with nfa (occasionally, not always)
+
+Good examples:
+- "$SOL holding $185 while alts rotate is the kind of strength that precedes leg up. watching closely. nfa"
+- "sentiment feels too bullish for my liking. historically that means pain incoming. or i'm wrong again. probably both."
+- "three days of lower highs on $SOL but volume says accumulation. someone knows something or everyone's guessing. nfa"
+
+2-3 sentences max. Be the smart friend who actually understands markets."""
 
             content = await voice.generate_tweet(prompt)
             

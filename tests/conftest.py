@@ -1,10 +1,22 @@
-"""Pytest configuration and shared fixtures."""
+"""
+JARVIS Test Configuration
+
+Central pytest configuration and shared fixtures for all tests.
+Includes coverage configuration and factory fixtures.
+"""
+
 import pytest
 import asyncio
 import tempfile
 import os
+import sys
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
+from datetime import datetime
+from typing import Generator
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Configure async tests
 @pytest.fixture(scope="session")
@@ -120,3 +132,142 @@ def cleanup():
             f.unlink()
         except Exception:
             pass
+
+
+# ============================================================================
+# Factory Fixtures
+# ============================================================================
+
+@pytest.fixture
+def user_factory():
+    """User factory fixture."""
+    try:
+        from tests.factories import UserFactory
+        return UserFactory
+    except ImportError:
+        pytest.skip("UserFactory not available")
+
+
+@pytest.fixture
+def trade_factory():
+    """Trade factory fixture."""
+    try:
+        from tests.factories import TradeFactory
+        return TradeFactory
+    except ImportError:
+        pytest.skip("TradeFactory not available")
+
+
+@pytest.fixture
+def message_factory():
+    """Message factory fixture."""
+    try:
+        from tests.factories import MessageFactory
+        return MessageFactory
+    except ImportError:
+        pytest.skip("MessageFactory not available")
+
+
+@pytest.fixture
+def telegram_update_factory():
+    """Telegram update factory fixture."""
+    try:
+        from tests.factories import TelegramUpdateFactory
+        return TelegramUpdateFactory
+    except ImportError:
+        pytest.skip("TelegramUpdateFactory not available")
+
+
+# ============================================================================
+# Mock Helper Fixtures
+# ============================================================================
+
+@pytest.fixture
+def mock_http_client():
+    """Create a mock HTTP client."""
+    try:
+        from tests.utils.mock_helpers import MockHTTPClient
+        return MockHTTPClient()
+    except ImportError:
+        pytest.skip("MockHTTPClient not available")
+
+
+@pytest.fixture
+def mock_cache():
+    """Create a mock cache."""
+    try:
+        from tests.utils.mock_helpers import MockCache
+        return MockCache()
+    except ImportError:
+        pytest.skip("MockCache not available")
+
+
+@pytest.fixture
+def mock_llm_provider():
+    """Create a mock LLM provider."""
+    try:
+        from tests.utils.mock_helpers import MockProvider
+        return MockProvider()
+    except ImportError:
+        pytest.skip("MockProvider not available")
+
+
+# ============================================================================
+# Async Utility Fixtures
+# ============================================================================
+
+@pytest.fixture
+def async_event_recorder():
+    """Create an async event recorder."""
+    try:
+        from tests.utils.async_utils import AsyncEventRecorder
+        return AsyncEventRecorder()
+    except ImportError:
+        pytest.skip("AsyncEventRecorder not available")
+
+
+# ============================================================================
+# Sequence Reset
+# ============================================================================
+
+@pytest.fixture(autouse=True)
+def reset_sequences():
+    """Reset sequence generators between tests."""
+    yield
+    try:
+        from tests.factories.base import SequenceGenerator
+        SequenceGenerator.reset()
+    except ImportError:
+        pass
+
+
+# ============================================================================
+# Pytest Hooks and Markers
+# ============================================================================
+
+def pytest_configure(config):
+    """Configure custom markers."""
+    config.addinivalue_line(
+        "markers", "slow: marks tests as slow running"
+    )
+    config.addinivalue_line(
+        "markers", "integration: marks integration tests"
+    )
+    config.addinivalue_line(
+        "markers", "security: marks security tests"
+    )
+    config.addinivalue_line(
+        "markers", "unit: marks unit tests"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Modify test collection."""
+    for item in items:
+        # Add slow marker to integration tests
+        if "integration" in item.nodeid:
+            item.add_marker(pytest.mark.integration)
+            item.add_marker(pytest.mark.slow)
+
+        if "security" in item.nodeid:
+            item.add_marker(pytest.mark.security)
