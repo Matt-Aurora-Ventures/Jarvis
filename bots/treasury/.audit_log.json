@@ -98,5 +98,23 @@
       "tx_signature": "5EKhcK7jb6jAs5kp3tQSQ4aqjzp7VzpXZKya46Y6Siej86zzo9FdukvvA2ndK9g1gKmXUw2qzFMfetXpvV6jUtVD",
       "dry_run": false
     }
+  },
+  {
+    "timestamp": "2026-01-14T02:08:12.933895",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "ffef21be",
+      "token": "USOR",
+      "token_mint": "2yrgj1SaZnca6nQGK8aUib147T9iSuFDSLcbiNfdPPk4",
+      "amount_usd": 0.45372745886550003,
+      "entry_price": 0.001824,
+      "tp_price": 0.002371200000000001,
+      "sl_price": 0.0016416000000000004,
+      "sentiment_grade": "B",
+      "tx_signature": "5FZauRBLXKy7mXMU3AFVixSWn7TrSPRLi9r8VY2H1Rr7APSDDWvU2Q4i6b9Ejzhzytw4kD7ZR8J2WKhE8PrbnNFY",
+      "dry_run": false
+    }
   }
 ]
