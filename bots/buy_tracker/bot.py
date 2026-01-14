@@ -142,6 +142,8 @@ class JarvisBuyBot:
         self.app.add_handler(CallbackQueryHandler(self._handle_confirm_callback, pattern="^cancel_trade$"))
         # Info button handler (pattern: starts with "info:")
         self.app.add_handler(CallbackQueryHandler(self._handle_info_callback, pattern="^info:"))
+        # Expand section handler (pattern: starts with "expand:")
+        self.app.add_handler(CallbackQueryHandler(self._handle_expand_callback, pattern="^expand:"))
         # FAQ handler for all other callbacks
         self.app.add_handler(CallbackQueryHandler(self._handle_faq_callback))
 
@@ -550,6 +552,145 @@ class JarvisBuyBot:
         except Exception as e:
             logger.error(f"Info callback error: {e}")
             await query.answer("Info unavailable", show_alert=True)
+
+    async def _handle_expand_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle expand section button clicks - show trading options for a section."""
+        query = update.callback_query
+        callback_data = query.data
+        chat_id = query.message.chat_id
+
+        try:
+            # Parse: expand:{section_type}
+            # section_type: trending, stocks, indexes, top_picks
+            parts = callback_data.split(":")
+            if len(parts) < 2:
+                await query.answer("Invalid section", show_alert=True)
+                return
+
+            section_type = parts[1]
+            await query.answer(f"Loading {section_type} trading options...")
+
+            # Import here to avoid circular deps
+            from core.enhanced_market_data import (
+                fetch_trending_solana_tokens,
+                BACKED_XSTOCKS,
+            )
+
+            # Dynamically load data based on section type
+            if section_type == "trending":
+                # Fetch trending tokens and post buy buttons
+                tokens, _ = await fetch_trending_solana_tokens(10)
+                if tokens:
+                    for token in tokens[:10]:
+                        keyboard = create_ape_buttons_with_tp_sl(
+                            symbol=token.symbol,
+                            asset_type="token",
+                            contract_address=token.contract or "",
+                            entry_price=token.price_usd,
+                            grade="",
+                        )
+                        price_str = f"${token.price_usd:.8f}" if token.price_usd < 0.01 else f"${token.price_usd:.4f}"
+                        msg = f"🔥 <b>{token.symbol}</b> - {price_str}"
+                        await self.bot.send_message(
+                            chat_id=chat_id,
+                            text=msg,
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=keyboard.to_dict(),
+                        )
+                        await asyncio.sleep(0.2)
+
+            elif section_type == "stocks":
+                # Get stocks from registry
+                stocks = [(k, v) for k, v in BACKED_XSTOCKS.items() if v["type"] == "stock"][:15]
+                for symbol, info in stocks:
+                    keyboard = create_ape_buttons_with_tp_sl(
+                        symbol=symbol,
+                        asset_type="stock",
+                        contract_address=info["mint"],
+                        entry_price=0.0,
+                        grade="",
+                    )
+                    msg = f"📈 <b>{symbol}</b> ({info['underlying']}) - {info['name']}"
+                    await self.bot.send_message(
+                        chat_id=chat_id,
+                        text=msg,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=keyboard.to_dict(),
+                    )
+                    await asyncio.sleep(0.2)
+
+            elif section_type == "indexes":
+                # Get indexes from registry
+                indexes = [(k, v) for k, v in BACKED_XSTOCKS.items() if v["type"] in ("index", "bond", "commodity")]
+                for symbol, info in indexes:
+                    keyboard = create_ape_buttons_with_tp_sl(
+                        symbol=symbol,
+                        asset_type="stock",
+                        contract_address=info["mint"],
+                        entry_price=0.0,
+                        grade="",
+                    )
+                    type_emoji = "📊" if info["type"] == "index" else "🥇" if info["type"] == "commodity" else "📄"
+                    msg = f"{type_emoji} <b>{symbol}</b> ({info['underlying']}) - {info['name']}"
+                    await self.bot.send_message(
+                        chat_id=chat_id,
+                        text=msg,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=keyboard.to_dict(),
+                    )
+                    await asyncio.sleep(0.2)
+
+            elif section_type == "top_picks":
+                # Load picks from temp file
+                import tempfile
+                import json
+                picks_file = Path(tempfile.gettempdir()) / "jarvis_top_picks.json"
+
+                if picks_file.exists():
+                    with open(picks_file) as f:
+                        picks = json.load(f)
+
+                    for i, pick in enumerate(picks[:10]):
+                        asset_type = "token" if pick["asset_class"] == "token" else "stock"
+                        keyboard = create_ape_buttons_with_tp_sl(
+                            symbol=pick["symbol"],
+                            asset_type=asset_type,
+                            contract_address=pick.get("contract", ""),
+                            entry_price=pick.get("entry_price", 0.0),
+                            grade=str(pick["conviction"]),
+                        )
+
+                        # Conviction color
+                        conv = pick["conviction"]
+                        conv_emoji = "🟢" if conv >= 80 else "🟡" if conv >= 60 else "🟠"
+
+                        # Medal for top 3
+                        medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else ""
+
+                        msg = f"{medal} <b>{pick['symbol']}</b> ({pick['asset_class'].upper()}) {conv_emoji} {conv}/100"
+                        await self.bot.send_message(
+                            chat_id=chat_id,
+                            text=msg,
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=keyboard.to_dict(),
+                        )
+                        await asyncio.sleep(0.2)
+                else:
+                    await self.bot.send_message(
+                        chat_id=chat_id,
+                        text="⚠️ Top picks data not available. Wait for next report.",
+                        parse_mode=ParseMode.HTML,
+                    )
+
+            # Update original message to show "Expanded"
+            try:
+                await query.message.edit_reply_markup(reply_markup=None)
+            except Exception:
+                pass  # Message may not be editable
+
+        except Exception as e:
+            logger.error(f"Expand callback error: {e}")
+            await query.answer(f"Error loading section: {e}", show_alert=True)
 
     def _format_buy_message(self, buy: BuyTransaction) -> str:
         """Format buy notification message like BobbyBuyBot style."""
