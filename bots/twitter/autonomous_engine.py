@@ -930,45 +930,47 @@ Example vibes:
             # Evening (18-22): Engagement, community building
             # Night (22-6): Lighter content, agentic musings
             
+            # Prioritize comprehensive market tweets (diverse topics)
+            # Reduce Solana-only generators
             if 6 <= hour < 10:
                 # Morning - comprehensive market focus
                 generators = [
                     ("comprehensive_market", self.generate_comprehensive_market_tweet),
-                    ("market_update", self.generate_market_update),
-                    ("social_sentiment", self.generate_social_sentiment_tweet),
-                    ("hourly_update", self.generate_hourly_update),
+                    ("comprehensive_market", self.generate_comprehensive_market_tweet),  # Higher weight
+                    ("agentic_tech", self.generate_agentic_thought),
+                    ("news_sentiment", self.generate_news_tweet),
                 ]
             elif 10 <= hour < 14:
-                # Midday - tokens, news, comprehensive
+                # Midday - comprehensive, news
                 generators = [
                     ("comprehensive_market", self.generate_comprehensive_market_tweet),
-                    ("trending_token", self.generate_trending_token_call),
+                    ("comprehensive_market", self.generate_comprehensive_market_tweet),
                     ("news_sentiment", self.generate_news_tweet),
-                    ("market_update", self.generate_market_update),
+                    ("agentic_tech", self.generate_agentic_thought),
                 ]
             elif 14 <= hour < 18:
-                # Afternoon - thoughts, comprehensive, sentiment
+                # Afternoon - comprehensive, thoughts
                 generators = [
+                    ("comprehensive_market", self.generate_comprehensive_market_tweet),
                     ("comprehensive_market", self.generate_comprehensive_market_tweet),
                     ("agentic_tech", self.generate_agentic_thought),
-                    ("social_sentiment", self.generate_social_sentiment_tweet),
-                    ("trending_token", self.generate_trending_token_call),
+                    ("news_sentiment", self.generate_news_tweet),
                 ]
             elif 18 <= hour < 22:
-                # Evening - comprehensive, news, recap
+                # Evening - comprehensive, news
                 generators = [
                     ("comprehensive_market", self.generate_comprehensive_market_tweet),
+                    ("comprehensive_market", self.generate_comprehensive_market_tweet),
                     ("news_sentiment", self.generate_news_tweet),
-                    ("hourly_update", self.generate_hourly_update),
-                    ("engagement", self.generate_interaction_tweet),
+                    ("agentic_tech", self.generate_agentic_thought),
                 ]
             else:
                 # Night - comprehensive, lighter content
                 generators = [
                     ("comprehensive_market", self.generate_comprehensive_market_tweet),
+                    ("comprehensive_market", self.generate_comprehensive_market_tweet),
                     ("agentic_tech", self.generate_agentic_thought),
-                    ("social_sentiment", self.generate_social_sentiment_tweet),
-                    ("grok_interaction", self.generate_grok_interaction),
+                    ("news_sentiment", self.generate_news_tweet),
                 ]
             
             # Filter out categories we've used recently
@@ -977,8 +979,8 @@ Example vibes:
             # Add fallbacks if all filtered out
             if not generators:
                 generators = [
-                    ("market_update", self.generate_market_update),
-                    ("hourly_update", self.generate_hourly_update),
+                    ("comprehensive_market", self.generate_comprehensive_market_tweet),
+                    ("news_sentiment", self.generate_news_tweet),
                 ]
             
             # Get autonomy recommendations
