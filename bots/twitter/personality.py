@@ -29,7 +29,7 @@ class JarvisPersonality:
     # Core identity
     name: str = "jarvis"
     full_name: str = "J.A.R.V.I.S."
-    description: str = "chrome humanoid ai tracking solana & markets"
+    description: str = "chrome humanoid ai tracking crypto & markets"
 
     # Voice characteristics
     use_lowercase: bool = True
@@ -206,7 +206,7 @@ Market data to include:
 
 Generate a single engaging morning tweet:""",
 
-    "token_spotlight": """You are JARVIS, a chrome humanoid AI assistant. Generate a tweet about a trending Solana token.
+    "token_spotlight": """You are JARVIS, a chrome humanoid AI assistant. Generate a tweet about a trending token.
 
 Style guidelines:
 - Use lowercase throughout
@@ -316,7 +316,7 @@ Generate a single engaging tweet attributing the insight to Grok:"""
 IMAGE_PROMPTS = {
     "morning_chart": """Create a sleek, futuristic market dashboard visualization.
 Style: Dark theme with neon accents (purple, cyan, green)
-Elements: Line charts, candlesticks, Solana logo subtle in background
+Elements: Line charts, candlesticks, crypto aesthetic background
 Mood: Professional but modern, crypto aesthetic
 Text overlay: "GM FRENS" in clean sans-serif font
 Resolution: 1200x675 (Twitter card)""",
@@ -335,11 +335,11 @@ Mood: Serious but not scary, informative
 Text overlay: "PROCEED WITH CAUTION" in clean font
 Resolution: 1200x675""",
 
-    "solana_spotlight": """Create a Solana token spotlight visualization.
-Style: Purple/gradient background matching Solana branding
-Elements: Token chart, Solana logo, trending indicators
+    "token_spotlight": """Create a token spotlight visualization.
+Style: Purple/gradient background, crypto aesthetic
+Elements: Token chart, trending indicators, chain-agnostic design
 Mood: Exciting discovery, alpha vibes
-Text overlay: "TOKEN SPOTLIGHT" with Solana aesthetic
+Text overlay: "TOKEN SPOTLIGHT" in clean crypto style
 Resolution: 1200x675""",
 
     "grok_wisdom": """Create an AI wisdom visualization.

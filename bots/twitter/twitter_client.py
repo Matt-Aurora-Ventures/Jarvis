@@ -585,15 +585,24 @@ class TwitterClient:
                         lambda: self._xdk_client.posts.mentions(
                             user_id=self._user_id,
                             since_id=since_id,
-                            max_results=max_results
+                            max_results=max_results,
+                            expansions=["author_id"],
+                            user_fields=["username"]
                         )
                     )
                     if mentions and hasattr(mentions, 'data') and mentions.data:
+                        # Build user lookup from includes
+                        users = {}
+                        if hasattr(mentions, 'includes') and mentions.includes:
+                            for user in mentions.includes.get('users', []):
+                                users[getattr(user, 'id', None)] = getattr(user, 'username', 'unknown')
+
                         return [
                             {
                                 "id": tweet.id,
                                 "text": tweet.text,
                                 "author_id": tweet.author_id,
+                                "author_username": users.get(tweet.author_id, "unknown"),
                                 "created_at": getattr(tweet, 'created_at', None)
                             }
                             for tweet in mentions.data

@@ -116,7 +116,54 @@ class TradingUI:
         await self.app.start()
         await self.app.updater.start_polling(drop_pending_updates=True)
 
+        # Start background position monitor
+        asyncio.create_task(self._position_monitor_loop())
+
         logger.info("Trading UI started")
+
+    async def _position_monitor_loop(self):
+        """
+        Background task to monitor positions and close breached stop losses.
+
+        Runs every 60 seconds to catch positions that missed their limit orders.
+        """
+        logger.info("Position monitor started")
+        while self._running:
+            try:
+                # Monitor and close any breached positions
+                closed = await self.engine.monitor_stop_losses()
+
+                # Notify admins of any closed positions
+                if closed and self.admin_ids:
+                    for pos_info in closed:
+                        symbol = pos_info.get("symbol", "UNKNOWN")
+                        reason = pos_info.get("reason", "AUTO")
+                        pnl_usd = pos_info.get("pnl_usd", 0)
+                        pnl_pct = pos_info.get("pnl_pct", 0)
+
+                        emoji = self.EMOJI['profit'] if pnl_usd >= 0 else self.EMOJI['loss']
+                        alert = (
+                            f"{self.EMOJI['warning']} <b>AUTO-CLOSED POSITION</b>\n\n"
+                            f"<b>Token:</b> {symbol}\n"
+                            f"<b>Reason:</b> {reason}\n"
+                            f"<b>P&L:</b> {emoji} <code>${pnl_usd:+.2f}</code> ({pnl_pct:+.1f}%)"
+                        )
+
+                        for admin_id in self.admin_ids:
+                            try:
+                                await self.app.bot.send_message(
+                                    chat_id=admin_id,
+                                    text=alert,
+                                    parse_mode=ParseMode.HTML
+                                )
+                            except Exception as e:
+                                logger.warning(f"Failed to notify admin {admin_id}: {e}")
+
+            except Exception as e:
+                logger.error(f"Position monitor error: {e}")
+
+            # Wait 60 seconds before next check
+            await asyncio.sleep(60)
 
     async def stop(self):
         """Stop the trading bot."""
@@ -569,33 +616,62 @@ Welcome to the Jarvis Treasury Management System.
         unrealized_pnl = sum(p.unrealized_pnl for p in positions)
         report = self.engine.generate_report()
 
-        # Build position summary
+        # Check position health and build alerts
+        alerts = []
         pos_lines = []
         for pos in positions[:5]:  # Top 5
             pnl = pos.unrealized_pnl_pct
+
+            # Determine position health status
+            status = ""
+            if pos.current_price <= pos.stop_loss_price:
+                status = " [SL BREACHED]"
+                alerts.append(f"{self.EMOJI['warning']} {pos.token_symbol} breached SL ({pnl:+.1f}%)")
+            elif pnl <= -50:
+                status = " [CRITICAL]"
+                alerts.append(f"{self.EMOJI['warning']} {pos.token_symbol} down {pnl:.1f}%")
+            elif pnl <= -20:
+                status = " [WARNING]"
+            elif pos.current_price >= pos.take_profit_price:
+                status = " [TP HIT]"
+                alerts.append(f"{self.EMOJI['target']} {pos.token_symbol} hit TP!")
+
             emoji = self.EMOJI['profit'] if pnl >= 0 else self.EMOJI['loss']
             pos_lines.append(
-                f"  {emoji} <b>{pos.token_symbol}</b>: "
+                f"  {emoji} <b>{pos.token_symbol}</b>{status}: "
                 f"<code>{pnl:+.1f}%</code> (${pos.unrealized_pnl:+.2f})"
             )
 
         positions_text = "\n".join(pos_lines) if pos_lines else "  No open positions"
 
+        # Build alerts section
+        alerts_text = ""
+        if alerts:
+            alerts_text = f"""
+<b>{self.EMOJI['warning']} ALERTS</b>
+{chr(10).join(alerts)}
+"""
+
         now = datetime.utcnow().strftime("%H:%M:%S UTC")
+
+        # Calculate wins/losses
+        wins = report.winning_trades
+        losses = report.losing_trades
 
         return f"""
 {self.EMOJI['chart']} <b>JARVIS TREASURY DASHBOARD</b>
-
+{alerts_text}
 <b>Portfolio Value</b>
 {self.EMOJI['wallet']} SOL: <code>{sol_balance:.4f}</code>
 {self.EMOJI['money']} USD: <code>${usd_value:,.2f}</code>
 
-<b>Performance</b>
-{self.EMOJI['chart']} Win Rate: <code>{report.win_rate:.1f}%</code>
-{self.EMOJI['profit' if report.total_pnl_usd >= 0 else 'loss']} Total P&L: <code>${report.total_pnl_usd:+,.2f}</code>
+<b>Performance (Win/Loss)</b>
+{self.EMOJI['chart']} Record: <code>{wins}W/{losses}L</code> ({report.win_rate:.1f}%)
+{self.EMOJI['profit' if report.total_pnl_usd >= 0 else 'loss']} Realized P&L: <code>${report.total_pnl_usd:+,.2f}</code>
 {self.EMOJI['trade']} Total Trades: <code>{report.total_trades}</code>
+{self.EMOJI['diamond']} Avg Win: <code>${report.average_win_usd:+.2f}</code> | Avg Loss: <code>${report.average_loss_usd:.2f}</code>
 
-<b>Open Positions ({len(positions)})</b>
+<b>Open Positions ({len(positions)}/{self.engine.max_positions})</b>
 {positions_text}
 {self.EMOJI['profit' if unrealized_pnl >= 0 else 'loss']} Unrealized: <code>${unrealized_pnl:+.2f}</code>
 
@@ -694,22 +770,40 @@ Total Unrealized: <code>${sum(p.unrealized_pnl for p in positions):+.2f}</code>
 
     def _build_history_view(self) -> str:
         """Build trade history view."""
-        history = self.engine.trade_history[-10:]  # Last 10
+        all_history = self.engine.trade_history
+        history = all_history[-15:]  # Last 15
 
-        if not history:
+        if not all_history:
             return f"{self.EMOJI['chart']} <b>TRADE HISTORY</b>\n\nNo completed trades yet."
+
+        # Calculate stats
+        wins = [t for t in all_history if t.pnl_usd > 0]
+        losses = [t for t in all_history if t.pnl_usd < 0]
+        total_pnl = sum(t.pnl_usd for t in all_history)
+        win_rate = (len(wins) / len(all_history) * 100) if all_history else 0
 
         trades = []
         for pos in reversed(history):
             emoji = self.EMOJI['profit'] if pos.pnl_usd >= 0 else self.EMOJI['loss']
+            close_type = ""
+            if hasattr(pos, 'exit_price') and hasattr(pos, 'take_profit_price'):
+                if pos.exit_price and pos.take_profit_price:
+                    if pos.exit_price >= pos.take_profit_price:
+                        close_type = " [TP]"
+                    elif hasattr(pos, 'stop_loss_price') and pos.exit_price <= pos.stop_loss_price:
+                        close_type = " [SL]"
             trades.append(
-                f"{emoji} <b>{pos.token_symbol}</b>: "
+                f"{emoji} <b>{pos.token_symbol}</b>{close_type}: "
                 f"<code>{pos.pnl_pct:+.1f}%</code> (${pos.pnl_usd:+.2f})"
             )
 
         return f"""
-{self.EMOJI['chart']} <b>TRADE HISTORY</b> (Last 10)
+{self.EMOJI['chart']} <b>TRADE HISTORY</b>
 
+<b>Stats:</b> {len(wins)}W / {len(losses)}L ({win_rate:.1f}% win rate)
+<b>Total P&L:</b> ${total_pnl:+.2f}
+
+<b>Recent Trades ({len(history)}/{len(all_history)}):</b>
 {chr(10).join(trades)}
 
 Use /report for full performance summary.

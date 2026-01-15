@@ -1,2 +1,3 @@
 // Liquidation tracking components
-export { LiquidationTracker, default } from './LiquidationTracker'
+export { LiquidationTracker } from './LiquidationTracker'
+export { LiquidationHeatmap, default } from './LiquidationHeatmap'

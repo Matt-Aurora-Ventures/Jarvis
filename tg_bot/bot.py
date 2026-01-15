@@ -102,6 +102,77 @@ _TREASURY_ENGINE = None
 _CHAT_RESPONDER = None
 _LAST_REPLY_AT: dict[int, float] = {}
 
+# Rate limiting constants for expand buttons
+EXPAND_MESSAGE_DELAY = 0.5  # 500ms between messages (was 200ms)
+EXPAND_RETRY_ATTEMPTS = 3  # Retry up to 3 times on rate limit
+
+
+class CallbackUpdate:
+    """Wrapper to make callback queries work with command handlers that expect update.message."""
+    def __init__(self, query):
+        self.callback_query = query
+        self.message = query.message
+        self.effective_user = query.from_user
+        self.effective_chat = query.message.chat if query.message else None
+
+
+async def _send_with_retry(query, text: str, parse_mode=None, reply_markup=None, max_retries: int = EXPAND_RETRY_ATTEMPTS):
+    """Send a message with retry logic for rate limiting."""
+    from telegram.error import RetryAfter, TimedOut, NetworkError
+
+    for attempt in range(max_retries):
+        try:
+            await query.message.reply_text(
+                text,
+                parse_mode=parse_mode,
+                reply_markup=reply_markup
+            )
+            return True
+        except RetryAfter as e:
+            wait_time = e.retry_after + 1
+            logger.warning(f"Rate limited, waiting {wait_time}s (attempt {attempt + 1}/{max_retries})")
+            await asyncio.sleep(wait_time)
+        except TimedOut:
+            logger.warning(f"Timed out, retrying (attempt {attempt + 1}/{max_retries})")
+            await asyncio.sleep(2)
+        except NetworkError as e:
+            logger.warning(f"Network error: {e}, retrying (attempt {attempt + 1}/{max_retries})")
+            await asyncio.sleep(2)
+        except Exception as e:
+            logger.error(f"Failed to send message: {e}")
+            return False
+
+    logger.error(f"Failed to send message after {max_retries} attempts")
+    return False
+
+
+def _cleanse_sensitive_info(text: str) -> str:
+    """Remove sensitive information from text before sending to chat."""
+    import re
+
+    # Mask Solana addresses (32-44 base58 chars)
+    text = re.sub(r'\b[1-9A-HJ-NP-Za-km-z]{32,44}\b', '[ADDRESS]', text)
+
+    # Mask Ethereum addresses (0x followed by 40 hex chars)
+    text = re.sub(r'\b0x[a-fA-F0-9]{40}\b', '[ETH_ADDRESS]', text)
+
+    # Mask API keys (common patterns)
+    text = re.sub(r'\b[A-Za-z0-9_-]{20,}[A-Za-z0-9]{10,}\b', '[API_KEY]', text)
+
+    # Mask private keys / seed phrases indicators
+    text = re.sub(r'(?i)(private\s*key|secret\s*key|seed\s*phrase|mnemonic)[:\s]*\S+', r'\1: [REDACTED]', text)
+
+    # Mask email addresses
+    text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL]', text)
+
+    # Mask IP addresses
+    text = re.sub(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '[IP]', text)
+
+    # Mask transaction signatures (base58, typically 88 chars)
+    text = re.sub(r'\b[1-9A-HJ-NP-Za-km-z]{85,90}\b', '[TX_SIG]', text)
+
+    return text
+
 
 def _get_chat_responder() -> ChatResponder:
     global _CHAT_RESPONDER
@@ -407,9 +478,22 @@ not another wrapper. a full system you can fork, run, and make your own
 🟢 [buy $KR8TIV](https://jup.ag/swap/SOL-KR8TIV)
 📊 [dexscreener](https://dexscreener.com/solana/u1zc8qpnrq3hbjubrwfywbqtlznscppgznegwxdbags)
 
-━━━ *build with AI* ━━━
+━━━ *quick start* ━━━
 
-never coded? no problem
+/sentiment - market vibes + buy buttons
+/trending - hot solana tokens
+/stocks - tokenized stocks (TSLA, NVDA etc)
+/trustscore - check your rep
+/help - full command list
+
+━━━ *chat rules* ━━━
+
+🚫 no spam/scams - instant ban
+🔗 new members: no links until trust score 40+
+⚠️ never share private keys or seed phrases
+🤖 i auto-moderate - scammers get removed fast
+
+━━━ *build with AI* ━━━
 
 claude opus 4.5 is free on google antigravity:
 → idx.google.com/antigravity
@@ -446,6 +530,25 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
         for new_user in update.message.new_chat_members:
             if new_user.is_bot:
                 continue  # Don't welcome bots
+
+            # Check for suspicious username - auto-ban scammers on join
+            try:
+                from core.jarvis_admin import get_jarvis_admin
+                admin = get_jarvis_admin()
+                username = new_user.username or ""
+                is_suspicious, pattern = admin.check_suspicious_username(username)
+                if is_suspicious:
+                    chat_id = update.effective_chat.id
+                    await context.bot.ban_chat_member(chat_id=chat_id, user_id=new_user.id)
+                    admin.ban_user(new_user.id, f"suspicious username: {pattern}")
+                    response = admin.get_random_response("suspicious_username", username=username)
+                    response += admin.get_random_response("mistake_footer")
+                    await context.bot.send_message(chat_id=chat_id, text=response)
+                    logger.warning(f"SUS USERNAME BANNED: user={new_user.id} @{username} pattern={pattern}")
+                    continue  # Don't welcome banned users
+            except Exception as e:
+                logger.error(f"Error checking suspicious username: {e}")
+
             first_name = new_user.first_name or "fren"
             await _send_welcome(context, update.effective_chat.id, first_name)
         return
@@ -551,6 +654,72 @@ async def trending(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard,
         disable_web_page_preview=True,
     )
+
+
+async def stocks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /stocks command - show tokenized stocks (xStocks) with buy buttons."""
+    await update.message.reply_text(
+        "_Fetching tokenized stocks..._",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+    try:
+        from core.enhanced_market_data import fetch_backed_stocks, BACKED_XSTOCKS
+
+        stocks_data, warnings = fetch_backed_stocks()
+
+        if not stocks_data:
+            await update.message.reply_text(
+                "Could not fetch stock data. Try again later.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
+
+        # Header message
+        await update.message.reply_text(
+            "=" * 25 + "\n"
+            "*TOKENIZED STOCKS (xStocks)*\n"
+            f"_{datetime.now(timezone.utc).strftime('%H:%M')} UTC_\n"
+            "=" * 25 + "\n\n"
+            "_Trade US equities 24/7 on Solana. Select allocation below:_",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+        # Post each stock with buy buttons
+        for stock in stocks_data[:5]:
+            change_emoji = "🟢" if stock.change_1y >= 0 else "🔴"
+            change_sign = "+" if stock.change_1y >= 0 else ""
+
+            # Create buy buttons for this stock
+            keyboard = _create_ape_keyboard(
+                symbol=stock.symbol,
+                asset_type="stock",
+                contract=stock.mint_address,
+            )
+
+            await update.message.reply_text(
+                f"📈 *{stock.symbol}* ({stock.underlying})\n"
+                f"_{stock.name}_\n\n"
+                f"💵 ${stock.price_usd:,.2f} {change_emoji} YTD: {change_sign}{stock.change_1y:.1f}%\n"
+                f"[View on Jupiter](https://jup.ag/swap/SOL-{stock.mint_address})",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard,
+                disable_web_page_preview=True,
+            )
+            await asyncio.sleep(0.3)
+
+        await update.message.reply_text(
+            "_via backed.fi xStocks - tokenized US equities on Solana_\n"
+            "_NFA/DYOR - trading involves risk_",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+    except Exception as e:
+        logger.error(f"Stocks command failed: {e}")
+        await update.message.reply_text(
+            f"Failed to fetch stocks: {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
 # =============================================================================
@@ -2739,31 +2908,373 @@ _All trades require TP/SL - no exceptions_
         )
 
 
+async def modstats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /modstats - Show moderation statistics (admin only).
+    """
+    config = get_config()
+    user_id = update.effective_user.id if update.effective_user else 0
+
+    # Admin check
+    if user_id not in config.admin_ids:
+        await update.message.reply_text("🚫 Admin only command.")
+        return
+
+    try:
+        from core.jarvis_admin import get_jarvis_admin
+        admin = get_jarvis_admin()
+        stats = admin.get_moderation_stats()
+        top_engaged = admin.get_top_engaged(limit=5, days=7)
+
+        # Format top engaged
+        engaged_list = ""
+        for i, user_data in enumerate(top_engaged, 1):
+            engaged_list += f"{i}. @{user_data['username']} ({user_data['action_count']} actions)\n"
+
+        if not engaged_list:
+            engaged_list = "No engagement data yet"
+
+        message = f"""
+📊 *MODERATION STATS*
+
+*Users:* {stats['total_users']} total, {stats['banned_users']} banned
+*Messages:* {stats['total_messages']} total, {stats['deleted_messages']} deleted
+*Pending Upgrades:* {stats['pending_upgrades']}
+
+━━━ *Top Engaged (7d)* ━━━
+{engaged_list}
+━━━ *Protection Status* ━━━
+✅ Spam detection: Active
+✅ Phishing detection: Active
+✅ Scam wallet detection: Active
+✅ New user link restriction: Active
+✅ Flood protection: Active
+✅ Suspicious username ban: Active
+"""
+
+        await update.message.reply_text(
+            message,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+    except Exception as e:
+        logger.error(f"Modstats failed: {e}")
+        await update.message.reply_text(
+            f"❌ *Error*\n\n{str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
+async def addscam(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /addscam <wallet> - Add a wallet address to scam list (admin only).
+    """
+    config = get_config()
+    user_id = update.effective_user.id if update.effective_user else 0
+
+    # Admin check
+    if user_id not in config.admin_ids:
+        await update.message.reply_text("🚫 Admin only command.")
+        return
+
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /addscam <wallet_address>\n\n"
+            "Example: /addscam So11111111111111111111111111111111111111112"
+        )
+        return
+
+    wallet = context.args[0]
+
+    try:
+        from core.jarvis_admin import get_jarvis_admin
+        admin = get_jarvis_admin()
+
+        if admin.add_scam_wallet(wallet):
+            await update.message.reply_text(
+                f"✅ Added to scam wallet list:\n`{wallet[:20]}...`\n\n"
+                "Future messages with this address will trigger auto-ban.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            logger.info(f"Admin {user_id} added scam wallet: {wallet[:20]}...")
+        else:
+            await update.message.reply_text("❌ Invalid wallet address format.")
+
+    except Exception as e:
+        logger.error(f"Addscam failed: {e}")
+        await update.message.reply_text(f"❌ Error: {str(e)[:100]}")
+
+
+async def trust(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /trust @username - Mark a user as trusted (admin only).
+    Trusted users bypass new-user link restrictions.
+    """
+    config = get_config()
+    user_id = update.effective_user.id if update.effective_user else 0
+
+    if user_id not in config.admin_ids:
+        await update.message.reply_text("🚫 Admin only command.")
+        return
+
+    # Check if replying to a message or using @username
+    target_user_id = None
+    target_username = None
+
+    if update.message.reply_to_message:
+        target_user_id = update.message.reply_to_message.from_user.id
+        target_username = update.message.reply_to_message.from_user.username or "unknown"
+    elif context.args:
+        target_username = context.args[0].lstrip("@")
+        # Would need to look up user by username - for now just show usage
+        await update.message.reply_text(
+            "Reply to a user's message to trust them.\n"
+            "Example: Reply to their message with /trust"
+        )
+        return
+    else:
+        await update.message.reply_text(
+            "Usage: Reply to a user's message with /trust\n"
+            "This marks them as trusted (bypasses new-user restrictions)."
+        )
+        return
+
+    try:
+        from core.jarvis_admin import get_jarvis_admin
+        admin = get_jarvis_admin()
+        admin.trust_user(target_user_id)
+        await update.message.reply_text(
+            f"✅ @{target_username} is now trusted.\n"
+            "They can post links immediately and have reduced spam sensitivity."
+        )
+        logger.info(f"Admin {user_id} trusted user {target_user_id} (@{target_username})")
+
+    except Exception as e:
+        logger.error(f"Trust command failed: {e}")
+        await update.message.reply_text(f"❌ Error: {str(e)[:100]}")
+
+
+async def trustscore(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /trustscore [@username] - Check trust score for a user.
+    Admins can check anyone, users can check themselves.
+    """
+    config = get_config()
+    user_id = update.effective_user.id if update.effective_user else 0
+    is_admin = user_id in config.admin_ids
+
+    # Determine target user
+    target_user_id = user_id
+    target_username = update.effective_user.username or "you"
+
+    if update.message.reply_to_message:
+        if is_admin:
+            target_user_id = update.message.reply_to_message.from_user.id
+            target_username = update.message.reply_to_message.from_user.username or "unknown"
+        else:
+            await update.message.reply_text("Only admins can check other users' trust scores.")
+            return
+
+    try:
+        from core.jarvis_admin import get_jarvis_admin
+        admin = get_jarvis_admin()
+        result = admin.calculate_trust_score(target_user_id)
+
+        score = result.get("score", 0)
+        level = result.get("level", "unknown")
+        factors = result.get("factors", {})
+
+        # Build response
+        level_emoji = {
+            "veteran": "🏆",
+            "trusted": "✅",
+            "regular": "👤",
+            "new": "🆕",
+            "suspicious": "⚠️",
+            "unknown": "❓",
+        }
+
+        response = f"""
+*Trust Score for @{target_username}*
+
+{level_emoji.get(level, '❓')} *Level:* {level.upper()}
+📊 *Score:* {score}/100
+
+*Breakdown:*
+▫️ Messages: +{factors.get('messages', 0):.1f}
+▫️ Tenure: +{factors.get('tenure', 0):.1f}
+▫️ Engagement: +{factors.get('engagement', 0):.1f}
+▫️ Trusted flag: +{factors.get('trusted_flag', 0):.0f}
+▫️ Warnings: -{factors.get('warnings_penalty', 0):.0f}
+▫️ Reports: -{factors.get('reports_penalty', 0):.0f}
+
+_Score 40+ = links allowed, 60+ = trusted, 80+ = veteran_
+"""
+        await update.message.reply_text(response, parse_mode=ParseMode.MARKDOWN)
+
+    except Exception as e:
+        logger.error(f"Trustscore command failed: {e}")
+        await update.message.reply_text(f"❌ Error: {str(e)[:100]}")
+
+
+async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /warn @username [reason] - Warn a user (admin only).
+    3 warnings = auto-ban.
+    """
+    config = get_config()
+    user_id = update.effective_user.id if update.effective_user else 0
+
+    if user_id not in config.admin_ids:
+        await update.message.reply_text("🚫 Admin only command.")
+        return
+
+    target_user_id = None
+    target_username = None
+    reason = "admin warning"
+
+    if update.message.reply_to_message:
+        target_user_id = update.message.reply_to_message.from_user.id
+        target_username = update.message.reply_to_message.from_user.username or "unknown"
+        if context.args:
+            reason = " ".join(context.args)
+    else:
+        await update.message.reply_text(
+            "Usage: Reply to a user's message with /warn [reason]\n"
+            "Example: /warn spamming links"
+        )
+        return
+
+    try:
+        from core.jarvis_admin import get_jarvis_admin
+        admin = get_jarvis_admin()
+        new_count = admin.warn_user(target_user_id)
+
+        if new_count >= 3:
+            # Auto-ban on 3rd warning
+            chat_id = update.effective_chat.id
+            await context.bot.ban_chat_member(chat_id=chat_id, user_id=target_user_id)
+            admin.ban_user(target_user_id, f"3 warnings: {reason}")
+            await update.message.reply_text(
+                f"🚫 @{target_username} has reached 3 warnings and is now banned.\n"
+                f"Reason: {reason}"
+            )
+            logger.warning(f"User {target_user_id} banned after 3 warnings by admin {user_id}")
+        else:
+            await update.message.reply_text(
+                f"⚠️ @{target_username} warned ({new_count}/3).\n"
+                f"Reason: {reason}\n\n"
+                f"3 warnings = ban."
+            )
+            logger.info(f"Admin {user_id} warned user {target_user_id} ({new_count}/3): {reason}")
+
+    except Exception as e:
+        logger.error(f"Warn command failed: {e}")
+        await update.message.reply_text(f"❌ Error: {str(e)[:100]}")
+
+
+async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /report - Report a message as spam (reply to the message).
+    Reports are logged and high-reported users get reviewed.
+    """
+    if not update.message.reply_to_message:
+        await update.message.reply_text(
+            "Reply to a spam message with /report to flag it.\n"
+            "Admins will review reported messages."
+        )
+        return
+
+    reporter_id = update.effective_user.id if update.effective_user else 0
+    reporter_username = update.effective_user.username or "unknown"
+    reported_msg = update.message.reply_to_message
+    reported_user_id = reported_msg.from_user.id
+    reported_username = reported_msg.from_user.username or "unknown"
+    reported_text = reported_msg.text or "[no text]"
+
+    try:
+        from core.jarvis_admin import get_jarvis_admin
+        admin = get_jarvis_admin()
+
+        # Record the report as a moderation action
+        admin.record_mod_action(
+            action_type="user_report",
+            user_id=reported_user_id,
+            message_id=reported_msg.message_id,
+            reason=f"reported by @{reporter_username}: {reported_text[:100]}"
+        )
+
+        # Check if user has been reported by enough unique users for auto-ban
+        report_count, reporters = admin.get_report_count(reported_user_id, hours=24)
+        chat_id = update.effective_chat.id
+
+        if report_count >= 3:
+            # Auto-ban: 3+ unique users reported this person
+            try:
+                await context.bot.ban_chat_member(chat_id=chat_id, user_id=reported_user_id)
+                admin.ban_user(reported_user_id, f"community reported ({report_count} reports)")
+
+                await update.message.reply_text(
+                    f"🚫 @{reported_username} has been banned.\n"
+                    f"Reported by {report_count} community members.\n"
+                    f"Thanks for keeping the chat safe!"
+                )
+                logger.warning(f"AUTO-BAN: user {reported_user_id} @{reported_username} - {report_count} reports from: {reporters}")
+                return
+            except Exception as ban_err:
+                logger.error(f"Failed to auto-ban reported user: {ban_err}")
+
+        await update.message.reply_text(
+            f"📢 Report received ({report_count}/3).\n"
+            f"@{reported_username}'s message has been flagged.\n"
+            f"3 reports from different users = auto-ban."
+        )
+
+        logger.info(f"User {reporter_id} reported {reported_user_id} ({report_count}/3 reports)")
+
+    except Exception as e:
+        logger.error(f"Report command failed: {e}")
+        await update.message.reply_text("❌ Failed to submit report. Please try again.")
+
+
 # =============================================================================
 # Callback Query Handler
 # =============================================================================
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline keyboard button presses."""
-    query = update.callback_query
-    await query.answer()
+    from telegram.error import BadRequest, TimedOut, NetworkError, RetryAfter
+    import asyncio
 
-    data = query.data
-    config = get_config()
-    user_id = update.effective_user.id
+    query = update.callback_query
+    data = query.data if query else "None"
+    user_id = update.effective_user.id if update.effective_user else 0
 
     # Log all callbacks for debugging
     logger.info(f"Callback received: '{data}' from user {user_id}")
 
+    # CRITICAL: Always answer callback first to stop loading spinner
+    try:
+        await query.answer()
+    except BadRequest as e:
+        logger.warning(f"Could not answer callback (stale?): {e}")
+        # Continue processing even if answer fails
+    except Exception as e:
+        logger.error(f"Error answering callback: {e}")
+
+    # Check if query.message exists (can be None for inline mode)
+    if not query.message:
+        logger.warning(f"Callback has no message object: {data}")
+        return
+
+    config = get_config()
+
     # Menu navigation callbacks
     if data == "menu_trending":
-        update.message = query.message
-        context.args = []
         await _handle_trending_inline(query)
         return
 
     if data == "menu_status":
-        update.message = query.message
         await _handle_status_inline(query)
         return
 
@@ -2829,131 +3340,131 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Admin-only menu callbacks
+    # Admin-only menu callbacks - use CallbackUpdate wrapper
     if data == "menu_signals":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await signals(update, context)
+        await signals(cb_update, context)
         return
 
     if data == "menu_digest":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await digest(update, context)
+        await digest(cb_update, context)
         return
 
     if data == "menu_brain":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await brain(update, context)
+        await brain(cb_update, context)
         return
 
     if data == "menu_reload":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await reload(update, context)
+        await reload(cb_update, context)
         return
 
     if data == "menu_health":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await health(update, context)
+        await health(cb_update, context)
         return
 
     if data == "menu_flags":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await flags(update, context)
+        await flags(cb_update, context)
         return
 
     if data == "menu_score":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await score(update, context)
+        await score(cb_update, context)
         return
 
     if data == "menu_config":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await config_cmd(update, context)
+        await config_cmd(cb_update, context)
         return
 
     if data == "menu_system":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await system(update, context)
+        await system(cb_update, context)
         return
 
     if data == "menu_orders":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await orders(update, context)
+        await orders(cb_update, context)
         return
 
     if data == "menu_wallet":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await wallet(update, context)
+        await wallet(cb_update, context)
         return
 
     if data == "menu_logs":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await logs(update, context)
+        await logs(cb_update, context)
         return
 
     if data == "menu_metrics":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await metrics(update, context)
+        await metrics(cb_update, context)
         return
 
     if data == "menu_audit":
         if not config.is_admin(user_id):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
-        update.message = query.message
+        cb_update = CallbackUpdate(query)
         context.args = []
-        await audit(update, context)
+        await audit(cb_update, context)
         return
 
     # Trading callbacks
@@ -2982,8 +3493,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         token = data.replace("analyze_", "")
         context.args = [token]
-        update.message = query.message
-        await analyze(update, context)
+        cb_update = CallbackUpdate(query)
+        await analyze(cb_update, context)
         return
 
     if data == "refresh_trending":
@@ -3048,7 +3559,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Ape callback received: {data} from user {user_id}")
 
         if not APE_BUTTONS_AVAILABLE:
-            await query.message.reply_text(
+            await _send_with_retry(
+                query,
                 "❌ Ape trading module not available",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -3056,7 +3568,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if not _is_treasury_admin(config, user_id):
-            await query.message.reply_text(
+            await _send_with_retry(
+                query,
                 f"⛔ *Admin Only*\n\nUser ID {user_id} is not authorized.",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -3081,7 +3594,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
 
     # Check if user is treasury admin for trading
     if not _is_treasury_admin(config, user_id):
-        await query.message.reply_text(
+        await _send_with_retry(
+            query,
             "⛔ *Admin Only*\n\nYou must be a treasury admin to view trading options.",
             parse_mode=ParseMode.MARKDOWN
         )
@@ -3094,7 +3608,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
             # Load trending tokens data
             data_file = temp_dir / "jarvis_trending_tokens.json"
             if not data_file.exists():
-                await query.message.reply_text(
+                await _send_with_retry(
+                    query,
                     "📊 No trending data available. Please wait for the next report.",
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -3103,7 +3618,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
             with open(data_file) as f:
                 tokens = json.load(f)
 
-            await query.message.reply_text(
+            await _send_with_retry(
+                query,
                 "🔥 *TRENDING TOKENS - Trading Options*\n\n"
                 "_Select allocation and risk profile:_",
                 parse_mode=ParseMode.MARKDOWN
@@ -3143,7 +3659,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
                 else:
                     insight = "major correction. either dead or opportunity. dyor"
 
-                await query.message.reply_text(
+                await _send_with_retry(
+                    query,
                     f"🛒 *{token['symbol']}*\n"
                     f"Price: {price_str} {change_emoji} {change:+.1f}%\n"
                     f"Signal: {verdict}\n"
@@ -3151,13 +3668,14 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
                 )
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(EXPAND_MESSAGE_DELAY)
 
         elif section == "stocks":
             # Load stocks data
             data_file = temp_dir / "jarvis_stocks.json"
             if not data_file.exists():
-                await query.message.reply_text(
+                await _send_with_retry(
+                    query,
                     "📊 No stocks data available. Please wait for the next report.",
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -3166,7 +3684,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
             with open(data_file) as f:
                 stocks = json.load(f)
 
-            await query.message.reply_text(
+            await _send_with_retry(
+                query,
                 "📈 *TOKENIZED STOCKS - Trading Options*\n\n"
                 "_Trade US equities on Solana:_",
                 parse_mode=ParseMode.MARKDOWN
@@ -3180,19 +3699,21 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
                     contract=stock["mint"],
                 )
 
-                await query.message.reply_text(
+                await _send_with_retry(
+                    query,
                     f"🛒 *{stock['symbol']}* ({stock['underlying']})\n"
                     f"{stock['name']}",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
                 )
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(EXPAND_MESSAGE_DELAY)
 
         elif section == "indexes":
             # Load indexes data
             data_file = temp_dir / "jarvis_indexes.json"
             if not data_file.exists():
-                await query.message.reply_text(
+                await _send_with_retry(
+                    query,
                     "📊 No indexes data available. Please wait for the next report.",
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -3201,7 +3722,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
             with open(data_file) as f:
                 indexes = json.load(f)
 
-            await query.message.reply_text(
+            await _send_with_retry(
+                query,
                 "📊 *INDEXES & COMMODITIES - Trading Options*\n\n"
                 "_Diversified market exposure:_",
                 parse_mode=ParseMode.MARKDOWN
@@ -3211,25 +3733,27 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
             for index in indexes:
                 keyboard = _create_ape_keyboard(
                     symbol=index["symbol"],
-                    asset_type="stock",  # Treated as stock for trading
+                    asset_type=index["type"],  # Use actual type: index, commodity, etc.
                     contract=index["mint"],
                 )
 
                 type_emoji = "📊" if index["type"] == "index" else "🥇" if index["type"] == "commodity" else "📄"
 
-                await query.message.reply_text(
+                await _send_with_retry(
+                    query,
                     f"🛒 {type_emoji} *{index['symbol']}* ({index['underlying']})\n"
                     f"{index['name']}",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
                 )
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(EXPAND_MESSAGE_DELAY)
 
         elif section == "top_picks":
             # Load top picks data
             data_file = temp_dir / "jarvis_top_picks.json"
             if not data_file.exists():
-                await query.message.reply_text(
+                await _send_with_retry(
+                    query,
                     "🏆 No top picks data available. Please wait for the next report.",
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -3238,7 +3762,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
             with open(data_file) as f:
                 picks = json.load(f)
 
-            await query.message.reply_text(
+            await _send_with_retry(
+                query,
                 "🏆 *JARVIS TOP 5 - Trading Options*\n\n"
                 "_Highest conviction picks across all assets:_",
                 parse_mode=ParseMode.MARKDOWN
@@ -3246,7 +3771,14 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
 
             # Post buy buttons for top 5 picks
             for i, pick in enumerate(picks[:5]):
-                asset_type = "token" if pick["asset_class"] == "token" else "stock"
+                # Map asset_class to proper type: token, stock, index, commodity
+                asset_class = pick.get("asset_class", "token")
+                if asset_class in ("index", "commodity"):
+                    asset_type = asset_class  # Keep as-is for indexes/commodities
+                elif asset_class == "stock":
+                    asset_type = "stock"
+                else:
+                    asset_type = "token"  # Default to token
                 keyboard = _create_ape_keyboard(
                     symbol=pick["symbol"],
                     asset_type=asset_type,
@@ -3264,19 +3796,21 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
                 # Medal for top 3
                 medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"#{i+1}"
 
-                await query.message.reply_text(
+                await _send_with_retry(
+                    query,
                     f"{medal} *{pick['symbol']}* ({pick['asset_class'].upper()}) {conv_emoji} {pick['conviction']}/100\n"
                     f"📝 {pick['reasoning'][:60]}...",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
                 )
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(EXPAND_MESSAGE_DELAY)
 
         elif section == "bluechip":
             # Load blue-chip Solana tokens data
             data_file = temp_dir / "jarvis_bluechip_tokens.json"
             if not data_file.exists():
-                await query.message.reply_text(
+                await _send_with_retry(
+                    query,
                     "💎 No blue-chip data available. Please wait for the next report.",
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -3285,7 +3819,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
             with open(data_file) as f:
                 tokens = json.load(f)
 
-            await query.message.reply_text(
+            await _send_with_retry(
+                query,
                 "💎 *SOLANA BLUE CHIPS - Trading Options*\n\n"
                 "_High liquidity tokens with proven history:_",
                 parse_mode=ParseMode.MARKDOWN
@@ -3329,7 +3864,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
                 else:
                     insight = "significant drop. either opportunity or warning. dyor"
 
-                await query.message.reply_text(
+                await _send_with_retry(
+                    query,
                     f"🛒 {cat_emoji} *{token['symbol']}* ({category})\n"
                     f"Price: {price_str} {change_emoji} {change:+.1f}%\n"
                     f"MCap: {mcap_str}\n"
@@ -3337,17 +3873,19 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
                 )
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(EXPAND_MESSAGE_DELAY)
 
         else:
-            await query.message.reply_text(
+            await _send_with_retry(
+                query,
                 f"Unknown section: {section}",
                 parse_mode=ParseMode.MARKDOWN
             )
 
     except Exception as e:
         logger.error(f"Error handling expand section {section}: {e}")
-        await query.message.reply_text(
+        await _send_with_retry(
+            query,
             f"❌ Error loading {section} data: {str(e)[:100]}",
             parse_mode=ParseMode.MARKDOWN
         )
@@ -3356,7 +3894,9 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
 def _create_ape_keyboard(symbol: str, asset_type: str, contract: str) -> InlineKeyboardMarkup:
     """Create an APE trading keyboard for a given asset."""
     contract_short = contract[:10] if contract else ""
-    type_char = "t" if asset_type == "token" else "s"
+    # Map asset type to character: t=token, s=stock, i=index, c=commodity, m=metal, b=bond
+    type_char_map = {"token": "t", "stock": "s", "index": "i", "commodity": "c", "metal": "m", "bond": "b"}
+    type_char = type_char_map.get(asset_type, "t")
 
     # Store full contract in lookup file for later retrieval
     # (Telegram callback_data is limited to 64 bytes, so we truncate and lookup)
@@ -3445,8 +3985,9 @@ async def _execute_ape_trade(query, callback_data: str):
 
     parsed = parse_ape_callback(callback_data)
     if not parsed:
-        await query.message.reply_text(
-            "Invalid trade button format.",
+        await _send_with_retry(
+            query,
+            "❌ Invalid trade button format.",
             parse_mode=ParseMode.MARKDOWN,
         )
         return
@@ -3473,8 +4014,9 @@ async def _execute_ape_trade(query, callback_data: str):
             logger.error(f"Failed to lookup contract: {e}")
 
     if not contract:
-        await query.message.reply_text(
-            "Missing token address for trade. Please refresh the report.",
+        await _send_with_retry(
+            query,
+            "❌ Missing token address for trade. Please refresh the report.",
             parse_mode=ParseMode.MARKDOWN,
         )
         return
@@ -3484,16 +4026,29 @@ async def _execute_ape_trade(query, callback_data: str):
     sl_pct = profile_config["sl_pct"]
     profile_label = profile_config["label"]
 
-    await query.edit_message_text(
-        (
-            "Processing ape trade...\n\n"
-            f"Token: {symbol}\n"
-            f"Allocation: {allocation_pct}%\n"
-            f"Profile: {profile_label}\n"
-            f"TP: +{int(tp_pct)}% | SL: -{int(sl_pct)}%"
-        ),
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    # Acknowledge button click immediately
+    try:
+        await query.answer("Processing trade...", show_alert=False)
+    except Exception:
+        pass  # Button might be stale
+
+    # Show processing message (with error handling for stale messages)
+    try:
+        await query.edit_message_text(
+            (
+                "⏳ <b>Processing ape trade...</b>\n\n"
+                f"Token: <code>{symbol}</code>\n"
+                f"Allocation: {allocation_pct}%\n"
+                f"Profile: {profile_label}\n"
+                f"TP: +{int(tp_pct)}% | SL: -{int(sl_pct)}%"
+            ),
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception as e:
+        logger.warning(f"Could not edit message for processing status: {e}")
+        # Continue anyway - message edit is just UX
+
+    chat_id = query.message.chat_id
 
     try:
         engine = await _get_treasury_engine()
@@ -3501,22 +4056,25 @@ async def _execute_ape_trade(query, callback_data: str):
 
         if balance_sol <= 0:
             await query.message.reply_text(
-                "Treasury balance is zero.",
-                parse_mode=ParseMode.MARKDOWN,
+                "❌ Treasury balance is zero.",
+                parse_mode=ParseMode.HTML,
             )
             return
 
+        logger.info(f"Calling execute_ape_trade for {callback_data[:50]}...")
         result = await execute_ape_trade(
             callback_data=callback_data,
             entry_price=0.0,
             treasury_balance_sol=balance_sol,
             user_id=user_id,
         )
+        logger.info(f"execute_ape_trade returned: success={result.success}, error={result.error}")
 
         if not result.trade_setup:
+            error_msg = result.error or 'Trade setup failed'
             await query.message.reply_text(
-                result.error or "Trade failed.",
-                parse_mode=ParseMode.MARKDOWN,
+                f"❌ <b>Trade Failed</b>\n\n{error_msg}",
+                parse_mode=ParseMode.HTML,
             )
             return
 
@@ -3524,44 +4082,64 @@ async def _execute_ape_trade(query, callback_data: str):
         amount_usd = setup.amount_sol * (balance_usd / balance_sol) if balance_sol > 0 else 0.0
         mode = "LIVE" if not engine.dry_run else "PAPER"
 
-        # Sanitize symbol for safe output
-        safe_symbol = setup.symbol.encode('ascii', 'replace').decode('ascii')
-        
+        # Sanitize symbol for safe HTML output
+        import html as html_module
+        safe_symbol = html_module.escape(setup.symbol)
+
         if result.success:
             result_text = (
-                f"TRADE EXECUTED ({mode})\n\n"
-                f"Token: {safe_symbol}\n"
-                f"Entry: ${setup.entry_price:.8f}\n"
-                f"Amount: {setup.amount_sol:.4f} SOL (~${amount_usd:.2f})\n"
-                f"Profile: {profile_label}\n"
-                f"TP: ${setup.take_profit_price:.8f} (+{int(tp_pct)}%)\n"
-                f"SL: ${setup.stop_loss_price:.8f} (-{int(sl_pct)}%)"
+                f"✅ <b>TRADE EXECUTED ({mode})</b>\n\n"
+                f"🪙 Token: <code>{safe_symbol}</code>\n"
+                f"📍 Entry: <code>${setup.entry_price:.8f}</code>\n"
+                f"💰 Amount: <code>{setup.amount_sol:.4f} SOL</code> (~${amount_usd:.2f})\n"
+                f"📊 Profile: {profile_label}\n"
+                f"🎯 TP: <code>${setup.take_profit_price:.8f}</code> (+{int(tp_pct)}%)\n"
+                f"🛑 SL: <code>${setup.stop_loss_price:.8f}</code> (-{int(sl_pct)}%)"
             )
             if result.tx_signature:
-                result_text += f"\n\nTX: https://solscan.io/tx/{result.tx_signature}"
+                result_text += f"\n\n<a href='https://solscan.io/tx/{result.tx_signature}'>View TX on Solscan</a>"
         else:
             # Sanitize error message
-            safe_error = str(result.error or 'Unknown error').encode('ascii', 'replace').decode('ascii')
+            safe_error = html_module.escape(str(result.error or 'Unknown error')[:200])
             result_text = (
-                f"TRADE FAILED ({mode})\n\n"
-                f"Token: {safe_symbol}\n"
-                f"Allocation: {allocation_pct}%\n"
-                f"Profile: {profile_label}\n"
-                f"Reason: {safe_error}"
+                f"⚠️ <b>TRADE FAILED ({mode})</b>\n\n"
+                f"🪙 Token: <code>{safe_symbol}</code>\n"
+                f"💰 Allocation: {allocation_pct}%\n"
+                f"📊 Profile: {profile_label}\n"
+                f"❌ Reason: {safe_error}"
             )
 
-        await query.message.reply_text(
-            result_text,
-            parse_mode=ParseMode.MARKDOWN,
-            disable_web_page_preview=True,
-        )
+        # Send trade feedback - critical that user sees result
+        logger.info(f"Sending trade result: {result_text[:100]}...")
+        try:
+            await query.message.reply_text(
+                result_text,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
+            logger.info("Trade result sent successfully")
+        except Exception as send_err:
+            logger.error(f"Failed to send trade result with HTML: {send_err}")
+            # Fallback to plain text
+            try:
+                plain_text = f"Trade {'EXECUTED' if result.success else 'FAILED'}: {safe_symbol} - {setup.amount_sol:.4f} SOL"
+                await query.message.reply_text(plain_text)
+                logger.info("Trade result sent as plain text fallback")
+            except Exception as fallback_err:
+                logger.error(f"Even fallback message failed: {fallback_err}")
 
     except Exception as e:
-        logger.error(f"Ape trade failed: {e}")
-        await query.message.reply_text(
-            f"Trade error: {str(e)[:200]}",
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        logger.error(f"Ape trade failed: {e}", exc_info=True)
+        try:
+            await query.message.reply_text(
+                f"❌ <b>Trade Error</b>\n\n{str(e)[:200]}",
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception:
+            try:
+                await query.message.reply_text(f"Trade error: {str(e)[:100]}")
+            except Exception:
+                logger.error("Could not send any error message to user")
 
 
 async def _execute_trade_with_tp_sl(query, data: str):
@@ -4229,18 +4807,33 @@ async def scheduled_digest(context: ContextTypes.DEFAULT_TYPE):
         title = f"Hourly Digest ({sentiment_added} with Grok)"
         message = fmt.format_hourly_digest(signals, title=title)
 
-        # Send to all admins
-        for admin_id in config.admin_ids:
+        # Add brief moderation stats
+        try:
+            from core.jarvis_admin import get_jarvis_admin
+            admin = get_jarvis_admin()
+            stats = admin.get_moderation_stats()
+            if stats['deleted_messages'] > 0 or stats['banned_users'] > 0:
+                message += f"\n\n🛡️ *Mod Activity*: {stats['deleted_messages']} deleted, {stats['banned_users']} banned"
+        except Exception:
+            pass  # Don't fail digest if mod stats fail
+
+        # Cleanse sensitive info before sending
+        message = _cleanse_sensitive_info(message)
+
+        # Send to broadcast chat (group) only - no private admin messages
+        if config.broadcast_chat_id:
             try:
                 await context.bot.send_message(
-                    chat_id=admin_id,
+                    chat_id=config.broadcast_chat_id,
                     text=message,
                     parse_mode=ParseMode.MARKDOWN,
                     disable_web_page_preview=True,
                 )
-                logger.info(f"Sent digest to admin {admin_id}")
+                logger.info(f"Sent digest to broadcast chat {config.broadcast_chat_id}")
             except Exception as e:
-                logger.error(f"Failed to send digest to {admin_id}: {e}")
+                logger.error(f"Failed to send digest to broadcast chat: {e}")
+        else:
+            logger.warning("No broadcast_chat_id configured - digest not sent")
 
     except Exception as e:
         logger.error(f"Scheduled digest failed: {e}")
@@ -4251,15 +4844,122 @@ async def scheduled_digest(context: ContextTypes.DEFAULT_TYPE):
 # =============================================================================
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Log errors without exposing sensitive info."""
-    # Don't log full error which might contain API keys
-    logger.error(f"Bot error: {type(context.error).__name__}")
+    """Log errors with full details for debugging."""
+    import traceback
+    from telegram.error import RetryAfter, TimedOut, NetworkError, BadRequest
 
+    error = context.error
+    error_type = type(error).__name__
+    error_msg = str(error)
+
+    # Get update context for debugging
+    update_info = ""
+    if update:
+        if update.callback_query:
+            update_info = f" | callback_data={update.callback_query.data[:50] if update.callback_query.data else 'None'}"
+        elif update.message:
+            update_info = f" | message={update.message.text[:50] if update.message.text else 'None'}"
+
+    # Log full error with stack trace
+    logger.error(f"Bot error: {error_type}: {error_msg}{update_info}")
+    logger.error(f"Traceback: {''.join(traceback.format_exception(type(error), error, error.__traceback__))[-500:]}")
+
+    # Handle specific error types
+    if isinstance(error, RetryAfter):
+        logger.warning(f"Rate limited for {error.retry_after}s - will retry")
+        return  # Don't send error message during rate limit
+
+    if isinstance(error, (TimedOut, NetworkError)):
+        logger.warning(f"Network issue: {error_msg}")
+        return  # Transient error, don't spam user
+
+    # Try to notify user (with retry for rate limits)
     if update and update.effective_message:
-        await update.effective_message.reply_text(
-            "Something went wrong. Please try again.",
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        try:
+            await update.effective_message.reply_text(
+                f"⚠️ Error: {error_type}. Please try again.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send error message: {e}")
+
+
+# Media restriction flag - can be toggled by admin
+_MEDIA_RESTRICTED = True  # GIFs/animations blocked by default
+
+async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle media messages (GIFs, animations, stickers).
+    Block from new users or when media is restricted.
+    """
+    if not update.message:
+        return
+
+    user_id = update.effective_user.id if update.effective_user else 0
+    username = update.effective_user.username or "unknown"
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+
+    # Check if admin
+    config = get_config()
+    if user_id in config.admin_ids:
+        return  # Admins can always send media
+
+    # Check if media is restricted globally
+    global _MEDIA_RESTRICTED
+    if _MEDIA_RESTRICTED:
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
+            logger.info(f"MEDIA BLOCKED: @{username} - media restricted mode active")
+        except Exception as e:
+            logger.error(f"Failed to delete media: {e}")
+        return
+
+    # Check if new user
+    try:
+        from core.jarvis_admin import get_jarvis_admin
+        admin = get_jarvis_admin()
+        user = admin.get_user(user_id)
+
+        if not user or user.message_count < 5:
+            # New user trying to send media
+            await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"🚫 @{username} - new users can't send media yet. Chat normally first."
+            )
+            logger.info(f"MEDIA BLOCKED: new user @{username} (msgs: {user.message_count if user else 0})")
+            return
+
+        if user.warning_count > 0:
+            # User with warnings trying to send media
+            await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
+            logger.info(f"MEDIA BLOCKED: warned user @{username} (warnings: {user.warning_count})")
+            return
+
+    except Exception as e:
+        logger.error(f"Media handler error: {e}")
+
+
+async def toggle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /togglemedia - Toggle media restrictions (admin only).
+    """
+    config = get_config()
+    user_id = update.effective_user.id if update.effective_user else 0
+
+    if user_id not in config.admin_ids:
+        await update.message.reply_text("🚫 Admin only command.")
+        return
+
+    global _MEDIA_RESTRICTED
+    _MEDIA_RESTRICTED = not _MEDIA_RESTRICTED
+
+    status = "🔴 BLOCKED" if _MEDIA_RESTRICTED else "🟢 ALLOWED"
+    await update.message.reply_text(
+        f"Media/GIFs are now: {status}\n\n"
+        f"Use /togglemedia to change."
+    )
+    logger.info(f"Media restriction toggled to {_MEDIA_RESTRICTED} by admin {user_id}")
 
 
 # Spam patterns - instant ban
@@ -4292,7 +4992,70 @@ async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE,
         # Record message for analysis
         admin.record_message(message_id, user_id, username, text, chat_id)
         admin.update_user(user_id, username)
-        
+
+        # Track engagement
+        action_type = 'message'
+        if update.message.reply_to_message:
+            action_type = 'reply'
+        elif '?' in text:
+            action_type = 'question'
+        admin.track_engagement(user_id, action_type, chat_id, text[:100])
+
+        # Check for message flooding - auto-mute for severe spam
+        is_rate_limited, msg_count = admin.is_rate_limited(user_id)
+        if is_rate_limited and msg_count >= 15:
+            # Severe flooding - auto-mute for 1 hour
+            from datetime import datetime, timedelta, timezone as tz
+            from telegram import ChatPermissions
+            try:
+                until_date = datetime.now(tz.utc) + timedelta(hours=1)
+                await context.bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    permissions=ChatPermissions(can_send_messages=False),
+                    until_date=until_date
+                )
+                admin.mute_user(user_id, f"flooding: {msg_count} msgs in 60s", 1)
+                response = admin.get_random_response("flood_muted", username=username, hours=1)
+                await context.bot.send_message(chat_id=chat_id, text=response)
+                logger.warning(f"FLOOD MUTED: user={user_id} @{username} msgs={msg_count}")
+                return True
+            except Exception as mute_err:
+                logger.error(f"Failed to mute flooding user: {mute_err}")
+
+        # Check for scam wallet addresses - instant ban
+        is_scam_wallet, scam_addr = admin.check_scam_wallet(text)
+        if is_scam_wallet:
+            await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+            admin.ban_user(user_id, f"scam wallet: {scam_addr[:20]}...")
+            response = admin.get_random_response("scam_wallet", username=username)
+            response += admin.get_random_response("mistake_footer")
+            await context.bot.send_message(chat_id=chat_id, text=response)
+            logger.warning(f"SCAM WALLET BANNED: user={user_id} @{username} addr={scam_addr[:20]}")
+            return True
+
+        # Check new user link restrictions
+        is_link_restricted, link_reason = admin.check_new_user_links(text, user_id)
+        if is_link_restricted:
+            await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            response = admin.get_random_response("new_user_link", username=username)
+            await context.bot.send_message(chat_id=chat_id, text=response)
+            logger.info(f"NEW USER LINK BLOCKED: user={user_id} @{username} reason={link_reason}")
+            return True
+
+        # Check for phishing links - instant ban
+        is_phishing, phishing_match = admin.check_phishing_link(text)
+        if is_phishing:
+            await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+            admin.ban_user(user_id, f"phishing link: {phishing_match}")
+            response = admin.get_random_response("phishing_link", username=username)
+            response += admin.get_random_response("mistake_footer")
+            await context.bot.send_message(chat_id=chat_id, text=response)
+            logger.warning(f"PHISHING BANNED: user={user_id} @{username} match={phishing_match}")
+            return True
+
         # Check for command attempts from non-admins
         is_cmd_attempt, cmd_type = admin.detect_command_attempt(text, user_id)
         if is_cmd_attempt:
@@ -4397,7 +5160,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     user_id = update.effective_user.id if update.effective_user else 0
     import sys
-    print(f"[MSG] user_id={user_id} text={text[:60]}", flush=True)
+    # Sanitize text for Windows console (remove emojis/special chars)
+    safe_text = text[:60].encode('ascii', 'replace').decode('ascii')
+    print(f"[MSG] user_id={user_id} text={safe_text}", flush=True)
     sys.stdout.flush()
     logger.info(f"Message from {user_id}: {text[:60]}")
     username = update.effective_user.username or "" if update.effective_user else ""
@@ -4522,6 +5287,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_title=(update.effective_chat.title if update.effective_chat else ""),
             is_private=update.effective_chat.type == "private" if update.effective_chat else False,
             user_id=user_id,
+            chat_id=chat_id,
         )
         logger.info(f"Reply generated: {reply[:50] if reply else 'EMPTY'}")
     except Exception as e:
@@ -4529,8 +5295,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = None
 
     if reply:
+        # Cleanse sensitive info before sending to public chat
+        safe_reply = _cleanse_sensitive_info(reply)
         await update.message.reply_text(
-            reply,
+            safe_reply,
             disable_web_page_preview=True,
         )
 
@@ -4588,6 +5356,9 @@ def main():
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("costs", costs))
     app.add_handler(CommandHandler("trending", trending))
+    app.add_handler(CommandHandler("stocks", stocks))
+    app.add_handler(CommandHandler("st", stocks))  # Alias for /stocks
+    app.add_handler(CommandHandler("equities", stocks))  # Alias for /stocks
     app.add_handler(CommandHandler("solprice", solprice))
     app.add_handler(CommandHandler("mcap", mcap))
     app.add_handler(CommandHandler("volume", volume))
@@ -4635,6 +5406,13 @@ def main():
     app.add_handler(CommandHandler("balance", balance))
     app.add_handler(CommandHandler("positions", positions))
     app.add_handler(CommandHandler("settings", settings))
+    app.add_handler(CommandHandler("modstats", modstats))
+    app.add_handler(CommandHandler("addscam", addscam))
+    app.add_handler(CommandHandler("trust", trust))
+    app.add_handler(CommandHandler("trustscore", trustscore))
+    app.add_handler(CommandHandler("warn", warn))
+    app.add_handler(CommandHandler("report", report))
+    app.add_handler(CommandHandler("togglemedia", toggle_media))
 
     app.add_handler(CallbackQueryHandler(button_callback))
 
@@ -4655,6 +5433,12 @@ def main():
         print("Anti-scam protection: DISABLED (no antiscam module or admin IDs)")
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Media handler - blocks GIFs/animations when restricted mode is active
+    app.add_handler(MessageHandler(
+        filters.ANIMATION | filters.Sticker.ALL | filters.VIDEO_NOTE,
+        handle_media
+    ))
 
     # Welcome new members - use StatusUpdate for reliability (doesn't require admin)
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
