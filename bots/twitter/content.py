@@ -133,14 +133,15 @@ class ContentGenerator:
                     if data.get("data"):
                         metrics.fear_greed_index = int(data["data"][0].get("value", 50))
 
-            # Get trending tokens from DexScreener
+            # Get trending tokens from DexScreener (multi-chain)
+            SUPPORTED_CHAINS = ["solana", "ethereum", "base", "bsc", "arbitrum"]
             async with session.get(
                 "https://api.dexscreener.com/token-boosts/top/v1"
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    sol_tokens = [t for t in data if t.get("chainId") == "solana"][:5]
-                    metrics.trending_tokens = sol_tokens
+                    trending_tokens = [t for t in data if t.get("chainId") in SUPPORTED_CHAINS][:8]
+                    metrics.trending_tokens = trending_tokens
 
         except Exception as e:
             logger.error(f"Failed to fetch market metrics: {e}")

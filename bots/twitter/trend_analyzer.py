@@ -58,6 +58,7 @@ class AlphaSignal:
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     confidence: float = 0.5
     source: str = "internal"
+    chain: str = "solana"  # Multi-chain support
 
     def to_tweet_context(self) -> Dict[str, str]:
         """Convert signal to tweet template context."""
@@ -114,6 +115,7 @@ class TrendInsight:
     details: Dict[str, Any] = field(default_factory=dict)
     relevance: float = 0.5
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    chain: str = "solana"  # Multi-chain support
 
     def to_tweet_context(self) -> Dict[str, str]:
         """Convert insight to tweet template context."""
@@ -320,12 +322,19 @@ class TrendAnalyzer:
 
         return signals
 
-    async def get_market_trend_insights(self) -> List[TrendInsight]:
-        """Generate market trend insights."""
+    async def get_market_trend_insights(self, chain: str = "solana") -> List[TrendInsight]:
+        """Generate market trend insights for a specific chain."""
         insights = []
 
+        # Chain display names
+        chain_names = {
+            "solana": "Solana", "ethereum": "ETH", "base": "Base",
+            "bsc": "BSC", "arbitrum": "Arbitrum"
+        }
+        chain_name = chain_names.get(chain, chain.title())
+
         # Analyze top tokens for overall market sentiment
-        trending = await self.get_trending_tokens()
+        trending = await self.get_trending_tokens(chain=chain)
 
         if trending:
             # Calculate average metrics
@@ -336,26 +345,29 @@ class TrendAnalyzer:
             if avg_change > 10:
                 insights.append(TrendInsight(
                     category="market",
-                    title="Solana Ecosystem Bullish",
+                    title=f"{chain_name} Ecosystem Bullish",
                     summary=f"top tokens averaging +{avg_change:.1f}% 24h. ${total_volume/1e6:.1f}M volume across trending pairs",
                     details={"avg_change": avg_change, "total_volume": total_volume},
-                    relevance=0.8
+                    relevance=0.8,
+                    chain=chain
                 ))
             elif avg_change < -10:
                 insights.append(TrendInsight(
                     category="market",
-                    title="Solana Ecosystem Under Pressure",
+                    title=f"{chain_name} Ecosystem Under Pressure",
                     summary=f"risk-off mode with {avg_change:.1f}% avg drawdown. volume at ${total_volume/1e6:.1f}M",
                     details={"avg_change": avg_change, "total_volume": total_volume},
-                    relevance=0.75
+                    relevance=0.75,
+                    chain=chain
                 ))
             else:
                 insights.append(TrendInsight(
                     category="market",
-                    title="Solana Range-Bound",
+                    title=f"{chain_name} Range-Bound",
                     summary=f"choppy action, avg change {avg_change:+.1f}%. watching for direction",
                     details={"avg_change": avg_change, "total_volume": total_volume},
-                    relevance=0.5
+                    relevance=0.5,
+                    chain=chain
                 ))
 
             # Top movers insight
@@ -369,7 +381,8 @@ class TrendAnalyzer:
                     title=f"${gainer_symbol} Leading the Charts",
                     summary=f"+{gainer_change:.0f}% 24h. one to watch if momentum holds",
                     details={"symbol": gainer_symbol, "change": gainer_change},
-                    relevance=0.7
+                    relevance=0.7,
+                    chain=chain
                 ))
 
         return insights

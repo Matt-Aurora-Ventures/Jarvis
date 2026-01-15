@@ -145,13 +145,33 @@ class ContentCalendar:
     def get_upcoming_events(self, days: int = 7) -> List[CryptoEvent]:
         """Get events in the next N days"""
         now = datetime.utcnow()
+        today = now.date()
         cutoff = now + timedelta(days=days)
-        
+
         upcoming = []
         for event in self.events:
             if event.date.startswith("recurring:"):
-                # Handle recurring events
-                upcoming.append(event)
+                # Handle recurring events - check if they actually occur within the window
+                pattern = event.date.split(":")[1]
+
+                if pattern == "friday":
+                    # Find the next Friday
+                    days_until_friday = (4 - today.weekday()) % 7
+                    if days_until_friday == 0 and now.hour > 20:  # Past Friday evening
+                        days_until_friday = 7
+                    if days_until_friday <= days:
+                        upcoming.append(event)
+
+                elif pattern == "last_day":
+                    # Find the last day of the current month
+                    if today.month == 12:
+                        next_month = today.replace(year=today.year + 1, month=1, day=1)
+                    else:
+                        next_month = today.replace(month=today.month + 1, day=1)
+                    last_day = next_month - timedelta(days=1)
+                    days_until_last = (last_day - today).days
+                    if 0 <= days_until_last <= days:
+                        upcoming.append(event)
             else:
                 try:
                     event_date = datetime.fromisoformat(event.date)
@@ -159,7 +179,7 @@ class ContentCalendar:
                         upcoming.append(event)
                 except Exception:
                     pass
-        
+
         return upcoming
     
     def get_todays_events(self) -> List[CryptoEvent]:

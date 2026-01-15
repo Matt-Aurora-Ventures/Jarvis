@@ -26,8 +26,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from bots.twitter.twitter_client import TwitterClient, TwitterCredentials
 from bots.twitter.claude_content import ClaudeContentGenerator
+from bots.twitter.autonomous_engine import XMemory
 
 logger = logging.getLogger(__name__)
+
+# Shared memory for cross-module deduplication
+_shared_memory: Optional['XMemory'] = None
+
+def get_shared_memory() -> 'XMemory':
+    """Get shared memory instance for deduplication."""
+    global _shared_memory
+    if _shared_memory is None:
+        _shared_memory = XMemory()
+    return _shared_memory
 
 # Predictions file from sentiment_report.py
 PREDICTIONS_FILE = Path(__file__).parent.parent / "buy_tracker" / "predictions_history.json"
@@ -243,8 +254,19 @@ Return ONLY a JSON object: {{"tweets": ["tweet1", "tweet2", "tweet3"]}}"""
     ) -> Optional[str]:
         """Post a tweet and return the tweet ID."""
         try:
+            # Check for duplicate content BEFORE posting (shared with autonomous_engine)
+            memory = get_shared_memory()
+            is_similar, similar_content = memory.is_similar_to_recent(text, hours=12, threshold=0.4)
+            if is_similar and reply_to is None:  # Don't skip thread replies
+                logger.warning(f"SKIPPED DUPLICATE (sentiment): Too similar to recent tweet")
+                logger.info(f"New: {text[:60]}...")
+                logger.info(f"Old: {similar_content[:60] if similar_content else 'N/A'}...")
+                return None
+
             result = await self.twitter.post_tweet(text, reply_to=reply_to)
             if result and result.success:
+                # Record to shared memory for cross-module deduplication
+                memory.record_tweet(result.tweet_id, text, "sentiment", [])
                 return result.tweet_id
             logger.error(f"Tweet failed: {result.error if result else 'unknown error'}")
             return None

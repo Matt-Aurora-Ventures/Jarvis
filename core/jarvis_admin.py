@@ -62,6 +62,29 @@ JARVIS_VOICE = {
         "easy there @{username}. quality over quantity.",
         "@{username} you're flooding the chat. take a breath.",
     ],
+    "flood_muted": [
+        "⏸️ @{username} muted for {hours}h - message flooding detected. relax and try again later.",
+        "🌊 flood detected from @{username}. cooling off for {hours} hours.",
+        "⏸️ @{username} triggered flood protection. muted for {hours}h.",
+    ],
+    "new_user_link": [
+        "hold up @{username} - new accounts can't post links yet. chat normally for a bit first.",
+        "@{username} links are restricted for new members. earn trust first - just chat naturally.",
+        "nice try @{username} but new users need to participate before sharing links.",
+    ],
+    "suspicious_username": [
+        "🚨 sus username detected: @{username}. banned preemptively. scammers get no chances.",
+        "auto-banned @{username} - username matches known scam patterns.",
+    ],
+    "scam_wallet": [
+        "⚠️ that wallet address is flagged as a known scam. deleted and user banned.",
+        "🚨 scam wallet detected. message removed, user @{username} banned.",
+    ],
+    "phishing_link": [
+        "🎣 phishing link detected. @{username} removed. don't click suspicious links.",
+        "⚠️ fake site alert! message deleted, @{username} banned. protect your wallet.",
+        "🚨 phishing attempt blocked. @{username} is gone. never connect wallets to unknown sites.",
+    ],
     "mistake_footer": "\n\nif this was a mistake, reach out to @MattFromKr8tiv - even AIs misfire sometimes.",
     
     # Response to non-admin commands
@@ -168,6 +191,59 @@ class JarvisAdmin:
             "minimum deposit", "withdrawal fee",
         ]
 
+        # Suspicious username patterns - auto-ban on join
+        self.suspicious_username_patterns = [
+            r"(support|helpdesk|admin|moderator|official).*\d",  # support123, admin_official
+            r"\d.*(support|helpdesk|admin)",  # 123support
+            r"(airdrop|giveaway|free_?crypto)",
+            r"(binance|coinbase|kraken|metamask|phantom|trustwallet).*(_|-)?(support|help|official)",
+            r"(crypto|nft|token).*signal",
+            r"customer.*service",
+            r"tech.*support",
+            r"wallet.*recovery",
+            r"(dm|message).*for.*(help|support)",
+        ]
+
+        # Known scam wallet addresses (add more as detected)
+        self.scam_wallets = set([
+            # Example known scam addresses - add real ones as detected
+            "ScamWa11etExamp1eAddress111111111111111111",
+        ])
+
+        # Phishing domain patterns (typosquatting, fake sites)
+        self.phishing_patterns = [
+            # Fake exchanges
+            r"(b1nance|binanc3|b!nance|blnance|binanse)",
+            r"(c0inbase|co1nbase|coinbas3|coinbasse)",
+            r"(krak3n|kraken-|kraaken)",
+            # Fake wallets
+            r"(metamask-|m3tamask|metarnask|meta-mask)",
+            r"(phantom-|ph4ntom|phant0m)",
+            r"(trustwallet-|trust-wallet|trustwall3t)",
+            # Fake DEXes
+            r"(uniswap-|un1swap|unlswap|uniswapp)",
+            r"(pancakeswap-|pancak3swap)",
+            r"(raydium-|rayd1um|raydlum)",
+            r"(jupiter-|jup1ter|juplt3r)",
+            # Suspicious TLDs for crypto
+            r"\.(xyz|top|click|link|online|site|club|work)/",
+            # Wallet connect scams
+            r"(wallet-?connect|wc-?bridge|dapp-?connect)",
+            # Claim/airdrop scams
+            r"(claim-?airdrop|free-?tokens|bonus-?claim)",
+        ]
+
+        # New user restrictions
+        self.new_user_message_threshold = 3  # messages before links allowed
+        self.new_user_link_patterns = [
+            r"https?://",
+            r"t\.me/",
+            r"telegram\.me/",
+            r"discord\.gg/",
+            r"bit\.ly/",
+            r"tinyurl\.",
+        ]
+
         # Rate limiting - track message times per user
         self._message_times: Dict[int, List[float]] = {}
         self.rate_limit_window = 60  # seconds
@@ -235,7 +311,25 @@ class JarvisAdmin:
                     priority INTEGER DEFAULT 0
                 )
             """)
-            
+
+            # Engagement tracking
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS engagement (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    action_type TEXT,
+                    timestamp TEXT,
+                    chat_id INTEGER,
+                    details TEXT
+                )
+            """)
+
+            # Create index for faster engagement queries
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_engagement_user
+                ON engagement(user_id, timestamp)
+            """)
+
             conn.commit()
             conn.close()
     
@@ -345,6 +439,53 @@ class JarvisAdmin:
             conn.commit()
             conn.close()
 
+    def record_mod_action(self, action_type: str, user_id: int, message_id: int = 0, reason: str = ""):
+        """Record a moderation action for tracking."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO mod_actions (action_type, user_id, message_id, reason, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            """, (action_type, user_id, message_id, reason, datetime.now(timezone.utc).isoformat()))
+            conn.commit()
+            conn.close()
+
+    def get_report_count(self, user_id: int, hours: int = 24) -> Tuple[int, List[str]]:
+        """
+        Get number of unique reporters for a user in the last N hours.
+        Returns: (count, list_of_reporter_usernames)
+        """
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+
+            # Get unique reporters from reason field (format: "reported by @username: ...")
+            cursor.execute("""
+                SELECT DISTINCT reason FROM mod_actions
+                WHERE action_type = 'user_report' AND user_id = ? AND timestamp > ?
+            """, (user_id, cutoff))
+
+            reporters = []
+            for row in cursor.fetchall():
+                reason = row[0] or ""
+                if "reported by @" in reason:
+                    reporter = reason.split("reported by @")[1].split(":")[0].strip()
+                    if reporter and reporter not in reporters:
+                        reporters.append(reporter)
+
+            conn.close()
+            return len(reporters), reporters
+
+    def check_report_threshold(self, user_id: int, threshold: int = 3) -> bool:
+        """
+        Check if user has been reported by enough unique users to warrant action.
+        Returns True if threshold met.
+        """
+        count, reporters = self.get_report_count(user_id)
+        return count >= threshold
+
     def is_rate_limited(self, user_id: int) -> Tuple[bool, int]:
         """
         Check if user is sending messages too fast.
@@ -374,6 +515,98 @@ class JarvisAdmin:
             cursor.execute("UPDATE users SET is_trusted = 1 WHERE user_id = ?", (user_id,))
             conn.commit()
             conn.close()
+
+    def calculate_trust_score(self, user_id: int) -> Dict:
+        """
+        Calculate a comprehensive trust score for a user.
+        Returns dict with score (0-100), level, and factors.
+        """
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+
+            # Get user data
+            cursor.execute("""
+                SELECT message_count, warning_count, is_banned, is_trusted,
+                       spam_score, first_seen, last_message_at
+                FROM users WHERE user_id = ?
+            """, (user_id,))
+            row = cursor.fetchone()
+
+            if not row:
+                conn.close()
+                return {"score": 0, "level": "unknown", "factors": {}}
+
+            msg_count, warnings, banned, trusted, spam, first_seen, last_msg = row
+
+            # Get engagement score
+            cursor.execute("""
+                SELECT COUNT(*) FROM engagement
+                WHERE user_id = ? AND timestamp > datetime('now', '-30 days')
+            """, (user_id,))
+            engagement_count = cursor.fetchone()[0]
+
+            # Get report count against this user
+            cursor.execute("""
+                SELECT COUNT(DISTINCT reason) FROM mod_actions
+                WHERE action_type = 'user_report' AND user_id = ?
+                AND timestamp > datetime('now', '-7 days')
+            """, (user_id,))
+            report_count = cursor.fetchone()[0]
+
+            conn.close()
+
+            # Calculate score factors
+            factors = {
+                "messages": min(30, msg_count / 10),  # Max 30 points for 300+ messages
+                "tenure": 0,  # Will calculate below
+                "engagement": min(20, engagement_count / 5),  # Max 20 points
+                "trusted_flag": 20 if trusted else 0,  # 20 points if manually trusted
+                "warnings_penalty": min(30, warnings * 10),  # Penalty for warnings
+                "reports_penalty": min(20, report_count * 5),  # Penalty for reports
+                "spam_penalty": min(20, spam * 10),  # Penalty for spam score
+            }
+
+            # Calculate tenure bonus (up to 20 points for 30+ day members)
+            if first_seen:
+                try:
+                    first = datetime.fromisoformat(first_seen.replace("Z", "+00:00"))
+                    days = (datetime.now(timezone.utc) - first).days
+                    factors["tenure"] = min(20, days * 0.67)  # ~20 points at 30 days
+                except Exception:
+                    factors["tenure"] = 0
+
+            # Calculate final score
+            positive = factors["messages"] + factors["tenure"] + factors["engagement"] + factors["trusted_flag"]
+            negative = factors["warnings_penalty"] + factors["reports_penalty"] + factors["spam_penalty"]
+            score = max(0, min(100, positive - negative))
+
+            # Banned users always get 0
+            if banned:
+                score = 0
+
+            # Determine level
+            if score >= 80:
+                level = "veteran"
+            elif score >= 60:
+                level = "trusted"
+            elif score >= 40:
+                level = "regular"
+            elif score >= 20:
+                level = "new"
+            else:
+                level = "suspicious"
+
+            return {
+                "score": round(score, 1),
+                "level": level,
+                "factors": factors,
+            }
+
+    def is_user_trusted(self, user_id: int, threshold: int = 40) -> bool:
+        """Quick check if user meets trust threshold."""
+        result = self.calculate_trust_score(user_id)
+        return result.get("score", 0) >= threshold
 
     def clear_warnings(self, user_id: int):
         """Clear warnings for a user."""
@@ -489,7 +722,140 @@ class JarvisAdmin:
         reason = ", ".join(reasons) if reasons else "clean"
 
         return is_spam, confidence, reason
-    
+
+    def check_suspicious_username(self, username: str) -> Tuple[bool, str]:
+        """
+        Check if a username matches known scam patterns.
+        Returns: (is_suspicious, matched_pattern)
+        """
+        if not username:
+            return False, ""
+
+        username_lower = username.lower()
+
+        for pattern in self.suspicious_username_patterns:
+            if re.search(pattern, username_lower, re.IGNORECASE):
+                return True, pattern
+
+        return False, ""
+
+    def check_new_user_links(self, text: str, user_id: int) -> Tuple[bool, str]:
+        """
+        Check if a new user is trying to post links.
+        Uses trust score system - users with score 40+ can post links.
+        Returns: (is_restricted, reason)
+        """
+        if self.is_admin(user_id):
+            return False, ""
+
+        user = self.get_user(user_id)
+        if not user:
+            # Unknown user, treat as new with 0 trust
+            trust_score = 0
+        else:
+            # Check if manually trusted (legacy) or has earned trust
+            if user.is_trusted:
+                return False, ""
+
+            # Calculate trust score - users with 40+ can post links
+            trust_result = self.calculate_trust_score(user_id)
+            trust_score = trust_result.get("score", 0)
+
+            if trust_score >= 40:
+                return False, ""  # Trust score high enough
+
+        # Check if message contains links
+        text_lower = text.lower()
+        for pattern in self.new_user_link_patterns:
+            if re.search(pattern, text_lower, re.IGNORECASE):
+                return True, f"low trust score ({trust_score:.0f}) posting links"
+
+        return False, ""
+
+    def check_scam_wallet(self, text: str) -> Tuple[bool, str]:
+        """
+        Check if message contains a known scam wallet address.
+        Returns: (is_scam, matched_address)
+        """
+        # Extract potential Solana addresses (32-44 base58 chars)
+        sol_pattern = r'\b[1-9A-HJ-NP-Za-km-z]{32,44}\b'
+        addresses = re.findall(sol_pattern, text)
+
+        for addr in addresses:
+            if addr in self.scam_wallets:
+                return True, addr
+
+        return False, ""
+
+    def add_scam_wallet(self, address: str) -> bool:
+        """Add a wallet address to the scam list."""
+        if address and len(address) >= 32:
+            self.scam_wallets.add(address)
+            return True
+        return False
+
+    def check_address_spoofing(self, text: str, known_addresses: List[str] = None) -> Tuple[bool, str, str]:
+        """
+        Check if message contains addresses similar to known addresses (spoofing).
+        Scammers often create addresses that look similar to legitimate ones.
+        Returns: (is_spoofed, suspicious_addr, similar_to)
+        """
+        # Extract addresses from text
+        sol_pattern = r'\b[1-9A-HJ-NP-Za-km-z]{32,44}\b'
+        addresses = re.findall(sol_pattern, text)
+
+        if not addresses:
+            return False, "", ""
+
+        # Default known addresses (can be extended)
+        if known_addresses is None:
+            known_addresses = []
+
+        for addr in addresses:
+            # Skip if it's in known addresses
+            if addr in known_addresses:
+                continue
+
+            # Check for similarity with known addresses
+            for known in known_addresses:
+                if self._addresses_similar(addr, known):
+                    return True, addr, known
+
+        return False, "", ""
+
+    def _addresses_similar(self, addr1: str, addr2: str, threshold: float = 0.8) -> bool:
+        """
+        Check if two addresses are suspiciously similar.
+        Scammers often change just a few characters.
+        """
+        if addr1 == addr2:
+            return False  # Same address, not spoofing
+
+        if len(addr1) != len(addr2):
+            return False  # Different lengths, probably not spoofing
+
+        # Count matching characters
+        matches = sum(c1 == c2 for c1, c2 in zip(addr1, addr2))
+        similarity = matches / len(addr1)
+
+        # If very similar (e.g., 80%+ match) but not identical, it's suspicious
+        return similarity >= threshold and similarity < 1.0
+
+    def check_phishing_link(self, text: str) -> Tuple[bool, str]:
+        """
+        Check if message contains phishing links.
+        Returns: (is_phishing, matched_pattern)
+        """
+        text_lower = text.lower()
+
+        # Check against phishing patterns
+        for pattern in self.phishing_patterns:
+            match = re.search(pattern, text_lower, re.IGNORECASE)
+            if match:
+                return True, match.group(0)
+
+        return False, ""
+
     def detect_command_attempt(self, text: str, user_id: int) -> Tuple[bool, str]:
         """
         Detect if a non-admin is trying to give commands.
@@ -623,6 +989,171 @@ class JarvisAdmin:
                 "deleted_messages": deleted_messages,
                 "pending_upgrades": pending_upgrades,
             }
+
+    def get_chat_stats(self, chat_id: int, hours: int = 24) -> Dict:
+        """
+        Get moderation statistics in the last N hours.
+
+        Note: chat_id is accepted for future use but currently returns global stats
+        since mod_actions table doesn't track chat_id yet.
+        """
+        # chat_id reserved for future per-chat filtering
+        _ = chat_id
+
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+
+            # Count mod actions by type
+            cursor.execute("""
+                SELECT action_type, COUNT(*) FROM mod_actions
+                WHERE timestamp > ?
+                GROUP BY action_type
+            """, (cutoff,))
+            actions = dict(cursor.fetchall())
+
+            # Spam blocked
+            spam_blocked = actions.get("spam_blocked", 0) + actions.get("spam_deleted", 0)
+
+            # Users banned
+            cursor.execute("""
+                SELECT COUNT(DISTINCT user_id) FROM mod_actions
+                WHERE action_type = 'ban' AND timestamp > ?
+            """, (cutoff,))
+            users_banned = cursor.fetchone()[0]
+
+            # Warnings issued
+            warnings_issued = actions.get("warning", 0) + actions.get("warn", 0)
+
+            # Reports received
+            reports = actions.get("user_report", 0) + actions.get("report", 0)
+
+            conn.close()
+
+            return {
+                "warnings_issued": warnings_issued,
+                "users_banned": users_banned,
+                "spam_blocked": spam_blocked,
+                "reports_received": reports,
+                "total_actions": sum(actions.values()),
+            }
+
+    # =========================================================================
+    # Engagement Tracking
+    # =========================================================================
+
+    def track_engagement(self, user_id: int, action_type: str, chat_id: int, details: str = ""):
+        """
+        Track a user engagement action.
+        action_type: 'message', 'reply', 'question', 'helpful', 'reaction'
+        """
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO engagement (user_id, action_type, timestamp, chat_id, details)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, action_type, datetime.now(timezone.utc).isoformat(), chat_id, details[:500] if details else ""))
+            conn.commit()
+            conn.close()
+
+    def get_engagement_score(self, user_id: int, days: int = 30) -> Dict:
+        """
+        Calculate engagement score for a user over the past N days.
+        Returns dict with score and breakdown.
+        """
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+            # Count by action type
+            cursor.execute("""
+                SELECT action_type, COUNT(*) FROM engagement
+                WHERE user_id = ? AND timestamp > ?
+                GROUP BY action_type
+            """, (user_id, cutoff))
+            counts = dict(cursor.fetchall())
+            conn.close()
+
+            # Weighted scoring
+            weights = {
+                'message': 1,
+                'reply': 2,      # Replying to others
+                'question': 2,   # Asking questions
+                'helpful': 5,    # Being helpful to others
+                'reaction': 1,   # Reacting to messages
+            }
+
+            score = sum(counts.get(action, 0) * weights.get(action, 1) for action in weights)
+
+            return {
+                'user_id': user_id,
+                'score': score,
+                'breakdown': counts,
+                'days': days,
+            }
+
+    def get_top_engaged(self, limit: int = 10, days: int = 30) -> List[Dict]:
+        """Get top engaged users."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+            cursor.execute("""
+                SELECT user_id, COUNT(*) as actions FROM engagement
+                WHERE timestamp > ?
+                GROUP BY user_id
+                ORDER BY actions DESC
+                LIMIT ?
+            """, (cutoff, limit))
+            rows = cursor.fetchall()
+            conn.close()
+
+            results = []
+            for user_id, action_count in rows:
+                user = self.get_user(user_id)
+                results.append({
+                    'user_id': user_id,
+                    'username': user.username if user else 'unknown',
+                    'action_count': action_count,
+                    'is_trusted': user.is_trusted if user else False,
+                })
+
+            return results
+
+    def auto_promote_engaged(self, min_score: int = 50, days: int = 30) -> List[int]:
+        """
+        Auto-promote highly engaged users to trusted status.
+        Returns list of promoted user IDs.
+        """
+        promoted = []
+        top_users = self.get_top_engaged(limit=20, days=days)
+
+        for user_data in top_users:
+            user_id = user_data['user_id']
+            if user_data.get('is_trusted'):
+                continue  # Already trusted
+
+            engagement = self.get_engagement_score(user_id, days)
+            if engagement['score'] >= min_score:
+                # Promote to trusted
+                with self._lock:
+                    conn = sqlite3.connect(str(self.db_path))
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "UPDATE users SET is_trusted = 1 WHERE user_id = ?",
+                        (user_id,)
+                    )
+                    conn.commit()
+                    conn.close()
+                promoted.append(user_id)
+
+        return promoted
 
 
 # Singleton

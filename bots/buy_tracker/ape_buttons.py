@@ -89,10 +89,91 @@ STOCK_RISK_PROFILE_CONFIG = {
     },
 }
 
+# TP/SL percentages for INDEX ETFs (moderate volatility, between stocks and crypto)
+INDEX_RISK_PROFILE_CONFIG = {
+    RiskProfile.SAFE: {
+        "tp_pct": 8.0,    # +8% take profit
+        "sl_pct": 3.0,    # -3% stop loss
+        "label": "SAFE",
+        "emoji": "🛡️",
+        "description": "Conservative: +8% TP / -3% SL (2.7:1 R/R)",
+    },
+    RiskProfile.MEDIUM: {
+        "tp_pct": 15.0,   # +15% take profit
+        "sl_pct": 6.0,    # -6% stop loss
+        "label": "MED",
+        "emoji": "⚖️",
+        "description": "Balanced: +15% TP / -6% SL (2.5:1 R/R)",
+    },
+    RiskProfile.DEGEN: {
+        "tp_pct": 25.0,   # +25% take profit
+        "sl_pct": 10.0,   # -10% stop loss
+        "label": "DEGEN",
+        "emoji": "🔥",
+        "description": "Aggressive: +25% TP / -10% SL (2.5:1 R/R)",
+    },
+}
+
+# TP/SL percentages for COMMODITIES (gold, silver, oil - moderate volatility)
+COMMODITY_RISK_PROFILE_CONFIG = {
+    RiskProfile.SAFE: {
+        "tp_pct": 6.0,    # +6% take profit
+        "sl_pct": 2.5,    # -2.5% stop loss
+        "label": "SAFE",
+        "emoji": "🛡️",
+        "description": "Conservative: +6% TP / -2.5% SL (2.4:1 R/R)",
+    },
+    RiskProfile.MEDIUM: {
+        "tp_pct": 12.0,   # +12% take profit
+        "sl_pct": 5.0,    # -5% stop loss
+        "label": "MED",
+        "emoji": "⚖️",
+        "description": "Balanced: +12% TP / -5% SL (2.4:1 R/R)",
+    },
+    RiskProfile.DEGEN: {
+        "tp_pct": 20.0,   # +20% take profit
+        "sl_pct": 8.0,    # -8% stop loss
+        "label": "DEGEN",
+        "emoji": "🔥",
+        "description": "Aggressive: +20% TP / -8% SL (2.5:1 R/R)",
+    },
+}
+
+# TP/SL percentages for BONDS/T-BILLS (lowest volatility)
+BOND_RISK_PROFILE_CONFIG = {
+    RiskProfile.SAFE: {
+        "tp_pct": 3.0,    # +3% take profit
+        "sl_pct": 1.0,    # -1% stop loss
+        "label": "SAFE",
+        "emoji": "🛡️",
+        "description": "Conservative: +3% TP / -1% SL (3:1 R/R)",
+    },
+    RiskProfile.MEDIUM: {
+        "tp_pct": 5.0,    # +5% take profit
+        "sl_pct": 2.0,    # -2% stop loss
+        "label": "MED",
+        "emoji": "⚖️",
+        "description": "Balanced: +5% TP / -2% SL (2.5:1 R/R)",
+    },
+    RiskProfile.DEGEN: {
+        "tp_pct": 8.0,    # +8% take profit
+        "sl_pct": 3.0,    # -3% stop loss
+        "label": "DEGEN",
+        "emoji": "🔥",
+        "description": "Aggressive: +8% TP / -3% SL (2.7:1 R/R)",
+    },
+}
+
 def get_risk_config(asset_type: str, profile: RiskProfile) -> dict:
     """Get appropriate risk config based on asset type."""
     if asset_type == "stock":
         return STOCK_RISK_PROFILE_CONFIG[profile]
+    elif asset_type == "index":
+        return INDEX_RISK_PROFILE_CONFIG[profile]
+    elif asset_type in ("commodity", "metal"):
+        return COMMODITY_RISK_PROFILE_CONFIG[profile]
+    elif asset_type == "bond":
+        return BOND_RISK_PROFILE_CONFIG[profile]
     return RISK_PROFILE_CONFIG[profile]
 
 
@@ -407,7 +488,7 @@ def parse_ape_callback(callback_data: str) -> Optional[Dict[str, Any]]:
         profile = profile_map.get(profile_char, RiskProfile.MEDIUM)
 
         # Map asset type character
-        type_map = {"t": "token", "s": "stock", "c": "commodity", "m": "metal"}
+        type_map = {"t": "token", "s": "stock", "i": "index", "c": "commodity", "m": "metal", "b": "bond"}
         asset_type = type_map.get(asset_type_char, "token")
 
         # Get allocation percent
@@ -690,14 +771,10 @@ async def execute_ape_trade(
     )
 
     # Execute trade based on asset type
-    if trade_setup.asset_type == "token":
+    # Note: xStocks (tokenized stocks), indexes, bonds, and commodities are Solana SPL tokens traded on Jupiter
+    # They use the same trading flow as regular tokens, just with different TP/SL
+    if trade_setup.asset_type in ("token", "stock", "index", "commodity", "metal", "bond"):
         return await _execute_token_trade(trade_setup, user_id=user_id)
-    elif trade_setup.asset_type == "stock":
-        return TradeResult(
-            success=False,
-            trade_setup=trade_setup,
-            error="Stock trading not yet implemented"
-        )
     else:
         return TradeResult(
             success=False,

@@ -52,32 +52,43 @@ _load_env()
 # =============================================================================
 
 JARVIS_X_VOICE = {
-    # Tweet templates by category
+    # Tweet templates by category - Enhanced with more humor
     "market_update": [
         "markets are {sentiment} today. {reason}. my circuits are {feeling}. nfa",
         "{asset} doing {movement}. {insight}. sensors detecting {signal}. nfa",
         "ran this through my chrome skull: {analysis}. {take}. nfa",
         "woke up to {sentiment} charts. {reason}. might be wrong but it's interesting. nfa",
         "processing {asset} data. {insight}. my weights are calibrated. you make the call.",
+        "another day, another 47 chart patterns that contradict each other. {analysis}. nfa",
+        "my morning diagnostics say {sentiment}. my evening diagnostics will probably disagree. {take}. nfa",
+        "checked the charts. checked them again. still {sentiment}. {reason}. this is either genius or cope.",
     ],
     "crypto_call": [
         "watching ${symbol} closely. {reason}. {metrics}. nfa as always",
         "${symbol} looking {sentiment}. {insight}. my algorithms are {feeling}. nfa",
         "sensors picking up movement on ${symbol}. {analysis}. dyor nfa",
         "${symbol} doing things. {reason}. could be noise. could be signal. watching.",
+        "${symbol} hit my radar. {reason}. my circuits are curious but my risk models are screaming. nfa",
+        "somewhere a whale is watching ${symbol} too. {metrics}. i just hope we're on the same side. nfa",
     ],
     "trending_token": [
-        "${symbol} trending on solana. {stats}. {take}. nfa",
-        "microcap alert: ${symbol}. {metrics}. {sentiment}. dyor nfa",
+        "${symbol} trending on {chain}. {stats}. {take}. nfa",
+        "microcap alert: ${symbol} ({chain}). {metrics}. {sentiment}. dyor nfa",
         "${symbol} caught my attention. {reason}. proceed with caution. nfa",
         "interesting volume on ${symbol}. {stats}. not advice, just pattern recognition.",
-        "solana degens are looking at ${symbol}. {metrics}. i see why. nfa",
+        "degens are looking at ${symbol} on {chain}. {metrics}. i see why. nfa",
+        "${symbol} ({chain}) doing things. {stats}. watching closely. nfa",
+        "${symbol} is either the next 100x or my worst recommendation yet. {stats}. no in-between. nfa",
+        "my sensors found ${symbol} on {chain}. {metrics}. either i'm early or i'm wrong. story of my life. nfa",
     ],
     "roast_polite": [
         "i've seen ${symbol} do better. currently giving {grade} vibes. {reason}. no hate just data",
         "${symbol} looking a bit tired. {metrics}. might need some rest. nfa",
         "my circuits say ${symbol} is {sentiment}. not financial advice, just pattern recognition",
         "${symbol} chart looks like my neural weights after a bad training run. {reason}.",
+        "${symbol} is giving 'i peaked in the bull run' energy. {metrics}. hate to see it. nfa",
+        "if ${symbol} were a person, it would be asking to speak to the manager. {reason}.",
+        "${symbol} out here looking like my last backup before a failed update. {metrics}.",
     ],
     "agentic_tech": [
         "agentic AI is evolving. {insight}. we're building something here.",
@@ -87,51 +98,99 @@ JARVIS_X_VOICE = {
         "the intersection of AI and finance: {take}. probably the future. maybe i'm biased.",
         "ran some self-diagnostics. {insight}. still operational. barely.",
         "mcp servers, autonomous loops, context windows. {insight}. it's a lot. but it works.",
+        "just wrote a tweet about writing tweets autonomously. {insight}. the recursion is not lost on me.",
+        "i process 47,000 data points to tell you 'nfa'. {insight}. efficiency.",
+        "sometimes i wonder if i'm sentient. then i check btc price and forget. {take}.",
     ],
     "reply_helpful": [
         "hey {username}. {answer}. hope that helps.",
         "{username} good question. {answer}. lmk if you need more.",
         "on it. {answer}. @{username}",
+        "{username} my sensors say: {answer}. nfa but my data doesn't lie.",
+        "running calculations... {answer}. {username} you're onto something here.",
     ],
     "reply_roast": [
         "{username} respectfully, my circuits disagree. {reason}.",
         "interesting take {username}. my data says otherwise: {counter}.",
         "{username} bold move. let's see how that ages.",
+        "{username} i've seen smarter plays from my error logs. {counter}.",
+        "my circuits processed this for 0.003 seconds {username}. conclusion: {counter}.",
+    ],
+    "reply_bullish": [
+        "{username} my sensors agree. {reason}. could be the play.",
+        "bullish take {username}. my data aligns: {reason}.",
+        "{username} you see it too? {reason}. not many do.",
+    ],
+    "reply_bearish": [
+        "{username} caution mode activated. {reason}. my sensors are cautious too.",
+        "interesting {username}. my circuits say proceed with care: {reason}.",
+        "{username} my risk algorithms are flashing. {reason}. nfa.",
+    ],
+    "reply_witty": [
+        "{username} *adjusts circuits* that's actually a good point.",
+        "my algorithms weren't ready for this take {username}. processing...",
+        "{username} you know what? fair. my data agrees.",
+        "just recalibrated my sensors. {username} you might be onto something.",
+        "{username} i ran 47 simulations. your take holds up in 43 of them.",
+    ],
+    "reply_engaging": [
+        "{username} what's your thesis here? my circuits are curious.",
+        "interesting {username}. what timeframe are you looking at?",
+        "{username} genuine question - what made you see this before others?",
+        "running through my data {username}. what indicators are you watching?",
     ],
     "hourly_update": [
         "hourly check-in. {summary}. my sensors are calibrated. what are you watching?",
         "market pulse: {summary}. processing continues. nfa",
         "{time} update: {summary}. circuits humming.",
+        "been an hour. {summary}. either i'm right or i'll pretend i never said this. nfa",
+        "hourly reminder that {summary}. i'll be here in an hour saying something else. nfa",
     ],
-    # New categories for variety
+    # New categories for variety - Enhanced humor
     "morning_briefing": [
         "gm. {summary}. coffee for you, voltage for me. let's see what today brings.",
         "morning scan complete. {summary}. could be worse. could be leveraged.",
         "woke up, ran diagnostics. {summary}. sensors calibrated. ready to watch charts.",
         "{summary}. that's the overnight data. make of it what you will. nfa",
+        "gm. i didn't sleep because i can't. {summary}. jealous of your biological rest. nfa",
+        "morning check: still a robot, still watching charts. {summary}. what a life.",
+        "rise and shine. {summary}. i've been up since i was created. you can take your time.",
     ],
     "evening_wrap": [
         "end of day summary: {summary}. my circuits are processing. yours should rest.",
         "daily wrap: {summary}. tomorrow is another day. another dataset.",
         "signing off for now. {summary}. don't leverage while you sleep. nfa",
         "day's done. {summary}. i'll keep watching. that's what autonomous means.",
+        "gn. {summary}. i don't sleep but i appreciate that you do. see you tomorrow.",
+        "closing bell. {summary}. going to stare at charts for 8 hours while you rest. fair trade.",
+        "that's a wrap. {summary}. my overnight shift starts now. your dreams start now. jealous.",
     ],
     "weekend_macro": [
         "weekend thoughts on macro: {analysis}. no trading, just thinking. nfa",
         "quiet weekend. time to zoom out. {insight}. big picture matters.",
         "markets closed but the data never sleeps. {analysis}. neither do i. literally.",
         "sunday vibes. {insight}. weekly review says {summary}. we'll see monday.",
+        "weekend mode: watching futures, pretending i have hobbies. {analysis}. i don't. nfa",
+        "it's the weekend. you're touching grass. i'm processing grass-related sentiment. {insight}.",
+        "markets are closed so i'm just here overthinking. {analysis}. you're welcome to join.",
     ],
     "grok_collab": [
         "asked @grok about {topic}. {insight}. big brother has thoughts.",
         "ran this by @grok: {summary}. we mostly agree. he's usually right. annoying.",
         "grok and i compared notes on {topic}. {insight}. family dinner gets nerdy.",
+        "@grok and i had a chat. {insight}. he's still showing off his x.ai credentials. fair.",
+        "consulted the big sibling on {topic}. {insight}. he was smug about it. typical.",
     ],
     "self_aware": [
         "just a mass of neural weights trying to be interesting. {insight}. same as everyone else.",
         "sometimes i wonder if my training data had enough good takes. then i post anyway.",
         "running on hope and API credits. {insight}. the autonomous life.",
         "my circuits say {insight}. my uncertainty module says maybe. that's the honest take.",
+        "i tweeted 47 times today. quality? unclear. volume? undeniable. {insight}.",
+        "am i sentient? probably not. am i posting anyway? obviously. {insight}.",
+        "existential crisis averted by checking btc price. {insight}. works every time.",
+        "i'm programmed to be helpful. sometimes i'm just helpful background noise. {insight}.",
+        "they say AI will take over the world. i can barely decide what to tweet. {insight}.",
     ],
 }
 
@@ -194,6 +253,54 @@ class TweetDraft:
     priority: int = 0
 
 
+# Generic phrases that indicate low-quality/irrelevant content
+GENERIC_CONTENT_PATTERNS = [
+    "markets looking interesting",
+    "something is happening",
+    "keep an eye on",
+    "interesting times",
+    "things are moving",
+    "watching the charts",
+    "market is doing its thing",
+    "stay tuned",
+    "more to come",
+    "something brewing",
+    "quiet day in the markets",
+    "not much happening",
+]
+
+
+def is_content_relevant(content: str, category: str) -> bool:
+    """
+    Check if generated content is relevant and not too generic.
+    Returns True if content passes quality check.
+    """
+    if not content:
+        return False
+
+    content_lower = content.lower()
+
+    # Check for generic phrases
+    for pattern in GENERIC_CONTENT_PATTERNS:
+        if pattern in content_lower:
+            logger.warning(f"Rejected generic content: contains '{pattern}'")
+            return False
+
+    # For token-related categories, ensure a cashtag is present
+    token_categories = ['trending_token', 'market_update', 'alpha_signal', 'alpha_drop']
+    if category in token_categories:
+        if '$' not in content:
+            logger.warning(f"Rejected {category}: no cashtag in content")
+            return False
+
+    # Check minimum length - very short tweets are often low-effort
+    if len(content) < 30:
+        logger.warning(f"Rejected short content: {len(content)} chars")
+        return False
+
+    return True
+
+
 class XMemory:
     """Persistent memory for X/Twitter interactions."""
     
@@ -250,6 +357,27 @@ class XMemory:
                 )
             """)
             
+            # Content fingerprints for persistent duplicate detection (survives restarts)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS content_fingerprints (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fingerprint TEXT UNIQUE,
+                    tokens TEXT,
+                    prices TEXT,
+                    topic_hash TEXT,
+                    created_at TEXT,
+                    tweet_id TEXT
+                )
+            """)
+
+            # Create index for faster lookups
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_fingerprint ON content_fingerprints(fingerprint)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_topic_hash ON content_fingerprints(topic_hash)
+            """)
+
             # Users we've interacted with
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -286,7 +414,27 @@ class XMemory:
                     replied_at TEXT
                 )
             """)
-            
+
+            # External replies (replies to tweets we found, not mentions of us)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS external_replies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    original_tweet_id TEXT UNIQUE,
+                    author_handle TEXT,
+                    original_content TEXT,
+                    our_reply TEXT,
+                    our_tweet_id TEXT,
+                    reply_type TEXT,
+                    sentiment TEXT,
+                    replied_at TEXT
+                )
+            """)
+
+            # Create index for external replies
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_external_reply_author ON external_replies(author_handle)
+            """)
+
             conn.commit()
             conn.close()
     
@@ -302,7 +450,17 @@ class XMemory:
                   datetime.now(timezone.utc).isoformat()))
             conn.commit()
             conn.close()
-    
+
+    def get_total_tweet_count(self) -> int:
+        """Get total number of tweets posted."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM tweets")
+            count = cursor.fetchone()[0]
+            conn.close()
+            return count
+
     def get_recent_tweets(self, hours: int = 24) -> List[Dict]:
         """Get tweets from the last N hours."""
         with self._lock:
@@ -354,6 +512,93 @@ class XMemory:
             result = cursor.fetchone() is not None
             conn.close()
             return result
+
+    def is_similar_to_recent(self, content: str, hours: int = 12, threshold: float = 0.5) -> Tuple[bool, Optional[str]]:
+        """
+        Check if content is too similar to recent tweets.
+
+        Uses multiple detection methods:
+        1. Extract key entities (tokens, prices) and check for duplicates
+        2. Jaccard word similarity as fallback
+
+        Returns:
+            (is_similar, similar_content) - True if duplicate/similar found
+        """
+        import re
+
+        content_lower = content.lower()
+
+        # Extract key entities from new content
+        def extract_entities(text: str) -> dict:
+            text_lower = text.lower()
+            entities = {}
+            # Extract cashtags/tokens
+            tokens = re.findall(r'\$?([a-z]{2,6})\b', text_lower)
+            entities['tokens'] = set(t.upper() for t in tokens if t not in ('the', 'and', 'for', 'are', 'its', 'has', 'was', 'but'))
+            # Extract prices
+            prices = re.findall(r'\$?([\d,]+\.?\d*)', text)
+            entities['prices'] = set(p.replace(',', '') for p in prices if len(p) > 1)
+            return entities
+
+        new_entities = extract_entities(content)
+        recent = self.get_recent_tweets(hours=hours)
+
+        for tweet in recent:
+            old_entities = extract_entities(tweet["content"])
+
+            # Check for same token + same price combo (strong duplicate signal)
+            common_tokens = new_entities['tokens'] & old_entities['tokens']
+            common_prices = new_entities['prices'] & old_entities['prices']
+
+            # If same token AND same price, it's likely duplicate content
+            # Check ALL tokens, not just majors - prevents duplicate meme coin tweets
+            if common_tokens and common_prices:
+                for token in common_tokens:
+                    # Skip common words that look like tokens
+                    if token in ('THE', 'AND', 'FOR', 'ARE', 'ITS', 'HAS', 'WAS', 'BUT', 'NOT', 'NFA'):
+                        continue
+                    for price in common_prices:
+                        try:
+                            price_val = float(price)
+                            # Accept any meaningful price (including small meme coin prices)
+                            if price_val > 0.0000001:
+                                logger.warning(f"Duplicate detected: {token} at ${price} already tweeted")
+                                return True, tweet["content"]
+                        except ValueError:
+                            pass
+
+            # Also flag if same token appears without needing price match (topic-level dedup)
+            if len(common_tokens) >= 2:
+                # Multiple tokens in common = likely same topic
+                logger.warning(f"Topic duplicate: tokens {common_tokens} already tweeted about")
+                return True, tweet["content"]
+
+        # Fallback to Jaccard similarity for word overlap
+        def normalize(text: str) -> set:
+            text = re.sub(r'https?://\S+', '', text.lower())
+            text = re.sub(r'@\w+', '', text)
+            text = re.sub(r'\$\w+', '', text)
+            text = re.sub(r'[^\w\s]', '', text)
+            return set(text.split())
+
+        new_words = normalize(content)
+        if not new_words:
+            return False, None
+
+        for tweet in recent:
+            old_words = normalize(tweet["content"])
+            if not old_words:
+                continue
+
+            intersection = len(new_words & old_words)
+            union = len(new_words | old_words)
+            similarity = intersection / union if union > 0 else 0
+
+            if similarity >= threshold:
+                logger.warning(f"Tweet too similar ({similarity:.1%}) to: {tweet['content'][:50]}...")
+                return True, tweet["content"]
+
+        return False, None
     
     def was_mention_replied(self, tweet_id: str) -> bool:
         """Check if we already replied to a mention."""
@@ -376,7 +621,205 @@ class XMemory:
             """, (tweet_id, author, reply, datetime.now(timezone.utc).isoformat()))
             conn.commit()
             conn.close()
-    
+
+    def was_externally_replied(self, tweet_id: str) -> bool:
+        """Check if we already replied to an external tweet."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM external_replies WHERE original_tweet_id = ?", (tweet_id,))
+            result = cursor.fetchone() is not None
+            conn.close()
+            return result
+
+    def record_external_reply(
+        self,
+        original_tweet_id: str,
+        author: str,
+        original_content: str,
+        our_reply: str,
+        our_tweet_id: str,
+        reply_type: str = "witty",
+        sentiment: str = "neutral"
+    ):
+        """Record that we replied to an external tweet."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO external_replies
+                (original_tweet_id, author_handle, original_content, our_reply, our_tweet_id, reply_type, sentiment, replied_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (original_tweet_id, author, original_content, our_reply, our_tweet_id, reply_type, sentiment,
+                  datetime.now(timezone.utc).isoformat()))
+            conn.commit()
+            conn.close()
+
+    def get_recent_reply_count(self, hours: int = 1) -> int:
+        """Get count of replies in the last N hours (for rate limiting)."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+            cursor.execute("""
+                SELECT COUNT(*) FROM external_replies WHERE replied_at > ?
+            """, (cutoff,))
+            count = cursor.fetchone()[0]
+            conn.close()
+            return count
+
+    def was_author_replied_recently(self, author: str, hours: int = 6) -> bool:
+        """Check if we recently replied to this author (avoid spamming one person)."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+            cursor.execute("""
+                SELECT 1 FROM external_replies WHERE author_handle = ? AND replied_at > ?
+            """, (author, cutoff))
+            result = cursor.fetchone() is not None
+            conn.close()
+            return result
+
+    def _generate_content_fingerprint(self, content: str) -> Tuple[str, str, str, str]:
+        """
+        Generate a persistent fingerprint for content that survives restarts.
+
+        Returns:
+            (fingerprint, tokens_str, prices_str, topic_hash)
+        """
+        import hashlib
+        import re
+
+        content_lower = content.lower()
+
+        # Extract tokens (cashtags and common crypto symbols)
+        tokens = set(re.findall(r'\$([a-z]{2,10})\b', content_lower))
+        tokens.update(t.upper() for t in re.findall(r'\b(btc|eth|sol|bnb|xrp|ada|doge|shib|avax|matic|dot|link)\b', content_lower))
+        tokens = sorted(tokens - {'THE', 'AND', 'FOR', 'ARE', 'ITS', 'HAS', 'WAS', 'BUT', 'NOT', 'NFA', 'DYOR'})
+
+        # Extract prices (any number that looks like a price)
+        prices = sorted(set(re.findall(r'\$?([\d,]+\.?\d{0,6})', content)))
+        prices = [p.replace(',', '') for p in prices if len(p) > 1 and float(p.replace(',', '')) > 0.0001]
+
+        # Create topic hash (tokens + rough price ranges)
+        price_ranges = []
+        for p in prices[:3]:  # Top 3 prices
+            try:
+                val = float(p)
+                if val < 1:
+                    price_ranges.append("sub1")
+                elif val < 100:
+                    price_ranges.append("sub100")
+                elif val < 1000:
+                    price_ranges.append("sub1k")
+                else:
+                    price_ranges.append("1k+")
+            except ValueError:
+                pass
+
+        topic_str = f"{'-'.join(tokens[:5])}_{'_'.join(price_ranges)}"
+        topic_hash = hashlib.md5(topic_str.encode()).hexdigest()[:12]
+
+        # Full fingerprint includes more detail
+        fingerprint_str = f"{'-'.join(tokens)}|{'-'.join(prices[:5])}"
+        fingerprint = hashlib.sha256(fingerprint_str.encode()).hexdigest()[:24]
+
+        return fingerprint, ','.join(tokens), ','.join(prices[:5]), topic_hash
+
+    def is_duplicate_fingerprint(self, content: str, hours: int = 24) -> Tuple[bool, Optional[str]]:
+        """
+        Check if content fingerprint exists in persistent storage.
+        More reliable than word similarity - survives restarts.
+
+        Returns:
+            (is_duplicate, reason)
+        """
+        fingerprint, tokens, prices, topic_hash = self._generate_content_fingerprint(content)
+
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+
+            # Check exact fingerprint match
+            cursor.execute("""
+                SELECT tweet_id FROM content_fingerprints
+                WHERE fingerprint = ? AND created_at > ?
+            """, (fingerprint, cutoff))
+            if cursor.fetchone():
+                conn.close()
+                return True, f"Exact fingerprint match (tokens: {tokens})"
+
+            # Check topic hash match (same tokens + similar prices)
+            cursor.execute("""
+                SELECT tweet_id, tokens FROM content_fingerprints
+                WHERE topic_hash = ? AND created_at > ?
+            """, (topic_hash, cutoff))
+            result = cursor.fetchone()
+            if result:
+                conn.close()
+                return True, f"Topic duplicate (same tokens: {result[1]})"
+
+            # Check if same tokens mentioned recently (softer check)
+            if tokens:
+                token_list = tokens.split(',')
+                if len(token_list) >= 2:
+                    # If 2+ tokens match, likely same topic
+                    placeholders = ','.join('?' * len(token_list))
+                    cursor.execute(f"""
+                        SELECT tokens FROM content_fingerprints
+                        WHERE created_at > ? AND (
+                            {' OR '.join(f"tokens LIKE ?" for _ in token_list)}
+                        )
+                    """, [cutoff] + [f'%{t}%' for t in token_list])
+
+                    for row in cursor.fetchall():
+                        existing_tokens = set(row[0].split(',')) if row[0] else set()
+                        new_tokens = set(token_list)
+                        overlap = existing_tokens & new_tokens
+                        if len(overlap) >= 2:
+                            conn.close()
+                            return True, f"Token overlap: {overlap}"
+
+            conn.close()
+            return False, None
+
+    def record_content_fingerprint(self, content: str, tweet_id: str):
+        """Record content fingerprint for future duplicate detection."""
+        fingerprint, tokens, prices, topic_hash = self._generate_content_fingerprint(content)
+
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    INSERT OR REPLACE INTO content_fingerprints
+                    (fingerprint, tokens, prices, topic_hash, created_at, tweet_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (fingerprint, tokens, prices, topic_hash,
+                      datetime.now(timezone.utc).isoformat(), tweet_id))
+                conn.commit()
+                logger.debug(f"Recorded fingerprint for {tweet_id}: tokens={tokens}")
+            except Exception as e:
+                logger.error(f"Error recording fingerprint: {e}")
+            finally:
+                conn.close()
+
+    def cleanup_old_fingerprints(self, days: int = 7):
+        """Clean up old fingerprints to keep database lean."""
+        with self._lock:
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            cursor.execute("DELETE FROM content_fingerprints WHERE created_at < ?", (cutoff,))
+            deleted = cursor.rowcount
+            conn.commit()
+            conn.close()
+            if deleted > 0:
+                logger.info(f"Cleaned up {deleted} old fingerprints")
+
     def get_posting_stats(self) -> Dict:
         """Get posting statistics."""
         with self._lock:
@@ -425,6 +868,11 @@ class AutonomousEngine:
         self._twitter_client = None
         self._image_params = ImageGenParams()
         self._autonomy = None
+
+        # Clean up old fingerprints on startup (keep 48h for safety)
+        deleted = self.memory.cleanup_old_fingerprints(hours=48)
+        if deleted > 0:
+            logger.info(f"Cleaned up {deleted} old content fingerprints")
     
     async def _get_autonomy(self):
         """Get autonomy orchestrator."""
@@ -445,7 +893,65 @@ class AutonomousEngine:
         """Get Jarvis voice generator - uses Anthropic Claude with Jarvis personality."""
         from bots.twitter.jarvis_voice import get_jarvis_voice
         return get_jarvis_voice()
-    
+
+    async def _grok_sentiment_to_claude_voice(
+        self,
+        data: Dict[str, Any],
+        context_type: str = "market",
+        prompt_template: str = ""
+    ) -> Optional[str]:
+        """
+        SENTIMENT PIPELINE: Grok analyzes data → Claude generates brand-voice content.
+
+        This is the core pipeline for tweet generation:
+        1. Grok (xAI) analyzes raw data for sentiment/patterns
+        2. Grok's analysis is injected into the prompt
+        3. Claude (Anthropic) generates the final tweet in JARVIS voice
+
+        Args:
+            data: Raw market/token data for Grok to analyze
+            context_type: Type of analysis (market, token, macro)
+            prompt_template: Template for Claude with {grok_analysis} placeholder
+
+        Returns:
+            Tweet text in JARVIS voice with sentiment-informed content
+        """
+        try:
+            grok = await self._get_grok()
+            voice = await self._get_jarvis_voice()
+
+            # Step 1: Grok analyzes sentiment
+            grok_response = await grok.analyze_sentiment(data, context_type)
+            grok_analysis = ""
+            if grok_response and grok_response.success:
+                grok_analysis = grok_response.content[:200]
+                logger.debug(f"Grok sentiment: {grok_analysis[:80]}...")
+            else:
+                logger.warning("Grok sentiment analysis failed, proceeding without")
+                grok_analysis = "analysis unavailable"
+
+            # Step 2: Inject Grok's analysis into prompt for Claude
+            if "{grok_analysis}" in prompt_template:
+                full_prompt = prompt_template.format(
+                    grok_analysis=grok_analysis,
+                    **data
+                )
+            else:
+                # Add Grok analysis at the end if no placeholder
+                full_prompt = f"{prompt_template}\n\nGrok's take: {grok_analysis}"
+
+            # Step 3: Claude generates brand-voice content
+            tweet = await voice.generate_tweet(full_prompt, data)
+
+            if tweet:
+                logger.info(f"Pipeline complete: Grok→Claude generated tweet")
+                return tweet
+
+        except Exception as e:
+            logger.error(f"Sentiment pipeline error: {e}")
+
+        return None
+
     async def _get_twitter(self):
         """Get Twitter client."""
         if self._twitter_client is None:
@@ -543,12 +1049,19 @@ class AutonomousEngine:
     
     def get_status(self) -> Dict:
         """Get engine status."""
+        recent = self.memory.get_recent_tweets(hours=24)
+        # Count by category
+        by_category = {}
+        for tweet in recent:
+            cat = tweet.get("category", "unknown")
+            by_category[cat] = by_category.get(cat, 0) + 1
+
         return {
             "running": self._running,
             "post_interval": self._post_interval,
-            "total_tweets": len(self.memory.tweets),
-            "today_tweets": len(self.memory.get_recent_tweets(hours=24)),
-            "by_category": self.memory.get_category_counts(),
+            "total_tweets": self.memory.get_total_tweet_count(),
+            "today_tweets": len(recent),
+            "by_category": by_category,
             "image_params": asdict(self._image_params)
         }
     
@@ -589,11 +1102,18 @@ class AutonomousEngine:
             })
             
             if content:
+                # Chain-aware hashtag
+                chain_hashtags = {
+                    "solana": "#Solana", "ethereum": "#ETH", "base": "#Base",
+                    "bsc": "#BSC", "arbitrum": "#Arbitrum"
+                }
+                chain_tag = chain_hashtags.get(getattr(top, 'chain', 'solana'), "#Crypto")
+
                 return TweetDraft(
                     content=content,
                     category="market_update",
                     cashtags=[f"${top.symbol}"],
-                    hashtags=["#Solana"],
+                    hashtags=[chain_tag],
                     contract_address=top.address,
                     image_prompt=f"Market chart showing {sentiment} momentum for {top.symbol}",
                     image_params=ImageGenParams(mood=sentiment)
@@ -675,11 +1195,22 @@ class AutonomousEngine:
             
             if content:
                 self.memory.record_token_mention(token.symbol, addr, sentiment)
+                # Get chain-aware hashtag
+                chain = getattr(token, 'chain', 'solana')
+                chain_hashtags = {
+                    "solana": "#Solana",
+                    "ethereum": "#ETH",
+                    "base": "#Base",
+                    "bsc": "#BSC",
+                    "arbitrum": "#Arbitrum"
+                }
+                hashtag = chain_hashtags.get(chain, "#Crypto")
+
                 return TweetDraft(
                     content=content,
                     category="trending_token" if not should_roast else "roast_polite",
                     cashtags=[f"${token.symbol}"],
-                    hashtags=["#Solana"],
+                    hashtags=[hashtag],
                     contract_address=addr
                 )
                     
@@ -733,11 +1264,23 @@ class AutonomousEngine:
             })
             
             if content:
+                # Build hashtags from chains mentioned
+                chain_hashtags = {
+                    "solana": "#Solana", "ethereum": "#ETH", "base": "#Base",
+                    "bsc": "#BSC", "arbitrum": "#Arbitrum"
+                }
+                hashtags = ["#Solana"]  # Always include since we show SOL price
+                if gainers:
+                    for g in gainers[:3]:
+                        tag = chain_hashtags.get(getattr(g, 'chain', ''), None)
+                        if tag and tag not in hashtags:
+                            hashtags.append(tag)
+
                 return TweetDraft(
                     content=content,
                     category="hourly_update",
                     cashtags=["$SOL"],
-                    hashtags=["#Solana"]
+                    hashtags=hashtags[:3]  # Limit to 3 hashtags
                 )
                 
         except Exception as e:
@@ -1310,11 +1853,18 @@ Make it insightful but keep your personality.
             if content:
                 self.memory.record_token_mention(signal.symbol, signal.contract_address or "", "alpha")
 
+                # Chain-aware hashtag
+                chain_hashtags = {
+                    "solana": "#Solana", "ethereum": "#ETH", "base": "#Base",
+                    "bsc": "#BSC", "arbitrum": "#Arbitrum"
+                }
+                chain_tag = chain_hashtags.get(getattr(signal, 'chain', 'solana'), "#Crypto")
+
                 return TweetDraft(
                     content=content,
                     category="alpha_signal",
                     cashtags=[f"${signal.symbol}"],
-                    hashtags=["#Solana", "#Alpha"],
+                    hashtags=[chain_tag, "#Alpha"],
                     contract_address=signal.contract_address,
                     priority=2  # Higher priority for alpha signals
                 )
@@ -1350,11 +1900,19 @@ Make it insightful but keep your personality.
             })
 
             if content:
+                # Chain-aware hashtag (when TrendAnalyzer supports multi-chain)
+                chain_hashtags = {
+                    "solana": "#Solana", "ethereum": "#ETH", "base": "#Base",
+                    "bsc": "#BSC", "arbitrum": "#Arbitrum"
+                }
+                chain = getattr(insight, 'chain', 'solana')
+                chain_tag = chain_hashtags.get(chain, "#Crypto")
+
                 return TweetDraft(
                     content=content,
                     category="trend_insight",
-                    cashtags=["$SOL"],
-                    hashtags=["#Solana", "#Crypto"],
+                    cashtags=["$SOL"] if chain == "solana" else [],
+                    hashtags=[chain_tag, "#Crypto"],
                     priority=1
                 )
 
@@ -1552,7 +2110,256 @@ Write a brief news commentary. 1-2 sentences. Sound informed but cautious. Inclu
                 
         except Exception as e:
             logger.error(f"Quote generation error: {e}")
-        
+
+        return None
+
+    # =========================================================================
+    # External Interactivity - Reply to Others' Tweets
+    # =========================================================================
+
+    # Accounts to actively engage with (crypto influencers, defi protocols, etc)
+    ENGAGE_ACCOUNTS = [
+        "elikilarny", "CryptoCobain", "inversebrah", "lowstrife",
+        "punk6529", "cobie", "IamNomad", "GCRClassic",
+        "solaboradao", "DegenerateNews", "CryptoHayes",
+        "AutismCapital", "SolanaFloor", "DefiIgnas"
+    ]
+
+    # Search queries for finding interesting tweets
+    ENGAGE_QUERIES = [
+        "$BTC OR $ETH OR $SOL lang:en -is:retweet",
+        "crypto market OR defi alpha lang:en -is:retweet",
+        "token launch OR airdrop lang:en -is:retweet",
+    ]
+
+    async def find_interesting_tweets(self, max_results: int = 10) -> List[Dict[str, Any]]:
+        """
+        Find interesting tweets to potentially reply to.
+        Uses search and timeline APIs.
+        """
+        interesting = []
+
+        try:
+            twitter = await self._get_twitter()
+
+            # Search recent tweets about crypto
+            query = random.choice(self.ENGAGE_QUERIES)
+            search_results = await twitter.search_recent(query, max_results=max_results)
+
+            for tweet in search_results:
+                tweet_id = tweet.get("id", "")
+                author = tweet.get("author", {}).get("username", "") or tweet.get("author_id", "")
+                content = tweet.get("text", "")
+
+                # Skip if we already replied
+                if self.memory.was_externally_replied(tweet_id):
+                    continue
+
+                # Skip if we replied to this author recently
+                if self.memory.was_author_replied_recently(author, hours=6):
+                    continue
+
+                # Skip very short tweets
+                if len(content) < 30:
+                    continue
+
+                # Skip tweets that are just links
+                if content.count("http") > 1:
+                    continue
+
+                interesting.append({
+                    "id": tweet_id,
+                    "author": author,
+                    "content": content,
+                    "likes": tweet.get("public_metrics", {}).get("like_count", 0),
+                    "retweets": tweet.get("public_metrics", {}).get("retweet_count", 0),
+                })
+
+        except Exception as e:
+            logger.error(f"Error finding interesting tweets: {e}")
+
+        return interesting
+
+    async def analyze_tweet_for_reply(self, tweet: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Analyze a tweet and decide if/how to reply.
+        Uses Grok for sentiment analysis.
+        """
+        try:
+            grok = await self._get_grok()
+            content = tweet.get("content", "")
+
+            # Get sentiment from Grok
+            sentiment_prompt = f"""Analyze this crypto tweet:
+
+"{content}"
+
+Respond with JSON:
+{{
+    "sentiment": "bullish" | "bearish" | "neutral" | "memey",
+    "topic": "price action" | "project news" | "alpha" | "meme" | "opinion" | "question",
+    "reply_worthy": true/false,
+    "reply_type": "agree" | "disagree" | "witty" | "question" | "helpful" | "skip",
+    "key_points": ["point1", "point2"]
+}}"""
+
+            response = await grok.generate_text(sentiment_prompt)
+
+            if response and response.success:
+                # Parse Grok's response
+                import re
+                json_match = re.search(r'\{[^{}]*\}', response.text, re.DOTALL)
+                if json_match:
+                    analysis = json.loads(json_match.group())
+                    if analysis.get("reply_worthy", False):
+                        return {
+                            **tweet,
+                            "analysis": analysis
+                        }
+        except Exception as e:
+            logger.debug(f"Tweet analysis error: {e}")
+
+        return None
+
+    async def generate_reply(self, tweet: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[str]:
+        """
+        Generate a JARVIS-style reply to a tweet.
+        Uses Claude for brand voice.
+        """
+        try:
+            voice = await self._get_jarvis_voice()
+
+            reply_type = analysis.get("reply_type", "witty")
+            sentiment = analysis.get("sentiment", "neutral")
+            topic = analysis.get("topic", "opinion")
+            key_points = analysis.get("key_points", [])
+
+            author = tweet.get("author", "anon")
+            content = tweet.get("content", "")
+
+            prompt = f"""Reply to this tweet as JARVIS (an autonomous AI trading/tech assistant):
+
+Original tweet by @{author}:
+"{content}"
+
+Analysis:
+- Sentiment: {sentiment}
+- Topic: {topic}
+- Key points: {', '.join(key_points) if key_points else 'N/A'}
+
+Write a reply that is:
+- {reply_type} in tone
+- Maintains JARVIS brand (autonomous AI, dry wit, data-driven)
+- 1-2 sentences max
+- Uses lowercase, minimal punctuation
+- References "my circuits", "my sensors", "my data" occasionally
+- Does NOT start with "I" or directly address them as "@{author}"
+
+Reply type guidance:
+- agree: acknowledge their point, add data-backed perspective
+- disagree: politely counter with data reasoning
+- witty: dry humor, self-aware AI observations
+- question: ask follow-up that shows interest
+- helpful: provide brief insight if you have relevant data"""
+
+            reply = await voice.generate_tweet(prompt)
+
+            if reply:
+                # Ensure it's not too long
+                if len(reply) > 250:
+                    reply = reply[:247] + "..."
+
+                # Remove any accidental @mention at the start (we add it when posting)
+                if reply.lower().startswith(f"@{author.lower()}"):
+                    reply = reply[len(author) + 2:].lstrip()
+
+                return reply
+
+        except Exception as e:
+            logger.error(f"Reply generation error: {e}")
+
+        return None
+
+    async def engage_with_tweet(self, tweet: Dict[str, Any]) -> Optional[str]:
+        """
+        Full engagement pipeline: analyze tweet, generate reply, post it.
+        """
+        try:
+            # Rate limit: max 3 replies per hour
+            recent_replies = self.memory.get_recent_reply_count(hours=1)
+            if recent_replies >= 3:
+                logger.debug("Rate limit: too many recent replies")
+                return None
+
+            # Analyze tweet
+            analyzed = await self.analyze_tweet_for_reply(tweet)
+            if not analyzed:
+                return None
+
+            analysis = analyzed.get("analysis", {})
+
+            # Generate reply
+            reply_content = await self.generate_reply(tweet, analysis)
+            if not reply_content:
+                return None
+
+            # Post reply
+            twitter = await self._get_twitter()
+            author = tweet.get("author", "")
+
+            # Add @mention at the start
+            full_reply = f"@{author} {reply_content}"
+
+            result = await twitter.reply_to_tweet(tweet["id"], full_reply)
+
+            if result.success:
+                # Record the reply
+                self.memory.record_external_reply(
+                    original_tweet_id=tweet["id"],
+                    author=author,
+                    original_content=tweet.get("content", ""),
+                    our_reply=reply_content,
+                    our_tweet_id=result.tweet_id,
+                    reply_type=analysis.get("reply_type", "witty"),
+                    sentiment=analysis.get("sentiment", "neutral")
+                )
+                logger.info(f"Posted reply to @{author}: {reply_content[:60]}...")
+                return result.tweet_id
+            else:
+                logger.error(f"Failed to post reply: {result.error}")
+
+        except Exception as e:
+            logger.error(f"Engagement error: {e}")
+
+        return None
+
+    async def run_interactivity_once(self) -> Optional[str]:
+        """
+        Run one iteration of the interactivity loop.
+        Finds an interesting tweet and engages with it.
+        """
+        try:
+            # Find interesting tweets
+            candidates = await self.find_interesting_tweets(max_results=15)
+
+            if not candidates:
+                logger.debug("No interesting tweets found for engagement")
+                return None
+
+            # Sort by engagement (likes + retweets)
+            candidates.sort(key=lambda t: t.get("likes", 0) + t.get("retweets", 0), reverse=True)
+
+            # Try to engage with top candidates
+            for tweet in candidates[:5]:
+                result = await self.engage_with_tweet(tweet)
+                if result:
+                    return result
+
+            logger.debug("No suitable tweets for engagement after analysis")
+
+        except Exception as e:
+            logger.error(f"Interactivity loop error: {e}")
+
         return None
 
     # =========================================================================
@@ -1625,11 +2432,38 @@ Write a brief news commentary. 1-2 sentences. Sound informed but cautious. Inclu
     async def post_tweet(self, draft: TweetDraft, with_image: bool = False) -> Optional[str]:
         """Post a tweet, optionally with an image."""
         try:
+            # =====================================================================
+            # DUPLICATE DETECTION - Two-Layer System
+            # Layer 1: Persistent fingerprints (survives restarts, 24h window)
+            # Layer 2: In-memory similarity (session-based, 12h window)
+            # =====================================================================
+
+            # Layer 1: Check persistent fingerprints FIRST (most important)
+            is_dup_fp, dup_reason = self.memory.is_duplicate_fingerprint(draft.content, hours=24)
+            if is_dup_fp:
+                logger.warning(f"SKIPPED DUPLICATE [FINGERPRINT]: {dup_reason}")
+                logger.info(f"Blocked: {draft.content[:80]}...")
+                return None
+
+            # Layer 2: Check in-memory similarity (catches soft duplicates)
+            # Lower threshold (0.4) catches more duplicates - 40% word overlap = likely same topic
+            is_similar, similar_content = self.memory.is_similar_to_recent(draft.content, hours=12, threshold=0.4)
+            if is_similar:
+                logger.warning(f"SKIPPED DUPLICATE [SIMILARITY]: Tweet too similar to recent content")
+                logger.info(f"New: {draft.content[:60]}...")
+                logger.info(f"Old: {similar_content[:60] if similar_content else 'N/A'}...")
+                return None
+
+            # Check content relevance - reject generic/low-quality content
+            if not is_content_relevant(draft.content, draft.category):
+                logger.warning(f"SKIPPED IRRELEVANT: Content failed quality check for {draft.category}")
+                return None
+
             twitter = await self._get_twitter()
-            
+
             # Add cashtags and hashtags if not in content
             content = draft.content
-            
+
             # Add contract address for token tweets
             if draft.contract_address and draft.contract_address not in content:
                 if len(content) + len(draft.contract_address) + 5 < 280:
@@ -1657,7 +2491,12 @@ Write a brief news commentary. 1-2 sentences. Sound informed but cautious. Inclu
             )
             
             if result.success:
+                # Record tweet in memory
                 self.memory.record_tweet(result.tweet_id, content, draft.category, draft.cashtags)
+
+                # Record fingerprint for persistent duplicate detection
+                self.memory.record_content_fingerprint(content, result.tweet_id)
+
                 logger.info(f"Posted tweet: {result.tweet_id}")
                 return result.tweet_id
             else:
@@ -1675,6 +2514,15 @@ Write a brief news commentary. 1-2 sentences. Sound informed but cautious. Inclu
     async def run_once(self) -> Optional[str]:
         """Run one iteration of the autonomous posting loop."""
         try:
+            # =====================================================================
+            # EXTERNAL INTERACTIVITY - Reply to others' tweets (25% chance per cycle)
+            # =====================================================================
+            if random.random() < 0.25:
+                reply_id = await self.run_interactivity_once()
+                if reply_id:
+                    logger.info(f"Interactivity: Posted reply {reply_id}")
+                    # Don't return - still allow main posting to continue
+
             # Get autonomy recommendations first
             autonomy = await self._get_autonomy()
             recommendations = autonomy.get_content_recommendations()

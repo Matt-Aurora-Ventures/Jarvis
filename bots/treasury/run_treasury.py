@@ -155,7 +155,7 @@ class TreasuryBot:
             jupiter=self.jupiter,
             admin_user_ids=admin_ids,
             risk_level=RiskLevel.MODERATE,
-            max_positions=5,
+            max_positions=30,
             dry_run=not live_mode  # Live mode if TREASURY_LIVE_MODE=true
         )
 

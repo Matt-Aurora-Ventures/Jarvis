@@ -155,11 +155,18 @@ class TerminalHandler:
             # Execute with timeout
             logger.info(f"Executing command for admin {user_id}: {command[:50]}...")
 
+            # Set up environment with proper HOME for Windows compatibility
+            env = os.environ.copy()
+            env['HOME'] = os.path.expanduser('~')
+            if 'USERPROFILE' not in env:
+                env['USERPROFILE'] = os.path.expanduser('~')
+
             process = await asyncio.create_subprocess_shell(
                 command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self.working_dir,
+                env=env,
             )
 
             try:

@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-4.6.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.6.1-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1200%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
@@ -54,7 +54,45 @@
 
 ---
 
-## 🚀 Recent Updates (v4.6.0 - January 2026)
+## 🚀 Recent Updates (v4.6.1 - January 2026)
+
+### 🛡️ Treasury Risk Management & Active Stop Loss Monitoring
+
+Critical risk management improvements for the trading system:
+
+#### Active Stop Loss Monitoring
+| Feature | Description |
+|---------|-------------|
+| `monitor_stop_losses()` | Background task checks positions every 60 seconds |
+| Emergency Close | Auto-closes positions down >90% (even without SL breach) |
+| TP Detection | Auto-closes when take profit price is hit |
+| Admin Notifications | Telegram alerts sent when positions are auto-closed |
+
+#### Position Health Dashboard
+| Status | Condition | Action |
+|--------|-----------|--------|
+| `[SL BREACHED]` | Price <= stop loss | Immediate close |
+| `[CRITICAL]` | Position down >50% | Alert displayed |
+| `[WARNING]` | Position down >20% | Caution flag |
+| `[TP HIT]` | Price >= take profit | Auto-close |
+
+#### Token Risk Classification
+| Risk Level | Market Cap | Liquidity | Position Modifier |
+|------------|------------|-----------|-------------------|
+| ESTABLISHED | >$500M | >$1M | 1.0x (full) |
+| MID | >$50M | >$100K | 0.85x |
+| MICRO | >$1M | >$20K | 0.7x |
+| SHITCOIN | <$1M | <$20K | 0.5x (half) |
+
+#### New Safeguards
+- **Liquidity Check**: Blocks trades on tokens with <$1,000 daily volume
+- **Tighter Stops for Shitcoins**: -7% SL vs -15% for established tokens
+- **Cross-Module Dedup**: Shared `XMemory` prevents duplicate tweets across all posting modules
+- **Content Relevance Filter**: Rejects generic/irrelevant AI-generated content
+
+---
+
+## 🚀 Previous: v4.6.0 - January 2026
 
 ### 🧠 MASSIVE RELEASE: Autonomous Intelligence & Full-Stack Expansion
 
@@ -962,6 +1000,33 @@ RISK_CONTROLS = {
     "recovery_cooldown_hours": 24,  # Cooldown after trigger
 }
 ```
+
+### Active Position Monitoring (v4.6.1)
+
+Background task runs every 60 seconds to protect against missed limit orders:
+
+```python
+# bots/treasury/trading.py
+async def monitor_stop_losses() -> List[Dict]:
+    """
+    Active stop loss monitoring - catches positions that miss their limit orders.
+    - Checks all open positions against current prices
+    - Force-closes any position that breached SL
+    - Emergency close for positions down >90%
+    - Auto-takes profit when TP is hit
+    """
+```
+
+**Position Health Statuses:**
+| Status | Trigger | Action |
+|--------|---------|--------|
+| SL_BREACHED | Current price <= Stop loss | Auto-close |
+| EMERGENCY_90PCT | Down >90% | Force close |
+| TP_HIT | Current price >= Take profit | Take profit |
+
+**Liquidity Guard:**
+- Trades blocked if daily volume < $1,000
+- Prevents entering positions with no exit liquidity
 
 ### Weekly Profit Distribution
 

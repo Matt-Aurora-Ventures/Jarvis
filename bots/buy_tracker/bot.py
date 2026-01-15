@@ -235,42 +235,55 @@ class JarvisBuyBot:
         message = self._format_buy_message(buy)
         keyboard = get_faq_keyboard(show_faq=False)
 
-        try:
-            # Check if we have a video to send
-            video_path = Path(self.config.video_path) if self.config.video_path else None
+        # Retry logic with exponential backoff for network issues
+        max_retries = 3
+        retry_delay = 2.0
 
-            if video_path and video_path.exists():
-                # Send video with caption and FAQ button
-                with open(video_path, 'rb') as video_file:
-                    sent_msg = await self.bot.send_video(
+        for attempt in range(max_retries):
+            try:
+                # Check if we have a video to send
+                video_path = Path(self.config.video_path) if self.config.video_path else None
+
+                if video_path and video_path.exists():
+                    # Send video with caption and FAQ button
+                    with open(video_path, 'rb') as video_file:
+                        sent_msg = await self.bot.send_video(
+                            chat_id=self.config.chat_id,
+                            video=video_file,
+                            caption=message,
+                            parse_mode=ParseMode.HTML,
+                            supports_streaming=True,
+                            reply_markup=keyboard,
+                            read_timeout=30,
+                            write_timeout=30,
+                        )
+                else:
+                    # Send text message with FAQ button
+                    sent_msg = await self.bot.send_message(
                         chat_id=self.config.chat_id,
-                        video=video_file,
-                        caption=message,
+                        text=message,
                         parse_mode=ParseMode.HTML,
-                        supports_streaming=True,
+                        disable_web_page_preview=True,
                         reply_markup=keyboard,
                     )
-            else:
-                # Send text message with FAQ button
-                sent_msg = await self.bot.send_message(
-                    chat_id=self.config.chat_id,
-                    text=message,
-                    parse_mode=ParseMode.HTML,
-                    disable_web_page_preview=True,
-                    reply_markup=keyboard,
-                )
 
-            # Cache original message for expand/collapse
-            self._message_cache[sent_msg.message_id] = message
-            # Limit cache size to last 100 messages
-            if len(self._message_cache) > 100:
-                oldest = list(self._message_cache.keys())[0]
-                del self._message_cache[oldest]
+                # Cache original message for expand/collapse
+                self._message_cache[sent_msg.message_id] = message
+                # Limit cache size to last 100 messages
+                if len(self._message_cache) > 100:
+                    oldest = list(self._message_cache.keys())[0]
+                    del self._message_cache[oldest]
 
-            logger.info(f"Buy notification sent: ${buy.usd_amount:.2f}")
+                logger.info(f"Buy notification sent: ${buy.usd_amount:.2f}")
+                return  # Success, exit retry loop
 
-        except Exception as e:
-            logger.error(f"Failed to send buy notification: {e}")
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Buy notification attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.error(f"Failed to send buy notification after {max_retries} attempts: {e}")
 
     async def _handle_faq_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle FAQ expand/collapse button clicks."""

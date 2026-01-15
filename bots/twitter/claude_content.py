@@ -268,7 +268,7 @@ class ClaudeContentGenerator:
         market_mood: str = "neutral"
     ) -> ClaudeResponse:
         """Generate a sentiment report tweet from raw data"""
-        prompt = f"""Generate a Twitter thread (3-4 tweets) from this Solana microcap sentiment data.
+        prompt = f"""Generate a Twitter thread (3-4 tweets) from this microcap sentiment data.
 
 SENTIMENT DATA:
 {sentiment_data}
@@ -318,7 +318,7 @@ Make it punchy. Reference your sensors or circuits once. Include NFA naturally."
         """Generate token spotlight tweet"""
         short_ca = f"{contract[:8]}...{contract[-4:]}" if len(contract) > 12 else contract
 
-        prompt = f"""Generate a tweet spotlighting this Solana token.
+        prompt = f"""Generate a tweet spotlighting this token.
 
 Token: ${symbol}
 24h Change: {price_change:+.1f}%

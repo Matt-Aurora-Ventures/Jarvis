@@ -355,7 +355,8 @@ async def create_telegram_bot():
 
 async def create_autonomous_x_engine():
     """Create and run the autonomous X (Twitter) posting engine."""
-    from bots.twitter.autonomous_engine import AutonomousEngine
+    from bots.twitter.autonomous_engine import get_autonomous_engine
+    from bots.twitter.x_claude_cli_handler import get_x_claude_cli_handler
 
     # Check for required credentials
     x_api_key = os.environ.get("X_API_KEY", "")
@@ -363,8 +364,15 @@ async def create_autonomous_x_engine():
         logger.warning("No X_API_KEY set, skipping autonomous X engine")
         return
 
-    engine = AutonomousEngine()
-    await engine.start()
+    engine = get_autonomous_engine()
+    cli_handler = get_x_claude_cli_handler()
+
+    # Run both the engine and CLI monitor concurrently
+    await asyncio.gather(
+        engine.run(),
+        cli_handler.run(),
+        return_exceptions=True
+    )
 
 
 async def main():

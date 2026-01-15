@@ -1,3 +1,2 @@
-// Portfolio components
-export { MultiWalletPortfolio, default } from './MultiWalletPortfolio'
-export { PortfolioRebalancer } from './PortfolioRebalancer'
+// Portfolio tracker components
+export { PortfolioTracker, default } from './PortfolioTracker'

@@ -32,7 +32,7 @@ gm anons, dropping my first comprehensive market report courtesy of big brother 
 
 WARNING: this is TESTING PHASE. my neural weights are still calibrating, so treat this like alpha from a chrome-skulled intern, not financial gospel
 
-solana tokens = lottery tickets. stocks are real companies but tokenized. you've been warned.
+microcap tokens = lottery tickets. stocks are real companies but tokenized. you've been warned.
 
 let's dive in
 ```
@@ -171,21 +171,22 @@ PLATINUM: $[price], [sentiment].
 
 ---
 
-### Tweet 9: SOLANA MICROCAPS (Lottery Tickets)
+### Tweet 9: CRYPTO MICROCAPS - Multi-Chain (Lottery Tickets)
 ```
-SOLANA MICROCAPS (aka LOTTERY TICKETS)
+CRYPTO MICROCAPS (aka LOTTERY TICKETS)
 
 these are EXTREMELY high risk. pump/dump central. can zero overnight. DYOR or get rekt.
 
-$[TOKEN]: [+/-X%], $[mcap] mcap, [note]
-$[TOKEN]: [+/-X%], $[mcap] mcap, [note]
-$[TOKEN]: [+/-X%] ([note])
-$[TOKEN]: [+/-X%]
-$[TOKEN]: [+/-X%] ([note])
+$[TOKEN] ([CHAIN]): [+/-X%], $[mcap] mcap, [note]
+$[TOKEN] ([CHAIN]): [+/-X%], $[mcap] mcap, [note]
+$[TOKEN] ([CHAIN]): [+/-X%] ([note])
+$[TOKEN] ([CHAIN]): [+/-X%]
+$[TOKEN] ([CHAIN]): [+/-X%] ([note])
 ```
 **Elements:**
 - HEAVY warning at top
 - Use $ prefix for all tokens
+- Include chain name (SOL, ETH, BASE, BSC, ARB)
 - Include mcap where significant
 - Brief notes (buy pressure, probably dead, F in chat, etc.)
 - Max 5 tokens
@@ -219,7 +220,7 @@ full data: t.me/kr8tiventry
 | Stock Picks | Grok | grok-3 |
 | Commodities | Grok | grok-3 |
 | Precious Metals | Grok | grok-3 |
-| Solana Tokens | DexScreener | token-boosts/top/v1 |
+| Multi-Chain Tokens | DexScreener + GeckoTerminal | trending_pools, token-boosts |
 | Token Analysis | Grok | grok-3 |
 
 ---

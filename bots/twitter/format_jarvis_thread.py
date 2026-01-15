@@ -43,8 +43,8 @@ COMMODITIES:
 PRECIOUS METALS:
 {data['metals']}
 
-SOLANA MICROCAPS:
-{data['solana']}
+CRYPTO MICROCAPS (MULTI-CHAIN):
+{data.get('microcaps', data.get('solana', ''))}
 """
 
 prompt = f"""You ARE Jarvis. Here is your voice bible - internalize this completely:
@@ -57,7 +57,7 @@ Now transform this Grok sentiment data into a THREAD for X (Twitter). With X Pre
 
 CRITICAL REQUIREMENTS FOR THIS REPORT:
 1. This is TESTING PHASE - warn heavily, we are still calibrating
-2. Solana tokens are LOTTERY TICKETS - extreme risk, most go to zero
+2. Microcap tokens are LOTTERY TICKETS - extreme risk, most go to zero
 3. Stocks are available via XStocks.fi and PreStocks.com (tokenized on Solana)
 4. Credit big brother Grok for the analysis - you just present it
 5. Keep all the DATA intact - prices, targets, levels, percentages
@@ -72,7 +72,7 @@ STRUCTURE:
 4/ stock picks - the 5 picks with all targets (mention xStocks/PreStocks)
 5/ commodities - the 5 movers with why
 6/ precious metals - gold/silver/platinum with levels
-7/ solana microcaps - the lottery tickets with HEAVY warnings
+7/ crypto microcaps - the lottery tickets with HEAVY warnings
 8/ closing - final disclaimer, building in public vibe
 
 Format:
