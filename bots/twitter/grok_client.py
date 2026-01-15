@@ -278,7 +278,7 @@ class GrokClient:
 
 What's the overall vibe? Bullish, bearish, or neutral? Why?""",
 
-            "token": """Analyze this Solana token data and give your quick take (1-2 sentences, lowercase, casual):
+            "token": """Analyze this crypto token data and give your quick take (1-2 sentences, lowercase, casual):
 {data}
 
 Is this looking interesting? Any red flags?""",

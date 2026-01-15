@@ -236,7 +236,24 @@ class ClaudeCLIHandler:
         # Try shutil.which as last resort
         found = shutil.which("claude")
         return found or "claude"
-    
+
+    def _find_bash(self) -> Optional[str]:
+        """Find bash executable for Windows $HOME expansion."""
+        import shutil
+
+        # Try common bash locations on Windows
+        bash_locations = [
+            shutil.which("bash"),  # Git Bash in PATH
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+            r"C:\Git\bin\bash.exe",
+        ]
+
+        for bash_path in bash_locations:
+            if bash_path and os.path.isfile(bash_path):
+                return bash_path
+        return None
+
     def is_admin(self, user_id: int, username: str = None) -> bool:
         """Check if user is authorized for CLI execution.
 
@@ -328,11 +345,19 @@ class ClaudeCLIHandler:
                     logger.info(f"Retry attempt {attempt} after {delay}s delay...")
                     await asyncio.sleep(delay)
 
+                # Set up environment with proper HOME for Windows
+                # Claude CLI hooks use $HOME which doesn't expand on Windows
+                env = os.environ.copy()
+                env['HOME'] = os.path.expanduser('~')
+                if 'USERPROFILE' not in env:
+                    env['USERPROFILE'] = os.path.expanduser('~')
+
                 self._active_process = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=self.working_dir,
+                    env=env,
                 )
 
                 try:
@@ -625,12 +650,28 @@ Execute this request. Be concise in your response. Follow any standing instructi
 
                 # Build the claude command
                 logger.info(f"Using Claude CLI at: {self._claude_path}")
-                cmd = [
-                    self._claude_path,
-                    "--print",  # Non-interactive, print output
-                    "--dangerously-skip-permissions",  # Allow file operations
-                    enhanced_prompt
-                ]
+
+                # On Windows, use bash (Git Bash) to properly expand $HOME in hook commands
+                # CMD.exe doesn't expand $HOME, causing hook paths to fail
+                bash_path = self._find_bash() if os.name == 'nt' else None
+
+                if bash_path:
+                    # Run through bash to properly expand $HOME in hook commands
+                    # Escape the prompt for bash
+                    escaped_prompt = enhanced_prompt.replace("'", "'\\''")
+                    cmd = [
+                        bash_path,
+                        "-c",
+                        f"{self._claude_path} --print --dangerously-skip-permissions '{escaped_prompt}'"
+                    ]
+                    logger.info("Using Git Bash for $HOME expansion")
+                else:
+                    cmd = [
+                        self._claude_path,
+                        "--print",  # Non-interactive, print output
+                        "--dangerously-skip-permissions",  # Allow file operations
+                        enhanced_prompt
+                    ]
 
                 # Execute with retry for transient failures
                 cli_success, stdout_str, stderr_str = await self._run_cli_with_retry(cmd, timeout=180.0)

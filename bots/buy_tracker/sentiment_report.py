@@ -332,6 +332,7 @@ class TokenSentiment:
     position_size_modifier: float = 1.0  # Multiply default position by this
     stop_loss_pct: float = -10.0  # Default -10% stop (tighter than before)
     chasing_pump: bool = False  # Flag if token already pumped 50%+
+    token_risk: str = "MICRO"  # SHITCOIN, MICRO, MID, ESTABLISHED
 
     def calculate_sentiment(self, include_grok: bool = True, market_regime: MarketRegime = None):
         """
@@ -343,9 +344,35 @@ class TokenSentiment:
         - Market regime awareness: bearish macro = bias toward neutral/bearish
         - Confidence-based position sizing
         - Tighter stop losses (-10% default)
+        - TOKEN RISK CLASSIFICATION: Different weights for shitcoins vs safe plays
         """
         score = 0.0
         confidence = 0.5  # Base confidence
+
+        # === TOKEN RISK CLASSIFICATION ===
+        # Classify tokens as: SHITCOIN, MICRO, MID, ESTABLISHED based on fundamentals
+        # This affects how we weight signals and set risk parameters
+        token_risk = "MICRO"  # Default
+
+        if self.mcap > 500_000_000 and self.liquidity > 1_000_000:
+            # $500M+ mcap, $1M+ liquidity = ESTABLISHED (SOL, major tokens)
+            token_risk = "ESTABLISHED"
+            confidence += 0.15  # Higher base confidence for established
+        elif self.mcap > 50_000_000 and self.liquidity > 100_000:
+            # $50M+ mcap, $100k+ liquidity = MID cap
+            token_risk = "MID"
+            confidence += 0.05
+        elif self.mcap > 1_000_000 and self.liquidity > 20_000:
+            # $1M+ mcap, $20k+ liquidity = MICRO cap
+            token_risk = "MICRO"
+            # No confidence adjustment - base case
+        else:
+            # Low mcap OR low liquidity = SHITCOIN (high risk)
+            token_risk = "SHITCOIN"
+            confidence -= 0.15  # Lower base confidence for shitcoins
+
+        # Store for reference
+        self.token_risk = token_risk
 
         # === CHASING PUMP DETECTION ===
         # CRITICAL: Don't call bullish on tokens that already pumped 50%+
@@ -497,24 +524,41 @@ class TokenSentiment:
         self.sentiment_score = max(-1, min(1, score))
         self.confidence = max(0.1, min(1.0, confidence))
 
-        # === POSITION SIZING BY CONFIDENCE ===
+        # === POSITION SIZING BY CONFIDENCE + TOKEN RISK ===
         # High confidence = normal position, low = smaller or skip
+        # Token risk modifies: SHITCOIN=0.5x, MICRO=0.7x, MID=0.85x, ESTABLISHED=1.0x
+        risk_multiplier = {
+            "SHITCOIN": 0.5,   # Half position for shitcoins
+            "MICRO": 0.7,      # 70% for microcaps
+            "MID": 0.85,       # 85% for midcaps
+            "ESTABLISHED": 1.0 # Full position for established
+        }.get(self.token_risk, 0.7)
+
         if self.confidence >= 0.7:
-            self.position_size_modifier = 1.0  # Full position
+            self.position_size_modifier = 1.0 * risk_multiplier
         elif self.confidence >= 0.5:
-            self.position_size_modifier = 0.7  # 70% position
+            self.position_size_modifier = 0.7 * risk_multiplier
         elif self.confidence >= 0.3:
-            self.position_size_modifier = 0.4  # 40% position
+            self.position_size_modifier = 0.4 * risk_multiplier
         else:
             self.position_size_modifier = 0.0  # Skip - too risky
 
-        # === STOP LOSS (tighter - 10% default) ===
+        # === STOP LOSS BY CONFIDENCE + TOKEN RISK ===
+        # Shitcoins need tighter stops (more volatile)
+        # ESTABLISHED: -15%, MID: -12%, MICRO: -10%, SHITCOIN: -7%
+        base_stop = {
+            "SHITCOIN": -7.0,    # Very tight for shitcoins
+            "MICRO": -10.0,      # Standard for micro
+            "MID": -12.0,        # Slightly looser for mid
+            "ESTABLISHED": -15.0 # Most room for established
+        }.get(self.token_risk, -10.0)
+
         if self.confidence >= 0.7:
-            self.stop_loss_pct = -10.0  # Standard stop
+            self.stop_loss_pct = base_stop
         elif self.confidence >= 0.5:
-            self.stop_loss_pct = -8.0   # Tighter for medium confidence
+            self.stop_loss_pct = base_stop * 0.8  # 20% tighter
         else:
-            self.stop_loss_pct = -5.0   # Very tight for low confidence
+            self.stop_loss_pct = base_stop * 0.6  # 40% tighter
 
         # === GRADE ASSIGNMENT ===
         # STRICTER thresholds - require higher scores for bullish calls

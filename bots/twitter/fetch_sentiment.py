@@ -153,8 +153,11 @@ PLATINUM|DIRECTION|[detailed outlook with levels]"""
             else:
                 metals = ''
 
-        # 5. Get Solana microcaps (lottery tickets warning)
-        print('=== FETCHING SOLANA MICROCAPS (LOTTERY TICKETS) ===')
+        # 5. Get trending microcaps from multiple chains
+        print('=== FETCHING TRENDING MICROCAPS (MULTI-CHAIN) ===')
+
+        # Supported chains for trending tokens
+        SUPPORTED_CHAINS = ['solana', 'ethereum', 'base', 'bsc', 'arbitrum']
 
         # First fetch trending tokens from DexScreener
         trending_tokens = []
@@ -162,10 +165,12 @@ PLATINUM|DIRECTION|[detailed outlook with levels]"""
             async with session.get('https://api.dexscreener.com/token-boosts/top/v1') as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    sol_tokens = [t for t in data if t.get('chainId') == 'solana'][:5]
+                    # Get tokens from multiple chains (prioritize solana but include others)
+                    multi_chain_tokens = [t for t in data if t.get('chainId') in SUPPORTED_CHAINS][:8]
 
-                    for token in sol_tokens:
+                    for token in multi_chain_tokens:
                         addr = token.get('tokenAddress', '')
+                        chain = token.get('chainId', 'unknown')
                         async with session.get(f'https://api.dexscreener.com/latest/dex/tokens/{addr}') as pair_resp:
                             if pair_resp.status == 200:
                                 pair_data = await pair_resp.json()
@@ -176,6 +181,7 @@ PLATINUM|DIRECTION|[detailed outlook with levels]"""
                                     txns = p.get('txns', {}).get('h24', {})
                                     trending_tokens.append({
                                         'symbol': base.get('symbol', '???'),
+                                        'chain': chain.upper(),
                                         'price': float(p.get('priceUsd', 0) or 0),
                                         'change_24h': p.get('priceChange', {}).get('h24', 0) or 0,
                                         'volume': p.get('volume', {}).get('h24', 0) or 0,
@@ -188,41 +194,41 @@ PLATINUM|DIRECTION|[detailed outlook with levels]"""
         except Exception as e:
             print(f'DexScreener error: {e}')
 
-        sol_analysis = ''
+        microcap_analysis = ''
         if trending_tokens:
             token_data = '\n'.join([
-                f"{t['symbol']}: ${t['price']:.8f}, 24h: {t['change_24h']:+.1f}%, Vol: ${t['volume']:,.0f}, MCap: ${t['mcap']:,.0f}, B/S: {t['buys']}/{t['sells']}"
+                f"{t['symbol']} ({t.get('chain', 'UNK')}): ${t['price']:.8f}, 24h: {t['change_24h']:+.1f}%, Vol: ${t['volume']:,.0f}, MCap: ${t['mcap']:,.0f}, B/S: {t['buys']}/{t['sells']}"
                 for t in trending_tokens
             ])
 
-            sol_prompt = f"""Analyze these trending Solana MICROCAP tokens. These are HIGH RISK lottery tickets.
+            microcap_prompt = f"""Analyze these trending MICROCAP tokens from multiple chains. HIGH RISK lottery tickets.
 
 {token_data}
 
 For each token:
-- Sentiment: BULLISH/BEARISH/NEUTRAL
+- Chain and sentiment: BULLISH/BEARISH/NEUTRAL
 - Brief reasoning (why this sentiment based on metrics)
 - If bullish: stop loss and targets (safe/medium/degen)
 
 Format:
-SYMBOL|SENTIMENT|REASONING|STOP_LOSS|TARGET_SAFE|TARGET_MED|TARGET_DEGEN
+SYMBOL|CHAIN|SENTIMENT|REASONING|STOP_LOSS|TARGET_SAFE|TARGET_MED|TARGET_DEGEN
 
 Be honest about the extreme risk. These can go to zero overnight."""
 
             async with session.post(
                 'https://api.x.ai/v1/chat/completions',
                 headers={'Authorization': f'Bearer {xai_key}', 'Content-Type': 'application/json'},
-                json={'model': 'grok-3', 'messages': [{'role': 'user', 'content': sol_prompt}], 'max_tokens': 600, 'temperature': 0.6}
+                json={'model': 'grok-3', 'messages': [{'role': 'user', 'content': microcap_prompt}], 'max_tokens': 600, 'temperature': 0.6}
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    sol_analysis = data['choices'][0]['message']['content'].strip()
-                    print(sol_analysis)
+                    microcap_analysis = data['choices'][0]['message']['content'].strip()
+                    print(microcap_analysis)
                 else:
-                    sol_analysis = ''
+                    microcap_analysis = ''
         else:
-            sol_analysis = 'No trending tokens found'
-            print(sol_analysis)
+            microcap_analysis = 'No trending tokens found'
+            print(microcap_analysis)
 
         # Save all data for next step
         report_data = {
@@ -230,7 +236,7 @@ Be honest about the extreme risk. These can go to zero overnight."""
             'stocks': stocks,
             'commodities': commodities,
             'metals': metals,
-            'solana': sol_analysis,
+            'microcaps': microcap_analysis,  # Multi-chain microcaps (was solana-only)
             'tokens_raw': trending_tokens
         }
 

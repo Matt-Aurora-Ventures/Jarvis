@@ -456,6 +456,23 @@ Include @{author} at the start. MUST be under 270 characters."""
         # Fallback to simple template
         return self.get_jarvis_result(author, success, action_summary[:50])
     
+    def _find_bash(self) -> Optional[str]:
+        """Find bash executable for Windows $HOME expansion."""
+        import shutil
+
+        # Try common bash locations on Windows
+        bash_locations = [
+            shutil.which("bash"),  # Git Bash in PATH
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+            r"C:\Git\bin\bash.exe",
+        ]
+
+        for bash_path in bash_locations:
+            if bash_path and os.path.isfile(bash_path):
+                return bash_path
+        return None
+
     async def execute_command(self, command: str, username: str = "") -> tuple[bool, str, str]:
         """Execute a coding command via Claude CLI."""
         start_time = time.time()
@@ -463,18 +480,44 @@ Include @{author} at the start. MUST be under 270 characters."""
         try:
             logger.info(f"Executing Claude CLI: {command[:100]}...")
 
-            cmd = [
-                "claude",
-                "--print",
-                "--dangerously-skip-permissions",
-                command
-            ]
+            # Set up environment with proper HOME for Windows
+            # Claude CLI hooks use $HOME which doesn't expand on Windows CMD
+            env = os.environ.copy()
+            home_path = os.path.expanduser('~')
+            env['HOME'] = home_path
+
+            # Also set USERPROFILE for Windows compatibility
+            if 'USERPROFILE' not in env:
+                env['USERPROFILE'] = home_path
+
+            # On Windows, try to use bash (Git Bash) which properly expands $HOME
+            # CMD.exe doesn't expand $HOME, causing hook paths to fail
+            bash_path = self._find_bash() if os.name == 'nt' else None
+
+            if bash_path:
+                # Run through bash to properly expand $HOME in hook commands
+                # Escape the command for bash
+                escaped_command = command.replace("'", "'\\''")
+                cmd = [
+                    bash_path,
+                    "-c",
+                    f"claude --print --dangerously-skip-permissions '{escaped_command}'"
+                ]
+                logger.info("Using Git Bash for $HOME expansion")
+            else:
+                cmd = [
+                    "claude",
+                    "--print",
+                    "--dangerously-skip-permissions",
+                    command
+                ]
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self.working_dir,
+                env=env,
             )
 
             try:

@@ -189,6 +189,8 @@ class TradeReport:
     best_trade_pnl: float = 0.0
     worst_trade_pnl: float = 0.0
     avg_trade_pnl: float = 0.0
+    average_win_usd: float = 0.0
+    average_loss_usd: float = 0.0
     open_positions: int = 0
     unrealized_pnl: float = 0.0
 
@@ -208,6 +210,7 @@ Win Rate: <code>{self.win_rate:.1f}%</code> ({self.winning_trades}W / {self.losi
 Best Trade: <code>${self.best_trade_pnl:+.2f}</code>
 Worst Trade: <code>${self.worst_trade_pnl:+.2f}</code>
 Average: <code>${self.avg_trade_pnl:+.2f}</code>
+Avg Win: <code>${self.average_win_usd:+.2f}</code> | Avg Loss: <code>${self.average_loss_usd:.2f}</code>
 
 <b>Open Positions:</b>
 Count: <code>{self.open_positions}</code>
@@ -855,6 +858,24 @@ class TradingEngine:
             self._log_audit("OPEN_POSITION_REJECTED", {"token": token_symbol, "reason": "no_price"}, user_id, False)
             return False, "Failed to get token price", None
 
+        # LIQUIDITY CHECK - Reject extremely illiquid tokens
+        # These are the ones that cause 100% losses when limit orders can't execute
+        try:
+            token_info = await self.jupiter.get_token_info(token_mint)
+            if token_info and hasattr(token_info, 'daily_volume'):
+                daily_volume = getattr(token_info, 'daily_volume', 0) or 0
+                if daily_volume < 1000:  # Less than $1000 daily volume
+                    logger.warning(f"Trade rejected: {token_symbol} has insufficient liquidity (${daily_volume:.0f}/day)")
+                    self._log_audit("OPEN_POSITION_REJECTED", {
+                        "token": token_symbol,
+                        "reason": "low_liquidity",
+                        "daily_volume": daily_volume,
+                    }, user_id, False)
+                    return False, f"⛔ Trade blocked: {token_symbol} has insufficient liquidity (${daily_volume:.0f}/day)", None
+        except Exception as e:
+            logger.debug(f"Could not check liquidity for {token_symbol}: {e}")
+            # Continue without liquidity check if data unavailable
+
         # Get portfolio value for limit checks
         _, portfolio_usd = await self.get_portfolio_value()
 
@@ -933,10 +954,14 @@ class TradingEngine:
             # Get quote for SOL -> token
             sol_amount = int(amount_usd / await self.jupiter.get_token_price(JupiterClient.SOL_MINT) * 1e9)
 
+            # Use higher slippage for volatile/illiquid assets (tokenized stocks, indexes, etc.)
+            # Default 50 bps is often too tight for xStocks and similar tokenized assets
+            slippage = 200  # 2% slippage tolerance
             quote = await self.jupiter.get_quote(
                 JupiterClient.SOL_MINT,
                 token_mint,
-                sol_amount
+                sol_amount,
+                slippage_bps=slippage
             )
 
             if not quote:
@@ -1130,10 +1155,12 @@ class TradingEngine:
             decimals = token_info.decimals if token_info else 9
             amount = int(token_balance * (10 ** decimals))
 
+            # Use higher slippage for closing (2%) - same as opening
             quote = await self.jupiter.get_quote(
                 position.token_mint,
                 JupiterClient.SOL_MINT,
-                amount
+                amount,
+                slippage_bps=200  # 2% slippage tolerance
             )
 
             if not quote:
@@ -1224,6 +1251,151 @@ class TradingEngine:
 
         self._save_state()
 
+    async def monitor_stop_losses(self) -> List[Dict[str, Any]]:
+        """
+        Active stop loss monitoring - catches positions that miss their limit orders.
+
+        For illiquid tokens, Jupiter limit orders may never fill. This method
+        actively checks prices and force-closes positions that have breached SL.
+
+        Returns:
+            List of closed positions with their P&L
+        """
+        closed_positions = []
+        positions_to_close = []
+
+        # First pass: identify positions that need closing
+        for pos_id, position in list(self.positions.items()):
+            if not position.is_open:
+                continue
+
+            # Get current price
+            current_price = await self.jupiter.get_token_price(position.token_mint)
+            if current_price <= 0:
+                logger.warning(f"Could not get price for {position.token_symbol} - skipping SL check")
+                continue
+
+            position.current_price = current_price
+
+            # Check if stop loss breached (for LONG positions)
+            if position.direction == TradeDirection.LONG:
+                if current_price <= position.stop_loss_price:
+                    pnl_pct = ((current_price - position.entry_price) / position.entry_price) * 100
+                    logger.warning(
+                        f"STOP LOSS BREACHED: {position.token_symbol} | "
+                        f"Current: ${current_price:.8f} <= SL: ${position.stop_loss_price:.8f} | "
+                        f"P&L: {pnl_pct:+.1f}%"
+                    )
+                    positions_to_close.append((pos_id, position, current_price, "SL_BREACH"))
+
+                # Also check for extreme loss (>90% down) even if SL wasn't set properly
+                elif current_price < position.entry_price * 0.1:  # Down >90%
+                    pnl_pct = ((current_price - position.entry_price) / position.entry_price) * 100
+                    logger.warning(
+                        f"EMERGENCY CLOSE: {position.token_symbol} down {pnl_pct:.1f}% | "
+                        f"Entry: ${position.entry_price:.8f} -> ${current_price:.8f}"
+                    )
+                    positions_to_close.append((pos_id, position, current_price, "EMERGENCY_90PCT"))
+
+                # Check for take profit hit
+                elif current_price >= position.take_profit_price:
+                    pnl_pct = ((current_price - position.entry_price) / position.entry_price) * 100
+                    logger.info(
+                        f"TAKE PROFIT HIT: {position.token_symbol} | "
+                        f"Current: ${current_price:.8f} >= TP: ${position.take_profit_price:.8f} | "
+                        f"P&L: {pnl_pct:+.1f}%"
+                    )
+                    positions_to_close.append((pos_id, position, current_price, "TP_HIT"))
+
+        # Second pass: close positions
+        for pos_id, position, exit_price, reason in positions_to_close:
+            try:
+                # Calculate P&L
+                pnl_pct = ((exit_price - position.entry_price) / position.entry_price) * 100
+                pnl_usd = position.amount_usd * (pnl_pct / 100)
+
+                # Update position
+                position.status = TradeStatus.CLOSED
+                position.closed_at = datetime.utcnow().isoformat()
+                position.exit_price = exit_price
+                position.pnl_pct = pnl_pct
+                position.pnl_usd = pnl_usd
+
+                # Cancel any pending limit orders
+                if self.order_manager:
+                    if position.tp_order_id:
+                        try:
+                            await self.order_manager.cancel_order(position.tp_order_id)
+                        except Exception:
+                            pass
+                    if position.sl_order_id:
+                        try:
+                            await self.order_manager.cancel_order(position.sl_order_id)
+                        except Exception:
+                            pass
+
+                # If not dry run, execute the actual sell
+                if not self.dry_run:
+                    try:
+                        balances = await self.wallet.get_token_balances()
+                        token_balance = balances.get(position.token_mint, {}).get('balance', 0)
+
+                        if token_balance > 0:
+                            token_info = await self.jupiter.get_token_info(position.token_mint)
+                            decimals = token_info.decimals if token_info else 9
+                            amount = int(token_balance * (10 ** decimals))
+
+                            quote = await self.jupiter.get_quote(
+                                position.token_mint,
+                                JupiterClient.SOL_MINT,
+                                amount,
+                                slippage_bps=500  # 5% slippage for emergency closes
+                            )
+
+                            if quote:
+                                result = await self.jupiter.execute_swap(quote, self.wallet)
+                                if result.success:
+                                    logger.info(f"Sold {position.token_symbol} via {reason}: {result.signature}")
+                    except Exception as sell_err:
+                        logger.error(f"Failed to sell {position.token_symbol}: {sell_err}")
+
+                # Move to history
+                self.trade_history.append(position)
+                del self.positions[pos_id]
+
+                # Audit log
+                self._log_audit(f"CLOSE_POSITION_{reason}", {
+                    "position_id": pos_id,
+                    "token": position.token_symbol,
+                    "entry_price": position.entry_price,
+                    "exit_price": exit_price,
+                    "sl_price": position.stop_loss_price,
+                    "pnl_usd": pnl_usd,
+                    "pnl_pct": pnl_pct,
+                    "reason": reason,
+                }, None, True)
+
+                closed_positions.append({
+                    "position_id": pos_id,
+                    "symbol": position.token_symbol,
+                    "reason": reason,
+                    "pnl_usd": pnl_usd,
+                    "pnl_pct": pnl_pct,
+                })
+
+                logger.info(
+                    f"Closed {position.token_symbol} via {reason}: "
+                    f"P&L ${pnl_usd:+.2f} ({pnl_pct:+.1f}%)"
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to close position {pos_id}: {e}")
+
+        if closed_positions:
+            self._save_state()
+
+        return closed_positions
+
     def get_open_positions(self) -> List[Position]:
         """Get all open positions."""
         return [p for p in self.positions.values() if p.is_open]
@@ -1248,6 +1420,10 @@ class TradingEngine:
 
         pnls = [p.pnl_usd for p in closed]
 
+        # Calculate average win and loss
+        avg_win = sum(p.pnl_usd for p in winning) / len(winning) if winning else 0
+        avg_loss = sum(p.pnl_usd for p in losing) / len(losing) if losing else 0
+
         return TradeReport(
             total_trades=len(closed),
             winning_trades=len(winning),
@@ -1258,6 +1434,8 @@ class TradingEngine:
             best_trade_pnl=max(pnls) if pnls else 0,
             worst_trade_pnl=min(pnls) if pnls else 0,
             avg_trade_pnl=(total_pnl / len(closed)) if closed else 0,
+            average_win_usd=avg_win,
+            average_loss_usd=avg_loss,
             open_positions=len(open_positions),
             unrealized_pnl=unrealized
         )
@@ -1888,3 +2066,69 @@ class TreasuryTrader:
         if not initialized:
             return False, msg
         return await self._engine.close_position(position_id)
+
+    async def monitor_and_close_breached_positions(self) -> List[Dict[str, Any]]:
+        """
+        Check all positions and close any that have breached their stop loss.
+
+        Returns list of closed positions with P&L.
+        """
+        initialized, msg = await self._ensure_initialized()
+        if not initialized:
+            return []
+        return await self._engine.monitor_stop_losses()
+
+    async def get_position_health(self) -> Dict[str, Any]:
+        """
+        Get health status of all positions.
+
+        Returns:
+            Dict with overall health and per-position status
+        """
+        initialized, _ = await self._ensure_initialized()
+        if not initialized:
+            return {"healthy": False, "error": "Not initialized"}
+
+        positions = self._engine.get_open_positions()
+        if not positions:
+            return {"healthy": True, "positions": [], "alerts": []}
+
+        alerts = []
+        position_status = []
+
+        for pos in positions:
+            # Calculate unrealized P&L
+            if pos.entry_price > 0:
+                pnl_pct = ((pos.current_price - pos.entry_price) / pos.entry_price) * 100
+            else:
+                pnl_pct = 0
+
+            status = "OK"
+            if pos.current_price <= pos.stop_loss_price:
+                status = "SL_BREACHED"
+                alerts.append(f"{pos.token_symbol} has breached SL ({pnl_pct:+.1f}%)")
+            elif pnl_pct <= -50:
+                status = "CRITICAL"
+                alerts.append(f"{pos.token_symbol} down {pnl_pct:.1f}%")
+            elif pnl_pct <= -20:
+                status = "WARNING"
+            elif pos.current_price >= pos.take_profit_price:
+                status = "TP_HIT"
+                alerts.append(f"{pos.token_symbol} hit TP ({pnl_pct:+.1f}%)")
+
+            position_status.append({
+                "id": pos.id,
+                "symbol": pos.token_symbol,
+                "entry": pos.entry_price,
+                "current": pos.current_price,
+                "pnl_pct": pnl_pct,
+                "tp": pos.take_profit_price,
+                "sl": pos.stop_loss_price,
+                "status": status,
+            })
+
+        return {
+            "healthy": len(alerts) == 0,
+            "positions": position_status,
+            "alerts": alerts,
+        }

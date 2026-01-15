@@ -40,8 +40,8 @@ COMMODITIES:
 PRECIOUS METALS:
 {data['metals']}
 
-SOLANA MICROCAPS (LOTTERY TICKETS):
-{data['solana']}
+CRYPTO MICROCAPS - MULTI-CHAIN (LOTTERY TICKETS):
+{data.get('microcaps', data.get('solana', ''))}
 """
 
 prompt = """You are JARVIS - Tony Stark's AI assistant. Sophisticated, calm, subtle wit, self-aware. NO EMOJIS ALLOWED.
@@ -50,7 +50,7 @@ Transform this Grok sentiment report into a THREAD for X (Twitter). With Premium
 
 CRITICAL REQUIREMENTS:
 1. WARN HEAVILY that this is still being tested - we are calibrating, be super careful
-2. Solana tokens are LOTTERY TICKETS - extreme risk, can go to zero
+2. Microcap tokens are LOTTERY TICKETS - extreme risk, can go to zero
 3. Stocks mentioned are available via XStocks.fi and PreStocks.com (tokenized stocks on Solana)
 4. Credit Grok for the analysis - JARVIS just presents it
 5. Be measured and careful in tone - not hype, not FUD, just facts
@@ -65,7 +65,7 @@ Structure the thread as:
 4/ STOCK PICKS - The 5 picks with targets (mention XStocks/PreStocks)
 5/ COMMODITIES - The 5 movers
 6/ PRECIOUS METALS - Gold/Silver/Platinum
-7/ SOLANA MICROCAPS - The lottery tickets with heavy warnings
+7/ CRYPTO MICROCAPS - The lottery tickets with heavy warnings
 8/ CLOSING - Final disclaimer, building in public
 
 Format each tweet like:

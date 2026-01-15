@@ -424,7 +424,7 @@ Good examples:
         prompt = f"""Share a genuine market insight or observation. Not vague vibes - something specific.
 
 Data:
-- Current focus: {data.get('focus', 'solana ecosystem')}
+- Current focus: {data.get('focus', 'crypto markets')}
 - Pattern noticed: {data.get('pattern', 'volume divergence')}
 - Supporting data: {data.get('support', 'on-chain metrics')}
 

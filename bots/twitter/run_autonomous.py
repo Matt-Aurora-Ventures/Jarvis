@@ -159,8 +159,9 @@ async def show_status():
 
 
 async def run_continuously():
-    """Run the autonomous engine continuously."""
+    """Run the autonomous engine continuously with vibe coding support."""
     from bots.twitter.autonomous_engine import get_autonomous_engine
+    from bots.twitter.x_claude_cli_handler import get_x_claude_cli_handler
     from core.secrets import validate_required_keys, print_key_status
 
     # Validate API keys before starting
@@ -179,13 +180,20 @@ async def run_continuously():
         print("All required keys configured.")
 
     engine = get_autonomous_engine()
+    cli_handler = get_x_claude_cli_handler()
 
     print(f"\nPosting interval: {engine._post_interval}s")
+    print("Vibe coding: ENABLED (@aurora_ventures can code via mentions)")
     print("Press Ctrl+C to stop")
     print("="*60 + "\n")
-    
+
     try:
-        await engine.run()
+        # Run both the engine and CLI monitor concurrently
+        await asyncio.gather(
+            engine.run(),
+            cli_handler.run(),
+            return_exceptions=True
+        )
     except KeyboardInterrupt:
         print("\nStopping engine...")
     except Exception as e:
@@ -208,6 +216,7 @@ async def run_continuously():
             pass
     finally:
         engine.stop()
+        cli_handler.stop()
         if hasattr(engine, 'cleanup'):
             await engine.cleanup()
 

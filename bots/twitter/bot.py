@@ -17,6 +17,17 @@ from .twitter_client import TwitterClient, TwitterCredentials, TweetResult
 from .grok_client import GrokClient
 from .content import ContentGenerator, TweetContent
 from .personality import JarvisPersonality, MoodState
+from .autonomous_engine import XMemory
+
+# Shared memory for cross-module deduplication
+_shared_memory: Optional['XMemory'] = None
+
+def get_shared_memory() -> 'XMemory':
+    """Get shared memory instance for deduplication."""
+    global _shared_memory
+    if _shared_memory is None:
+        _shared_memory = XMemory()
+    return _shared_memory
 
 # Configure logging
 logging.basicConfig(
@@ -206,6 +217,15 @@ class JarvisTwitterBot:
 
     async def _post_tweet(self, content: TweetContent) -> Optional[TweetResult]:
         """Post a tweet with optional image"""
+        # Check for duplicate content BEFORE posting (shared with autonomous_engine)
+        memory = get_shared_memory()
+        is_similar, similar_content = memory.is_similar_to_recent(content.text, hours=12, threshold=0.4)
+        if is_similar:
+            logger.warning(f"SKIPPED DUPLICATE (bot): Too similar to recent tweet")
+            logger.info(f"New: {content.text[:60]}...")
+            logger.info(f"Old: {similar_content[:60] if similar_content else 'N/A'}...")
+            return None
+
         media_ids = None
         video_path = self._resolve_video_path(content)
 
@@ -244,6 +264,8 @@ class JarvisTwitterBot:
                 "url": result.url
             })
             self._save_state()
+            # Record to shared memory for cross-module deduplication
+            memory.record_tweet(result.tweet_id, content.text, content.content_type, [])
             logger.info(f"Tweet posted: {result.url}")
         else:
             logger.error(f"Failed to post tweet: {result.error}")
