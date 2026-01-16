@@ -1,39 +1,45 @@
 """
 X/Twitter Claude CLI Handler for Admin Coding Commands.
 
-Monitors mentions from authorized admin accounts (@aurora_ventures)
+Monitors mentions from the SOLE authorized admin account (@matthaynes88)
 and executes coding requests via Claude CLI.
 
 Flow:
-1. Monitor mentions of @Jarvis_lifeos from @aurora_ventures ONLY
+1. Monitor mentions of @Jarvis_lifeos from @matthaynes88 ONLY
 2. Detect coding requests
 3. Reply with JARVIS-style confirmation
 4. Execute via Claude CLI with context
 5. Reply with cleansed, JARVIS-voiced result
 
 Security:
-- ONLY @aurora_ventures can execute (strict whitelist)
+- ONLY @matthaynes88 can interact (ALL other users are silently ignored)
+- No responses to any non-admin - coding OR questions
 - Triple-pass output sanitization (paranoid mode)
 - No sensitive data ever exposed
 - Rate limiting to prevent abuse
 """
 
 import asyncio
+import fnmatch
 import logging
 import os
 import re
+import shutil
+import tempfile
 import time
 from collections import defaultdict
-from typing import Optional, List, Dict, Any, Set
+from typing import Optional, List, Dict, Any, Set, Tuple
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+from core.security.scrubber import get_scrubber
 
 logger = logging.getLogger(__name__)
 
-# STRICT Admin whitelist - ONLY these users can execute CLI
-# @aurora_ventures is Matt's main X account
+# STRICT Admin whitelist - ONLY this user can interact with JARVIS on X
+# All CLI commands AND question responses are restricted to this account
 ADMIN_USERNAMES: Set[str] = {
-    "aurora_ventures",  # Primary admin account
+    "matthaynes88",  # ONLY authorized account - no one else
 }
 
 # JARVIS voice templates (from brand bible)
@@ -53,9 +59,9 @@ JARVIS_SUCCESS_TEMPLATES = [
 ]
 
 JARVIS_ERROR_TEMPLATES = [
-    "@{author} hit a snag. {error}",
-    "@{author} my circuits encountered an issue. {error}",
-    "@{author} something went wrong. {error}",
+    "@{author} hit a snag. will retry later.",
+    "@{author} my circuits need recalibrating. check telegram for details.",
+    "@{author} something went sideways. details in telegram.",
 ]
 
 # Coding keywords to detect requests
@@ -94,8 +100,8 @@ SECRET_PATTERNS = [
     (r'DATABASE_URL[=:]\s*[\'"]?[^\s\'"]+', 'DATABASE_URL=[REDACTED]'),
 
     # GitHub
-    (r'ghp_[a-zA-Z0-9]{36}', '[REDACTED]'),
-    (r'gho_[a-zA-Z0-9]{36}', '[REDACTED]'),
+    (r'ghp_[a-zA-Z0-9]{30,}', '[REDACTED]'),
+    (r'gho_[a-zA-Z0-9]{30,}', '[REDACTED]'),
     (r'github_pat_[a-zA-Z0-9_]+', '[REDACTED]'),
 
     # Generic secrets
@@ -136,7 +142,7 @@ class PendingCommand:
     result: Optional[str] = None
 
 
-@dataclass 
+@dataclass
 class XClaudeCLIState:
     """Runtime state for the handler."""
     last_mention_id: Optional[str] = None
@@ -144,13 +150,89 @@ class XClaudeCLIState:
     last_check_time: float = 0
     commands_executed_today: int = 0
     last_reset_date: Optional[str] = None
-    
+
     def reset_daily(self):
         """Reset daily counters."""
         today = datetime.now().strftime("%Y-%m-%d")
         if self.last_reset_date != today:
             self.commands_executed_today = 0
             self.last_reset_date = today
+
+
+class XBotCircuitBreaker:
+    """Circuit breaker to prevent X bot spam loops.
+
+    After MAX_CONSECUTIVE_ERRORS, enters cooldown for COOLDOWN_DURATION seconds.
+    Also enforces MIN_POST_INTERVAL between posts.
+    """
+    _last_post: Optional[datetime] = None
+    _error_count: int = 0
+    _cooldown_until: Optional[datetime] = None
+    _success_count: int = 0
+
+    MIN_POST_INTERVAL = 60  # seconds between posts
+    MAX_CONSECUTIVE_ERRORS = 3
+    COOLDOWN_DURATION = 1800  # 30 minutes cooldown after errors
+
+    @classmethod
+    def can_post(cls) -> tuple[bool, str]:
+        """Check if posting is allowed."""
+        # Kill switch check
+        if os.getenv("X_BOT_ENABLED", "true").lower() == "false":
+            return False, "X_BOT_ENABLED=false"
+
+        # Cooldown check
+        if cls._cooldown_until and datetime.now() < cls._cooldown_until:
+            remaining = (cls._cooldown_until - datetime.now()).seconds
+            return False, f"Circuit breaker cooldown ({remaining}s remaining)"
+
+        # Rate limit check
+        if cls._last_post:
+            elapsed = (datetime.now() - cls._last_post).total_seconds()
+            if elapsed < cls.MIN_POST_INTERVAL:
+                return False, f"Rate limit ({cls.MIN_POST_INTERVAL - elapsed:.0f}s until next post)"
+
+        return True, "OK"
+
+    @classmethod
+    def record_success(cls):
+        """Record a successful post."""
+        cls._last_post = datetime.now()
+        cls._error_count = 0
+        cls._success_count += 1
+        logger.debug(f"XBotCircuitBreaker: success #{cls._success_count}")
+
+    @classmethod
+    def record_error(cls):
+        """Record an error. Triggers cooldown after MAX_CONSECUTIVE_ERRORS."""
+        cls._error_count += 1
+        logger.warning(f"XBotCircuitBreaker: error #{cls._error_count}/{cls.MAX_CONSECUTIVE_ERRORS}")
+
+        if cls._error_count >= cls.MAX_CONSECUTIVE_ERRORS:
+            cls._cooldown_until = datetime.now() + timedelta(seconds=cls.COOLDOWN_DURATION)
+            cls._error_count = 0
+            logger.error(f"XBotCircuitBreaker: COOLDOWN ACTIVATED for {cls.COOLDOWN_DURATION}s")
+
+    @classmethod
+    def reset(cls):
+        """Reset the circuit breaker (for testing)."""
+        cls._last_post = None
+        cls._error_count = 0
+        cls._cooldown_until = None
+        cls._success_count = 0
+
+    @classmethod
+    def status(cls) -> dict:
+        """Get circuit breaker status."""
+        can_post, reason = cls.can_post()
+        return {
+            "can_post": can_post,
+            "reason": reason,
+            "error_count": cls._error_count,
+            "success_count": cls._success_count,
+            "cooldown_until": cls._cooldown_until.isoformat() if cls._cooldown_until else None,
+            "last_post": cls._last_post.isoformat() if cls._last_post else None,
+        }
 
 
 class XClaudeCLIHandler:
@@ -164,6 +246,89 @@ class XClaudeCLIHandler:
     RATE_LIMIT_WINDOW = 60  # seconds
     RATE_LIMIT_MAX_REQUESTS = 5  # max requests per window
     RATE_LIMIT_MIN_GAP = 10  # minimum seconds between requests (X is slower)
+
+    ISOLATION_IGNORE_NAMES = {
+        ".git",
+        ".hg",
+        ".svn",
+        ".venv",
+        "venv",
+        ".agent",
+        ".claude",
+        ".codex",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        "node_modules",
+        "dist",
+        "build",
+        "logs",
+        "tmp",
+        "temp",
+        "data",
+        # Windows reserved device names - must be ignored to prevent WinError 87
+        "nul",
+        "con",
+        "prn",
+        "aux",
+        "com1",
+        "com2",
+        "com3",
+        "com4",
+        "com5",
+        "com6",
+        "com7",
+        "com8",
+        "com9",
+        "lpt1",
+        "lpt2",
+        "lpt3",
+        "lpt4",
+        "lpt5",
+        "lpt6",
+        "lpt7",
+        "lpt8",
+        "lpt9",
+    }
+
+    # Windows reserved names that should never be accessed
+    WINDOWS_RESERVED_NAMES = {
+        "nul", "con", "prn", "aux",
+        "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+        "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+    }
+
+    ISOLATION_IGNORE_GLOBS = {
+        ".env",
+        ".env.*",
+        "*.log",
+        "*.db",
+        "*.sqlite",
+        "*.sqlite3",
+        "*.pem",
+        "*.key",
+        "*.pfx",
+        "tmpclaude-*",  # Claude temporary directories
+        "tmpclaude-*-cwd",
+    }
+
+    SANDBOX_ENV_BLOCKLIST = (
+        "KEY",
+        "TOKEN",
+        "SECRET",
+        "PASSWORD",
+        "PRIVATE",
+        "MNEMONIC",
+        "SEED",
+        "CREDENTIAL",
+    )
+
+    SANDBOX_ENV_ALLOWLIST = {
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_API_KEY",
+        "CLAUDE_CODE_API_KEY",
+    }
 
     def __init__(self):
         self.state = XClaudeCLIState()
@@ -205,7 +370,8 @@ class XClaudeCLIHandler:
     def is_admin(self, username: str) -> bool:
         """Check if username is authorized admin.
 
-        STRICT: Only @aurora_ventures can execute CLI commands.
+        STRICT: ONLY @matthaynes88 can interact with JARVIS on X.
+        All other users are silently ignored - no CLI, no questions, nothing.
         """
         if not username:
             logger.warning("CLI attempt with no username")
@@ -304,6 +470,222 @@ class XClaudeCLIHandler:
             "last_execution": last_exec_str,
         }
 
+    def _scrub_prompt(self, text: str) -> Tuple[str, List[str]]:
+        """Scrub sensitive data before sending prompt to Claude."""
+        scrubber = get_scrubber()
+        scrubbed, redacted = scrubber.scrub(text or "")
+        scrubbed = self.sanitize_output(scrubbed, paranoid=True)
+        return scrubbed, list(set(redacted))
+
+    def _should_ignore_path(self, rel_path: str) -> bool:
+        rel_path = rel_path.replace("\\", "/")
+        parts = rel_path.split("/")
+        for part in parts:
+            if part.lower() in self.ISOLATION_IGNORE_NAMES:
+                return True
+        filename = parts[-1] if parts else rel_path
+        filename_lower = filename.lower()
+        if filename_lower in self.ISOLATION_IGNORE_NAMES:
+            return True
+        for pattern in self.ISOLATION_IGNORE_GLOBS:
+            if fnmatch.fnmatch(filename_lower, pattern):
+                return True
+        return False
+
+    def _collect_file_stats(self, root_dir: str) -> Dict[str, Tuple[float, int]]:
+        stats: Dict[str, Tuple[float, int]] = {}
+        for base, _, files in os.walk(root_dir):
+            for name in files:
+                path = os.path.join(base, name)
+                rel = os.path.relpath(path, root_dir)
+                if self._should_ignore_path(rel):
+                    continue
+                try:
+                    st = os.stat(path)
+                except OSError:
+                    continue
+                stats[rel] = (st.st_mtime, st.st_size)
+        return stats
+
+    def _build_copy_ignore(self):
+        patterns = [p.lower() for p in self.ISOLATION_IGNORE_GLOBS]
+
+        def _ignore(_path: str, names: List[str]):
+            ignored = set()
+            for name in names:
+                name_lower = name.lower()
+                if name_lower in self.ISOLATION_IGNORE_NAMES:
+                    ignored.add(name)
+                    continue
+                for pattern in patterns:
+                    if fnmatch.fnmatch(name_lower, pattern):
+                        ignored.add(name)
+                        break
+            return ignored
+
+        return _ignore
+
+    def _is_windows_reserved_name(self, name: str) -> bool:
+        """Check if a filename is a Windows reserved device name."""
+        # Get the base name without extension
+        base = name.split('.')[0].lower() if '.' in name else name.lower()
+        return base in self.WINDOWS_RESERVED_NAMES
+
+    def _safe_copy_tree(self, src: str, dst: str, ignore) -> List[str]:
+        """Copy directory tree with Windows-safe error handling.
+
+        Returns list of errors encountered (but continues copying).
+        """
+        errors = []
+
+        # Create destination directory
+        os.makedirs(dst, exist_ok=True)
+
+        try:
+            names = os.listdir(src)
+        except OSError as e:
+            errors.append(f"Cannot list {src}: {e}")
+            return errors
+
+        # Get names to ignore
+        ignored_names = ignore(src, names)
+
+        for name in names:
+            # Skip ignored names
+            if name in ignored_names:
+                continue
+
+            # Skip Windows reserved names explicitly
+            if self._is_windows_reserved_name(name):
+                continue
+
+            src_path = os.path.join(src, name)
+            dst_path = os.path.join(dst, name)
+
+            try:
+                # Check if it's a directory or file
+                if os.path.isdir(src_path):
+                    # Recursively copy directory
+                    sub_errors = self._safe_copy_tree(src_path, dst_path, ignore)
+                    errors.extend(sub_errors)
+                else:
+                    # Copy file
+                    try:
+                        shutil.copy2(src_path, dst_path)
+                    except OSError as e:
+                        errors.append(f"Cannot copy {src_path}: {e}")
+            except OSError as e:
+                # Handle any access errors (including Windows device name errors)
+                errors.append(f"Cannot access {src_path}: {e}")
+
+        return errors
+
+    def _prepare_isolated_workspace(self) -> Tuple[tempfile.TemporaryDirectory, str, Dict[str, Tuple[float, int]]]:
+        temp_dir = tempfile.TemporaryDirectory(prefix="jarvis_claude_")
+        sandbox_root = os.path.join(temp_dir.name, "workspace")
+        ignore = self._build_copy_ignore()
+        try:
+            # Use custom safe copy that handles Windows reserved names
+            errors = self._safe_copy_tree(self.working_dir, sandbox_root, ignore)
+            if errors:
+                logger.warning(f"Sandbox copy had {len(errors)} non-fatal errors")
+                for err in errors[:5]:  # Log first 5
+                    logger.debug(f"  {err}")
+            before_stats = self._collect_file_stats(sandbox_root)
+            return temp_dir, sandbox_root, before_stats
+        except Exception:
+            temp_dir.cleanup()
+            raise
+
+    def _files_equal(self, path_a: str, path_b: str) -> bool:
+        try:
+            if os.path.getsize(path_a) != os.path.getsize(path_b):
+                return False
+            with open(path_a, "rb") as fa, open(path_b, "rb") as fb:
+                while True:
+                    chunk_a = fa.read(8192)
+                    chunk_b = fb.read(8192)
+                    if chunk_a != chunk_b:
+                        return False
+                    if not chunk_a:
+                        return True
+        except OSError:
+            return False
+
+    def _apply_sandbox_changes(
+        self,
+        sandbox_root: str,
+        before_stats: Dict[str, Tuple[float, int]]
+    ) -> Dict[str, List[str]]:
+        after_stats = self._collect_file_stats(sandbox_root)
+        added = sorted(rel for rel in after_stats if rel not in before_stats)
+        removed = sorted(rel for rel in before_stats if rel not in after_stats)
+
+        changed_candidates = [
+            rel for rel in after_stats
+            if rel in before_stats and after_stats[rel] != before_stats[rel]
+        ]
+        changed: List[str] = []
+
+        for rel in changed_candidates:
+            src = os.path.join(sandbox_root, rel)
+            dst = os.path.join(self.working_dir, rel)
+            if not os.path.exists(dst):
+                added.append(rel)
+                continue
+            if not self._files_equal(src, dst):
+                changed.append(rel)
+
+        def is_safe(rel_path: str) -> bool:
+            if rel_path.startswith("..") or os.path.isabs(rel_path):
+                return False
+            base = os.path.abspath(self.working_dir)
+            target = os.path.abspath(os.path.join(base, rel_path))
+            return os.path.commonpath([base, target]) == base
+
+        for rel in added + changed:
+            if not is_safe(rel):
+                continue
+            src = os.path.join(sandbox_root, rel)
+            dst = os.path.join(self.working_dir, rel)
+            dst_dir = os.path.dirname(dst)
+            if dst_dir:
+                os.makedirs(dst_dir, exist_ok=True)
+            try:
+                shutil.copy2(src, dst)
+            except OSError as e:
+                logger.warning(f"Failed to apply change for {rel}: {e}")
+
+        for rel in removed:
+            if not is_safe(rel):
+                continue
+            dst = os.path.join(self.working_dir, rel)
+            try:
+                if os.path.isfile(dst):
+                    os.remove(dst)
+            except OSError as e:
+                logger.warning(f"Failed to remove {rel}: {e}")
+
+        return {
+            "added": sorted(set(added)),
+            "changed": sorted(set(changed)),
+            "removed": sorted(set(removed)),
+        }
+
+    def _build_sandbox_env(self) -> Dict[str, str]:
+        env = os.environ.copy()
+        for key in list(env.keys()):
+            key_upper = key.upper()
+            if key_upper in self.SANDBOX_ENV_ALLOWLIST:
+                continue
+            if any(token in key_upper for token in self.SANDBOX_ENV_BLOCKLIST):
+                env.pop(key, None)
+        env["HOME"] = os.path.expanduser("~")
+        if "USERPROFILE" not in env:
+            env["USERPROFILE"] = os.path.expanduser("~")
+        env["JARVIS_SANDBOX"] = "1"
+        return env
+
     def is_coding_request(self, text: str) -> bool:
         """Detect if text is a coding request."""
         text_lower = text.lower()
@@ -364,8 +746,9 @@ class XClaudeCLIHandler:
             template = random.choice(JARVIS_SUCCESS_TEMPLATES)
             return template.format(author=author, summary=summary.lower().strip('.'))
         else:
+            # Don't expose error details publicly - just acknowledge the issue
             template = random.choice(JARVIS_ERROR_TEMPLATES)
-            return template.format(author=author, error=summary.lower().strip('.'))
+            return template.format(author=author)
     
     def format_for_tweet(self, text: str, max_len: int = 270) -> str:
         """Format text to fit in a tweet."""
@@ -376,6 +759,84 @@ class XClaudeCLIHandler:
             return text
         
         return text[:max_len-3] + "..."
+
+    def _format_for_telegram(self, text: str, max_len: int = 3500) -> str:
+        """Format text for Telegram (plain text)."""
+        if len(text) > max_len:
+            return text[:max_len] + "\n\n[truncated]"
+        return text
+
+    def _clean_output_for_telegram(self, output: str) -> str:
+        """Clean CLI output before sending to Telegram - remove hook errors and internal details."""
+        if not output:
+            return output
+
+        lines = output.split('\n')
+        cleaned_lines = []
+        skip_until_blank = False
+
+        for line in lines:
+            # Skip hook error blocks
+            if 'hook [' in line.lower() and 'failed' in line.lower():
+                skip_until_blank = True
+                continue
+            if 'SessionEnd hook' in line or 'PreToolUse' in line or 'PostToolUse' in line:
+                skip_until_blank = True
+                continue
+            # Skip Node.js stack traces
+            if line.strip().startswith('at ') or 'node:internal' in line:
+                continue
+            if 'MODULE_NOT_FOUND' in line or 'requireStack' in line:
+                continue
+            if line.strip().startswith('throw err;') or line.strip().startswith('^'):
+                continue
+            if 'Error: Cannot find module' in line:
+                skip_until_blank = True
+                continue
+            # Skip sandbox temp paths
+            if 'jarvis_claude_' in line or 'AppData\\Local\\Temp' in line:
+                continue
+            # Stop skipping on blank line
+            if skip_until_blank and not line.strip():
+                skip_until_blank = False
+                continue
+            if skip_until_blank:
+                continue
+
+            cleaned_lines.append(line)
+
+        cleaned = '\n'.join(cleaned_lines).strip()
+        # Remove multiple consecutive newlines
+        while '\n\n\n' in cleaned:
+            cleaned = cleaned.replace('\n\n\n', '\n\n')
+        return cleaned if cleaned else "Command executed."
+
+    async def _report_to_telegram(self, message: str) -> bool:
+        """Send a report to Telegram if configured."""
+        try:
+            import aiohttp
+
+            bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+            target_chat = os.environ.get("TELEGRAM_BUY_BOT_CHAT_ID") or os.environ.get("TELEGRAM_ADMIN_CHAT_ID")
+
+            if not bot_token or not target_chat:
+                return False
+
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {
+                "chat_id": target_chat,
+                "text": message,
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as resp:
+                    if resp.status == 200:
+                        return True
+                    logger.error(f"Telegram report failed: {resp.status}")
+                    return False
+        except Exception as e:
+            logger.error(f"Telegram report error: {e}")
+            return False
     
     def summarize_result(self, full_output: str) -> str:
         """Create a brief summary for tweet reply."""
@@ -478,17 +939,23 @@ Include @{author} at the start. MUST be under 270 characters."""
         start_time = time.time()
 
         try:
-            logger.info(f"Executing Claude CLI: {command[:100]}...")
+            scrubbed_command, redacted = self._scrub_prompt(command)
+            logger.info(f"Executing Claude CLI: {scrubbed_command[:100]}...")
+            if redacted:
+                logger.info(f"Scrubbed {len(set(redacted))} sensitive items before Claude CLI")
+
+            sandbox_dir = None
+            sandbox_root = None
+            before_stats: Dict[str, Tuple[float, int]] = {}
+            try:
+                sandbox_dir, sandbox_root, before_stats = self._prepare_isolated_workspace()
+            except Exception as e:
+                self.record_execution(False, time.time() - start_time, username)
+                return False, "Sandbox setup failed", f"Sandbox setup failed: {e}"
 
             # Set up environment with proper HOME for Windows
             # Claude CLI hooks use $HOME which doesn't expand on Windows CMD
-            env = os.environ.copy()
-            home_path = os.path.expanduser('~')
-            env['HOME'] = home_path
-
-            # Also set USERPROFILE for Windows compatibility
-            if 'USERPROFILE' not in env:
-                env['USERPROFILE'] = home_path
+            env = self._build_sandbox_env()
 
             # On Windows, try to use bash (Git Bash) which properly expands $HOME
             # CMD.exe doesn't expand $HOME, causing hook paths to fail
@@ -497,7 +964,7 @@ Include @{author} at the start. MUST be under 270 characters."""
             if bash_path:
                 # Run through bash to properly expand $HOME in hook commands
                 # Escape the command for bash
-                escaped_command = command.replace("'", "'\\''")
+                escaped_command = scrubbed_command.replace("'", "'\\''")
                 cmd = [
                     bash_path,
                     "-c",
@@ -509,26 +976,37 @@ Include @{author} at the start. MUST be under 270 characters."""
                     "claude",
                     "--print",
                     "--dangerously-skip-permissions",
-                    command
+                    scrubbed_command
                 ]
 
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=self.working_dir,
-                env=env,
-            )
-
+            apply_error = None
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=self.COMMAND_TIMEOUT_SECONDS
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=sandbox_root or self.working_dir,
+                    env=env,
                 )
-            except asyncio.TimeoutError:
-                process.kill()
-                self.record_execution(False, time.time() - start_time, username)
-                return False, "Timed out", "Command timed out after 5 minutes"
+
+                try:
+                    stdout, stderr = await asyncio.wait_for(
+                        process.communicate(),
+                        timeout=self.COMMAND_TIMEOUT_SECONDS
+                    )
+                except asyncio.TimeoutError:
+                    process.kill()
+                    self.record_execution(False, time.time() - start_time, username)
+                    return False, "Timed out", "Command timed out after 5 minutes"
+            finally:
+                try:
+                    if sandbox_root:
+                        self._apply_sandbox_changes(sandbox_root, before_stats)
+                except Exception as e:
+                    apply_error = str(e)
+                    logger.error(f"Failed to apply sandbox changes: {e}")
+                if sandbox_dir:
+                    sandbox_dir.cleanup()
 
             output = ""
             if stdout:
@@ -539,6 +1017,10 @@ Include @{author} at the start. MUST be under 270 characters."""
             # Triple-pass sanitization (paranoid mode)
             sanitized = self.sanitize_output(output, paranoid=True)
             summary = self.summarize_result(sanitized)
+
+            if apply_error:
+                self.record_execution(False, time.time() - start_time, username)
+                return False, "Apply changes failed", f"Apply changes failed: {apply_error}"
 
             success = process.returncode == 0
             self.record_execution(success, time.time() - start_time, username)
@@ -552,26 +1034,90 @@ Include @{author} at the start. MUST be under 270 characters."""
             self.record_execution(False, time.time() - start_time, username)
             return False, f"Error: {str(e)[:50]}", str(e)
     
+    async def answer_question(self, question: str, author: str) -> Optional[str]:
+        """Generate a Jarvis-style answer to a question using Grok/Claude."""
+        try:
+            voice = await self._get_jarvis_voice()
+
+            # Clean question
+            clean_q = re.sub(r'@\w+', '', question).strip()
+
+            prompt = f"""You are JARVIS, an autonomous AI trading assistant on X/Twitter.
+Someone asked: "{clean_q}"
+
+Write a brief, helpful reply in JARVIS voice:
+- Lowercase, casual tone
+- Data-driven if it's a market question
+- Witty but not mean
+- 1-2 sentences max
+- Reference "my sensors", "my data", "my circuits" occasionally
+- DO NOT start with "I" - start with lowercase
+
+Example good responses:
+- "my sensors say btc looking bullish above 95k. nfa but the data speaks."
+- "checked my database. that token has decent liquidity but watch the unlocks."
+- "processing... looks like you're onto something there. let me dig deeper."
+
+Reply to @{author}:"""
+
+            response = await voice.generate_tweet(prompt)
+
+            if response:
+                # Ensure it starts with @mention
+                if not response.lower().startswith(f"@{author.lower()}"):
+                    response = f"@{author} {response}"
+
+                # Ensure under 270 chars
+                if len(response) > 270:
+                    response = response[:267] + "..."
+
+                return response
+
+        except Exception as e:
+            logger.error(f"Question answering error: {e}")
+
+        return None
+
     async def process_mention(self, mention: Dict[str, Any]) -> Optional[str]:
         """Process a single mention, return reply text if action taken."""
         tweet_id = str(mention.get("id", ""))
         text = mention.get("text", "")
         author = mention.get("author_username", "").lower()
-        
-        # Skip if not from admin
-        if not self.is_admin(author):
-            logger.debug(f"Ignoring mention from non-admin: {author}")
-            return None
-        
-        # Skip if not a coding request
-        if not self.is_coding_request(text):
-            logger.debug(f"Not a coding request: {text[:50]}")
-            return None
-        
+
+        # Check if from admin
+        is_admin = self.is_admin(author)
+
+        # Check if coding request
+        is_coding = self.is_coding_request(text)
+
+        # NON-ADMIN: Completely ignore - JARVIS only responds to @matthaynes88
+        # No CLI commands, no question answers, nothing
+        if not is_admin:
+            logger.warning(f"Unauthorized X CLI attempt by @{author}")
+            return None  # Silently ignore all non-admin interactions
+
+        # Admin non-coding: answer questions freely with normal rate limits
+        if not is_coding:
+            allowed, rate_msg = self.check_rate_limit(author)
+            if not allowed:
+                return f"@{author} {rate_msg}"
+
+            can_post, cb_reason = XBotCircuitBreaker.can_post()
+            if not can_post:
+                return None
+
+            self.record_request(author)
+            response = await self.answer_question(text, author)
+            if response:
+                logger.info(f"Answered question from admin @{author}")
+            return response
+
+        # Coding request from admin - execute via CLI
         # Clean up the command text (remove @mentions)
         command = re.sub(r'@\w+', '', text).strip()
         
-        logger.info(f"Coding request from @{author}: {command[:100]}")
+        log_preview, _ = self._scrub_prompt(command)
+        logger.info(f"Coding request from @{author}: {log_preview[:100]}")
 
         # Check daily limit
         self.state.reset_daily()
@@ -587,22 +1133,51 @@ Include @{author} at the start. MUST be under 270 characters."""
         # Record this request
         self.record_request(author)
 
+        # Circuit breaker check - prevent spam loops
+        can_post, cb_reason = XBotCircuitBreaker.can_post()
+        if not can_post:
+            logger.warning(f"Circuit breaker blocked post: {cb_reason}")
+            await self._report_to_telegram(f"X CLI blocked by circuit breaker: {cb_reason}")
+            return None  # Don't reply - circuit breaker active
+
         # Execute
         twitter = await self._get_twitter()
 
         # Send JARVIS-style confirmation (using brand bible template)
         confirm_text = self.get_jarvis_confirmation(author)
-        await twitter.reply_to_tweet(tweet_id, confirm_text)
-        
+        try:
+            await twitter.reply_to_tweet(tweet_id, confirm_text)
+            XBotCircuitBreaker.record_success()
+        except Exception as e:
+            XBotCircuitBreaker.record_error()
+            logger.error(f"Failed to send confirmation: {e}")
+            return None
+
         # Execute command
         success, summary, full_output = await self.execute_command(command, author)
-        
+
         self.state.commands_executed_today += 1
-        
+
+        # Report results to Telegram if configured (with cleaned output)
+        cleaned_output = self._clean_output_for_telegram(full_output)
+        telegram_report = (
+            f"X CLI request by @{author}\n"
+            f"Success: {success}\n"
+            f"Summary:\n{summary}\n\n"
+            f"Output:\n{cleaned_output}"
+        )
+        await self._report_to_telegram(self._format_for_telegram(telegram_report))
+
+        # Track execution result for circuit breaker
+        if success:
+            XBotCircuitBreaker.record_success()
+        else:
+            XBotCircuitBreaker.record_error()
+
         # Generate Jarvis-voice response
         result_text = await self.jarvis_response(summary, success, author)
         result_text = self.format_for_tweet(result_text)
-        
+
         return result_text
     
     async def check_mentions(self):
@@ -626,14 +1201,32 @@ Include @{author} at the start. MUST be under 270 characters."""
             # Process each mention
             for mention in mentions:
                 try:
+                    # Circuit breaker check before processing
+                    can_post, cb_reason = XBotCircuitBreaker.can_post()
+                    if not can_post:
+                        logger.warning(f"Circuit breaker active, skipping mention: {cb_reason}")
+                        continue
+
                     reply = await self.process_mention(mention)
                     if reply:
+                        # Final circuit breaker check before reply
+                        can_post, cb_reason = XBotCircuitBreaker.can_post()
+                        if not can_post:
+                            logger.warning(f"Circuit breaker blocked reply: {cb_reason}")
+                            continue
+
                         tweet_id = str(mention.get("id", ""))
-                        await twitter.reply_to_tweet(tweet_id, reply)
-                        logger.info(f"Replied to mention {tweet_id}")
+                        try:
+                            await twitter.reply_to_tweet(tweet_id, reply)
+                            XBotCircuitBreaker.record_success()
+                            logger.info(f"Replied to mention {tweet_id}")
+                        except Exception as e:
+                            XBotCircuitBreaker.record_error()
+                            logger.error(f"Failed to reply to mention {tweet_id}: {e}")
                 except Exception as e:
+                    XBotCircuitBreaker.record_error()
                     logger.error(f"Error processing mention: {e}")
-                
+
                 # Small delay between processing
                 await asyncio.sleep(2)
                 

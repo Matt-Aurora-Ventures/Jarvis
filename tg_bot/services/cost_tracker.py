@@ -17,6 +17,8 @@ from tg_bot.config import API_COSTS, get_config
 
 logger = logging.getLogger(__name__)
 
+GROK_COST_PER_CALL = 0.10
+
 
 @dataclass
 class APICall:
@@ -131,6 +133,8 @@ class CostTracker:
         # Calculate cost
         if custom_cost is not None:
             cost = custom_cost
+        elif service == "grok":
+            cost = GROK_COST_PER_CALL
         elif tokens_used > 0 and service in ["grok", "claude"]:
             # Token-based pricing
             cost = (tokens_used / 1000) * API_COSTS.get(service, 0.001)
@@ -191,6 +195,19 @@ class CostTracker:
         if today_cost >= config.daily_cost_limit_usd:
             return False, f"Daily cost limit reached (${today_cost:.3f}/${config.daily_cost_limit_usd:.2f})"
 
+        return True, "OK"
+
+    def can_make_call(self) -> tuple[bool, str]:
+        """
+        Check if a Grok API call is allowed within the daily budget.
+
+        Returns:
+            (allowed, reason) tuple
+        """
+        today_cost = self.get_today_cost()
+        projected = today_cost + GROK_COST_PER_CALL
+        if projected > self.daily_limit:
+            return False, f"Daily cost limit reached (${today_cost:.3f}/${self.daily_limit:.2f})"
         return True, "OK"
 
     def get_today_cost(self) -> float:
