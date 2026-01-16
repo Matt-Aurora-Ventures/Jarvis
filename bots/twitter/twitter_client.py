@@ -5,14 +5,67 @@ With tweepy fallback for media uploads (v1.1 API)
 """
 
 import os
+import json
 import logging
 import asyncio
 from typing import Optional, List, Dict, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from functools import wraps
+import tempfile
+
+import aiohttp
+
+from core.utils.circuit_breaker import APICircuitBreaker, CircuitOpenError
 
 logger = logging.getLogger(__name__)
+
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+# OAuth2 token persistence file (same directory as .env)
+OAUTH2_TOKEN_FILE = Path(__file__).parent / ".oauth2_tokens.json"
+
+
+def _load_oauth2_tokens() -> Dict[str, str]:
+    """Load OAuth2 tokens from persistent storage."""
+    try:
+        if OAUTH2_TOKEN_FILE.exists():
+            with open(OAUTH2_TOKEN_FILE, 'r') as f:
+                tokens = json.load(f)
+                logger.debug("Loaded OAuth2 tokens from file")
+                return tokens
+    except Exception as e:
+        logger.warning(f"Could not load OAuth2 tokens: {e}")
+    return {}
+
+
+def _save_oauth2_tokens(access_token: str, refresh_token: str) -> bool:
+    """Save OAuth2 tokens atomically to persistent storage."""
+    try:
+        tokens = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        # Atomic write: temp file then rename
+        dir_name = OAUTH2_TOKEN_FILE.parent
+        fd, tmp_path = tempfile.mkstemp(dir=str(dir_name), suffix='.tmp')
+        try:
+            with os.fdopen(fd, 'w') as f:
+                json.dump(tokens, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, str(OAUTH2_TOKEN_FILE))
+            logger.info("OAuth2 tokens persisted to file")
+            return True
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
+    except Exception as e:
+        logger.error(f"Failed to save OAuth2 tokens: {e}")
+        return False
 
 # Telegram sync (lazy import to avoid circular deps)
 _telegram_sync = None
@@ -61,39 +114,100 @@ class TweetResult:
             self.timestamp = datetime.utcnow()
 
 
+class RetryablePostError(Exception):
+    """Retryable error raised when posting to X fails transiently."""
+
+    def __init__(self, message: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _is_retryable_status(status_code: Optional[int]) -> bool:
+    return status_code in RETRYABLE_STATUS_CODES
+
+
+def _is_retryable_exception(exc: Exception) -> bool:
+    # Check aiohttp exceptions
+    if isinstance(exc, (aiohttp.ClientError, aiohttp.ServerTimeoutError)):
+        return True
+
+    # Check requests exceptions (for sync fallback paths)
+    try:
+        import requests
+        if isinstance(exc, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+            return True
+        if isinstance(exc, requests.exceptions.RequestException):
+            return True
+    except Exception:
+        pass
+
+    return isinstance(exc, (asyncio.TimeoutError, TimeoutError, ConnectionError, OSError))
+
+
+def with_retry(max_attempts: int = 3, base_delay: float = 2.0):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            attempt = 0
+            while True:
+                try:
+                    return await func(*args, **kwargs)
+                except RetryablePostError as exc:
+                    attempt += 1
+                    if attempt >= max_attempts:
+                        logger.error(f"Post tweet failed after {attempt} attempts: {exc}")
+                        return TweetResult(success=False, error=str(exc))
+
+                    delay = base_delay * (2 ** (attempt - 1))
+                    logger.warning(
+                        f"Retryable post error (attempt {attempt}/{max_attempts}): {exc}. "
+                        f"Retrying in {delay:.1f}s"
+                    )
+                    await asyncio.sleep(delay)
+
+        return wrapper
+
+    return decorator
+
+
 @dataclass
 class TwitterCredentials:
     """X API credentials"""
-    api_key: str
-    api_secret: str
-    access_token: str
-    access_token_secret: str
-    bearer_token: Optional[str] = None
+    api_key: str = field(repr=False)
+    api_secret: str = field(repr=False)
+    access_token: str = field(repr=False)
+    access_token_secret: str = field(repr=False)
+    bearer_token: Optional[str] = field(default=None, repr=False)
     # OAuth 2.0 for @Jarvis_lifeos
-    oauth2_client_id: Optional[str] = None
-    oauth2_client_secret: Optional[str] = None
-    oauth2_access_token: Optional[str] = None
-    oauth2_refresh_token: Optional[str] = None
+    oauth2_client_id: Optional[str] = field(default=None, repr=False)
+    oauth2_client_secret: Optional[str] = field(default=None, repr=False)
+    oauth2_access_token: Optional[str] = field(default=None, repr=False)
+    oauth2_refresh_token: Optional[str] = field(default=None, repr=False)
 
     @classmethod
     def from_env(cls) -> "TwitterCredentials":
-        """Load credentials from environment variables"""
+        """Load credentials from environment variables and persisted token file"""
         try:
             from dotenv import load_dotenv
             env_path = Path(__file__).parent / ".env"
             load_dotenv(env_path, override=False)
         except Exception:
             pass
-        
+
         # Prefer JARVIS-specific tokens for @Jarvis_lifeos account
         # These are OAuth 1.0a tokens that work directly with the account
         jarvis_access = os.getenv("JARVIS_ACCESS_TOKEN")
         jarvis_secret = os.getenv("JARVIS_ACCESS_TOKEN_SECRET")
-        
+
         # Use Jarvis tokens if available, otherwise fall back to X_ACCESS_TOKEN
         access_token = jarvis_access or os.getenv("X_ACCESS_TOKEN", "") or os.getenv("TWITTER_ACCESS_TOKEN", "")
         access_secret = jarvis_secret or os.getenv("X_ACCESS_TOKEN_SECRET", "") or os.getenv("TWITTER_ACCESS_TOKEN_SECRET", "")
-        
+
+        # Load OAuth2 tokens - file takes precedence (contains refreshed tokens)
+        persisted_tokens = _load_oauth2_tokens()
+        oauth2_access = persisted_tokens.get("access_token") or os.getenv("X_OAUTH2_ACCESS_TOKEN")
+        oauth2_refresh = persisted_tokens.get("refresh_token") or os.getenv("X_OAUTH2_REFRESH_TOKEN")
+
         return cls(
             api_key=os.getenv("X_API_KEY", "") or os.getenv("TWITTER_API_KEY", ""),
             api_secret=os.getenv("X_API_SECRET", "") or os.getenv("TWITTER_API_SECRET", ""),
@@ -102,8 +216,8 @@ class TwitterCredentials:
             bearer_token=os.getenv("X_BEARER_TOKEN") or os.getenv("TWITTER_BEARER_TOKEN"),
             oauth2_client_id=os.getenv("X_OAUTH2_CLIENT_ID"),
             oauth2_client_secret=os.getenv("X_OAUTH2_CLIENT_SECRET"),
-            oauth2_access_token=os.getenv("X_OAUTH2_ACCESS_TOKEN"),
-            oauth2_refresh_token=os.getenv("X_OAUTH2_REFRESH_TOKEN")
+            oauth2_access_token=oauth2_access,
+            oauth2_refresh_token=oauth2_refresh
         )
 
     def is_valid(self) -> bool:
@@ -134,6 +248,7 @@ class TwitterClient:
         self._username: Optional[str] = None
         self._user_id: Optional[str] = None
         self._use_oauth2 = False  # Whether to use OAuth 2.0 for posting
+        self._circuit_breaker = APICircuitBreaker("twitter_api")
 
     def _get_expected_username(self) -> str:
         expected = (
@@ -296,10 +411,18 @@ class TwitterClient:
             resp = requests.post(token_url, headers=headers, data=data)
             if resp.status_code == 200:
                 tokens = resp.json()
-                self.credentials.oauth2_access_token = tokens.get("access_token")
+                new_access = tokens.get("access_token")
+                new_refresh = tokens.get("refresh_token", self.credentials.oauth2_refresh_token)
+
+                # Update in memory
+                self.credentials.oauth2_access_token = new_access
                 if "refresh_token" in tokens:
-                    self.credentials.oauth2_refresh_token = tokens["refresh_token"]
-                logger.info("OAuth 2.0 token refreshed successfully")
+                    self.credentials.oauth2_refresh_token = new_refresh
+
+                # Persist to file for next restart
+                _save_oauth2_tokens(new_access, new_refresh)
+
+                logger.info("OAuth 2.0 token refreshed and persisted successfully")
                 return True
 
             logger.error(f"Token refresh failed: {resp.text}")
@@ -319,6 +442,7 @@ class TwitterClient:
         """Check if client is connected"""
         return self._username is not None and (self._use_oauth2 or self._tweepy_client is not None)
 
+    @with_retry(max_attempts=3, base_delay=2.0)
     async def post_tweet(
         self,
         text: str,
@@ -363,26 +487,48 @@ class TwitterClient:
             if quote_tweet_id:
                 post_data["quote_tweet_id"] = quote_tweet_id
 
-            # Use OAuth 2.0 for @Jarvis_lifeos (primary method)
+            # Use OAuth 2.0 for @Jarvis_lifeos (primary method) - native aiohttp
             if self._use_oauth2:
-                import requests
-
                 headers = {
                     "Authorization": f"Bearer {self.credentials.oauth2_access_token}",
                     "Content-Type": "application/json"
                 }
 
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: requests.post(
-                        "https://api.twitter.com/2/tweets",
-                        headers=headers,
-                        json=post_data
-                    )
-                )
+                async def _request():
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            "https://api.twitter.com/2/tweets",
+                            headers=headers,
+                            json=post_data,
+                            timeout=aiohttp.ClientTimeout(total=30)
+                        ) as resp:
+                            status = resp.status
+                            resp_text = await resp.text()
+                            try:
+                                resp_json = await resp.json()
+                            except Exception:
+                                resp_json = {}
 
-                if response.status_code == 201:
-                    data = response.json().get("data", {})
+                            if _is_retryable_status(status):
+                                raise RetryablePostError(
+                                    f"OAuth 2.0 post failed ({status}): {resp_text}",
+                                    status_code=status,
+                                )
+                            return status, resp_json, resp_text
+
+                try:
+                    status, resp_json, resp_text = await self._circuit_breaker.call(_request)
+                except CircuitOpenError as exc:
+                    return TweetResult(success=False, error=str(exc))
+                except RetryablePostError:
+                    raise
+                except Exception as e:
+                    if _is_retryable_exception(e):
+                        raise RetryablePostError(f"OAuth 2.0 post failed due to network/timeout: {e}")
+                    raise
+
+                if status == 201:
+                    data = resp_json.get("data", {})
                     tweet_id = data.get("id")
                     url = f"https://x.com/{self._username}/status/{tweet_id}"
                     logger.info(f"Tweet posted via OAuth 2.0: {url}")
@@ -392,7 +538,7 @@ class TwitterClient:
                         await self._sync_to_telegram(text, url)
 
                     return TweetResult(success=True, tweet_id=tweet_id, url=url)
-                elif response.status_code == 401:
+                elif status == 401:
                     # Token expired, refresh and retry
                     logger.warning("OAuth 2.0 token expired during post, refreshing...")
                     if self._refresh_oauth2_token():
@@ -401,22 +547,40 @@ class TwitterClient:
                         logger.error("Token refresh failed - cannot post (will not fallback to wrong account)")
                         return TweetResult(success=False, error="OAuth 2.0 token refresh failed")
                 else:
-                    error_msg = f"OAuth 2.0 post failed ({response.status_code}): {response.text}"
+                    error_msg = f"OAuth 2.0 post failed ({status}): {resp_text}"
                     logger.error(error_msg)
                     # Do NOT fallback to tweepy - return error instead
                     return TweetResult(success=False, error=error_msg)
 
             # Use tweepy if OAuth 2.0 is not active (either not configured or failed to connect)
             if self._tweepy_client and not self._use_oauth2:
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: self._tweepy_client.create_tweet(
-                        text=text,
-                        media_ids=media_ids,
-                        in_reply_to_tweet_id=reply_to,
-                        quote_tweet_id=quote_tweet_id
+                async def _request():
+                    return await loop.run_in_executor(
+                        None,
+                        lambda: self._tweepy_client.create_tweet(
+                            text=text,
+                            media_ids=media_ids,
+                            in_reply_to_tweet_id=reply_to,
+                            quote_tweet_id=quote_tweet_id
+                        )
                     )
-                )
+
+                try:
+                    response = await self._circuit_breaker.call(_request)
+                except CircuitOpenError as exc:
+                    return TweetResult(success=False, error=str(exc))
+                except Exception as e:
+                    status_code = None
+                    if HAS_TWEEPY and isinstance(e, TweepyException):
+                        status_code = getattr(getattr(e, "response", None), "status_code", None)
+                        if _is_retryable_status(status_code):
+                            raise RetryablePostError(
+                                f"Tweepy post failed ({status_code}): {e}",
+                                status_code=status_code
+                            )
+                    if _is_retryable_exception(e):
+                        raise RetryablePostError(f"Tweepy post failed due to network/timeout: {e}")
+                    raise
 
                 if response and response.data:
                     tweet_id = response.data["id"]
@@ -431,6 +595,8 @@ class TwitterClient:
 
             return TweetResult(success=False, error="No SDK available to post")
 
+        except RetryablePostError:
+            raise
         except Exception as e:
             logger.error(f"Failed to post tweet: {e}")
             return TweetResult(success=False, error=str(e))
@@ -827,6 +993,147 @@ class TwitterClient:
         except Exception as e:
             logger.error(f"Failed to search: {e}")
             return []
+
+    async def get_user(self, username: str) -> Optional[Dict[str, Any]]:
+        """Get user info by username."""
+        if not self.is_connected:
+            return None
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            # Try tweepy (more reliable for user lookups)
+            if self._tweepy_client:
+                try:
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: self._tweepy_client.get_user(
+                            username=username,
+                            user_fields=["created_at", "public_metrics", "description", "verified"]
+                        )
+                    )
+                    if response and response.data:
+                        user = response.data
+                        metrics = user.public_metrics or {}
+                        return {
+                            "id": str(user.id),
+                            "username": user.username,
+                            "name": user.name,
+                            "followers_count": metrics.get("followers_count", 0),
+                            "following_count": metrics.get("following_count", 0),
+                            "tweet_count": metrics.get("tweet_count", 0),
+                            "created_at": str(user.created_at) if user.created_at else None,
+                            "description": user.description or "",
+                            "verified": getattr(user, 'verified', False),
+                        }
+                except Exception as e:
+                    logger.warning(f"tweepy get_user failed: {e}")
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to get user {username}: {e}")
+            return None
+
+    async def get_quote_tweets(self, tweet_id: str, max_results: int = 20) -> List[Dict[str, Any]]:
+        """Get quote tweets of a specific tweet."""
+        if not self.is_connected:
+            return []
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            # Use tweepy for quote tweets
+            if self._tweepy_client:
+                try:
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: self._tweepy_client.get_quote_tweets(
+                            id=tweet_id,
+                            max_results=min(max_results, 100),
+                            tweet_fields=["author_id", "created_at", "text"],
+                            expansions=["author_id"],
+                            user_fields=["username", "public_metrics", "created_at", "description"]
+                        )
+                    )
+                    if response and response.data:
+                        # Build user lookup
+                        users = {}
+                        if response.includes and "users" in response.includes:
+                            for user in response.includes["users"]:
+                                metrics = user.public_metrics or {}
+                                users[str(user.id)] = {
+                                    "id": str(user.id),
+                                    "username": user.username,
+                                    "followers_count": metrics.get("followers_count", 0),
+                                    "following_count": metrics.get("following_count", 0),
+                                    "tweet_count": metrics.get("tweet_count", 0),
+                                    "created_at": str(user.created_at) if user.created_at else None,
+                                    "description": user.description or "",
+                                }
+
+                        return [
+                            {
+                                "id": str(tweet.id),
+                                "text": tweet.text,
+                                "author_id": str(tweet.author_id),
+                                "author": users.get(str(tweet.author_id), {}),
+                                "created_at": str(tweet.created_at) if tweet.created_at else None,
+                            }
+                            for tweet in response.data
+                        ]
+                except Exception as e:
+                    logger.warning(f"tweepy get_quote_tweets failed: {e}")
+
+            return []
+
+        except Exception as e:
+            logger.error(f"Failed to get quote tweets: {e}")
+            return []
+
+    async def block_user(self, user_id: str) -> bool:
+        """Block a user by ID."""
+        if not self.is_connected or not self._user_id:
+            return False
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            if self._tweepy_client:
+                await loop.run_in_executor(
+                    None,
+                    lambda: self._tweepy_client.block(target_user_id=user_id)
+                )
+                logger.info(f"Blocked user: {user_id}")
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to block user {user_id}: {e}")
+            return False
+
+    async def mute_user(self, user_id: str) -> bool:
+        """Mute a user by ID."""
+        if not self.is_connected or not self._user_id:
+            return False
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            if self._tweepy_client:
+                await loop.run_in_executor(
+                    None,
+                    lambda: self._tweepy_client.mute(target_user_id=user_id)
+                )
+                logger.info(f"Muted user: {user_id}")
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to mute user {user_id}: {e}")
+            return False
 
     def disconnect(self):
         """Clean up connections"""
