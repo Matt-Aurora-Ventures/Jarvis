@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-4.6.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.6.2-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1200%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
@@ -54,7 +54,44 @@
 
 ---
 
-## 🚀 Recent Updates (v4.6.1 - January 2026)
+## 🚀 Recent Updates (v4.6.2 - January 2026)
+
+### ⚡ Code Quality & Async Performance
+
+Deep infrastructure improvements for reliability and performance.
+
+#### Native Async Twitter Posting
+| Change | Before | After |
+|--------|--------|-------|
+| HTTP Client | `requests` (blocking) | `aiohttp` (native async) |
+| Event Loop | Blocked via `run_in_executor` | Non-blocking |
+| Timeout | Basic | `aiohttp.ClientTimeout(total=30)` |
+| Exceptions | Limited handling | Full aiohttp exception support |
+
+#### SQLite Connection Management
+- **Context Managers**: All database operations now use `with self._get_connection():`
+- **Auto-Cleanup**: Connections properly closed after each operation
+- **No More Locks**: Prevents SQLite database lock issues
+
+#### Exception Handling Hardening
+| File | Before | After |
+|------|--------|-------|
+| `buy_tracker/bot.py` | `except:` | `except Exception:` |
+| `treasury/backtest.py` | `except:` | `except (ValueError, TypeError):` |
+| `spam_protection.py` | `except:` | `except ValueError:` |
+
+> **Why This Matters**: Bare `except:` catches SystemExit and KeyboardInterrupt, preventing graceful shutdown.
+
+#### Additional Improvements
+- OAuth token persistence across sessions
+- Circuit breaker verification
+- Engagement tracker metrics implementation
+- Max positions increased to 50
+- Grok API cost tracking
+
+---
+
+## 🚀 Previous: v4.6.1 - January 2026
 
 ### 🛡️ Treasury Risk Management & Active Stop Loss Monitoring
 

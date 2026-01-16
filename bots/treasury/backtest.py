@@ -153,7 +153,7 @@ class SentimentBacktester:
         self,
         initial_balance: float = 1000.0,
         position_size_pct: float = 0.10,  # 10% per trade
-        max_positions: int = 5,
+        max_positions: int = 50,
         min_grade: str = "B",  # Minimum grade to trade
         use_trailing_stop: bool = False
     ):
@@ -332,8 +332,8 @@ class SentimentBacktester:
             # Parse timestamp
             try:
                 pred_time = datetime.fromisoformat(pred.get('timestamp', ''))
-            except:
-                continue
+            except (ValueError, TypeError):
+                continue  # Skip entries with invalid timestamps
 
             # Apply date filters
             if start_date and pred_time < start_date:
@@ -540,7 +540,7 @@ async def run_quick_backtest():
     backtester = SentimentBacktester(
         initial_balance=1000.0,
         position_size_pct=0.10,
-        max_positions=5,
+        max_positions=50,
         min_grade="B"
     )
 
