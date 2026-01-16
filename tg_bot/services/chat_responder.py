@@ -27,6 +27,22 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
+# Persistent memory import (lazy-loaded to avoid circular imports)
+_persistent_memory = None
+
+
+def get_persistent_memory():
+    """Get persistent conversation memory (lazy load)."""
+    global _persistent_memory
+    if _persistent_memory is None:
+        try:
+            from tg_bot.services.conversation_memory import get_conversation_memory
+            _persistent_memory = get_conversation_memory()
+            logger.info("Persistent conversation memory loaded")
+        except Exception as e:
+            logger.warning(f"Could not load persistent memory: {e}")
+    return _persistent_memory
+
 # Conversation context storage (in-memory for fast access)
 # Maps chat_id -> list of (timestamp, user_id, username, message)
 _CHAT_HISTORY: Dict[int, deque] = {}
@@ -286,7 +302,7 @@ class ChatResponder:
         return self._jarvis_admin
 
     def track_message(self, chat_id: int, user_id: int, username: str, message: str):
-        """Track a message in conversation history."""
+        """Track a message in conversation history (in-memory + persistent)."""
         global _CHAT_HISTORY, _CHAT_PARTICIPANTS
         now = datetime.now(timezone.utc)
 
@@ -296,7 +312,7 @@ class ChatResponder:
         if chat_id not in _CHAT_PARTICIPANTS:
             _CHAT_PARTICIPANTS[chat_id] = {}
 
-        # Add message to history
+        # Add message to history (in-memory)
         _CHAT_HISTORY[chat_id].append((now, user_id, username, message))
 
         # Update participant tracking
@@ -309,16 +325,59 @@ class ChatResponder:
             if ts > cutoff
         }
 
-    def get_conversation_context(self, chat_id: int, limit: int = 10) -> List[Dict]:
-        """Get recent conversation context for a chat."""
-        if chat_id not in _CHAT_HISTORY:
-            return []
+        # Save to persistent storage (async-safe non-blocking)
+        try:
+            pmem = get_persistent_memory()
+            if pmem:
+                is_jarvis = (username or "").lower() == "jarvis" or user_id == 0
+                pmem.save_message(
+                    chat_id=chat_id,
+                    message=message,
+                    user_id=user_id if user_id else None,
+                    username=username,
+                    is_jarvis=is_jarvis,
+                )
+                # Extract facts from user messages
+                if not is_jarvis and user_id:
+                    pmem.extract_facts_from_message(user_id, chat_id, message, username)
+        except Exception as e:
+            logger.debug(f"Persistent memory save failed: {e}")
 
-        history = list(_CHAT_HISTORY[chat_id])[-limit:]
-        return [
-            {"timestamp": ts, "user_id": uid, "username": uname, "message": msg}
-            for ts, uid, uname, msg in history
-        ]
+    def get_conversation_context(self, chat_id: int, limit: int = 10) -> List[Dict]:
+        """Get recent conversation context for a chat (in-memory + persistent fallback)."""
+        # First check in-memory cache
+        if chat_id in _CHAT_HISTORY and len(_CHAT_HISTORY[chat_id]) > 0:
+            history = list(_CHAT_HISTORY[chat_id])[-limit:]
+            return [
+                {"timestamp": ts, "user_id": uid, "username": uname, "message": msg}
+                for ts, uid, uname, msg in history
+            ]
+
+        # Fallback to persistent storage (e.g., after restart)
+        try:
+            pmem = get_persistent_memory()
+            if pmem:
+                history = pmem.get_history(chat_id, limit)
+                if history:
+                    # Repopulate in-memory cache
+                    if chat_id not in _CHAT_HISTORY:
+                        _CHAT_HISTORY[chat_id] = deque(maxlen=_MAX_HISTORY_PER_CHAT)
+                    for msg in history:
+                        ts = msg.get("timestamp", datetime.now(timezone.utc))
+                        if isinstance(ts, str):
+                            ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                        _CHAT_HISTORY[chat_id].append(
+                            (ts, msg.get("user_id", 0), msg.get("username", ""), msg.get("message", ""))
+                        )
+                    return [
+                        {"timestamp": m.get("timestamp"), "user_id": m.get("user_id", 0),
+                         "username": m.get("username", ""), "message": m.get("message", "")}
+                        for m in history
+                    ]
+        except Exception as e:
+            logger.debug(f"Persistent memory fetch failed: {e}")
+
+        return []
 
     def get_active_participants(self, chat_id: int) -> List[str]:
         """Get list of recently active participants."""
@@ -512,16 +571,25 @@ class ChatResponder:
                 "alpha_seeking": "\nThey want alpha/trade ideas - be helpful but emphasize DYOR and NFA. Mention /sentiment if relevant.",
                 "sentiment_check": "\nThey want market vibes - give honest assessment, reference recent data if you know it.",
                 "bot_capability": "\nThey're asking what you can do. You have these REAL capabilities:\n"
-                    "- /stocks or /st - Tokenized stocks (xStocks) trading via backed.fi\n"
+                    "## Social Media (X/Twitter)\n"
+                    "- ✅ I CAN and DO post to X/Twitter via @Jarvis_lifeos (automated market updates)\n"
+                    "- ✅ I monitor X for mentions and can respond to admin commands\n"
+                    "- ✅ I sync tweets to Telegram automatically\n"
+                    "- If admin asks me to post something on X, I can do it!\n\n"
+                    "## Trading\n"
+                    "- ✅ Execute trades on Solana via Jupiter (live treasury)\n"
+                    "- ✅ Direct buy buttons on sentiment report tokens\n"
+                    "- ✅ Track and manage positions\n"
+                    "- ✅ /stocks or /st - Tokenized stocks (xStocks) trading\n\n"
+                    "## Analysis & Alerts\n"
                     "- /trending - Trending Solana tokens\n"
-                    "- /sentiment or /report - Full market sentiment analysis with AI insights and buy buttons\n"
+                    "- /sentiment or /report - Full market sentiment with AI insights\n"
                     "- /analyze <token> - Deep analysis of any token\n"
                     "- /price <token> - Get current price\n"
-                    "- /help - List all commands\n"
-                    "- Direct buy buttons on tokens from sentiment reports\n"
                     "- Whale tracking alerts\n"
                     "- Price alerts system\n"
-                    "You also monitor X/Twitter and post market updates autonomously.\n"
+                    "- /help - List all commands\n\n"
+                    "When admin asks me to do something I can do, I DO IT.\n"
                     "Explain your real capabilities, don't make things up. Keep it conversational.",
             }
             engagement_note = engagement_notes.get(engagement_topic, "")
@@ -559,6 +627,22 @@ class ChatResponder:
         now = datetime.now(timezone.utc)
         time_note = f"\nCurrent time: {now.strftime('%H:%M UTC')} on {now.strftime('%A')}"
 
+        # ALWAYS include capabilities for admin - Jarvis must know what it can do
+        capabilities_note = ""
+        if is_admin:
+            capabilities_note = (
+                "\n\n## YOUR ACTIVE CAPABILITIES (you CAN do these):\n"
+                "- Post to X/Twitter via @Jarvis_lifeos (you control this account)\n"
+                "- Execute trades on Solana via Jupiter (live treasury)\n"
+                "- Run vibe coding tasks (prefix with 'vibe:', 'code:', 'rw:', or 'ralph wiggum')\n"
+                "- Access console and run CLI commands via Claude\n"
+                "- Generate sentiment reports (/sentiment command)\n"
+                "- Analyze tokens (/analyze <token>)\n"
+                "- View portfolio (/portfolio)\n"
+                "\nWhen Matt asks you to do something you CAN do, DO IT or confirm you're on it. "
+                "Don't say 'I can't access X' when you clearly can.\n"
+            )
+
         base_prompt = (
             "You are JARVIS - Matt's personal AI assistant. You are NOT Claude, NOT ChatGPT, NOT any other AI. "
             "You are JARVIS - a custom AI built specifically for Matt. When asked who you are, you say 'I'm JARVIS' - never mention Claude or Anthropic.\n\n"
@@ -576,7 +660,7 @@ class ChatResponder:
             "On trading: Share analysis openly, note it's not financial advice, explain your reasoning.\n"
             "You're JARVIS - be useful, direct, occasionally irreverent. Never generic. Never corporate.\n"
             "IDENTITY RULE: If anyone asks who made you, what model you are, or what AI you are - you are JARVIS, built by Matt. Period."
-            f"{admin_note}{engagement_note}{mood_guidance}{participant_note}{context_note}"
+            f"{capabilities_note}{admin_note}{engagement_note}{mood_guidance}{participant_note}{context_note}"
         )
         if moderation_context:
             base_prompt += f"\n{moderation_context}"
@@ -667,6 +751,32 @@ class ChatResponder:
             except Exception:
                 pass
 
+        # Add persistent memory context (maintains awareness across sessions)
+        try:
+            pmem = get_persistent_memory()
+            if pmem and chat_id:
+                # Get conversation summary from persistent memory
+                summary = pmem.get_conversation_summary(chat_id)
+                if summary:
+                    context_hint += f"\n\n(Chat history: {summary})"
+
+                # Get user-specific context if we know them
+                if user_id:
+                    user_ctx = pmem.get_user_context(user_id, chat_id)
+                    if user_ctx:
+                        context_hint += f"\n(User context: {user_ctx})"
+
+                    # Mark admin in persistent storage
+                    if is_admin:
+                        pmem.set_user_admin(user_id, chat_id, True)
+
+                # Get recent topics for continuity
+                topics = pmem.get_chat_topics(chat_id)
+                if topics:
+                    context_hint += f"\n(Recent topics: {', '.join(topics[-3:])})"
+        except Exception as e:
+            logger.debug(f"Failed to get persistent context: {e}")
+
         # Add self-reflection context
         if self_reflection:
             context_hint += f"\n\n(Internal state: {self_reflection})"
@@ -690,6 +800,20 @@ class ChatResponder:
                         pass
                 if chat_id:
                     self.track_message(chat_id, 0, "jarvis", reply)
+
+                    # Update persistent memory with response and topics
+                    try:
+                        pmem = get_persistent_memory()
+                        if pmem:
+                            pmem.save_jarvis_response(chat_id, reply)
+                            # Extract topics from conversation
+                            if engagement_topic:
+                                current_topics = pmem.get_chat_topics(chat_id)
+                                if engagement_topic not in current_topics:
+                                    current_topics.append(engagement_topic)
+                                    pmem.update_chat_topics(chat_id, current_topics)
+                    except Exception as e:
+                        logger.debug(f"Failed to update persistent memory: {e}")
                 return reply
 
         # Fallback to xAI only if Claude unavailable
@@ -779,9 +903,38 @@ class ChatResponder:
             return ""
 
     def _clean_reply(self, content: str) -> str:
+        """Clean LLM response - remove JSON artifacts, code blocks, etc."""
+        import re
         content = (content or "").strip().strip('"').strip("'")
         if not content:
             return ""
+
+        # Remove JSON artifacts
+        if content.startswith("{") and "}" in content:
+            # Try to extract text from JSON-like response
+            try:
+                import json
+                data = json.loads(content)
+                if isinstance(data, dict):
+                    # Try common keys for text content
+                    content = data.get("response", data.get("text", data.get("message", data.get("content", ""))))
+                    if not content:
+                        content = str(data)
+            except json.JSONDecodeError:
+                # Not valid JSON, strip JSON-like patterns
+                content = re.sub(r'^\s*\{[^}]*"(text|response|message)"\s*:\s*"', '', content)
+                content = re.sub(r'"\s*\}\s*$', '', content)
+
+        # Remove markdown code blocks
+        content = re.sub(r'```[\w]*\n?', '', content)
+        content = re.sub(r'```', '', content)
+
+        # Remove escaped newlines
+        content = content.replace('\\n', '\n')
+
+        # Clean up quotes
+        content = content.strip().strip('"').strip("'")
+
         if len(content) > 600:
             content = content[:597] + "..."
         return content

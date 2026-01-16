@@ -62,7 +62,7 @@ class BotConfig:
     # === RATE LIMITING ===
     sentiment_interval_seconds: int = 3600  # 1 hour minimum between sentiment checks
     max_sentiment_per_day: int = 24  # Max 24 sentiment checks per day
-    daily_cost_limit_usd: float = 1.00  # Stop if daily cost exceeds this
+    daily_cost_limit_usd: float = 10.00  # Stop if daily cost exceeds this
 
     # === MODEL SETTINGS ===
     grok_model: str = "grok-3-mini"  # cheapest: grok-3-mini, best: grok-4
