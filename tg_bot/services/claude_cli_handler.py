@@ -18,14 +18,19 @@ Security:
 """
 
 import asyncio
+import fnmatch
 import logging
 import os
 import re
+import shutil
+import tempfile
 import time
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Any
 from pathlib import Path
 from datetime import datetime, timezone
 from collections import defaultdict
+
+from core.security.scrubber import get_scrubber
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +144,18 @@ CLAUDE_OUTPUT_PATTERNS = [
     # Simplify file paths
     (r'c:\\Users\\lucid\\OneDrive\\Desktop\\Projects\\Jarvis\\', ''),
     (r'/home/[^/]+/', '~/'),
+    # Remove Claude hook errors (sandbox $HOME expansion issues)
+    (r'(?:Session|PreTool|PostTool|Stop)(?:End|Use)? hook \[[^\]]+\] failed:[^\n]*\n', '\n'),
+    # Remove node throw err + caret line pattern
+    (r'  throw err;\n  \^\n', ''),
+    # Remove node:internal module path lines
+    (r'node:internal/[^\n]*\n', ''),
+    # Remove Error: Cannot find module with stack trace
+    (r"Error: Cannot find module '[^']*'[^\n]*\n(?:    at [^\n]+\n)*", ''),
+    # Remove bash: command not found errors from hooks
+    (r'bash: [^\n]*: No such file or directory\n', ''),
+    # Clean up 3+ consecutive blank lines to 2
+    (r'\n{3,}', '\n\n'),
 ]
 
 
@@ -184,6 +201,104 @@ class ClaudeCLIHandler:
         "econnrefused",
         "econnreset",
     ]
+
+    ISOLATION_IGNORE_NAMES = {
+        ".git",
+        ".hg",
+        ".svn",
+        ".venv",
+        "venv",
+        ".agent",
+        ".claude",
+        ".codex",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        "node_modules",
+        "dist",
+        "build",
+        "logs",
+        "tmp",
+        "temp",
+        "data",
+        "nul",
+        "con",
+        "prn",
+        "aux",
+        "com1",
+        "com2",
+        "com3",
+        "com4",
+        "com5",
+        "com6",
+        "com7",
+        "com8",
+        "com9",
+        "lpt1",
+        "lpt2",
+        "lpt3",
+        "lpt4",
+        "lpt5",
+        "lpt6",
+        "lpt7",
+        "lpt8",
+        "lpt9",
+    }
+
+    ISOLATION_IGNORE_GLOBS = {
+        ".env",
+        ".env.*",
+        "*.log",
+        "*.db",
+        "*.sqlite",
+        "*.sqlite3",
+        "*.pem",
+        "*.key",
+        "*.pfx",
+    }
+
+    SANDBOX_ENV_BLOCKLIST = (
+        "KEY",
+        "TOKEN",
+        "SECRET",
+        "PASSWORD",
+        "PRIVATE",
+        "MNEMONIC",
+        "SEED",
+        "CREDENTIAL",
+    )
+
+    SANDBOX_ENV_ALLOWLIST = {
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_API_KEY",
+        "CLAUDE_CODE_API_KEY",
+    }
+
+    WINDOWS_RESERVED_NAMES = {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        "com1",
+        "com2",
+        "com3",
+        "com4",
+        "com5",
+        "com6",
+        "com7",
+        "com8",
+        "com9",
+        "lpt1",
+        "lpt2",
+        "lpt3",
+        "lpt4",
+        "lpt5",
+        "lpt6",
+        "lpt7",
+        "lpt8",
+        "lpt9",
+    }
 
     def __init__(self, admin_user_ids: list[int] = None):
         # Use strict whitelist, ignore env var for CLI execution
@@ -253,6 +368,25 @@ class ClaudeCLIHandler:
             if bash_path and os.path.isfile(bash_path):
                 return bash_path
         return None
+
+    def _windows_to_bash_path(self, win_path: str) -> str:
+        """Convert Windows path to Git Bash compatible path.
+
+        C:\\Users\\lucid\\... -> /c/Users/lucid/...
+        """
+        if not win_path or os.name != 'nt':
+            return win_path
+
+        # Handle drive letter (C: -> /c)
+        if len(win_path) >= 2 and win_path[1] == ':':
+            drive = win_path[0].lower()
+            rest = win_path[2:]
+            # Convert backslashes to forward slashes
+            rest = rest.replace('\\', '/')
+            return f"/{drive}{rest}"
+
+        # Just convert backslashes if no drive letter
+        return win_path.replace('\\', '/')
 
     def is_admin(self, user_id: int, username: str = None) -> bool:
         """Check if user is authorized for CLI execution.
@@ -328,7 +462,9 @@ class ClaudeCLIHandler:
     async def _run_cli_with_retry(
         self,
         cmd: List[str],
-        timeout: float = 180.0
+        timeout: float = 180.0,
+        cwd: Optional[str] = None,
+        env: Optional[Dict[str, str]] = None,
     ) -> Tuple[bool, str, str]:
         """Run CLI command with retry for transient failures.
 
@@ -347,17 +483,17 @@ class ClaudeCLIHandler:
 
                 # Set up environment with proper HOME for Windows
                 # Claude CLI hooks use $HOME which doesn't expand on Windows
-                env = os.environ.copy()
-                env['HOME'] = os.path.expanduser('~')
-                if 'USERPROFILE' not in env:
-                    env['USERPROFILE'] = os.path.expanduser('~')
+                exec_env = env.copy() if env else os.environ.copy()
+                exec_env["HOME"] = os.path.expanduser("~")
+                if "USERPROFILE" not in exec_env:
+                    exec_env["USERPROFILE"] = os.path.expanduser("~")
 
                 self._active_process = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    cwd=self.working_dir,
-                    env=env,
+                    cwd=cwd or self.working_dir,
+                    env=exec_env,
                 )
 
                 try:
@@ -432,6 +568,199 @@ class ClaudeCLIHandler:
             "pending": list(self._pending_commands),  # Copy to avoid mutation
             "is_locked": self._execution_lock.locked(),
         }
+
+    def _scrub_prompt(self, text: str) -> Tuple[str, List[str]]:
+        """Scrub sensitive data before sending prompt to Claude."""
+        scrubber = get_scrubber()
+        scrubbed, redacted = scrubber.scrub(text or "")
+        scrubbed = self.sanitize_output(scrubbed, paranoid=True)
+        return scrubbed, list(set(redacted))
+
+    def _should_ignore_path(self, rel_path: str) -> bool:
+        rel_path = rel_path.replace("\\", "/")
+        parts = rel_path.split("/")
+        for part in parts:
+            if part.lower() in self.ISOLATION_IGNORE_NAMES:
+                return True
+        filename = parts[-1] if parts else rel_path
+        filename_lower = filename.lower()
+        if filename_lower in self.ISOLATION_IGNORE_NAMES:
+            return True
+        for pattern in self.ISOLATION_IGNORE_GLOBS:
+            if fnmatch.fnmatch(filename_lower, pattern):
+                return True
+        return False
+
+    def _collect_file_stats(self, root_dir: str) -> Dict[str, Tuple[float, int]]:
+        stats: Dict[str, Tuple[float, int]] = {}
+        for base, _, files in os.walk(root_dir):
+            for name in files:
+                path = os.path.join(base, name)
+                rel = os.path.relpath(path, root_dir)
+                if self._should_ignore_path(rel):
+                    continue
+                try:
+                    st = os.stat(path)
+                except OSError:
+                    continue
+                stats[rel] = (st.st_mtime, st.st_size)
+        return stats
+
+    def _build_copy_ignore(self):
+        patterns = [p.lower() for p in self.ISOLATION_IGNORE_GLOBS]
+
+        def _ignore(_path: str, names: List[str]):
+            ignored = set()
+            for name in names:
+                name_lower = name.lower()
+                if name_lower in self.ISOLATION_IGNORE_NAMES:
+                    ignored.add(name)
+                    continue
+                for pattern in patterns:
+                    if fnmatch.fnmatch(name_lower, pattern):
+                        ignored.add(name)
+                        break
+            return ignored
+
+        return _ignore
+
+    def _copy_workspace(self, src_root: str, dst_root: str) -> None:
+        for root, dirs, files in os.walk(src_root):
+            rel_root = os.path.relpath(root, src_root)
+            if rel_root == ".":
+                rel_root = ""
+
+            if rel_root and self._should_ignore_path(rel_root):
+                dirs[:] = []
+                continue
+
+            filtered_dirs = []
+            for d in dirs:
+                d_base = d.split(".", 1)[0].lower()
+                if d_base in self.WINDOWS_RESERVED_NAMES:
+                    continue
+                if self._should_ignore_path(os.path.join(rel_root, d)):
+                    continue
+                filtered_dirs.append(d)
+            dirs[:] = filtered_dirs
+
+            dst_dir = os.path.join(dst_root, rel_root) if rel_root else dst_root
+            os.makedirs(dst_dir, exist_ok=True)
+
+            for name in files:
+                name_base = name.split(".", 1)[0].lower()
+                if name_base in self.WINDOWS_RESERVED_NAMES:
+                    continue
+                rel_path = os.path.join(rel_root, name) if rel_root else name
+                if self._should_ignore_path(rel_path):
+                    continue
+                src_path = os.path.join(root, name)
+                dst_path = os.path.join(dst_root, rel_path)
+                try:
+                    os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+                    shutil.copy2(src_path, dst_path)
+                except OSError as e:
+                    logger.warning(f"Skipped copy for {rel_path}: {e}")
+
+    def _prepare_isolated_workspace(self) -> Tuple[tempfile.TemporaryDirectory, str, Dict[str, Tuple[float, int]]]:
+        temp_dir = tempfile.TemporaryDirectory(prefix="jarvis_claude_")
+        sandbox_root = os.path.join(temp_dir.name, "workspace")
+        try:
+            self._copy_workspace(self.working_dir, sandbox_root)
+            before_stats = self._collect_file_stats(sandbox_root)
+            return temp_dir, sandbox_root, before_stats
+        except Exception:
+            temp_dir.cleanup()
+            raise
+
+    def _files_equal(self, path_a: str, path_b: str) -> bool:
+        try:
+            if os.path.getsize(path_a) != os.path.getsize(path_b):
+                return False
+            with open(path_a, "rb") as fa, open(path_b, "rb") as fb:
+                while True:
+                    chunk_a = fa.read(8192)
+                    chunk_b = fb.read(8192)
+                    if chunk_a != chunk_b:
+                        return False
+                    if not chunk_a:
+                        return True
+        except OSError:
+            return False
+
+    def _apply_sandbox_changes(
+        self,
+        sandbox_root: str,
+        before_stats: Dict[str, Tuple[float, int]]
+    ) -> Dict[str, List[str]]:
+        after_stats = self._collect_file_stats(sandbox_root)
+        added = sorted(rel for rel in after_stats if rel not in before_stats)
+        removed = sorted(rel for rel in before_stats if rel not in after_stats)
+
+        changed_candidates = [
+            rel for rel in after_stats
+            if rel in before_stats and after_stats[rel] != before_stats[rel]
+        ]
+        changed: List[str] = []
+
+        for rel in changed_candidates:
+            src = os.path.join(sandbox_root, rel)
+            dst = os.path.join(self.working_dir, rel)
+            if not os.path.exists(dst):
+                added.append(rel)
+                continue
+            if not self._files_equal(src, dst):
+                changed.append(rel)
+
+        def is_safe(rel_path: str) -> bool:
+            if rel_path.startswith("..") or os.path.isabs(rel_path):
+                return False
+            base = os.path.abspath(self.working_dir)
+            target = os.path.abspath(os.path.join(base, rel_path))
+            return os.path.commonpath([base, target]) == base
+
+        for rel in added + changed:
+            if not is_safe(rel):
+                continue
+            src = os.path.join(sandbox_root, rel)
+            dst = os.path.join(self.working_dir, rel)
+            dst_dir = os.path.dirname(dst)
+            if dst_dir:
+                os.makedirs(dst_dir, exist_ok=True)
+            try:
+                shutil.copy2(src, dst)
+            except OSError as e:
+                logger.warning(f"Failed to apply change for {rel}: {e}")
+
+        for rel in removed:
+            if not is_safe(rel):
+                continue
+            dst = os.path.join(self.working_dir, rel)
+            try:
+                if os.path.isfile(dst):
+                    os.remove(dst)
+            except OSError as e:
+                logger.warning(f"Failed to remove {rel}: {e}")
+
+        return {
+            "added": sorted(set(added)),
+            "changed": sorted(set(changed)),
+            "removed": sorted(set(removed)),
+        }
+
+    def _build_sandbox_env(self) -> Dict[str, str]:
+        env = os.environ.copy()
+        for key in list(env.keys()):
+            key_upper = key.upper()
+            if key_upper in self.SANDBOX_ENV_ALLOWLIST:
+                continue
+            if any(token in key_upper for token in self.SANDBOX_ENV_BLOCKLIST):
+                env.pop(key, None)
+        env["HOME"] = os.path.expanduser("~")
+        if "USERPROFILE" not in env:
+            env["USERPROFILE"] = os.path.expanduser("~")
+        env["JARVIS_SANDBOX"] = "1"
+        return env
 
     def sanitize_output(self, text: str, paranoid: bool = True) -> str:
         """Remove ALL sensitive information from output.
@@ -596,7 +925,7 @@ class ClaudeCLIHandler:
         """
         if not self.is_admin(user_id, username):
             logger.warning(f"Unauthorized Claude CLI attempt by user {user_id} ({username})")
-            return False, "access denied. admin only.", "Unauthorized."
+            return False, "access denied. admin only.", "Access denied. Admin only."
 
         # Check rate limits
         allowed, rate_msg = self.check_rate_limit(user_id)
@@ -616,9 +945,10 @@ class ClaudeCLIHandler:
         start_time = time.time()
 
         # Add to pending queue
+        scrubbed_preview, _ = self._scrub_prompt(prompt)
         pending_entry = {
             "user_id": user_id,
-            "prompt_preview": prompt[:50] + "..." if len(prompt) > 50 else prompt,
+            "prompt_preview": scrubbed_preview[:50] + "..." if len(scrubbed_preview) > 50 else scrubbed_preview,
             "queued_at": datetime.now().isoformat(),
         }
         self._pending_commands.append(pending_entry)
@@ -627,7 +957,6 @@ class ClaudeCLIHandler:
         # Acquire execution lock (serialize CLI calls)
         async with self._execution_lock:
             try:
-                logger.info(f"Executing Claude CLI for admin {user_id}: {prompt[:100]}...")
 
                 # Send JARVIS-style confirmation
                 if send_update:
@@ -635,18 +964,25 @@ class ClaudeCLIHandler:
                     await send_update(f"🤖 {jarvis_confirm}")
 
                 # Build enhanced prompt with context (includes learnings & preferences)
-                enhanced_prompt = prompt
+                scrubbed_prompt, redacted = self._scrub_prompt(prompt)
+                enhanced_prompt = scrubbed_prompt
+                logger.info(f"Executing Claude CLI for admin {user_id}: {scrubbed_prompt[:100]}...")
 
                 if include_context and self._bridge:
                     context = self.get_conversation_context(user_id, current_request=prompt, limit=5)
                     if context:
+                        scrubbed_context, context_redacted = self._scrub_prompt(context)
+                        redacted.extend(context_redacted)
                         enhanced_prompt = f"""## Context
-{context}
+{scrubbed_context}
 
 ## Current Request
-{prompt}
+{scrubbed_prompt}
 
 Execute this request. Be concise in your response. Follow any standing instructions."""
+
+                if redacted:
+                    logger.info(f"Scrubbed {len(set(redacted))} sensitive items before Claude CLI")
 
                 # Build the claude command
                 logger.info(f"Using Claude CLI at: {self._claude_path}")
@@ -657,14 +993,16 @@ Execute this request. Be concise in your response. Follow any standing instructi
 
                 if bash_path:
                     # Run through bash to properly expand $HOME in hook commands
-                    # Escape the prompt for bash
+                    # Convert Windows path to bash-compatible format
+                    bash_claude_path = self._windows_to_bash_path(self._claude_path)
+                    # Escape the prompt for bash (single quotes with escaped single quotes)
                     escaped_prompt = enhanced_prompt.replace("'", "'\\''")
                     cmd = [
                         bash_path,
                         "-c",
-                        f"{self._claude_path} --print --dangerously-skip-permissions '{escaped_prompt}'"
+                        f"'{bash_claude_path}' --print --dangerously-skip-permissions '{escaped_prompt}'"
                     ]
-                    logger.info("Using Git Bash for $HOME expansion")
+                    logger.info(f"Using Git Bash for $HOME expansion, claude path: {bash_claude_path}")
                 else:
                     cmd = [
                         self._claude_path,
@@ -673,13 +1011,48 @@ Execute this request. Be concise in your response. Follow any standing instructi
                         enhanced_prompt
                     ]
 
-                # Execute with retry for transient failures
-                cli_success, stdout_str, stderr_str = await self._run_cli_with_retry(cmd, timeout=180.0)
+                # Execute in isolated workspace
+                sandbox_dir = None
+                sandbox_root = None
+                before_stats: Dict[str, Tuple[float, int]] = {}
+                try:
+                    sandbox_dir, sandbox_root, before_stats = self._prepare_isolated_workspace()
+                except Exception as e:
+                    self.record_execution(False, time.time() - start_time, user_id)
+                    jarvis_error = self.get_jarvis_response(False, "sandbox setup failed")
+                    return False, jarvis_error, f"Sandbox setup failed: {e}"
+
+                apply_error = None
+                try:
+                    sandbox_env = self._build_sandbox_env()
+                    cli_success, stdout_str, stderr_str = await self._run_cli_with_retry(
+                        cmd,
+                        timeout=180.0,
+                        cwd=sandbox_root,
+                        env=sandbox_env,
+                    )
+                finally:
+                    try:
+                        if sandbox_root:
+                            self._apply_sandbox_changes(sandbox_root, before_stats)
+                    except Exception as e:
+                        apply_error = str(e)
+                        logger.error(f"Failed to apply sandbox changes: {e}")
+                    if sandbox_dir:
+                        sandbox_dir.cleanup()
+
+                if apply_error:
+                    self.record_execution(False, time.time() - start_time, user_id)
+                    jarvis_error = self.get_jarvis_response(False, "failed to apply changes")
+                    return False, jarvis_error, f"Apply changes failed: {apply_error}"
 
                 if not cli_success:
                     self.record_execution(False, time.time() - start_time, user_id)
-                    jarvis_error = self.get_jarvis_response(False, stderr_str or "execution failed")
-                    return False, jarvis_error, stderr_str or "Command execution failed."
+                    error_output = stderr_str or "Command execution failed."
+                    sanitized_error = self.sanitize_output(error_output, paranoid=True)
+                    summary_error = sanitized_error[:200] if sanitized_error else "execution failed"
+                    jarvis_error = self.get_jarvis_response(False, summary_error)
+                    return False, jarvis_error, sanitized_error
 
                 # Combine output
                 output = stdout_str

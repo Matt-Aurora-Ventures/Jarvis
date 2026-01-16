@@ -504,19 +504,37 @@ class ConsoleBridge:
     
     def is_coding_request(self, message: str) -> bool:
         """Detect if a message is a coding/development request."""
+        message_lower = (message or "").strip().lower()
+        if not message_lower:
+            return False
+
+        explicit_prefixes = (
+            "code:",
+            "cli:",
+            "vibe:",
+            "rw:",
+            "ralph wiggum",
+            "vibe code",
+            "cascade",
+        )
+        if message_lower.startswith(explicit_prefixes):
+            return True
+
         coding_keywords = [
+            # Action verbs
             "fix", "add", "create", "build", "implement", "change",
             "update", "modify", "refactor", "debug", "test", "deploy",
+            "make", "write", "run", "execute", "install", "delete",
+            "remove", "edit", "check", "pull", "push", "commit",
+            "show", "get", "analyze", "trace", "review", "setup",
+            # Technical terms
             "code", "function", "class", "api", "endpoint", "command",
-            "feature", "bug", "error", "issue", "make", "write",
-            "ralph wiggum", "cascade", "vibe code", "console",
-            "turn on", "turn off", "enable", "disable", "start", "stop",
-            "run", "execute", "please do", "can you", "help me",
-            "generate", "report", "send me", "show me", "get me",
-            "fetch", "pull", "push", "commit", "github", "repo",
-            "script", "bot", "handler", "service", "module"
+            "feature", "bug", "error", "issue", "script", "handler",
+            "service", "module", "repo", "github", "config", "log",
+            "database", "server", "bot", "telegram", "twitter", "trading",
+            # Common requests
+            "latest", "status", "what's wrong", "why", "how do",
         ]
-        message_lower = message.lower()
         return any(kw in message_lower for kw in coding_keywords)
 
 
