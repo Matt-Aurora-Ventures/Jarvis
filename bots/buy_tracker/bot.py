@@ -423,8 +423,8 @@ class JarvisBuyBot:
                     text=f"❌ Error processing trade: {str(e)[:100]}",
                     parse_mode=ParseMode.HTML,
                 )
-            except:
-                pass
+            except Exception:
+                pass  # Ignore errors when sending error notification
 
     async def _handle_confirm_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle trade confirmation button clicks."""
@@ -800,6 +800,13 @@ async def run_buy_bot():
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+
+    # Start metrics server (best-effort)
+    try:
+        from core.monitoring.metrics import start_metrics_server
+        start_metrics_server()
+    except Exception as exc:
+        logger.warning(f"Metrics server unavailable: {exc}")
 
     bot = JarvisBuyBot()
     try:
