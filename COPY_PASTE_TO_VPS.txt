@@ -1,0 +1,38 @@
+# ============================================================
+# JARVIS VPS DEPLOYMENT - JUST COPY & PASTE THIS
+# ============================================================
+#
+# Instructions:
+# 1. SSH into your VPS: ssh root@72.61.7.126
+# 2. Copy the entire command below (starting with "curl")
+# 3. Paste it into your VPS terminal
+# 4. Press Enter
+# 5. Done! All bots will be running 24/7
+#
+# ============================================================
+
+curl -fsSL https://raw.githubusercontent.com/Matt-Aurora-Ventures/Jarvis/main/vps-deploy-with-keys.sh | bash && echo -e "\n\n✓ DEPLOYMENT COMPLETE! Your bots are running 24/7\n\nNext step: Update API keys\n  nano /home/jarvis/Jarvis/secrets/keys.json\n\nThen restart:\n  systemctl restart jarvis-supervisor jarvis-telegram jarvis-twitter\n"
+
+# ============================================================
+# What this does:
+# ✓ Updates system and installs dependencies
+# ✓ Creates jarvis non-root user
+# ✓ Configures firewall
+# ✓ Clones Jarvis repo
+# ✓ Installs Python venv + requirements
+# ✓ Creates systemd services (auto-restart on crash)
+# ✓ Adds your Groq API key
+# ✓ Starts all bots
+# ============================================================
+
+# After deployment completes, you MUST:
+# 1. SSH back in: ssh root@72.61.7.126
+# 2. Edit keys: nano /home/jarvis/Jarvis/secrets/keys.json
+# 3. Replace REPLACEME values with your actual API keys
+# 4. Save and exit: Ctrl+O, Enter, Ctrl+X
+# 5. Restart services: systemctl restart jarvis-supervisor jarvis-telegram jarvis-twitter
+
+# Monitor logs anytime:
+#   journalctl -u jarvis-supervisor -f
+#   journalctl -u jarvis-telegram -f
+#   journalctl -u jarvis-twitter -f
