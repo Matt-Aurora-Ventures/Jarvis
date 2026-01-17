@@ -335,7 +335,7 @@ class TreasuryDisplay:
                         if exit_time_str:
                             try:
                                 exit_time = datetime.fromisoformat(exit_time_str)
-                            except:
+                            except (ValueError, TypeError):
                                 exit_time = datetime.now()
                         else:
                             exit_time = datetime.now()
