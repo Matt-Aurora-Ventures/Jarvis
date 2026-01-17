@@ -224,7 +224,56 @@ def get_treasury_handler(data_dir: str = None) -> TreasuryHandler:
     return _handler
 
 
+# Create default handler instance for module-level functions
+_default_handler = None
+
+
+async def handle_treasury(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /treasury command - Full display."""
+    global _default_handler
+    if _default_handler is None:
+        _default_handler = get_treasury_handler()
+    return await _default_handler.handle_treasury(update, context)
+
+
+async def handle_portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /portfolio or /p command - Quick overview."""
+    global _default_handler
+    if _default_handler is None:
+        _default_handler = get_treasury_handler()
+    return await _default_handler.handle_portfolio(update, context)
+
+
+async def handle_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /balance or /b command - Balance summary."""
+    global _default_handler
+    if _default_handler is None:
+        _default_handler = get_treasury_handler()
+    return await _default_handler.handle_balance(update, context)
+
+
+async def handle_pnl(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /pnl command - P&L details."""
+    global _default_handler
+    if _default_handler is None:
+        _default_handler = get_treasury_handler()
+    return await _default_handler.handle_pnl(update, context)
+
+
+async def handle_sector(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /sector command - Sector breakdown."""
+    global _default_handler
+    if _default_handler is None:
+        _default_handler = get_treasury_handler()
+    return await _default_handler.handle_sector(update, context)
+
+
 __all__ = [
     'TreasuryHandler',
     'get_treasury_handler',
+    'handle_treasury',
+    'handle_portfolio',
+    'handle_balance',
+    'handle_pnl',
+    'handle_sector',
 ]
