@@ -189,7 +189,8 @@ class TwitterCredentials:
         """Load credentials from environment variables and persisted token file"""
         try:
             from dotenv import load_dotenv
-            env_path = Path(__file__).parent / ".env"
+            # Load from root .env file (project root is 3 directories up)
+            env_path = Path(__file__).parent.parent.parent / ".env"
             load_dotenv(env_path, override=False)
         except Exception:
             pass
