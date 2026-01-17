@@ -240,6 +240,31 @@ class CircuitBreaker:
             self._stats.record_rejection()
             return False
 
+    async def call(self, func: Callable) -> Any:
+        """
+        Execute a callable through the circuit breaker.
+
+        Args:
+            func: Async callable to execute
+
+        Returns:
+            Result of the callable
+
+        Raises:
+            CircuitOpenError: If circuit is open
+            Any exception from the callable
+        """
+        if not self.allow_request():
+            raise CircuitOpenError(self.name, self.get_remaining_timeout())
+
+        try:
+            result = await func()
+            self.record_success()
+            return result
+        except Exception as e:
+            self.record_failure(e)
+            raise
+
     def get_remaining_timeout(self) -> float:
         """Get remaining seconds until half-open."""
         if self._state != CircuitState.OPEN or self._opened_at is None:
