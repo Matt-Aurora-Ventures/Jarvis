@@ -21,7 +21,7 @@ def load_env_manual():
         except UnicodeDecodeError:
             try:
                 content = env_path.read_text(encoding='utf-16')
-            except:
+            except Exception:
                 content = env_path.read_text(encoding='latin-1')
         for line in content.splitlines():
             line = line.strip()
@@ -110,7 +110,7 @@ async def main():
                 try:
                     change_val = float(price_change) if price_change else 0
                     change_str = f"+{change_val:.1f}%" if change_val >= 0 else f"{change_val:.1f}%"
-                except:
+                except Exception:
                     change_str = "N/A"
 
                 message += f"{i}. *{symbol}* {change_str}\n"

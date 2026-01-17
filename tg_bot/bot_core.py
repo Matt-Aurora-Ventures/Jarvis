@@ -117,8 +117,12 @@ class CallbackUpdate:
 
 
 async def _send_with_retry(query, text: str, parse_mode=None, reply_markup=None, max_retries: int = EXPAND_RETRY_ATTEMPTS):
-    """Send a message with retry logic for rate limiting."""
+    """Send a message with exponential backoff retry logic for rate limiting."""
     from telegram.error import RetryAfter, TimedOut, NetworkError
+    import random
+
+    base_delay = 1.0  # Start with 1 second
+    max_delay = 30.0  # Cap at 30 seconds
 
     for attempt in range(max_retries):
         try:
@@ -129,15 +133,20 @@ async def _send_with_retry(query, text: str, parse_mode=None, reply_markup=None,
             )
             return True
         except RetryAfter as e:
+            # Telegram tells us exactly how long to wait
             wait_time = e.retry_after + 1
             logger.warning(f"Rate limited, waiting {wait_time}s (attempt {attempt + 1}/{max_retries})")
             await asyncio.sleep(wait_time)
         except TimedOut:
-            logger.warning(f"Timed out, retrying (attempt {attempt + 1}/{max_retries})")
-            await asyncio.sleep(2)
+            # Exponential backoff with jitter for timeouts
+            delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+            logger.warning(f"Timed out, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})")
+            await asyncio.sleep(delay)
         except NetworkError as e:
-            logger.warning(f"Network error: {e}, retrying (attempt {attempt + 1}/{max_retries})")
-            await asyncio.sleep(2)
+            # Exponential backoff with jitter for network errors
+            delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+            logger.warning(f"Network error: {e}, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})")
+            await asyncio.sleep(delay)
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
             return False
@@ -1538,7 +1547,7 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         async def send_status(msg: str):
             try:
                 await confirm_msg.edit_text(msg, parse_mode=ParseMode.HTML)
-            except:
+            except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
         
         success, summary, output = await cli_handler.execute(
@@ -1650,7 +1659,7 @@ async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             try:
                 await working_msg.delete()
-            except:
+            except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
 
             if not result.success:
@@ -1705,7 +1714,7 @@ async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Delete working message
         try:
             await working_msg.delete()
-        except:
+        except Exception:  # noqa: BLE001 - intentional catch-all
             pass
 
         if not result.success:
@@ -2258,7 +2267,7 @@ async def paper(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Treasury Trading Commands
 # =============================================================================
 
-DEFAULT_ADMIN_USER_ID = 8527130908  # Legacy fallback if env not set
+DEFAULT_ADMIN_USER_ID = int(os.environ.get("JARVIS_ADMIN_USER_ID", "8527130908"))  # Legacy fallback if env not set
 
 
 @admin_only
@@ -4496,7 +4505,7 @@ async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE,
                         text=f"removed spam. @{username} banned.\n\nif this was a mistake, reach out to @MattFromKr8tiv.",
                     )
                     return True
-                except:
+                except Exception:  # noqa: BLE001 - intentional catch-all
                     pass
     
     return False
@@ -4637,7 +4646,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 async def send_status(msg: str):
                     try:
                         await confirm_msg.edit_text(msg, parse_mode=ParseMode.HTML)
-                    except:
+                    except Exception:  # noqa: BLE001 - intentional catch-all
                         pass
                 
                 success, summary, output = await cli_handler.execute(

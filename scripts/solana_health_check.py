@@ -105,7 +105,7 @@ async def check_account_health():
             )
             
             print(f"\n🔧 Program Accounts: {len(program_accounts.value) if program_accounts else 0}")
-        except:
+        except Exception:
             print("\n🔧 Program Accounts: Unable to fetch")
         
         # Check recent transactions

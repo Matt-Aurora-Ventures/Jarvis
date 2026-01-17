@@ -934,7 +934,7 @@ class JarvisAdmin:
             })
             
             UPGRADE_QUEUE.write_text(json.dumps(queue, indent=2))
-        except:
+        except Exception:  # noqa: BLE001 - intentional catch-all
             pass
     
     # =========================================================================

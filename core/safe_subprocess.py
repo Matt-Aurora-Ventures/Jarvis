@@ -36,17 +36,17 @@ def _kill_process_tree(pid: int):
         for child in children:
             try:
                 child.kill()
-            except:
+            except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
         try:
             parent.kill()
-        except:
+        except Exception:  # noqa: BLE001 - intentional catch-all
             pass
     except ImportError:
         # Fallback without psutil
         try:
             os.kill(pid, signal.SIGKILL)
-        except:
+        except Exception:  # noqa: BLE001 - intentional catch-all
             pass
 
 
@@ -165,7 +165,7 @@ def run_command_safe(
                 stdout, stderr = proc.communicate(timeout=1)
                 result["stdout"] = stdout or ""
                 result["stderr"] = stderr or ""
-            except:
+            except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
         
         finally:
@@ -259,7 +259,7 @@ async def run_command_async(
             try:
                 proc.kill()
                 await proc.wait()
-            except:
+            except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
             
             result["stderr"] = f"[TIMEOUT] Command exceeded {timeout}s limit and was killed"

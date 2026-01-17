@@ -1,0 +1,294 @@
+# ============================================================================
+# JARVIS Master Configuration File
+#
+# This unified configuration file replaces all scattered config files.
+# All secrets should be provided via environment variables.
+#
+# Environment Variable Expansion:
+#   ${VAR_NAME}          - Replace with environment variable
+#   ${VAR_NAME:default}  - Use default if not set
+#
+# Usage:
+#   from core.config.unified_config import get_unified_config
+#   config = get_unified_config()
+#   api_key = config.get("twitter.api_key")
+# ============================================================================
+
+general:
+  name: "Jarvis"
+  version: "4.6.3"
+  debug: ${DEBUG:false}
+  log_level: ${LOG_LEVEL:INFO}
+  data_dir: ${LIFEOS_HOME:~/.lifeos}
+
+# ============================================================================
+# Trading Configuration
+# ============================================================================
+trading:
+  enabled: ${TRADING_ENABLED:false}
+  live_mode: ${TREASURY_LIVE_MODE:false}
+  paper_mode: true
+
+  # Position management
+  max_positions: 50
+  max_position_pct: 0.25  # 25% of portfolio per position
+  daily_loss_limit_pct: 0.10  # 10% daily loss limit
+
+  # Execution parameters
+  default_slippage_pct: 0.01  # 1% slippage tolerance
+  slippage_bps: 50  # 50 basis points for Jupiter
+
+  # Jupiter DEX integration
+  rpc_url: ${RPC_URL:https://api.mainnet-beta.solana.com}
+  jupiter_api_url: https://api.jup.ag
+
+  # Dry run mode
+  dry_run: ${DRY_RUN:true}
+
+# ============================================================================
+# Twitter / X Bot Configuration
+# ============================================================================
+twitter:
+  enabled: ${X_BOT_ENABLED:false}
+
+  # API Credentials (OAuth 1.0a)
+  api_key: ${X_API_KEY}
+  api_secret: ${X_API_SECRET}
+  access_token: ${X_ACCESS_TOKEN}
+  access_token_secret: ${X_ACCESS_TOKEN_SECRET}
+  bearer_token: ${X_BEARER_TOKEN}
+
+  # OAuth 2.0 (recommended for posting)
+  oauth2_client_id: ${X_OAUTH2_CLIENT_ID}
+  oauth2_client_secret: ${X_OAUTH2_CLIENT_SECRET}
+  oauth2_access_token: ${X_OAUTH2_ACCESS_TOKEN}
+  oauth2_refresh_token: ${X_OAUTH2_REFRESH_TOKEN}
+  oauth2_redirect_uri: ${X_OAUTH2_REDIRECT_URI:http://localhost:8888/callback}
+
+  # Account settings
+  expected_username: ${X_EXPECTED_USERNAME:jarvis_lifeos}
+
+  # Grok API (for sentiment analysis)
+  grok_api_key: ${XAI_API_KEY}
+  grok_model: grok-3
+  grok_image_model: grok-2-image
+
+  # Rate limiting & circuit breaker
+  polling_interval: 60  # seconds
+  min_tweet_interval: 1800  # 30 minutes between tweets
+  circuit_breaker_cooldown: 1800  # 30 minutes cooldown after 3 errors
+  circuit_breaker_error_threshold: 3
+
+  # Engagement settings
+  auto_reply: true
+  reply_probability: 0.3  # Reply to 30% of mentions
+  like_mentions: true
+  max_replies_per_hour: 5
+  mention_check_interval: 60  # seconds
+
+  # Posting schedule (24-hour format, UTC)
+  schedule:
+    8: morning_report      # 8 AM - Morning market overview
+    10: token_spotlight    # 10 AM - Trending token spotlight
+    12: stock_picks        # 12 PM - Stock picks from Grok
+    14: macro_update       # 2 PM - Macro/geopolitical update
+    16: commodities        # 4 PM - Commodities & precious metals
+    18: grok_insight       # 6 PM - Grok wisdom/insight
+    20: evening_wrap       # 8 PM - Evening market wrap
+
+# ============================================================================
+# Telegram Bot Configuration
+# ============================================================================
+telegram:
+  enabled: ${TELEGRAM_ENABLED:false}
+
+  # Bot Token
+  bot_token: ${TELEGRAM_BOT_TOKEN}
+
+  # Admin security - only these users can run commands
+  admin_ids: ${TELEGRAM_ADMIN_IDS}  # Format: "123456789,987654321"
+
+  # Chat configuration
+  broadcast_chat_id: ${TELEGRAM_BROADCAST_CHAT_ID}
+  buy_bot_chat_id: ${TELEGRAM_BUY_BOT_CHAT_ID}
+
+  # Polling
+  polling_interval: 1.0  # seconds
+
+  # Rate limiting & cost control
+  sentiment_interval_seconds: 3600  # 1 hour minimum between checks
+  max_sentiment_per_day: 24
+  daily_cost_limit_usd: 10.00  # Stop if daily cost exceeds this
+
+  # LLM settings
+  grok_api_key: ${XAI_API_KEY}
+  grok_model: grok-3-mini
+
+  anthropic_api_key: ${ANTHROPIC_API_KEY}
+  claude_model: claude-sonnet-4-20250514
+  claude_max_tokens: 1024
+
+  # Data APIs
+  birdeye_api_key: ${BIRDEYE_API_KEY}  # For token data
+
+  # Database
+  db_path: ${HOME:~}/.lifeos/telegram/jarvis_secure.db
+
+  # Digest schedule (UTC hours)
+  digest_hours: [8, 14, 20]
+
+  # Paper trading
+  paper_starting_balance: 100.0  # SOL
+  paper_max_position_pct: 0.20
+  paper_slippage_pct: 0.003
+
+  # Treasury integration
+  low_balance_threshold: ${LOW_BALANCE_THRESHOLD:0.01}  # SOL
+
+  # Security
+  log_api_calls: false  # Never log actual API responses
+  mask_addresses: true  # Truncate addresses in logs
+
+# ============================================================================
+# Buy Tracker Configuration
+# ============================================================================
+buy_tracker:
+  enabled: ${BUY_TRACKER_ENABLED:false}
+
+  # Telegram settings
+  bot_token: ${TELEGRAM_BUY_BOT_TOKEN:${TELEGRAM_BOT_TOKEN}}
+  chat_id: ${TELEGRAM_BUY_BOT_CHAT_ID}
+
+  # Token tracking
+  token_symbol: ${BUY_BOT_TOKEN_SYMBOL:KR8TIV}
+  token_name: ${BUY_BOT_TOKEN_NAME:Kr8Tiv}
+  token_address: ${BUY_BOT_TOKEN_ADDRESS}
+  pair_address: ${BUY_BOT_PAIR_ADDRESS}
+
+  # RPC settings
+  rpc_url: ${RPC_URL:https://api.mainnet-beta.solana.com}
+  helius_api_key: ${HELIUS_API_KEY}
+  websocket_url: ${WEBSOCKET_URL}
+
+  # Notification settings
+  min_buy_usd: 5.0  # Minimum buy amount in USD to notify
+  bot_name: "Jarvis Buy Bot Tracker"
+  buy_emoji: "🤖"
+
+# ============================================================================
+# LLM / AI Configuration
+# ============================================================================
+llm:
+  provider: ${LLM_PROVIDER:groq}
+  model: ${LLM_MODEL:llama-3.3-70b-versatile}
+  temperature: 0.7
+  max_tokens: 500
+  fallback_provider: ${LLM_FALLBACK:ollama}
+
+# ============================================================================
+# Persona Configuration
+# ============================================================================
+persona:
+  default: jarvis
+  voice_enabled: false
+  voice_id: morgan_freeman
+
+# ============================================================================
+# Plugins Configuration
+# ============================================================================
+plugins:
+  enabled: true
+  auto_load: true
+  directories:
+    - plugins
+
+# ============================================================================
+# Memory Configuration
+# ============================================================================
+memory:
+  # Memory store settings
+  db_path: ${HOME:~}/.lifeos/memory.db
+  max_history: 1000
+
+  # TTL settings (hours)
+  trading_ttl_hours: 24
+  scratch_ttl_hours: 1
+  duplicate_intent_hours: 1  # Issue #1: idempotency window
+
+  # Backup settings (Issue #2)
+  backup_dir: ${HOME:~}/.lifeos/trading/backups
+  backup_interval_hours: 1
+  backup_retention_hours: 24
+
+# ============================================================================
+# Event Bus Configuration
+# ============================================================================
+events:
+  max_history: 1000
+  max_dead_letters: 100
+
+  # Queue settings
+  max_queue_size: 1000
+  handler_timeout: 30.0  # seconds (Issue #4 fix)
+
+  # Dead letter queue retention
+  dlq_retention: 100
+
+# ============================================================================
+# Notifications Configuration
+# ============================================================================
+notifications:
+  desktop_enabled: true
+  sound_enabled: true
+
+# ============================================================================
+# Monitoring Configuration
+# ============================================================================
+monitoring:
+  health_check_interval: 30  # seconds
+  metrics_enabled: true
+  log_level: INFO
+
+# ============================================================================
+# API Configuration
+# ============================================================================
+api:
+  rate_limit_per_minute: 60
+  timeout_seconds: 30
+  retry_attempts: 3
+
+# ============================================================================
+# Security Configuration
+# ============================================================================
+security:
+  require_auth: true
+  session_timeout_minutes: 60
+  max_failed_logins: 5
+  kill_switch: ${LIFEOS_KILL_SWITCH:false}
+
+# ============================================================================
+# Bot Configuration
+# ============================================================================
+bot:
+  reply_cooldown_seconds: 12
+  smart_filter_enabled: true
+  admin_ids: ${BOT_ADMIN_IDS}
+
+# ============================================================================
+# State Backup Configuration (Issue #2)
+# ============================================================================
+state_backup:
+  state_dir: ${HOME:~}/.lifeos/trading
+  backup_dir: ${HOME:~}/.lifeos/trading/backups
+  archive_dir: ${HOME:~}/.lifeos/trading/archive
+
+  # Backup timing
+  backup_interval_hours: 1
+  backup_retention_hours: 24
+
+  # Files to backup
+  backup_files:
+    - positions.json
+    - exit_intents.json
+    - audit_log.json
+    - daily_volume.json

@@ -2,6 +2,10 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+include = ["core*", "api*", "bots*", "tg_bot*", "integrations*", "lifeos*"]
+exclude = ["tests*", "docs*", "scripts*"]
+
 [project]
 name = "jarvis"
 version = "1.0.0"

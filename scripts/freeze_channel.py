@@ -14,7 +14,7 @@ from telegram import Bot, ChatPermissions
 try:
     from tg_bot.config import get_config
     config = get_config()
-except:
+except Exception:  # noqa: BLE001 - intentional catch-all
     pass
 
 async def freeze_channel():

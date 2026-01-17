@@ -704,7 +704,7 @@ if __name__ == '__main__':
         try:
             result = mcp_doctor_simple.run_all_tests()
             return all(r.passed for r in result.values())
-        except:
+        except Exception:
             return False
     
     def _run_secret_scan(self) -> bool:

@@ -24,7 +24,7 @@ try:
         MCP_AVAILABLE = True
     else:
         MCP_IMPORT_ERROR = "MCP modules not available in subprocess"
-except:
+except Exception:
     MCP_IMPORT_ERROR = "Could not test MCP availability"
 
 # Alternative: try direct imports (may work in some contexts)

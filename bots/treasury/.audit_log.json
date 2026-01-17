@@ -134,5 +134,846 @@
       "tx_signature": "4ARd8gbBtr228AqmDET6K9FTWsAwwLJ7tenoBzzHGxXSfxb3WYgDsAxNwAdx3VeVjBzzggonLfSP7N8WguRKVyU6",
       "dry_run": false
     }
+  },
+  {
+    "timestamp": "2026-01-14T17:31:45.723374",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "4898c04d",
+      "token": "SPYx",
+      "token_mint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+      "amount_usd": 7.357500000000001,
+      "entry_price": 686.31,
+      "tp_price": 789.2564999999998,
+      "sl_price": 645.1313999999999,
+      "sentiment_grade": "B",
+      "tx_signature": "284Fx6oQmUAaqvvqJPpC7zWr87sfM6yFEwELup8XyFkH5vJQG1MsrKEUadpjcxzvXLv6j55vyUnhi79LF21J9hXD",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-14T17:33:07.793382",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "b4ebd181",
+      "token": "TEST",
+      "token_mint": "5zaGbQSZk2pSSugnKojH3NxpVkcvGFqQbYH6fuuofAAA",
+      "amount_usd": 0.00147058,
+      "entry_price": 0.1666,
+      "tp_price": 114.99999999999999,
+      "sl_price": 95.0,
+      "sentiment_grade": "B",
+      "tx_signature": "38ctRWxbBn8aKmRr3swYsWeySX74NieYgkbH2CUYhx5HeQ9Roh2DzWc847HCxn82Z3GokuU4UfXg4FrPEPxkVFH1",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-14T17:33:08.970156",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "7b408e14",
+      "token": "AAPLx",
+      "token_mint": "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
+      "amount_usd": 0.00147058,
+      "entry_price": 259.14,
+      "tp_price": 110.0,
+      "sl_price": 96.0,
+      "sentiment_grade": "B",
+      "tx_signature": "2DMcGankhVnfGxKf266JHttG5N7GRz5f5DYMACVJ4GzdMEktW3uhqoCZQx36tmBYDK5EXJbrksD6zVrs4gAbu9k9",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-14T17:33:09.357455",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "GLDx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-14T17:41:49.707143",
+    "action": "CLOSE_POSITION_STOP_LOSS",
+    "user_id": null,
+    "success": true,
+    "details": {
+      "position_id": "b4ebd181",
+      "token": "TEST",
+      "entry_price": 0.1666,
+      "exit_price": 0.1668,
+      "pnl_usd": 1.7654021608643963e-06,
+      "pnl_pct": 0.12004801920768651,
+      "order_id": "ec8725d0",
+      "tx_signature": "5EH6sDWHxgPoGzAGXeBVnspERoXrnZyVJ3RHVrXcCdrR26vKyt1Y8nrdntq6JhGdwDtpw3Y5DcckdD3hN7sUNmGx"
+    }
+  },
+  {
+    "timestamp": "2026-01-14T17:41:50.518454",
+    "action": "CLOSE_POSITION_TAKE_PROFIT",
+    "user_id": null,
+    "success": true,
+    "details": {
+      "position_id": "7b408e14",
+      "token": "AAPLx",
+      "entry_price": 259.14,
+      "exit_price": 256.9,
+      "pnl_usd": -1.2711658562939004e-05,
+      "pnl_pct": -0.8643976229065405,
+      "order_id": "5295d4ca",
+      "tx_signature": "2xVSZu17pPb4BYyF1tDEH8yLc5VFi4iDMQLYbhjtgFpEU6ctoAoZZ7i1EY9A2D6MXh9f9J7HLiTECzJznjMWY716"
+    }
+  },
+  {
+    "timestamp": "2026-01-14T18:05:20.435382",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "a055c891",
+      "token": "TSLAX",
+      "token_mint": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+      "amount_usd": 13.867124232022501,
+      "entry_price": 435.0059,
+      "tp_price": 456.756195,
+      "sl_price": 426.30578199999997,
+      "sentiment_grade": "B",
+      "tx_signature": "3esWTu7SKdZZXyk6bbF3cnz5v24zUr1jSUd3HD2vT8XZMVj4xGKZuYc3JAo3c5V1zkEVqxT4b1FSoFABgSMSWGW3",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-14T18:38:42.226810",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "b7207eea",
+      "token": "NVDAX",
+      "token_mint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+      "amount_usd": 13.133638491590402,
+      "entry_price": 181.82,
+      "tp_price": 200.002,
+      "sl_price": 174.54719999999998,
+      "sentiment_grade": "B",
+      "tx_signature": "ZjJLwErLf8N364uDkxz1FxkY3Vob1NPmm5ht9B6yGnD6YwAxUk5DMqAfQdHZqfUAwPLahhN4XkhaXWbuqfCBH4U",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-14T18:50:14.340152",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "TSLAx",
+      "reason": "duplicate"
+    }
+  },
+  {
+    "timestamp": "2026-01-14T18:50:17.390280",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "AAPLx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-14T19:28:34.141130",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "TSLAx",
+      "reason": "duplicate"
+    }
+  },
+  {
+    "timestamp": "2026-01-14T19:45:41.326446",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "MSFTx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-15T00:38:51.587261",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "AAPLX",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-15T00:38:55.121227",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "GOOGLX",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-15T00:39:10.968625",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "TQQQx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-15T00:39:17.785978",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "GLDx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-15T01:33:24.392707",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "4f9ce137",
+      "token": "GLDx",
+      "token_mint": "Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re",
+      "amount_usd": 12.387252158279999,
+      "entry_price": 425.6,
+      "tp_price": 476.6720000000001,
+      "sl_price": 404.32,
+      "sentiment_grade": "B",
+      "tx_signature": "3QXUWhgxPWUGadsrLCGjRkDGejS1DAzkD7nEPwsoqsPghexPtj7r1NcQbT3NkUmFgWUxc2ZYSFvQkALJ9Hjtzkxv",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-15T01:33:36.001810",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "567743bd",
+      "token": "TQQQx",
+      "token_mint": "XsjQP3iMAaQ3kQScQKthQpx9ALRbjKAjQtHg6TFomoc",
+      "amount_usd": 12.387252158279999,
+      "entry_price": 106.27,
+      "tp_price": 114.7716,
+      "sl_price": 103.08189999999999,
+      "sentiment_grade": "B",
+      "tx_signature": "5n8oxWTovSEBNSuARhuLEfqbdZxgkEnCehfRjoo9WSp4DWDp4fbDBwSiaqbNixuh5y2QLfT5TL7BpfyRzCChAoxR",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-15T04:37:37.807392",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "SPYX",
+      "reason": "duplicate"
+    }
+  },
+  {
+    "timestamp": "2026-01-15T04:37:42.059477",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "TSLAX",
+      "reason": "duplicate"
+    }
+  },
+  {
+    "timestamp": "2026-01-15T19:31:50.831260",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "3964cf26",
+      "token": "NVDAx",
+      "token_mint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+      "amount_usd": 10.815773075586002,
+      "entry_price": 188.76,
+      "tp_price": 198.198,
+      "sl_price": 184.98479999999998,
+      "sentiment_grade": "B",
+      "tx_signature": "3dCTNi3gddWYJKmXebdnsJVffQRwoEdEW6HJnzfrbLdLsmkBDbDu79qMtfeZBizrgJev2UioZMgD8EPNSnGkCKTU",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-15T19:31:54.995568",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "008e82c5",
+      "token": "AAPLx",
+      "token_mint": "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
+      "amount_usd": 10.815773075586002,
+      "entry_price": 258.25,
+      "tp_price": 271.1625,
+      "sl_price": 253.085,
+      "sentiment_grade": "B",
+      "tx_signature": "3geCukbwB4mMsGs9DF7gFKhXZEYQYvZpavhcjYvyzDQmhYwdJ1qpg3jiHJmeFVNXdYcmhHDytPyy32CG1hNi9DBZ",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-15T19:33:28.293948",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "NVDAx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-15T21:29:18.882791",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "NVDAX",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-15T22:32:17.621355",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "AAPLx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T01:19:49.930069",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "TSLAX",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T01:30:43.891683",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "NVDAx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T01:30:46.008221",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "AAPLx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T01:30:48.021526",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "TSLAx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T01:30:59.716103",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "TQQQx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T02:25:00.109435",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "TQQQx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T03:33:26.643361",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "AAPLx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T03:33:29.546469",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "NVDAx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T03:36:42.943873",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "SPYX",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T04:57:32.658199",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "QQQx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T04:58:13.443093",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "TQQQx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T04:58:15.033085",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "GLDx",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:10:20.851153",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "0a49d661",
+      "token": "SPYx",
+      "token_mint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+      "amount_usd": 9.74513807323,
+      "entry_price": 695.7,
+      "tp_price": 751.3560000000001,
+      "sl_price": 674.8290000000001,
+      "sentiment_grade": "B",
+      "tx_signature": "e98cMfNhscEMW9jWHNryMUbeToDqjKKqFt5izPjganmgFFazwTwdL1w3ey4TFY22q5dGVS6bPYqMsMN37AokUx7",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:10:23.772552",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "b588b3a2",
+      "token": "QQQx",
+      "token_mint": "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+      "amount_usd": 9.74513807323,
+      "entry_price": 623.093,
+      "tp_price": 672.94044,
+      "sl_price": 604.4002099999999,
+      "sentiment_grade": "B",
+      "tx_signature": "5GqYr97gVZHntDGW2kTipJv66qvNKGPzeCgDUBB6afpgujj2XD9BJEQVFxNoVYb9fzHAMknURV6GcEDTjEbmwqWA",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:10:26.594338",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "2d1058b4",
+      "token": "SPYx",
+      "token_mint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+      "amount_usd": 9.74513807323,
+      "entry_price": 695.7,
+      "tp_price": 751.3560000000001,
+      "sl_price": 674.8290000000001,
+      "sentiment_grade": "B",
+      "tx_signature": "tb6zcr4sTCcxbf6gSD2h4RUmRsw2EvpJx7JPk5WeSCgjmL4VuvA2sEAuDzmS4hYmuAzVWSzFe2dqVdL4h1BYwoG",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:10:29.363136",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "7306cb50",
+      "token": "QQQx",
+      "token_mint": "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+      "amount_usd": 9.74513807323,
+      "entry_price": 623.093,
+      "tp_price": 672.94044,
+      "sl_price": 604.4002099999999,
+      "sentiment_grade": "B",
+      "tx_signature": "5ZSjfJQmdP69Foa93bLR2ZXTjV8JcitohGaPxuwdgYh25bLFU75PnJzCtqLvJCkJh5SbpUoBUcPgBU6tB81jbHqq",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:10:32.048508",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "44c5e71b",
+      "token": "TQQQx",
+      "token_mint": "XsjQP3iMAaQ3kQScQKthQpx9ALRbjKAjQtHg6TFomoc",
+      "amount_usd": 9.74513807323,
+      "entry_price": 112.26,
+      "tp_price": 121.24080000000001,
+      "sl_price": 108.8922,
+      "sentiment_grade": "B",
+      "tx_signature": "2Gad9w2tP6vfFVHZscpHRERRsUezdZZ5TzvKAsQ5YCPcUpGd3veo2TbyUXd47695c3SmGP2pbSUGUZdM4RVDuasw",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:10:45.309128",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "0eab948e",
+      "token": "GLDx",
+      "token_mint": "Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re",
+      "amount_usd": 7.778717560875002,
+      "entry_price": 422.39,
+      "tp_price": 447.7334,
+      "sl_price": 411.83025,
+      "sentiment_grade": "B",
+      "tx_signature": "2FukGPiZVppzyxPHJJMHQhNKPeErkqPuaAYHeTMW1ZH3Qf5fG8ja3ccJA2mUkZuPSC6AsCabPQF7o3EB49QNDKeL",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:10:49.528393",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "20fe62c9",
+      "token": "GLDx",
+      "token_mint": "Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re",
+      "amount_usd": 7.290717365753001,
+      "entry_price": 422.39,
+      "tp_price": 447.7334,
+      "sl_price": 411.83025,
+      "sentiment_grade": "B",
+      "tx_signature": "5cz1skPcyL83EssU2pTWTr5kJzjVXZccKBNhe33nF3Md2styqVGMVWJ2GPDTMjKZMaCKMBgYq42n291pb2RiSWrU",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:11:10.838108",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "e155f3f6",
+      "token": "TSLAx",
+      "token_mint": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+      "amount_usd": 6.550103276623001,
+      "entry_price": 440.72,
+      "tp_price": 462.75600000000003,
+      "sl_price": 431.9056,
+      "sentiment_grade": "B",
+      "tx_signature": "4EcNJztinhQNw7eDQEcE5FWaKYdmM4rXhmyogXvK1eLRGVW3MGCaYVBjefwwxGjVzjF5VRhe2YgcQPMp6yGRX342",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:11:12.898412",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "NVDAx",
+      "reason": "token_allocation",
+      "existing_token_usd": 23.949411567176405,
+      "amount_usd": 6.550103276623001,
+      "allocation_pct": 0.23280064248252955
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:11:19.373118",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "829b371a",
+      "token": "AAPLx",
+      "token_mint": "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
+      "amount_usd": 6.550103276623001,
+      "entry_price": 257.52,
+      "tp_price": 270.396,
+      "sl_price": 252.3696,
+      "sentiment_grade": "B",
+      "tx_signature": "3NTgHSxicCzpcvDjFN4hmPNxJarpkHWCcVvoYJvBzoJYWdKNVarXdMDtMXrAxhptQ7GvWsQramqWSxsPwQLLnz1m",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:12:21.625232",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "af0bb89a",
+      "token": "AAPLx",
+      "token_mint": "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
+      "amount_usd": 5.8719729470685005,
+      "entry_price": 257.52,
+      "tp_price": 270.396,
+      "sl_price": 252.3696,
+      "sentiment_grade": "B",
+      "tx_signature": "5W4dkcrzMYS7Jui1Pr2Lq5FzWAJ5ptSZKkkwqb85j1TB9AskXMRZWSjMZrxKpZhU9NYMRAguZHqDjivnPdUiCVkx",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:12:24.259199",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "35cb4961",
+      "token": "MSFTx",
+      "token_mint": "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX",
+      "amount_usd": 5.8719729470685005,
+      "entry_price": 461.54,
+      "tp_price": 484.617,
+      "sl_price": 452.30920000000003,
+      "sentiment_grade": "B",
+      "tx_signature": "542PU3wYEwiX7qZPy3h4vgUMEaoSVkM48D89ZScHVqeesfiyQscZnjfiiPT8QgBzpX1kE9Zr6B89Ky21nhBRZQM6",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:14:04.189911",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "3101cd8a",
+      "token": "SUPARALPH",
+      "token_mint": "2GL3PTYVE4J85HRuySaLsK1HK9cVkG34UQJDkQHbBAGS",
+      "amount_usd": 1.3175871656088751,
+      "entry_price": 5.778e-05,
+      "tp_price": 6.6447e-05,
+      "sl_price": 5.489099999999999e-05,
+      "sentiment_grade": "B",
+      "tx_signature": "mjGDLFnseHqLiAGV66zhLo1MeK2XHwcPBgbfN1eeGudeNLCSmE2H2q4kxm7yY3uek99fcUigaW6YLPYATfmhLtJ",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:14:09.033094",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "NVDAX",
+      "reason": "token_allocation",
+      "existing_token_usd": 23.949411567176405,
+      "amount_usd": 5.2703486624355005,
+      "allocation_pct": 0.2770525811696613
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:14:32.724606",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "5e4d0ef9",
+      "token": "GOOGLX",
+      "token_mint": "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
+      "amount_usd": 2.07599382403,
+      "entry_price": 333.28,
+      "tp_price": 349.94399999999996,
+      "sl_price": 326.6144,
+      "sentiment_grade": "B",
+      "tx_signature": "27YtLArB3CScksdna9W46ncdkSTgAUjwa4YU56NypS1PwnLUVQjWbwShi9VJYgBrN4qGEUfq2pbfZLp1fCvcsuJ2",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T05:15:11.138854",
+    "action": "CLOSE_POSITION_TAKE_PROFIT",
+    "user_id": null,
+    "success": true,
+    "details": {
+      "position_id": "3101cd8a",
+      "token": "SUPARALPH",
+      "entry_price": 5.778e-05,
+      "exit_price": 7.077e-05,
+      "pnl_usd": 0.29621767534197463,
+      "pnl_pct": 22.481827622014546,
+      "order_id": "7489ba81",
+      "tx_signature": "5iP2ocVvVjNNAYhvJZ2Pn1fmPayx9MyY9rWnqvUDvmMT3xTWuwn769QBXAgXCQ7Xe8qZGLFet9ZhLxo8PoCU8oLV"
+    }
+  },
+  {
+    "timestamp": "2026-01-16T07:35:29.207541",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "3c7ae826",
+      "token": "VIBECODOOR",
+      "token_mint": "5ceJY97nRc2GYzA6N51FpYCMMcWVxWfxTVFVzuX3BAGS",
+      "amount_usd": 1.2980397370612504,
+      "entry_price": 5.118e-06,
+      "tp_price": 5.885699999999999e-06,
+      "sl_price": 4.8621e-06,
+      "sentiment_grade": "B",
+      "tx_signature": "S2sndAAJeWrj2RPkGr3R5rx1hds2guYzpcCJq76X4gBprLxWY11AY5UAKoY5aAETfX2R9skk9o2jHTFYThAPKVg",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-16T13:27:47.923449",
+    "action": "CLOSE_POSITION_STOP_LOSS",
+    "user_id": null,
+    "success": true,
+    "details": {
+      "position_id": "3c7ae826",
+      "token": "VIBECODOOR",
+      "entry_price": 5.118e-06,
+      "exit_price": 4.609e-06,
+      "pnl_usd": -0.1290938308253568,
+      "pnl_pct": -9.945291129347396,
+      "order_id": "0d067d68",
+      "tx_signature": "2NT6bZSri69k5TMztnAtkHjTSMKM2eLtf9rsqn2e2iAFC4CWKzLf4uR4EjdV29WcbfrCNZtNQXByLtzEk7rFTA6N"
+    }
+  },
+  {
+    "timestamp": "2026-01-17T01:21:54.517381",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "NVDAX",
+      "reason": "duplicate",
+      "existing_positions": 2
+    }
+  },
+  {
+    "timestamp": "2026-01-17T01:21:56.301139",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "AAPLX",
+      "reason": "duplicate",
+      "existing_positions": 3
+    }
+  },
+  {
+    "timestamp": "2026-01-17T01:21:59.588305",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "GOOGLX",
+      "reason": "duplicate",
+      "existing_positions": 1
+    }
+  },
+  {
+    "timestamp": "2026-01-17T02:34:27.909016",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "NVDAX",
+      "reason": "duplicate",
+      "existing_positions": 2
+    }
+  },
+  {
+    "timestamp": "2026-01-17T07:25:02.197981",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "AAPLx",
+      "reason": "duplicate",
+      "existing_positions": 3
+    }
+  },
+  {
+    "timestamp": "2026-01-17T07:25:36.590248",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "NVDAx",
+      "reason": "duplicate",
+      "existing_positions": 2
+    }
+  },
+  {
+    "timestamp": "2026-01-17T07:25:38.239141",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "TSLAx",
+      "reason": "duplicate",
+      "existing_positions": 2
+    }
   }
 ]

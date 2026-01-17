@@ -288,7 +288,7 @@ class SearchCache:
                 
                 try:
                     return json.loads(row[0])
-                except:
+                except Exception:
                     return None
         
         return None
