@@ -678,6 +678,63 @@ class Scorekeeper:
                 return pos
         return None
 
+    def sync_from_treasury_positions(self, treasury_positions: List[Dict]) -> int:
+        """
+        Sync positions from TreasuryTrader's .positions.json into scorekeeper.
+
+        This ensures open positions with stop losses/take profits are visible
+        in the Telegram dashboard.
+
+        Args:
+            treasury_positions: List of position dicts from trading.py
+
+        Returns:
+            Number of positions synced
+        """
+        synced_count = 0
+        try:
+            for pos_data in treasury_positions:
+                # Only sync OPEN positions
+                if pos_data.get("status") != "OPEN":
+                    continue
+
+                pos_id = pos_data.get("id")
+                token_mint = pos_data.get("token_mint")
+
+                # Skip if already in scorekeeper
+                if pos_id in self.positions:
+                    continue
+
+                # Convert treasury position format to scorekeeper Position
+                pos = Position(
+                    id=pos_id,
+                    symbol=pos_data.get("token_symbol", "UNKNOWN"),
+                    token_mint=token_mint,
+                    entry_price=pos_data.get("entry_price", 0.0),
+                    entry_amount_sol=pos_data.get("amount_usd", 0.0) / 100.0,  # Approximate SOL value
+                    entry_amount_tokens=pos_data.get("amount", 0.0),
+                    take_profit_price=pos_data.get("take_profit_price", 0.0),
+                    stop_loss_price=pos_data.get("stop_loss_price", 0.0),
+                    tp_order_id=pos_data.get("tp_order_id", ""),
+                    sl_order_id=pos_data.get("sl_order_id", ""),
+                    status="open",
+                    opened_at=pos_data.get("opened_at", datetime.now(timezone.utc).isoformat()),
+                )
+
+                self.positions[pos_id] = pos
+                synced_count += 1
+                logger.info(f"Synced position: {pos.symbol} ({pos.id})")
+
+            # Save after syncing
+            if synced_count > 0:
+                self._save()
+                logger.info(f"Synced {synced_count} positions from treasury")
+
+        except Exception as e:
+            logger.error(f"Failed to sync treasury positions: {e}")
+
+        return synced_count
+
     def get_positions_by_token(self, token_mint: str) -> List[Position]:
         """Get open positions for a token."""
         return [
