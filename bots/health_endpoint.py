@@ -30,6 +30,71 @@ _health_state = {
 }
 
 
+def _aggregate_status(components: dict) -> str:
+    statuses = [c.get("status", "error") for c in components.values()]
+    if any(status == "error" for status in statuses):
+        return "error"
+    if any(status == "degraded" for status in statuses):
+        return "degraded"
+    return "healthy"
+
+
+def _check_twitter_bot() -> dict:
+    try:
+        from bots.twitter.config import BotConfiguration
+        valid, errors = BotConfiguration.load().validate()
+        if valid:
+            return {"status": "healthy"}
+        return {"status": "degraded", "message": "; ".join(errors) or "Missing credentials"}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
+def _check_telegram_bot() -> dict:
+    try:
+        from tg_bot.config import get_config
+        config = get_config()
+        if not config.telegram_token:
+            return {"status": "error", "message": "TELEGRAM_BOT_TOKEN missing"}
+        if not config.admin_ids:
+            return {"status": "degraded", "message": "TELEGRAM_ADMIN_IDS not set"}
+        return {"status": "healthy"}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
+def _check_treasury() -> dict:
+    try:
+        wallet_path = os.environ.get("TREASURY_WALLET_PATH", "").strip()
+        default_path = Path(__file__).resolve().parents[1] / "data" / "treasury_keypair.json"
+        keypair_exists = Path(wallet_path).exists() if wallet_path else default_path.exists()
+        has_password = bool(os.environ.get("JARVIS_WALLET_PASSWORD"))
+        if keypair_exists or has_password:
+            return {"status": "healthy"}
+        return {"status": "degraded", "message": "Treasury wallet not configured"}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
+def _check_scorekeeper() -> dict:
+    try:
+        from bots.treasury.scorekeeper import get_scorekeeper
+        keeper = get_scorekeeper()
+        open_positions = keeper.get_open_positions()
+        return {"status": "healthy", "open_positions": len(open_positions)}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
+def _collect_component_health() -> dict:
+    return {
+        "twitter_bot": _check_twitter_bot(),
+        "telegram_bot": _check_telegram_bot(),
+        "treasury": _check_treasury(),
+        "scorekeeper": _check_scorekeeper(),
+    }
+
+
 def update_health(components: dict):
     """Update health state from supervisor."""
     global _health_state
@@ -37,24 +102,23 @@ def update_health(components: dict):
     _health_state["last_update"] = datetime.utcnow().isoformat()
 
     # Determine overall status
-    statuses = [c.get("status", "unknown") for c in components.values()]
-    if all(s == "running" for s in statuses):
-        _health_state["status"] = "healthy"
-    elif any(s == "running" for s in statuses):
-        _health_state["status"] = "degraded"
-    else:
-        _health_state["status"] = "unhealthy"
+    _health_state["status"] = _aggregate_status(components)
 
 
 async def health_handler(request):
     """Handle /health endpoint."""
+    components = _collect_component_health()
+    _health_state["components"] = components
+    _health_state["last_update"] = datetime.utcnow().isoformat()
+    _health_state["status"] = _aggregate_status(components)
+
     status_code = 200 if _health_state["status"] in ("healthy", "degraded") else 503
 
     response = {
         "status": _health_state["status"],
         "timestamp": datetime.utcnow().isoformat(),
         "uptime": None,
-        "components": _health_state["components"],
+        "components": components,
     }
 
     if _health_state["started_at"]:
@@ -90,7 +154,7 @@ async def metrics_handler(request):
     ]
 
     for name, info in _health_state.get("components", {}).items():
-        status = 1 if info.get("status") == "running" else 0
+        status = 1 if info.get("status") in ("healthy", "degraded") else 0
         restarts = info.get("restart_count", 0)
         lines.append(f'jarvis_component_status{{component="{name}"}} {status}')
         lines.append(f'jarvis_component_restarts{{component="{name}"}} {restarts}')

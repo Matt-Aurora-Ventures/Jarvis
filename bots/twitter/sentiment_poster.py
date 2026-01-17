@@ -221,8 +221,28 @@ Return ONLY a JSON object: {{"tweets": ["tweet1", "tweet2", "tweet3"]}}"""
                     content = content.strip()
 
                 if content.startswith("{"):
-                    data = json.loads(content)
-                    tweets = data.get("tweets", [content])
+                    # Try to fix common JSON issues (missing closing brackets)
+                    try:
+                        data = json.loads(content)
+                    except json.JSONDecodeError:
+                        # Try adding missing closing brackets
+                        fixed = content.rstrip()
+                        if not fixed.endswith("}"):
+                            fixed += '"]}'
+                        elif not fixed.endswith("]}"):
+                            fixed += "]}"
+                        try:
+                            data = json.loads(fixed)
+                        except json.JSONDecodeError:
+                            # Last resort: extract tweets via regex
+                            import re
+                            tweet_matches = re.findall(r'"([^"]{10,280})"', content)
+                            if tweet_matches:
+                                tweets = tweet_matches[:3]
+                                data = None
+                            else:
+                                raise
+                    tweets = data.get("tweets", [content]) if data else tweets
                 else:
                     tweets = [content]
             except json.JSONDecodeError as e:
@@ -297,20 +317,9 @@ async def run_sentiment_poster():
                     key, value = line.split("=", 1)
                     os.environ.setdefault(key.strip(), value.strip())
 
-    # Create Twitter client
-    creds = TwitterCredentials(
-        api_key=os.environ.get("X_API_KEY", ""),
-        api_secret=os.environ.get("X_API_SECRET", ""),
-        access_token=os.environ.get("X_ACCESS_TOKEN", ""),
-        access_token_secret=os.environ.get("X_ACCESS_TOKEN_SECRET", ""),
-        bearer_token=os.environ.get("X_BEARER_TOKEN", ""),
-        oauth2_client_id=os.environ.get("X_OAUTH2_CLIENT_ID", ""),
-        oauth2_client_secret=os.environ.get("X_OAUTH2_CLIENT_SECRET", ""),
-        oauth2_access_token=os.environ.get("X_OAUTH2_ACCESS_TOKEN", ""),
-        oauth2_refresh_token=os.environ.get("X_OAUTH2_REFRESH_TOKEN", ""),
-    )
-
-    twitter = TwitterClient(creds)
+    # Create Twitter client using from_env() which correctly prefers JARVIS_ACCESS_TOKEN
+    # for posting as @Jarvis_lifeos instead of @aurora_ventures
+    twitter = TwitterClient()  # Uses TwitterCredentials.from_env() internally
 
     # Create Claude client
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")

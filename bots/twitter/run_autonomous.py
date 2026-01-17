@@ -230,6 +230,13 @@ def main():
     parser.add_argument("--interval", type=int, default=3600, help="Post interval in seconds")
     
     args = parser.parse_args()
+
+    # Start metrics server (best-effort)
+    try:
+        from core.monitoring.metrics import start_metrics_server
+        start_metrics_server()
+    except Exception as exc:
+        logger.warning(f"Metrics server unavailable: {exc}")
     
     if args.test:
         asyncio.run(test_generation())

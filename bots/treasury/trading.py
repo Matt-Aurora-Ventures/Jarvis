@@ -240,6 +240,8 @@ class TradingEngine:
     MAX_TRADE_USD = 100.0      # Maximum single trade size
     MAX_DAILY_USD = 500.0      # Maximum daily trading volume
     MAX_POSITION_PCT = 0.20    # Max 20% of portfolio in single position
+    MAX_ALLOCATION_PER_TOKEN = 0.20  # Max 20% of portfolio per token (stacked positions)
+    ALLOW_STACKING = False  # Set to False to prevent duplicate positions in same token
 
     # Default TP/SL percentages by sentiment grade
     # MANDATORY: Every trade MUST have TP/SL set based on grade
@@ -276,13 +278,96 @@ class TradingEngine:
         RiskLevel.DEGEN: 0.10,          # 10%
     }
 
+    # ==========================================================================
+    # TOKEN SAFETY SYSTEM - HARDCODED REMEDIATIONS FROM PERFORMANCE AUDIT
+    # ==========================================================================
+    # Performance audit showed 3 catastrophic -99% losses from pump.fun tokens.
+    # These tokens have no liquidity for stop loss execution.
+    # ==========================================================================
+
+    # ESTABLISHED TOKENS - Vetted, liquid, safe to trade with normal position sizes
+    # These tokens have proven liquidity and legitimate projects
+    ESTABLISHED_TOKENS = {
+        # Major Solana tokens
+        "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": "BONK",
+        "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "JUP",
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
+        "So11111111111111111111111111111111111111112": "SOL",
+        "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So": "MSOL",
+        "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj": "STSOL",
+        "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm": "WIF",
+        "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof": "RNDR",
+        "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3": "PYTH",
+        "85VBFQZC9TZkfaptBWjvUw7YbZjy52A6mjtPGjstQAmQ": "W",
+        "27G8MtK7VtTcCHkpASjSDdkWWYfoqT6ggEuKidVJidD4": "JTO",
+
+        # WRAPPED MAJOR TOKENS - Cross-chain bridged assets (Portal/Wormhole)
+        "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs": "WETH",  # Wrapped ETH (Portal)
+        "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh": "WBTC",  # Wrapped BTC (Portal)
+        "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E": "WBTC_SOL",  # Wrapped BTC (Sollet)
+        "FYfQ9uaRaYvRiaEGUmct45F9WKam3BYXArTrotnTNFXF": "WADA",  # Wrapped ADA (Portal)
+        "A9mUU4qviSctJVPJdBJWkb28deg915LYJKrzQ19ji3FM": "WDOT",  # Wrapped DOT (Portal)
+        "CWE8jPTUYhdCTZYWPTe1o5DFqfdjzWKc9WKz6PBjkgy8": "WAVAX", # Wrapped AVAX (Portal)
+        "9bzWNhJcgbVnUPV1T1QMMLj9a4PEcXXPKzPNxMcGUP8n": "WMATIC", # Wrapped MATIC (Portal)
+        "CDJWUqTcYTVAKXAVXoQZFes5JUFc7owSeq7eMQcDSbo5": "WLINK", # Wrapped LINK (Portal)
+        "4wjPQJ6PrkC4dHhYghwJzGBVP78DkBzA2U3kHoFNBuhj": "WUNI",  # Wrapped UNI (Portal)
+        "AUrMpCDYYcPuHhyNX8gEEqbmDPFUpBpHrNW3vPeCFn5Z": "WAAVE", # Wrapped AAVE (Portal)
+        "EchesyfXePKdLtoiZSL8pBe8Myagyy8ZRqsACNCFGnvp": "WFIL",  # Wrapped FIL (Portal)
+        "7i5KKsX2weiTkry7jA4ZwSuXGhs5eJBEjY8vVxR4pfRx": "GMT",   # STEPN
+        "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R": "RAY",   # Raydium
+        "AFbX8oGjGpmVFywbVouvhQSRmiW2aR1mohfahi4Y2AdB": "GST",   # Green Satoshi Token
+        "BRjpCHtyQLNCo8gqRUr8jtdAj5AjPYQaoqbvcZiHok1k": "devUSDC",  # Dev USDC
+        "Saber2gLauYim4Mvftnrasomsv6NvAuncvMEZwcLpD1": "SBR",   # Saber
+        "GENEtH5amGSi8kHAtQoezp1XEXwZJ8vcuePYnXdKrMYz": "GENE",  # Genopets
+        "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE": "ORCA",  # Orca
+        "MNDEFzGvMt87ueuHvVU9VcTqsAP5b3fTGPsHuuPA5ey": "MNDE",  # Marinade
+        "kinXdEcpDQeHPEuQnqmUgtYykqKGVFq6CeVX5iAHJq6": "KIN",   # Kin
+
+        # TOP 30 BY MARKET CAP (Solana ecosystem)
+        "SHDWyBxihqiCj6YekG2GUr7wqKLeLAMK1gHZck9pL6y": "SHDW",  # Shadow
+        "BLZEEuZUBVqFhj8adcCFPJvPVCiCyVmh3hkJMrU8KuJA": "BLZE",  # Blaze
+        "TNSRxcUxoT9xBG3de7PiJyTDYu7kskLqcpddxnEJAS6": "TNSR",  # Tensor
+        "HxhWkVpk5NS4Ltg5nij2G671CKXFRKM5AGKUWZK3Q8KV": "HAWK",  # Hawksight
+        "mb1eu7TzEc71KxDpsmsKoucSSuuoGLv1drys1oP2jh6": "MOBILE", # Helium Mobile
+        "iotEVVZLEywoTn1QdwNPddxPWszn3zFhEot3MfL9fns": "IOT",   # Helium IOT
+        "HNTkznmTnk98R9RnFMn6Y7Sbkg6bz5D7WTxo1sXX9G4F": "HNT",  # Helium
+
+        # Tokenized equities (XStocks) - backed by real assets
+        "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W": "SPYx",
+        "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB": "TSLAX",
+        "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh": "NVDAX",
+        "Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re": "GLDx",
+        "XsjQP3iMAaQ3kQScQKthQpx9ALRbjKAjQtHg6TFomoc": "TQQQx",
+        "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp": "AAPLx",
+        "XsMGMDhxqnWAqtF4xk2Z5i4wJBhZnJ4Wk6c8XJNhE3J": "GOOGLx",
+        "XsMSFTs3E5UT7cRUhP7sQDh9KRo6LGp5TE8yPkMiL5F": "MSFTx",
+    }
+
+    # HIGH RISK TOKEN PATTERNS - Require extra scrutiny and smaller positions
+    # Pump.fun tokens CAN work but need careful analysis:
+    # - Check liquidity before entry
+    # - Use smaller position sizes
+    # - Set tighter stop losses
+    # - Monitor more frequently
+    HIGH_RISK_PATTERNS = [
+        "pump",     # pump.fun tokens - high risk, small positions only
+    ]
+
+    # MINIMUM REQUIREMENTS FOR HIGH-RISK TOKENS (pump.fun, new launches, etc.)
+    MIN_LIQUIDITY_USD = 5000       # $5k minimum liquidity for any trade
+    MIN_VOLUME_24H_USD = 2500      # $2.5k minimum daily volume
+    MIN_TOKEN_AGE_HOURS = 1        # At least 1 hour old (not instant rugs)
+    MAX_HIGH_RISK_POSITION_PCT = 0.15  # Max 15% of normal position for high-risk
+    MAX_UNVETTED_POSITION_PCT = 0.25   # Max 25% of normal position for unvetted
+
     def __init__(
         self,
         wallet: SecureWallet,
         jupiter: JupiterClient,
         admin_user_ids: List[int] = None,
         risk_level: RiskLevel = RiskLevel.MODERATE,
-        max_positions: int = 5,
+        max_positions: int = 50,
         dry_run: bool = True,  # Start in dry run mode
         enable_signals: bool = True,  # Enable advanced signal analysis
     ):
@@ -329,6 +414,93 @@ class TradingEngine:
 
         # Load existing state
         self._load_state()
+
+    # ==========================================================================
+    # TOKEN SAFETY METHODS - Protect against rug pulls and illiquid tokens
+    # ==========================================================================
+
+    def is_high_risk_token(self, token_mint: str) -> bool:
+        """
+        Check if token matches high-risk patterns (e.g., pump.fun).
+
+        High-risk tokens aren't blocked but get:
+        - Smaller position sizes (15% of normal)
+        - Extra liquidity checks
+        - Tighter monitoring
+
+        Pump.fun tokens caused 3 big losses in our audit, but banning
+        them entirely would miss opportunities. Instead, we trade smarter.
+        """
+        mint_lower = token_mint.lower()
+        for pattern in self.HIGH_RISK_PATTERNS:
+            if pattern in mint_lower:
+                return True
+        return False
+
+    def is_established_token(self, token_mint: str) -> bool:
+        """Check if token is in our vetted established tokens list."""
+        return token_mint in self.ESTABLISHED_TOKENS
+
+    def classify_token_risk(self, token_mint: str, token_symbol: str) -> str:
+        """
+        Classify token into risk tiers for position sizing.
+
+        Returns:
+            ESTABLISHED - Vetted tokens, full position size
+            MID - Known symbols but not in whitelist, 50% position
+            MICRO - Unknown tokens with liquidity, 25% position
+            HIGH_RISK - Pump.fun and similar, 15% position + extra checks
+        """
+        # Established whitelist - these are safe
+        if self.is_established_token(token_mint):
+            return "ESTABLISHED"
+
+        # XStocks pattern (starts with Xs) - backed assets
+        if token_mint.startswith("Xs"):
+            return "ESTABLISHED"
+
+        # High-risk patterns (pump.fun etc) - trade with caution, not banned
+        if self.is_high_risk_token(token_mint):
+            return "HIGH_RISK"
+
+        # Known major symbols (might be on different mint)
+        major_symbols = ["BTC", "ETH", "SOL", "USDC", "USDT", "BONK", "WIF", "JUP", "PYTH"]
+        if token_symbol.upper() in major_symbols:
+            return "MID"
+
+        # Tokenized equity symbols
+        if token_symbol.upper().endswith("X") and len(token_symbol) <= 6:
+            return "MID"
+
+        # Everything else is micro cap risk
+        return "MICRO"
+
+    def get_risk_adjusted_position_size(
+        self,
+        token_mint: str,
+        token_symbol: str,
+        base_position_usd: float
+    ) -> Tuple[float, str]:
+        """
+        Adjust position size based on token risk classification.
+
+        Returns:
+            Tuple of (adjusted_position_usd, risk_tier)
+        """
+        risk_tier = self.classify_token_risk(token_mint, token_symbol)
+
+        if risk_tier == "ESTABLISHED":
+            return base_position_usd, risk_tier  # Full size
+
+        elif risk_tier == "MID":
+            return base_position_usd * 0.50, risk_tier  # 50% size
+
+        elif risk_tier == "HIGH_RISK":
+            # Pump.fun and similar - small positions, not banned
+            return base_position_usd * self.MAX_HIGH_RISK_POSITION_PCT, risk_tier  # 15% size
+
+        else:  # MICRO
+            return base_position_usd * self.MAX_UNVETTED_POSITION_PCT, risk_tier  # 25% size
 
     def _load_state(self):
         """Load positions and history from disk."""
@@ -563,14 +735,11 @@ class TradingEngine:
         Returns:
             Tuple of (direction, reasoning)
         """
-        # Get current positions for this token
-        existing = [p for p in self.positions.values()
-                   if p.token_mint == token_mint and p.is_open]
+        # Count open positions (allow multiple per token)
+        open_positions = [p for p in self.positions.values() if p.is_open]
 
-        if existing:
-            return TradeDirection.NEUTRAL, "Already have open position"
-
-        if len(self.positions) >= self.max_positions:
+        # Check if we'd exceed max positions
+        if len(open_positions) >= self.max_positions:
             return TradeDirection.NEUTRAL, "Max positions reached"
 
         # Determine direction based on sentiment
@@ -841,14 +1010,36 @@ class TradingEngine:
             logger.warning(f"Trade rejected: Grade {sentiment_grade} is too risky")
             return False, f"⛔ Trade blocked: Grade {sentiment_grade} is too risky", None
 
-        # Check existing positions
-        existing = [p for p in self.positions.values()
-                   if p.token_mint == token_mint and p.is_open]
-        if existing:
-            self._log_audit("OPEN_POSITION_REJECTED", {"token": token_symbol, "reason": "duplicate"}, user_id, False)
-            return False, f"Already have position in {token_symbol}", None
+        # ==========================================================================
+        # HIGH-RISK TOKEN WARNING - Learn from performance audit, but don't ban
+        # Pump.fun tokens caused 3 big losses, but we trade smarter now:
+        # - Smaller position sizes (15% of normal)
+        # - Extra liquidity checks
+        # - Tighter stop loss monitoring
+        # ==========================================================================
+        if self.is_high_risk_token(token_mint):
+            logger.warning(f"HIGH-RISK TOKEN: {token_symbol} is a pump.fun token - using 15% position size")
 
-        if len([p for p in self.positions.values() if p.is_open]) >= self.max_positions:
+        # Classify token risk tier
+        risk_tier = self.classify_token_risk(token_mint, token_symbol)
+        logger.info(f"Token {token_symbol} classified as: {risk_tier}")
+
+        # Check max positions limit (allow multiple positions per token)
+        open_positions = [p for p in self.positions.values() if p.is_open]
+
+        # Check for existing positions in this token
+        existing_in_token = [p for p in open_positions if p.token_mint == token_mint]
+        if existing_in_token:
+            if not self.ALLOW_STACKING:
+                self._log_audit("OPEN_POSITION_REJECTED", {
+                    "token": token_symbol,
+                    "reason": "duplicate",
+                    "existing_positions": len(existing_in_token),
+                }, user_id, False)
+                return False, f"Already have position in {token_symbol} (stacking disabled)", None
+            logger.info(f"STACKING: Adding to existing position in {token_symbol} (currently {len(existing_in_token)} position(s))")
+
+        if len(open_positions) >= self.max_positions:
             self._log_audit("OPEN_POSITION_REJECTED", {"token": token_symbol, "reason": "max_positions"}, user_id, False)
             return False, "Maximum positions reached", None
 
@@ -879,9 +1070,82 @@ class TradingEngine:
         # Get portfolio value for limit checks
         _, portfolio_usd = await self.get_portfolio_value()
 
+        # INPUT VALIDATION - Security fix for amount_usd parameter
+        if amount_usd is not None:
+            # Validate amount_usd is numeric
+            try:
+                amount_usd = float(amount_usd)
+            except (TypeError, ValueError):
+                self._log_audit("OPEN_POSITION_REJECTED", {
+                    "token": token_symbol,
+                    "reason": "invalid_amount",
+                    "amount_usd": str(amount_usd),
+                }, user_id, False)
+                return False, "⛔ Invalid amount: must be a number", None
+
+            # Validate amount_usd is positive
+            if amount_usd <= 0:
+                self._log_audit("OPEN_POSITION_REJECTED", {
+                    "token": token_symbol,
+                    "reason": "non_positive_amount",
+                    "amount_usd": amount_usd,
+                }, user_id, False)
+                return False, "⛔ Invalid amount: must be positive", None
+
+            # Validate amount_usd doesn't exceed maximum single trade size
+            if amount_usd > self.MAX_TRADE_USD:
+                self._log_audit("OPEN_POSITION_REJECTED", {
+                    "token": token_symbol,
+                    "reason": "amount_exceeds_max",
+                    "amount_usd": amount_usd,
+                    "max_trade_usd": self.MAX_TRADE_USD,
+                }, user_id, False)
+                return False, f"⛔ Invalid amount: ${amount_usd:.2f} exceeds max single trade ${self.MAX_TRADE_USD:.2f}", None
+
         # Calculate position size
         if not amount_usd:
             amount_usd = self.calculate_position_size(portfolio_usd)
+
+        # ==========================================================================
+        # RISK-ADJUSTED POSITION SIZING - Based on token risk classification
+        # Established tokens: 100% of base size
+        # Mid-tier: 50% of base size
+        # Micro caps: 25% of base size (MAX_UNVETTED_POSITION_PCT)
+        # ==========================================================================
+        original_amount = amount_usd
+        amount_usd, risk_tier = self.get_risk_adjusted_position_size(
+            token_mint, token_symbol, amount_usd
+        )
+
+        if amount_usd == 0:
+            # Should not reach here due to pump.fun check above, but safety net
+            self._log_audit("OPEN_POSITION_REJECTED", {
+                "token": token_symbol,
+                "reason": "risk_too_high",
+                "risk_tier": risk_tier,
+            }, user_id, False)
+            return False, f"⛔ Trade blocked: {token_symbol} classified as {risk_tier}", None
+
+        if amount_usd < original_amount:
+            logger.info(f"Position size reduced: ${original_amount:.2f} -> ${amount_usd:.2f} ({risk_tier})")
+
+        # Enforce per-token allocation cap while allowing stacking
+        if portfolio_usd > 0:
+            existing_token_usd = sum(p.amount_usd for p in existing_in_token)
+            total_token_usd = existing_token_usd + amount_usd
+            token_allocation_pct = total_token_usd / portfolio_usd
+            if token_allocation_pct > self.MAX_ALLOCATION_PER_TOKEN:
+                self._log_audit("OPEN_POSITION_REJECTED", {
+                    "token": token_symbol,
+                    "reason": "token_allocation",
+                    "existing_token_usd": existing_token_usd,
+                    "amount_usd": amount_usd,
+                    "allocation_pct": token_allocation_pct,
+                }, user_id, False)
+                return False, (
+                    f"Token allocation {token_allocation_pct*100:.1f}% exceeds max "
+                    f"{self.MAX_ALLOCATION_PER_TOKEN*100:.0f}% for {token_symbol}"
+                ), None
 
         # CRITICAL: Check spending limits before proceeding
         allowed, limit_reason = self._check_spending_limits(amount_usd, portfolio_usd)
@@ -1066,13 +1330,23 @@ class TradingEngine:
         Returns:
             Tuple of (success, message)
         """
-        if self.admin_user_ids:
-            if not user_id or not self.is_admin(user_id):
-                self._log_audit("CLOSE_POSITION_REJECTED", {
-                    "position_id": position_id,
-                    "reason": "unauthorized",
-                }, user_id, False)
-                return False, "Unauthorized"
+        # SECURITY FIX - Strict admin check prevents bypass when admin list is empty
+        # Old logic: if admin_user_ids: check auth (allowed anyone when list empty)
+        # New logic: ALWAYS check auth, warn if list is empty
+        if not self.admin_user_ids:
+            logger.warning("SECURITY WARNING: admin_user_ids is empty - no users can close positions")
+            self._log_audit("CLOSE_POSITION_REJECTED", {
+                "position_id": position_id,
+                "reason": "no_admins_configured",
+            }, user_id, False)
+            return False, "⛔ No admins configured - cannot close positions"
+
+        if not user_id or not self.is_admin(user_id):
+            self._log_audit("CLOSE_POSITION_REJECTED", {
+                "position_id": position_id,
+                "reason": "unauthorized",
+            }, user_id, False)
+            return False, "⛔ Unauthorized - admin access required"
 
         if position_id not in self.positions:
             self._log_audit("CLOSE_POSITION_REJECTED", {
@@ -1242,12 +1516,16 @@ class TradingEngine:
             return False, f"Error: {str(e)}"
 
     async def update_positions(self):
-        """Update current prices for all open positions."""
+        """Update current prices and unrealized PnL for all open positions."""
         for position in self.positions.values():
             if position.is_open:
                 price = await self.jupiter.get_token_price(position.token_mint)
                 if price > 0:
                     position.current_price = price
+                    # Calculate unrealized PnL
+                    if position.entry_price > 0:
+                        position.pnl_pct = ((price - position.entry_price) / position.entry_price) * 100
+                        position.pnl_usd = position.amount_usd * (position.pnl_pct / 100)
 
         self._save_state()
 
@@ -1783,7 +2061,7 @@ class TreasuryTrader:
                 wallet=wallet,
                 jupiter=jupiter,
                 dry_run=not live_mode,
-                max_positions=10,
+                max_positions=50,  # Increased from 10 to support more concurrent positions
                 admin_user_ids=admin_ids,
             )
             await self._engine.initialize_order_manager()
@@ -1804,6 +2082,7 @@ class TreasuryTrader:
         stop_loss_price: float,
         token_symbol: str = "",
         user_id: Optional[int] = None,
+        sentiment_grade: str = "B",
     ) -> Dict[str, Any]:
         """
         Execute a buy trade with take profit and stop loss.
@@ -1814,6 +2093,8 @@ class TreasuryTrader:
             take_profit_price: Take profit target price
             stop_loss_price: Stop loss target price
             token_symbol: Token symbol for logging
+            user_id: User ID for authorization
+            sentiment_grade: Sentiment grade for TP/SL config (A, B, C, etc.)
 
         Returns:
             Dict with success, tx_signature, error, and message
@@ -1878,7 +2159,7 @@ class TreasuryTrader:
                 token_symbol=symbol,
                 direction=TradeDirection.LONG,
                 amount_usd=amount_usd,
-                sentiment_grade="B",  # Default grade
+                sentiment_grade=sentiment_grade,  # Use actual grade from sentiment analysis
                 custom_tp=tp_pct,
                 custom_sl=sl_pct,
                 user_id=user_id,

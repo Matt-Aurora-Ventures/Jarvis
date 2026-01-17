@@ -4,6 +4,7 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from collections import defaultdict
 from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 import logging
 
@@ -198,3 +199,68 @@ provider_latency = metrics.histogram("provider_latency_seconds", "AI provider la
 trade_executions = metrics.counter("trade_executions_total", "Trade executions", ["symbol", "side", "status"])
 cache_hits = metrics.counter("cache_hits_total", "Cache hits", ["cache_type"])
 cache_misses = metrics.counter("cache_misses_total", "Cache misses", ["cache_type"])
+
+# Jarvis bot metrics
+TWEETS_POSTED = metrics.counter(
+    "jarvis_tweets_posted_total",
+    "Tweets posted",
+    ["category", "with_image"],
+)
+TWEET_LATENCY = metrics.histogram(
+    "jarvis_tweet_latency_seconds",
+    "Tweet post latency",
+)
+API_CALLS = metrics.counter(
+    "jarvis_api_calls_total",
+    "API calls",
+    ["service"],
+)
+API_LATENCY = metrics.histogram(
+    "jarvis_api_latency_seconds",
+    "API call latency",
+    ["service"],
+)
+ACTIVE_POSITIONS = metrics.gauge(
+    "jarvis_active_positions",
+    "Active positions",
+)
+
+_metrics_server: Optional[HTTPServer] = None
+_metrics_server_lock = threading.Lock()
+
+
+def start_metrics_server(port: int = 9090) -> Optional[HTTPServer]:
+    """Start a simple Prometheus metrics HTTP server."""
+    global _metrics_server
+    with _metrics_server_lock:
+        if _metrics_server is not None:
+            return _metrics_server
+
+        class MetricsHandler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802 - BaseHTTPRequestHandler naming
+                if self.path.rstrip("/") != "/metrics":
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+
+                payload = metrics.collect_all().encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, format, *args):  # noqa: A002
+                return
+
+        try:
+            server = HTTPServer(("0.0.0.0", port), MetricsHandler)
+        except OSError as exc:
+            logger.warning(f"Metrics server failed to start on port {port}: {exc}")
+            return None
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        _metrics_server = server
+        logger.info(f"Metrics server started on http://0.0.0.0:{port}/metrics")
+        return server

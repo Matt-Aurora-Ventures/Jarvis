@@ -17,12 +17,42 @@ import logging
 import os
 import sys
 import signal
+import socket
 import time
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Callable, Any
 from dataclasses import dataclass, field
 from enum import Enum
+
+
+def systemd_notify(state: str) -> bool:
+    """
+    Send notification to systemd watchdog.
+
+    States:
+        READY=1 - Service is ready
+        WATCHDOG=1 - Ping the watchdog
+        STOPPING=1 - Service is stopping
+
+    Returns True if notification was sent, False otherwise.
+    """
+    notify_socket = os.environ.get("NOTIFY_SOCKET")
+    if not notify_socket:
+        return False  # Not running under systemd
+
+    try:
+        # Handle abstract sockets (start with @)
+        if notify_socket.startswith("@"):
+            notify_socket = "\0" + notify_socket[1:]
+
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        sock.connect(notify_socket)
+        sock.sendall(state.encode())
+        sock.close()
+        return True
+    except Exception:
+        return False
 
 # Fix Windows encoding
 if sys.platform == "win32":
@@ -146,8 +176,16 @@ class BotSupervisor:
                     exc_info=True
                 )
 
+                # Alert on repeated failures (every 5 failures)
+                if state.consecutive_failures % 5 == 0:
+                    asyncio.create_task(self._send_error_alert(
+                        name, str(e), state.consecutive_failures, state.restart_count
+                    ))
+
                 if state.restart_count >= self.max_restarts:
                     logger.error(f"[{name}] Max restarts reached, giving up")
+                    # Send critical alert
+                    asyncio.create_task(self._send_critical_alert(name, str(e)))
                     break
 
                 # Exponential backoff
@@ -193,6 +231,9 @@ class BotSupervisor:
 
                 logger.info("\n".join(status_lines))
 
+                # Ping systemd watchdog (if running under systemd)
+                systemd_notify("WATCHDOG=1")
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -206,6 +247,10 @@ class BotSupervisor:
         logger.info("JARVIS BOT SUPERVISOR STARTING")
         logger.info(f"Components: {list(self.components.keys())}")
         logger.info("=" * 60)
+
+        # Notify systemd that we're ready
+        if systemd_notify("READY=1"):
+            logger.info("Notified systemd: READY")
 
         # Create tasks for each component
         tasks = []
@@ -230,6 +275,7 @@ class BotSupervisor:
     async def _cleanup(self):
         """Clean up all components."""
         logger.info("Supervisor shutting down...")
+        systemd_notify("STOPPING=1")
 
         for name, state in self.components.items():
             if state.task and not state.task.done():
@@ -252,6 +298,74 @@ class BotSupervisor:
             }
             for name, state in self.components.items()
         }
+
+    async def _send_error_alert(
+        self, component: str, error: str, consecutive: int, total: int
+    ):
+        """Send error alert to Telegram admins."""
+        try:
+            import aiohttp
+            token = os.environ.get("TELEGRAM_BOT_TOKEN")
+            admin_ids = os.environ.get("TELEGRAM_ADMIN_IDS", "")
+
+            if not token or not admin_ids:
+                return
+
+            admin_list = [x.strip() for x in admin_ids.split(",") if x.strip().isdigit()]
+            if not admin_list:
+                return
+
+            message = (
+                f"⚠️ <b>Component Error Alert</b>\n\n"
+                f"<b>Component:</b> {component}\n"
+                f"<b>Consecutive failures:</b> {consecutive}\n"
+                f"<b>Total restarts:</b> {total}\n"
+                f"<b>Error:</b> <code>{error[:200]}</code>"
+            )
+
+            async with aiohttp.ClientSession() as session:
+                for admin_id in admin_list[:3]:  # Limit to first 3 admins
+                    url = f"https://api.telegram.org/bot{token}/sendMessage"
+                    await session.post(url, json={
+                        "chat_id": admin_id,
+                        "text": message,
+                        "parse_mode": "HTML",
+                    })
+        except Exception as e:
+            logger.debug(f"Failed to send error alert: {e}")
+
+    async def _send_critical_alert(self, component: str, error: str):
+        """Send critical alert when component gives up."""
+        try:
+            import aiohttp
+            token = os.environ.get("TELEGRAM_BOT_TOKEN")
+            admin_ids = os.environ.get("TELEGRAM_ADMIN_IDS", "")
+
+            if not token or not admin_ids:
+                return
+
+            admin_list = [x.strip() for x in admin_ids.split(",") if x.strip().isdigit()]
+            if not admin_list:
+                return
+
+            message = (
+                f"🚨 <b>CRITICAL: Component Died</b>\n\n"
+                f"<b>Component:</b> {component}\n"
+                f"<b>Status:</b> Max restarts reached - STOPPED\n"
+                f"<b>Last error:</b> <code>{error[:200]}</code>\n\n"
+                f"Manual intervention required!"
+            )
+
+            async with aiohttp.ClientSession() as session:
+                for admin_id in admin_list[:3]:
+                    url = f"https://api.telegram.org/bot{token}/sendMessage"
+                    await session.post(url, json={
+                        "chat_id": admin_id,
+                        "text": message,
+                        "parse_mode": "HTML",
+                    })
+        except Exception as e:
+            logger.debug(f"Failed to send critical alert: {e}")
 
 
 def load_env():
@@ -297,18 +411,9 @@ async def create_twitter_poster():
     from bots.twitter.twitter_client import TwitterClient, TwitterCredentials
     from bots.twitter.claude_content import ClaudeContentGenerator
 
-    twitter_creds = TwitterCredentials(
-        api_key=os.environ.get("X_API_KEY", ""),
-        api_secret=os.environ.get("X_API_SECRET", ""),
-        access_token=os.environ.get("X_ACCESS_TOKEN", ""),
-        access_token_secret=os.environ.get("X_ACCESS_TOKEN_SECRET", ""),
-        bearer_token=os.environ.get("X_BEARER_TOKEN", ""),
-        oauth2_client_id=os.environ.get("X_OAUTH2_CLIENT_ID", ""),
-        oauth2_client_secret=os.environ.get("X_OAUTH2_CLIENT_SECRET", ""),
-        oauth2_access_token=os.environ.get("X_OAUTH2_ACCESS_TOKEN", ""),
-        oauth2_refresh_token=os.environ.get("X_OAUTH2_REFRESH_TOKEN", ""),
-    )
-    twitter_client = TwitterClient(twitter_creds)
+    # Use TwitterCredentials.from_env() which correctly prefers JARVIS_ACCESS_TOKEN
+    # for posting as @Jarvis_lifeos instead of @aurora_ventures
+    twitter_client = TwitterClient()  # Uses from_env() internally
     claude_client = ClaudeContentGenerator(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
     poster = SentimentTwitterPoster(
@@ -375,6 +480,64 @@ async def create_autonomous_x_engine():
     )
 
 
+def validate_startup() -> bool:
+    """
+    Validate critical configuration before starting.
+
+    Returns True if all critical checks pass, False otherwise.
+    """
+    issues = []
+    warnings = []
+
+    # Critical: Telegram bot token
+    if not os.environ.get("TELEGRAM_BOT_TOKEN"):
+        issues.append("TELEGRAM_BOT_TOKEN not set - Telegram bot will not start")
+
+    # Critical: Admin IDs
+    if not os.environ.get("TELEGRAM_ADMIN_IDS"):
+        warnings.append("TELEGRAM_ADMIN_IDS not set - admin commands disabled")
+
+    # Warning: Trading credentials
+    if not os.environ.get("WALLET_PRIVATE_KEY"):
+        warnings.append("WALLET_PRIVATE_KEY not set - trading disabled")
+
+    if not os.environ.get("SOLANA_RPC_URL"):
+        warnings.append("SOLANA_RPC_URL not set - using public RPC")
+
+    # Warning: AI APIs
+    if not os.environ.get("XAI_API_KEY") and not os.environ.get("GROK_API_KEY"):
+        warnings.append("XAI_API_KEY/GROK_API_KEY not set - Grok features disabled")
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        warnings.append("ANTHROPIC_API_KEY not set - Claude features disabled")
+
+    # Warning: X/Twitter
+    if not os.environ.get("JARVIS_ACCESS_TOKEN"):
+        warnings.append("JARVIS_ACCESS_TOKEN not set - X posting disabled")
+
+    # Print results
+    if issues:
+        print("\n" + "=" * 60)
+        print("  STARTUP VALIDATION: FAILED")
+        print("=" * 60)
+        for issue in issues:
+            print(f"  [CRITICAL] {issue}")
+        for warn in warnings:
+            print(f"  [WARNING] {warn}")
+        print("=" * 60 + "\n")
+        return False
+
+    if warnings:
+        print("\n" + "-" * 60)
+        print("  STARTUP WARNINGS:")
+        print("-" * 60)
+        for warn in warnings:
+            print(f"  [!] {warn}")
+        print("-" * 60 + "\n")
+
+    return True
+
+
 async def main():
     """Main entry point with robust supervision."""
     logging.basicConfig(
@@ -391,11 +554,38 @@ async def main():
 
     load_env()
 
+    # Validate configuration before starting
+    if not validate_startup():
+        print("Fix configuration issues and restart.")
+        sys.exit(1)
+
     print("=" * 60)
     print("  JARVIS BOT SUPERVISOR")
     print("  Robust bot management with auto-restart")
     print("=" * 60)
     print()
+
+    # Start health endpoint (best-effort)
+    health_runner = None
+    try:
+        from bots.health_endpoint import start_health_server
+        health_port = int(os.environ.get("HEALTH_PORT", "8080"))
+        health_runner = await start_health_server(health_port)
+        print(f"Health endpoint: http://localhost:{health_port}/health")
+    except Exception as exc:
+        logger.warning(f"Health endpoint unavailable: {exc}")
+
+    # Start external heartbeat monitoring (Healthchecks.io, etc.)
+    heartbeat = None
+    try:
+        from core.monitoring.heartbeat import get_heartbeat
+        heartbeat = get_heartbeat()
+        if await heartbeat.start():
+            print(f"External heartbeat: enabled (interval: {heartbeat.interval}s)")
+        else:
+            print("External heartbeat: not configured (set HEALTHCHECKS_URL)")
+    except Exception as exc:
+        logger.warning(f"Heartbeat monitoring unavailable: {exc}")
 
     # Create supervisor
     supervisor = BotSupervisor(
@@ -440,6 +630,10 @@ async def main():
         logger.info("Keyboard interrupt received")
     finally:
         await supervisor._cleanup()
+        if heartbeat:
+            await heartbeat.stop()
+        if health_runner:
+            await health_runner.cleanup()
 
 
 if __name__ == "__main__":

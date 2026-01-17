@@ -14,6 +14,7 @@ See: docs/GROK_COMPLIANCE_REGULATORY_GUIDE.md
 """
 
 import asyncio
+import html
 import logging
 import os
 import json
@@ -43,6 +44,8 @@ from core.enhanced_market_data import (
     fetch_backed_stocks,
     fetch_backed_indexes,
     get_grok_conviction_picks,
+    get_wrapped_token_count,
+    get_wrapped_token_symbols,
     TrendingToken,
     BackedAsset,
     ConvictionPick,
@@ -334,6 +337,14 @@ class TokenSentiment:
     chasing_pump: bool = False  # Flag if token already pumped 50%+
     token_risk: str = "MICRO"  # SHITCOIN, MICRO, MID, ESTABLISHED
 
+    # Social metrics (from LunarCrush / CryptoPanic)
+    galaxy_score: float = 0.0  # 0-100 overall social score
+    social_volume: int = 0  # Number of social mentions
+    social_sentiment: float = 50.0  # 0-100 sentiment score
+    alt_rank: int = 0  # Ranking vs other alts
+    news_sentiment: str = "neutral"  # bullish/bearish/neutral
+    news_count: int = 0  # Recent news articles
+
     def calculate_sentiment(self, include_grok: bool = True, market_regime: MarketRegime = None):
         """
         Calculate sentiment from metrics + Grok AI score.
@@ -603,6 +614,23 @@ class SentimentReportGenerator:
         self._running = False
         self._session: Optional[aiohttp.ClientSession] = None
 
+    def _can_use_grok(self) -> tuple[bool, str]:
+        if not self.xai_api_key:
+            return False, "XAI_API_KEY not set"
+        from tg_bot.services.cost_tracker import get_tracker
+        tracker = get_tracker()
+        return tracker.can_make_call()
+
+    def _record_grok_call(self, endpoint: str, success: bool = True) -> None:
+        from tg_bot.services.cost_tracker import get_tracker, GROK_COST_PER_CALL
+        tracker = get_tracker()
+        tracker.record_call(
+            service="grok",
+            endpoint=endpoint,
+            success=success,
+            custom_cost=GROK_COST_PER_CALL,
+        )
+
     async def start(self):
         """Start the sentiment report scheduler."""
         self._running = True
@@ -714,17 +742,22 @@ class SentimentReportGenerator:
             # Get Grok's overall market summary
             grok_summary = await self._get_grok_summary(tokens)
 
-            # Get macro events and traditional markets analysis
-            macro = await self._get_macro_analysis()
-            markets = await self._get_traditional_markets()
-
-            # Get stock picks with change tracking
+            # Fetch independent sections in parallel for faster reports
             previous_picks = self._get_previous_stock_picks()
-            stock_picks, picks_changes = await self._get_stock_picks(previous_picks)
-
-            # Get commodity movers and precious metals
-            commodities = await self._get_commodity_movers()
-            precious_metals = await self._get_precious_metals_outlook()
+            (
+                macro,
+                markets,
+                stock_picks_result,
+                commodities,
+                precious_metals,
+            ) = await asyncio.gather(
+                self._get_macro_analysis(),
+                self._get_traditional_markets(),
+                self._get_stock_picks(previous_picks),
+                self._get_commodity_movers(),
+                self._get_precious_metals_outlook(),
+            )
+            stock_picks, picks_changes = stock_picks_result
 
             # Save predictions for tracking
             self._save_predictions(tokens, macro, markets, stock_picks, commodities, precious_metals)
@@ -869,18 +902,48 @@ class SentimentReportGenerator:
         if not self.xai_api_key:
             return
 
+        can_call, reason = self._can_use_grok()
+        if not can_call:
+            logger.warning(f"Skipping Grok token scores: {reason}")
+            return
+
         try:
-            # Build token data for Grok
-            token_data = "\n".join([
-                f"{i+1}. {t.symbol}: Price ${t.price_usd:.8f}, 24h Change {t.change_24h:+.1f}%, "
-                f"Buy/Sell Ratio {t.buy_sell_ratio:.2f}x, Volume ${t.volume_24h:,.0f}, MCap ${t.mcap:,.0f}"
-                for i, t in enumerate(tokens)
-            ])
+            # Build token data for Grok (with social metrics if available)
+            token_lines = []
+            for i, t in enumerate(tokens):
+                base_data = (
+                    f"{i+1}. {t.symbol}: Price ${t.price_usd:.8f}, 24h Change {t.change_24h:+.1f}%, "
+                    f"Buy/Sell Ratio {t.buy_sell_ratio:.2f}x, Volume ${t.volume_24h:,.0f}, "
+                    f"MCap ${t.mcap:,.0f}, Liquidity ${t.liquidity:,.0f}"
+                )
+                # Add social metrics if available
+                social_data = ""
+                if t.galaxy_score > 0:
+                    social_data += f", Galaxy Score {t.galaxy_score:.0f}/100"
+                if t.social_sentiment != 50.0:
+                    social_data += f", Social Sentiment {t.social_sentiment:.0f}/100"
+                if t.news_sentiment != "neutral":
+                    social_data += f", News {t.news_sentiment.upper()}"
+                if t.news_count > 0:
+                    social_data += f" ({t.news_count} articles)"
+                token_lines.append(base_data + social_data)
+            token_data = "\n".join(token_lines)
 
             prompt = f"""Score each MICROCAP token's sentiment from -100 (extremely bearish) to +100 (extremely bullish).
 These are HIGH RISK microcaps - basically lottery tickets. Be honest about the risk.
 Analyze onchain metrics (buy/sell ratio), volume, momentum, and fundamentals.
 For BULLISH tokens, provide price targets. For ALL tokens, explain WHY.
+
+CRITICAL SCAM DETECTION - Immediately flag and score BEARISH (-80 or lower) if:
+- Token launched < 24 hours ago with no real product or team (pump.fun garbage)
+- Name contains obvious scam patterns (misspellings of major tokens, copy-cat names)
+- Liquidity < $50K or mcap < $500K (likely rug pull setup)
+- No social presence, website, or verifiable team
+- Extreme concentrated holder distribution (whale control)
+- Token pumped >500% in 24h with no news catalyst (likely manipulated)
+
+PREFER tokens with: $50K+ liquidity, $500K+ mcap, established community, real utility.
+AVOID pump.fun launches, honeypots, low-liquidity traps.
 
 MICROCAP TOKENS (with onchain data):
 {token_data}
@@ -891,6 +954,7 @@ SYMBOL|SCORE|VERDICT|REASON|STOP_LOSS|TARGET_SAFE|TARGET_MED|TARGET_DEGEN
 Example:
 BONK|45|BULLISH|Strong buy pressure 2.1x ratio, volume surge, meme momentum|$0.000015|$0.000025|$0.000040|$0.000080
 WIF|-20|BEARISH|Sell pressure dominating, declining volume, weak hands exiting||||
+SCAMCOIN|-90|BEARISH|AVOID - pump.fun launch, <$20K liquidity, no team, rug risk||||
 POPCAT|10|NEUTRAL|Mixed signals, buy/sell balanced, waiting for catalyst||||
 
 Rules:
@@ -903,7 +967,11 @@ Rules:
 - Target Med = medium risk target (optimistic but possible)
 - Target Degen = full send target (moonshot potential)
 - Consider: buy/sell ratio, volume health, price momentum, liquidity depth
+- Use social data when available: Galaxy Score >70 = strong social, >50 = moderate
+- High social sentiment (>65) combined with good onchain = stronger conviction
+- Bullish news + positive social = weight toward bullish
 - Remember: these are volatile microcaps, not blue chips
+- FLAG ANY PUMP.FUN GARBAGE OR SCAM TOKENS AS BEARISH IMMEDIATELY
 
 Respond with ONLY the formatted lines, no other text."""
 
@@ -926,6 +994,7 @@ Respond with ONLY the formatted lines, no other text."""
                 if resp.status == 200:
                     data = await resp.json()
                     response = data["choices"][0]["message"]["content"].strip()
+                    self._record_grok_call("sentiment")
 
                     # Parse Grok's response (new format: SYMBOL|SCORE|VERDICT|REASON|STOP|SAFE|MED|DEGEN)
                     for line in response.split("\n"):
@@ -979,6 +1048,11 @@ Respond with ONLY the formatted lines, no other text."""
         if not self.xai_api_key:
             return "AI analysis unavailable"
 
+        can_call, reason = self._can_use_grok()
+        if not can_call:
+            logger.warning(f"Skipping Grok summary: {reason}")
+            return "Market analysis pending..."
+
         try:
             bullish = [t for t in tokens if t.grok_verdict == "BULLISH"]
             bearish = [t for t in tokens if t.grok_verdict == "BEARISH"]
@@ -1008,6 +1082,7 @@ Give a 2 sentence microcap market outlook. Be direct, acknowledge the risk, but 
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
+                    self._record_grok_call("summary")
                     return data["choices"][0]["message"]["content"].strip()
 
         except Exception as e:
@@ -1020,6 +1095,11 @@ Give a 2 sentence microcap market outlook. Be direct, acknowledge the risk, but 
         macro = MacroAnalysis()
 
         if not self.xai_api_key:
+            return macro
+
+        can_call, reason = self._can_use_grok()
+        if not can_call:
+            logger.warning(f"Skipping Grok macro analysis: {reason}")
             return macro
 
         # Get current date for context
@@ -1082,6 +1162,7 @@ DOUBLE CHECK: All events must be FUTURE events from {current_date}, not past eve
                 if resp.status == 200:
                     data = await resp.json()
                     response = data["choices"][0]["message"]["content"].strip()
+                    self._record_grok_call("macro")
 
                     for line in response.split("\n"):
                         line = line.strip()
@@ -1174,6 +1255,11 @@ DOUBLE CHECK: All events must be FUTURE events from {current_date}, not past eve
         if not self.xai_api_key:
             return markets
 
+        can_call, reason = self._can_use_grok()
+        if not can_call:
+            logger.warning(f"Skipping Grok traditional markets: {reason}")
+            return markets
+
         try:
             prompt = """Analyze DXY (US Dollar Index) and US stock market sentiment.
 
@@ -1214,6 +1300,7 @@ Be direct and specific. Traders need actionable intel, not fluff."""
                 if resp.status == 200:
                     data = await resp.json()
                     response = data["choices"][0]["message"]["content"].strip()
+                    self._record_grok_call("markets")
 
                     for line in response.split("\n"):
                         line = line.strip()
@@ -1255,6 +1342,11 @@ Be direct and specific. Traders need actionable intel, not fluff."""
         changes_note = ""
 
         if not self.xai_api_key:
+            return picks, changes_note
+
+        can_call, reason = self._can_use_grok()
+        if not can_call:
+            logger.warning(f"Skipping Grok stock picks: {reason}")
             return picks, changes_note
 
         try:
@@ -1303,6 +1395,7 @@ Respond with ONLY the formatted lines."""
                 if resp.status == 200:
                     data = await resp.json()
                     response = data["choices"][0]["message"]["content"].strip()
+                    self._record_grok_call("stock_picks")
 
                     for line in response.split("\n"):
                         line = line.strip()
@@ -1336,6 +1429,11 @@ Respond with ONLY the formatted lines."""
         movers = []
 
         if not self.xai_api_key:
+            return movers
+
+        can_call, reason = self._can_use_grok()
+        if not can_call:
+            logger.warning(f"Skipping Grok commodity movers: {reason}")
             return movers
 
         try:
@@ -1378,6 +1476,7 @@ Respond with ONLY the formatted lines."""
                 if resp.status == 200:
                     data = await resp.json()
                     response = data["choices"][0]["message"]["content"].strip()
+                    self._record_grok_call("commodities")
 
                     for line in response.split("\n"):
                         line = line.strip()
@@ -1494,6 +1593,11 @@ IMPORTANT: Use these LIVE prices for your analysis. Do NOT use your training dat
         if not self.xai_api_key:
             return outlook
 
+        can_call, reason = self._can_use_grok()
+        if not can_call:
+            logger.warning(f"Skipping Grok precious metals outlook: {reason}")
+            return outlook
+
         try:
             prompt = f"""{price_context}
 Provide your WEEKLY OUTLOOK for precious metals: Gold, Silver, and Platinum.
@@ -1533,6 +1637,7 @@ Be specific about price targets and key levels to watch."""
                 if resp.status == 200:
                     data = await resp.json()
                     response = data["choices"][0]["message"]["content"].strip()
+                    self._record_grok_call("precious_metals")
 
                     for line in response.split("\n"):
                         line = line.strip()
@@ -1787,22 +1892,22 @@ Be specific about price targets and key levels to watch."""
                 f"{dxy_emoji} <b>DXY (Dollar)</b>: {markets.dxy_direction}",
             ])
             if markets.dxy_sentiment:
-                lines2.append(f"<i>{markets.dxy_sentiment}</i>")
+                lines2.append(f"<i>{html.escape(markets.dxy_sentiment)}</i>")
             lines2.append("")
 
             lines2.extend([
                 f"{stocks_emoji} <b>US Stocks</b>: {markets.stocks_direction}",
             ])
             if markets.stocks_sentiment:
-                lines2.append(f"<i>{markets.stocks_sentiment}</i>")
+                lines2.append(f"<i>{html.escape(markets.stocks_sentiment)}</i>")
             lines2.append("")
 
             if markets.next_24h:
-                lines2.append(f"<b>Next 24h:</b> <i>{markets.next_24h}</i>")
+                lines2.append(f"<b>Next 24h:</b> <i>{html.escape(markets.next_24h)}</i>")
             if markets.next_week:
-                lines2.append(f"<b>This Week:</b> <i>{markets.next_week}</i>")
+                lines2.append(f"<b>This Week:</b> <i>{html.escape(markets.next_week)}</i>")
             if markets.correlation_note:
-                lines2.extend(["", f"<b>Crypto Impact:</b> <i>{markets.correlation_note}</i>"])
+                lines2.extend(["", f"<b>Crypto Impact:</b> <i>{html.escape(markets.correlation_note)}</i>"])
             lines2.append("")
 
         # Macro Events Section
@@ -1816,25 +1921,25 @@ Be specific about price targets and key levels to watch."""
             if macro.short_term:
                 lines2.extend([
                     "⏰ <b>Next 24 Hours:</b>",
-                    f"<i>{macro.short_term}</i>",
+                    f"<i>{html.escape(macro.short_term)}</i>",
                     "",
                 ])
             if macro.medium_term:
                 lines2.extend([
                     "📅 <b>Next 3 Days:</b>",
-                    f"<i>{macro.medium_term}</i>",
+                    f"<i>{html.escape(macro.medium_term)}</i>",
                     "",
                 ])
             if macro.long_term:
                 lines2.extend([
                     "🗓 <b>1 Week - 1 Month:</b>",
-                    f"<i>{macro.long_term}</i>",
+                    f"<i>{html.escape(macro.long_term)}</i>",
                     "",
                 ])
             if macro.key_events:
                 lines2.extend([
                     "<b>Key Events to Watch:</b>",
-                    f"<i>{', '.join(macro.key_events[:5])}</i>",
+                    f"<i>{html.escape(', '.join(macro.key_events[:5]))}</i>",
                     "",
                 ])
 
@@ -1843,7 +1948,7 @@ Be specific about price targets and key levels to watch."""
             "<b>________________________________________</b>",
             "",
             "<b>GROK'S TAKE</b>",
-            f"<i>{grok_summary}</i>",
+            f"<i>{html.escape(grok_summary) if grok_summary else 'Analysis pending...'}</i>",
             "",
             "<i>Stocks, Commodities & Metals in next message...</i>",
         ])
@@ -1864,21 +1969,21 @@ Be specific about price targets and key levels to watch."""
 
             for i, pick in enumerate(stock_picks, 1):
                 emoji = "🟢" if pick.direction == "BULLISH" else "🔴"
-                lines3.append(f"{emoji} <b>{i}. {pick.ticker}</b> - {pick.direction}")
-                lines3.append(f"   <i>{pick.reason}</i>")
+                lines3.append(f"{emoji} <b>{i}. {html.escape(pick.ticker)}</b> - {pick.direction}")
+                lines3.append(f"   <i>{html.escape(pick.reason)}</i>")
                 if pick.target or pick.stop_loss:
                     targets = []
                     if pick.target:
-                        targets.append(f"Target: {pick.target}")
+                        targets.append(f"Target: {html.escape(pick.target)}")
                     if pick.stop_loss:
-                        targets.append(f"Stop: {pick.stop_loss}")
+                        targets.append(f"Stop: {html.escape(pick.stop_loss)}")
                     lines3.append(f"   <b>{' | '.join(targets)}</b>")
                 lines3.append("")
 
             if picks_changes:
                 lines3.extend([
                     "<b>Changes from last report:</b>",
-                    f"<i>{picks_changes}</i>",
+                    f"<i>{html.escape(picks_changes)}</i>",
                     "",
                 ])
 
@@ -1893,10 +1998,10 @@ Be specific about price targets and key levels to watch."""
 
             for i, c in enumerate(commodities, 1):
                 emoji = "📈" if c.direction == "UP" else "📉"
-                lines3.append(f"{emoji} <b>{i}. {c.name}</b> ({c.change})")
-                lines3.append(f"   <i>Why: {c.reason}</i>")
+                lines3.append(f"{emoji} <b>{i}. {html.escape(c.name)}</b> ({html.escape(c.change)})")
+                lines3.append(f"   <i>Why: {html.escape(c.reason)}</i>")
                 if c.outlook:
-                    lines3.append(f"   <b>Outlook:</b> <i>{c.outlook}</i>")
+                    lines3.append(f"   <b>Outlook:</b> <i>{html.escape(c.outlook)}</i>")
                 lines3.append("")
 
         # Precious Metals Section
@@ -1912,7 +2017,7 @@ Be specific about price targets and key levels to watch."""
             gold_emoji = "🟢" if precious_metals.gold_direction == "BULLISH" else "🔴" if precious_metals.gold_direction == "BEARISH" else "🟡"
             lines3.extend([
                 f"{gold_emoji} <b>GOLD</b>: {precious_metals.gold_direction}",
-                f"<i>{precious_metals.gold_outlook}</i>",
+                f"<i>{html.escape(precious_metals.gold_outlook or '')}</i>",
                 "",
             ])
 
@@ -1920,7 +2025,7 @@ Be specific about price targets and key levels to watch."""
             silver_emoji = "🟢" if precious_metals.silver_direction == "BULLISH" else "🔴" if precious_metals.silver_direction == "BEARISH" else "🟡"
             lines3.extend([
                 f"{silver_emoji} <b>SILVER</b>: {precious_metals.silver_direction}",
-                f"<i>{precious_metals.silver_outlook}</i>",
+                f"<i>{html.escape(precious_metals.silver_outlook or '')}</i>",
                 "",
             ])
 
@@ -1928,7 +2033,7 @@ Be specific about price targets and key levels to watch."""
             plat_emoji = "🟢" if precious_metals.platinum_direction == "BULLISH" else "🔴" if precious_metals.platinum_direction == "BEARISH" else "🟡"
             lines3.extend([
                 f"{plat_emoji} <b>PLATINUM</b>: {precious_metals.platinum_direction}",
-                f"<i>{precious_metals.platinum_outlook}</i>",
+                f"<i>{html.escape(precious_metals.platinum_outlook or '')}</i>",
                 "",
             ])
 
@@ -2020,6 +2125,9 @@ Be specific about price targets and key levels to watch."""
 
         # Section 5: TOP 10 BEST TRADES across all classes (with expand button)
         await self._post_grok_conviction_picks(tokens)
+
+        # Section 6: Ape Buttons for bullish Solana tokens (with Grok TP/SL)
+        await self._post_ape_buttons(tokens)
 
         # Final: Treasury status breakdown
         await self._post_treasury_status()
@@ -2416,10 +2524,13 @@ Market Mood: {mood}
                 "DeFi": "💱",
                 "Infrastructure": "🛠️",
                 "Meme": "🐕",
+                "Wrapped": "🔗",
+                "LST": "💧",
+                "Stablecoin": "💵",
                 "Other": "📊"
             }
 
-            for cat in ["L1", "DeFi", "Infrastructure", "Meme"]:
+            for cat in ["L1", "DeFi", "Infrastructure", "Meme", "Wrapped", "LST", "Stablecoin"]:
                 if cat in categories:
                     cat_emoji = category_emojis.get(cat, "📊")
                     token_lines.append(f"\n{cat_emoji} <b>{cat}</b>")
@@ -2458,7 +2569,7 @@ Ecosystem Health: {ecosystem_health}
 {health_desc}
 📊 {green_count}/{len(bluechip_tokens)} positive | Avg: {avg_change:+.1f}%
 
-<i>High liquidity tokens with >$200M mcap & >1yr history</i>
+<i>Native + wrapped tokens with $500K+ liquidity</i>
 {tokens_text}
 """
             # Save blue-chip data for expand handler
@@ -2585,9 +2696,16 @@ Ideal for portfolio hedging & balance
         tokens: List[TrendingToken],
         stocks: List[BackedAsset],
         indexes: List[BackedAsset],
+        bluechip_tokens: Optional[List[TrendingToken]] = None,
     ) -> List[ConvictionPick]:
         """
         Get Grok's conviction picks using direct API call.
+
+        Args:
+            tokens: Trending Solana tokens
+            stocks: xStocks from backed.fi
+            indexes: Index ETFs from backed.fi
+            bluechip_tokens: High liquidity wrapped/bridged tokens
 
         Returns list of ConvictionPick objects sorted by conviction score.
         """
@@ -2596,13 +2714,60 @@ Ideal for portfolio hedging & balance
         if not self.xai_api_key:
             return picks
 
+        can_call, reason = self._can_use_grok()
+        if not can_call:
+            logger.warning(f"Skipping Grok conviction picks: {reason}")
+            return picks
+
         try:
+            # Get historical learnings to improve picks
+            learnings_section = ""
+            try:
+                from bots.treasury.scorekeeper import get_scorekeeper
+                sk = get_scorekeeper()
+                learnings = sk.get_learnings_for_context(limit=5)
+                if learnings:
+                    learnings_section = f"""
+
+{learnings}
+
+IMPORTANT: Use the learnings above to calibrate your TP/SL recommendations.
+- For XSTOCK assets: Consider tighter stops (~5%) and modest targets (~10%)
+- For MEME/MICRO tokens: Consider wider stops (~10-15%) due to volatility
+- For WRAPPED tokens: Consider medium stops (~8-10%) - more stable than memes
+- Prioritize assets where past patterns showed success
+"""
+            except Exception as e:
+                logger.debug(f"Could not load historical learnings: {e}")
+
             # Build asset summary for Grok
             asset_summary = "ASSETS TO ANALYZE:\n\n"
 
             asset_summary += "TRENDING SOLANA TOKENS:\n"
             for t in tokens[:10]:
                 asset_summary += f"- {t.symbol}: ${t.price_usd:.8f}, 24h: {t.price_change_24h:+.1f}%, Vol: ${t.volume_24h:,.0f}, MCap: ${t.mcap:,.0f}\n"
+
+            # Add high liquidity wrapped/bridged tokens
+            if bluechip_tokens:
+                wrapped = [t for t in bluechip_tokens if HIGH_LIQUIDITY_SOLANA_TOKENS.get(t.symbol, {}).get("category") == "Wrapped"]
+                lst = [t for t in bluechip_tokens if HIGH_LIQUIDITY_SOLANA_TOKENS.get(t.symbol, {}).get("category") == "LST"]
+                defi = [t for t in bluechip_tokens if HIGH_LIQUIDITY_SOLANA_TOKENS.get(t.symbol, {}).get("category") == "DeFi"]
+
+                if wrapped:
+                    asset_summary += "\nWRAPPED/BRIDGED TOKENS ($500K+ liquidity):\n"
+                    for t in wrapped[:15]:
+                        info = HIGH_LIQUIDITY_SOLANA_TOKENS.get(t.symbol, {})
+                        asset_summary += f"- {t.symbol} ({info.get('description', '')}): ${t.price_usd:.6f}, 24h: {t.price_change_24h:+.1f}%, Liq: ${t.liquidity_usd:,.0f}\n"
+
+                if lst:
+                    asset_summary += "\nLIQUID STAKING TOKENS (LSTs):\n"
+                    for t in lst[:5]:
+                        asset_summary += f"- {t.symbol}: ${t.price_usd:.4f}, 24h: {t.price_change_24h:+.1f}%\n"
+
+                if defi:
+                    asset_summary += "\nSOLANA DEFI BLUE CHIPS:\n"
+                    for t in defi[:5]:
+                        asset_summary += f"- {t.symbol}: ${t.price_usd:.4f}, 24h: {t.price_change_24h:+.1f}%, MCap: ${t.mcap:,.0f}\n"
 
             asset_summary += "\nTOKENIZED STOCKS (xStocks on Solana):\n"
             for s in stocks[:10]:
@@ -2614,13 +2779,20 @@ Ideal for portfolio hedging & balance
 
             prompt = f"""Analyze these assets and provide your TOP 10 conviction picks.
 
-{asset_summary}
+CRITICAL QUALITY REQUIREMENTS FOR TOKEN PICKS:
+- ONLY recommend tokens with $50K+ liquidity and $500K+ market cap
+- NEVER recommend pump.fun launches, honeypots, or tokens < 24h old
+- AVOID tokens that pumped >500% with no catalyst (likely manipulation)
+- PREFER established tokens with real community and utility
+- Scams and rug pulls will destroy our portfolio - BE CAUTIOUS
 
+{asset_summary}
+{learnings_section}
 For each pick, provide:
 1. SYMBOL - The asset symbol
 2. ASSET_CLASS - token/stock/index
 3. CONVICTION - Score from 1-100 (100 = highest conviction)
-4. REASONING - Brief 1-2 sentence explanation
+4. REASONING - Brief 1-2 sentence explanation (mention liquidity/mcap for tokens)
 5. TARGET - Target price (approximate % gain)
 6. STOP - Stop loss (approximate % loss)
 7. TIMEFRAME - short (1-7 days), medium (1-4 weeks), long (1-3 months)
@@ -2630,8 +2802,17 @@ PICK|SYMBOL|ASSET_CLASS|CONVICTION|REASONING|TARGET_PCT|STOP_PCT|TIMEFRAME
 
 Example:
 PICK|NVDAx|stock|85|Strong AI demand and upcoming earnings catalyst|+15%|-5%|medium
+PICK|BONK|token|65|$2M liquidity, $500M mcap, strong meme momentum|+40%|-15%|short
+PICK|WETH|token|70|$5M liquidity, ETH exposure on Solana, safer play|+20%|-8%|medium
 
-Provide your 10 best picks with conviction scores. Be selective - only include assets you have genuine conviction in."""
+Provide your 10 best picks with conviction scores. Be selective - only include assets you have genuine conviction in.
+
+ASSET CLASS BALANCE:
+- Include at least 2-3 wrapped/bridged tokens (WETH, WBTC, LINK, etc.) as safer alternatives
+- Mix of trending memes, wrapped majors, and stocks provides diversification
+- Wrapped tokens from ETH/BTC ecosystem often outperform during alt season
+
+DO NOT include any pump.fun garbage or low-liquidity scam tokens."""
 
             # Call Grok API
             async with self._session.post(
@@ -2656,6 +2837,7 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
 
                 data = await resp.json()
                 response = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                self._record_grok_call("conviction_picks")
 
                 # Parse response
                 lines = response.strip().split("\n")
@@ -2680,11 +2862,19 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
                         contract = ""
 
                         if asset_class == "token":
+                            # Search trending tokens first
                             for t in tokens:
                                 if t.symbol.upper() == symbol:
                                     entry_price = t.price_usd
                                     contract = t.contract
                                     break
+                            # Also search bluechip/wrapped tokens
+                            if entry_price == 0 and bluechip_tokens:
+                                for t in bluechip_tokens:
+                                    if t.symbol.upper() == symbol:
+                                        entry_price = t.price_usd
+                                        contract = t.contract
+                                        break
                         elif asset_class == "stock":
                             for s in stocks:
                                 if s.symbol.upper() == symbol or s.underlying.upper() == symbol:
@@ -2719,6 +2909,31 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
         # Sort by conviction score
         picks.sort(key=lambda p: p.conviction_score, reverse=True)
 
+        # Save picks to database for performance tracking
+        if picks:
+            try:
+                from bots.treasury.scorekeeper import get_scorekeeper
+                sk = get_scorekeeper()
+                saved_count = 0
+                for pick in picks[:10]:
+                    success = sk.save_pick(
+                        symbol=pick.symbol,
+                        asset_class=pick.asset_class,
+                        contract=pick.contract,
+                        conviction_score=pick.conviction_score,
+                        entry_price=pick.entry_price,
+                        target_price=pick.target_price,
+                        stop_loss=pick.stop_loss,
+                        timeframe=pick.timeframe,
+                        reasoning=pick.reasoning,
+                    )
+                    if success:
+                        saved_count += 1
+                if saved_count > 0:
+                    logger.info(f"Saved {saved_count} picks to performance tracker")
+            except Exception as e:
+                logger.debug(f"Could not save picks for tracking: {e}")
+
         return picks[:10]
 
     async def _post_grok_conviction_picks(self, tokens: List = None):
@@ -2731,6 +2946,11 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
 
             # Gather all available assets
             trending_tokens, _ = await fetch_trending_solana_tokens(10)
+
+            # Fetch high liquidity wrapped/bridged tokens
+            bluechip_tokens, bc_warnings = await fetch_high_liquidity_tokens()
+            if bc_warnings:
+                logger.debug(f"Bluechip token warnings: {bc_warnings}")
 
             # Get stocks from BACKED_XSTOCKS
             stocks = [
@@ -2762,8 +2982,10 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
                 if info["type"] in ("index", "bond", "commodity")
             ]
 
-            # Call Grok directly for conviction picks
-            picks = await self._get_grok_conviction_picks_internal(trending_tokens, stocks, indexes)
+            # Call Grok directly for conviction picks (now includes wrapped tokens)
+            picks = await self._get_grok_conviction_picks_internal(
+                trending_tokens, stocks, indexes, bluechip_tokens
+            )
 
             logger.info(f"Grok returned {len(picks)} conviction picks")
 
@@ -2774,7 +2996,7 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
             # Store picks for expand handler (save to file for cross-process access)
             import tempfile
             picks_data = []
-            for p in picks[:5]:  # TOP 5 only
+            for p in picks[:10]:  # TOP 10
                 picks_data.append({
                     "symbol": p.symbol,
                     "asset_class": p.asset_class,
@@ -2793,7 +3015,7 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
                 json.dump(picks_data, f)
 
             # Calculate unified sentiment across all picks
-            avg_conviction = sum(p.conviction_score for p in picks[:5]) / min(5, len(picks))
+            avg_conviction = sum(p.conviction_score for p in picks[:10]) / min(10, len(picks))
             if avg_conviction >= 75:
                 unified_sentiment = "🟢 STRONG BUY"
                 sentiment_desc = "High confidence across multiple asset classes"
@@ -2804,9 +3026,9 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
                 unified_sentiment = "🟠 CAUTIOUS"
                 sentiment_desc = "Selective positioning recommended"
 
-            # Build picks list display (TOP 5)
+            # Build picks list display (TOP 10)
             pick_lines = []
-            for i, pick in enumerate(picks[:5]):
+            for i, pick in enumerate(picks[:10]):
                 # Conviction color
                 if pick.conviction_score >= 80:
                     conv_emoji = "🟢"
@@ -2834,10 +3056,10 @@ Provide your 10 best picks with conviction scores. Be selective - only include a
 
             picks_text = "\n\n".join(pick_lines)
 
-            # Build section message - UNIFIED TOP 5
+            # Build section message - UNIFIED TOP 10
             section_msg = f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏆 <b>JARVIS UNIFIED TOP 5</b>
+🏆 <b>JARVIS UNIFIED TOP 10</b>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🤖 <b>JARVIS Unified Sentiment:</b> {unified_sentiment}
@@ -2878,11 +3100,106 @@ Avg Conviction: {avg_conviction:.0f}/100
             logger.error(f"Failed to post Grok conviction picks: {e}")
 
     async def _post_treasury_status(self):
-        """Post treasury status at the end of report."""
+        """Post comprehensive treasury dashboard at the end of report."""
         try:
-            # Try to get treasury status
-            treasury_status = await self._get_treasury_status()
+            from bots.treasury.scorekeeper import get_scorekeeper
 
+            scorekeeper = get_scorekeeper()
+
+            # Get balance from blockchain
+            balance_sol, sol_price = await self._get_treasury_balance()
+
+            # Generate beautiful dashboard using scorekeeper
+            dashboard_html = scorekeeper.format_telegram_dashboard_html(
+                balance_sol=balance_sol,
+                sol_price=sol_price
+            )
+
+            # Add wallet link footer
+            treasury_addr = os.environ.get("TREASURY_WALLET_ADDRESS", "")
+            if treasury_addr:
+                dashboard_html += f"\n\nTreasury: <code>{treasury_addr[:12]}...{treasury_addr[-4:]}</code>"
+                dashboard_html += f'\n<a href="https://solscan.io/account/{treasury_addr}">View on Solscan</a>'
+
+            dashboard_html += "\n\n<i>Use APE buttons above to trade with treasury</i>"
+
+            async with self._session.post(
+                f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
+                data={
+                    "chat_id": self.chat_id,
+                    "text": dashboard_html,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": "true",
+                }
+            ) as resp:
+                result = await resp.json()
+                if not result.get("ok"):
+                    logger.debug(f"Treasury dashboard not posted: {result}")
+
+        except Exception as e:
+            logger.debug(f"Could not post treasury dashboard: {e}")
+            # Fallback to basic status
+            await self._post_treasury_status_fallback()
+
+    async def _get_treasury_balance(self) -> Tuple[float, float]:
+        """Get treasury SOL balance and current SOL price.
+
+        Returns:
+            (balance_sol, sol_price)
+        """
+        balance_sol = 0.0
+        sol_price = 200.0  # Default
+
+        try:
+            # Try via TreasuryTrader first
+            from bots.treasury.trading import TreasuryTrader
+            trader = TreasuryTrader()
+            initialized, _ = await trader._ensure_initialized()
+            if initialized and trader._engine:
+                balance_sol, _ = await trader._engine.get_portfolio_value()
+        except Exception as e:
+            logger.debug(f"TreasuryTrader balance fetch failed: {e}")
+
+        # Fallback: Direct RPC balance fetch
+        if balance_sol == 0.0:
+            try:
+                treasury_addr = os.environ.get("TREASURY_WALLET_ADDRESS", "")
+                helius_rpc = os.environ.get("HELIUS_RPC_URL", "")
+
+                if treasury_addr and helius_rpc and self._session:
+                    payload = {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "getBalance",
+                        "params": [treasury_addr]
+                    }
+                    async with self._session.post(helius_rpc, json=payload) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            lamports = data.get("result", {}).get("value", 0)
+                            balance_sol = lamports / 1_000_000_000
+            except Exception as e:
+                logger.debug(f"RPC balance fetch failed: {e}")
+
+        # Fetch SOL price
+        try:
+            async with self._session.get(
+                "https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112"
+            ) as price_resp:
+                if price_resp.status == 200:
+                    price_data = await price_resp.json()
+                    pairs = price_data.get("pairs", [])
+                    if pairs:
+                        sol_price = float(pairs[0].get("priceUsd", 200) or 200)
+        except Exception:
+            pass
+
+        return balance_sol, sol_price
+
+    async def _post_treasury_status_fallback(self):
+        """Post basic treasury status when scorekeeper unavailable."""
+        try:
+            treasury_status = await self._get_treasury_status()
             if treasury_status:
                 status_msg = f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2890,14 +3207,11 @@ Avg Conviction: {avg_conviction:.0f}/100
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 💵 Balance: <code>{treasury_status['balance_sol']:.4f} SOL</code> (~${treasury_status['balance_usd']:,.2f})
-📊 Open Positions: <code>{treasury_status['positions']}</code>
-24h P&L: {'📈' if treasury_status['pnl_24h'] >= 0 else '📉'} <code>{treasury_status['pnl_24h']:+.2f}%</code>
 
 Treasury: <code>{treasury_status['address'][:12]}...{treasury_status['address'][-4:]}</code>
 <a href="https://solscan.io/account/{treasury_status['address']}">View on Solscan</a>
 
 <i>Use APE buttons above to trade with treasury</i>
-<i>All trades follow Grok's recommended TP/SL</i>
 """
                 async with self._session.post(
                     f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
@@ -2908,17 +3222,15 @@ Treasury: <code>{treasury_status['address'][:12]}...{treasury_status['address'][
                         "disable_web_page_preview": "false",
                     }
                 ) as resp:
-                    result = await resp.json()
-                    if not result.get("ok"):
-                        logger.debug(f"Treasury status not posted: {result}")
-
+                    await resp.json()
         except Exception as e:
-            logger.debug(f"Could not post treasury status: {e}")
+            logger.debug(f"Fallback treasury status failed: {e}")
 
     async def _get_treasury_status(self) -> Optional[Dict[str, Any]]:
         """Get current treasury status from blockchain."""
         try:
             from bots.treasury.trading import TreasuryTrader
+            from bots.treasury.scorekeeper import get_scorekeeper
 
             trader = TreasuryTrader()
             initialized, msg = await trader._ensure_initialized()
@@ -2926,13 +3238,17 @@ Treasury: <code>{treasury_status['address'][:12]}...{treasury_status['address'][
             if initialized and trader._engine:
                 balance_sol, balance_usd = await trader._engine.get_portfolio_value()
                 address = os.environ.get("TREASURY_WALLET_ADDRESS", "")
+                scorekeeper = get_scorekeeper()
+                open_positions = scorekeeper.get_open_positions()
+                scorecard = scorekeeper.get_scorecard()
 
                 return {
                     "address": address,
                     "balance_sol": balance_sol,
                     "balance_usd": balance_usd,
-                    "positions": 0,  # Would get from trading engine
-                    "pnl_24h": 0.0,  # Would calculate from trade history
+                    "positions": len(open_positions),
+                    "pnl_24h": scorecard.total_pnl_sol,
+                    "win_rate": scorecard.win_rate,
                 }
             else:
                 logger.debug(f"Treasury init failed: {msg}")
@@ -2973,12 +3289,23 @@ Treasury: <code>{treasury_status['address'][:12]}...{treasury_status['address'][
                         except:
                             pass
 
+                        open_positions = []
+                        scorecard = None
+                        try:
+                            from bots.treasury.scorekeeper import get_scorekeeper
+                            scorekeeper = get_scorekeeper()
+                            open_positions = scorekeeper.get_open_positions()
+                            scorecard = scorekeeper.get_scorecard()
+                        except Exception:
+                            pass
+
                         return {
                             "address": treasury_addr,
                             "balance_sol": balance_sol,
                             "balance_usd": balance_sol * sol_price,
-                            "positions": 0,
-                            "pnl_24h": 0.0,
+                            "positions": len(open_positions),
+                            "pnl_24h": scorecard.total_pnl_sol if scorecard else 0.0,
+                            "win_rate": scorecard.win_rate if scorecard else 0.0,
                         }
         except Exception as e:
             logger.debug(f"RPC balance fetch failed: {e}")

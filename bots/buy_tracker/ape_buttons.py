@@ -759,6 +759,30 @@ async def execute_ape_trade(
             error=f"REJECTED: {error_msg}"
         )
 
+    # Enforce per-token allocation cap while allowing stacking
+    if trade_setup.contract_address and treasury_balance_sol > 0:
+        try:
+            from bots.treasury.scorekeeper import get_scorekeeper
+            from bots.treasury.trading import TradingEngine
+
+            scorekeeper = get_scorekeeper()
+            existing_positions = scorekeeper.get_positions_by_token(trade_setup.contract_address)
+            existing_sol = sum(p.entry_amount_sol for p in existing_positions)
+            total_sol = existing_sol + trade_setup.amount_sol
+            allocation_pct = total_sol / treasury_balance_sol
+
+            if allocation_pct > TradingEngine.MAX_ALLOCATION_PER_TOKEN:
+                return TradeResult(
+                    success=False,
+                    trade_setup=trade_setup,
+                    error=(
+                        f"Token allocation {allocation_pct*100:.1f}% exceeds max "
+                        f"{TradingEngine.MAX_ALLOCATION_PER_TOKEN*100:.0f}% for {trade_setup.symbol}"
+                    )
+                )
+        except Exception as e:
+            logger.debug(f"Token allocation check skipped: {e}")
+
     # Log the validated trade
     profile_config = RISK_PROFILE_CONFIG[trade_setup.risk_profile]
     logger.info(
@@ -797,7 +821,7 @@ async def _execute_token_trade(setup: TradeSetup, user_id: Optional[int] = None)
         logger.info("Creating TreasuryTrader...")
         trader = TreasuryTrader()
 
-        logger.info(f"Calling execute_buy_with_tp_sl: {setup.contract_address}, {setup.amount_sol} SOL")
+        logger.info(f"Calling execute_buy_with_tp_sl: {setup.contract_address}, {setup.amount_sol} SOL, grade={setup.grade}")
         # Execute buy with TP/SL
         result = await trader.execute_buy_with_tp_sl(
             token_mint=setup.contract_address or "",
@@ -806,6 +830,7 @@ async def _execute_token_trade(setup: TradeSetup, user_id: Optional[int] = None)
             stop_loss_price=setup.stop_loss_price,
             token_symbol=setup.symbol,
             user_id=user_id,
+            sentiment_grade=setup.grade or "B",  # Pass actual sentiment grade
         )
 
         if result.get("success"):

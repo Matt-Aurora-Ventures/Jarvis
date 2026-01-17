@@ -25,6 +25,9 @@ class LunarCrushAPI:
     # Rate limiting: 1000 calls/day = ~42/hour = 1 per 1.5 seconds minimum
     MIN_REQUEST_INTERVAL = 1.5  # seconds between requests
     _last_request_time = 0.0
+    _error_count = 0  # Track consecutive errors to avoid spam
+    _disabled = False  # Disable after too many errors
+    _warned_404 = False  # Only warn once about 404s
 
     def __init__(self):
         self.api_key = os.getenv("LUNARCRUSH_API_KEY", "")
@@ -69,6 +72,10 @@ class LunarCrushAPI:
 
     async def _get(self, endpoint: str, params: Optional[Dict] = None) -> Optional[Dict]:
         """Make GET request to LunarCrush API."""
+        # If disabled due to repeated errors, skip
+        if LunarCrushAPI._disabled:
+            return None
+
         cache_key = f"{endpoint}:{params}"
 
         # Check cache first (before rate limiting)
@@ -86,16 +93,28 @@ class LunarCrushAPI:
 
             async with session.get(url, headers=self._get_headers(), params=params, timeout=10) as resp:
                 if resp.status == 200:
+                    LunarCrushAPI._error_count = 0  # Reset on success
                     data = await resp.json()
                     self._cache[cache_key] = (data, datetime.now().timestamp())
                     return data
                 elif resp.status == 429:
                     logger.warning("LunarCrush API rate limited")
                     return None
+                elif resp.status == 404:
+                    LunarCrushAPI._error_count += 1
+                    if not LunarCrushAPI._warned_404:
+                        logger.warning("LunarCrush API returning 404 - endpoint may have changed")
+                        LunarCrushAPI._warned_404 = True
+                    if LunarCrushAPI._error_count >= 5:
+                        logger.warning("LunarCrush API disabled after repeated 404s")
+                        LunarCrushAPI._disabled = True
+                    return None
                 else:
+                    LunarCrushAPI._error_count += 1
                     logger.warning(f"LunarCrush API error: {resp.status}")
                     return None
         except Exception as e:
+            LunarCrushAPI._error_count += 1
             logger.error(f"LunarCrush API error: {e}")
             return None
     

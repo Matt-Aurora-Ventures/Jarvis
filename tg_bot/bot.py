@@ -17,8 +17,8 @@ import tg_bot.bot_core as bot_core
 from tg_bot.bot_core import *  # re-export non-underscore symbols for legacy imports
 from tg_bot.handlers.commands import start, help_command, status, subscribe, unsubscribe
 from tg_bot.handlers.sentiment import trending, digest, report, sentiment, picks
-from tg_bot.handlers.admin import reload, config_cmd, logs, system
-from tg_bot.handlers.trading import balance, positions, wallet, dashboard, button_callback
+from tg_bot.handlers.admin import reload, config_cmd, logs, system, away, back, awaystatus, memory
+from tg_bot.handlers.trading import balance, positions, wallet, dashboard, button_callback, calibrate
 
 
 def main():
@@ -108,6 +108,10 @@ def main():
     app.add_handler(CommandHandler("system", system))
     app.add_handler(CommandHandler("wallet", wallet))
     app.add_handler(CommandHandler("logs", logs))
+    app.add_handler(CommandHandler("away", away))
+    app.add_handler(CommandHandler("back", back))
+    app.add_handler(CommandHandler("awaystatus", awaystatus))
+    app.add_handler(CommandHandler("memory", memory))
     app.add_handler(CommandHandler("metrics", metrics))
     app.add_handler(CommandHandler("clistats", clistats))
     app.add_handler(CommandHandler("stats", clistats))
@@ -132,6 +136,8 @@ def main():
     app.add_handler(CommandHandler("positions", positions))
     app.add_handler(CommandHandler("dashboard", dashboard))
     app.add_handler(CommandHandler("dash", dashboard))
+    app.add_handler(CommandHandler("calibrate", calibrate))
+    app.add_handler(CommandHandler("cal", calibrate))
     app.add_handler(CommandHandler("settings", settings))
     app.add_handler(CommandHandler("addscam", addscam))
     app.add_handler(CommandHandler("trust", trust))

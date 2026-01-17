@@ -215,7 +215,7 @@ class PositionManager:
         manager.set_limits(PositionLimits(
             max_position_size=10000,
             max_leverage=5,
-            max_positions=10
+            max_positions=50
         ))
 
         # Open position
@@ -239,7 +239,7 @@ class PositionManager:
     DEFAULT_LIMITS = PositionLimits(
         max_position_size=50000,
         max_leverage=10,
-        max_positions=20,
+        max_positions=50,  # Increased from 20 to support more concurrent positions
         max_exposure_per_symbol=0.25,
         max_total_exposure=0.8,
         min_margin_ratio=0.05,

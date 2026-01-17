@@ -357,9 +357,49 @@ class EngagementTracker:
             return None
 
         try:
-            # This would call the Twitter API to get tweet metrics
-            # For now, return placeholder - actual implementation depends on API client
-            pass
+            # Fetch tweet data from Twitter API
+            tweet_data = await self.api.get_tweet(tweet_id)
+            if not tweet_data:
+                logger.warning(f"Could not fetch tweet {tweet_id}")
+                return None
+
+            # Extract public metrics
+            metrics_data = tweet_data.get("metrics", {})
+            likes = metrics_data.get("like_count", 0)
+            retweets = metrics_data.get("retweet_count", 0)
+            replies = metrics_data.get("reply_count", 0)
+            quotes = metrics_data.get("quote_count", 0)
+            impressions = metrics_data.get("impression_count", 0)
+
+            # Calculate engagement rate (engagements / impressions)
+            total_engagements = likes + retweets + replies + quotes
+            engagement_rate = (total_engagements / impressions * 100) if impressions > 0 else 0.0
+
+            # Get existing metrics or create new
+            existing = self.db.get_tweet_metrics(tweet_id)
+            text_preview = existing.get("text_preview", "") if existing else tweet_data.get("text", "")[:100]
+            created_at = existing.get("created_at", "") if existing else tweet_data.get("created_at", "")
+
+            # Create updated metrics object
+            metrics = TweetMetrics(
+                tweet_id=tweet_id,
+                created_at=str(created_at),
+                text_preview=text_preview,
+                likes=likes,
+                retweets=retweets,
+                replies=replies,
+                quotes=quotes,
+                impressions=impressions,
+                engagement_rate=round(engagement_rate, 2),
+                last_updated=datetime.now(timezone.utc).isoformat()
+            )
+
+            # Save to database
+            self.db.save_tweet_metrics(metrics)
+            logger.debug(f"Updated metrics for tweet {tweet_id}: {likes} likes, {retweets} RTs")
+
+            return metrics
+
         except Exception as e:
             logger.error(f"Failed to update metrics for {tweet_id}: {e}")
             return None
@@ -402,6 +442,45 @@ class EngagementTracker:
             'top_tweets': top_tweets[:5],
             'trends': trends
         }
+
+    def get_category_performance(self, hours: int = 168) -> Dict[str, Dict[str, float]]:
+        """
+        Get average engagement by content category from X memory storage.
+
+        Returns:
+            {category: {avg_likes, avg_retweets, avg_replies, count}}
+        """
+        x_memory_db = Path(__file__).resolve().parents[2] / "data" / "jarvis_x_memory.db"
+        if not x_memory_db.exists():
+            return {}
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        conn = sqlite3.connect(str(x_memory_db))
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT category,
+                       COUNT(*) as count,
+                       AVG(engagement_likes) as avg_likes,
+                       AVG(engagement_retweets) as avg_retweets,
+                       AVG(engagement_replies) as avg_replies
+                FROM tweets
+                WHERE posted_at > ?
+                GROUP BY category
+            """, (cutoff,))
+
+            results = {}
+            for row in cursor.fetchall():
+                results[row[0]] = {
+                    "count": row[1],
+                    "avg_likes": round(row[2] or 0, 1),
+                    "avg_retweets": round(row[3] or 0, 1),
+                    "avg_replies": round(row[4] or 0, 1),
+                }
+
+            return results
+        finally:
+            conn.close()
 
     def get_best_posting_times(self) -> List[Dict]:
         """Analyze best times to post based on engagement."""

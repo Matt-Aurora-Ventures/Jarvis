@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from core.utils.circuit_breaker import APICircuitBreaker, CircuitOpenError
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,11 +46,25 @@ class GrokClient:
     IMAGE_MODEL = "grok-2-image"
     STATE_FILE = Path(__file__).parent / ".grok_state.json"
 
+    # Cost per 1K tokens (xAI Grok pricing - update as needed)
+    COST_PER_1K_INPUT = 0.005   # $0.005 per 1K input tokens
+    COST_PER_1K_OUTPUT = 0.015  # $0.015 per 1K output tokens
+    COST_PER_IMAGE = 0.02       # $0.02 per image generation
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("XAI_API_KEY", "")
         self._session: Optional[aiohttp.ClientSession] = None
         self._daily_image_count = 0
         self._last_image_date: Optional[str] = None
+        self._circuit_breaker = APICircuitBreaker("grok_api")
+
+        # Cost tracking
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+        self._total_images = 0
+        self._daily_cost = 0.0
+        self._all_time_cost = 0.0
+
         self._load_state()  # Load persisted state on init
 
     def _load_state(self):
@@ -58,10 +74,19 @@ class GrokClient:
                 data = json.loads(self.STATE_FILE.read_text())
                 self._last_image_date = data.get("last_image_date")
                 self._daily_image_count = data.get("daily_image_count", 0)
-                # Reset if it's a new day
+
+                # Load cost tracking data
+                self._total_input_tokens = data.get("total_input_tokens", 0)
+                self._total_output_tokens = data.get("total_output_tokens", 0)
+                self._total_images = data.get("total_images", 0)
+                self._all_time_cost = data.get("all_time_cost", 0.0)
+                self._daily_cost = data.get("daily_cost", 0.0)
+
+                # Reset daily stats if it's a new day
                 today = datetime.now().strftime("%Y-%m-%d")
                 if self._last_image_date != today:
                     self._daily_image_count = 0
+                    self._daily_cost = 0.0
                     self._last_image_date = today
         except Exception as e:
             logger.warning(f"Could not load Grok state: {e}")
@@ -71,10 +96,48 @@ class GrokClient:
         try:
             self.STATE_FILE.write_text(json.dumps({
                 "last_image_date": self._last_image_date,
-                "daily_image_count": self._daily_image_count
-            }))
+                "daily_image_count": self._daily_image_count,
+                "total_input_tokens": self._total_input_tokens,
+                "total_output_tokens": self._total_output_tokens,
+                "total_images": self._total_images,
+                "daily_cost": self._daily_cost,
+                "all_time_cost": self._all_time_cost
+            }, indent=2))
         except Exception as e:
             logger.warning(f"Could not save Grok state: {e}")
+
+    def _track_usage(self, usage: Optional[Dict[str, int]], is_image: bool = False):
+        """Track API usage and calculate costs"""
+        cost = 0.0
+
+        if is_image:
+            self._total_images += 1
+            cost = self.COST_PER_IMAGE
+        elif usage:
+            input_tokens = usage.get("prompt_tokens", 0)
+            output_tokens = usage.get("completion_tokens", 0)
+            self._total_input_tokens += input_tokens
+            self._total_output_tokens += output_tokens
+            cost = (input_tokens / 1000 * self.COST_PER_1K_INPUT +
+                    output_tokens / 1000 * self.COST_PER_1K_OUTPUT)
+
+        self._daily_cost += cost
+        self._all_time_cost += cost
+        self._save_state()
+
+        if cost > 0:
+            logger.debug(f"Grok API cost: ${cost:.4f} (daily: ${self._daily_cost:.2f})")
+
+    def get_usage_stats(self) -> Dict[str, Any]:
+        """Get current usage statistics"""
+        return {
+            "total_input_tokens": self._total_input_tokens,
+            "total_output_tokens": self._total_output_tokens,
+            "total_images": self._total_images,
+            "daily_cost_usd": round(self._daily_cost, 4),
+            "all_time_cost_usd": round(self._all_time_cost, 4),
+            "daily_image_count": self._daily_image_count
+        }
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session"""
@@ -87,6 +150,18 @@ class GrokClient:
                 timeout=aiohttp.ClientTimeout(total=60)  # 60s timeout
             )
         return self._session
+
+    async def _post_json(self, endpoint: str, payload: Dict[str, Any]) -> tuple[int, Optional[Dict[str, Any]], Optional[str]]:
+        session = await self._get_session()
+
+        async def _request():
+            async with session.post(f"{self.BASE_URL}/{endpoint}", json=payload) as resp:
+                status = resp.status
+                if status == 200:
+                    return status, await resp.json(), None
+                return status, None, await resp.text()
+
+        return await self._circuit_breaker.call(_request)
 
     async def close(self):
         """Close the session"""
@@ -116,8 +191,6 @@ class GrokClient:
             return GrokResponse(success=False, error="XAI API key not configured")
 
         try:
-            session = await self._get_session()
-
             # Format prompt with context
             if context:
                 for key, value in context.items():
@@ -140,31 +213,33 @@ class GrokClient:
                 "max_tokens": max_tokens,
                 "temperature": temperature
             }
+            try:
+                status, data, error_text = await self._post_json("chat/completions", payload)
+            except CircuitOpenError as exc:
+                return GrokResponse(success=False, error=str(exc))
 
-            async with session.post(
-                f"{self.BASE_URL}/chat/completions",
-                json=payload
-            ) as resp:
-                if resp.status != 200:
-                    error_text = await resp.text()
-                    logger.error(f"Grok API error: {resp.status} - {error_text}")
-                    return GrokResponse(success=False, error=f"API error: {resp.status}")
+            if status != 200:
+                logger.error(f"Grok API error: {status} - {error_text}")
+                return GrokResponse(success=False, error=f"API error: {status}")
 
-                data = await resp.json()
-                content = data["choices"][0]["message"]["content"].strip()
+            content = data["choices"][0]["message"]["content"].strip()
 
-                # Ensure content fits tweet
-                if len(content) > 280:
-                    content = content[:277] + "..."
+            # Ensure content fits tweet
+            if len(content) > 280:
+                content = content[:277] + "..."
 
-                # Clean up any quotes if Grok wrapped the response
-                content = content.strip('"\'')
+            # Clean up any quotes if Grok wrapped the response
+            content = content.strip('"\'')
 
-                return GrokResponse(
-                    success=True,
-                    content=content,
-                    usage=data.get("usage")
-                )
+            # Track usage and costs
+            usage_data = data.get("usage")
+            self._track_usage(usage_data)
+
+            return GrokResponse(
+                success=True,
+                content=content,
+                usage=usage_data
+            )
 
         except Exception as e:
             logger.error(f"Grok generation error: {e}")
@@ -202,8 +277,6 @@ class GrokClient:
             )
 
         try:
-            session = await self._get_session()
-
             # Enhance prompt with style instructions
             enhanced_prompt = self._enhance_image_prompt(prompt, style)
 
@@ -213,31 +286,28 @@ class GrokClient:
                 "n": 1,
                 "response_format": "b64_json"
             }
+            try:
+                status, data, error_text = await self._post_json("images/generations", payload)
+            except CircuitOpenError as exc:
+                return ImageResponse(success=False, error=str(exc))
 
-            async with session.post(
-                f"{self.BASE_URL}/images/generations",
-                json=payload
-            ) as resp:
-                if resp.status != 200:
-                    error_text = await resp.text()
-                    logger.error(f"Grok image API error: {resp.status} - {error_text}")
-                    return ImageResponse(success=False, error=f"API error: {resp.status}")
+            if status != 200:
+                logger.error(f"Grok image API error: {status} - {error_text}")
+                return ImageResponse(success=False, error=f"API error: {status}")
 
-                data = await resp.json()
+            if "data" in data and len(data["data"]) > 0:
+                b64_data = data["data"][0].get("b64_json")
+                if b64_data:
+                    image_bytes = base64.b64decode(b64_data)
+                    self._daily_image_count += 1
+                    self._track_usage(None, is_image=True)  # Track image cost
+                    logger.info(f"Image generated ({self._daily_image_count}/6 today)")
+                    return ImageResponse(
+                        success=True,
+                        image_data=image_bytes
+                    )
 
-                if "data" in data and len(data["data"]) > 0:
-                    b64_data = data["data"][0].get("b64_json")
-                    if b64_data:
-                        image_bytes = base64.b64decode(b64_data)
-                        self._daily_image_count += 1
-                        self._save_state()  # Persist count
-                        logger.info(f"Image generated ({self._daily_image_count}/6 today)")
-                        return ImageResponse(
-                            success=True,
-                            image_data=image_bytes
-                        )
-
-                return ImageResponse(success=False, error="No image data in response")
+            return ImageResponse(success=False, error="No image data in response")
 
         except Exception as e:
             logger.error(f"Grok image generation error: {e}")

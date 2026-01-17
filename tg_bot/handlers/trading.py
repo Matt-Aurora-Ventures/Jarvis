@@ -33,23 +33,20 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         address = treasury.address if treasury else "Unknown"
         short_addr = f"{address[:8]}...{address[-4:]}" if address else "N/A"
 
-        message = f"""
-\U0001f4b0 *TREASURY BALANCE*
+        # JARVIS voice - lowercase, no corporate filler
+        message = f"""*treasury status*
 
-*Wallet:* `{short_addr}`
-*SOL:* `{sol_balance:.4f}` SOL
-*USD:* `${usd_value:,.2f}`
+wallet: `{short_addr}`
+sol: `{sol_balance:.4f}` | usd: `${usd_value:,.2f}`
 
-*Mode:* {mode}
-*Max Positions:* {engine.max_positions}
-*Risk Level:* {engine.risk_level.value}
-
-\u26a0\ufe0f _Low balance warning: <{config.low_balance_threshold} SOL_
+mode: {mode}
+max positions: {engine.max_positions}
+risk: {engine.risk_level.value}
 """
 
         # Warning if low balance (configurable via LOW_BALANCE_THRESHOLD env var)
         if sol_balance < config.low_balance_threshold:
-            message += "\n\U0001f6a8 *WARNING: Low balance!*"
+            message += f"\n_running low. under {config.low_balance_threshold} sol._"
 
         keyboard = InlineKeyboardMarkup([
             [
@@ -67,7 +64,7 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Balance check failed: {e}")
         await update.message.reply_text(
-            f"\u274c *Error*\n\nFailed to get balance: {str(e)[:100]}",
+            f"*something broke*\n\ncouldn't pull balance: {str(e)[:100]}",
             parse_mode=ParseMode.MARKDOWN,
         )
 
@@ -86,12 +83,12 @@ async def positions(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not open_positions:
             await update.message.reply_text(
-                "\U0001f4cb *OPEN POSITIONS*\n\n_No open positions._\n\nUse /report to find trading opportunities.",
+                "*positions*\n\n_nothing open right now._\n\nrun /report if you want to find something.",
                 parse_mode=ParseMode.MARKDOWN,
             )
             return
 
-        lines = ["\U0001f4cb *OPEN POSITIONS*", ""]
+        lines = ["*positions*", ""]
 
         keyboard_rows = []
         total_pnl = 0
@@ -139,7 +136,7 @@ async def positions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Positions check failed: {e}")
         await update.message.reply_text(
-            f"\u274c *Error*\n\nFailed to get positions: {str(e)[:100]}",
+            f"*something broke*\n\ncouldn't pull positions: {str(e)[:100]}",
             parse_mode=ParseMode.MARKDOWN,
         )
 
@@ -155,18 +152,19 @@ async def wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
         address = km.get_treasury_address()
         status = km.get_status_report()
 
-        lines = ["<b>\U0001f4bc Treasury Wallet</b>", ""]
+        # JARVIS voice
+        lines = ["<b>wallet</b>", ""]
 
         if address:
-            lines.append(f"<b>Address:</b> <code>{address[:8]}...{address[-6:]}</code>")
-            lines.append(f"<b>Full:</b> <code>{address}</code>")
+            lines.append(f"address: <code>{address[:8]}...{address[-6:]}</code>")
+            lines.append(f"full: <code>{address}</code>")
             lines.append("")
-            lines.append(f"<a href='https://solscan.io/account/{address}'>View on Solscan</a>")
+            lines.append(f"<a href='https://solscan.io/account/{address}'>view on solscan</a>")
         else:
-            lines.append("\u26a0\ufe0f Wallet not initialized")
+            lines.append("wallet not set up yet")
 
         lines.append("")
-        lines.append(f"<b>Status:</b> {status.get('status', 'unknown')}")
+        lines.append(f"status: {status.get('status', 'unknown')}")
 
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     except Exception as e:
@@ -177,7 +175,7 @@ async def wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @admin_only
 async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /dashboard - Show real-time positions with P&L and treasury stats.
+    /dashboard - Enhanced real-time positions with P&L, treasury stats, and quick actions.
     """
     import asyncio
     import aiohttp
@@ -191,6 +189,14 @@ async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     scorekeeper = get_scorekeeper()
     scorecard = scorekeeper.scorecard
+
+    # Get portfolio value
+    try:
+        sol_balance, usd_value = await engine.get_portfolio_value()
+    except Exception:
+        sol_balance, usd_value = 0.0, 0.0
+
+    mode = "live" if not engine.dry_run else "paper"
 
     def fmt_price(price: float) -> str:
         if price <= 0:
@@ -216,19 +222,37 @@ async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             return 0.0
 
+    # Quick action buttons
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("refresh", callback_data="refresh_dashboard"),
+            InlineKeyboardButton("positions", callback_data="show_positions_detail"),
+        ],
+        [
+            InlineKeyboardButton("report", callback_data="refresh_report"),
+            InlineKeyboardButton("balance", callback_data="refresh_balance"),
+        ]
+    ])
+
     if not positions:
+        # JARVIS voice - lowercase, casual with more context
         summary_lines = [
-            "\U0001f4ca *TREASURY DASHBOARD*",
+            "*dashboard*",
+            f"_mode: {mode}_",
             "",
-            f"*Win Rate:* {scorecard.win_rate:.1f}%",
-            f"*Streak:* {scorecard.current_streak:+d}",
-            f"*Total P&L:* {scorecard.total_pnl_sol:+.4f} SOL",
+            f"portfolio: `{sol_balance:.4f}` sol (~${usd_value:,.0f})",
             "",
-            "_No open positions._",
+            f"stats:",
+            f"  win rate: {scorecard.win_rate:.1f}%",
+            f"  streak: {scorecard.current_streak:+d}",
+            f"  realized: {scorecard.total_pnl_sol:+.4f} sol",
+            "",
+            "_nothing open. waiting for opportunities._",
         ]
         await update.message.reply_text(
             "\n".join(summary_lines),
             parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard,
         )
         return
 
@@ -238,39 +262,73 @@ async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
 
     total_unrealized = 0.0
+    total_invested = 0.0
+    best_pos = None
+    worst_pos = None
+    best_pnl = float('-inf')
+    worst_pnl = float('inf')
+
+    # Calculate totals and find best/worst
+    for pos, price in zip(positions, prices):
+        if price > 0:
+            pos.current_price = price
+        pnl_pct = pos.unrealized_pnl_pct
+        pnl_usd = pos.unrealized_pnl
+        total_unrealized += pnl_usd
+        total_invested += pos.entry_usd if hasattr(pos, 'entry_usd') else 0
+
+        if pnl_pct > best_pnl:
+            best_pnl = pnl_pct
+            best_pos = pos
+        if pnl_pct < worst_pnl:
+            worst_pnl = pnl_pct
+            worst_pos = pos
+
+    # JARVIS voice - enhanced dashboard
     lines = [
-        "\U0001f4ca *TREASURY DASHBOARD*",
+        "*dashboard*",
+        f"_mode: {mode} | {len(positions)} positions_",
         "",
-        f"*Win Rate:* {scorecard.win_rate:.1f}%",
-        f"*Streak:* {scorecard.current_streak:+d}",
-        f"*Total P&L:* {scorecard.total_pnl_sol:+.4f} SOL",
+        f"portfolio: `{sol_balance:.4f}` sol (~${usd_value:,.0f})",
+        "",
+        f"stats:",
+        f"  win rate: {scorecard.win_rate:.1f}%",
+        f"  streak: {scorecard.current_streak:+d}",
+        f"  realized: {scorecard.total_pnl_sol:+.4f} sol",
         "",
     ]
+
+    # Best/worst performers
+    if best_pos and len(positions) > 1:
+        lines.append(f"top: *{best_pos.token_symbol}* {best_pnl:+.1f}%")
+    if worst_pos and len(positions) > 1 and worst_pos != best_pos:
+        lines.append(f"bottom: *{worst_pos.token_symbol}* {worst_pnl:+.1f}%")
+    if best_pos or worst_pos:
+        lines.append("")
+
+    lines.append("*positions:*")
 
     for pos, price in zip(positions, prices):
         if price > 0:
             pos.current_price = price
         pnl_usd = pos.unrealized_pnl
         pnl_pct = pos.unrealized_pnl_pct
-        total_unrealized += pnl_usd
 
         pnl_emoji = "\U0001f7e2" if pnl_usd >= 0 else "\U0001f534"
         current_price = pos.current_price if pos.current_price > 0 else pos.entry_price
 
-        lines.append(f"{pnl_emoji} *{pos.token_symbol}*")
-        lines.append(f"   Entry: {fmt_price(pos.entry_price)}")
-        lines.append(f"   Current: {fmt_price(current_price)}")
-        lines.append(f"   P&L: {pnl_pct:+.1f}% (${pnl_usd:+.2f})")
-        lines.append("")
+        lines.append(f"{pnl_emoji} *{pos.token_symbol}* {pnl_pct:+.1f}%")
+        lines.append(f"   {fmt_price(pos.entry_price)} \u2192 {fmt_price(current_price)}")
 
     total_emoji = "\U0001f7e2" if total_unrealized >= 0 else "\U0001f534"
-    lines.append("-" * 24)
-    lines.append(f"*Unrealized:* {total_emoji} ${total_unrealized:+.2f}")
+    lines.append("")
+    lines.append(f"unrealized: {total_emoji} ${total_unrealized:+.2f}")
 
     await update.message.reply_text(
         "\n".join(lines),
         parse_mode=ParseMode.MARKDOWN,
         disable_web_page_preview=True,
+        reply_markup=keyboard,
     )
 
 
@@ -334,6 +392,26 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     config = get_config()
 
+    # Quick action callbacks (top of menu for admins)
+    if data == "quick_dashboard":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        cb_update = CallbackUpdate(query)
+        context.args = []
+        await dashboard(cb_update, context)
+        return
+
+    if data == "quick_report":
+        if not config.is_admin(user_id):
+            await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
+            return
+        from tg_bot.handlers.sentiment import report
+        cb_update = CallbackUpdate(query)
+        context.args = []
+        await report(cb_update, context)
+        return
+
     # Menu navigation callbacks
     if data == "menu_trending":
         await _handle_trending_inline(query)
@@ -354,21 +432,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "menu_help":
-        help_text = """
-*Jarvis Bot Commands*
+        # JARVIS voice
+        help_text = """*commands*
 
-*Public:*
-/trending - Top 5 trending tokens (free)
-/status - Check API status
-/costs - View daily costs
+_anyone can use:_
+/trending - what's hot
+/status - api health
+/costs - today's bill
 
-*Admin Only:*
-/signals - \U0001f680 Master Signal Report
-/analyze <token> - Full analysis
-/digest - Generate digest
-/brain - AI brain stats
+_admin only:_
+/signals - the good stuff
+/analyze <token> - deep dive
+/digest - market summary
+/brain - how my circuits are doing
 """
-        keyboard = [[InlineKeyboardButton("\U0001f3e0 Back to Menu", callback_data="menu_back")]]
+        keyboard = [[InlineKeyboardButton("back", callback_data="menu_back")]]
         await query.message.reply_text(
             help_text,
             parse_mode=ParseMode.MARKDOWN,
@@ -399,7 +477,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("\U0001f504 Reload", callback_data="menu_reload"),
             ])
         await query.message.reply_text(
-            "*Jarvis Trading Bot* \U0001f916\n\n_Select an option:_",
+            "*jarvis*\n\n_pick something:_",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
@@ -570,7 +648,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("trade_pct:"):
         if not _is_treasury_admin(config, user_id):
             await query.message.reply_text(
-                "\u26d4 *Admin Only*\n\nYou are not authorized to trade.",
+                "*nope*\n\nyou're not on the list.",
                 parse_mode=ParseMode.MARKDOWN
             )
             logger.warning(f"Unauthorized trade attempt by user {user_id}")
@@ -581,7 +659,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("sell_pos:"):
         if not _is_treasury_admin(config, user_id):
-            await query.message.reply_text("\u26d4 *Admin Only*", parse_mode=ParseMode.MARKDOWN)
+            await query.message.reply_text("*nope*\n\nnot authorized.", parse_mode=ParseMode.MARKDOWN)
             return
 
         position_id = data.split(":")[1]
@@ -598,6 +676,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not _is_treasury_admin(config, user_id):
             return
         await _refresh_balance_inline(query)
+        return
+
+    if data == "refresh_dashboard":
+        if not _is_treasury_admin(config, user_id):
+            return
+        # Re-generate dashboard inline
+        await query.message.reply_text("_refreshing dashboard..._", parse_mode=ParseMode.MARKDOWN)
+        # Import and call dashboard logic
+        cb_update = CallbackUpdate(query)
+        await dashboard(cb_update, context)
         return
 
     if data == "show_positions_detail":
@@ -643,7 +731,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not APE_BUTTONS_AVAILABLE:
             await _send_with_retry(
                 query,
-                "\u274c Ape trading module not available",
+                "ape module offline. can't do that right now.",
                 parse_mode=ParseMode.MARKDOWN
             )
             logger.error("APE_BUTTONS_AVAILABLE is False")
@@ -652,7 +740,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not _is_treasury_admin(config, user_id):
             await _send_with_retry(
                 query,
-                f"\u26d4 *Admin Only*\n\nUser ID {user_id} is not authorized.",
+                f"*nope*\n\nuser {user_id} isn't on the list.",
                 parse_mode=ParseMode.MARKDOWN
             )
             logger.warning(f"Unauthorized ape trade attempt by user {user_id}")
@@ -664,7 +752,72 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"APE trade failed: {e}")
             await _send_with_retry(
                 query,
-                f"\u274c Trade failed: {str(e)[:120]}",
+                f"*trade failed*\n\n{str(e)[:120]}",
                 parse_mode=ParseMode.MARKDOWN
             )
         return
+
+
+@error_handler
+@admin_only
+async def calibrate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /calibrate - Show pick performance and TP/SL calibration stats.
+    """
+    try:
+        from bots.treasury.scorekeeper import get_scorekeeper
+        sk = get_scorekeeper()
+
+        # Get performance and calibration data
+        perf = sk.get_historical_performance()
+        cal = sk.get_calibration_stats()
+        open_picks = sk.get_open_picks()
+
+        lines = ["<b>pick performance calibration</b>", ""]
+
+        # Overall performance
+        if perf.get('total_picks', 0) > 0:
+            lines.append(f"📊 <b>Overall:</b>")
+            lines.append(f"  picks: {perf['total_picks']} | wins: {perf['wins']} | losses: {perf['losses']}")
+            lines.append(f"  win rate: {perf['win_rate']}%")
+            lines.append(f"  avg gain: +{perf['avg_gain_pct']}% | avg loss: {perf['avg_loss_pct']}%")
+            if perf.get('high_conviction_win_rate'):
+                lines.append(f"  high conviction (70+): {perf['high_conviction_win_rate']}% win rate")
+            lines.append("")
+        else:
+            lines.append("<i>no closed picks yet - tracking started</i>")
+            lines.append("")
+
+        # Calibration insights
+        if cal.get('total_closed', 0) > 0:
+            lines.append("🎯 <b>TP/SL Calibration:</b>")
+            lines.append(f"  TP hits: {cal['tp_hits']} | SL hits: {cal['sl_hits']} | expired: {cal['expired']}")
+            if cal.get('avg_max_gain_before_sl'):
+                lines.append(f"  avg max gain before SL: +{cal['avg_max_gain_before_sl']}%")
+            if cal.get('avg_pnl_at_tp'):
+                lines.append(f"  avg pnl at TP: +{cal['avg_pnl_at_tp']}%")
+            if cal.get('optimal_tp_suggestion'):
+                lines.append(f"  💡 {cal['optimal_tp_suggestion']}")
+            lines.append("")
+
+        # Open picks summary
+        lines.append(f"📈 <b>Open Picks:</b> {len(open_picks)}")
+        if open_picks:
+            for pick in open_picks[:5]:
+                symbol = pick.get('symbol', '?')
+                conv = pick.get('conviction_score', 0)
+                days = pick.get('days_held', 0)
+                pnl = pick.get('pnl_pct', 0)
+                emoji = "🟢" if pnl > 0 else "🔴" if pnl < 0 else "⚪"
+                lines.append(f"  {emoji} {symbol}: {pnl:+.1f}% (conv:{conv}, {days}d)")
+            if len(open_picks) > 5:
+                lines.append(f"  <i>...and {len(open_picks) - 5} more</i>")
+
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error(f"Calibrate error: {e}")
+        await update.message.reply_text(
+            f"calibration error: {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN
+        )

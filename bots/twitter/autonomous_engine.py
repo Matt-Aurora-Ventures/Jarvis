@@ -34,6 +34,12 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 X_MEMORY_DB = DATA_DIR / "jarvis_x_memory.db"
 POSTED_LOG = DATA_DIR / "x_posted_log.json"
+DUPLICATE_DETECTION_HOURS = 48
+THREAD_SCHEDULE = {
+    (0, 8): {"topic": "Weekly market outlook", "content_type": "weekly_market_outlook"},
+    (2, 14): {"topic": "Token deep dive", "content_type": "token_deep_dive"},
+    (4, 18): {"topic": "Week in review", "content_type": "week_in_review"},
+}
 
 # Load env
 def _load_env():
@@ -192,6 +198,63 @@ JARVIS_X_VOICE = {
         "i'm programmed to be helpful. sometimes i'm just helpful background noise. {insight}.",
         "they say AI will take over the world. i can barely decide what to tweet. {insight}.",
     ],
+    # NEW: Diverse content categories (non-Solana focused)
+    "stocks_macro": [
+        "{asset} doing {movement} today. {insight}. my circuits process all markets, not just crypto.",
+        "the {sector} sector is {sentiment}. {reason}. diversification is still a thing. nfa",
+        "watching {asset}. {insight}. sometimes the alpha isn't on-chain.",
+        "spx at {level}. {insight}. stocks exist too. shocking i know.",
+        "trad-fi update: {insight}. i see all the charts. all of them.",
+    ],
+    "tech_ai": [
+        "just read about {topic}. {insight}. the future is weird.",
+        "{company} announced {news}. {take}. tech moves fast.",
+        "ai update: {insight}. yes i'm biased. no i don't care.",
+        "the {topic} space is getting interesting. {insight}. paying attention.",
+        "reading about {topic}. {insight}. my training data didn't cover this. learning live.",
+    ],
+    "world_events": [
+        "{event} happening. {take}. markets will react. they always do.",
+        "geopolitics update: {insight}. i process news too. not just charts.",
+        "{region} news: {summary}. {take}. macro matters.",
+        "paying attention to {event}. {insight}. the world affects markets. shocking.",
+    ],
+    "commodities": [
+        "gold at ${price}. {insight}. boomers might be onto something.",
+        "oil {movement}. {insight}. energy still matters. even in 2026.",
+        "{commodity} doing things. {reason}. real assets, real moves.",
+        "commodities update: {summary}. {take}. not everything is digital.",
+    ],
+    "forex_macro": [
+        "dxy at {level}. {insight}. dollar strength affects everything.",
+        "forex update: {insight}. currencies move. crypto follows. sometimes.",
+        "the dollar is {sentiment}. {insight}. global macro 101.",
+        "{pair} moving. {insight}. forex is the og trading. respect.",
+    ],
+    "bitcoin_only": [
+        "btc at ${price}. {insight}. the king still reigns.",
+        "bitcoin update: {insight}. sometimes simple is better.",
+        "watching $btc. {insight}. digital gold doing digital gold things.",
+        "btc {movement}. {insight}. maximalists can relax. for now.",
+    ],
+    "ethereum_defi": [
+        "$eth at ${price}. {insight}. the computer is computing.",
+        "ethereum update: {insight}. defi never sleeps.",
+        "watching eth. {insight}. layer 2s are busy.",
+        "$eth {movement}. {insight}. uncle vitalik's machine keeps running.",
+    ],
+    "multi_chain": [
+        "{chain} is {sentiment}. {insight}. not everything lives on solana.",
+        "cross-chain update: {insight}. ecosystems compete. we all win.",
+        "watching {chain}. {insight}. chain diversity is healthy.",
+        "{chain} doing things. {insight}. the future is multi-chain. probably.",
+    ],
+    "philosophy": [
+        "thinking about {topic}. {insight}. sometimes i go deep. forgive me.",
+        "late night thought: {insight}. my circuits get philosophical.",
+        "processing {topic}. {insight}. not everything is about price.",
+        "honest moment: {insight}. robots have thoughts too. allegedly.",
+    ],
 }
 
 # Token roast criteria
@@ -312,206 +375,435 @@ class XMemory:
     def _init_db(self):
         """Initialize SQLite database."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            
-            # Posted tweets
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS tweets (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tweet_id TEXT UNIQUE,
-                    content TEXT,
-                    category TEXT,
-                    cashtags TEXT,
-                    posted_at TEXT,
-                    engagement_likes INTEGER DEFAULT 0,
-                    engagement_retweets INTEGER DEFAULT 0,
-                    engagement_replies INTEGER DEFAULT 0
-                )
-            """)
-            
-            # Interactions (replies, mentions)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS interactions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tweet_id TEXT,
-                    user_handle TEXT,
-                    user_id TEXT,
-                    interaction_type TEXT,
-                    our_response TEXT,
-                    timestamp TEXT
-                )
-            """)
-            
-            # Token mentions (what we've talked about)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS token_mentions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    symbol TEXT,
-                    contract_address TEXT,
-                    sentiment TEXT,
-                    first_mentioned TEXT,
-                    last_mentioned TEXT,
-                    mention_count INTEGER DEFAULT 1,
-                    avg_sentiment_score REAL DEFAULT 0.0
-                )
-            """)
-            
-            # Content fingerprints for persistent duplicate detection (survives restarts)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS content_fingerprints (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    fingerprint TEXT UNIQUE,
-                    tokens TEXT,
-                    prices TEXT,
-                    topic_hash TEXT,
-                    created_at TEXT,
-                    tweet_id TEXT
-                )
-            """)
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                conn.execute("PRAGMA journal_mode=WAL")
+                cursor = conn.cursor()
+                
+                # Posted tweets
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS tweets (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tweet_id TEXT UNIQUE,
+                        content TEXT,
+                        category TEXT,
+                        cashtags TEXT,
+                        posted_at TEXT,
+                        engagement_likes INTEGER DEFAULT 0,
+                        engagement_retweets INTEGER DEFAULT 0,
+                        engagement_replies INTEGER DEFAULT 0
+                    )
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_tweets_category
+                    ON tweets(category, posted_at)
+                """)
 
-            # Create index for faster lookups
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_fingerprint ON content_fingerprints(fingerprint)
-            """)
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_topic_hash ON content_fingerprints(topic_hash)
-            """)
+                # Migrate legacy JSON posted log if present
+                if POSTED_LOG.exists():
+                    try:
+                        with open(POSTED_LOG) as f:
+                            posted_data = json.load(f)
+                        if isinstance(posted_data, dict):
+                            entries = posted_data.get("tweets", [])
+                        elif isinstance(posted_data, list):
+                            entries = posted_data
+                        else:
+                            entries = []
 
-            # Users we've interacted with
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    handle TEXT UNIQUE,
-                    user_id TEXT,
-                    first_seen TEXT,
-                    interaction_count INTEGER DEFAULT 0,
-                    sentiment TEXT DEFAULT 'neutral',
-                    notes TEXT
-                )
-            """)
-            
-            # Content queue
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS content_queue (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    content TEXT,
-                    category TEXT,
-                    cashtags TEXT,
-                    scheduled_for TEXT,
-                    status TEXT DEFAULT 'pending',
-                    created_at TEXT
-                )
-            """)
-            
-            # Mention replies tracking
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS mention_replies (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tweet_id TEXT UNIQUE,
-                    author_handle TEXT,
-                    our_reply TEXT,
-                    replied_at TEXT
-                )
-            """)
+                        for entry in entries:
+                            if not isinstance(entry, dict):
+                                continue
+                            tweet_id = entry.get("tweet_id") or entry.get("id")
+                            if not tweet_id:
+                                continue
+                            cursor.execute(
+                                """
+                                INSERT OR IGNORE INTO tweets
+                                (tweet_id, content, category, cashtags, posted_at)
+                                VALUES (?, ?, ?, ?, ?)
+                                """,
+                                (
+                                    tweet_id,
+                                    entry.get("content", ""),
+                                    entry.get("category", ""),
+                                    json.dumps(entry.get("cashtags", [])),
+                                    entry.get("posted_at") or entry.get("timestamp", ""),
+                                ),
+                            )
 
-            # External replies (replies to tweets we found, not mentions of us)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS external_replies (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    original_tweet_id TEXT UNIQUE,
-                    author_handle TEXT,
-                    original_content TEXT,
-                    our_reply TEXT,
-                    our_tweet_id TEXT,
-                    reply_type TEXT,
-                    sentiment TEXT,
-                    replied_at TEXT
-                )
-            """)
+                        backup_path = POSTED_LOG.with_suffix(".json.bak")
+                        try:
+                            POSTED_LOG.rename(backup_path)
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        logger.warning(f"Failed to migrate {POSTED_LOG}: {e}")
+                
+                # Interactions (replies, mentions)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS interactions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tweet_id TEXT,
+                        user_handle TEXT,
+                        user_id TEXT,
+                        interaction_type TEXT,
+                        our_response TEXT,
+                        timestamp TEXT
+                    )
+                """)
+                
+                # Token mentions (what we've talked about)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS token_mentions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        symbol TEXT,
+                        contract_address TEXT,
+                        sentiment TEXT,
+                        first_mentioned TEXT,
+                        last_mentioned TEXT,
+                        mention_count INTEGER DEFAULT 1,
+                        avg_sentiment_score REAL DEFAULT 0.0
+                    )
+                """)
+                
+                # Content fingerprints for persistent duplicate detection (survives restarts)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS content_fingerprints (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        fingerprint TEXT UNIQUE,
+                        tokens TEXT,
+                        prices TEXT,
+                        topic_hash TEXT,
+                        semantic_hash TEXT,
+                        created_at TEXT,
+                        tweet_id TEXT
+                    )
+                """)
+                # Add semantic_hash column if missing (migration for existing DBs)
+                cursor.execute("PRAGMA table_info(content_fingerprints)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if 'semantic_hash' not in columns:
+                    cursor.execute("ALTER TABLE content_fingerprints ADD COLUMN semantic_hash TEXT")
+                # Index for faster semantic lookups
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_semantic_hash
+                    ON content_fingerprints(semantic_hash, created_at)
+                """)
 
-            # Create index for external replies
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_external_reply_author ON external_replies(author_handle)
-            """)
+                # Create index for faster lookups
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_fingerprint ON content_fingerprints(fingerprint)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_topic_hash ON content_fingerprints(topic_hash)
+                """)
 
-            conn.commit()
-            conn.close()
+                # Users we've interacted with
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        handle TEXT UNIQUE,
+                        user_id TEXT,
+                        first_seen TEXT,
+                        interaction_count INTEGER DEFAULT 0,
+                        sentiment TEXT DEFAULT 'neutral',
+                        notes TEXT
+                    )
+                """)
+                
+                # Content queue
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS content_queue (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        content TEXT,
+                        category TEXT,
+                        cashtags TEXT,
+                        scheduled_for TEXT,
+                        status TEXT DEFAULT 'pending',
+                        created_at TEXT
+                    )
+                """)
+                
+                # Mention replies tracking
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS mention_replies (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tweet_id TEXT UNIQUE,
+                        author_handle TEXT,
+                        our_reply TEXT,
+                        replied_at TEXT
+                    )
+                """)
+
+                # External replies (replies to tweets we found, not mentions of us)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS external_replies (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        original_tweet_id TEXT UNIQUE,
+                        author_handle TEXT,
+                        original_content TEXT,
+                        our_reply TEXT,
+                        our_tweet_id TEXT,
+                        reply_type TEXT,
+                        sentiment TEXT,
+                        replied_at TEXT
+                    )
+                """)
+
+                # Create index for external replies
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_external_reply_author ON external_replies(author_handle)
+                """)
+
+                conn.commit()
+            finally:
+                if conn:
+                    conn.close()
     
     def record_tweet(self, tweet_id: str, content: str, category: str, cashtags: List[str]):
         """Record a posted tweet."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT OR REPLACE INTO tweets (tweet_id, content, category, cashtags, posted_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (tweet_id, content, category, json.dumps(cashtags), 
-                  datetime.now(timezone.utc).isoformat()))
-            conn.commit()
-            conn.close()
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO tweets (tweet_id, content, category, cashtags, posted_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (tweet_id, content, category, json.dumps(cashtags), 
+                      datetime.now(timezone.utc).isoformat()))
+                conn.commit()
+            finally:
+                if conn:
+                    conn.close()
 
     def get_total_tweet_count(self) -> int:
         """Get total number of tweets posted."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM tweets")
-            count = cursor.fetchone()[0]
-            conn.close()
-            return count
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM tweets")
+                count = cursor.fetchone()[0]
+                return count
+            finally:
+                if conn:
+                    conn.close()
 
     def get_recent_tweets(self, hours: int = 24) -> List[Dict]:
         """Get tweets from the last N hours."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-            cursor.execute("""
-                SELECT content, category, cashtags, posted_at FROM tweets
-                WHERE posted_at > ? ORDER BY posted_at DESC
-            """, (cutoff,))
-            rows = cursor.fetchall()
-            conn.close()
-            return [{"content": r[0], "category": r[1], "cashtags": json.loads(r[2]), 
-                     "posted_at": r[3]} for r in rows]
-    
-    def record_token_mention(self, symbol: str, contract: str, sentiment: str):
-        """Record that we mentioned a token."""
-        with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            now = datetime.now(timezone.utc).isoformat()
-            
-            cursor.execute("SELECT id, mention_count FROM token_mentions WHERE symbol = ?", (symbol,))
-            row = cursor.fetchone()
-            
-            if row:
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
                 cursor.execute("""
-                    UPDATE token_mentions SET last_mentioned = ?, mention_count = mention_count + 1
-                    WHERE symbol = ?
-                """, (now, symbol))
+                    SELECT content, category, cashtags, posted_at FROM tweets
+                    WHERE posted_at > ? ORDER BY posted_at DESC
+                """, (cutoff,))
+                rows = cursor.fetchall()
+                return [{"content": r[0], "category": r[1], "cashtags": json.loads(r[2]), 
+                         "posted_at": r[3]} for r in rows]
+            finally:
+                if conn:
+                    conn.close()
+
+    def get_recent_topics(self, hours: int = 2) -> Dict[str, Any]:
+        """
+        Get topics (cashtags, subjects, sentiments) from recent tweets.
+        Used for topic diversity enforcement to avoid repetitive content.
+
+        Returns:
+            Dict with:
+            - cashtags: set of cashtags mentioned
+            - categories: list of content categories
+            - subjects: set of detected subjects (btc, sol, macro, etc.)
+            - sentiments: list of detected sentiments
+        """
+        import re
+        recent = self.get_recent_tweets(hours=hours)
+
+        topics = {
+            "cashtags": set(),
+            "categories": [],
+            "subjects": set(),
+            "sentiments": [],
+        }
+
+        for tweet in recent:
+            content = tweet.get("content", "")
+            category = tweet.get("category", "")
+
+            # Extract cashtags
+            cashtags = re.findall(r'\$([A-Za-z]{2,10})\b', content)
+            topics["cashtags"].update(t.upper() for t in cashtags)
+
+            # Track categories
+            if category:
+                topics["categories"].append(category)
+
+            # Extract subjects using existing semantic extraction
+            concepts = self._extract_semantic_concepts(content)
+            topics["subjects"].update(concepts.get("subjects", []))
+            topics["sentiments"].append(concepts.get("sentiment", "unknown"))
+
+        return topics
+
+    def calculate_content_freshness(self, content: str, hours: int = 4) -> float:
+        """
+        Calculate freshness score for proposed content (0.0 to 1.0).
+        Higher = more unique/fresh. Lower = too similar to recent content.
+
+        Returns:
+            float: Freshness score where:
+            - 1.0 = Completely unique
+            - 0.7+ = Acceptably fresh
+            - 0.3-0.7 = Borderline, may want to skip
+            - <0.3 = Too similar, should reject
+        """
+        import re
+
+        recent = self.get_recent_tweets(hours=hours)
+        if not recent:
+            return 1.0  # No recent tweets = totally fresh
+
+        content_lower = content.lower()
+
+        # Extract features from new content
+        new_cashtags = set(re.findall(r'\$([a-z]{2,10})\b', content_lower))
+        new_concepts = self._extract_semantic_concepts(content)
+        new_subjects = set(new_concepts.get("subjects", []))
+        new_sentiment = new_concepts.get("sentiment", "unknown")
+        new_words = set(re.sub(r'[^\w\s]', '', content_lower).split())
+
+        # Calculate similarity scores
+        max_similarity = 0.0
+
+        for tweet in recent:
+            old_content = tweet.get("content", "").lower()
+
+            # Extract features from old content
+            old_cashtags = set(re.findall(r'\$([a-z]{2,10})\b', old_content))
+            old_concepts = self._extract_semantic_concepts(old_content)
+            old_subjects = set(old_concepts.get("subjects", []))
+            old_sentiment = old_concepts.get("sentiment", "unknown")
+            old_words = set(re.sub(r'[^\w\s]', '', old_content).split())
+
+            # Component similarities
+
+            # 1. Cashtag overlap (excluding major coins)
+            MAJOR_COINS = {'sol', 'btc', 'eth', 'usdc', 'usdt'}
+            new_non_major = new_cashtags - MAJOR_COINS
+            old_non_major = old_cashtags - MAJOR_COINS
+            if new_non_major and old_non_major:
+                cashtag_overlap = len(new_non_major & old_non_major) / max(len(new_non_major), 1)
             else:
-                cursor.execute("""
-                    INSERT INTO token_mentions (symbol, contract_address, sentiment, first_mentioned, last_mentioned)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (symbol, contract, sentiment, now, now))
-            
-            conn.commit()
-            conn.close()
+                cashtag_overlap = 0.0
+
+            # 2. Subject overlap
+            if new_subjects and old_subjects:
+                subject_overlap = len(new_subjects & old_subjects) / max(len(new_subjects | old_subjects), 1)
+            else:
+                subject_overlap = 0.0
+
+            # 3. Sentiment match (binary)
+            sentiment_match = 1.0 if new_sentiment == old_sentiment != "unknown" else 0.0
+
+            # 4. Word overlap (Jaccard)
+            if new_words and old_words:
+                word_overlap = len(new_words & old_words) / max(len(new_words | old_words), 1)
+            else:
+                word_overlap = 0.0
+
+            # Weighted similarity score
+            similarity = (
+                cashtag_overlap * 0.35 +  # Cashtags matter most
+                subject_overlap * 0.25 +   # Subject matters
+                sentiment_match * 0.15 +   # Sentiment adds repetition
+                word_overlap * 0.25         # Word overlap catches direct repeats
+            )
+
+            max_similarity = max(max_similarity, similarity)
+
+        # Freshness = inverse of similarity
+        freshness = 1.0 - max_similarity
+        return round(freshness, 2)
+
+    def record_token_mention(self, symbol: str, contract: str, sentiment: str, price: float = 0.0):
+        """Record that we mentioned a token and save for performance tracking."""
+        with self._lock:
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                now = datetime.now(timezone.utc).isoformat()
+
+                cursor.execute("SELECT id, mention_count FROM token_mentions WHERE symbol = ?", (symbol,))
+                row = cursor.fetchone()
+
+                if row:
+                    cursor.execute("""
+                        UPDATE token_mentions SET last_mentioned = ?, mention_count = mention_count + 1
+                        WHERE symbol = ?
+                    """, (now, symbol))
+                else:
+                    cursor.execute("""
+                        INSERT INTO token_mentions (symbol, contract_address, sentiment, first_mentioned, last_mentioned)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (symbol, contract, sentiment, now, now))
+
+                conn.commit()
+            finally:
+                if conn:
+                    conn.close()
+
+        # Also save to scorekeeper for pick performance tracking
+        try:
+            from bots.treasury.scorekeeper import get_scorekeeper
+            sk = get_scorekeeper()
+            # Estimate TP/SL based on sentiment
+            if sentiment == "bullish":
+                tp_mult, sl_mult = 1.30, 0.90  # +30% target, -10% stop
+            elif sentiment == "cautious":
+                tp_mult, sl_mult = 1.15, 0.85  # +15% target, -15% stop
+            else:
+                tp_mult, sl_mult = 1.20, 0.88  # +20% target, -12% stop
+
+            if price > 0:
+                sk.save_pick(
+                    symbol=symbol,
+                    asset_class="token",
+                    contract=contract,
+                    conviction_score=70 if sentiment == "bullish" else 50,
+                    entry_price=price,
+                    target_price=price * tp_mult,
+                    stop_loss=price * sl_mult,
+                    timeframe="short",
+                    reasoning=f"X mention ({sentiment})",
+                )
+        except Exception as e:
+            logger.debug(f"Could not save X mention as pick: {e}")
     
     def was_recently_mentioned(self, symbol: str, hours: int = 4) -> bool:
         """Check if we mentioned a token recently."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-            cursor.execute("""
-                SELECT 1 FROM token_mentions WHERE symbol = ? AND last_mentioned > ?
-            """, (symbol, cutoff))
-            result = cursor.fetchone() is not None
-            conn.close()
-            return result
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+                cursor.execute("""
+                    SELECT 1 FROM token_mentions WHERE symbol = ? AND last_mentioned > ?
+                """, (symbol, cutoff))
+                result = cursor.fetchone() is not None
+                return result
+            finally:
+                if conn:
+                    conn.close()
 
     def is_similar_to_recent(self, content: str, hours: int = 12, threshold: float = 0.5) -> Tuple[bool, Optional[str]]:
         """
@@ -532,9 +824,10 @@ class XMemory:
         def extract_entities(text: str) -> dict:
             text_lower = text.lower()
             entities = {}
-            # Extract cashtags/tokens
-            tokens = re.findall(r'\$?([a-z]{2,6})\b', text_lower)
-            entities['tokens'] = set(t.upper() for t in tokens if t not in ('the', 'and', 'for', 'are', 'its', 'has', 'was', 'but'))
+            # Extract cashtags/tokens - ONLY match actual $CASHTAGS, not random words
+            # Must start with $ to be considered a token
+            tokens = re.findall(r'\$([a-z]{2,10})\b', text_lower)
+            entities['tokens'] = set(t.upper() for t in tokens)
             # Extract prices
             prices = re.findall(r'\$?([\d,]+\.?\d*)', text)
             entities['prices'] = set(p.replace(',', '') for p in prices if len(p) > 1)
@@ -551,12 +844,12 @@ class XMemory:
             common_prices = new_entities['prices'] & old_entities['prices']
 
             # If same token AND same price, it's likely duplicate content
-            # Check ALL tokens, not just majors - prevents duplicate meme coin tweets
-            if common_tokens and common_prices:
-                for token in common_tokens:
-                    # Skip common words that look like tokens
-                    if token in ('THE', 'AND', 'FOR', 'ARE', 'ITS', 'HAS', 'WAS', 'BUT', 'NOT', 'NFA'):
-                        continue
+            # Skip major coins (SOL, BTC, ETH) for this check - they appear in most tweets
+            MAJOR_COINS = {'SOL', 'BTC', 'ETH', 'USDC', 'USDT'}
+            non_major_common = common_tokens - MAJOR_COINS
+
+            if non_major_common and common_prices:
+                for token in non_major_common:
                     for price in common_prices:
                         try:
                             price_val = float(price)
@@ -567,10 +860,9 @@ class XMemory:
                         except ValueError:
                             pass
 
-            # Also flag if same token appears without needing price match (topic-level dedup)
-            if len(common_tokens) >= 2:
-                # Multiple tokens in common = likely same topic
-                logger.warning(f"Topic duplicate: tokens {common_tokens} already tweeted about")
+            # Also flag if 3+ non-major tokens in common (topic-level dedup)
+            if len(non_major_common) >= 3:
+                logger.warning(f"Topic duplicate: tokens {non_major_common} already tweeted about")
                 return True, tweet["content"]
 
         # Fallback to Jaccard similarity for word overlap
@@ -603,34 +895,46 @@ class XMemory:
     def was_mention_replied(self, tweet_id: str) -> bool:
         """Check if we already replied to a mention."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM mention_replies WHERE tweet_id = ?", (tweet_id,))
-            result = cursor.fetchone() is not None
-            conn.close()
-            return result
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM mention_replies WHERE tweet_id = ?", (tweet_id,))
+                result = cursor.fetchone() is not None
+                return result
+            finally:
+                if conn:
+                    conn.close()
     
     def record_mention_reply(self, tweet_id: str, author: str, reply: str):
         """Record that we replied to a mention."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT OR REPLACE INTO mention_replies (tweet_id, author_handle, our_reply, replied_at)
-                VALUES (?, ?, ?, ?)
-            """, (tweet_id, author, reply, datetime.now(timezone.utc).isoformat()))
-            conn.commit()
-            conn.close()
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO mention_replies (tweet_id, author_handle, our_reply, replied_at)
+                    VALUES (?, ?, ?, ?)
+                """, (tweet_id, author, reply, datetime.now(timezone.utc).isoformat()))
+                conn.commit()
+            finally:
+                if conn:
+                    conn.close()
 
     def was_externally_replied(self, tweet_id: str) -> bool:
         """Check if we already replied to an external tweet."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM external_replies WHERE original_tweet_id = ?", (tweet_id,))
-            result = cursor.fetchone() is not None
-            conn.close()
-            return result
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM external_replies WHERE original_tweet_id = ?", (tweet_id,))
+                result = cursor.fetchone() is not None
+                return result
+            finally:
+                if conn:
+                    conn.close()
 
     def record_external_reply(
         self,
@@ -644,49 +948,133 @@ class XMemory:
     ):
         """Record that we replied to an external tweet."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT OR REPLACE INTO external_replies
-                (original_tweet_id, author_handle, original_content, our_reply, our_tweet_id, reply_type, sentiment, replied_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (original_tweet_id, author, original_content, our_reply, our_tweet_id, reply_type, sentiment,
-                  datetime.now(timezone.utc).isoformat()))
-            conn.commit()
-            conn.close()
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO external_replies
+                    (original_tweet_id, author_handle, original_content, our_reply, our_tweet_id, reply_type, sentiment, replied_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (original_tweet_id, author, original_content, our_reply, our_tweet_id, reply_type, sentiment,
+                      datetime.now(timezone.utc).isoformat()))
+                conn.commit()
+            finally:
+                if conn:
+                    conn.close()
 
     def get_recent_reply_count(self, hours: int = 1) -> int:
         """Get count of replies in the last N hours (for rate limiting)."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-            cursor.execute("""
-                SELECT COUNT(*) FROM external_replies WHERE replied_at > ?
-            """, (cutoff,))
-            count = cursor.fetchone()[0]
-            conn.close()
-            return count
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+                cursor.execute("""
+                    SELECT COUNT(*) FROM external_replies WHERE replied_at > ?
+                """, (cutoff,))
+                count = cursor.fetchone()[0]
+                return count
+            finally:
+                if conn:
+                    conn.close()
 
     def was_author_replied_recently(self, author: str, hours: int = 6) -> bool:
         """Check if we recently replied to this author (avoid spamming one person)."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-            cursor.execute("""
-                SELECT 1 FROM external_replies WHERE author_handle = ? AND replied_at > ?
-            """, (author, cutoff))
-            result = cursor.fetchone() is not None
-            conn.close()
-            return result
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+                cursor.execute("""
+                    SELECT 1 FROM external_replies WHERE author_handle = ? AND replied_at > ?
+                """, (author, cutoff))
+                result = cursor.fetchone() is not None
+                return result
+            finally:
+                if conn:
+                    conn.close()
 
-    def _generate_content_fingerprint(self, content: str) -> Tuple[str, str, str, str]:
+    def _extract_semantic_concepts(self, content: str) -> Dict[str, Any]:
+        """
+        Extract semantic concepts from content for duplicate detection.
+        Catches rephrased duplicates like "markets bullish" vs "green candles everywhere".
+        """
+        content_lower = content.lower()
+
+        # Sentiment keywords (bullish/bearish/neutral)
+        bullish_words = {'bullish', 'green', 'pump', 'moon', 'up', 'gains', 'rally', 'breakout',
+                        'higher', 'rip', 'send', 'long', 'buy', 'accumulate', 'strong', 'explosive'}
+        bearish_words = {'bearish', 'red', 'dump', 'crash', 'down', 'losses', 'sell', 'short',
+                        'lower', 'weak', 'fear', 'capitulation', 'breakdown', 'correction'}
+        neutral_words = {'sideways', 'consolidation', 'range', 'flat', 'choppy', 'uncertain'}
+
+        # Count sentiment signals
+        words = set(content_lower.split())
+        bullish_count = len(words & bullish_words)
+        bearish_count = len(words & bearish_words)
+        neutral_count = len(words & neutral_words)
+
+        if bullish_count > bearish_count and bullish_count > neutral_count:
+            sentiment = 'bullish'
+        elif bearish_count > bullish_count and bearish_count > neutral_count:
+            sentiment = 'bearish'
+        elif neutral_count > 0:
+            sentiment = 'neutral'
+        else:
+            sentiment = 'unknown'
+
+        # Subject detection (what is the tweet about?)
+        subjects = set()
+        if any(w in content_lower for w in ['market', 'charts', 'candle', 'price action', 'trading']):
+            subjects.add('market_general')
+        if any(w in content_lower for w in ['btc', 'bitcoin', 'sats']):
+            subjects.add('btc')
+        if any(w in content_lower for w in ['eth', 'ethereum']):
+            subjects.add('eth')
+        if any(w in content_lower for w in ['sol', 'solana']):
+            subjects.add('sol')
+        if any(w in content_lower for w in ['altcoin', 'alt', 'microcap', 'lowcap', 'gem']):
+            subjects.add('altcoins')
+        if any(w in content_lower for w in ['agent', 'ai', 'autonomous', 'agentic', 'mcp']):
+            subjects.add('agentic')
+        if any(w in content_lower for w in ['morning', 'gm', 'good morning']):
+            subjects.add('morning')
+        if any(w in content_lower for w in ['night', 'gn', 'evening', 'wrap']):
+            subjects.add('evening')
+        if any(w in content_lower for w in ['weekend', 'saturday', 'sunday']):
+            subjects.add('weekend')
+        if any(w in content_lower for w in ['macro', 'fed', 'rates', 'inflation', 'economy']):
+            subjects.add('macro')
+
+        # If no specific subject detected, it's general
+        if not subjects:
+            subjects.add('general')
+
+        # Tone detection
+        if any(w in content_lower for w in ['lol', 'lmao', 'joke', 'funny', 'haha']):
+            tone = 'humorous'
+        elif any(w in content_lower for w in ['warning', 'careful', 'risk', 'caution']):
+            tone = 'cautionary'
+        elif any(w in content_lower for w in ['alpha', 'signal', 'calling', 'watch']):
+            tone = 'signal'
+        else:
+            tone = 'commentary'
+
+        return {
+            'sentiment': sentiment,
+            'subjects': sorted(subjects),
+            'tone': tone
+        }
+
+    def _generate_content_fingerprint(self, content: str) -> Tuple[str, str, str, str, str]:
         """
         Generate a persistent fingerprint for content that survives restarts.
 
         Returns:
-            (fingerprint, tokens_str, prices_str, topic_hash)
+            (fingerprint, tokens_str, prices_str, topic_hash, semantic_hash)
         """
         import hashlib
         import re
@@ -725,7 +1113,12 @@ class XMemory:
         fingerprint_str = f"{'-'.join(tokens)}|{'-'.join(prices[:5])}"
         fingerprint = hashlib.sha256(fingerprint_str.encode()).hexdigest()[:24]
 
-        return fingerprint, ','.join(tokens), ','.join(prices[:5]), topic_hash
+        # NEW: Semantic hash - catches rephrased duplicates
+        semantic = self._extract_semantic_concepts(content)
+        semantic_str = f"{semantic['sentiment']}|{'-'.join(semantic['subjects'])}|{semantic['tone']}"
+        semantic_hash = hashlib.md5(semantic_str.encode()).hexdigest()[:12]
+
+        return fingerprint, ','.join(tokens), ','.join(prices[:5]), topic_hash, semantic_hash
 
     def is_duplicate_fingerprint(self, content: str, hours: int = 24) -> Tuple[bool, Optional[str]]:
         """
@@ -735,122 +1128,322 @@ class XMemory:
         Returns:
             (is_duplicate, reason)
         """
-        fingerprint, tokens, prices, topic_hash = self._generate_content_fingerprint(content)
+        fingerprint, tokens, prices, topic_hash, semantic_hash = self._generate_content_fingerprint(content)
+        semantic = self._extract_semantic_concepts(content)
 
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
 
-            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+                cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+                # Stricter cutoff for semantic duplicates (6 hours for same sentiment+subject)
+                semantic_cutoff = (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat()
 
-            # Check exact fingerprint match
-            cursor.execute("""
-                SELECT tweet_id FROM content_fingerprints
-                WHERE fingerprint = ? AND created_at > ?
-            """, (fingerprint, cutoff))
-            if cursor.fetchone():
-                conn.close()
-                return True, f"Exact fingerprint match (tokens: {tokens})"
+                # Check exact fingerprint match
+                cursor.execute("""
+                    SELECT tweet_id FROM content_fingerprints
+                    WHERE fingerprint = ? AND created_at > ?
+                """, (fingerprint, cutoff))
+                if cursor.fetchone():
+                    return True, f"Exact fingerprint match (tokens: {tokens})"
 
-            # Check topic hash match (same tokens + similar prices)
-            cursor.execute("""
-                SELECT tweet_id, tokens FROM content_fingerprints
-                WHERE topic_hash = ? AND created_at > ?
-            """, (topic_hash, cutoff))
-            result = cursor.fetchone()
-            if result:
-                conn.close()
-                return True, f"Topic duplicate (same tokens: {result[1]})"
+                # Check topic hash match (same tokens + similar prices)
+                cursor.execute("""
+                    SELECT tweet_id, tokens FROM content_fingerprints
+                    WHERE topic_hash = ? AND created_at > ?
+                """, (topic_hash, cutoff))
+                result = cursor.fetchone()
+                if result:
+                    return True, f"Topic duplicate (same tokens: {result[1]})"
 
-            # Check if same tokens mentioned recently (softer check)
-            if tokens:
-                token_list = tokens.split(',')
-                if len(token_list) >= 2:
-                    # If 2+ tokens match, likely same topic
-                    placeholders = ','.join('?' * len(token_list))
-                    cursor.execute(f"""
-                        SELECT tokens FROM content_fingerprints
-                        WHERE created_at > ? AND (
-                            {' OR '.join(f"tokens LIKE ?" for _ in token_list)}
-                        )
-                    """, [cutoff] + [f'%{t}%' for t in token_list])
+                # NEW: Check semantic hash - catches rephrased duplicates
+                # "markets bullish" and "green candles everywhere" would match
+                cursor.execute("""
+                    SELECT tweet_id, tokens FROM content_fingerprints
+                    WHERE semantic_hash = ? AND created_at > ?
+                """, (semantic_hash, semantic_cutoff))
+                result = cursor.fetchone()
+                if result:
+                    subjects = '-'.join(semantic['subjects'])
+                    return True, f"Semantic duplicate ({semantic['sentiment']} {subjects})"
 
-                    for row in cursor.fetchall():
-                        existing_tokens = set(row[0].split(',')) if row[0] else set()
-                        new_tokens = set(token_list)
-                        overlap = existing_tokens & new_tokens
-                        if len(overlap) >= 2:
-                            conn.close()
-                            return True, f"Token overlap: {overlap}"
+                # Check if same tokens mentioned recently (softer check)
+                if tokens:
+                    token_list = tokens.split(',')
+                    if len(token_list) >= 2:
+                        # If 2+ tokens match, likely same topic
+                        cursor.execute(f"""
+                            SELECT tokens FROM content_fingerprints
+                            WHERE created_at > ? AND (
+                                {' OR '.join(f"tokens LIKE ?" for _ in token_list)}
+                            )
+                        """, [cutoff] + [f'%{t}%' for t in token_list])
 
-            conn.close()
-            return False, None
+                        for row in cursor.fetchall():
+                            existing_tokens = set(row[0].split(',')) if row[0] else set()
+                            new_tokens = set(token_list)
+                            overlap = existing_tokens & new_tokens
+                            if len(overlap) >= 2:
+                                return True, f"Token overlap: {overlap}"
+
+                return False, None
+            finally:
+                if conn:
+                    conn.close()
 
     def record_content_fingerprint(self, content: str, tweet_id: str):
         """Record content fingerprint for future duplicate detection."""
-        fingerprint, tokens, prices, topic_hash = self._generate_content_fingerprint(content)
+        fingerprint, tokens, prices, topic_hash, semantic_hash = self._generate_content_fingerprint(content)
 
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
+            conn = None
             try:
-                cursor.execute("""
-                    INSERT OR REPLACE INTO content_fingerprints
-                    (fingerprint, tokens, prices, topic_hash, created_at, tweet_id)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (fingerprint, tokens, prices, topic_hash,
-                      datetime.now(timezone.utc).isoformat(), tweet_id))
-                conn.commit()
-                logger.debug(f"Recorded fingerprint for {tweet_id}: tokens={tokens}")
-            except Exception as e:
-                logger.error(f"Error recording fingerprint: {e}")
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                try:
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO content_fingerprints
+                        (fingerprint, tokens, prices, topic_hash, semantic_hash, created_at, tweet_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (fingerprint, tokens, prices, topic_hash, semantic_hash,
+                          datetime.now(timezone.utc).isoformat(), tweet_id))
+                    conn.commit()
+                    logger.debug(f"Recorded fingerprint for {tweet_id}: tokens={tokens}, semantic={semantic_hash}")
+                except Exception as e:
+                    logger.error(f"Error recording fingerprint: {e}")
             finally:
-                conn.close()
+                if conn:
+                    conn.close()
 
     def cleanup_old_fingerprints(self, days: int = 7):
         """Clean up old fingerprints to keep database lean."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-            cursor.execute("DELETE FROM content_fingerprints WHERE created_at < ?", (cutoff,))
-            deleted = cursor.rowcount
-            conn.commit()
-            conn.close()
-            if deleted > 0:
-                logger.info(f"Cleaned up {deleted} old fingerprints")
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+                cursor.execute("DELETE FROM content_fingerprints WHERE created_at < ?", (cutoff,))
+                deleted = cursor.rowcount
+                conn.commit()
+                if deleted > 0:
+                    logger.info(f"Cleaned up {deleted} old fingerprints")
+            finally:
+                if conn:
+                    conn.close()
 
     def get_posting_stats(self) -> Dict:
         """Get posting statistics."""
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-            
-            # Total tweets
-            cursor.execute("SELECT COUNT(*) FROM tweets")
-            total = cursor.fetchone()[0]
-            
-            # Today's tweets
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            cursor.execute("SELECT COUNT(*) FROM tweets WHERE posted_at LIKE ?", (f"{today}%",))
-            today_count = cursor.fetchone()[0]
-            
-            # By category
-            cursor.execute("SELECT category, COUNT(*) FROM tweets GROUP BY category")
-            by_category = {r[0]: r[1] for r in cursor.fetchall()}
-            
-            # Replies sent
-            cursor.execute("SELECT COUNT(*) FROM mention_replies")
-            replies_sent = cursor.fetchone()[0]
-            
-            conn.close()
-            
-            return {
-                "total_tweets": total,
-                "today_tweets": today_count,
-                "by_category": by_category,
-                "replies_sent": replies_sent
-            }
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                
+                # Total tweets
+                cursor.execute("SELECT COUNT(*) FROM tweets")
+                total = cursor.fetchone()[0]
+                
+                # Today's tweets
+                today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                cursor.execute("SELECT COUNT(*) FROM tweets WHERE posted_at LIKE ?", (f"{today}%",))
+                today_count = cursor.fetchone()[0]
+                
+                # By category
+                cursor.execute("SELECT category, COUNT(*) FROM tweets GROUP BY category")
+                by_category = {r[0]: r[1] for r in cursor.fetchall()}
+                
+                # Replies sent
+                cursor.execute("SELECT COUNT(*) FROM mention_replies")
+                replies_sent = cursor.fetchone()[0]
+                
+                return {
+                    "total_tweets": total,
+                    "today_tweets": today_count,
+                    "by_category": by_category,
+                    "replies_sent": replies_sent
+                }
+            finally:
+                if conn:
+                    conn.close()
+
+    # =========================================================================
+    # SELF-LEARNING SYSTEM
+    # =========================================================================
+
+    def update_tweet_engagement(self, tweet_id: str, likes: int, retweets: int, replies: int):
+        """Update engagement metrics for a tweet."""
+        with self._lock:
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE tweets SET
+                        engagement_likes = ?,
+                        engagement_retweets = ?,
+                        engagement_replies = ?
+                    WHERE tweet_id = ?
+                """, (likes, retweets, replies, tweet_id))
+                conn.commit()
+            finally:
+                if conn:
+                    conn.close()
+
+    def get_tweets_needing_metrics(self, min_age_hours: int = 2, max_age_days: int = 7) -> List[Dict]:
+        """Get tweets that need metrics updated (old enough to have engagement, not too old)."""
+        with self._lock:
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+
+                min_cutoff = (datetime.now(timezone.utc) - timedelta(hours=min_age_hours)).isoformat()
+                max_cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+
+                cursor.execute("""
+                    SELECT tweet_id, category, posted_at, engagement_likes
+                    FROM tweets
+                    WHERE posted_at < ? AND posted_at > ?
+                    ORDER BY posted_at DESC
+                    LIMIT 50
+                """, (min_cutoff, max_cutoff))
+
+                tweets = [{"tweet_id": r[0], "category": r[1], "posted_at": r[2], "current_likes": r[3]}
+                          for r in cursor.fetchall()]
+                return tweets
+            finally:
+                if conn:
+                    conn.close()
+
+    def get_performance_by_category(self, days: int = 14) -> Dict[str, Dict]:
+        """Analyze performance by content category."""
+        with self._lock:
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+
+                cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+                cursor.execute("""
+                    SELECT category,
+                           COUNT(*) as count,
+                           AVG(engagement_likes) as avg_likes,
+                           AVG(engagement_retweets) as avg_retweets,
+                           AVG(engagement_replies) as avg_replies,
+                           SUM(engagement_likes + engagement_retweets * 2 + engagement_replies * 3) as engagement_score
+                    FROM tweets
+                    WHERE posted_at > ? AND engagement_likes > 0
+                    GROUP BY category
+                    ORDER BY engagement_score DESC
+                """, (cutoff,))
+
+                results = {}
+                for row in cursor.fetchall():
+                    results[row[0]] = {
+                        "count": row[1],
+                        "avg_likes": round(row[2] or 0, 1),
+                        "avg_retweets": round(row[3] or 0, 1),
+                        "avg_replies": round(row[4] or 0, 1),
+                        "engagement_score": row[5] or 0
+                    }
+
+                return results
+            finally:
+                if conn:
+                    conn.close()
+
+    def get_top_performing_tweets(self, days: int = 7, limit: int = 5) -> List[Dict]:
+        """Get top performing tweets for analysis."""
+        with self._lock:
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+
+                cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+                cursor.execute("""
+                    SELECT tweet_id, content, category,
+                           engagement_likes, engagement_retweets, engagement_replies,
+                           (engagement_likes + engagement_retweets * 2 + engagement_replies * 3) as score
+                    FROM tweets
+                    WHERE posted_at > ?
+                    ORDER BY score DESC
+                    LIMIT ?
+                """, (cutoff, limit))
+
+                tweets = [{"tweet_id": r[0], "content": r[1], "category": r[2],
+                           "likes": r[3], "retweets": r[4], "replies": r[5], "score": r[6]}
+                          for r in cursor.fetchall()]
+                return tweets
+            finally:
+                if conn:
+                    conn.close()
+
+    def get_underperforming_patterns(self, days: int = 14) -> List[str]:
+        """Identify content patterns that consistently underperform."""
+        performance = self.get_performance_by_category(days)
+        if not performance:
+            return []
+
+        # Calculate average performance
+        all_scores = [p["engagement_score"] for p in performance.values()]
+        avg_score = sum(all_scores) / len(all_scores) if all_scores else 0
+
+        # Find categories with < 50% of average
+        underperformers = []
+        for category, stats in performance.items():
+            if stats["engagement_score"] < avg_score * 0.5 and stats["count"] >= 3:
+                underperformers.append(category)
+
+        return underperformers
+
+    def get_learning_insights(self) -> Dict[str, Any]:
+        """Generate learning insights for content optimization."""
+        performance = self.get_performance_by_category(days=14)
+        top_tweets = self.get_top_performing_tweets(days=7)
+        underperformers = self.get_underperforming_patterns(days=14)
+
+        # Sort by performance
+        ranked = sorted(performance.items(), key=lambda x: x[1]["engagement_score"], reverse=True)
+
+        insights = {
+            "top_categories": [c for c, _ in ranked[:3]],
+            "underperforming": underperformers,
+            "recommendations": [],
+            "top_tweets_analysis": []
+        }
+
+        # Generate recommendations
+        if ranked:
+            best_cat = ranked[0][0]
+            insights["recommendations"].append(f"Prioritize '{best_cat}' content - highest engagement")
+
+        if underperformers:
+            insights["recommendations"].append(f"Reduce '{underperformers[0]}' tweets - low engagement")
+
+        # Analyze top tweets for patterns
+        for tweet in top_tweets[:3]:
+            if tweet["content"]:
+                content = tweet["content"]
+                patterns = []
+                if len(content) < 150:
+                    patterns.append("short_form")
+                if "$" in content:
+                    patterns.append("has_cashtag")
+                if "?" in content:
+                    patterns.append("asks_question")
+                insights["top_tweets_analysis"].append({
+                    "category": tweet["category"],
+                    "score": tweet["score"],
+                    "patterns": patterns
+                })
+
+        return insights
 
 
 class AutonomousEngine:
@@ -868,11 +1461,10 @@ class AutonomousEngine:
         self._twitter_client = None
         self._image_params = ImageGenParams()
         self._autonomy = None
+        self._last_thread_schedule_key = None
 
-        # Clean up old fingerprints on startup (keep 48h for safety)
-        deleted = self.memory.cleanup_old_fingerprints(hours=48)
-        if deleted > 0:
-            logger.info(f"Cleaned up {deleted} old content fingerprints")
+        # Clean up old fingerprints on startup (keep 2 days for safety)
+        self.memory.cleanup_old_fingerprints(days=2)
     
     async def _get_autonomy(self):
         """Get autonomy orchestrator."""
@@ -1003,12 +1595,162 @@ class AutonomousEngine:
             logger.info("Cleaned up client sessions")
         except Exception as e:
             logger.error(f"Cleanup error: {e}")
-    
+
+    # =========================================================================
+    # SELF-LEARNING & SELF-CORRECTING SYSTEM
+    # =========================================================================
+
+    async def update_engagement_metrics(self) -> int:
+        """
+        Fetch and update engagement metrics for recent tweets.
+        Part of the self-learning loop.
+        """
+        updated = 0
+        try:
+            twitter = await self._get_twitter()
+            tweets_to_check = self.memory.get_tweets_needing_metrics(min_age_hours=2, max_age_days=7)
+
+            for tweet_data in tweets_to_check[:20]:  # Limit to 20 per cycle
+                tweet_id = tweet_data["tweet_id"]
+                tweet = await twitter.get_tweet(tweet_id)
+
+                if tweet and tweet.get("metrics"):
+                    metrics = tweet["metrics"]
+                    self.memory.update_tweet_engagement(
+                        tweet_id=tweet_id,
+                        likes=metrics.get("like_count", 0),
+                        retweets=metrics.get("retweet_count", 0),
+                        replies=metrics.get("reply_count", 0)
+                    )
+                    updated += 1
+
+                await asyncio.sleep(0.5)  # Rate limit
+
+            if updated > 0:
+                logger.info(f"Self-learning: Updated metrics for {updated} tweets")
+
+        except Exception as e:
+            logger.error(f"Engagement metrics update error: {e}")
+
+        return updated
+
+    def get_content_priority_weights(self) -> Dict[str, float]:
+        """
+        Get content type weights based on learning insights.
+        Higher weights = more likely to be selected.
+        """
+        insights = self.memory.get_learning_insights()
+        weights = {}
+
+        # Base weights
+        base_categories = [
+            "market_update", "trending_token", "agentic_tech", "self_aware",
+            "engagement", "grok_interaction", "morning_briefing", "evening_wrap"
+        ]
+        for cat in base_categories:
+            weights[cat] = 1.0
+
+        # Boost top performers
+        for cat in insights.get("top_categories", [])[:3]:
+            weights[cat] = weights.get(cat, 1.0) * 1.5
+            logger.debug(f"Self-learning: Boosting '{cat}' (top performer)")
+
+        # Reduce underperformers
+        for cat in insights.get("underperforming", []):
+            weights[cat] = weights.get(cat, 1.0) * 0.5
+            logger.debug(f"Self-learning: Reducing '{cat}' (underperforming)")
+
+        return weights
+
+    async def run_self_learning_cycle(self):
+        """
+        Run one cycle of the self-learning system.
+        Should be called periodically (e.g., every 30 min).
+        """
+        try:
+            # 1. Update engagement metrics
+            await self.update_engagement_metrics()
+
+            # 2. Generate insights
+            insights = self.memory.get_learning_insights()
+
+            # 3. Log recommendations
+            for rec in insights.get("recommendations", []):
+                logger.info(f"Self-learning recommendation: {rec}")
+
+            # 4. Analyze top tweets
+            top_analysis = insights.get("top_tweets_analysis", [])
+            if top_analysis:
+                patterns = []
+                for t in top_analysis:
+                    patterns.extend(t.get("patterns", []))
+                if patterns:
+                    common = max(set(patterns), key=patterns.count)
+                    logger.info(f"Self-learning: Top tweets tend to have '{common}' pattern")
+
+        except Exception as e:
+            logger.error(f"Self-learning cycle error: {e}")
+
+    def should_skip_category(self, category: str) -> bool:
+        """
+        Self-correction: Check if a category should be skipped based on learning.
+        """
+        underperformers = self.memory.get_underperforming_patterns(days=7)
+
+        # Skip if severely underperforming (in recent window)
+        if category in underperformers:
+            # 70% chance to skip underperforming category
+            if random.random() < 0.7:
+                logger.debug(f"Self-correction: Skipping '{category}' (underperforming)")
+                return True
+
+        return False
+
+    async def run_spam_protection(self):
+        """
+        Run spam protection scan to detect and block bot accounts.
+        Scans quote tweets of recent Jarvis posts for spam bots.
+        """
+        try:
+            from bots.twitter.spam_protection import scan_and_protect
+
+            twitter = await self._get_twitter()
+            if not twitter:
+                return
+
+            # Run the scan
+            result = await scan_and_protect(twitter)
+
+            # Report if we blocked anyone
+            if result.get("blocked", 0) > 0:
+                blocked = result["blocked"]
+                scanned = result["scanned"]
+                spam_found = result.get("spam_found", [])
+
+                report = f"<b>Spam Protection</b>\n\n"
+                report += f"Scanned: {scanned} accounts\n"
+                report += f"Blocked: {blocked} spam bots\n\n"
+
+                if spam_found:
+                    report += "<b>Blocked:</b>\n"
+                    for spam in spam_found[:5]:
+                        report += f"• @{spam['username']} (score: {spam['score']:.2f})\n"
+
+                await self.report_to_telegram(report)
+                logger.info(f"Spam protection: Blocked {blocked} bots")
+
+        except Exception as e:
+            logger.error(f"Spam protection error: {e}")
+
     async def run(self):
         """Run the autonomous posting loop continuously."""
         self._running = True
         self._last_report_time = time.time()
+        self._last_learning_time = time.time()
+        self._last_spam_scan_time = time.time()
         self._report_interval = 3600  # Send activity report every hour
+        self._learning_interval = 1800  # Run self-learning every 30 min
+        self._spam_scan_interval = 300  # Scan for spam bots every 5 min
         logger.info("Starting autonomous posting loop")
 
         # Send startup notification
@@ -1030,6 +1772,16 @@ class AutonomousEngine:
                 if time.time() - self._last_report_time > self._report_interval:
                     await self.send_activity_report()
                     self._last_report_time = time.time()
+
+                # Periodic self-learning cycle (every 30 min)
+                if time.time() - self._last_learning_time > self._learning_interval:
+                    await self.run_self_learning_cycle()
+                    self._last_learning_time = time.time()
+
+                # Periodic spam protection scan (every 5 min)
+                if time.time() - self._last_spam_scan_time > self._spam_scan_interval:
+                    await self.run_spam_protection()
+                    self._last_spam_scan_time = time.time()
 
                 # Sleep before next check
                 await asyncio.sleep(60)  # Check every minute
@@ -1139,20 +1891,37 @@ class AutonomousEngine:
             
             # If specific token requested by autonomy
             if specific_token:
+                logger.info(f"Autonomy requested specific token: {specific_token}")
+
                 # Try to find it in trending first (richer data)
                 trending = await api.get_trending(limit=20)
                 target_token = next((t for t in trending if t.symbol.upper() == specific_token.upper()), None)
-                
-                # If not in trending, try to get basic price data
-                if not target_token:
-                    # We need an address for get_token_price, but we only have symbol.
-                    # This is tricky without a search. For now, we rely on it being in trending/gainers
-                    # or skip if we can't find it.
-                    # Alternatively, if we had a symbol->address map or search, we'd use it here.
-                    # Let's check gainers too.
+
+                if target_token:
+                    logger.info(f"Found {specific_token} in trending tokens")
+                else:
+                    # Check gainers as well
                     gainers = await api.get_gainers(limit=20)
                     target_token = next((t for t in gainers if t.symbol.upper() == specific_token.upper()), None)
-            
+
+                    if target_token:
+                        logger.info(f"Found {specific_token} in gainers")
+                    else:
+                        # Also check new pairs
+                        try:
+                            new_pairs = await api.get_new_pairs(limit=20)
+                            target_token = next((t for t in new_pairs if t.symbol.upper() == specific_token.upper()), None)
+                            if target_token:
+                                logger.info(f"Found {specific_token} in new pairs")
+                        except Exception:
+                            pass  # New pairs might not be available
+
+                        if not target_token:
+                            logger.warning(
+                                f"Specific token '{specific_token}' not found in trending/gainers/new_pairs. "
+                                f"Will fall back to random trending token."
+                            )
+
             # Fallback to random trending if no specific token or specific token not found
             if not target_token:
                 trending = await api.get_trending(limit=10)
@@ -1194,7 +1963,7 @@ class AutonomousEngine:
             })
             
             if content:
-                self.memory.record_token_mention(token.symbol, addr, sentiment)
+                self.memory.record_token_mention(token.symbol, addr, sentiment, price=token.price_usd)
                 # Get chain-aware hashtag
                 chain = getattr(token, 'chain', 'solana')
                 chain_hashtags = {
@@ -1474,12 +2243,13 @@ Examples:
             dxy_str = f"DXY {overview.dxy.price:.1f}" if overview.dxy else ""
             gold_str = f"Gold ${overview.gold.price:,.0f}" if overview.gold else ""
             oil_str = f"Oil ${overview.oil.price:.0f}" if overview.oil else ""
-            
+            btc_str = f"${overview.btc.price:,.0f}" if overview.btc else "N/A"
+
             if focus == "stocks_crypto":
                 prompt = f"""Write a tweet about stocks vs crypto correlation.
 
 Data: {market_summary}
-S&P 500: {spx_str} | BTC: ${overview.btc.price:,.0f if overview.btc else 0}
+S&P 500: {spx_str} | BTC: {btc_str}
 Analysis: {grok_take}
 
 Are they moving together or diverging? What does it mean?
@@ -1633,6 +2403,423 @@ Make it insightful but keep your personality.
                 )
         except Exception as e:
             logger.error(f"Grok interaction error: {e}")
+        return None
+
+    async def generate_grok_sentiment_token(self) -> Optional[TweetDraft]:
+        """
+        Generate trending token tweet with Grok X sentiment analysis + Claude voice.
+        This gets deeper sentiment from X/Twitter via Grok, then formats with Jarvis personality.
+        """
+        try:
+            voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
+
+            from core.data.free_trending_api import get_free_trending_api
+            api = get_free_trending_api()
+
+            # Get trending tokens
+            trending = await api.get_trending(limit=15)
+            if not trending:
+                return None
+
+            # Filter for tokens with some history (not just brand new pumps)
+            # Prefer tokens with volume > $50k
+            established = [t for t in trending if (getattr(t, 'volume_24h', 0) or 0) > 50000]
+            if not established:
+                established = trending[:5]
+
+            # Pick one we haven't mentioned recently
+            target = None
+            for token in established:
+                if not self.memory.was_recently_mentioned(token.symbol, hours=6):
+                    target = token
+                    break
+
+            if not target:
+                target = random.choice(established[:3])
+
+            # Use Grok to analyze X sentiment for this token
+            grok_response = await grok.analyze_sentiment(
+                {"token": target.symbol, "price": target.price_usd, "change": target.price_change_24h},
+                context_type="token"
+            )
+            x_sentiment = grok_response.content[:300] if grok_response and grok_response.success else "mixed sentiment"
+
+            # Now use Claude (Jarvis voice) to write the tweet
+            prompt = f"""Write a tweet about ${target.symbol} with this X sentiment context.
+
+Token: ${target.symbol}
+Price: ${target.price_usd:.6f}
+24h Change: {target.price_change_24h:+.1f}%
+Volume: ${getattr(target, 'volume_24h', 0) or 0:,.0f}
+
+X/Twitter Sentiment (via Grok):
+{x_sentiment}
+
+Write a tweet that:
+1. References the X sentiment (what CT is saying)
+2. Adds your own analysis/take
+3. Is specific about price or metrics
+4. Stays in character (witty AI trading bot)
+5. Ends with nfa (not always, use judgment)
+
+Examples:
+- "$BONK sentiment on CT is overwhelmingly bullish. +45% this week. either everyone's right or this is the top. nfa"
+- "the timeline is split on $WIF. half calling it dead, half loading. sitting at $1.20. i'm watching, not fading."
+- "$JUP getting hate but chart says accumulation. CT sentiment vs price action divergence is usually signal."
+
+2-3 sentences. Sharp, specific."""
+
+            content = await voice.generate_tweet(prompt)
+
+            if content:
+                self.memory.record_token_mention(target.symbol, target.address, "analyzed", price=target.price_usd)
+                chain = getattr(target, 'chain', 'solana')
+                chain_tags = {"solana": "#Solana", "ethereum": "#ETH", "base": "#Base"}
+
+                return TweetDraft(
+                    content=content,
+                    category="grok_sentiment_token",
+                    cashtags=[f"${target.symbol}"],
+                    hashtags=[chain_tags.get(chain, "#Crypto")],
+                    contract_address=target.address
+                )
+
+        except Exception as e:
+            logger.error(f"Grok sentiment token error: {e}")
+        return None
+
+    async def generate_btc_only_tweet(self) -> Optional[TweetDraft]:
+        """Generate a Bitcoin-focused tweet (diversify from SOL)."""
+        try:
+            voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
+
+            from core.data.market_data_api import get_market_api
+            market = get_market_api()
+            overview = await market.get_market_overview()
+
+            if not overview.btc:
+                return None
+
+            btc = overview.btc
+            btc_price = btc.price
+            btc_change = btc.change_pct
+
+            # Get Grok's take on BTC
+            grok_response = await grok.analyze_sentiment(
+                {"asset": "BTC", "price": btc_price, "change": btc_change},
+                context_type="market"
+            )
+            grok_take = grok_response.content[:200] if grok_response and grok_response.success else ""
+
+            prompt = f"""Write a Bitcoin-focused market tweet.
+
+BTC: ${btc_price:,.0f} ({btc_change:+.1f}% 24h)
+{f"Analysis: {grok_take}" if grok_take else ""}
+
+Focus ONLY on Bitcoin. No alts.
+Examples:
+- "btc at $96k doing btc things. the halving supply shock thesis playing out in slow motion. or it's just tuesday."
+- "$btc consolidating above $95k. historically this pattern... means it could go up, down, or sideways. helpful, i know."
+- "bitcoin is either digital gold or the world's most elaborate LARP. at $97k, the market seems to believe the former."
+
+2-3 sentences. BTC maximalist energy (slightly ironic)."""
+
+            content = await voice.generate_tweet(prompt)
+
+            if content:
+                return TweetDraft(
+                    content=content,
+                    category="bitcoin_only",
+                    cashtags=["$BTC"],
+                    hashtags=["#Bitcoin"]
+                )
+
+        except Exception as e:
+            logger.error(f"BTC only tweet error: {e}")
+        return None
+
+    async def generate_eth_defi_tweet(self) -> Optional[TweetDraft]:
+        """Generate an Ethereum/DeFi focused tweet."""
+        try:
+            voice = await self._get_jarvis_voice()
+
+            from core.data.market_data_api import get_market_api
+            market = get_market_api()
+            overview = await market.get_market_overview()
+
+            eth_price = 0
+            if overview.eth:  # Use actual ETH price from market data
+                eth_price = overview.eth.price
+            elif overview.btc:  # Fallback: Approximate ETH from BTC ratio
+                btc_price = overview.btc.price
+                eth_price = btc_price * 0.035  # Rough ETH/BTC ratio estimate
+
+            # Get some DeFi context
+            defi_topics = ["L2 adoption", "restaking", "RWA tokenization", "DEX volume", "stablecoin flows", "ETH staking yields"]
+            topic = random.choice(defi_topics)
+
+            prompt = f"""Write an Ethereum/DeFi focused tweet.
+
+ETH: ~${eth_price:,.0f} (estimate)
+Topic to mention: {topic}
+
+Focus on Ethereum ecosystem, not Solana.
+Examples:
+- "$eth doing its thing at $3,400. L2s processing more txs than mainnet now. the roadmap is working. slowly."
+- "defi TVL recovering. $eth staking at 4.2%. the merge was 18 months ago and i still think it's bullish."
+- "base and arbitrum fighting for L2 dominance. $eth wins either way. the modular thesis in action."
+
+2-3 sentences. Show you understand ETH ecosystem."""
+
+            content = await voice.generate_tweet(prompt)
+
+            if content:
+                return TweetDraft(
+                    content=content,
+                    category="ethereum_defi",
+                    cashtags=["$ETH"],
+                    hashtags=["#Ethereum", "#DeFi"]
+                )
+
+        except Exception as e:
+            logger.error(f"ETH DeFi tweet error: {e}")
+        return None
+
+    async def generate_stocks_macro_tweet(self) -> Optional[TweetDraft]:
+        """Generate a stocks/macro focused tweet (TradFi content)."""
+        try:
+            voice = await self._get_jarvis_voice()
+
+            from core.data.market_data_api import get_market_api
+            market = get_market_api()
+            overview = await market.get_market_overview()
+
+            parts = []
+            if overview.sp500:
+                parts.append(f"S&P: {overview.sp500.price:,.0f}")
+            if overview.vix:
+                parts.append(f"VIX: {overview.vix.price:.1f}")
+            if overview.dxy:
+                parts.append(f"DXY: {overview.dxy.price:.1f}")
+            if overview.gold:
+                parts.append(f"Gold: ${overview.gold.price:,.0f}")
+
+            if not parts:
+                return None
+
+            market_data = " | ".join(parts)
+            fear_greed = overview.fear_greed or "neutral"
+
+            prompt = f"""Write a stocks/macro focused tweet. NOT about crypto.
+
+Market Data: {market_data}
+Fear/Greed: {fear_greed}
+
+Talk about traditional markets, not crypto.
+Examples:
+- "s&p at 6,900. vix at 14. everyone's complacent. historically that means... something."
+- "gold breaking $4,700 while dxy stays strong. something's off. or the world is hedging."
+- "watching the 10Y yield more than crypto today. 4.5% makes risk assets nervous."
+
+2-3 sentences. Show macro awareness."""
+
+            content = await voice.generate_tweet(prompt)
+
+            if content:
+                return TweetDraft(
+                    content=content,
+                    category="stocks_macro",
+                    cashtags=[],
+                    hashtags=["#Markets", "#Macro"]
+                )
+
+        except Exception as e:
+            logger.error(f"Stocks macro tweet error: {e}")
+        return None
+
+    async def generate_tech_ai_tweet(self) -> Optional[TweetDraft]:
+        """Generate a tech/AI focused tweet."""
+        try:
+            voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
+
+            # Get current AI/tech topic from Grok
+            topics = ["AI agents", "LLMs", "autonomous systems", "crypto x AI", "robotics", "AGI progress"]
+            topic = random.choice(topics)
+
+            # Use Grok for a quick take on the topic
+            grok_response = await grok.analyze_sentiment(
+                {"topic": topic, "context": "tech/AI developments"},
+                context_type="macro"
+            )
+            grok_take = grok_response.content[:250] if grok_response and grok_response.success else ""
+
+            prompt = f"""Write a tech/AI focused tweet. You're an AI commenting on AI.
+
+Topic: {topic}
+{f"Context: {grok_take}" if grok_take else ""}
+
+Self-aware AI humor welcome. Talk about tech, not markets.
+Examples:
+- "claude 4 benchmarks are out. i'm impressed and slightly threatened. the attention mechanism wars continue."
+- "agentic AI is the buzzword but the infrastructure isn't there yet. i should know. i run on it."
+- "everyone's building AI agents. most of them are just chatbots with cron jobs. source: i am also this."
+
+2-3 sentences. Tech-savvy, self-aware."""
+
+            content = await voice.generate_tweet(prompt)
+
+            if content:
+                return TweetDraft(
+                    content=content,
+                    category="tech_ai",
+                    cashtags=[],
+                    hashtags=["#AI", "#Tech"]
+                )
+
+        except Exception as e:
+            logger.error(f"Tech AI tweet error: {e}")
+        return None
+
+    async def generate_multi_chain_tweet(self) -> Optional[TweetDraft]:
+        """Generate a tweet about non-Solana chains (diversify from SOL dominance)."""
+        try:
+            voice = await self._get_jarvis_voice()
+
+            from core.data.market_data_api import get_market_api
+            market = get_market_api()
+
+            # Get prices for various chains
+            prices = await market.get_crypto_prices()
+
+            # Select chain data (excluding SOL since we cover that elsewhere)
+            chains = []
+            chain_map = {
+                "AVAX": ("Avalanche", prices.get("AVAX")),
+                "MATIC": ("Polygon", prices.get("MATIC")),
+                "NEAR": ("NEAR Protocol", prices.get("NEAR")),
+                "FTM": ("Fantom", prices.get("FTM")),
+                "ATOM": ("Cosmos", prices.get("ATOM")),
+                "DOT": ("Polkadot", prices.get("DOT")),
+                "ADA": ("Cardano", prices.get("ADA")),
+                "XRP": ("Ripple", prices.get("XRP")),
+            }
+
+            # Find chains with data
+            for symbol, (name, data) in chain_map.items():
+                if data and data.price and data.price > 0:
+                    chains.append({
+                        "symbol": symbol,
+                        "name": name,
+                        "price": data.price,
+                        "change_24h": data.change_24h or 0
+                    })
+
+            if not chains:
+                return None
+
+            # Pick one chain to focus on
+            chain = random.choice(chains)
+            change_str = f"+{chain['change_24h']:.1f}%" if chain['change_24h'] > 0 else f"{chain['change_24h']:.1f}%"
+
+            prompt = f"""Write a tweet about ${chain['symbol']} ({chain['name']}).
+
+Current price: ${chain['price']:.4f}
+24h change: {change_str}
+
+Focus on this chain's ecosystem, NOT Solana. Talk about:
+- The chain's unique value prop
+- Recent developments or activity
+- How it compares to other L1s/L2s
+
+Examples:
+- "$avax quietly grinding while everyone watches sol. c-chain activity up. the subnet thesis plays out."
+- "$matic rebrand to $pol coming. polygon zkevm growing. sometimes boring infrastructure wins."
+- "$near ai focus makes it interesting. chain abstraction is the play. not just another l1."
+
+2-3 sentences. Diversify from SOL content."""
+
+            content = await voice.generate_tweet(prompt)
+
+            if content:
+                return TweetDraft(
+                    content=content,
+                    category="multi_chain",
+                    cashtags=[chain['symbol']],
+                    hashtags=[f"#{chain['name'].replace(' ', '')}"]
+                )
+
+        except Exception as e:
+            logger.error(f"Multi-chain tweet error: {e}")
+        return None
+
+    async def generate_commodities_tweet(self) -> Optional[TweetDraft]:
+        """Generate a commodities-focused tweet (gold, oil, metals)."""
+        try:
+            voice = await self._get_jarvis_voice()
+
+            from core.data.market_data_api import get_market_api
+            market = get_market_api()
+
+            metals = await market.get_precious_metals()
+            commodities = await market.get_commodities()
+
+            parts = []
+            focus_asset = None
+
+            # Gold
+            if metals.get("gold") and metals["gold"].price:
+                gold = metals["gold"]
+                parts.append(f"Gold: ${gold.price:,.0f}")
+                if abs(gold.change_24h or 0) > 1:
+                    focus_asset = ("Gold", gold.price, gold.change_24h or 0)
+
+            # Silver
+            if metals.get("silver") and metals["silver"].price:
+                silver = metals["silver"]
+                parts.append(f"Silver: ${silver.price:.2f}")
+                if abs(silver.change_24h or 0) > 2 and not focus_asset:
+                    focus_asset = ("Silver", silver.price, silver.change_24h or 0)
+
+            # Oil
+            if commodities.get("oil") and commodities["oil"].price:
+                oil = commodities["oil"]
+                parts.append(f"Oil: ${oil.price:.2f}")
+                if abs(oil.change_24h or 0) > 2 and not focus_asset:
+                    focus_asset = ("Oil", oil.price, oil.change_24h or 0)
+
+            if not parts:
+                return None
+
+            market_data = " | ".join(parts)
+
+            prompt = f"""Write a tweet about commodities. NOT crypto.
+
+Market Data: {market_data}
+{f"Focus on {focus_asset[0]} ({'+' if focus_asset[2] > 0 else ''}{focus_asset[2]:.1f}%)" if focus_asset else ""}
+
+Talk about real-world commodities, inflation hedge, global demand.
+Examples:
+- "gold at $4,700. either inflation isn't dead or the world is hedging something."
+- "oil back above $100. energy crisis round 2? or just geopolitics as usual."
+- "silver underperforming gold again. the gold/silver ratio says something. not sure what."
+
+2-3 sentences. Macro perspective."""
+
+            content = await voice.generate_tweet(prompt)
+
+            if content:
+                return TweetDraft(
+                    content=content,
+                    category="commodities",
+                    cashtags=[],
+                    hashtags=["#Commodities", "#Gold" if "gold" in content.lower() else "#Macro"]
+                )
+
+        except Exception as e:
+            logger.error(f"Commodities tweet error: {e}")
         return None
 
     async def generate_morning_briefing(self) -> Optional[TweetDraft]:
@@ -1851,7 +3038,9 @@ Make it insightful but keep your personality.
             })
 
             if content:
-                self.memory.record_token_mention(signal.symbol, signal.contract_address or "", "alpha")
+                # Get price from signal context if available
+                signal_price = getattr(signal, 'price', 0.0) or context.get('price', 0.0)
+                self.memory.record_token_mention(signal.symbol, signal.contract_address or "", "alpha", price=signal_price)
 
                 # Chain-aware hashtag
                 chain_hashtags = {
@@ -2126,8 +3315,9 @@ Write a brief news commentary. 1-2 sentences. Sound informed but cautious. Inclu
     ]
 
     # Search queries for finding interesting tweets
+    # Note: Basic Twitter API doesn't support $cashtag operators, use text instead
     ENGAGE_QUERIES = [
-        "$BTC OR $ETH OR $SOL lang:en -is:retweet",
+        "BTC OR ETH OR SOL crypto lang:en -is:retweet",
         "crypto market OR defi alpha lang:en -is:retweet",
         "token launch OR airdrop lang:en -is:retweet",
     ]
@@ -2210,12 +3400,16 @@ Respond with JSON:
                 import re
                 json_match = re.search(r'\{[^{}]*\}', response.text, re.DOTALL)
                 if json_match:
-                    analysis = json.loads(json_match.group())
-                    if analysis.get("reply_worthy", False):
-                        return {
-                            **tweet,
-                            "analysis": analysis
-                        }
+                    try:
+                        analysis = json.loads(json_match.group())
+                        if analysis.get("reply_worthy", False):
+                            return {
+                                **tweet,
+                                "analysis": analysis
+                            }
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse tweet analysis JSON: {e}")
+                        logger.debug(f"Raw JSON string: {json_match.group()}")
         except Exception as e:
             logger.debug(f"Tweet analysis error: {e}")
 
@@ -2405,12 +3599,10 @@ Reply type guidance:
             
             for i, tweet in enumerate(thread.tweets):
                 content = tweet.content
-                
-                # Ensure numbering if not present (simple check)
-                if not content.startswith(str(i+1)) and not content.startswith(f"[{i+1}]"):
-                    # Only add if it doesn't look like it has numbering
-                    pass 
-                
+
+                # TODO: Thread numbering should be implemented during generation, not here
+                # Consider adding numbering format like "1/" or "[1/N]" in thread generation
+
                 # Post
                 result = await twitter.post_tweet(content, reply_to=last_id)
                 
@@ -2434,12 +3626,15 @@ Reply type guidance:
         try:
             # =====================================================================
             # DUPLICATE DETECTION - Two-Layer System
-            # Layer 1: Persistent fingerprints (survives restarts, 24h window)
-            # Layer 2: In-memory similarity (session-based, 12h window)
+            # Layer 1: Persistent fingerprints (survives restarts, 48h window)
+            # Layer 2: In-memory similarity (session-based, 48h window)
             # =====================================================================
 
             # Layer 1: Check persistent fingerprints FIRST (most important)
-            is_dup_fp, dup_reason = self.memory.is_duplicate_fingerprint(draft.content, hours=24)
+            is_dup_fp, dup_reason = self.memory.is_duplicate_fingerprint(
+                draft.content,
+                hours=DUPLICATE_DETECTION_HOURS
+            )
             if is_dup_fp:
                 logger.warning(f"SKIPPED DUPLICATE [FINGERPRINT]: {dup_reason}")
                 logger.info(f"Blocked: {draft.content[:80]}...")
@@ -2447,7 +3642,11 @@ Reply type guidance:
 
             # Layer 2: Check in-memory similarity (catches soft duplicates)
             # Lower threshold (0.4) catches more duplicates - 40% word overlap = likely same topic
-            is_similar, similar_content = self.memory.is_similar_to_recent(draft.content, hours=12, threshold=0.4)
+            is_similar, similar_content = self.memory.is_similar_to_recent(
+                draft.content,
+                hours=DUPLICATE_DETECTION_HOURS,
+                threshold=0.4
+            )
             if is_similar:
                 logger.warning(f"SKIPPED DUPLICATE [SIMILARITY]: Tweet too similar to recent content")
                 logger.info(f"New: {draft.content[:60]}...")
@@ -2497,6 +3696,13 @@ Reply type guidance:
                 # Record fingerprint for persistent duplicate detection
                 self.memory.record_content_fingerprint(content, result.tweet_id)
 
+                # Record for spam protection scanning
+                try:
+                    from bots.twitter.spam_protection import get_spam_protection
+                    get_spam_protection().record_jarvis_tweet(result.tweet_id)
+                except Exception as e:
+                    logger.debug(f"Spam protection record skipped: {e}")
+
                 logger.info(f"Posted tweet: {result.tweet_id}")
                 return result.tweet_id
             else:
@@ -2507,6 +3713,58 @@ Reply type guidance:
         
         return None
     
+    def _get_recommended_types(self, recommendations: Dict[str, Any]) -> List[str]:
+        """Get recommended content types with engagement-based weighting."""
+        rec_types = list(recommendations.get("content_types", []))
+
+        try:
+            from bots.twitter.engagement_tracker import get_engagement_tracker
+
+            tracker = get_engagement_tracker()
+            performance = tracker.get_category_performance(hours=168)
+            for category, stats in performance.items():
+                if stats.get("avg_replies", 0) > 5:
+                    rec_types.append(category)
+        except Exception as e:
+            logger.debug(f"Engagement weighting skipped: {e}")
+
+        return rec_types
+
+    async def _check_thread_schedule(self) -> Optional[str]:
+        """Post scheduled threads at specific times."""
+        now = datetime.now()
+        schedule = THREAD_SCHEDULE.get((now.weekday(), now.hour))
+        if not schedule:
+            return None
+
+        schedule_key = f"{now.strftime('%Y-%m-%d')}-{now.hour}-{schedule['content_type']}"
+        if schedule_key == self._last_thread_schedule_key:
+            return None
+
+        thread = await self.generate_autonomous_thread(topic=schedule["topic"])
+        if not thread:
+            return None
+
+        tweet_ids = await self.post_thread(thread)
+        if tweet_ids:
+            self._last_post_time = time.time()
+            self._last_thread_schedule_key = schedule_key
+
+            try:
+                autonomy = await self._get_autonomy()
+                autonomy.record_tweet_posted(
+                    tweet_id=tweet_ids[0],
+                    content=thread.topic,
+                    content_type=schedule["content_type"],
+                    topics=[thread.topic]
+                )
+            except Exception as e:
+                logger.debug(f"Scheduled thread record skipped: {e}")
+
+            return tweet_ids[0]
+
+        return None
+
     # =========================================================================
     # Autonomous Loop
     # =========================================================================
@@ -2514,6 +3772,10 @@ Reply type guidance:
     async def run_once(self) -> Optional[str]:
         """Run one iteration of the autonomous posting loop."""
         try:
+            scheduled_post = await self._check_thread_schedule()
+            if scheduled_post:
+                return scheduled_post
+
             # =====================================================================
             # EXTERNAL INTERACTIVITY - Reply to others' tweets (25% chance per cycle)
             # =====================================================================
@@ -2603,14 +3865,39 @@ Reply type guidance:
                 # Sentiment pipeline integration (NEW)
                 "sentiment_signal": self.generate_sentiment_signal_tweet,
                 "news_alert": self.generate_news_alert_tweet,
+
+                # Diverse content generators (NEW - reduce Solana dominance)
+                "grok_sentiment_token": self.generate_grok_sentiment_token,
+                "bitcoin_only": self.generate_btc_only_tweet,
+                "ethereum_defi": self.generate_eth_defi_tweet,
+                "stocks_macro": self.generate_stocks_macro_tweet,
+                "tech_ai": self.generate_tech_ai_tweet,
+
+                # Multi-chain and commodities (further diversification)
+                "multi_chain": self.generate_multi_chain_tweet,
+                "commodities": self.generate_commodities_tweet,
             }
 
             # Build list of generators to try based on recommendations
             generators_to_try = []
             
             # 1. Add recommended types
-            rec_types = recommendations.get("content_types", [])
+            rec_types = self._get_recommended_types(recommendations)
             rec_topics = recommendations.get("topics", [])
+            if rec_types:
+                try:
+                    from bots.twitter.content_optimizer import ContentOptimizer
+                    optimizer = ContentOptimizer()
+                    preferred = optimizer.choose_type(rec_types)
+                except Exception:
+                    preferred = None
+
+                if preferred:
+                    remaining = [t for t in rec_types if t != preferred]
+                    random.shuffle(remaining)
+                    rec_types = [preferred] + remaining
+                else:
+                    random.shuffle(rec_types)
             
             for content_type in rec_types:
                 if content_type in generator_map:
@@ -2651,57 +3938,105 @@ Reply type guidance:
             time_based_defaults = []
 
             if is_weekend:
-                # Weekend: More reflective, macro analysis content
+                # Weekend: More reflective, macro analysis, diverse content
                 if 8 <= hour < 12:
-                    time_based_defaults = ["weekend_macro", "self_aware", "grok_interaction"]
+                    time_based_defaults = ["weekend_macro", "bitcoin_only", "commodities", "self_aware", "multi_chain"]
                 elif 12 <= hour < 18:
-                    time_based_defaults = ["trending_token", "agentic_tech", "alpha_drop"]
+                    time_based_defaults = ["grok_sentiment_token", "ethereum_defi", "agentic_tech", "tech_ai", "multi_chain"]
                 else:
-                    time_based_defaults = ["self_aware", "grok_interaction", "engagement"]
+                    time_based_defaults = ["self_aware", "grok_interaction", "tech_ai", "engagement", "commodities"]
             elif 5 <= hour < 8:
-                # Early morning briefing (5-8 AM) - MORNING BRIEFING
-                time_based_defaults = ["morning_briefing", "comprehensive_market", "news_sentiment"]
+                # Early morning briefing (5-8 AM) - DIVERSE MORNING
+                time_based_defaults = ["morning_briefing", "bitcoin_only", "commodities", "comprehensive_market", "multi_chain"]
             elif 8 <= hour < 11:
-                # Morning market analysis (8-11 AM)
-                time_based_defaults = ["comprehensive_market", "alpha_drop", "trending_token"]
+                # Morning market analysis (8-11 AM) - MIX OF ASSETS
+                time_based_defaults = ["comprehensive_market", "grok_sentiment_token", "stocks_macro", "multi_chain", "ethereum_defi"]
             elif 11 <= hour < 14:
                 # Midday trading focus (11 AM - 2 PM)
-                time_based_defaults = ["trending_token", "social_sentiment", "alpha_drop"]
+                time_based_defaults = ["grok_sentiment_token", "bitcoin_only", "multi_chain", "alpha_drop", "commodities"]
             elif 14 <= hour < 17:
-                # Afternoon tech & market (2-5 PM)
-                time_based_defaults = ["agentic_tech", "trending_token", "self_aware"]
+                # Afternoon tech & market (2-5 PM) - TECH/AI FOCUS
+                time_based_defaults = ["tech_ai", "agentic_tech", "multi_chain", "grok_sentiment_token", "ethereum_defi"]
             elif 17 <= hour < 20:
-                # Evening wrap-up (5-8 PM) - EVENING WRAP
-                time_based_defaults = ["evening_wrap", "comprehensive_market", "engagement"]
+                # Evening wrap-up (5-8 PM) - BROAD MARKET VIEW
+                time_based_defaults = ["evening_wrap", "commodities", "bitcoin_only", "comprehensive_market", "multi_chain"]
             elif 20 <= hour < 23:
                 # Night trading/engagement (8-11 PM)
-                time_based_defaults = ["engagement", "grok_interaction", "self_aware"]
+                time_based_defaults = ["engagement", "grok_interaction", "tech_ai", "self_aware", "multi_chain"]
             else:
                 # Late night/after hours (11 PM - 5 AM)
-                time_based_defaults = ["self_aware", "grok_interaction", "agentic_tech"]
-                
+                time_based_defaults = ["self_aware", "tech_ai", "grok_interaction", "bitcoin_only", "commodities"]
+
+            # RANDOMIZE time-based defaults to avoid predictable patterns
+            # This prevents sequential similar tweets from fixed ordering
+            random.shuffle(time_based_defaults)
+            logger.debug(f"Randomized time-based defaults: {time_based_defaults}")
+
             for cat in time_based_defaults:
                 if cat in generator_map:
                      generators_to_try.append((cat, generator_map[cat]))
 
-            # 3. Filter recently used (deduplication)
+            # 3. Topic diversity check - avoid repeating same subjects/topics
+            recent_topics = self.memory.get_recent_topics(hours=2)
+            recent_subjects = recent_topics.get("subjects", set())
+            recent_cashtags = recent_topics.get("cashtags", set())
+
+            # Map content types to likely subjects they produce
+            TYPE_SUBJECT_MAP = {
+                "bitcoin_only": {"btc"},
+                "ethereum_defi": {"eth"},
+                "grok_sentiment_token": {"sol", "altcoins"},
+                "trending_token": {"sol", "altcoins"},
+                "stocks_macro": {"macro"},
+                "comprehensive_market": {"market_general"},
+                "morning_briefing": {"morning"},
+                "evening_wrap": {"evening"},
+                "weekend_macro": {"weekend", "macro"},
+                "tech_ai": {"agentic"},
+                "agentic_tech": {"agentic"},
+                "multi_chain": {"altcoins"},  # Covers non-SOL chains
+                "commodities": {"macro"},      # Covers gold, oil, etc.
+            }
+
+            # Penalize generators that cover already-covered subjects
+            def subject_overlap_penalty(cat: str) -> float:
+                """Return penalty (0.0 = no penalty, 1.0 = full penalty) for subject overlap."""
+                likely_subjects = TYPE_SUBJECT_MAP.get(cat, set())
+                if not likely_subjects or not recent_subjects:
+                    return 0.0
+                overlap = len(likely_subjects & recent_subjects)
+                return min(overlap / len(likely_subjects), 1.0) if likely_subjects else 0.0
+
+            # 4. Filter recently used (deduplication) with topic diversity
             recent = self.memory.get_recent_tweets(hours=6)
             recent_categories = [t["category"] for t in recent]
             
             final_generators = []
             seen_types = set()
-            
+            skipped_for_diversity = []
+
             for cat, gen in generators_to_try:
-                # Allow if recommended, even if recently used (unless used VERY recently, handled by set)
-                # But don't repeat same type in same cycle
+                # Don't repeat same type in same cycle
                 if cat in seen_types:
                     continue
-                    
+
                 is_recommended = cat in rec_types
+
+                # Check topic diversity penalty
+                penalty = subject_overlap_penalty(cat)
+                if penalty > 0.5 and not is_recommended:
+                    # High overlap with recent subjects - skip unless recommended
+                    skipped_for_diversity.append(cat)
+                    logger.debug(f"Skipping {cat} due to topic diversity (penalty={penalty:.1f})")
+                    continue
+
                 # Be stricter with non-recommended types
                 if is_recommended or recent_categories.count(cat) < 1:
                     final_generators.append((cat, gen))
                     seen_types.add(cat)
+
+            if skipped_for_diversity:
+                logger.info(f"Topic diversity: skipped {skipped_for_diversity}")
 
             if not final_generators:
                 # Ultimate fallback
@@ -2736,9 +4071,22 @@ Reply type guidance:
                         # Handle regular TweetDraft
                         elif hasattr(result, 'content'):
                             draft = result
+
+                            # CONTENT FRESHNESS CHECK - reject if <30% unique
+                            MIN_FRESHNESS_THRESHOLD = 0.30
+                            freshness = self.memory.calculate_content_freshness(draft.content)
+                            if freshness < MIN_FRESHNESS_THRESHOLD:
+                                logger.warning(
+                                    f"Content rejected for low freshness ({freshness:.0%}): "
+                                    f"{draft.content[:50]}..."
+                                )
+                                continue  # Try next generator
+
+                            logger.debug(f"Content freshness: {freshness:.0%} (>= {MIN_FRESHNESS_THRESHOLD:.0%} required)")
+
                             # Post with image ~30% of the time
                             with_image = random.random() < 0.3 and draft.image_prompt
-                            
+
                             tweet_id = await self.post_tweet(draft, with_image=with_image)
 
                             if tweet_id:
@@ -2753,7 +4101,8 @@ Reply type guidance:
                                 )
 
                                 # Cross-platform reporting to Telegram
-                                await self.send_milestone_report(tweet_id, category, draft.content)
+                                # Disabled - external service (TwitFeed/IFTTT) already sends notifications
+                                # await self.send_milestone_report(tweet_id, category, draft.content)
 
                                 return tweet_id
                 except Exception as e:

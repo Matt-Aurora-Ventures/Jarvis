@@ -49,12 +49,12 @@ class ContentCalendar:
     # Optimal posting hours (UTC)
     OPTIMAL_HOURS = [14, 15, 16, 17, 18, 19, 20, 21]  # 2PM-9PM UTC (morning-afternoon US)
     
-    # Content type weights by time of day
+    # Content type weights by time of day - DIVERSIFIED (not just Solana!)
     CONTENT_BY_HOUR = {
-        "morning": ["market_update", "daily_outlook"],  # 12-16 UTC
-        "afternoon": ["engagement", "alpha", "trending"],  # 16-20 UTC
-        "evening": ["reflection", "agentic", "grok_chat"],  # 20-24 UTC
-        "night": ["sentiment", "overnight"],  # 0-12 UTC
+        "morning": ["bitcoin_only", "stocks_macro", "comprehensive_market", "daily_outlook"],  # 12-16 UTC
+        "afternoon": ["tech_ai", "ethereum_defi", "grok_sentiment_token", "alpha"],  # 16-20 UTC
+        "evening": ["self_aware", "bitcoin_only", "grok_interaction", "tech_ai"],  # 20-24 UTC
+        "night": ["stocks_macro", "tech_ai", "bitcoin_only", "ethereum_defi"],  # 0-12 UTC
     }
     
     def __init__(self):
