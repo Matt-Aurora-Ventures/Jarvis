@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-4.6.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.6.4-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1200%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
@@ -42,6 +42,7 @@
 - [Future Platforms](#-future-platforms)
 - [API Reference](#-api-reference)
 - [Architecture Deep Dive](#-architecture-deep-dive)
+- [MCP & Semantic Memory](#-mcp--semantic-memory-system)
 - [Configuration](#%EF%B8%8F-configuration)
 - [Deployment](#-deployment)
 - [Change History & Traceability](#change-history--traceability)
@@ -54,7 +55,58 @@
 
 ---
 
-## 🚀 Recent Updates (v4.6.2 - January 2026)
+## 🚀 Recent Updates (v4.6.4 - January 17, 2026)
+
+### 🧠 Enterprise Memory & MCP Enhancement
+
+Complete semantic memory system for cross-session learning and context preservation.
+
+#### 18 Model Context Protocols (MCPs) Configured
+**New MCPs Added:**
+- **ast-grep** - 20x faster code pattern search across 60+ modified files
+- **nia** - Instant SDK/API documentation (Twitter, Telegram, Jupiter)
+- **firecrawl** - Website scraping for market data extraction
+- **postgres** - Direct queries to `continuous_claude` semantic memory database
+- **perplexity** - Real-time web research for token analysis
+
+**Total MCP Stack:** 18 servers (memory, filesystem, git, docker, solana, twitter, telegram, github, brave-search, etc.)
+
+#### Automated Memory Import System
+| Feature | Capability |
+|---------|------------|
+| **Source** | PostgreSQL `continuous_claude` database (100+ learnings) |
+| **Storage** | Local SQLite with full-text search + JSONL for MCP server |
+| **Access** | Python API + CLI commands + `/recall` skill in Claude Code |
+| **Search** | Confidence-ranked, topic-filtered, semantic matching |
+
+**New Files:**
+- `MEMORY_QUERY_GUIDE.md` - 50+ query examples for all Jarvis tasks
+- `MCP_SETUP_SUMMARY.md` - Complete system documentation
+- `core/memory/auto_import.py` - Memory import engine (398 lines)
+- `scripts/verify_mcp_setup.py` - Setup verification tool
+
+#### Query Examples
+```python
+# Import and search
+from core.memory.auto_import import MemoryImporter
+importer = MemoryImporter()
+results = importer.search_imported_memories("trading strategy", limit=10)
+
+# View statistics
+stats = importer.get_memory_stats()  # Total entries, by type, by confidence
+```
+
+#### What This Enables
+✓ No knowledge loss between sessions
+✓ Cross-session learning & pattern discovery
+✓ 20x faster code search (ast-grep)
+✓ Instant API documentation (nia)
+✓ Real-time market research (perplexity + firecrawl)
+✓ Semantic memory queries with 100+ learnings indexed
+
+---
+
+## 🚀 Previous Updates (v4.6.2 - January 2026)
 
 ### ⚡ Code Quality & Async Performance
 
@@ -2051,6 +2103,172 @@ User Request → "Buy $100 of SOL"
 │  (Analytics)     │  ◄─── Update portfolio
 └──────────────────┘  ◄─── Notify user
 ```
+
+## 🧠 MCP & Semantic Memory System
+
+JARVIS leverages 18 Model Context Protocols (MCPs) for enterprise-grade memory, code analysis, and research capabilities.
+
+### Memory Architecture
+
+```
+PostgreSQL (continuous_claude)
+    ↓ [100+ semantic learnings with BGE embeddings]
+    ↓
+MemoryImporter (auto_import.py)
+    ├─ Full-text search indexing
+    ├─ Confidence-based ranking
+    └─ Topic categorization
+    ↓
+Local Storage
+    ├─ SQLite indexed database (zero-latency search)
+    ├─ JSONL format (MCP memory server)
+    └─ Session-level access via /recall
+```
+
+### Available MCPs
+
+**Development & Code Analysis:**
+| MCP | Purpose | Speed |
+|-----|---------|-------|
+| **ast-grep** | Pattern matching & refactoring | 20x faster than grep |
+| **git** | Repository operations | Native |
+| **github** | PR reviews & issue tracking | GitHub API |
+
+**Knowledge & Documentation:**
+| MCP | Purpose |
+|-----|---------|
+| **nia** | SDK/API docs (Twitter, Telegram, Jupiter) |
+| **brave-search** | Web search |
+| **youtube-transcript** | Video context extraction |
+
+**Data Extraction & Research:**
+| MCP | Purpose | Use Case |
+|-----|---------|----------|
+| **firecrawl** | Website scraping | Market data, token research |
+| **perplexity** | Real-time web research | Current analysis |
+| **postgres** | Database queries | Semantic memory + trading history |
+| **sqlite** | Local queries | Session data |
+
+**Infrastructure:**
+| MCP | Purpose |
+|-----|---------|
+| **docker** | Container management |
+| **puppeteer** | Browser automation |
+| **fetch** | HTTP operations |
+| **filesystem** | File navigation |
+| **sequential-thinking** | Reasoning with chain-of-thought |
+
+**Bot Integrations:**
+| MCP | Purpose |
+|-----|---------|
+| **twitter** | X/Twitter API |
+| **telegram** | Telegram bot framework |
+| **solana** | Blockchain operations |
+| **memory** | Session-level memory (JSONL) |
+
+### Using the Memory System
+
+**Quick Start:**
+```bash
+# Import all learnings from PostgreSQL
+python core/memory/auto_import.py
+
+# Query in Python
+from core.memory.auto_import import MemoryImporter
+importer = MemoryImporter()
+results = importer.search_imported_memories("trading strategy", limit=10)
+
+# Query in Claude Code
+/recall "search terms for your task"
+```
+
+**Available Queries:**
+
+Trading & Treasury:
+```bash
+# Past trading strategies
+importer.search_imported_memories("trading strategy", limit=10)
+
+# Bug fixes
+importer.get_recent_by_type("ERROR_FIX", limit=20)
+```
+
+X Bot & Social:
+```bash
+# Circuit breaker patterns
+importer.search_imported_memories("circuit breaker x twitter", limit=10)
+
+# Sentiment scoring methods
+importer.search_imported_memories("grok sentiment score", limit=10)
+```
+
+Configuration & Architecture:
+```bash
+# System decisions
+importer.get_recent_by_type("ARCHITECTURAL_DECISION", limit=20)
+
+# Config best practices
+importer.search_imported_memories("config yaml environment", limit=10)
+```
+
+**Memory Statistics:**
+```python
+stats = importer.get_memory_stats()
+# Returns: total_entries, by_type, by_confidence, topics, most_recent
+```
+
+### Learning Types
+
+| Type | Purpose | Example |
+|------|---------|---------|
+| `WORKING_SOLUTION` | Fixes that work | "How we fixed the X bot spam loop" |
+| `ERROR_FIX` | Bug solutions | "Bare except cleanup" |
+| `FAILED_APPROACH` | What didn't work | "Approaches that failed for state backup" |
+| `ARCHITECTURAL_DECISION` | System design choices | "Why PostgreSQL for memory" |
+| `CODEBASE_PATTERN` | Reusable patterns | "Event bus handler patterns" |
+
+### Configuration
+
+**Database Connection:**
+```bash
+# .env
+DATABASE_URL=postgresql://claude:claude_dev@localhost:5432/continuous_claude
+SQLITE_DB_PATH=./data/jarvis.db
+```
+
+**Optional API Keys:**
+```bash
+# GitHub (for code review workflows)
+GITHUB_TOKEN=ghp_...
+
+# Firecrawl (for web scraping)
+FIRECRAWL_API_KEY=...
+
+# Perplexity (for real-time research)
+PERPLEXITY_API_KEY=...
+```
+
+### Documentation
+
+- **[MEMORY_QUERY_GUIDE.md](MEMORY_QUERY_GUIDE.md)** - 50+ query examples by task
+- **[MCP_SETUP_SUMMARY.md](MCP_SETUP_SUMMARY.md)** - Complete MCP documentation
+- **[core/memory/auto_import.py](core/memory/auto_import.py)** - Memory import system implementation
+
+### Verification
+
+```bash
+# Verify all systems are configured
+python scripts/verify_mcp_setup.py
+
+# Expected output:
+# [PASS] [MCP] Configuration - 18 MCPs configured
+# [PASS] [ENV] Environment Variables - .env configured
+# [PASS] [DB] PostgreSQL Connection - Connected to continuous_claude
+# [PASS] [MEMORY] Memory System - MemoryImporter initialized
+# [PASS] [DOCS] Documentation - All guides present
+```
+
+---
 
 ### Security Architecture
 
