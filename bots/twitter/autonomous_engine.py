@@ -34,6 +34,7 @@ from core.memory.dedup_store import (
     MemoryType,
     get_memory_store
 )
+from bots.twitter.telegram_sync import sync_tweet_to_telegram
 
 logger = logging.getLogger(__name__)
 
@@ -3665,6 +3666,13 @@ Reply type guidance:
                     get_spam_protection().record_jarvis_tweet(result.tweet_id)
                 except Exception as e:
                     logger.debug(f"Spam protection record skipped: {e}")
+
+                # Sync tweet to Telegram chat
+                try:
+                    tweet_url = f"https://x.com/Jarvis_lifeos/status/{result.tweet_id}"
+                    await sync_tweet_to_telegram(content, tweet_url, "Jarvis_lifeos")
+                except Exception as e:
+                    logger.debug(f"Telegram sync skipped: {e}")
 
                 logger.info(f"Posted tweet: {result.tweet_id}")
                 return result.tweet_id
