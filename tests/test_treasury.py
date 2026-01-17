@@ -183,7 +183,7 @@ class TestRiskLimits:
         """Test default risk limits."""
         limits = RiskLimits()
 
-        assert limits.max_position_size_pct == 0.05
+        assert limits.max_position_size_pct == 0.25  # Updated for unrestricted trading
         assert limits.max_total_exposure_pct == 0.50
         assert limits.max_daily_loss_pct == 0.05
         assert limits.max_consecutive_losses == 3
