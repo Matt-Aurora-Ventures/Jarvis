@@ -245,9 +245,11 @@ class TestRiskManager:
     """Tests for RiskManager."""
 
     @pytest.fixture
-    def risk_manager(self):
-        """Create a RiskManager for testing."""
-        return RiskManager()
+    def risk_manager(self, tmp_path):
+        """Create a RiskManager for testing with isolated database."""
+        # Use temporary database for testing to avoid polluting shared state
+        db_path = str(tmp_path / "test_treasury.db")
+        return RiskManager(db_path=db_path)
 
     def test_validate_trade_position_size(self, risk_manager):
         """Test position size validation."""
