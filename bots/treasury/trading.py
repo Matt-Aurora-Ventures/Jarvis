@@ -248,8 +248,8 @@ class TradingEngine:
     MAX_TRADE_USD = 100.0      # Maximum single trade size
     MAX_DAILY_USD = 500.0      # Maximum daily trading volume
     MAX_POSITION_PCT = 0.20    # Max 20% of portfolio in single position
-    MAX_ALLOCATION_PER_TOKEN = 0.20  # Max 20% of portfolio per token (stacked positions)
-    ALLOW_STACKING = False  # Set to False to prevent duplicate positions in same token
+    MAX_ALLOCATION_PER_TOKEN = None  # DISABLED: No maximum per-token allocation - allows unrestricted stacking
+    ALLOW_STACKING = True  # ENABLED: Allow multiple positions in the same token
 
     # Default TP/SL percentages by sentiment grade
     # MANDATORY: Every trade MUST have TP/SL set based on grade
@@ -299,8 +299,6 @@ class TradingEngine:
         # Major Solana tokens
         "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": "BONK",
         "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "JUP",
-        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
-        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
         "So11111111111111111111111111111111111111112": "SOL",
         "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So": "MSOL",
         "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj": "STSOL",
@@ -1193,8 +1191,9 @@ class TradingEngine:
         if amount_usd < original_amount:
             logger.info(f"Position size reduced: ${original_amount:.2f} -> ${amount_usd:.2f} ({risk_tier})")
 
-        # Enforce per-token allocation cap while allowing stacking
-        if portfolio_usd > 0:
+        # DISABLED: Per-token allocation cap (MAX_ALLOCATION_PER_TOKEN = None)
+        # This allows unlimited stacking per token while still checking overall portfolio limits
+        if self.MAX_ALLOCATION_PER_TOKEN is not None and portfolio_usd > 0:
             existing_token_usd = sum(p.amount_usd for p in existing_in_token)
             total_token_usd = existing_token_usd + amount_usd
             token_allocation_pct = total_token_usd / portfolio_usd
