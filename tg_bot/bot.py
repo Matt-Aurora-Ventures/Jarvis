@@ -19,13 +19,7 @@ from tg_bot.handlers.commands import start, help_command, status, subscribe, uns
 from tg_bot.handlers.sentiment import trending, digest, report, sentiment, picks
 from tg_bot.handlers.admin import reload, config_cmd, logs, system, away, back, awaystatus, memory
 from tg_bot.handlers.trading import balance, positions, wallet, dashboard, button_callback, calibrate
-from tg_bot.handlers.treasury import (
-    handle_treasury,
-    handle_portfolio,
-    handle_balance as handle_treasury_balance,
-    handle_pnl,
-    handle_sector,
-)
+from tg_bot.handlers import treasury as treasury_handlers
 
 
 def main():
@@ -147,12 +141,12 @@ def main():
     app.add_handler(CommandHandler("cal", calibrate))
 
     # Treasury Display Commands (v4.7.0)
-    app.add_handler(CommandHandler("treasury", handle_treasury))
-    app.add_handler(CommandHandler("portfolio", handle_portfolio))
-    app.add_handler(CommandHandler("p", handle_portfolio))
-    app.add_handler(CommandHandler("b", handle_treasury_balance))
-    app.add_handler(CommandHandler("pnl", handle_pnl))
-    app.add_handler(CommandHandler("sector", handle_sector))
+    app.add_handler(CommandHandler("treasury", treasury_handlers.handle_treasury))
+    app.add_handler(CommandHandler("portfolio", treasury_handlers.handle_portfolio))
+    app.add_handler(CommandHandler("p", treasury_handlers.handle_portfolio))
+    app.add_handler(CommandHandler("b", treasury_handlers.handle_balance))
+    app.add_handler(CommandHandler("pnl", treasury_handlers.handle_pnl))
+    app.add_handler(CommandHandler("sector", treasury_handlers.handle_sector))
     app.add_handler(CommandHandler("settings", settings))
     app.add_handler(CommandHandler("addscam", addscam))
     app.add_handler(CommandHandler("trust", trust))
