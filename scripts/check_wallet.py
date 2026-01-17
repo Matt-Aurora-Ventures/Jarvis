@@ -136,10 +136,10 @@ async def check_wallet():
                     price = token_info["price"]
                 else:
                     price, _ = get_token_price_dexscreener(mint)
-                    time.sleep(0.3)  # Rate limit
+                    await asyncio.sleep(0.3)  # Rate limit
             else:
                 price, symbol = get_token_price_dexscreener(mint)
-                time.sleep(0.3)  # Rate limit
+                await asyncio.sleep(0.3)  # Rate limit
 
             usd_value = amount * price
             total_usd += usd_value

@@ -1009,7 +1009,7 @@ Respond with ONLY the formatted lines, no other text."""
                         symbol = parts[0].strip().upper()
                         try:
                             score = int(parts[1].strip())
-                        except:
+                        except Exception:
                             continue
 
                         verdict = parts[2].strip().upper()
@@ -3286,7 +3286,7 @@ Treasury: <code>{treasury_status['address'][:12]}...{treasury_status['address'][
                                     pairs = price_data.get("pairs", [])
                                     if pairs:
                                         sol_price = float(pairs[0].get("priceUsd", 100) or 100)
-                        except:
+                        except Exception:  # noqa: BLE001 - intentional catch-all
                             pass
 
                         open_positions = []

@@ -1,0 +1,40 @@
+[Unit]
+Description=JARVIS Bot Supervisor - Autonomous Trading & Social AI
+Documentation=https://github.com/lucid/jarvis
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jarvis
+Group=jarvis
+WorkingDirectory=/opt/jarvis
+ExecStart=/usr/bin/python3 bots/supervisor.py
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+
+# Environment
+EnvironmentFile=/opt/jarvis/.env
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/jarvis
+PrivateTmp=true
+
+# Resource limits
+MemoryMax=2G
+CPUQuota=80%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jarvis
+
+# Watchdog - systemd will restart if no ping in 5 minutes
+WatchdogSec=300
+
+[Install]
+WantedBy=multi-user.target

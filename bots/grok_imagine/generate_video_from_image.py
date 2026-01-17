@@ -189,7 +189,7 @@ async def generate_video_from_base():
                                     print(f"\n*** SUCCESS! ***")
                                     print(f"Video saved to: {output_path}")
                                     return str(output_path)
-                                except:
+                                except Exception:
                                     continue
                 except Exception as e:
                     print(f"Button scan error: {e}")

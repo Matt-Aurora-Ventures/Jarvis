@@ -51,7 +51,7 @@ async def fetch_history():
                     else:
                         # Message doesn't exist or can't be copied
                         pass
-            except:
+            except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
             
             if len(messages) >= 50:

@@ -150,7 +150,7 @@ def test_system_info() -> MCPDoctorResult:
             cpu_result = subprocess.run(['sysctl', '-n', 'hw.ncpu'], capture_output=True, text=True, timeout=5)
             if cpu_result.returncode == 0:
                 system_info['cpu_cores'] = cpu_result.stdout.strip()
-        except:
+        except Exception:
             system_info['cpu_cores'] = 'unknown'
         
         # Get memory info
@@ -160,7 +160,7 @@ def test_system_info() -> MCPDoctorResult:
                 system_info['memory_info'] = 'available'
             else:
                 system_info['memory_info'] = 'failed'
-        except:
+        except Exception:
             system_info['memory_info'] = 'unknown'
         
         # Get platform info

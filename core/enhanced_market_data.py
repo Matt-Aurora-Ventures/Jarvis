@@ -879,7 +879,7 @@ async def fetch_trending_solana_tokens(limit: int = 10) -> Tuple[List[TrendingTo
                                                     tx_count_24h=tx_count,
                                                     rank=len(tokens) + 1,
                                                 ))
-                                except:
+                                except Exception:  # noqa: BLE001 - intentional catch-all
                                     pass
                 except Exception as e:
                     warnings.append(f"Boost fallback failed: {e}")

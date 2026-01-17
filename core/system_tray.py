@@ -135,7 +135,7 @@ class JarvisSystemTray:
         try:
             from PIL import ImageFont
             font = ImageFont.truetype("arial.ttf", 32)
-        except:
+        except Exception:
             font = ImageFont.load_default()
 
         text = "J"
