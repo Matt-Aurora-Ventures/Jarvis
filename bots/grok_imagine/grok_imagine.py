@@ -115,7 +115,7 @@ class GrokImagine:
                     logger.warning("Additional verification required - please complete manually")
                     # Wait for manual input
                     await asyncio.sleep(30)
-            except:
+            except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
 
             # Enter password
@@ -133,7 +133,7 @@ class GrokImagine:
                 logger.info("Login successful!")
                 await self.save_cookies()
                 return True
-            except:
+            except Exception as e:
                 logger.error("Login failed - could not verify success")
                 return False
 
@@ -151,9 +151,9 @@ class GrokImagine:
             try:
                 await self.page.wait_for_selector('[data-testid="primaryColumn"]', timeout=5000)
                 return True
-            except:
+            except Exception:
                 return False
-        except:
+        except Exception:
             return False
 
     async def generate_image(
@@ -199,7 +199,7 @@ class GrokImagine:
                     if mode_selector:
                         await mode_selector.click()
                         await asyncio.sleep(0.5)
-                except:
+                except Exception as e:
                     logger.warning(f"Could not select mode: {mode}")
 
             # Click generate/submit button
@@ -363,7 +363,7 @@ class GrokImagine:
                     await self.save_cookies()
                     logger.info("Login successful! Cookies saved for future use.")
                     return True
-                except:
+                except Exception:  # noqa: BLE001 - intentional catch-all
                     pass
 
             if i % 6 == 0:  # Every 30 seconds

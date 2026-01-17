@@ -83,3 +83,15 @@ def rate_limited(func: Callable[..., Awaitable[Any]]):
         return await func(update, context, *args, **kwargs)
 
     return wrapper
+
+
+# Import handler modules for easy access
+from tg_bot.handlers import system
+
+__all__ = [
+    "error_handler",
+    "admin_only",
+    "rate_limited",
+    "system",
+]
+

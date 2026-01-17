@@ -26,7 +26,7 @@ def load_env_manual():
         except UnicodeDecodeError:
             try:
                 content = env_path.read_text(encoding='utf-16')
-            except:
+            except Exception:
                 content = env_path.read_text(encoding='latin-1')
 
         for line in content.splitlines():
@@ -52,7 +52,7 @@ def load_env_manual_old():
             # Fall back to UTF-16 or Latin-1
             try:
                 content = env_path.read_text(encoding='utf-16')
-            except:
+            except Exception:
                 content = env_path.read_text(encoding='latin-1')
 
         for line in content.splitlines():

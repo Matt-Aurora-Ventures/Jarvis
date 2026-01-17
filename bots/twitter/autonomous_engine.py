@@ -28,6 +28,13 @@ from dataclasses import dataclass, asdict
 import logging
 import threading
 
+from core.memory.dedup_store import (
+    MemoryStore,
+    MemoryEntry,
+    MemoryType,
+    get_memory_store
+)
+
 logger = logging.getLogger(__name__)
 
 # Paths
@@ -366,10 +373,11 @@ def is_content_relevant(content: str, category: str) -> bool:
 
 class XMemory:
     """Persistent memory for X/Twitter interactions."""
-    
+
     def __init__(self, db_path: Path = X_MEMORY_DB):
         self.db_path = db_path
         self._lock = threading.Lock()
+        self._memory_store = get_memory_store()  # Get global MemoryStore instance for dedup
         self._init_db()
     
     def _init_db(self):
@@ -1120,9 +1128,9 @@ class XMemory:
 
         return fingerprint, ','.join(tokens), ','.join(prices[:5]), topic_hash, semantic_hash
 
-    def is_duplicate_fingerprint(self, content: str, hours: int = 24) -> Tuple[bool, Optional[str]]:
+    async def is_duplicate_fingerprint(self, content: str, hours: int = 24) -> Tuple[bool, Optional[str]]:
         """
-        Check if content fingerprint exists in persistent storage.
+        Check if content fingerprint exists in persistent storage using MemoryStore.
         More reliable than word similarity - survives restarts.
 
         Returns:
@@ -1131,108 +1139,64 @@ class XMemory:
         fingerprint, tokens, prices, topic_hash, semantic_hash = self._generate_content_fingerprint(content)
         semantic = self._extract_semantic_concepts(content)
 
-        with self._lock:
-            conn = None
-            try:
-                conn = sqlite3.connect(str(self.db_path))
-                cursor = conn.cursor()
+        try:
+            # Use MemoryStore for unified duplicate detection
+            # Map tokens to entity_id (e.g., "XBT" for X Bot token tracking)
+            entity_id = ','.join(tokens.split(',')[:5]) if tokens else "general"
 
-                cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-                # Stricter cutoff for semantic duplicates (6 hours for same sentiment+subject)
-                semantic_cutoff = (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat()
+            is_dup, reason = await self._memory_store.is_duplicate(
+                content=content,
+                entity_id=entity_id,
+                entity_type="tweet",
+                memory_type=MemoryType.DUPLICATE_CONTENT,
+                hours=hours,
+                similarity_threshold=0.4  # Catch more duplicates with lower threshold
+            )
 
-                # Check exact fingerprint match
-                cursor.execute("""
-                    SELECT tweet_id FROM content_fingerprints
-                    WHERE fingerprint = ? AND created_at > ?
-                """, (fingerprint, cutoff))
-                if cursor.fetchone():
-                    return True, f"Exact fingerprint match (tokens: {tokens})"
+            if is_dup:
+                return True, reason
 
-                # Check topic hash match (same tokens + similar prices)
-                cursor.execute("""
-                    SELECT tweet_id, tokens FROM content_fingerprints
-                    WHERE topic_hash = ? AND created_at > ?
-                """, (topic_hash, cutoff))
-                result = cursor.fetchone()
-                if result:
-                    return True, f"Topic duplicate (same tokens: {result[1]})"
+            return False, None
+        except Exception as e:
+            logger.warning(f"MemoryStore duplicate check failed: {e}, falling back to safe")
+            return False, None
 
-                # NEW: Check semantic hash - catches rephrased duplicates
-                # "markets bullish" and "green candles everywhere" would match
-                cursor.execute("""
-                    SELECT tweet_id, tokens FROM content_fingerprints
-                    WHERE semantic_hash = ? AND created_at > ?
-                """, (semantic_hash, semantic_cutoff))
-                result = cursor.fetchone()
-                if result:
-                    subjects = '-'.join(semantic['subjects'])
-                    return True, f"Semantic duplicate ({semantic['sentiment']} {subjects})"
-
-                # Check if same tokens mentioned recently (softer check)
-                if tokens:
-                    token_list = tokens.split(',')
-                    if len(token_list) >= 2:
-                        # If 2+ tokens match, likely same topic
-                        cursor.execute(f"""
-                            SELECT tokens FROM content_fingerprints
-                            WHERE created_at > ? AND (
-                                {' OR '.join(f"tokens LIKE ?" for _ in token_list)}
-                            )
-                        """, [cutoff] + [f'%{t}%' for t in token_list])
-
-                        for row in cursor.fetchall():
-                            existing_tokens = set(row[0].split(',')) if row[0] else set()
-                            new_tokens = set(token_list)
-                            overlap = existing_tokens & new_tokens
-                            if len(overlap) >= 2:
-                                return True, f"Token overlap: {overlap}"
-
-                return False, None
-            finally:
-                if conn:
-                    conn.close()
-
-    def record_content_fingerprint(self, content: str, tweet_id: str):
-        """Record content fingerprint for future duplicate detection."""
+    async def record_content_fingerprint(self, content: str, tweet_id: str):
+        """Record content fingerprint for future duplicate detection using MemoryStore."""
         fingerprint, tokens, prices, topic_hash, semantic_hash = self._generate_content_fingerprint(content)
 
-        with self._lock:
-            conn = None
-            try:
-                conn = sqlite3.connect(str(self.db_path))
-                cursor = conn.cursor()
-                try:
-                    cursor.execute("""
-                        INSERT OR REPLACE INTO content_fingerprints
-                        (fingerprint, tokens, prices, topic_hash, semantic_hash, created_at, tweet_id)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (fingerprint, tokens, prices, topic_hash, semantic_hash,
-                          datetime.now(timezone.utc).isoformat(), tweet_id))
-                    conn.commit()
-                    logger.debug(f"Recorded fingerprint for {tweet_id}: tokens={tokens}, semantic={semantic_hash}")
-                except Exception as e:
-                    logger.error(f"Error recording fingerprint: {e}")
-            finally:
-                if conn:
-                    conn.close()
+        try:
+            # Create MemoryEntry with X bot's sophisticated fingerprinting
+            entity_id = ','.join(tokens.split(',')[:5]) if tokens else "general"
 
-    def cleanup_old_fingerprints(self, days: int = 7):
-        """Clean up old fingerprints to keep database lean."""
-        with self._lock:
-            conn = None
-            try:
-                conn = sqlite3.connect(str(self.db_path))
-                cursor = conn.cursor()
-                cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-                cursor.execute("DELETE FROM content_fingerprints WHERE created_at < ?", (cutoff,))
-                deleted = cursor.rowcount
-                conn.commit()
-                if deleted > 0:
-                    logger.info(f"Cleaned up {deleted} old fingerprints")
-            finally:
-                if conn:
-                    conn.close()
+            entry = MemoryEntry(
+                content=content,
+                memory_type=MemoryType.DUPLICATE_CONTENT,
+                entity_id=entity_id,
+                entity_type="tweet",
+                fingerprint=fingerprint,
+                semantic_hash=semantic_hash,
+                topic_hash=topic_hash,
+                metadata={
+                    "tweet_id": tweet_id,
+                    "tokens": tokens,
+                    "prices": prices,
+                }
+            )
+
+            entry_id = await self._memory_store.store(entry)
+            logger.debug(f"Recorded fingerprint in MemoryStore {entry_id}: tokens={tokens}, semantic={semantic_hash}")
+        except Exception as e:
+            logger.warning(f"Failed to record fingerprint in MemoryStore: {e}")
+
+    async def cleanup_old_fingerprints(self, days: int = 7):
+        """Clean up old fingerprints using MemoryStore."""
+        try:
+            deleted = await self._memory_store.cleanup_expired()
+            if deleted > 0:
+                logger.info(f"Cleaned up {deleted} expired fingerprints from MemoryStore")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup fingerprints: {e}")
 
     def get_posting_stats(self) -> Dict:
         """Get posting statistics."""
@@ -1463,9 +1427,8 @@ class AutonomousEngine:
         self._autonomy = None
         self._last_thread_schedule_key = None
 
-        # Clean up old fingerprints on startup (keep 2 days for safety)
-        self.memory.cleanup_old_fingerprints(days=2)
-    
+        # Fingerprint cleanup is now handled by MemoryStore.cleanup_expired()
+
     async def _get_autonomy(self):
         """Get autonomy orchestrator."""
         if self._autonomy is None:
@@ -3631,7 +3594,7 @@ Reply type guidance:
             # =====================================================================
 
             # Layer 1: Check persistent fingerprints FIRST (most important)
-            is_dup_fp, dup_reason = self.memory.is_duplicate_fingerprint(
+            is_dup_fp, dup_reason = await self.memory.is_duplicate_fingerprint(
                 draft.content,
                 hours=DUPLICATE_DETECTION_HOURS
             )
@@ -3694,7 +3657,7 @@ Reply type guidance:
                 self.memory.record_tweet(result.tweet_id, content, draft.category, draft.cashtags)
 
                 # Record fingerprint for persistent duplicate detection
-                self.memory.record_content_fingerprint(content, result.tweet_id)
+                await self.memory.record_content_fingerprint(content, result.tweet_id)
 
                 # Record for spam protection scanning
                 try:

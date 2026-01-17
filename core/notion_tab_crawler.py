@@ -177,7 +177,7 @@ class NotionTabCrawler:
         # Scroll back to top
         try:
             await context.evaluate("() => window.scrollTo(0, 0)")
-        except:
+        except Exception:  # noqa: BLE001 - intentional catch-all
             pass
         self.stats["scroll_passes"] += passes
         return passes
@@ -445,7 +445,7 @@ class NotionTabCrawler:
                     txt = (await loc.inner_text()).strip()
                     if txt:
                         return txt
-        except:
+        except Exception:  # noqa: BLE001 - intentional catch-all
             pass
         return "Untitled"
 

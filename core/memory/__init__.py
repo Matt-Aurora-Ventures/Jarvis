@@ -21,6 +21,23 @@ from core.memory.persistence import (
     get_memory_store,
 )
 
+# New deduplication-focused memory store (M1 implementation)
+try:
+    from core.memory.dedup_store import (
+        MemoryStore as DeduplicationMemoryStore,
+        MemoryEntry,
+        MemoryType as DeduplicationMemoryType,
+        SQLiteMemoryStore as SQLiteDeduplicationStore,
+        get_memory_store as get_dedup_store,
+    )
+except ImportError:
+    # dedup_store not yet available
+    DeduplicationMemoryStore = None
+    MemoryEntry = None
+    DeduplicationMemoryType = None
+    SQLiteDeduplicationStore = None
+    get_dedup_store = None
+
 
 def get_recent_entries(days: int = 7, limit: int = 50) -> List[LongTermMemory]:
     """
@@ -84,6 +101,7 @@ def summarize_entries(entries: List[LongTermMemory]) -> str:
 
 
 __all__ = [
+    # Existing memory system (persistence.py)
     "LongTermMemory",
     "MemoryStore",
     "MemoryType",
@@ -93,4 +111,10 @@ __all__ = [
     "get_memory_store",
     "get_recent_entries",
     "summarize_entries",
+    # New deduplication memory store (dedup_store.py - M1)
+    "DeduplicationMemoryStore",
+    "MemoryEntry",
+    "DeduplicationMemoryType",
+    "SQLiteDeduplicationStore",
+    "get_dedup_store",
 ]

@@ -411,7 +411,7 @@ class ConsoleBridge:
         """Load pending requests."""
         try:
             return json.loads(REQUESTS_FILE.read_text())
-        except:
+        except Exception:
             return []
     
     def _save_requests(self, requests: List[Dict]):

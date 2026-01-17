@@ -30,7 +30,7 @@ async def get_current_price(mint):
                 if pair.get("chainId") == "solana":
                     return float(pair.get("priceUsd", 0))
         return None
-    except:
+    except Exception:
         return None
 
 

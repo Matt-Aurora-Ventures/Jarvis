@@ -676,6 +676,7 @@ async def execute_ape_trade(
     Execute an ape trade with MANDATORY TP/SL validation.
 
     For volatile Solana tokens, fetches current price and accepts slippage.
+    Includes idempotency checking to prevent duplicate trades (Issue #1 fix).
 
     Args:
         callback_data: Raw callback data from button
@@ -684,12 +685,18 @@ async def execute_ape_trade(
         direction: Trade direction
         grade: Asset grade
         max_slippage_pct: Maximum acceptable slippage from quoted price
+        user_id: User ID for idempotency tracking
 
     Returns:
         TradeResult with success/failure info
     """
     import tempfile
     from pathlib import Path
+    from bots.buy_tracker.intent_tracker import (
+        generate_intent_id,
+        check_intent_duplicate,
+        record_intent_execution,
+    )
 
     # Parse callback
     parsed = parse_ape_callback(callback_data)
@@ -759,6 +766,29 @@ async def execute_ape_trade(
             error=f"REJECTED: {error_msg}"
         )
 
+    # Issue #1 FIX: Check for duplicate intents (idempotency for button retries)
+    intent_id = generate_intent_id(
+        symbol=trade_setup.symbol,
+        amount_sol=trade_setup.amount_sol,
+        entry_price=trade_setup.entry_price,
+        tp_price=trade_setup.take_profit_price,
+        sl_price=trade_setup.stop_loss_price,
+        user_id=user_id,
+    )
+
+    is_dup, dup_reason = await check_intent_duplicate(intent_id, trade_setup.symbol)
+    if is_dup:
+        logger.info(
+            f"DUPLICATE INTENT BLOCKED: {trade_setup.symbol} (intent {intent_id}) "
+            f"was already processed. Reason: {dup_reason}"
+        )
+        return TradeResult(
+            success=False,
+            trade_setup=trade_setup,
+            error=f"This trade was already executed (intent {intent_id[:8]}). "
+                  f"Duplicate blocked to prevent double trading."
+        )
+
     # Enforce per-token allocation cap while allowing stacking
     if trade_setup.contract_address and treasury_balance_sol > 0:
         try:
@@ -798,7 +828,21 @@ async def execute_ape_trade(
     # Note: xStocks (tokenized stocks), indexes, bonds, and commodities are Solana SPL tokens traded on Jupiter
     # They use the same trading flow as regular tokens, just with different TP/SL
     if trade_setup.asset_type in ("token", "stock", "index", "commodity", "metal", "bond"):
-        return await _execute_token_trade(trade_setup, user_id=user_id)
+        result = await _execute_token_trade(trade_setup, user_id=user_id)
+
+        # Record intent for future idempotency (whether success or failure)
+        try:
+            await record_intent_execution(
+                intent_id=intent_id,
+                symbol=trade_setup.symbol,
+                success=result.success,
+                tx_signature=result.tx_signature,
+                error=result.error,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record intent execution: {e}")
+
+        return result
     else:
         return TradeResult(
             success=False,

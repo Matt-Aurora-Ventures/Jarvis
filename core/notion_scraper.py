@@ -88,11 +88,11 @@ class NotionScraper:
         # Try to find main content - don't fail if not found immediately
         try:
             await self.page.wait_for_selector('[data-block-id]', timeout=10000)
-        except:
+        except Exception:
             # If no data-block-id found, try other selectors
             try:
                 await self.page.wait_for_selector('.notion-page-content', timeout=5000)
-            except:
+            except Exception:
                 # Continue anyway - page might still load content
                 pass
         
@@ -165,9 +165,9 @@ class NotionScraper:
                             if aria_expanded == "false":
                                 await button.click()
                                 await asyncio.sleep(0.3)
-                    except:
+                    except Exception:  # noqa: BLE001 - intentional catch-all
                         pass
-            except:
+            except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
         
         # Wait for content to load
@@ -199,9 +199,9 @@ class NotionScraper:
                         await button.click()
                         await asyncio.sleep(1)
                         print(f"Clicked load more button")
-                    except:
+                    except Exception:  # noqa: BLE001 - intentional catch-all
                         pass
-            except:
+            except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
         
         # Final wait for any remaining content
@@ -227,9 +227,9 @@ class NotionScraper:
                     try:
                         await button.click()
                         await asyncio.sleep(1)
-                    except:
+                    except Exception:  # noqa: BLE001 - intentional catch-all
                         pass
-            except:
+            except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
         """Scroll down to trigger lazy loading of images and content."""
         if not self.page:

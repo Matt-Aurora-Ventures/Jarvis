@@ -63,7 +63,7 @@ def speak_openai_tts(text: str, voice: str = "alloy", model: str = "tts-1") -> b
         try:
             from scripts.monitor_tts_costs import log_tts_usage
             log_tts_usage(text, voice, model)
-        except:
+        except Exception as e:
             pass  # Don't fail if logging fails
         
         # Play audio

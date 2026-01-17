@@ -87,7 +87,7 @@ class RiskLimits:
     max_trades_per_hour: int = 10        # Throttle limit
     stop_loss_pct: float = 2.0           # Default stop-loss %
     take_profit_pct: float = 6.0         # Default take-profit %
-    max_open_positions: int = 5          # Max concurrent positions
+    max_open_positions: int = 50          # Max concurrent positions
     min_risk_reward: float = 2.0         # Minimum risk/reward ratio
 
 
@@ -210,6 +210,8 @@ class RiskManager:
         self._current_equity: float = 0.0
         self._circuit_breaker_active: bool = False
         self._circuit_breaker_reason: str = ""
+        self._circuit_breaker_triggered_at: float = 0.0  # Timestamp for auto-recovery
+        self._consecutive_losses: int = 0  # Track consecutive losing trades
         
         # Load existing data
         self._load_state()
@@ -225,6 +227,8 @@ class RiskManager:
                 self._current_equity = state.get("current_equity", 0.0)
                 self._circuit_breaker_active = state.get("circuit_breaker_active", False)
                 self._circuit_breaker_reason = state.get("circuit_breaker_reason", "")
+                self._circuit_breaker_triggered_at = state.get("circuit_breaker_triggered_at", 0.0)
+                self._consecutive_losses = state.get("consecutive_losses", 0)
             except Exception:
                 pass
         
@@ -245,6 +249,8 @@ class RiskManager:
             "current_equity": self._current_equity,
             "circuit_breaker_active": self._circuit_breaker_active,
             "circuit_breaker_reason": self._circuit_breaker_reason,
+            "circuit_breaker_triggered_at": self._circuit_breaker_triggered_at,
+            "consecutive_losses": self._consecutive_losses,
             "updated_at": time.time(),
         }
         with open(state_file, "w") as f:
@@ -277,6 +283,8 @@ class RiskManager:
         
         # Check circuit breaker
         if drawdown >= self.limits.max_drawdown_pct:
+            if not self._circuit_breaker_active:  # Only set timestamp on initial trigger
+                self._circuit_breaker_triggered_at = time.time()
             self._circuit_breaker_active = True
             self._circuit_breaker_reason = f"Max drawdown exceeded: {drawdown:.2f}%"
         
@@ -299,9 +307,24 @@ class RiskManager:
         """
         issues = []
         
-        # Check circuit breaker
+        # Check circuit breaker with auto-recovery
         if self._circuit_breaker_active:
-            issues.append(f"Circuit breaker: {self._circuit_breaker_reason}")
+            recovery_hours = self.limits.circuit_breaker_recovery_hours
+            hours_since_trigger = (time.time() - self._circuit_breaker_triggered_at) / 3600
+            if hours_since_trigger >= recovery_hours:
+                # Auto-recover after configured hours
+                self._circuit_breaker_active = False
+                self._circuit_breaker_reason = ""
+                self._circuit_breaker_triggered_at = 0.0
+                self._consecutive_losses = 0  # Reset consecutive losses too
+                self._save_state()
+            else:
+                hours_remaining = recovery_hours - hours_since_trigger
+                issues.append(f"Circuit breaker: {self._circuit_breaker_reason} (auto-reset in {hours_remaining:.1f}h)")
+        
+        # Check consecutive losses
+        if self._consecutive_losses >= self.limits.max_consecutive_losses:
+            issues.append(f"Consecutive losses: {self._consecutive_losses}/{self.limits.max_consecutive_losses}")
         
         # Check throttle (trades per hour)
         now = time.time()
@@ -399,6 +422,16 @@ class RiskManager:
                     trade.pnl = (trade.entry_price - exit_price) * trade.quantity
                 
                 trade.pnl_pct = (trade.pnl / (trade.entry_price * trade.quantity)) * 100
+                
+                # Track consecutive losses for circuit breaker
+                if trade.pnl < 0:
+                    self._consecutive_losses += 1
+                    if self._consecutive_losses >= self.limits.max_consecutive_losses:
+                        self._circuit_breaker_active = True
+                        self._circuit_breaker_triggered_at = time.time()
+                        self._circuit_breaker_reason = f"Consecutive losses: {self._consecutive_losses}"
+                else:
+                    self._consecutive_losses = 0  # Reset on winning trade
                 
                 self._save_state()
                 return trade

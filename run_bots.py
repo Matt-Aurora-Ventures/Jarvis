@@ -64,7 +64,7 @@ def main():
                     line = proc.stdout.readline()
                     if line:
                         print(f"[{name}] {line.rstrip()}")
-                except:
+                except Exception:  # noqa: BLE001 - intentional catch-all
                     pass
 
             time.sleep(0.1)

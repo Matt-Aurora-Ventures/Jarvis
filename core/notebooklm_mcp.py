@@ -88,7 +88,7 @@ class NotebookLMClient:
         # Click "New notebook" button
         try:
             await self.page.click('button:has-text("New notebook")', timeout=5000)
-        except:
+        except Exception:
             print("⚠️  'New notebook' button not found - may need manual navigation")
             return {"error": "Could not create notebook"}
         

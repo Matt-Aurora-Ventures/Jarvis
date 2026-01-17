@@ -37,7 +37,7 @@ def main():
     try:
         from playwright.async_api import async_playwright
         checks.append("✓ Playwright installed")
-    except:
+    except Exception:
         checks.append("✗ Playwright missing - run: ./venv/bin/pip install playwright")
     
     # Check Chromium
@@ -50,7 +50,7 @@ def main():
             checks.append("✓ Chromium browser installed")
         else:
             checks.append("✗ Chromium missing - run: ./venv/bin/playwright install chromium")
-    except:
+    except Exception:
         checks.append("✗ Cannot verify Chromium")
     
     # Check MCP config
@@ -64,7 +64,7 @@ def main():
     try:
         from core.trading_notion import compile_notion_strategies
         checks.append("✓ Trading compilation module ready")
-    except:
+    except Exception:
         checks.append("✗ Trading module error")
     
     for check in checks:

@@ -25,6 +25,15 @@ from typing import Dict, List, Optional, Callable, Any
 from dataclasses import dataclass, field
 from enum import Enum
 
+# Import safe task tracking
+try:
+    from core.async_utils import fire_and_forget, TaskTracker
+    TASK_TRACKING_AVAILABLE = True
+except ImportError:
+    TASK_TRACKING_AVAILABLE = False
+    fire_and_forget = None
+    TaskTracker = None
+
 
 def systemd_notify(state: str) -> bool:
     """
@@ -178,14 +187,26 @@ class BotSupervisor:
 
                 # Alert on repeated failures (every 5 failures)
                 if state.consecutive_failures % 5 == 0:
-                    asyncio.create_task(self._send_error_alert(
-                        name, str(e), state.consecutive_failures, state.restart_count
-                    ))
+                    if TASK_TRACKING_AVAILABLE:
+                        fire_and_forget(
+                            self._send_error_alert(name, str(e), state.consecutive_failures, state.restart_count),
+                            name=f"error_alert_{name}"
+                        )
+                    else:
+                        asyncio.create_task(self._send_error_alert(
+                            name, str(e), state.consecutive_failures, state.restart_count
+                        ))
 
                 if state.restart_count >= self.max_restarts:
                     logger.error(f"[{name}] Max restarts reached, giving up")
                     # Send critical alert
-                    asyncio.create_task(self._send_critical_alert(name, str(e)))
+                    if TASK_TRACKING_AVAILABLE:
+                        fire_and_forget(
+                            self._send_critical_alert(name, str(e)),
+                            name=f"critical_alert_{name}"
+                        )
+                    else:
+                        asyncio.create_task(self._send_critical_alert(name, str(e)))
                     break
 
                 # Exponential backoff
