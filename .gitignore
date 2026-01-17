@@ -189,6 +189,7 @@ api_keys.json
 keys.json
 .env
 .env.*
+vps-deploy-custom-*.sh  # Custom deployment scripts with injected API keys - DO NOT COMMIT
 
 # === GROK IMAGINE ===
 # Browser session and cookies (contains auth tokens)
