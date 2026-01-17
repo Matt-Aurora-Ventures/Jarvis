@@ -323,13 +323,13 @@ def format_master_signal_report(signals: List[TokenSignal]) -> str:
     now = datetime.now(timezone.utc)
     lines = []
 
-    # Epic header
-    lines.append("🚀" + "═" * 30 + "🚀")
+    # Header
+    lines.append("━" * 30)
     lines.append("")
-    lines.append("⚡ *JARVIS MASTER SIGNAL REPORT* ⚡")
+    lines.append("⚡ *jarvis master signal report* ⚡")
     lines.append(f"🕐 {now.strftime('%Y-%m-%d %H:%M')} UTC")
     lines.append("")
-    lines.append("🚀" + "═" * 30 + "🚀")
+    lines.append("━" * 30)
     lines.append("")
 
     if not signals:
@@ -390,7 +390,7 @@ def format_master_signal_report(signals: List[TokenSignal]) -> str:
     # Leverage warnings
     high_vol = [s for s in signals if s.volume_1h > 500_000]
     if high_vol:
-        lines.append("🔥 *High Volume (Leverage Candidates):*")
+        lines.append("📊 *high volume (leverage candidates):*")
         for sig in high_vol[:3]:
             lev = _suggest_leverage(sig)
             lines.append(f"   • {sig.symbol} - Vol: {format_volume(sig.volume_1h)}/1h - Max {lev}x")

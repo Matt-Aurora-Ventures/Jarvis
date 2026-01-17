@@ -19,7 +19,7 @@ async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /reload command - reload config (admin only)."""
     reload_config()
     await update.message.reply_text(
-        "Configuration reloaded from environment.",
+        "config reloaded. fresh settings loaded.",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -32,13 +32,13 @@ async def logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log_file = Path("logs/jarvis.log")
 
         if not log_file.exists():
-            await update.message.reply_text("No log file found.", parse_mode=ParseMode.HTML)
+            await update.message.reply_text("no log file. nothing to show.", parse_mode=ParseMode.HTML)
             return
 
         # Read last 20 lines
         lines = log_file.read_text().strip().split("\n")[-20:]
 
-        output = ["<b>\U0001f4cb Recent Logs</b>", ""]
+        output = ["<b>recent logs</b>", ""]
         for line in lines:
             # Truncate long lines
             if len(line) > 80:
@@ -56,7 +56,8 @@ async def logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def system(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /system command - comprehensive system status (admin only)."""
     try:
-        lines = ["<b>\U0001f916 JARVIS System Status</b>", ""]
+        # JARVIS voice
+        lines = ["<b>system status</b>", ""]
 
         # Health status
         try:
@@ -140,22 +141,22 @@ async def config_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 return
 
-        # Show key config values
+        # Show key config values - JARVIS voice
         trading = cfg.get_by_prefix("trading")
         bot_cfg = cfg.get_by_prefix("bot")
 
         lines = [
-            "<b>Current Configuration</b>",
+            "<b>config</b>",
             "",
-            "<i>Use: /config set &lt;key&gt; &lt;value&gt;</i>",
+            "<i>/config set &lt;key&gt; &lt;value&gt; to change</i>",
             "",
-            "<b>Trading:</b>",
+            "<b>trading:</b>",
         ]
         for k, v in sorted(trading.items()):
             lines.append(f"  <code>{k}</code>: {v}")
 
         lines.append("")
-        lines.append("<b>Bot:</b>")
+        lines.append("<b>bot:</b>")
         for k, v in sorted(bot_cfg.items()):
             lines.append(f"  <code>{k}</code>: {v}")
 
@@ -163,3 +164,167 @@ async def config_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Config error: {e}")
         await update.message.reply_text(f"Config error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@error_handler
+@admin_only
+async def away(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle /away command - enable auto-responder (admin only).
+
+    Usage:
+        /away - Enable with default message
+        /away 2h - Enable for 2 hours
+        /away 30m Going for lunch - Enable for 30 min with custom message
+        /away Custom message only - Enable with just message (no duration)
+    """
+    try:
+        from tg_bot.services.auto_responder import get_auto_responder, parse_duration
+
+        responder = get_auto_responder()
+
+        # Parse arguments
+        duration = None
+        message = None
+
+        if context.args:
+            # Check if first arg is a duration
+            first_arg = context.args[0]
+            parsed = parse_duration(first_arg)
+            if parsed:
+                duration = parsed
+                # Rest is the message
+                if len(context.args) > 1:
+                    message = " ".join(context.args[1:])
+            else:
+                # Entire args is the message
+                message = " ".join(context.args)
+
+        result = responder.enable(message=message, duration_minutes=duration)
+        await update.message.reply_text(f"\U0001f4a4 {result}", parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error(f"Away command error: {e}")
+        await update.message.reply_text(f"Error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@error_handler
+@admin_only
+async def back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /back command - disable auto-responder (admin only)."""
+    try:
+        from tg_bot.services.auto_responder import get_auto_responder
+
+        responder = get_auto_responder()
+        result = responder.disable()
+        await update.message.reply_text(f"\U0001f44b {result}", parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error(f"Back command error: {e}")
+        await update.message.reply_text(f"Error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@error_handler
+@admin_only
+async def awaystatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /awaystatus command - check auto-responder status (admin only)."""
+    try:
+        from tg_bot.services.auto_responder import get_auto_responder
+
+        responder = get_auto_responder()
+        status = responder.get_status()
+
+        # JARVIS voice
+        if status["enabled"]:
+            lines = [
+                "<b>away mode: on</b>",
+                "",
+                f"message: {status.get('message', 'N/A')}",
+            ]
+            if status.get("return_time"):
+                lines.append(f"back at: {status['return_time']}")
+            if status.get("remaining"):
+                lines.append(f"time left: {status['remaining']}")
+            if status.get("enabled_at"):
+                lines.append(f"started: {status['enabled_at']}")
+        else:
+            lines = ["<b>away mode: off</b>", "", "i'm around."]
+
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error(f"Awaystatus error: {e}")
+        await update.message.reply_text(f"Error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@error_handler
+@admin_only
+async def memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle /memory command - show what JARVIS remembers (admin only).
+
+    Usage:
+        /memory - Show what I know about you
+        /memory @username - Show what I know about another user
+    """
+    try:
+        from tg_bot.services.conversation_memory import get_conversation_memory
+
+        chat_id = update.effective_chat.id
+        user_id = update.effective_user.id
+
+        # Check if looking up another user
+        if context.args and context.args[0].startswith("@"):
+            # Would need to lookup user by username - for now just show self
+            pass
+
+        pmem = get_conversation_memory()
+        if not pmem:
+            await update.message.reply_text(
+                "memory system offline.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
+
+        # Get user facts
+        facts = pmem.get_user_facts(user_id, chat_id)
+
+        # Get user context
+        user_ctx = pmem.get_user_context(user_id, chat_id)
+
+        # Get conversation summary
+        summary = pmem.get_conversation_summary(chat_id)
+
+        # Get recent topics
+        topics = pmem.get_chat_topics(chat_id)
+
+        # JARVIS voice - lowercase, no corporate filler
+        lines = ["<b>what i remember</b>", ""]
+
+        if user_ctx:
+            lines.append(f"<b>about you:</b> {user_ctx}")
+            lines.append("")
+
+        if facts:
+            lines.append("<b>facts:</b>")
+            for f in facts[:8]:
+                fact_type = f.get("fact_type", "unknown")
+                content = f.get("fact_content", "")[:60]
+                lines.append(f"  • {fact_type}: {content}")
+            lines.append("")
+
+        if topics:
+            lines.append(f"<b>recent topics:</b> {', '.join(topics[-5:])}")
+            lines.append("")
+
+        if summary:
+            lines.append(f"<b>chat stats:</b> {summary}")
+
+        if len(lines) <= 2:
+            lines.append("nothing yet. talk to me more.")
+
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error(f"Memory error: {e}")
+        await update.message.reply_text(f"memory error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)

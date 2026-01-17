@@ -21,7 +21,7 @@ async def trending(update: Update, context: ContextTypes.DEFAULT_TYPE):
     config = get_config()
     user_id = update.effective_user.id
     await update.message.reply_text(
-        "_Fetching trending tokens..._",
+        "_pulling trending..._",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -30,20 +30,15 @@ async def trending(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not signals:
         await update.message.reply_text(
-            fmt.format_error(
-                "Could not fetch trending tokens.",
-                "Check /status for data source availability."
-            ),
+            "*couldn't pull trending*\n\ncheck /status - something's probably down.",
             parse_mode=ParseMode.MARKDOWN,
         )
         return
 
-    # Format as simple list (NO sentiment to save costs)
+    # Format as simple list (NO sentiment to save costs) - JARVIS voice
     lines = [
-        "=" * 25,
-        "*TRENDING TOKENS*",
-        f"_{datetime.now(timezone.utc).strftime('%H:%M')} UTC_",
-        "=" * 25,
+        "*trending*",
+        f"_{datetime.now(timezone.utc).strftime('%H:%M')} utc_",
         "",
     ]
 
@@ -55,7 +50,7 @@ async def trending(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"   [Chart]({fmt.get_dexscreener_link(sig.address)})")
         lines.append("")
 
-    lines.append("_Use /signals for full Master Report (admin only)_")
+    lines.append("_/signals for the full picture (admin)_")
 
     keyboard = None
     if config.is_admin(user_id):
@@ -83,7 +78,7 @@ async def digest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ADMIN ONLY - Uses up to 3 sentiment checks from rate limit.
     """
     await update.message.reply_text(
-        "_Generating comprehensive digest..._",
+        "_building the digest..._",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -141,8 +136,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Use full SentimentReportGenerator if available
     if bot_module.SENTIMENT_REPORT_AVAILABLE:
         await update.message.reply_text(
-            "\U0001f4ca _Generating full Jarvis Sentiment Report..._\n"
-            "_This includes Grok AI analysis, market data, and trading buttons._",
+            "_generating full report... grok analysis, market data, trading buttons._",
             parse_mode=ParseMode.MARKDOWN,
         )
 
@@ -187,7 +181,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         # Fall back to simplified report
         await update.message.reply_text(
-            "\U0001f4ca _Generating Jarvis Trading Report..._",
+            "_building the report..._",
             parse_mode=ParseMode.MARKDOWN,
         )
         await bot_module._generate_simple_report(update, context)
@@ -222,12 +216,10 @@ async def picks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 picks_data = json.load(f)
 
             if picks_data:
-                # Format picks message
+                # Format picks message - JARVIS voice
                 lines = [
-                    "=" * 30,
-                    "*JARVIS TOP PICKS*",
-                    f"_Grok's highest conviction trades_",
-                    "=" * 30,
+                    "*my top picks*",
+                    f"_highest conviction trades right now_",
                     "",
                 ]
 
@@ -257,10 +249,10 @@ async def picks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Add expand button for trading
                 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🏆 Trading Options", callback_data="expand:top_picks")]
+                    [InlineKeyboardButton("trade these", callback_data="expand:top_picks")]
                 ])
 
-                lines.append("_Use /report for full sentiment analysis_")
+                lines.append("_/report for the full breakdown_")
 
                 await update.message.reply_text(
                     "\n".join(lines),
@@ -271,11 +263,10 @@ async def picks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             pass  # Fall through to "no picks" message
 
-    # No cached picks available
+    # No cached picks available - JARVIS voice
     await update.message.reply_text(
-        "🏆 *No picks available*\n\n"
-        "Top picks are generated with the hourly sentiment report.\n"
-        "Use /report to generate fresh picks with Grok analysis.\n\n"
-        "_Or wait for the next scheduled report._",
+        "*no picks yet*\n\n"
+        "i generate these with the hourly report.\n"
+        "run /report to get fresh picks now, or wait for the next cycle.",
         parse_mode=ParseMode.MARKDOWN,
     )

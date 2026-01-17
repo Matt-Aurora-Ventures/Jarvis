@@ -86,7 +86,7 @@ class ConfigHotReload:
             # Trading defaults
             "trading.max_position_pct": 25.0,
             "trading.daily_loss_limit_pct": 10.0,
-            "trading.max_positions": 5,
+            "trading.max_positions": 50,  # Increased from 5 to support more concurrent positions
             "trading.slippage_bps": 50,
             "trading.dry_run": True,
             

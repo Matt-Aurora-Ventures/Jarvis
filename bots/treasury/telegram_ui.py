@@ -513,6 +513,7 @@ Welcome to the Jarvis Treasury Management System.
             )
 
         elif data == "refresh_portfolio":
+            await self.engine.update_positions()  # Refresh prices before display
             portfolio = await self._build_portfolio_view()
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"{self.EMOJI['refresh']} Refresh", callback_data="refresh_portfolio")],
@@ -525,6 +526,7 @@ Welcome to the Jarvis Treasury Management System.
             )
 
         elif data == "show_positions":
+            await self.engine.update_positions()  # Refresh prices before display
             positions = await self._build_positions_view()
             keyboard = self._get_positions_keyboard()
             await query.edit_message_text(
@@ -637,9 +639,25 @@ Welcome to the Jarvis Treasury Management System.
                 alerts.append(f"{self.EMOJI['target']} {pos.token_symbol} hit TP!")
 
             emoji = self.EMOJI['profit'] if pnl >= 0 else self.EMOJI['loss']
+
+            # Calculate TP/SL percentages from entry
+            tp_pct = ((pos.take_profit_price - pos.entry_price) / pos.entry_price * 100) if pos.entry_price > 0 else 0
+            sl_pct = ((pos.stop_loss_price - pos.entry_price) / pos.entry_price * 100) if pos.entry_price > 0 else 0
+
+            # Smart price formatting - use scientific notation for very small prices
+            def fmt_price(p: float) -> str:
+                if p >= 1:
+                    return f"${p:.4f}"
+                elif p >= 0.0001:
+                    return f"${p:.6f}"
+                else:
+                    return f"${p:.2e}"
+
             pos_lines.append(
-                f"  {emoji} <b>{pos.token_symbol}</b>{status}: "
-                f"<code>{pnl:+.1f}%</code> (${pos.unrealized_pnl:+.2f})"
+                f"  {emoji} <b>{pos.token_symbol}</b>{status}\n"
+                f"      Entry: <code>{fmt_price(pos.entry_price)}</code> → Now: <code>{fmt_price(pos.current_price)}</code>\n"
+                f"      P&L: <code>{pnl:+.1f}%</code> (${pos.unrealized_pnl:+.2f})\n"
+                f"      TP: <code>{tp_pct:+.0f}%</code> | SL: <code>{sl_pct:.0f}%</code>"
             )
 
         positions_text = "\n".join(pos_lines) if pos_lines else "  No open positions"
@@ -736,6 +754,8 @@ Welcome to the Jarvis Treasury Management System.
 
     async def _build_positions_view(self) -> str:
         """Build positions view."""
+        # Refresh prices before displaying
+        await self.engine.update_positions()
         positions = self.engine.get_open_positions()
 
         if not positions:

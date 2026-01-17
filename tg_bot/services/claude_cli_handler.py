@@ -146,16 +146,51 @@ CLAUDE_OUTPUT_PATTERNS = [
     (r'/home/[^/]+/', '~/'),
     # Remove Claude hook errors (sandbox $HOME expansion issues)
     (r'(?:Session|PreTool|PostTool|Stop)(?:End|Use)? hook \[[^\]]+\] failed:[^\n]*\n', '\n'),
-    # Remove node throw err + caret line pattern
-    (r'  throw err;\n  \^\n', ''),
-    # Remove node:internal module path lines
-    (r'node:internal/[^\n]*\n', ''),
-    # Remove Error: Cannot find module with stack trace
-    (r"Error: Cannot find module '[^']*'[^\n]*\n(?:    at [^\n]+\n)*", ''),
+
+    # ============== Node.js Error Cleanup (COMPREHENSIVE) ==============
+    # Full Node.js error blocks (throw err through stack trace)
+    (r'throw err;[\s\S]*?Node\.js v[\d.]+', ''),
+    # Standalone throw err with caret
+    (r'\s*throw err;\s*\n\s*\^\s*\n', ''),
+    # requireStack patterns
+    (r'\s*requireStack:\s*\[[\s\S]*?\]\s*\n?', ''),
+    # code: MODULE_NOT_FOUND patterns
+    (r"\s*code:\s*'MODULE_NOT_FOUND'[,\s]*\n?", ''),
+    # Node.js version line
+    (r'\s*Node\.js v[\d.]+\s*\n?', ''),
+    # node:internal module path lines
+    (r'\s*node:internal/[^\n]*\n', ''),
+    # at Function.Module lines (stack trace)
+    (r'\s*at Function\.Module[^\n]*\n', ''),
+    (r'\s*at Module\.[^\n]*\n', ''),
+    (r'\s*at Object\.<anonymous>[^\n]*\n', ''),
+    # Error: Cannot find module with full stack trace
+    (r"Error: Cannot find module '[^']*'[\s\S]*?(?=\n\n|\Z)", ''),
+    # Orphaned closing braces from error objects
+    (r'^\s*\}\s*$', ''),
+    # requireStack array content
+    (r"requireStack:\s*\[\s*'[^']*'\s*\]", ''),
+
+    # ============== Bash/Shell Errors ==============
     # Remove bash: command not found errors from hooks
     (r'bash: [^\n]*: No such file or directory\n', ''),
-    # Clean up 3+ consecutive blank lines to 2
+    (r'bash: [^\n]*: command not found\n', ''),
+    # Remove shell error codes
+    (r'\nError: Command failed with exit code \d+\n?', ''),
+
+    # ============== Hook Error Cleanup ==============
+    # Hook failure traces
+    (r'Hook \S+ failed:[\s\S]*?(?=\n\n|\Z)', ''),
+    # Failed to load hook messages
+    (r'Failed to load hook[^\n]*\n', ''),
+
+    # ============== Final Cleanup ==============
+    # Multiple consecutive blank lines to 2
     (r'\n{3,}', '\n\n'),
+    # Lines with only whitespace
+    (r'\n\s+\n', '\n\n'),
+    # Trailing whitespace
+    (r'[ \t]+$', ''),
 ]
 
 
@@ -782,10 +817,10 @@ class ClaudeCLIHandler:
             except re.error as e:
                 logger.warning(f"Regex error in pattern: {e}")
 
-        # Pass 2: Claude output cleanup
+        # Pass 2: Claude output cleanup (MULTILINE for ^ and $ anchors)
         for pattern, replacement in CLAUDE_OUTPUT_PATTERNS:
             try:
-                sanitized = re.sub(pattern, replacement, sanitized)
+                sanitized = re.sub(pattern, replacement, sanitized, flags=re.MULTILINE)
             except re.error:
                 pass
 
