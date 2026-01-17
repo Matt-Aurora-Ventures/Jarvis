@@ -19,13 +19,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_admin = config.is_admin(user_id)
     admin_status = "Admin" if is_admin else "User"
 
-    message = f"""
-*Welcome to Jarvis Trading Bot* \U0001f916
+    # JARVIS voice - no corporate filler
+    if is_admin:
+        message = f"""hey. i'm jarvis. your ai trading partner.
 
-*Your Status:* {admin_status}
+*status:* admin access confirmed. all systems available.
 
-_Use the buttons below for quick access:_
-"""
+pick your poison:"""
+    else:
+        message = f"""hey. i'm jarvis.
+
+*status:* standard access. admin commands locked.
+
+what do you need:"""
 
     # Build keyboard based on user role
     keyboard = [
@@ -40,7 +46,12 @@ _Use the buttons below for quick access:_
     ]
 
     if is_admin:
+        # Quick actions row at top
         keyboard.insert(0, [
+            InlineKeyboardButton("📊 Dashboard", callback_data="quick_dashboard"),
+            InlineKeyboardButton("📈 Report", callback_data="quick_report"),
+        ])
+        keyboard.insert(1, [
             InlineKeyboardButton("\U0001f680 SIGNALS", callback_data="menu_signals"),
             InlineKeyboardButton("\U0001f4cb Digest", callback_data="menu_digest"),
         ])
@@ -115,7 +126,7 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.subscribe(user.id, chat.id, user.username)
 
     await update.message.reply_text(
-        "You are subscribed to hourly digests.",
+        "noted. you'll get hourly updates. my circuits will find you.",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -133,5 +144,5 @@ async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db = SubscriberDB(config.db_path)
     removed = db.unsubscribe(user.id)
 
-    message = "You are unsubscribed." if removed else "You were not subscribed."
+    message = "done. you're off the list. less work for my circuits." if removed else "you weren't on the list. nothing to undo."
     await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)

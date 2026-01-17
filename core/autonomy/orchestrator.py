@@ -271,7 +271,17 @@ class AutonomyOrchestrator:
         for suggestion in calendar_suggestions[:2]:
             if suggestion.get("type"):
                 recommendations["content_types"].append(suggestion["type"])
-        
+
+        # DIVERSITY INJECTION: Force diverse content to break Solana-only feedback loop
+        # Rotate through non-Solana content types based on hour
+        import random
+        hour = __import__('datetime').datetime.now().hour
+        diverse_types = ["bitcoin_only", "stocks_macro", "tech_ai", "ethereum_defi", "grok_sentiment_token"]
+        # Pick 2 diverse types based on hour rotation
+        diverse_picks = [diverse_types[hour % len(diverse_types)], diverse_types[(hour + 2) % len(diverse_types)]]
+        recommendations["content_types"].extend(diverse_picks)
+        recommendations["topics"].extend(["$BTC", "$ETH"])  # Add non-SOL topics
+
         # Alpha signals
         alpha_signals = self.alpha.get_actionable_signals(50)
         for signal in alpha_signals[:2]:

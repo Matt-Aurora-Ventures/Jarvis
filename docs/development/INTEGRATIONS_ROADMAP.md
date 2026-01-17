@@ -380,7 +380,73 @@ This roadmap outlines the strategic integration plan for Jarvis to become a comp
 - Customer support
 - Analytics reporting
 
-## Phase 7: AI & ML Enhancements (Q3 2026)
+## Phase 7: Server-Based Architecture (Q2-Q3 2026)
+
+### 7.0 JARVIS Server Migration
+**Status**: 📋 Planned
+**Priority**: High
+
+**Vision:**
+Transition JARVIS from a local CLI-invoked model to a persistent server-based architecture where JARVIS runs continuously as a service, enabling:
+- Always-on availability without CLI session management
+- Persistent context and memory across all interactions
+- Multi-client support (Telegram, X, Web Dashboard, Mobile)
+- Lower latency responses (no cold starts)
+- Background task execution without user presence
+
+**Architecture Components:**
+
+1. **Core JARVIS Server**
+   - FastAPI/Starlette backend running 24/7
+   - WebSocket support for real-time communication
+   - Message queue (Redis/RabbitMQ) for async task handling
+   - Persistent SQLite/PostgreSQL for memory storage
+
+2. **Client Adapters**
+   - Telegram Bot → Server API (replace direct CLI calls)
+   - X/Twitter Bot → Server API (unified posting queue)
+   - Web Dashboard → Server WebSocket (real-time updates)
+   - CLI → Server API (for admin/development use)
+
+3. **Memory & Context Layer**
+   - Centralized conversation memory (already implemented: `conversation_memory.py`)
+   - Cross-platform context sharing (Telegram + X unified history)
+   - User identity linking across platforms
+   - Long-term knowledge graph persistence
+
+4. **Process Management**
+   - Supervisor → PM2/systemd service manager
+   - Health checks and auto-restart
+   - Graceful shutdown with state persistence
+   - Rolling updates without downtime
+
+**Implementation Phases:**
+
+| Phase | Scope | Target |
+|-------|-------|--------|
+| 7.0.1 | Design server API schema | Q2 2026 |
+| 7.0.2 | Core FastAPI server with health endpoints | Q2 2026 |
+| 7.0.3 | Migrate Telegram bot to server API | Q2 2026 |
+| 7.0.4 | Migrate X bot to server API | Q3 2026 |
+| 7.0.5 | WebSocket real-time layer | Q3 2026 |
+| 7.0.6 | Cross-platform identity & context | Q3 2026 |
+
+**Benefits:**
+- Single source of truth for JARVIS state
+- Unified context across all platforms
+- Better debugging and observability
+- Scalable to multiple instances
+- Foundation for mobile app and API access
+
+**Privacy Considerations:**
+- Self-hosted server (no cloud dependency)
+- All data stored locally
+- Encrypted communications between components
+- User-controlled data retention policies
+
+---
+
+## Phase 8: AI & ML Enhancements (Q3-Q4 2026)
 
 ### 7.1 Multi-Model Support
 **Status**: ✅ Partial (Multiple providers)

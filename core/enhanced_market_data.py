@@ -22,6 +22,26 @@ import requests
 logger = logging.getLogger(__name__)
 
 # =============================================================================
+# TOKEN QUALITY FILTERS - Prevent pump.fun garbage
+# =============================================================================
+
+MIN_LIQUIDITY_USD = 50_000      # Minimum $50K liquidity for trending tokens
+MIN_LIQUIDITY_WRAPPED = 500_000 # Minimum $500K liquidity for wrapped/bridged tokens
+MIN_MCAP_USD = 500_000          # Minimum $500K mcap to filter micro-caps
+MIN_VOLUME_24H = 10_000         # Minimum $10K daily volume
+MIN_TX_COUNT_24H = 50           # Minimum 50 transactions to show activity
+MAX_PRICE_CHANGE_24H = 500      # Skip tokens that pumped >500% (likely scams)
+
+# Blacklist patterns - known pump.fun / honeypot indicators
+BLACKLIST_PATTERNS = [
+    "pump.fun",
+    "honeypot",
+    "test",
+    "scam",
+    "rugpull",
+]
+
+# =============================================================================
 # DATA STRUCTURES
 # =============================================================================
 
@@ -38,6 +58,14 @@ class TrendingToken:
     mcap: float
     tx_count_24h: int
     rank: int
+    # Social metrics (from LunarCrush)
+    galaxy_score: float = 0.0  # 0-100 overall social score
+    social_volume: int = 0  # Number of social mentions
+    social_sentiment: float = 50.0  # 0-100 sentiment score
+    alt_rank: int = 0  # Ranking vs other alts
+    # News metrics (from CryptoPanic)
+    news_sentiment: str = "neutral"  # bullish/bearish/neutral
+    news_count: int = 0  # Recent news articles
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -51,6 +79,12 @@ class TrendingToken:
             "mcap": self.mcap,
             "tx_count_24h": self.tx_count_24h,
             "rank": self.rank,
+            "galaxy_score": self.galaxy_score,
+            "social_volume": self.social_volume,
+            "social_sentiment": self.social_sentiment,
+            "alt_rank": self.alt_rank,
+            "news_sentiment": self.news_sentiment,
+            "news_count": self.news_count,
         }
 
 
@@ -280,21 +314,316 @@ HIGH_LIQUIDITY_SOLANA_TOKENS = {
         "category": "Meme",
         "description": "Iconic Solana meme token",
     },
+    # Wrapped Major Assets (Wormhole/Portal bridged)
+    "WBTC": {
+        "name": "Wrapped BTC (Portal)",
+        "mint": "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh",
+        "category": "Wrapped",
+        "description": "Bitcoin bridged to Solana via Wormhole",
+    },
+    "WETH": {
+        "name": "Wrapped ETH (Portal)",
+        "mint": "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs",
+        "category": "Wrapped",
+        "description": "Ethereum bridged to Solana via Wormhole",
+    },
+    "cbBTC": {
+        "name": "Coinbase BTC (wormhole)",
+        "mint": "cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij",
+        "category": "Wrapped",
+        "description": "Coinbase wrapped BTC on Solana",
+    },
+    "tBTC": {
+        "name": "tBTC (Threshold)",
+        "mint": "6DNSN2BJsaPFdFFc1zP37kkeNe4Usc1Sqkzr9C9vPWcU",
+        "category": "Wrapped",
+        "description": "Decentralized BTC via Threshold Network",
+    },
+    # Liquid Staking Tokens (LSTs)
+    "mSOL": {
+        "name": "Marinade Staked SOL",
+        "mint": "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",
+        "category": "LST",
+        "description": "Marinade liquid staked SOL - earn yield while liquid",
+    },
+    "jitoSOL": {
+        "name": "Jito Staked SOL",
+        "mint": "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn",
+        "category": "LST",
+        "description": "Jito liquid staked SOL with MEV rewards",
+    },
+    "bSOL": {
+        "name": "BlazeStake Staked SOL",
+        "mint": "bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1",
+        "category": "LST",
+        "description": "BlazeStake liquid staked SOL",
+    },
+    "INF": {
+        "name": "Infinity SOL",
+        "mint": "5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm",
+        "category": "LST",
+        "description": "Sanctum Infinity liquid staked SOL",
+    },
+    # More Wrapped/Bridged Assets
+    "wstETH": {
+        "name": "Wrapped stETH (Wormhole)",
+        "mint": "ZScHuTtqZukUrtZS43teTKGs2VqkKL8k4QCouR2n6Uo",
+        "category": "Wrapped",
+        "description": "Lido wrapped staked ETH on Solana",
+    },
+    # Ethereum Ecosystem Tokens (Wormhole bridged)
+    "LINK": {
+        "name": "Chainlink (Wormhole)",
+        "mint": "2wpTofQ8SkACrkZWrZDjXPitYa8AwWgX8AfxdeBRRVLX",
+        "category": "Wrapped",
+        "description": "Chainlink oracle token bridged to Solana",
+    },
+    "UNI": {
+        "name": "Uniswap (Wormhole)",
+        "mint": "8FU95xFJhUUkyyCLU13HSzDLs7oC4QZdXQHL6SCeab36",
+        "category": "Wrapped",
+        "description": "Uniswap governance token on Solana",
+    },
+    "AAVE": {
+        "name": "Aave (Wormhole)",
+        "mint": "3vAs4D1WE6Na4tCgt4BApgFfENbm8WY7q4cSPD1yM4Cg",
+        "category": "Wrapped",
+        "description": "Aave lending protocol token on Solana",
+    },
+    "LDO": {
+        "name": "Lido DAO (Wormhole)",
+        "mint": "HZRCwxP2Vq9PCpPXooayhJ2bxTpo5xfpQrwB1svh332p",
+        "category": "Wrapped",
+        "description": "Lido DAO governance token on Solana",
+    },
+    "CRV": {
+        "name": "Curve DAO (Wormhole)",
+        "mint": "7gjNiPun3AzEazTZoFEjZgcBMeuaXdpjHq2raZTmTrfs",
+        "category": "Wrapped",
+        "description": "Curve Finance governance token on Solana",
+    },
+    "MKR": {
+        "name": "Maker (Wormhole)",
+        "mint": "2cZv8PrgHoRA2ECcMU5wdDpJgjPrqzLgsqMpoasvpnRz",
+        "category": "Wrapped",
+        "description": "MakerDAO governance token on Solana",
+    },
+    "SNX": {
+        "name": "Synthetix (Wormhole)",
+        "mint": "8UJbtpsEubDVkY53rk7d61hNYKkvouicczB2XmuwiG4g",
+        "category": "Wrapped",
+        "description": "Synthetix protocol token on Solana",
+    },
+    "SHIB": {
+        "name": "Shiba Inu (Wormhole)",
+        "mint": "CiKu4eHsVrc1eueVQeHn7qhXTcVu95gSQmBpX4utjL9z",
+        "category": "Wrapped",
+        "description": "Shiba Inu meme token bridged to Solana",
+    },
+    # Other L1 Wrapped Tokens
+    "WAVAX": {
+        "name": "Wrapped AVAX (Wormhole)",
+        "mint": "KgV1GvrHQmRBY8sHQQeUKwTm2r2h8t4C8qt12Cw1HVE",
+        "category": "Wrapped",
+        "description": "Avalanche native token bridged to Solana",
+    },
+    "WMATIC": {
+        "name": "Wrapped MATIC (Wormhole)",
+        "mint": "Gz7VkD4MacbEB6yC5XD3HcumEiYx2EtDYYrfikGsvopG",
+        "category": "Wrapped",
+        "description": "Polygon native token bridged to Solana",
+    },
+    "WBNB": {
+        "name": "Wrapped BNB (Wormhole)",
+        "mint": "9gP2kCy3wA1ctvYWQk75guqXuHfrEomqydHLtcTCqiLa",
+        "category": "Wrapped",
+        "description": "BNB Chain native token bridged to Solana",
+    },
+    "WFTM": {
+        "name": "Wrapped FTM (Wormhole)",
+        "mint": "EsPKhGTMf3bGoy4Qm7pCv3UCcWqAmbC1UGHBTDxRjjD4",
+        "category": "Wrapped",
+        "description": "Fantom native token bridged to Solana",
+    },
+    "ATOM": {
+        "name": "Cosmos Hub (Wormhole)",
+        "mint": "3bLN5BxGMz9fQB6MCVxvWpZ1NtXx9MRCPxb5hZ3kqJzm",
+        "category": "Wrapped",
+        "description": "Cosmos Hub native token on Solana",
+    },
+    "NEAR": {
+        "name": "NEAR Protocol (Allbridge)",
+        "mint": "BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z",
+        "category": "Wrapped",
+        "description": "NEAR Protocol token bridged to Solana",
+    },
+    "DOT": {
+        "name": "Polkadot (Wormhole)",
+        "mint": "4RMt7FRZQsHAMfS7vXXE4k6tXD7DzHqmHfqMrJZQK9Ph",
+        "category": "Wrapped",
+        "description": "Polkadot native token bridged to Solana",
+    },
+    "ARB": {
+        "name": "Arbitrum (Wormhole)",
+        "mint": "GhwMf3R4ykSJfJi3tgYPrw3Q2C8qWCGybQKoLb9NG1GV",
+        "category": "Wrapped",
+        "description": "Arbitrum L2 token bridged to Solana",
+    },
+    "APE": {
+        "name": "ApeCoin (Wormhole)",
+        "mint": "6FaQ7pkcYmYc3ePoxnMCVVLLnrJmJu3j5p9xpJY4PxU4",
+        "category": "Wrapped",
+        "description": "Bored Ape Yacht Club ecosystem token",
+    },
+    "RNDR": {
+        "name": "Render Token (Wormhole)",
+        "mint": "CvLN3FnUNZ5CScptJbEQa52bsVfMbgPmPB3XLK7h8P1w",
+        "category": "Wrapped",
+        "description": "Ethereum RNDR token bridged (vs native RENDER)",
+    },
+    "INJ": {
+        "name": "Injective (Wormhole)",
+        "mint": "E4ohQfnNv9gZmP6dmVxGpDJTNmrQP8oGq6RjcxsHz3ab",
+        "category": "Wrapped",
+        "description": "Injective Protocol token on Solana",
+    },
+    "GRT": {
+        "name": "The Graph (Wormhole)",
+        "mint": "Fs5zyiLVWaKf7KPr8TGhHMjVpLjPmxV7B5Rtu8y7QGqE",
+        "category": "Wrapped",
+        "description": "The Graph indexing protocol token",
+    },
+    # Native Solana DeFi tokens
+    "FIDA": {
+        "name": "Bonfida",
+        "mint": "EchesyfXePKdLtoiZSL8pBe8Myagyy8ZRqsACNCFGnvp",
+        "category": "DeFi",
+        "description": "Bonfida - Solana naming service and DEX",
+    },
+    "STEP": {
+        "name": "Step Finance",
+        "mint": "StepAscQoEioFxxWGnh2sLBDFp9d8rvKz2Yp39iDpyT",
+        "category": "DeFi",
+        "description": "Solana portfolio dashboard and analytics",
+    },
+    "SBR": {
+        "name": "Saber",
+        "mint": "Saber2gLauYim4Mvftnrasomsv6NvAuncvMEZwcLpD1",
+        "category": "DeFi",
+        "description": "Solana cross-chain stablecoin exchange",
+    },
+    "MNGO": {
+        "name": "Mango Markets",
+        "mint": "MangoCzJ36AjZyKwVj3VnYU4GTonjfVEnJmvvWaxLac",
+        "category": "DeFi",
+        "description": "Decentralized perpetuals and margin trading",
+    },
+    # Additional meme tokens with liquidity
+    "POPCAT": {
+        "name": "Popcat",
+        "mint": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+        "category": "Meme",
+        "description": "Viral cat meme token on Solana",
+    },
+    "MEW": {
+        "name": "cat in a dogs world",
+        "mint": "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5",
+        "category": "Meme",
+        "description": "Cat themed meme token on Solana",
+    },
+    # Stablecoins
+    "USDC": {
+        "name": "USD Coin",
+        "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "category": "Stablecoin",
+        "description": "Circle USD stablecoin on Solana",
+    },
+    "USDT": {
+        "name": "Tether USD",
+        "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+        "category": "Stablecoin",
+        "description": "Tether USD stablecoin on Solana",
+    },
+    "DAI": {
+        "name": "DAI (Wormhole)",
+        "mint": "EjmyN6qEC1Tf1JxiG1ae7UTJhUxSwk1TCCuaYL3Xk3jS",
+        "category": "Stablecoin",
+        "description": "MakerDAO DAI stablecoin on Solana",
+    },
+    "FRAX": {
+        "name": "Frax (Wormhole)",
+        "mint": "FR87nWEUxVgerFGhZM8Y4AggKGLnaXswr1Pd8wZ4kZcp",
+        "category": "Stablecoin",
+        "description": "Frax fractional stablecoin on Solana",
+    },
+    "BUSD": {
+        "name": "Binance USD (Wormhole)",
+        "mint": "5RpUwQ8wtdPCZHhu6MERp2RGrpobsbZ6MH5dDHkUjs2",
+        "category": "Stablecoin",
+        "description": "Binance USD stablecoin on Solana",
+    },
+    "PYUSD": {
+        "name": "PayPal USD",
+        "mint": "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo",
+        "category": "Stablecoin",
+        "description": "PayPal USD stablecoin on Solana",
+    },
 }
 
 
-async def fetch_high_liquidity_tokens() -> Tuple[List[TrendingToken], List[str]]:
+def get_wrapped_tokens_by_category() -> Dict[str, List[Dict[str, str]]]:
+    """
+    Get wrapped tokens grouped by their category.
+
+    Returns:
+        Dict mapping category to list of token info dicts
+    """
+    categories: Dict[str, List[Dict[str, str]]] = {}
+    for symbol, info in HIGH_LIQUIDITY_SOLANA_TOKENS.items():
+        category = info.get("category", "Other")
+        if category not in categories:
+            categories[category] = []
+        categories[category].append({
+            "symbol": symbol,
+            "name": info["name"],
+            "mint": info["mint"],
+            "description": info.get("description", ""),
+        })
+    return categories
+
+
+def get_wrapped_token_count() -> Dict[str, int]:
+    """Get count of tokens by category."""
+    categories = get_wrapped_tokens_by_category()
+    return {cat: len(tokens) for cat, tokens in categories.items()}
+
+
+def get_wrapped_token_symbols() -> List[str]:
+    """Get all wrapped token symbols (category=Wrapped only)."""
+    return [
+        symbol for symbol, info in HIGH_LIQUIDITY_SOLANA_TOKENS.items()
+        if info.get("category") == "Wrapped"
+    ]
+
+
+async def fetch_high_liquidity_tokens(
+    min_liquidity: float = MIN_LIQUIDITY_WRAPPED
+) -> Tuple[List[TrendingToken], List[str]]:
     """
     Fetch live data for established high-liquidity Solana tokens.
 
-    These are blue-chip tokens with >$200M market cap and >1 year history.
-    Used as stable alternatives to trending tokens for sentiment analysis.
+    These are blue-chip tokens with proven liquidity and history.
+    Filters for wrapped/bridged tokens to ensure $500K+ liquidity.
+
+    Args:
+        min_liquidity: Minimum liquidity in USD (default $500K for wrapped tokens)
 
     Returns:
         (tokens, warnings)
     """
     warnings = []
     tokens = []
+    skipped_low_liq = []
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -308,6 +637,16 @@ async def fetch_high_liquidity_tokens() -> Tuple[List[TrendingToken], List[str]]
                             if pairs:
                                 # Get the highest liquidity pair
                                 best_pair = max(pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
+                                liquidity = float(best_pair.get("liquidity", {}).get("usd") or 0)
+
+                                # Filter: wrapped/bridged tokens require $500K+ liquidity
+                                category = info.get("category", "")
+                                is_wrapped = category in ("Wrapped", "Stablecoin")
+
+                                if is_wrapped and liquidity < min_liquidity:
+                                    skipped_low_liq.append(f"{symbol} (${liquidity:,.0f})")
+                                    continue
+
                                 tokens.append(TrendingToken(
                                     symbol=symbol,
                                     name=info["name"],
@@ -315,7 +654,7 @@ async def fetch_high_liquidity_tokens() -> Tuple[List[TrendingToken], List[str]]
                                     price_usd=float(best_pair.get("priceUsd") or 0),
                                     price_change_24h=float(best_pair.get("priceChange", {}).get("h24") or 0),
                                     volume_24h=float(best_pair.get("volume", {}).get("h24") or 0),
-                                    liquidity_usd=float(best_pair.get("liquidity", {}).get("usd") or 0),
+                                    liquidity_usd=liquidity,
                                     mcap=float(best_pair.get("marketCap") or best_pair.get("fdv") or 0),
                                     tx_count_24h=int(best_pair.get("txns", {}).get("h24", {}).get("buys", 0) or 0) +
                                                 int(best_pair.get("txns", {}).get("h24", {}).get("sells", 0) or 0),
@@ -332,6 +671,9 @@ async def fetch_high_liquidity_tokens() -> Tuple[List[TrendingToken], List[str]]
     except Exception as e:
         warnings.append(f"High liquidity fetch failed: {e}")
 
+    if skipped_low_liq:
+        warnings.append(f"Skipped low liquidity wrapped tokens: {', '.join(skipped_low_liq)}")
+
     # Sort by market cap descending
     tokens.sort(key=lambda t: t.mcap, reverse=True)
 
@@ -343,6 +685,55 @@ async def fetch_high_liquidity_tokens() -> Tuple[List[TrendingToken], List[str]]
 
 
 # =============================================================================
+# TOKEN QUALITY VALIDATION
+# =============================================================================
+
+def passes_quality_filter(
+    symbol: str,
+    name: str,
+    liquidity_usd: float,
+    mcap: float,
+    volume_24h: float,
+    tx_count_24h: int,
+    price_change_24h: float,
+) -> Tuple[bool, str]:
+    """
+    Check if a token passes quality filters.
+
+    Returns:
+        (passes, reason) - True if passes, False with reason if filtered out
+    """
+    # Check blacklist patterns in name
+    name_lower = name.lower()
+    symbol_lower = symbol.lower()
+    for pattern in BLACKLIST_PATTERNS:
+        if pattern in name_lower or pattern in symbol_lower:
+            return False, f"Blacklisted pattern: {pattern}"
+
+    # Check minimum liquidity
+    if liquidity_usd < MIN_LIQUIDITY_USD:
+        return False, f"Low liquidity: ${liquidity_usd:,.0f} < ${MIN_LIQUIDITY_USD:,}"
+
+    # Check minimum market cap
+    if mcap < MIN_MCAP_USD:
+        return False, f"Low mcap: ${mcap:,.0f} < ${MIN_MCAP_USD:,}"
+
+    # Check minimum volume
+    if volume_24h < MIN_VOLUME_24H:
+        return False, f"Low volume: ${volume_24h:,.0f} < ${MIN_VOLUME_24H:,}"
+
+    # Check minimum transactions
+    if tx_count_24h < MIN_TX_COUNT_24H:
+        return False, f"Low tx count: {tx_count_24h} < {MIN_TX_COUNT_24H}"
+
+    # Check for pump-and-dump (extreme gains)
+    if price_change_24h > MAX_PRICE_CHANGE_24H:
+        return False, f"Extreme pump: {price_change_24h:+.0f}% > {MAX_PRICE_CHANGE_24H}%"
+
+    return True, "Passed"
+
+
+# =============================================================================
 # TRENDING TOKENS FETCHER
 # =============================================================================
 
@@ -350,11 +741,19 @@ async def fetch_trending_solana_tokens(limit: int = 10) -> Tuple[List[TrendingTo
     """
     Fetch top trending Solana tokens from DexScreener.
 
+    Applies quality filters to prevent pump.fun garbage:
+    - Minimum $50K liquidity
+    - Minimum $500K market cap
+    - Minimum $10K 24h volume
+    - Minimum 50 transactions
+    - Skip tokens pumped >500%
+
     Returns:
         (tokens, warnings)
     """
     warnings = []
     tokens = []
+    filtered_count = 0
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -370,7 +769,9 @@ async def fetch_trending_solana_tokens(limit: int = 10) -> Tuple[List[TrendingTo
                         if isinstance(p, dict) and p.get("chainId") == "solana"
                     ][:limit * 2]  # Get more to filter
 
-                    for profile in solana_profiles[:limit]:
+                    for profile in solana_profiles:  # Process more to account for filtering
+                        if len(tokens) >= limit:
+                            break
                         token_addr = profile.get("tokenAddress", "")
                         if not token_addr:
                             continue
@@ -384,17 +785,37 @@ async def fetch_trending_solana_tokens(limit: int = 10) -> Tuple[List[TrendingTo
                                     pairs = detail_data.get("pairs") or []
                                     if pairs:
                                         best_pair = max(pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
+
+                                        # Extract values for quality check
+                                        symbol = best_pair.get("baseToken", {}).get("symbol", "???")
+                                        name = best_pair.get("baseToken", {}).get("name", "Unknown")
+                                        liquidity = float(best_pair.get("liquidity", {}).get("usd", 0) or 0)
+                                        mcap = float(best_pair.get("marketCap") or best_pair.get("fdv") or 0)
+                                        volume = float(best_pair.get("volume", {}).get("h24") or 0)
+                                        tx_count = int(best_pair.get("txns", {}).get("h24", {}).get("buys", 0) or 0) + \
+                                                   int(best_pair.get("txns", {}).get("h24", {}).get("sells", 0) or 0)
+                                        price_change = float(best_pair.get("priceChange", {}).get("h24") or 0)
+
+                                        # Apply quality filter
+                                        passes, reason = passes_quality_filter(
+                                            symbol, name, liquidity, mcap, volume, tx_count, price_change
+                                        )
+
+                                        if not passes:
+                                            filtered_count += 1
+                                            logger.debug(f"Filtered {symbol}: {reason}")
+                                            continue
+
                                         tokens.append(TrendingToken(
-                                            symbol=best_pair.get("baseToken", {}).get("symbol", "???"),
-                                            name=best_pair.get("baseToken", {}).get("name", "Unknown"),
+                                            symbol=symbol,
+                                            name=name,
                                             contract=token_addr,
                                             price_usd=float(best_pair.get("priceUsd") or 0),
-                                            price_change_24h=float(best_pair.get("priceChange", {}).get("h24") or 0),
-                                            volume_24h=float(best_pair.get("volume", {}).get("h24") or 0),
-                                            liquidity_usd=float(best_pair.get("liquidity", {}).get("usd") or 0),
-                                            mcap=float(best_pair.get("marketCap") or best_pair.get("fdv") or 0),
-                                            tx_count_24h=int(best_pair.get("txns", {}).get("h24", {}).get("buys", 0) or 0) +
-                                                        int(best_pair.get("txns", {}).get("h24", {}).get("sells", 0) or 0),
+                                            price_change_24h=price_change,
+                                            volume_24h=volume,
+                                            liquidity_usd=liquidity,
+                                            mcap=mcap,
+                                            tx_count_24h=tx_count,
                                             rank=len(tokens) + 1,
                                         ))
                         except Exception as e:
@@ -425,17 +846,37 @@ async def fetch_trending_solana_tokens(limit: int = 10) -> Tuple[List[TrendingTo
                                             pairs = detail_data.get("pairs") or []
                                             if pairs:
                                                 best_pair = max(pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
+
+                                                # Extract values for quality check
+                                                symbol = best_pair.get("baseToken", {}).get("symbol", "???")
+                                                name = best_pair.get("baseToken", {}).get("name", "Unknown")
+                                                liquidity = float(best_pair.get("liquidity", {}).get("usd", 0) or 0)
+                                                mcap = float(best_pair.get("marketCap") or best_pair.get("fdv") or 0)
+                                                volume = float(best_pair.get("volume", {}).get("h24") or 0)
+                                                tx_count = int(best_pair.get("txns", {}).get("h24", {}).get("buys", 0) or 0) + \
+                                                           int(best_pair.get("txns", {}).get("h24", {}).get("sells", 0) or 0)
+                                                price_change = float(best_pair.get("priceChange", {}).get("h24") or 0)
+
+                                                # Apply quality filter
+                                                passes, reason = passes_quality_filter(
+                                                    symbol, name, liquidity, mcap, volume, tx_count, price_change
+                                                )
+
+                                                if not passes:
+                                                    filtered_count += 1
+                                                    logger.debug(f"Filtered boost {symbol}: {reason}")
+                                                    continue
+
                                                 tokens.append(TrendingToken(
-                                                    symbol=best_pair.get("baseToken", {}).get("symbol", "???"),
-                                                    name=best_pair.get("baseToken", {}).get("name", "Unknown"),
+                                                    symbol=symbol,
+                                                    name=name,
                                                     contract=token_addr,
                                                     price_usd=float(best_pair.get("priceUsd") or 0),
-                                                    price_change_24h=float(best_pair.get("priceChange", {}).get("h24") or 0),
-                                                    volume_24h=float(best_pair.get("volume", {}).get("h24") or 0),
-                                                    liquidity_usd=float(best_pair.get("liquidity", {}).get("usd") or 0),
-                                                    mcap=float(best_pair.get("marketCap") or best_pair.get("fdv") or 0),
-                                                    tx_count_24h=int(best_pair.get("txns", {}).get("h24", {}).get("buys", 0) or 0) +
-                                                                int(best_pair.get("txns", {}).get("h24", {}).get("sells", 0) or 0),
+                                                    price_change_24h=price_change,
+                                                    volume_24h=volume,
+                                                    liquidity_usd=liquidity,
+                                                    mcap=mcap,
+                                                    tx_count_24h=tx_count,
                                                     rank=len(tokens) + 1,
                                                 ))
                                 except:
@@ -445,6 +886,11 @@ async def fetch_trending_solana_tokens(limit: int = 10) -> Tuple[List[TrendingTo
 
     except Exception as e:
         warnings.append(f"Trending fetch failed: {e}")
+
+    # Log filter statistics
+    if filtered_count > 0:
+        logger.info(f"Quality filter: Filtered out {filtered_count} low-quality tokens")
+        warnings.append(f"Filtered {filtered_count} tokens below quality threshold (min ${MIN_LIQUIDITY_USD:,} liquidity, ${MIN_MCAP_USD:,} mcap)")
 
     # Update ranks
     for i, token in enumerate(tokens):
@@ -461,6 +907,115 @@ def fetch_trending_solana_tokens_sync(limit: int = 10) -> Tuple[List[TrendingTok
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     return loop.run_until_complete(fetch_trending_solana_tokens(limit))
+
+
+# =============================================================================
+# SOCIAL METRICS ENRICHMENT
+# =============================================================================
+
+async def enrich_tokens_with_social_data(
+    tokens: List[TrendingToken],
+) -> Tuple[List[TrendingToken], List[str]]:
+    """
+    Enrich tokens with social metrics from LunarCrush and CryptoPanic.
+
+    This adds:
+    - galaxy_score: LunarCrush overall social score (0-100)
+    - social_volume: Number of social mentions
+    - social_sentiment: Sentiment score (0-100)
+    - alt_rank: Ranking vs other altcoins
+    - news_sentiment: bullish/bearish/neutral from news
+    - news_count: Number of recent news articles
+
+    Returns:
+        (enriched_tokens, warnings)
+    """
+    warnings = []
+
+    # Import APIs (avoid circular imports)
+    try:
+        from core.data.lunarcrush_api import get_lunarcrush
+        from core.data.cryptopanic_api import get_cryptopanic
+    except ImportError as e:
+        warnings.append(f"Failed to import social APIs: {e}")
+        return tokens, warnings
+
+    lunarcrush = get_lunarcrush()
+    cryptopanic = get_cryptopanic()
+
+    # Enrich each token with social data
+    for token in tokens:
+        try:
+            # Get LunarCrush sentiment
+            lunar_data = await lunarcrush.get_coin_sentiment(token.symbol)
+            if lunar_data:
+                token.galaxy_score = lunar_data.get("galaxy_score", 0) or 0
+                token.social_volume = lunar_data.get("social_volume", 0) or 0
+                token.social_sentiment = lunar_data.get("sentiment", 50) or 50
+                token.alt_rank = lunar_data.get("alt_rank", 0) or 0
+                logger.debug(f"LunarCrush data for {token.symbol}: galaxy={token.galaxy_score}, sentiment={token.social_sentiment}")
+        except Exception as e:
+            warnings.append(f"LunarCrush error for {token.symbol}: {e}")
+
+        try:
+            # Get CryptoPanic news sentiment
+            news = await cryptopanic.get_news(currencies=token.symbol, limit=5)
+            if news:
+                token.news_count = len(news)
+                bullish = sum(1 for n in news if n.get("sentiment") == "bullish")
+                bearish = sum(1 for n in news if n.get("sentiment") == "bearish")
+                if bullish > bearish:
+                    token.news_sentiment = "bullish"
+                elif bearish > bullish:
+                    token.news_sentiment = "bearish"
+                else:
+                    token.news_sentiment = "neutral"
+                logger.debug(f"CryptoPanic data for {token.symbol}: {token.news_count} articles, sentiment={token.news_sentiment}")
+        except Exception as e:
+            warnings.append(f"CryptoPanic error for {token.symbol}: {e}")
+
+    # Close sessions
+    await lunarcrush.close()
+    await cryptopanic.close()
+
+    return tokens, warnings
+
+
+def enrich_tokens_with_social_data_sync(
+    tokens: List[TrendingToken],
+) -> Tuple[List[TrendingToken], List[str]]:
+    """Synchronous wrapper for social enrichment."""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(enrich_tokens_with_social_data(tokens))
+
+
+async def fetch_trending_with_social(limit: int = 10) -> Tuple[List[TrendingToken], List[str]]:
+    """
+    Fetch trending tokens AND enrich with social metrics.
+
+    Combines:
+    1. DexScreener trending tokens (with quality filters)
+    2. LunarCrush social sentiment
+    3. CryptoPanic news sentiment
+
+    Returns:
+        (enriched_tokens, all_warnings)
+    """
+    # First get base token data
+    tokens, warnings = await fetch_trending_solana_tokens(limit)
+
+    if not tokens:
+        return tokens, warnings
+
+    # Then enrich with social data
+    tokens, social_warnings = await enrich_tokens_with_social_data(tokens)
+    warnings.extend(social_warnings)
+
+    return tokens, warnings
 
 
 # =============================================================================
@@ -535,6 +1090,8 @@ async def get_grok_conviction_picks(
     indexes: List[BackedAsset],
     grok_client: Any,
     top_n: int = 10,
+    historical_learnings: str = "",
+    save_picks: bool = True,
 ) -> Tuple[List[ConvictionPick], List[str]]:
     """
     Use Grok to analyze all assets and provide conviction scores.
@@ -545,6 +1102,8 @@ async def get_grok_conviction_picks(
         indexes: Index ETFs from backed.fi
         grok_client: Grok API client
         top_n: Number of top picks to return
+        historical_learnings: Past learnings to include in prompt
+        save_picks: Whether to save picks to database for tracking
 
     Returns:
         (conviction_picks, warnings)
@@ -572,9 +1131,22 @@ async def get_grok_conviction_picks(
         for i in indexes[:5]:
             asset_summary += f"- {i.symbol} ({i.underlying}): ${i.price_usd:.2f}\n"
 
+        # Include historical learnings if available
+        learnings_section = ""
+        if historical_learnings:
+            learnings_section = f"""
+
+{historical_learnings}
+
+IMPORTANT: Use the learnings above to calibrate your TP/SL recommendations.
+- For XSTOCK assets: Consider tighter stops (~5%) and modest targets (~10%)
+- For MEME/MICRO tokens: Consider wider stops (~10-15%) due to volatility
+- Prioritize assets where past patterns showed success
+"""
+
         prompt = f"""Analyze these assets and provide your TOP {top_n} conviction picks.
 
-{asset_summary}
+{asset_summary}{learnings_section}
 
 For each pick, provide:
 1. SYMBOL - The asset symbol
@@ -656,8 +1228,30 @@ Provide your {top_n} best picks with conviction scores. Be selective - only incl
 
     # Sort by conviction score
     picks.sort(key=lambda p: p.conviction_score, reverse=True)
+    final_picks = picks[:top_n]
 
-    return picks[:top_n], warnings
+    # Save picks to database for performance tracking
+    if save_picks and final_picks:
+        try:
+            from bots.treasury.scorekeeper import get_scorekeeper
+            sk = get_scorekeeper()
+            for pick in final_picks:
+                sk.save_pick(
+                    symbol=pick.symbol,
+                    asset_class=pick.asset_class,
+                    contract=pick.contract,
+                    conviction_score=pick.conviction_score,
+                    entry_price=pick.entry_price,
+                    target_price=pick.target_price,
+                    stop_loss=pick.stop_loss,
+                    timeframe=pick.timeframe,
+                    reasoning=pick.reasoning,
+                )
+            logger.info(f"Saved {len(final_picks)} picks to performance tracker")
+        except Exception as e:
+            warnings.append(f"Failed to save picks: {e}")
+
+    return final_picks, warnings
 
 
 def get_grok_conviction_picks_sync(
@@ -666,6 +1260,8 @@ def get_grok_conviction_picks_sync(
     indexes: List[BackedAsset],
     grok_client: Any,
     top_n: int = 10,
+    historical_learnings: str = "",
+    save_picks: bool = True,
 ) -> Tuple[List[ConvictionPick], List[str]]:
     """Synchronous wrapper for Grok conviction picks."""
     try:
@@ -674,7 +1270,7 @@ def get_grok_conviction_picks_sync(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     return loop.run_until_complete(
-        get_grok_conviction_picks(tokens, stocks, indexes, grok_client, top_n)
+        get_grok_conviction_picks(tokens, stocks, indexes, grok_client, top_n, historical_learnings, save_picks)
     )
 
 

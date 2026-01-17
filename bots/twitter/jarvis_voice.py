@@ -101,10 +101,28 @@ class JarvisVoice:
             
             if message and message.content:
                 tweet = message.content[0].text.strip()
-                
+
+                # Clean up JSON artifacts if LLM returned JSON
+                import re
+                if tweet.startswith("{") and "}" in tweet:
+                    try:
+                        import json
+                        data = json.loads(tweet)
+                        if isinstance(data, dict):
+                            tweet = data.get("tweet", data.get("text", data.get("content", "")))
+                    except json.JSONDecodeError:
+                        # Extract text from JSON-like pattern
+                        match = re.search(r'"(?:tweet|text|content)"\s*:\s*"([^"]+)"', tweet)
+                        if match:
+                            tweet = match.group(1)
+
+                # Remove markdown code blocks
+                tweet = re.sub(r'```[\w]*\n?', '', tweet)
+                tweet = re.sub(r'```', '', tweet)
+
                 # Clean up - remove quotes if wrapped
                 tweet = tweet.strip('"\'')
-                
+
                 # Ensure lowercase
                 tweet = tweet.lower() if tweet[0].isupper() else tweet
                 
@@ -157,9 +175,24 @@ If markets are down: "rough day. could be worse. could be leveraged." energy"""
         return await self.generate_tweet(prompt)
     
     async def generate_token_tweet(self, token_data: Dict[str, Any]) -> Optional[str]:
-        """Generate a token spotlight tweet."""
+        """Generate a token spotlight tweet with historical performance context."""
         is_roast = token_data.get('should_roast', False)
-        
+
+        # Get historical learnings from past trades
+        learnings_context = ""
+        try:
+            from bots.treasury.scorekeeper import get_scorekeeper
+            sk = get_scorekeeper()
+            learnings = sk.get_learnings_for_context(limit=3)
+            performance = sk.get_performance_summary()
+            if learnings or performance:
+                learnings_context = f"""
+My past picks: {performance}
+{learnings}
+Use this to calibrate your tone - be more cautious if past calls didn't work, more confident if they did."""
+        except Exception as e:
+            logger.debug(f"Could not load learnings for tweet: {e}")
+
         if is_roast:
             prompt = f"""Write a gentle, polite roast of this token (be skeptical but not mean):
 - Symbol: ${token_data.get('symbol', 'unknown')}
@@ -167,7 +200,7 @@ If markets are down: "rough day. could be worse. could be leveraged." energy"""
 - 24h change: {token_data.get('change', 0):+.1f}%
 - Liquidity: ${token_data.get('liquidity', 0):,.0f}
 - Issue: {token_data.get('issue', 'low liquidity')}
-
+{learnings_context}
 Express healthy skepticism. Include the cashtag."""
         else:
             prompt = f"""Write a neutral/cautiously optimistic tweet about this token:
@@ -175,9 +208,9 @@ Express healthy skepticism. Include the cashtag."""
 - Price: ${token_data.get('price', 0):.8f}
 - 24h change: {token_data.get('change', 0):+.1f}%
 - Volume: ${token_data.get('volume', 0):,.0f}
-
+{learnings_context}
 Be informative but not shilling. Include the cashtag."""
-        
+
         return await self.generate_tweet(prompt)
     
     async def generate_agentic_tweet(self) -> Optional[str]:

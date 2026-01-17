@@ -25,6 +25,7 @@ class CryptoPanicAPI:
     # Rate limiting: ~1 request per second to be safe
     MIN_REQUEST_INTERVAL = 1.0
     _last_request_time = 0.0
+    _warned_no_key = False  # Only warn once about missing key
 
     def __init__(self):
         self.api_key = os.getenv("CRYPTOPANIC_API_KEY", "")
@@ -52,7 +53,9 @@ class CryptoPanicAPI:
     async def _get(self, endpoint: str, params: Optional[Dict] = None) -> Optional[Dict]:
         """Make GET request to CryptoPanic API."""
         if not self.api_key:
-            logger.warning("CRYPTOPANIC_API_KEY not set")
+            if not CryptoPanicAPI._warned_no_key:
+                logger.warning("CRYPTOPANIC_API_KEY not set - news features disabled")
+                CryptoPanicAPI._warned_no_key = True
             return None
 
         cache_key = f"{endpoint}:{params}"

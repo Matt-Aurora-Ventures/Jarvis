@@ -602,7 +602,7 @@ async def signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     - All relevant links
     """
     await update.message.reply_text(
-        "🚀 _Generating Master Signal Report..._",
+        "⚡ _generating master signal report..._",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -1309,7 +1309,7 @@ async def gainers(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("No gainers data available.", parse_mode=ParseMode.HTML)
             return
         
-        lines = ["<b>🚀 Top Gainers (24h)</b>", ""]
+        lines = ["<b>📈 top gainers (24h)</b>", ""]
         
         for token in tokens[:10]:
             emoji = "🟢" if token.price_change_24h > 0 else "🔴"
@@ -2961,8 +2961,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
 
             await _send_with_retry(
                 query,
-                "🔥 *TRENDING TOKENS - Trading Options*\n\n"
-                "_Select allocation and risk profile:_",
+                "⚡ *trending tokens - trading options*\n\n"
+                "_select allocation and risk profile:_",
                 parse_mode=ParseMode.MARKDOWN
             )
 
@@ -4527,6 +4527,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_spam = await check_and_ban_spam(update, context, text, user_id)
         if is_spam:
             return  # Message was spam, user banned, stop processing
+
+    # Auto-responder check - respond to non-admin messages when admin is away
+    if not is_admin:
+        try:
+            from tg_bot.services.auto_responder import get_auto_responder
+            responder = get_auto_responder()
+            chat_id_for_ar = update.effective_chat.id if update.effective_chat else 0
+            auto_response = responder.get_response(chat_id_for_ar)
+            if auto_response:
+                await update.message.reply_text(auto_response)
+                logger.info(f"Auto-responded to chat {chat_id_for_ar}")
+                # Continue processing - don't return, allow normal handling too
+        except Exception as e:
+            logger.debug(f"Auto-responder check failed: {e}")
 
     # Terminal command handling (admin only) - prefix with > or /term
     if text.startswith('>') or text.lower().startswith('/term '):
