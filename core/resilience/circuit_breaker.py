@@ -347,6 +347,86 @@ def circuit_breaker(
     return decorator
 
 
+
+# Backward compatibility aliases
+CircuitBreakerState = CircuitState
+APICircuitBreaker = CircuitBreaker
+
+
+@dataclass
+class CircuitBreakerConfig:
+    """Configuration for circuit breaker."""
+    failure_threshold: int = 5
+    success_threshold: int = 2
+    timeout: float = 30.0
+    half_open_max_calls: int = 3
+    excluded_exceptions: tuple = ()
+
+
+class CircuitBreakerRegistry:
+    """Registry for managing multiple circuit breakers."""
+
+    def __init__(self):
+        self._breakers: Dict[str, CircuitBreaker] = {}
+
+    def get_or_create(self, name: str, config=None, **kwargs) -> CircuitBreaker:
+        if name not in self._breakers:
+            self._breakers[name] = CircuitBreaker(name, **kwargs)
+        return self._breakers[name]
+
+    def get(self, name: str):
+        return self._breakers.get(name)
+
+    def all(self) -> Dict[str, CircuitBreaker]:
+        return self._breakers.copy()
+
+    def list_all(self):
+        return list(self._breakers.keys())
+
+    def status(self) -> Dict[str, Any]:
+        return {name: b.get_status() for name, b in self._breakers.items()}
+
+    def get_all_status(self):
+        return self.status()
+
+    def reset_all(self):
+        for breaker in self._breakers.values():
+            breaker.reset()
+
+
+_registry = None
+
+
+def get_registry() -> CircuitBreakerRegistry:
+    global _registry
+    if _registry is None:
+        _registry = CircuitBreakerRegistry()
+    return _registry
+
+
+# Alias for backward compatibility
+get_breaker = get_circuit_breaker
+
+
+# Pre-configured API breaker configs
+API_CONFIGS = {
+    "twelve_data": {"failure_threshold": 5, "success_threshold": 2, "timeout": 120.0},
+    "hyperliquid": {"failure_threshold": 3, "success_threshold": 2, "timeout": 30.0},
+    "coingecko": {"failure_threshold": 5, "success_threshold": 2, "timeout": 60.0},
+    "birdeye": {"failure_threshold": 3, "success_threshold": 2, "timeout": 30.0},
+    "dexscreener": {"failure_threshold": 5, "success_threshold": 2, "timeout": 60.0},
+    "jupiter": {"failure_threshold": 3, "success_threshold": 2, "timeout": 30.0},
+    "twitter": {"failure_threshold": 5, "success_threshold": 2, "timeout": 300.0},
+    "grok": {"failure_threshold": 5, "success_threshold": 2, "timeout": 300.0},
+}
+
+
+def get_api_breaker(api_name: str) -> CircuitBreaker:
+    """Get circuit breaker with pre-configured settings for known APIs."""
+    config = API_CONFIGS.get(api_name, {})
+    return get_circuit_breaker(api_name, **config)
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 

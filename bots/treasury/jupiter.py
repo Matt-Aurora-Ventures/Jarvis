@@ -714,20 +714,69 @@ class JupiterClient:
         quote: SwapQuote,
         wallet,  # SecureWallet instance
         simulate_first: bool = True,
-        priority_fee: int = None
+        priority_fee: int = None,
+        max_retries: int = 3,
+        retry_delay: float = 1.0
     ) -> SwapResult:
         """
-        Execute a swap using the treasury wallet.
+        Execute a swap using the treasury wallet with retry logic.
 
         Args:
             quote: Quote from get_quote()
             wallet: SecureWallet instance for signing
             simulate_first: Simulate before executing
             priority_fee: Priority fee in micro lamports
+            max_retries: Maximum number of retry attempts (default: 3)
+            retry_delay: Base delay between retries in seconds (uses exponential backoff)
 
         Returns:
             SwapResult with transaction details
         """
+        import asyncio
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                result = await self._execute_swap_once(
+                    quote, wallet, simulate_first, priority_fee
+                )
+                if result.success:
+                    return result
+                
+                # Check if error is retryable
+                error_msg = result.error or ""
+                retryable_errors = [
+                    "timeout", "blockhash", "rate limit", "too many requests",
+                    "network", "connection", "503", "504", "429"
+                ]
+                is_retryable = any(e in error_msg.lower() for e in retryable_errors)
+                
+                if not is_retryable:
+                    return result  # Non-retryable error, fail immediately
+                    
+                last_error = result.error
+                if attempt < max_retries - 1:
+                    delay = retry_delay * (2 ** attempt)  # Exponential backoff
+                    logger.warning(f"Swap attempt {attempt + 1} failed: {error_msg}. Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                    
+            except Exception as e:
+                last_error = str(e)
+                if attempt < max_retries - 1:
+                    delay = retry_delay * (2 ** attempt)
+                    logger.warning(f"Swap attempt {attempt + 1} error: {e}. Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+        
+        return SwapResult(success=False, error=f"Swap failed after {max_retries} attempts: {last_error}")
+
+    async def _execute_swap_once(
+        self,
+        quote: SwapQuote,
+        wallet,
+        simulate_first: bool,
+        priority_fee: int
+    ) -> SwapResult:
+        """Single swap attempt (called by execute_swap with retry logic)."""
         try:
             treasury = wallet.get_treasury()
             if not treasury:

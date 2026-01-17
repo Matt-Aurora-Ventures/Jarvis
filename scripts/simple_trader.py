@@ -37,7 +37,7 @@ async def get_usdc_balance():
                     amount = float(item.account.data.parsed["info"]["tokenAmount"]["uiAmount"] or 0)
                     if amount > 0:
                         return amount
-        except:
+        except Exception:  # noqa: BLE001 - intentional catch-all
             pass
     return 0.0
 

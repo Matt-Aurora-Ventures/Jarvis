@@ -24,7 +24,6 @@ from .gateway import (
     UpstreamProvider,
     ProviderStatus,
     CircuitState,
-    CacheEntry,
     RequestContext,
     get_api_gateway
 )
@@ -36,6 +35,7 @@ from .circuit_breaker import (
 )
 
 from .cache import (
+    CacheEntry,
     RequestCache,
     CacheConfig,
     CacheStats

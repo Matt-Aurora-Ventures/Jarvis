@@ -25,6 +25,14 @@ from .wallet import SecureWallet, WalletInfo
 from .jupiter import JupiterClient, SwapQuote, SwapResult, LimitOrderManager
 from .scorekeeper import get_scorekeeper, Scorekeeper
 
+# Import safe state management for race-condition-free file access
+try:
+    from core.safe_state import SafeState
+    SAFE_STATE_AVAILABLE = True
+except ImportError:
+    SAFE_STATE_AVAILABLE = False
+    SafeState = None
+
 # Import centralized audit trail for security logging
 try:
     from core.security.audit_trail import audit_trail, AuditEventType
@@ -268,7 +276,7 @@ class TradingEngine:
     }
 
     # Admin ID for trade execution (MUST match)
-    ADMIN_USER_ID = 8527130908
+    ADMIN_USER_ID = int(os.environ.get("JARVIS_ADMIN_USER_ID", "8527130908"))
 
     # Position sizing by risk level (% of portfolio)
     POSITION_SIZE = {
@@ -503,32 +511,56 @@ class TradingEngine:
             return base_position_usd * self.MAX_UNVETTED_POSITION_PCT, risk_tier  # 25% size
 
     def _load_state(self):
-        """Load positions and history from disk."""
-        # Load positions
-        if self.POSITIONS_FILE.exists():
+        """Load positions and history from disk with file locking."""
+        # Use SafeState for race-condition-free access
+        if SAFE_STATE_AVAILABLE:
+            self._positions_state = SafeState(self.POSITIONS_FILE, default_value=[])
+            self._history_state = SafeState(self.HISTORY_FILE, default_value=[])
+            self._volume_state = SafeState(self.DAILY_VOLUME_FILE, default_value={})
+            self._audit_state = SafeState(self.AUDIT_LOG_FILE, default_value=[])
+
             try:
-                with open(self.POSITIONS_FILE) as f:
-                    data = json.load(f)
-                    for pos_data in data:
-                        pos = Position.from_dict(pos_data)
-                        self.positions[pos.id] = pos
+                data = self._positions_state.read()
+                for pos_data in data:
+                    pos = Position.from_dict(pos_data)
+                    self.positions[pos.id] = pos
             except Exception as e:
                 logger.error(f"Failed to load positions: {e}")
 
-        # Load history
-        if self.HISTORY_FILE.exists():
             try:
-                with open(self.HISTORY_FILE) as f:
-                    data = json.load(f)
-                    self.trade_history = [Position.from_dict(p) for p in data]
+                data = self._history_state.read()
+                self.trade_history = [Position.from_dict(p) for p in data]
             except Exception as e:
                 logger.error(f"Failed to load history: {e}")
+        else:
+            # Fallback to original implementation
+            if self.POSITIONS_FILE.exists():
+                try:
+                    with open(self.POSITIONS_FILE) as f:
+                        data = json.load(f)
+                        for pos_data in data:
+                            pos = Position.from_dict(pos_data)
+                            self.positions[pos.id] = pos
+                except Exception as e:
+                    logger.error(f"Failed to load positions: {e}")
+
+            if self.HISTORY_FILE.exists():
+                try:
+                    with open(self.HISTORY_FILE) as f:
+                        data = json.load(f)
+                        self.trade_history = [Position.from_dict(p) for p in data]
+                except Exception as e:
+                    logger.error(f"Failed to load history: {e}")
 
     def _get_daily_volume(self) -> float:
-        """Get total trading volume for today (UTC)."""
+        """Get total trading volume for today (UTC) with file locking."""
         today = datetime.utcnow().strftime('%Y-%m-%d')
         try:
-            if self.DAILY_VOLUME_FILE.exists():
+            if SAFE_STATE_AVAILABLE and hasattr(self, '_volume_state'):
+                data = self._volume_state.read()
+                if data.get('date') == today:
+                    return data.get('volume_usd', 0.0)
+            elif self.DAILY_VOLUME_FILE.exists():
                 with open(self.DAILY_VOLUME_FILE) as f:
                     data = json.load(f)
                     if data.get('date') == today:
@@ -538,12 +570,15 @@ class TradingEngine:
         return 0.0
 
     def _add_daily_volume(self, amount_usd: float):
-        """Add to daily trading volume."""
+        """Add to daily trading volume with file locking."""
         today = datetime.utcnow().strftime('%Y-%m-%d')
         current = self._get_daily_volume()
         try:
-            with open(self.DAILY_VOLUME_FILE, 'w') as f:
-                json.dump({'date': today, 'volume_usd': current + amount_usd}, f)
+            if SAFE_STATE_AVAILABLE and hasattr(self, '_volume_state'):
+                self._volume_state.write({'date': today, 'volume_usd': current + amount_usd})
+            else:
+                with open(self.DAILY_VOLUME_FILE, 'w') as f:
+                    json.dump({'date': today, 'volume_usd': current + amount_usd}, f)
         except Exception as e:
             logger.error(f"Failed to save daily volume: {e}")
 
@@ -642,15 +677,18 @@ class TradingEngine:
             logger.error(f"Failed to write audit log: {e}")
 
     def _save_state(self):
-        """Save positions and history to disk."""
+        """Save positions and history to disk with file locking."""
         try:
-            # Save positions
-            with open(self.POSITIONS_FILE, 'w') as f:
-                json.dump([p.to_dict() for p in self.positions.values()], f, indent=2)
-
-            # Save history
-            with open(self.HISTORY_FILE, 'w') as f:
-                json.dump([p.to_dict() for p in self.trade_history], f, indent=2)
+            if SAFE_STATE_AVAILABLE and hasattr(self, '_positions_state'):
+                # Use SafeState for atomic writes with locking
+                self._positions_state.write([p.to_dict() for p in self.positions.values()])
+                self._history_state.write([p.to_dict() for p in self.trade_history])
+            else:
+                # Fallback to original implementation
+                with open(self.POSITIONS_FILE, 'w') as f:
+                    json.dump([p.to_dict() for p in self.positions.values()], f, indent=2)
+                with open(self.HISTORY_FILE, 'w') as f:
+                    json.dump([p.to_dict() for p in self.trade_history], f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save state: {e}")
 
@@ -743,16 +781,24 @@ class TradingEngine:
             return TradeDirection.NEUTRAL, "Max positions reached"
 
         # Determine direction based on sentiment
-        if sentiment_score > 0.35 and sentiment_grade in ['A', 'A-', 'B+']:
-            return TradeDirection.LONG, f"Strong bullish signal (Grade {sentiment_grade})"
+        # TIGHTENED THRESHOLDS - Require higher conviction for entries
+        # A+/A grades: score > 0.40 (was 0.35) - highest conviction plays only
+        if sentiment_score > 0.40 and sentiment_grade in ['A+', 'A']:
+            return TradeDirection.LONG, f"High conviction bullish (Grade {sentiment_grade}, score {sentiment_score:.2f})"
 
-        if sentiment_score > 0.20 and sentiment_grade in ['B', 'B+']:
-            return TradeDirection.LONG, f"Moderate bullish signal (Grade {sentiment_grade})"
+        # A-/B+ grades: score > 0.35 (tightened from 0.35 for lower grades)
+        if sentiment_score > 0.35 and sentiment_grade in ['A-', 'B+']:
+            return TradeDirection.LONG, f"Strong bullish signal (Grade {sentiment_grade}, score {sentiment_score:.2f})"
 
-        if sentiment_score < -0.35:
-            return TradeDirection.SHORT, f"Strong bearish signal - avoid"
+        # B grade: score > 0.30 (was 0.20 - much tighter now)
+        if sentiment_score > 0.30 and sentiment_grade == 'B':
+            return TradeDirection.LONG, f"Moderate bullish signal (Grade {sentiment_grade}, score {sentiment_score:.2f})"
 
-        return TradeDirection.NEUTRAL, "Signal not strong enough"
+        # Strong bearish - avoid these tokens
+        if sentiment_score < -0.30:
+            return TradeDirection.SHORT, f"Bearish signal - avoid (score {sentiment_score:.2f})"
+
+        return TradeDirection.NEUTRAL, f"Signal not strong enough (score {sentiment_score:.2f}, grade {sentiment_grade})"
 
     async def analyze_liquidation_signal(
         self,
@@ -934,16 +980,21 @@ class TradingEngine:
         if not signals:
             return TradeDirection.NEUTRAL, "No signals detected", 0.0
 
-        # Simple majority vote with confidence weighting
+        # TIGHTENED: Weighted voting with higher confidence requirements
         long_score = sum(conf for _, dir, conf in signals if dir == 'long')
         short_score = sum(conf for _, dir, conf in signals if dir == 'short')
+        
+        # Require at least 2 agreeing signals OR 1 signal with >0.6 confidence
+        min_signal_count = len([s for s in signals if s[1] == 'long']) if long_score > short_score else len([s for s in signals if s[1] == 'short'])
+        avg_confidence = max(long_score, short_score) / max(min_signal_count, 1)
 
-        if long_score > short_score and long_score > 0.5:
+        # TIGHTENED: Require 0.6 threshold (was 0.5) for combined signals
+        if long_score > short_score and (long_score > 0.6 or (min_signal_count >= 2 and avg_confidence > 0.4)):
             direction = TradeDirection.LONG
-            confidence = long_score / len(signals)
-        elif short_score > long_score and short_score > 0.5:
+            confidence = avg_confidence
+        elif short_score > long_score and (short_score > 0.6 or (min_signal_count >= 2 and avg_confidence > 0.4)):
             direction = TradeDirection.SHORT
-            confidence = short_score / len(signals)
+            confidence = avg_confidence
         else:
             direction = TradeDirection.NEUTRAL
             confidence = 0.0
@@ -1051,11 +1102,13 @@ class TradingEngine:
 
         # LIQUIDITY CHECK - Reject extremely illiquid tokens
         # These are the ones that cause 100% losses when limit orders can't execute
+        # FAIL-SAFE: For HIGH_RISK and MICRO tokens, reject if liquidity unavailable
+        liquidity_verified = False
         try:
             token_info = await self.jupiter.get_token_info(token_mint)
             if token_info and hasattr(token_info, 'daily_volume'):
                 daily_volume = getattr(token_info, 'daily_volume', 0) or 0
-                if daily_volume < 1000:  # Less than $1000 daily volume
+                if daily_volume < self.MIN_LIQUIDITY_USD:  # Use configurable minimum
                     logger.warning(f"Trade rejected: {token_symbol} has insufficient liquidity (${daily_volume:.0f}/day)")
                     self._log_audit("OPEN_POSITION_REJECTED", {
                         "token": token_symbol,
@@ -1063,9 +1116,20 @@ class TradingEngine:
                         "daily_volume": daily_volume,
                     }, user_id, False)
                     return False, f"⛔ Trade blocked: {token_symbol} has insufficient liquidity (${daily_volume:.0f}/day)", None
+                liquidity_verified = True
+                logger.debug(f"Liquidity OK for {token_symbol}: ${daily_volume:.0f}/day")
         except Exception as e:
-            logger.debug(f"Could not check liquidity for {token_symbol}: {e}")
-            # Continue without liquidity check if data unavailable
+            logger.warning(f"Could not check liquidity for {token_symbol}: {e}")
+
+        # FAIL-SAFE: Reject HIGH_RISK and MICRO tokens if liquidity not verified
+        # ESTABLISHED tokens get a pass (they have proven liquidity history)
+        if not liquidity_verified and risk_tier in ("HIGH_RISK", "MICRO"):
+            self._log_audit("OPEN_POSITION_REJECTED", {
+                "token": token_symbol,
+                "reason": "liquidity_check_failed",
+                "risk_tier": risk_tier,
+            }, user_id, False)
+            return False, f"⛔ Trade blocked: Cannot verify liquidity for {risk_tier} token {token_symbol}", None
 
         # Get portfolio value for limit checks
         _, portfolio_usd = await self.get_portfolio_value()

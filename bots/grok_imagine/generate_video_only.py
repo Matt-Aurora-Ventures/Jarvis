@@ -52,7 +52,7 @@ async def generate_grok_image(page, prompt: str) -> str:
                 if input_box:
                     logger.info(f"Found input with selector: {sel}")
                     break
-            except:
+            except Exception:
                 continue
 
         if not input_box:
@@ -165,7 +165,7 @@ async def check_account(page) -> str:
             href = await profile_link.get_attribute("href")
             if href:
                 return href.split("/")[-1]
-    except:
+    except Exception:  # noqa: BLE001 - intentional catch-all
         pass
     return "unknown"
 

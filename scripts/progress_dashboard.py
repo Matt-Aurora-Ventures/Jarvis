@@ -366,7 +366,8 @@ def get_progress():
         if PROGRESS_FILE.exists():
             with open(PROGRESS_FILE) as f:
                 return jsonify(json.load(f))
-    except: pass
+    except Exception:  # noqa: BLE001 - intentional catch-all
+        pass
     return jsonify({
         "status": "waiting", "tokens_scanned": 0, "backtests_completed": 0,
         "elapsed_seconds": 0, "current_task": "Connecting..."
@@ -438,7 +439,8 @@ class SecurityMonitor:
                             "msg": f"New Conn: {r_ip}:{port}",
                             "level": level
                         })
-        except: pass
+        except Exception:  # noqa: BLE001 - intentional catch-all
+            pass
         self.known_conns = current_conns
 
         # Add alerts to event feed
@@ -478,7 +480,8 @@ def get_logs():
         if LOG_FILE.exists():
             with open(LOG_FILE) as f:
                 logs.extend([l.strip() for l in f.readlines()[-20:]])
-    except: pass
+    except Exception:  # noqa: BLE001 - intentional catch-all
+        pass
     return jsonify({"logs": logs})
 
 @app.route('/api/messages', methods=['GET', 'POST'])
@@ -486,7 +489,7 @@ def handle_messages():
     try:
         with open(MESSAGES_FILE, 'r') as f:
             msgs = json.load(f)
-    except: msgs = []
+    except (FileNotFoundError, json.JSONDecodeError, IOError): msgs = []
 
     if request.method == 'POST':
         data = request.json

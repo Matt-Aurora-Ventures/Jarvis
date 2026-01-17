@@ -307,7 +307,7 @@ class SecretScanner:
         try:
             if file_path.stat().st_size > 10 * 1024 * 1024:  # 10MB
                 return True
-        except:
+        except Exception:
             return True
         
         return False
@@ -407,7 +407,7 @@ class OpenSourceSafetyChecker:
                             "content": content[:500],  # First 500 chars
                             "license_type": self._detect_license_type(content)
                         })
-                except:
+                except Exception:  # noqa: BLE001 - intentional catch-all
                     pass
         
         # Scan for copyright notices
@@ -460,7 +460,7 @@ class OpenSourceSafetyChecker:
                                 "file": str(file_path),
                                 "content": content[:1000]
                             })
-                    except:
+                    except Exception:  # noqa: BLE001 - intentional catch-all
                         pass
         
         # Analyze dependencies for issues

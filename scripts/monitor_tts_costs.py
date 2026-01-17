@@ -61,7 +61,7 @@ def get_hourly_stats() -> dict:
                     total_chars += entry["characters"]
                     total_cost += entry["estimated_cost_usd"]
                     count += 1
-            except:
+            except Exception:
                 continue
     
     return {
@@ -96,7 +96,7 @@ def get_daily_stats() -> dict:
                     total_chars += entry["characters"]
                     total_cost += entry["estimated_cost_usd"]
                     count += 1
-            except:
+            except Exception:
                 continue
     
     return {

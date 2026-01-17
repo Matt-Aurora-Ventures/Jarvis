@@ -44,7 +44,7 @@ async def get_market_data():
                                         mcap = p.get("marketCap", 0) or p.get("fdv", 0) or 0
                                         vol = p.get("volume", {}).get("h24", 0) or 0
                                         print(f"{sym}: ${price:.6f} ({change:+.0f}%) | MC: ${mcap/1000:.0f}K | Vol: ${vol/1000:.0f}K")
-                        except:
+                        except Exception:  # noqa: BLE001 - intentional catch-all
                             pass
                         await asyncio.sleep(0.1)
         except Exception as e:

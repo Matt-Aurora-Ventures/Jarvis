@@ -304,6 +304,6 @@ class TestProcessKill:
                 # Should not raise even with fake PID
                 try:
                     _kill_process_tree(99999999)
-                except:
+                except Exception:
                     pass  # OK if it fails for non-existent process
 

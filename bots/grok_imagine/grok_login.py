@@ -130,11 +130,11 @@ async def _is_logged_in(page) -> bool:
                     sign_in = await page.query_selector('button:has-text("Sign in"), a:has-text("Sign in")')
                     if not sign_in:
                         return True
-            except:
+            except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
 
         return False
-    except:
+    except Exception:
         return False
 
 

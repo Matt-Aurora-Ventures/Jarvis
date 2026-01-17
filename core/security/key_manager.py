@@ -315,7 +315,7 @@ class KeyManager:
             keypair = self.load_treasury_keypair()
             if keypair:
                 return str(keypair.pubkey())
-        except:
+        except Exception:  # noqa: BLE001 - intentional catch-all
             pass
         
         return None
