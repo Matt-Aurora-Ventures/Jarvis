@@ -14,6 +14,7 @@ from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 
 from bots.buy_tracker.config import BuyBotConfig, load_config
 from bots.buy_tracker.monitor import BuyTransaction, TransactionMonitor
+from core.utils.instance_lock import acquire_instance_lock
 from bots.buy_tracker.ape_buttons import (
     parse_ape_callback,
     create_trade_setup,
@@ -111,6 +112,7 @@ class JarvisBuyBot:
         self.app: Optional[Application] = None
         self.monitor: Optional[TransactionMonitor] = None
         self._running = False
+        self._polling_lock = None
         # Store original messages for FAQ expand/collapse {message_id: original_text}
         self._message_cache: dict[int, str] = {}
         # Counter for emoji credit attribution
@@ -159,15 +161,25 @@ class JarvisBuyBot:
         await self.app.start()
         enable_polling = os.environ.get("BUY_BOT_ENABLE_POLLING", "auto").lower()
         main_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-        if self.app.updater:
-            if enable_polling in ("1", "true", "yes", "on"):
+        should_poll = False
+        if enable_polling in ("1", "true", "yes", "on"):
+            should_poll = True
+        elif enable_polling == "auto" and self.config.bot_token and self.config.bot_token != main_token:
+            should_poll = True
+
+        if self.app.updater and should_poll:
+            self._polling_lock = acquire_instance_lock(
+                self.config.bot_token,
+                name="telegram_polling",
+                max_wait_seconds=5,
+            )
+            if not self._polling_lock:
+                logger.warning("Buy bot polling disabled: lock held for token")
+            else:
                 await self.app.updater.start_polling(allowed_updates=["callback_query"])
                 logger.info("Buy bot started (polling enabled)")
-            elif enable_polling == "auto" and self.config.bot_token and self.config.bot_token != main_token:
-                await self.app.updater.start_polling(allowed_updates=["callback_query"])
-                logger.info("Buy bot started (polling enabled - separate token)")
-            else:
-                logger.info("Buy bot started (polling disabled to avoid token conflicts)")
+        elif self.app.updater:
+            logger.info("Buy bot started (polling disabled to avoid token conflicts)")
         else:
             logger.info("Buy bot started (no updater available; callbacks inactive)")
 
