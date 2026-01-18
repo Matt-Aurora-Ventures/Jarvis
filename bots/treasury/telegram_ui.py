@@ -18,6 +18,7 @@ from telegram.ext import (
 )
 from telegram.constants import ParseMode
 
+from core.utils.instance_lock import acquire_instance_lock
 from .wallet import SecureWallet, WalletInfo
 from .jupiter import JupiterClient
 from .trading import TradingEngine, Position, TradeDirection, RiskLevel, TradeStatus
@@ -85,6 +86,7 @@ class TradingUI:
         self.engine = trading_engine
         self.admin_ids = admin_ids
         self.app: Optional[Application] = None
+        self._polling_lock = None
         self._running = False
         self._dashboard_messages: Dict[int, int] = {}  # user_id -> message_id
 
@@ -114,7 +116,17 @@ class TradingUI:
         self._running = True
         await self.app.initialize()
         await self.app.start()
-        await self.app.updater.start_polling(drop_pending_updates=True)
+        self._polling_lock = acquire_instance_lock(
+            self.bot_token,
+            name="telegram_polling",
+            max_wait_seconds=5,
+        )
+        if not self._polling_lock:
+            logger.warning("Trading UI polling disabled: lock held for token")
+        elif self.app.updater:
+            await self.app.updater.start_polling(drop_pending_updates=True)
+        else:
+            logger.warning("Trading UI polling disabled: updater unavailable")
 
         # Start background position monitor
         asyncio.create_task(self._position_monitor_loop())

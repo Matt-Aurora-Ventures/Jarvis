@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from enum import Enum
 
+from core.database.sqlite_pool import sql_connection
+
 logger = logging.getLogger(__name__)
 
 # Persistence paths
@@ -143,16 +145,19 @@ class Scorekeeper:
         logger.info(f"Scorekeeper initialized: {len(self.positions)} positions, {len(self.trades)} trades")
 
     def _get_conn(self) -> sqlite3.Connection:
-        """Get a SQLite connection to the consolidated jarvis.db."""
+        """Get a SQLite connection using the pooled connection manager."""
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(DB_PATH)
+        # Note: This returns a new connection managed by the pool.
+        # The caller is responsible for closing it via try/finally.
+        conn = sqlite3.connect(str(DB_PATH), timeout=10.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
     def _init_db(self) -> None:
         """Initialize SQLite schema for treasury tracking."""
-        with self._get_conn() as conn:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with sql_connection(str(DB_PATH)) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS positions (
                     id TEXT PRIMARY KEY,
