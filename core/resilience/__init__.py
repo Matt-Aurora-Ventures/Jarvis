@@ -1,56 +1,26 @@
 """
-JARVIS Resilience Patterns
+Resilience patterns for Jarvis trading system.
 
-Provides fault tolerance and reliability:
-- Retry with exponential backoff
+Includes:
+- Exponential backoff with jitter
 - Circuit breaker pattern
-- Bulkhead isolation
-- Timeout handling
+- Retry logic
 """
 
-from core.resilience.retry import (
-    RetryPolicy,
-    RetryExhausted,
-    RetryStats,
-    RetryContext,
-    retry,
+from .backoff import (
+    BackoffConfig,
+    calculate_backoff_delay,
+    retry_with_backoff,
     retry_async,
-    retry_sync,
-    AGGRESSIVE_RETRY,
-    CONSERVATIVE_RETRY,
-    API_RETRY,
-    RPC_RETRY,
-)
-
-from core.resilience.circuit_breaker import (
+    retry_backoff,
     CircuitBreaker,
-    CircuitState,
-    CircuitStats,
-    CircuitOpenError,
-    circuit_breaker,
-    get_circuit_breaker,
-    get_all_circuits,
 )
 
 __all__ = [
-    # Retry
-    "RetryPolicy",
-    "RetryExhausted",
-    "RetryStats",
-    "RetryContext",
-    "retry",
+    "BackoffConfig",
+    "calculate_backoff_delay",
+    "retry_with_backoff",
     "retry_async",
-    "retry_sync",
-    "AGGRESSIVE_RETRY",
-    "CONSERVATIVE_RETRY",
-    "API_RETRY",
-    "RPC_RETRY",
-    # Circuit Breaker
+    "retry_backoff",
     "CircuitBreaker",
-    "CircuitState",
-    "CircuitStats",
-    "CircuitOpenError",
-    "circuit_breaker",
-    "get_circuit_breaker",
-    "get_all_circuits",
 ]
