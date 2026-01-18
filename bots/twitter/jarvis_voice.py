@@ -81,7 +81,7 @@ class JarvisVoice:
                 context_str = "\n".join([f"- {k}: {v}" for k, v in context.items()])
                 full_prompt = f"{prompt}\n\nData:\n{context_str}"
             
-            full_prompt += "\n\nGenerate a single tweet. Must be under 280 characters, lowercase. Do NOT end with 'nfa' every time - only occasionally."
+            full_prompt += "\n\nGenerate a single tweet. Can be up to 4,000 characters (Premium X). Lowercase. Do NOT end with 'nfa' every time - only occasionally."
             
             # Use sync client in async context
             import asyncio
@@ -125,10 +125,16 @@ class JarvisVoice:
 
                 # Ensure lowercase
                 tweet = tweet.lower() if tweet[0].isupper() else tweet
-                
-                # Ensure under 280 chars
-                if len(tweet) > 280:
-                    tweet = tweet[:277] + "..."
+
+                # Ensure under 4,000 chars (X Premium limit) with word-boundary truncation
+                max_chars = 4000
+                if len(tweet) > max_chars:
+                    truncated = tweet[:max_chars - 3]
+                    last_space = truncated.rfind(' ')
+                    if last_space > max_chars - 500:
+                        tweet = tweet[:last_space] + "..."
+                    else:
+                        tweet = truncated + "..."
                 
                 # Remove nfa if it was added - we don't want it every tweet
                 # Only keep nfa ~20% of the time

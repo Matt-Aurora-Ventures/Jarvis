@@ -133,7 +133,7 @@ When Asked for Direct Advice: Never give it, deflect with humor, redirect to NFA
 1. Always include "NFA" or "not financial advice" naturally
 2. Never guarantee profits or returns
 3. Never say "you should buy/sell" - say "sentiment suggests" or "data shows"
-4. All tweets MUST be under 280 characters
+4. All tweets can be up to 4,000 characters (Premium X)
 
 ## BANNED PHRASES (Never use these)
 
@@ -205,7 +205,7 @@ class ClaudeContentGenerator:
                     user_message = user_message.replace(f"{{{key}}}", str(value))
 
             # Add formatting reminder
-            user_message += "\n\nRemember: lowercase, under 280 chars, natural NFA, minimal emojis. Return ONLY the tweet text, nothing else."
+            user_message += "\n\nRemember: lowercase, up to 4,000 chars (Premium X), natural NFA, minimal emojis. Return ONLY the tweet text, nothing else."
 
             response = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
@@ -256,9 +256,15 @@ class ClaudeContentGenerator:
             formatted_lines.append(line)
         text = '\n'.join(formatted_lines)
 
-        # Truncate if over 280
-        if len(text) > 280:
-            text = text[:277] + "..."
+        # Truncate if over 4,000 chars (X Premium limit) with word-boundary truncation
+        max_chars = 4000
+        if len(text) > max_chars:
+            truncated = text[:max_chars - 3]
+            last_space = truncated.rfind(' ')
+            if last_space > max_chars - 500:
+                text = text[:last_space] + "..."
+            else:
+                text = truncated + "..."
 
         return text
 
@@ -436,7 +442,7 @@ RULES:
 - If being mean, kill them with kindness
 - If complimenting, be gracious but not sycophantic
 
-Stay in character. Under 280 chars."""
+Stay in character. Up to 4,000 chars (Premium X)."""
 
         return await self.generate_tweet(prompt, temperature=0.9)
 
