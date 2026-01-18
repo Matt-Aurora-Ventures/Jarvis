@@ -178,10 +178,16 @@ async def start_health_server(port: int = 8080):
     runner = web.AppRunner(app)
     await runner.setup()
 
-    site = web.TCPSite(runner, "0.0.0.0", port)
+    # Security: Restrict health endpoint to localhost or specific IP
+    # On VPS: HEALTH_HOST should be 127.0.0.1 for local access only, or set to specific monitoring IP
+    import os
+    health_host = os.getenv('HEALTH_HOST', '127.0.0.1')  # Default to localhost (secure)
+    logger.warning(f"Health endpoint binding to {health_host}:{port} (set HEALTH_HOST env var to change)")
+
+    site = web.TCPSite(runner, health_host, port)
     await site.start()
 
-    logger.info(f"Health server started on http://0.0.0.0:{port}")
+    logger.info(f"Health server started on http://{health_host}:{port}")
     _health_state["status"] = "healthy"
 
     return runner

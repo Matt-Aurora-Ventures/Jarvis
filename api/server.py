@@ -252,4 +252,17 @@ def run_backtests():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8765, debug=True)
+    import os
+    # Security: Use environment variables for host/debug settings
+    # On VPS: API_HOST should be 127.0.0.1 or specific IP, debug should be False
+    api_host = os.getenv('API_HOST', '127.0.0.1')  # Default to localhost (secure)
+    api_port = int(os.getenv('API_PORT', '8765'))
+    api_debug = os.getenv('API_DEBUG', 'false').lower() in ('true', '1', 'yes')
+
+    # Warn if debug is enabled in production
+    if api_debug:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning("API_DEBUG is enabled - only use this in development!")
+
+    app.run(host=api_host, port=api_port, debug=api_debug)
