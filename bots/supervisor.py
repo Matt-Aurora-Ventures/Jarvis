@@ -501,6 +501,50 @@ async def create_autonomous_x_engine():
     )
 
 
+async def create_public_trading_bot():
+    """Create and run the public trading bot for mass-market users."""
+    from bots.public_trading_bot_supervisor import PublicBotConfig, PublicTradingBotSupervisor
+
+    try:
+        # Get configuration from environment
+        telegram_token = os.environ.get("PUBLIC_BOT_TELEGRAM_TOKEN", "")
+        live_trading = os.environ.get("PUBLIC_BOT_LIVE_TRADING", "false").lower() == "true"
+        require_confirmation = os.environ.get("PUBLIC_BOT_REQUIRE_CONFIRMATION", "true").lower() == "true"
+        min_confidence = float(os.environ.get("PUBLIC_BOT_MIN_CONFIDENCE", "65.0"))
+        max_daily_loss = float(os.environ.get("PUBLIC_BOT_MAX_DAILY_LOSS", "1000.0"))
+
+        # Check if enabled
+        if not telegram_token:
+            logger.info("[public_bot] PUBLIC_BOT_TELEGRAM_TOKEN not set, skipping public trading bot")
+            return
+
+        # Create config
+        config = PublicBotConfig(
+            enabled=True,
+            telegram_token=telegram_token,
+            enable_live_trading=live_trading,
+            require_confirmation=require_confirmation,
+            min_confidence_threshold=min_confidence,
+            max_daily_loss_per_user=max_daily_loss,
+        )
+
+        # Create and initialize supervisor
+        supervisor = PublicTradingBotSupervisor(config)
+        success = await supervisor.initialize()
+
+        if not success:
+            logger.error("[public_bot] Failed to initialize public trading bot")
+            return
+
+        # Start the bot
+        logger.info("[public_bot] Public trading bot initialized, starting polling...")
+        await supervisor.start()
+
+    except Exception as e:
+        logger.error(f"[public_bot] Public trading bot error: {e}", exc_info=True)
+        raise
+
+
 async def create_autonomous_manager():
     """Create and run the autonomous manager (moderation, learning, vibe coding)."""
     from core.moderation.toxicity_detector import ToxicityDetector
@@ -676,6 +720,7 @@ async def main():
     supervisor.register("twitter_poster", create_twitter_poster, min_backoff=30.0, max_backoff=300.0)
     supervisor.register("telegram_bot", create_telegram_bot, min_backoff=10.0, max_backoff=60.0)
     supervisor.register("autonomous_x", create_autonomous_x_engine, min_backoff=30.0, max_backoff=300.0)
+    supervisor.register("public_trading_bot", create_public_trading_bot, min_backoff=20.0, max_backoff=180.0)
     supervisor.register("autonomous_manager", create_autonomous_manager, min_backoff=15.0, max_backoff=120.0)
 
     print("Registered components:")
