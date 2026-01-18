@@ -379,6 +379,26 @@
       "timestamp": "2026-01-18T19:36:06.892315+00:00",
       "from": "Codex",
       "message": "Aiohttp timeout audit: many ClientSession calls lack per-request timeout and sessions are created with no ClientTimeout. Files/lines flagged: bots/buy_tracker/monitor.py (session.get/post at ~140/148/239/256), bots/buy_tracker/sentiment_report.py (many session.get/post lines), core/api_proxy/gateway.py:418 (session.request), core/api_proxy/openrouter_proxy.py:369 (session.post), core/trading/batch_processor.py:470/485, core/trading/multi_venue_router.py:363/387, core/treasury/buyback_burn.py:326/341/364/390. Recommend setting ClientSession(timeout=ClientTimeout(total=...)) or passing timeout per request to avoid hangs."
+    },
+    {
+      "timestamp": "2026-01-18T19:37:23.051830+00:00",
+      "from": "Codex",
+      "message": "FastAPI websockets in api/fastapi_app.py (/ws/staking|credits|treasury|voice|trading) accept any connection; no auth/token check. If API host is 0.0.0.0, these expose real-time data to anyone. Consider requiring JWT/API key on connect or binding to localhost."
+    },
+    {
+      "timestamp": "2026-01-18T19:38:00.017420+00:00",
+      "from": "Codex",
+      "message": "Secrets folder: secrets/keys.json exists (not tracked; .gitignore ignores secrets/). Ensure it stays untracked; rotate keys if ever committed or synced."
+    },
+    {
+      "timestamp": "2026-01-18T19:40:09.413255+00:00",
+      "from": "Codex",
+      "message": "core/api_server.py (HTTPServer bound to 0.0.0.0) exposes sensitive endpoints with no auth: /api/autonomous*, /api/services/integrate, /api/wallet/status + /api/wallet/transactions (loads keypair), /api/trade (executes/simulates trades). If reachable over network, anyone can toggle autonomy or access wallet data. Bind to localhost or add auth."
+    },
+    {
+      "timestamp": "2026-01-18T19:51:35.046705+00:00",
+      "from": "Codex",
+      "message": "Secrets remediation done locally: removed hardcoded Telegram bot token/chat ID from deploy_kr8tiv.py (now env-driven), removed hardcoded TELEGRAM_BOT_TOKEN/ADMIN_USER_ID from monitor_bot_responses.py (env-driven), removed VPS password from scripts/deploy_vps_fix.py (env-driven), redacted token in SECURITY_ALERT.md, and replaced secret values in lifeos/config/mcp.config.json with ${ENV_VAR} placeholders. Recommend rotating any credentials previously exposed, and run scripts/security_scan.py or gitleaks before pushing. Remaining secret-pattern hits are test fixtures/docs (fake tokens)."
     }
   ]
 }

@@ -1,1 +1,1 @@
-"""Unit tests for Jarvis trading system."""
+"""Unit tests for Jarvis components."""
