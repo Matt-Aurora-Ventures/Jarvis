@@ -6,9 +6,12 @@ import sys
 import os
 
 # Credentials
-HOST = "72.61.7.126"
-USER = "jarvis"
-PASSWORD = "***SSH_PASSWORD_REDACTED***"
+HOST = os.getenv("VPS_HOST", "")
+USER = os.getenv("VPS_USERNAME", "")
+PASSWORD = os.getenv("VPS_PASSWORD", "")
+
+if not HOST or not USER or not PASSWORD:
+    raise SystemExit("Missing VPS_HOST, VPS_USERNAME, or VPS_PASSWORD in environment")
 
 # Commands to run on VPS
 COMMANDS = [
@@ -102,8 +105,8 @@ SSH with password authentication is not available from this environment.
 
 Run these commands manually on VPS:
 
-ssh jarvis@72.61.7.126
-# (password will be: ***SSH_PASSWORD_REDACTED***)
+ssh $VPS_USERNAME@$VPS_HOST
+# (password from VPS_PASSWORD env var)
 
 Then paste these commands:
 

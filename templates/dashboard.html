@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS Monitoring Dashboard</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #333;
+        }
+        h1 { color: #00d4ff; font-size: 28px; }
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-healthy { background: #10b981; color: white; }
+        .status-degraded { background: #f59e0b; color: black; }
+        .status-unhealthy { background: #ef4444; color: white; }
+        .status-unknown { background: #6b7280; color: white; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #333;
+        }
+        .card h2 {
+            color: #00d4ff;
+            font-size: 18px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .card h2 svg {
+            width: 20px;
+            height: 20px;
+        }
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #222;
+        }
+        .metric-row:last-child { border-bottom: none; }
+        .metric-label { color: #888; }
+        .metric-value { font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+        .metric-value.positive { color: #10b981; }
+        .metric-value.negative { color: #ef4444; }
+        .metric-value.warning { color: #f59e0b; }
+        .component-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.running { background: #10b981; }
+        .status-dot.stopped { background: #ef4444; animation: none; }
+        .status-dot.warning { background: #f59e0b; }
+        .status-dot.unknown { background: #6b7280; animation: none; }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .alert-item {
+            background: #2a2a3e;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .alert-item:last-child { margin-bottom: 0; }
+        .alert-critical { border-left: 4px solid #ef4444; }
+        .alert-warning { border-left: 4px solid #f59e0b; }
+        .alert-info { border-left: 4px solid #3b82f6; }
+        .alert-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .alert-time {
+            color: #666;
+            font-size: 12px;
+        }
+        .timestamp { color: #666; font-size: 14px; margin-top: 20px; }
+        #last-update { color: #888; font-size: 14px; }
+        .chart-container {
+            height: 200px;
+            background: #0f0f1a;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            margin-top: 10px;
+        }
+        .progress-bar {
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        .progress-fill.low { background: #10b981; }
+        .progress-fill.medium { background: #f59e0b; }
+        .progress-fill.high { background: #ef4444; }
+        .uptime-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #10b981;
+            text-align: center;
+            padding: 20px 0;
+        }
+        .log-entry {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            padding: 5px 0;
+            border-bottom: 1px solid #222;
+        }
+        .log-error { color: #ef4444; }
+        .log-warning { color: #f59e0b; }
+        .log-info { color: #888; }
+        .quick-stat {
+            text-align: center;
+            padding: 15px;
+        }
+        .quick-stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+        .quick-stat-label {
+            color: #666;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+        .cost-tracker {
+            background: linear-gradient(135deg, #1a1a2e 0%, #2d1b4e 100%);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>JARVIS Monitoring Dashboard</h1>
+        <div>
+            <span id="system-status" class="status-badge status-unknown">LOADING</span>
+            <span id="last-update">Last update: --</span>
+        </div>
+    </div>
+
+    <div class="grid">
+        <!-- Quick Stats Row -->
+        <div class="card" style="grid-column: span 2;">
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px;">
+                <div class="quick-stat">
+                    <div class="quick-stat-value" id="qs-positions">--</div>
+                    <div class="quick-stat-label">Open Positions</div>
+                </div>
+                <div class="quick-stat">
+                    <div class="quick-stat-value" id="qs-pnl">--</div>
+                    <div class="quick-stat-label">Total P&L</div>
+                </div>
+                <div class="quick-stat">
+                    <div class="quick-stat-value" id="qs-winrate">--</div>
+                    <div class="quick-stat-label">Win Rate</div>
+                </div>
+                <div class="quick-stat">
+                    <div class="quick-stat-value" id="qs-components">--</div>
+                    <div class="quick-stat-label">Components</div>
+                </div>
+                <div class="quick-stat">
+                    <div class="quick-stat-value" id="qs-errors">--</div>
+                    <div class="quick-stat-label">Errors (24h)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trading Metrics -->
+        <div class="card">
+            <h2>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                </svg>
+                Trading
+            </h2>
+            <div class="metric-row">
+                <span class="metric-label">Active Positions</span>
+                <span class="metric-value" id="active-positions">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Total Notional (USD)</span>
+                <span class="metric-value" id="total-notional">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Win Rate</span>
+                <span class="metric-value" id="win-rate">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Total P&L (USD)</span>
+                <span class="metric-value" id="total-pnl">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Avg Trade P&L</span>
+                <span class="metric-value" id="avg-pnl">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Sharpe Ratio</span>
+                <span class="metric-value" id="sharpe-ratio">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Max Drawdown</span>
+                <span class="metric-value" id="max-drawdown">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Liquidation Risk</span>
+                <span class="metric-value" id="liquidation-risk">--</span>
+            </div>
+        </div>
+
+        <!-- Bot Status -->
+        <div class="card">
+            <h2>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                </svg>
+                Bot Components
+            </h2>
+            <div id="bot-components">
+                <div class="component-status">
+                    <span class="status-dot unknown"></span>
+                    <span>Loading...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance -->
+        <div class="card">
+            <h2>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+                Performance
+            </h2>
+            <div class="metric-row">
+                <span class="metric-label">API Latency (P50)</span>
+                <span class="metric-value" id="api-latency-p50">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">API Latency (P95)</span>
+                <span class="metric-value" id="api-latency-p95">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">API Latency (P99)</span>
+                <span class="metric-value" id="api-latency-p99">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">CPU Usage</span>
+                <span class="metric-value" id="cpu-usage">--</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill low" id="cpu-bar" style="width: 0%"></div>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Memory Usage</span>
+                <span class="metric-value" id="memory-usage">--</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill low" id="memory-bar" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Logs -->
+        <div class="card">
+            <h2>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                Logging (24h)
+            </h2>
+            <div class="metric-row">
+                <span class="metric-label">Errors</span>
+                <span class="metric-value negative" id="error-count">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Warnings</span>
+                <span class="metric-value warning" id="warning-count">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Info</span>
+                <span class="metric-value" id="info-count">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Error Rate</span>
+                <span class="metric-value" id="error-rate">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Recent Error</span>
+                <span class="metric-value" id="recent-error" style="font-size: 11px;">--</span>
+            </div>
+        </div>
+
+        <!-- Active Alerts -->
+        <div class="card">
+            <h2>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+                Active Alerts
+            </h2>
+            <div id="alerts-list">
+                <p style="color: #666; text-align: center; padding: 20px;">No active alerts</p>
+            </div>
+        </div>
+
+        <!-- Uptime -->
+        <div class="card">
+            <h2>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                System Uptime
+            </h2>
+            <div class="uptime-display" id="uptime">--</div>
+            <div class="metric-row">
+                <span class="metric-label">Started At</span>
+                <span class="metric-value" id="started-at">--</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="timestamp">
+        Dashboard refreshes every 5 seconds | WebSocket: <span id="ws-status">Connecting...</span>
+    </div>
+
+    <script>
+        let ws;
+        let startTime = null;
+
+        function connectWebSocket() {
+            const wsUrl = `ws://${window.location.host}/ws/metrics`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                document.getElementById('ws-status').textContent = 'Connected';
+                document.getElementById('ws-status').style.color = '#10b981';
+            };
+
+            ws.onclose = () => {
+                document.getElementById('ws-status').textContent = 'Reconnecting...';
+                document.getElementById('ws-status').style.color = '#f59e0b';
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = () => {
+                document.getElementById('ws-status').textContent = 'Error';
+                document.getElementById('ws-status').style.color = '#ef4444';
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    updateDashboard(data);
+                } catch (e) {
+                    console.error('Failed to parse WebSocket message:', e);
+                }
+            };
+        }
+
+        function formatNumber(num, decimals = 0) {
+            if (num === null || num === undefined) return '--';
+            return num.toLocaleString(undefined, {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            });
+        }
+
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+
+            let parts = [];
+            if (days > 0) parts.push(`${days}d`);
+            if (hours > 0) parts.push(`${hours}h`);
+            if (minutes > 0) parts.push(`${minutes}m`);
+
+            return parts.join(' ') || '< 1m';
+        }
+
+        function updateProgressBar(elementId, percent) {
+            const bar = document.getElementById(elementId);
+            bar.style.width = `${Math.min(percent, 100)}%`;
+            bar.className = 'progress-fill ' +
+                (percent < 60 ? 'low' : percent < 80 ? 'medium' : 'high');
+        }
+
+        function updateDashboard(data) {
+            document.getElementById('last-update').textContent =
+                'Last update: ' + new Date().toLocaleTimeString();
+
+            // Quick stats
+            if (data.trading) {
+                document.getElementById('qs-positions').textContent = data.trading.active_positions || 0;
+                const pnl = data.trading.total_pnl_usd || 0;
+                document.getElementById('qs-pnl').textContent = (pnl >= 0 ? '+' : '') + '$' + formatNumber(pnl, 0);
+                document.getElementById('qs-pnl').style.color = pnl >= 0 ? '#10b981' : '#ef4444';
+                document.getElementById('qs-winrate').textContent = formatNumber(data.trading.win_rate, 1) + '%';
+            }
+
+            if (data.bots && data.bots.components) {
+                const running = Object.values(data.bots.components)
+                    .filter(c => c.status === 'running' || c.status === 'healthy').length;
+                const total = Object.keys(data.bots.components).length;
+                document.getElementById('qs-components').textContent = `${running}/${total}`;
+                document.getElementById('qs-components').style.color =
+                    running === total ? '#10b981' : running > 0 ? '#f59e0b' : '#ef4444';
+            }
+
+            if (data.logs) {
+                document.getElementById('qs-errors').textContent = data.logs.errors_24h || 0;
+                document.getElementById('qs-errors').style.color =
+                    data.logs.errors_24h > 10 ? '#ef4444' : data.logs.errors_24h > 0 ? '#f59e0b' : '#10b981';
+            }
+
+            // Trading metrics
+            if (data.trading) {
+                document.getElementById('active-positions').textContent = data.trading.active_positions || 0;
+                document.getElementById('total-notional').textContent = '$' + formatNumber(data.trading.total_notional_usd || 0, 0);
+                document.getElementById('win-rate').textContent = formatNumber(data.trading.win_rate, 1) + '%';
+
+                const pnl = data.trading.total_pnl_usd || 0;
+                const pnlEl = document.getElementById('total-pnl');
+                pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + formatNumber(pnl, 2);
+                pnlEl.className = 'metric-value ' + (pnl >= 0 ? 'positive' : 'negative');
+
+                const avgPnl = data.trading.avg_trade_pnl || 0;
+                const avgPnlEl = document.getElementById('avg-pnl');
+                avgPnlEl.textContent = (avgPnl >= 0 ? '+' : '') + '$' + formatNumber(avgPnl, 2);
+                avgPnlEl.className = 'metric-value ' + (avgPnl >= 0 ? 'positive' : 'negative');
+
+                document.getElementById('sharpe-ratio').textContent = formatNumber(data.trading.sharpe_ratio, 2);
+
+                const dd = data.trading.max_drawdown || 0;
+                const ddEl = document.getElementById('max-drawdown');
+                ddEl.textContent = formatNumber(dd, 1) + '%';
+                ddEl.className = 'metric-value ' + (dd > -10 ? '' : dd > -20 ? 'warning' : 'negative');
+
+                const risk = data.trading.liquidation_risk || 'LOW';
+                const riskEl = document.getElementById('liquidation-risk');
+                riskEl.textContent = risk;
+                riskEl.className = 'metric-value ' + (risk === 'LOW' ? 'positive' : risk === 'MEDIUM' ? 'warning' : 'negative');
+            }
+
+            // Bot components
+            if (data.bots && data.bots.components) {
+                const container = document.getElementById('bot-components');
+                container.innerHTML = '';
+
+                for (const [name, info] of Object.entries(data.bots.components)) {
+                    const status = info.status || info.component_status || 'unknown';
+                    const isRunning = status === 'running' || status === 'healthy';
+                    const hasStopped = status === 'stopped' || status === 'unhealthy';
+                    const dotClass = isRunning ? 'running' : hasStopped ? 'stopped' : 'warning';
+
+                    let extra = '';
+                    if (info.restart_count > 0) {
+                        extra = `<span style="color: #f59e0b; font-size: 12px;">(${info.restart_count} restarts)</span>`;
+                    }
+                    if (info.uptime) {
+                        extra += `<span style="color: #666; font-size: 12px; margin-left: 10px;">${info.uptime}</span>`;
+                    }
+
+                    container.innerHTML += `
+                        <div class="component-status">
+                            <span class="status-dot ${dotClass}"></span>
+                            <span style="flex: 1;">${name}</span>
+                            <span style="color: ${isRunning ? '#10b981' : hasStopped ? '#ef4444' : '#f59e0b'}; text-transform: uppercase; font-size: 12px;">${status}</span>
+                            ${extra}
+                        </div>
+                    `;
+                }
+            }
+
+            // Performance
+            if (data.performance) {
+                document.getElementById('api-latency-p50').textContent =
+                    formatNumber(data.performance.api_latency_p50_ms, 0) + 'ms';
+                document.getElementById('api-latency-p95').textContent =
+                    formatNumber(data.performance.api_latency_p95_ms, 0) + 'ms';
+                document.getElementById('api-latency-p99').textContent =
+                    formatNumber(data.performance.api_latency_p99_ms, 0) + 'ms';
+
+                const cpu = data.performance.cpu_percent || 0;
+                document.getElementById('cpu-usage').textContent = formatNumber(cpu, 1) + '%';
+                updateProgressBar('cpu-bar', cpu);
+
+                const memMb = data.performance.memory_mb || 0;
+                const memTotal = data.performance.memory_total_mb || 1;
+                const memPct = data.performance.memory_percent || (memMb / memTotal * 100);
+                document.getElementById('memory-usage').textContent =
+                    `${formatNumber(memMb, 0)}MB / ${formatNumber(memTotal, 0)}MB`;
+                updateProgressBar('memory-bar', memPct);
+            }
+
+            // Logs
+            if (data.logs) {
+                document.getElementById('error-count').textContent = data.logs.errors_24h || 0;
+                document.getElementById('warning-count').textContent = data.logs.warnings_24h || 0;
+                document.getElementById('info-count').textContent = data.logs.info_24h || 0;
+                document.getElementById('error-rate').textContent =
+                    formatNumber(data.logs.error_rate_per_minute, 2) + '/min';
+                document.getElementById('recent-error').textContent =
+                    data.logs.recent_error || 'None';
+            }
+        }
+
+        async function fetchHealth() {
+            try {
+                const resp = await fetch('/health');
+                const health = await resp.json();
+
+                const statusEl = document.getElementById('system-status');
+                statusEl.textContent = health.status.toUpperCase();
+                statusEl.className = 'status-badge status-' + health.status;
+
+                // Update uptime
+                if (health.timestamp) {
+                    if (!startTime) {
+                        startTime = new Date(health.timestamp);
+                        document.getElementById('started-at').textContent =
+                            startTime.toLocaleString();
+                    }
+                    const uptime = Math.floor((Date.now() - startTime.getTime()) / 1000);
+                    document.getElementById('uptime').textContent = formatUptime(uptime);
+                }
+            } catch (e) {
+                console.error('Failed to fetch health:', e);
+            }
+        }
+
+        async function fetchAlerts() {
+            try {
+                const resp = await fetch('/alerts');
+                const data = await resp.json();
+
+                const container = document.getElementById('alerts-list');
+                const alerts = data.active_alerts || [];
+
+                if (alerts.length === 0) {
+                    container.innerHTML = '<p style="color: #10b981; text-align: center; padding: 20px;">All systems operational</p>';
+                    return;
+                }
+
+                container.innerHTML = alerts.map(alert => `
+                    <div class="alert-item alert-${alert.severity || 'info'}">
+                        <div class="alert-title">${alert.id || 'Alert'}</div>
+                        <div>${alert.message || 'No message'}</div>
+                        <div class="alert-time">${alert.created_at || '--'}</div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to fetch alerts:', e);
+            }
+        }
+
+        async function fetchData() {
+            try {
+                const [trading, bots, perf, logs] = await Promise.all([
+                    fetch('/metrics/trading').then(r => r.json()),
+                    fetch('/metrics/bots').then(r => r.json()),
+                    fetch('/metrics/performance').then(r => r.json()),
+                    fetch('/metrics/logs').then(r => r.json()),
+                ]);
+
+                updateDashboard({ trading, bots, performance: perf, logs });
+            } catch (e) {
+                console.error('Failed to fetch data:', e);
+            }
+        }
+
+        // Initialize
+        fetchData();
+        fetchHealth();
+        fetchAlerts();
+        setInterval(fetchData, 5000);
+        setInterval(fetchHealth, 10000);
+        setInterval(fetchAlerts, 15000);
+        connectWebSocket();
+    </script>
+</body>
+</html>
