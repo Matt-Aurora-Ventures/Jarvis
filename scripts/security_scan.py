@@ -237,7 +237,7 @@ if __name__ == "__main__":
         print(f"  File: {finding.file}:{finding.line}")
         print(f"  {finding.description}")
         if finding.recommendation:
-            print(f"  → {finding.recommendation}")
+            print(f"  -> {finding.recommendation}")
     
     print("\n" + "-" * 60)
     print("Summary:")

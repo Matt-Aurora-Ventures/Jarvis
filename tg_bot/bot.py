@@ -21,6 +21,7 @@ from tg_bot.handlers.sentiment import trending, digest, report, sentiment, picks
 from tg_bot.handlers.admin import reload, config_cmd, logs, system, away, back, awaystatus, memory
 from tg_bot.handlers.trading import balance, positions, wallet, dashboard, button_callback, calibrate
 from tg_bot.handlers import treasury as treasury_handlers
+from tg_bot.handlers.sim_commands import sim, sim_buy, sim_sell, sim_pos
 
 
 def main():
@@ -141,6 +142,12 @@ def main():
     app.add_handler(CommandHandler("upgrades", upgrades))
     app.add_handler(CommandHandler("xbot", xbot))
     app.add_handler(CommandHandler("paper", paper))
+
+    # Paper Trading Simulator (SOL-based, real prices)
+    app.add_handler(CommandHandler("sim", sim))
+    app.add_handler(CommandHandler("simbuy", sim_buy))
+    app.add_handler(CommandHandler("simsell", sim_sell))
+    app.add_handler(CommandHandler("simpos", sim_pos))
     app.add_handler(CommandHandler("dev", dev))
 
     # Treasury Trading Commands

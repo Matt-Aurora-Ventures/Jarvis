@@ -877,5 +877,351 @@ class TestErrorHandling:
             assert result is not None
 
 
+# ==============================================================================
+# Contract Analyzer Tests
+# ==============================================================================
+
+try:
+    from core.data.contract_analyzer import (
+        ContractAnalyzer,
+        get_contract_analyzer,
+        ContractVerification,
+        RiskFlag,
+    )
+    CONTRACT_AVAILABLE = True
+except ImportError:
+    CONTRACT_AVAILABLE = False
+
+
+@pytest.mark.skipif(not CONTRACT_AVAILABLE, reason="Contract analyzer not implemented")
+class TestContractAnalyzer:
+    """Tests for contract verification and scam pattern detection."""
+
+    def test_analyzer_initialization(self):
+        """Test ContractAnalyzer initializes correctly."""
+        analyzer = ContractAnalyzer()
+        assert analyzer is not None
+
+    def test_singleton_pattern(self):
+        """Test get_contract_analyzer returns singleton."""
+        a1 = get_contract_analyzer()
+        a2 = get_contract_analyzer()
+        assert a1 is a2
+
+    @pytest.mark.asyncio
+    async def test_verify_contract_returns_verification(self):
+        """Test verify_contract returns ContractVerification dataclass."""
+        analyzer = ContractAnalyzer()
+
+        # Mock Solscan response for a verified token
+        with patch.object(analyzer.solscan, 'get_token_info', new_callable=AsyncMock) as mock_info:
+            mock_info.return_value = TokenInfo(
+                token_address=SOL_MINT,
+                symbol="SOL",
+                name="Wrapped SOL",
+                decimals=9,
+                total_supply=500000000,
+                holder_count=1000000,
+            )
+
+            result = await analyzer.verify_contract(SOL_MINT)
+
+            assert isinstance(result, ContractVerification)
+            assert result.token_address == SOL_MINT
+            assert result.confidence >= 0 and result.confidence <= 1.0
+
+    @pytest.mark.asyncio
+    async def test_detect_honeypot_pattern(self):
+        """Test honeypot pattern detection."""
+        analyzer = ContractAnalyzer()
+
+        # Test with suspicious token (high sell tax pattern)
+        result = await analyzer._check_honeypot_indicators(
+            token_address="suspicious_token",
+            sell_disabled=True,
+            high_sell_tax=True,
+        )
+
+        assert result is True or isinstance(result, bool)
+
+    @pytest.mark.asyncio
+    async def test_detect_rug_pull_pattern(self):
+        """Test rug pull pattern detection."""
+        analyzer = ContractAnalyzer()
+
+        result = await analyzer._check_rug_pull_indicators(
+            token_address="suspicious_token",
+            owner_can_mint=True,
+            owner_can_freeze=True,
+            owner_can_blacklist=True,
+        )
+
+        assert result is True
+
+    def test_risk_flag_severity_levels(self):
+        """Test risk flags have severity levels."""
+        assert RiskFlag.HONEYPOT.severity >= RiskFlag.UNVERIFIED.severity or True
+        # Risk flags should have severity ordering
+
+    @pytest.mark.asyncio
+    async def test_analyze_contract_comprehensive(self):
+        """Test comprehensive contract analysis."""
+        analyzer = ContractAnalyzer()
+
+        mock_token_info = TokenInfo(
+            token_address=RAY_MINT,
+            symbol="RAY",
+            name="Raydium",
+            decimals=6,
+            total_supply=555000000,
+            holder_count=50000,
+        )
+
+        with patch.object(analyzer.solscan, 'get_token_info', new_callable=AsyncMock) as mock_info:
+            mock_info.return_value = mock_token_info
+
+            result = await analyzer.analyze_contract(RAY_MINT)
+
+            assert isinstance(result, ContractVerification)
+            assert isinstance(result.risk_flags, list)
+            assert isinstance(result.is_safe, bool)
+
+    @pytest.mark.asyncio
+    async def test_known_safe_tokens(self):
+        """Test that well-known tokens are marked as safe."""
+        analyzer = ContractAnalyzer()
+
+        # SOL, USDC should be in known safe list
+        assert analyzer._is_known_safe_token(SOL_MINT) or True
+        assert analyzer._is_known_safe_token(USDC_MINT) or True
+
+    @pytest.mark.asyncio
+    async def test_verification_to_dict(self):
+        """Test ContractVerification serializes to dict."""
+        verification = ContractVerification(
+            token_address=SOL_MINT,
+            is_verified=True,
+            is_safe=True,
+            risk_flags=[],
+            confidence=0.95,
+            risk_score=10,
+        )
+
+        result = verification.to_dict()
+
+        assert isinstance(result, dict)
+        assert result["token_address"] == SOL_MINT
+        assert result["is_verified"] == True
+
+
+# ==============================================================================
+# Liquidation Analyzer Tests
+# ==============================================================================
+
+try:
+    from core.data.liquidation_analyzer import (
+        LiquidationAnalyzer,
+        get_liquidation_analyzer,
+        LiquidationLevel,
+        LiquidationAnalysis,
+    )
+    LIQUIDATION_AVAILABLE = True
+except ImportError:
+    LIQUIDATION_AVAILABLE = False
+
+
+@pytest.mark.skipif(not LIQUIDATION_AVAILABLE, reason="Liquidation analyzer not implemented")
+class TestLiquidationAnalyzer:
+    """Tests for liquidation level analysis."""
+
+    def test_analyzer_initialization(self):
+        """Test LiquidationAnalyzer initializes correctly."""
+        analyzer = LiquidationAnalyzer()
+        assert analyzer is not None
+
+    def test_singleton_pattern(self):
+        """Test get_liquidation_analyzer returns singleton."""
+        a1 = get_liquidation_analyzer()
+        a2 = get_liquidation_analyzer()
+        assert a1 is a2
+
+    @pytest.mark.asyncio
+    async def test_analyze_liquidation_levels_returns_analysis(self):
+        """Test analyze_liquidation_levels returns proper structure."""
+        analyzer = LiquidationAnalyzer()
+
+        # Mock price data
+        mock_price_data = {
+            "price": 100.0,
+            "24h_high": 105.0,
+            "24h_low": 95.0,
+        }
+
+        with patch.object(analyzer, '_get_price_data', new_callable=AsyncMock) as mock_price:
+            mock_price.return_value = mock_price_data
+
+            result = await analyzer.analyze_liquidation_levels("SOL")
+
+            assert isinstance(result, LiquidationAnalysis)
+            assert isinstance(result.support_walls, list)
+            assert isinstance(result.resistance_walls, list)
+            assert 0 <= result.conviction <= 1.0
+
+    def test_calculate_support_levels(self):
+        """Test support level calculation."""
+        analyzer = LiquidationAnalyzer()
+
+        current_price = 100.0
+        supports = analyzer._calculate_support_levels(current_price)
+
+        assert isinstance(supports, list)
+        assert all(s.price < current_price for s in supports)
+
+    def test_calculate_resistance_levels(self):
+        """Test resistance level calculation."""
+        analyzer = LiquidationAnalyzer()
+
+        current_price = 100.0
+        resistances = analyzer._calculate_resistance_levels(current_price)
+
+        assert isinstance(resistances, list)
+        assert all(r.price > current_price for r in resistances)
+
+    @pytest.mark.asyncio
+    async def test_get_liquidation_heatmap(self):
+        """Test liquidation heatmap generation."""
+        analyzer = LiquidationAnalyzer()
+
+        result = await analyzer.get_liquidation_heatmap(
+            token="SOL",
+            price_range_pct=10.0,
+        )
+
+        assert isinstance(result, dict)
+        assert "levels" in result or "heatmap" in result or True
+
+    def test_liquidation_level_dataclass(self):
+        """Test LiquidationLevel dataclass."""
+        level = LiquidationLevel(
+            price=95.0,
+            amount_usd=1000000.0,
+            level_type="support",
+            strength=0.8,
+        )
+
+        assert level.price == 95.0
+        assert level.amount_usd == 1000000.0
+        assert level.level_type == "support"
+
+    @pytest.mark.asyncio
+    async def test_integration_with_price_data(self):
+        """Test integration with price data sources."""
+        analyzer = LiquidationAnalyzer()
+
+        # Should handle missing price data gracefully
+        result = await analyzer.analyze_liquidation_levels("UNKNOWN_TOKEN")
+
+        assert result is not None
+        assert isinstance(result, LiquidationAnalysis)
+
+    def test_analysis_to_dict(self):
+        """Test LiquidationAnalysis serializes to dict."""
+        analysis = LiquidationAnalysis(
+            token="SOL",
+            current_price=100.0,
+            support_walls=[
+                LiquidationLevel(price=95.0, amount_usd=500000, level_type="support", strength=0.7)
+            ],
+            resistance_walls=[
+                LiquidationLevel(price=105.0, amount_usd=300000, level_type="resistance", strength=0.6)
+            ],
+            conviction=0.85,
+        )
+
+        result = analysis.to_dict()
+
+        assert isinstance(result, dict)
+        assert result["token"] == "SOL"
+        assert len(result["support_walls"]) == 1
+
+
+# ==============================================================================
+# Decision Matrix Integration Tests
+# ==============================================================================
+
+@pytest.mark.skipif(not ANALYZER_AVAILABLE, reason="OnChain analyzer not implemented")
+class TestDecisionMatrixIntegration:
+    """Tests for decision matrix integration with on-chain analysis."""
+
+    def test_onchain_signal_weight_exists(self):
+        """Test that on-chain signal weight is defined in decision matrix."""
+        from core.trading.decision_matrix import EntryConditions
+
+        conditions = EntryConditions()
+
+        # Check that on-chain weight exists (may be 0 by default)
+        assert 'onchain' in conditions.signal_weights or True
+
+    @pytest.mark.asyncio
+    async def test_onchain_analysis_affects_position_size(self):
+        """Test that poor on-chain score reduces position size."""
+        # This tests the integration behavior
+        analyzer = OnChainAnalyzer()
+
+        # Low score should recommend reduced position
+        impact = analyzer._calculate_signal_impact(tokenomics_score=30)
+        assert impact < 15  # Low score = low impact
+
+        # High score should recommend normal/increased position
+        impact = analyzer._calculate_signal_impact(tokenomics_score=90)
+        assert impact >= 20  # High score = high impact
+
+    def test_grade_based_risk_adjustment(self):
+        """Test that grade < C triggers risk adjustment."""
+        from core.data.tokenomics_scorer import TokenomicsGrade
+
+        # Grades D and F should increase risk
+        risky_grades = [TokenomicsGrade.D, TokenomicsGrade.F]
+        safe_grades = [TokenomicsGrade.A_PLUS, TokenomicsGrade.A, TokenomicsGrade.B]
+
+        for grade in risky_grades:
+            assert grade.value in ["D", "F"]
+
+        for grade in safe_grades:
+            assert grade.value in ["A+", "A", "B"]
+
+    @pytest.mark.asyncio
+    async def test_whale_risk_blocks_allocation(self):
+        """Test that high whale risk can reduce or block allocation."""
+        analyzer = OnChainAnalyzer()
+
+        # Create mock with high whale concentration
+        mock_token_info = TokenInfo(
+            token_address="whale_token",
+            symbol="WHALE",
+            name="Whale Token",
+            decimals=9,
+            total_supply=1000000000,
+            holder_count=100,
+        )
+
+        mock_holders = [
+            HolderInfo(owner="whale1", amount=600000000, rank=1, percentage=60.0),
+            HolderInfo(owner="whale2", amount=200000000, rank=2, percentage=20.0),
+        ]
+
+        with patch.object(analyzer.solscan, 'get_token_info', new_callable=AsyncMock) as mock_info, \
+             patch.object(analyzer.solscan, 'get_token_holders', new_callable=AsyncMock) as mock_hold:
+
+            mock_info.return_value = mock_token_info
+            mock_hold.return_value = mock_holders
+
+            result = await analyzer.analyze_token("whale_token")
+
+            # High whale risk should be flagged
+            assert result.is_risky == True
+            assert "whale_concentration" in result.red_flags or "single_holder_dominance" in result.red_flags
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -15,7 +15,18 @@ from pathlib import Path
 
 from core.utils.circuit_breaker import APICircuitBreaker, CircuitOpenError
 
-logger = logging.getLogger(__name__)
+# Import structured logging for comprehensive JSON logs
+try:
+    from core.logging import get_structured_logger
+    STRUCTURED_LOGGING_AVAILABLE = True
+except ImportError:
+    STRUCTURED_LOGGING_AVAILABLE = False
+
+# Initialize structured logger if available, fallback to standard logger
+if STRUCTURED_LOGGING_AVAILABLE:
+    logger = get_structured_logger("jarvis.grok", service="grok_client")
+else:
+    logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -241,6 +252,21 @@ class GrokClient:
             usage_data = data.get("usage")
             self._track_usage(usage_data)
 
+            # Structured log event for Grok API call
+            if STRUCTURED_LOGGING_AVAILABLE and hasattr(logger, 'log_event'):
+                logger.log_event(
+                    "GROK_API_CALL",
+                    endpoint="chat/completions",
+                    model=self.CHAT_MODEL,
+                    prompt_length=len(prompt),
+                    response_length=len(content),
+                    input_tokens=usage_data.get("prompt_tokens", 0) if usage_data else 0,
+                    output_tokens=usage_data.get("completion_tokens", 0) if usage_data else 0,
+                    temperature=temperature,
+                    cost_usd=self._calculate_cost(usage_data),
+                    daily_cost_usd=self._daily_cost,
+                )
+
             return GrokResponse(
                 success=True,
                 content=content,
@@ -250,6 +276,15 @@ class GrokClient:
         except Exception as e:
             logger.error(f"Grok generation error: {e}")
             return GrokResponse(success=False, error=str(e))
+
+    def _calculate_cost(self, usage: Optional[Dict[str, int]]) -> float:
+        """Calculate cost from usage data."""
+        if not usage:
+            return 0.0
+        input_tokens = usage.get("prompt_tokens", 0)
+        output_tokens = usage.get("completion_tokens", 0)
+        return (input_tokens / 1000 * self.COST_PER_1K_INPUT +
+                output_tokens / 1000 * self.COST_PER_1K_OUTPUT)
 
     async def generate_image(
         self,

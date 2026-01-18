@@ -87,11 +87,12 @@ def rate_limited(func: Callable[..., Awaitable[Any]]):
 
 # Import handler modules for easy access
 from tg_bot.handlers import system
+from tg_bot.handlers import paper_trading
 
 __all__ = [
     "error_handler",
     "admin_only",
     "rate_limited",
     "system",
+    "paper_trading",
 ]
-
