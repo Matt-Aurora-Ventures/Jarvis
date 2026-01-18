@@ -274,3 +274,424 @@ def track_performance(name: str = None, warn_threshold_ms: float = None):
         return sync_wrapper
 
     return decorator
+
+
+# =============================================================================
+# Enhanced Profile Block System
+# =============================================================================
+
+@dataclass
+class EnhancedProfileResult:
+    """Extended result for profile_block operations."""
+    name: str
+    duration_ms: float
+    memory_mb: float = 0.0
+    peak_memory_mb: float = 0.0
+    call_count: int = 1
+    exception_count: int = 0
+    last_exception: Optional[str] = None
+
+
+class GlobalProfileStore:
+    """
+    Global store for profile_block results.
+
+    Thread-safe storage for profiling results that can be accessed
+    across the application.
+    """
+
+    def __init__(self):
+        self._results: Dict[str, EnhancedProfileResult] = {}
+        self._memory_tracking = False
+
+    def record(
+        self,
+        name: str,
+        duration_ms: float,
+        memory_mb: float = 0.0,
+        peak_memory_mb: float = 0.0,
+        exception: Optional[Exception] = None
+    ):
+        """Record a profiling result."""
+        if name in self._results:
+            r = self._results[name]
+            r.duration_ms += duration_ms
+            r.call_count += 1
+            r.memory_mb = max(r.memory_mb, memory_mb)
+            r.peak_memory_mb = max(r.peak_memory_mb, peak_memory_mb)
+            if exception:
+                r.exception_count += 1
+                r.last_exception = str(exception)
+        else:
+            self._results[name] = EnhancedProfileResult(
+                name=name,
+                duration_ms=duration_ms,
+                memory_mb=memory_mb,
+                peak_memory_mb=peak_memory_mb,
+                call_count=1,
+                exception_count=1 if exception else 0,
+                last_exception=str(exception) if exception else None
+            )
+
+    def get_results(self) -> Dict[str, Dict[str, Any]]:
+        """Get all results as a dictionary."""
+        return {
+            name: {
+                "duration_ms": r.duration_ms,
+                "memory_mb": r.memory_mb,
+                "peak_memory_mb": r.peak_memory_mb,
+                "call_count": r.call_count,
+                "exception_count": r.exception_count,
+                "avg_duration_ms": r.duration_ms / r.call_count if r.call_count > 0 else 0
+            }
+            for name, r in self._results.items()
+        }
+
+    def reset(self):
+        """Clear all results."""
+        self._results.clear()
+
+
+# Global profile store
+_profile_store = GlobalProfileStore()
+
+
+@contextmanager
+def profile_block(name: str, track_memory: bool = False):
+    """
+    Context manager for profiling a code block.
+
+    Usage:
+        with profile_block("trading.execute_trade"):
+            # code here gets profiled
+
+        with profile_block("analysis.sentiment", track_memory=True):
+            # code here gets profiled with memory tracking
+
+    Args:
+        name: Unique name for this profiled operation (use dotted notation)
+        track_memory: Whether to track memory usage (has overhead)
+    """
+    start_time = time.perf_counter()
+    memory_before = 0
+    exception_caught = None
+
+    # Start memory tracking if requested
+    if track_memory:
+        if not tracemalloc.is_tracing():
+            tracemalloc.start()
+        memory_before, _ = tracemalloc.get_traced_memory()
+
+    try:
+        yield
+    except Exception as e:
+        exception_caught = e
+        raise
+    finally:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+
+        memory_mb = 0.0
+        peak_memory_mb = 0.0
+        if track_memory and tracemalloc.is_tracing():
+            memory_after, peak = tracemalloc.get_traced_memory()
+            memory_mb = (memory_after - memory_before) / 1024 / 1024
+            peak_memory_mb = peak / 1024 / 1024
+
+        _profile_store.record(
+            name=name,
+            duration_ms=duration_ms,
+            memory_mb=memory_mb,
+            peak_memory_mb=peak_memory_mb,
+            exception=exception_caught
+        )
+
+
+def get_profiler_results() -> Dict[str, Dict[str, Any]]:
+    """Get all profiler results."""
+    return _profile_store.get_results()
+
+
+def reset_profiler():
+    """Reset the global profiler."""
+    _profile_store.reset()
+
+
+def profile_performance(func: Callable = None, *, name: str = None):
+    """
+    Decorator to profile a function's performance.
+
+    Can be used with or without arguments:
+        @profile_performance
+        def my_func():
+            ...
+
+        @profile_performance(name="custom.name")
+        async def my_async_func():
+            ...
+
+    Args:
+        func: The function to decorate (when used without parentheses)
+        name: Custom name for the operation (defaults to function name)
+    """
+    def decorator(fn: Callable) -> Callable:
+        op_name = name or fn.__name__
+
+        @functools.wraps(fn)
+        async def async_wrapper(*args, **kwargs):
+            with profile_block(op_name):
+                return await fn(*args, **kwargs)
+
+        @functools.wraps(fn)
+        def sync_wrapper(*args, **kwargs):
+            with profile_block(op_name):
+                return fn(*args, **kwargs)
+
+        if asyncio.iscoroutinefunction(fn):
+            return async_wrapper
+        return sync_wrapper
+
+    # Handle both @profile_performance and @profile_performance()
+    if func is not None:
+        return decorator(func)
+    return decorator
+
+
+# =============================================================================
+# Output Formatters
+# =============================================================================
+
+def export_results_json() -> str:
+    """Export profiler results as JSON."""
+    import json
+    return json.dumps(get_profiler_results(), indent=2)
+
+
+def export_results_csv() -> str:
+    """Export profiler results as CSV."""
+    results = get_profiler_results()
+    lines = ["name,duration_ms,avg_duration_ms,call_count,exception_count,memory_mb"]
+
+    for name, data in sorted(results.items()):
+        lines.append(
+            f"{name},{data['duration_ms']:.2f},{data['avg_duration_ms']:.2f},"
+            f"{data['call_count']},{data['exception_count']},{data['memory_mb']:.2f}"
+        )
+
+    return "\n".join(lines)
+
+
+def export_results_table() -> str:
+    """Export profiler results as a human-readable table."""
+    results = get_profiler_results()
+
+    if not results:
+        return "No profiling results available."
+
+    # Calculate column widths
+    name_width = max(len(name) for name in results.keys())
+    name_width = max(name_width, 20)
+
+    lines = [
+        "Performance Profiling Results",
+        "=" * 70,
+        f"{'Name':<{name_width}} {'Time(ms)':>12} {'Avg(ms)':>10} {'Calls':>8} {'Errors':>8}",
+        "-" * 70
+    ]
+
+    # Sort by duration (slowest first)
+    sorted_results = sorted(
+        results.items(),
+        key=lambda x: x[1]['duration_ms'],
+        reverse=True
+    )
+
+    for name, data in sorted_results:
+        lines.append(
+            f"{name:<{name_width}} {data['duration_ms']:>12.2f} "
+            f"{data['avg_duration_ms']:>10.2f} {data['call_count']:>8} "
+            f"{data['exception_count']:>8}"
+        )
+
+    lines.append("-" * 70)
+
+    # Summary
+    total_time = sum(d['duration_ms'] for d in results.values())
+    total_calls = sum(d['call_count'] for d in results.values())
+    total_errors = sum(d['exception_count'] for d in results.values())
+
+    lines.append(f"Total: {total_time:.2f}ms across {total_calls} calls ({total_errors} errors)")
+
+    return "\n".join(lines)
+
+
+# =============================================================================
+# Memory Leak Detection
+# =============================================================================
+
+class MemoryLeakDetector:
+    """
+    Detect potential memory leaks by tracking memory over time.
+
+    Usage:
+        detector = MemoryLeakDetector()
+
+        # In your main loop or periodic task
+        detector.record_sample(current_memory_mb)
+
+        # Check for leaks
+        result = detector.analyze()
+        if result["has_potential_leak"]:
+            logger.warning(f"Potential memory leak: {result['growth_mb']}MB growth")
+    """
+
+    def __init__(self, max_samples: int = 100, leak_threshold_mb: float = 10.0):
+        """
+        Args:
+            max_samples: Maximum number of samples to keep
+            leak_threshold_mb: Memory growth threshold to flag as potential leak
+        """
+        self.max_samples = max_samples
+        self.leak_threshold_mb = leak_threshold_mb
+        self._samples: list = []
+
+    def record_sample(self, memory_mb: float):
+        """Record a memory sample."""
+        self._samples.append({
+            "timestamp": time.time(),
+            "memory_mb": memory_mb
+        })
+
+        # Keep only recent samples
+        if len(self._samples) > self.max_samples:
+            self._samples = self._samples[-self.max_samples:]
+
+    def analyze(self) -> Dict[str, Any]:
+        """
+        Analyze memory samples for potential leaks.
+
+        Returns:
+            Dictionary with analysis results
+        """
+        if len(self._samples) < 2:
+            return {
+                "has_potential_leak": False,
+                "growth_mb": 0,
+                "samples": len(self._samples),
+                "message": "Not enough samples"
+            }
+
+        first_memory = self._samples[0]["memory_mb"]
+        last_memory = self._samples[-1]["memory_mb"]
+        growth_mb = last_memory - first_memory
+
+        # Check if there's consistent growth
+        increasing_count = 0
+        for i in range(1, len(self._samples)):
+            if self._samples[i]["memory_mb"] > self._samples[i-1]["memory_mb"]:
+                increasing_count += 1
+
+        growth_ratio = increasing_count / (len(self._samples) - 1)
+
+        has_leak = growth_mb > self.leak_threshold_mb and growth_ratio > 0.6
+
+        return {
+            "has_potential_leak": has_leak,
+            "growth_mb": round(growth_mb, 2),
+            "growth_ratio": round(growth_ratio, 2),
+            "samples": len(self._samples),
+            "first_mb": round(first_memory, 2),
+            "last_mb": round(last_memory, 2),
+            "message": "Potential leak detected" if has_leak else "Memory stable"
+        }
+
+    def reset(self):
+        """Clear all samples."""
+        self._samples.clear()
+
+
+# =============================================================================
+# Benchmark Runner
+# =============================================================================
+
+def run_benchmark(
+    func: Callable,
+    iterations: int = 100,
+    warmup: int = 5
+) -> Dict[str, Any]:
+    """
+    Run a synchronous function multiple times and collect timing statistics.
+
+    Args:
+        func: Function to benchmark (no arguments)
+        iterations: Number of iterations
+        warmup: Number of warmup iterations (not counted)
+
+    Returns:
+        Dictionary with timing statistics
+    """
+    # Warmup
+    for _ in range(warmup):
+        func()
+
+    # Benchmark
+    times = []
+    for _ in range(iterations):
+        start = time.perf_counter()
+        func()
+        duration = (time.perf_counter() - start) * 1000
+        times.append(duration)
+
+    times.sort()
+
+    return {
+        "iterations": iterations,
+        "min_ms": round(min(times), 3),
+        "max_ms": round(max(times), 3),
+        "avg_ms": round(sum(times) / len(times), 3),
+        "p50_ms": round(times[len(times) // 2], 3),
+        "p95_ms": round(times[int(len(times) * 0.95)], 3),
+        "p99_ms": round(times[int(len(times) * 0.99)], 3),
+        "total_ms": round(sum(times), 3)
+    }
+
+
+async def run_async_benchmark(
+    func: Callable,
+    iterations: int = 100,
+    warmup: int = 5
+) -> Dict[str, Any]:
+    """
+    Run an async function multiple times and collect timing statistics.
+
+    Args:
+        func: Async function to benchmark (no arguments)
+        iterations: Number of iterations
+        warmup: Number of warmup iterations (not counted)
+
+    Returns:
+        Dictionary with timing statistics
+    """
+    # Warmup
+    for _ in range(warmup):
+        await func()
+
+    # Benchmark
+    times = []
+    for _ in range(iterations):
+        start = time.perf_counter()
+        await func()
+        duration = (time.perf_counter() - start) * 1000
+        times.append(duration)
+
+    times.sort()
+
+    return {
+        "iterations": iterations,
+        "min_ms": round(min(times), 3),
+        "max_ms": round(max(times), 3),
+        "avg_ms": round(sum(times) / len(times), 3),
+        "p50_ms": round(times[len(times) // 2], 3),
+        "p95_ms": round(times[int(len(times) * 0.95)], 3) if len(times) >= 20 else None,
+        "p99_ms": round(times[int(len(times) * 0.99)], 3) if len(times) >= 100 else None,
+        "total_ms": round(sum(times), 3)
+    }

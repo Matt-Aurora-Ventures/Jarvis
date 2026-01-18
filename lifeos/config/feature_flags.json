@@ -1,0 +1,44 @@
+{
+  "flags": {
+    "DEXTER_ENABLED": {
+      "enabled": false,
+      "description": "Enable Dexter ReAct agent for Telegram finance queries",
+      "rollout_percentage": 0,
+      "user_whitelist": [],
+      "created_at": "2026-01-18",
+      "updated_at": "2026-01-18"
+    },
+    "ADVANCED_TRADING_ENABLED": {
+      "enabled": false,
+      "description": "Enable advanced trading features: trailing stops, DCA strategies",
+      "rollout_percentage": 0,
+      "user_whitelist": [],
+      "created_at": "2026-01-18",
+      "updated_at": "2026-01-18"
+    },
+    "NEW_TELEGRAM_UI_ENABLED": {
+      "enabled": false,
+      "description": "Enable new Telegram UI with inline buttons and drill-down menus",
+      "rollout_percentage": 0,
+      "user_whitelist": [],
+      "created_at": "2026-01-18",
+      "updated_at": "2026-01-18"
+    },
+    "LIVE_TRADING_ENABLED": {
+      "enabled": true,
+      "description": "Allow real trades (vs paper trading)",
+      "rollout_percentage": 0,
+      "user_whitelist": [],
+      "created_at": "2026-01-18",
+      "updated_at": "2026-01-18"
+    },
+    "STRUCTURED_LOGGING_ENABLED": {
+      "enabled": false,
+      "description": "Enable new structured logging system with JSON output",
+      "rollout_percentage": 0,
+      "user_whitelist": [],
+      "created_at": "2026-01-18",
+      "updated_at": "2026-01-18"
+    }
+  }
+}
