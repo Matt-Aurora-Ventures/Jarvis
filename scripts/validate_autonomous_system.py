@@ -106,8 +106,8 @@ async def test_position_sync() -> bool:
         logger.info(f"  Synced {synced} positions to scorekeeper")
 
         # Check scorekeeper now has positions
-        scorekeeper_positions = scorekeeper.get_all_positions()
-        logger.info(f"  Scorekeeper now has {len(scorekeeper_positions)} total positions")
+        scorekeeper_positions = scorekeeper.get_open_positions()
+        logger.info(f"  Scorekeeper has {len(scorekeeper_positions)} open positions")
 
         return True  # Return True if sync works, regardless of position count
 
