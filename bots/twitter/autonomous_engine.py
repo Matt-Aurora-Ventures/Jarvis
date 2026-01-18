@@ -1430,7 +1430,39 @@ class AutonomousEngine:
         self._autonomy = None
         self._last_thread_schedule_key = None
 
+        # Error tracking for spam prevention (exponential backoff)
+        self._consecutive_errors = 0
+        self._last_error_time = 0
+        self._error_cooldown_base = 300  # Base 5 minutes, exponentially increases
+
         # Fingerprint cleanup is now handled by MemoryStore.cleanup_expired()
+
+    def _record_error(self):
+        """Record an error and trigger exponential backoff."""
+        self._consecutive_errors += 1
+        self._last_error_time = time.time()
+        # Exponential backoff: 5min * (2^errors), max 2 hours
+        backoff_seconds = min(self._error_cooldown_base * (2 ** (self._consecutive_errors - 1)), 7200)
+        logger.warning(
+            f"X Bot error #{self._consecutive_errors}. "
+            f"Increasing cooldown to {backoff_seconds//60} minutes."
+        )
+        self._post_interval = self._post_interval + backoff_seconds
+
+    def _record_success(self):
+        """Reset error counter on successful post."""
+        if self._consecutive_errors > 0:
+            logger.info(f"X Bot: Recovered after {self._consecutive_errors} error(s), resetting cooldown")
+            self._post_interval = 1800  # Reset to 30 minutes
+            self._consecutive_errors = 0
+
+    def _is_in_error_cooldown(self) -> bool:
+        """Check if we're in error cooldown period."""
+        if self._consecutive_errors == 0:
+            return False
+        time_since_error = time.time() - self._last_error_time
+        backoff_needed = self._error_cooldown_base * (2 ** (self._consecutive_errors - 1))
+        return time_since_error < backoff_needed
 
     async def _get_autonomy(self):
         """Get autonomy orchestrator."""
@@ -3762,10 +3794,16 @@ Reply type guidance:
             autonomy = await self._get_autonomy()
             recommendations = autonomy.get_content_recommendations()
             
+            # Check if we're in error cooldown (exponential backoff from spam prevention)
+            if self._is_in_error_cooldown():
+                time_remaining = (self._error_cooldown_base * (2 ** (self._consecutive_errors - 1))) - (time.time() - self._last_error_time)
+                logger.warning(f"X Bot in error cooldown. Resuming in {time_remaining:.0f}s")
+                return None
+
             # Check if we should post
             now = time.time()
             time_since_last = now - self._last_post_time
-            
+
             should_post = recommendations.get("should_post", True)
             
             # Override if it's been too long (1.5x interval) to ensure we don't go silent
@@ -4064,6 +4102,7 @@ Reply type guidance:
 
                             if tweet_id:
                                 self._last_post_time = time.time()
+                                self._record_success()  # Reset error tracking on successful post
 
                                 # Record to autonomy systems for learning
                                 autonomy.record_tweet_posted(
@@ -4080,12 +4119,14 @@ Reply type guidance:
                                 return tweet_id
                 except Exception as e:
                     logger.error(f"Error executing generator {category}: {e}")
+                    self._record_error()  # Track error for exponential backoff
                     continue
-            
+
             logger.warning("No content generated this cycle")
-            
+
         except Exception as e:
             logger.error(f"Autonomous loop error: {e}")
+            self._record_error()  # Track error for exponential backoff
         
         return None
 
