@@ -70,13 +70,22 @@ class EntryConditions:
     # Signal combination
     require_multiple_signals: bool = False  # Require 2+ signals to agree
     signal_weights: Dict[str, float] = field(default_factory=lambda: {
-        'liquidation': 0.35,
-        'ma': 0.25,
-        'sentiment': 0.25,
+        'liquidation': 0.25,
+        'ma': 0.15,
+        'sentiment': 0.15,
+        'onchain': 0.12,  # On-chain tokenomics analysis
         'rsi': 0.08,
-        'macd': 0.05,
-        'mean_reversion': 0.02,
+        'macd': 0.07,
+        'mean_reversion': 0.06,
+        'breakout': 0.07,  # Breakout/breakdown strategy
+        'volume_profile': 0.05,  # Volume profile analysis
     })
+
+    # On-chain analysis settings
+    onchain_enabled: bool = True
+    onchain_min_grade: str = "C"  # Minimum grade to trade (D, F blocked)
+    onchain_whale_risk_threshold: float = 0.7  # Block if whale risk > 70%
+    onchain_reduce_size_on_risk: bool = True  # Reduce position size if risky
 
 
 @dataclass
@@ -274,6 +283,56 @@ class DecisionMatrix:
                 signals_used.append('sentiment')
                 reasoning.append(f"Sentiment signal: {sent_signal.direction}")
 
+        # 2b. Process on-chain analysis signal
+        onchain_risk_multiplier = 1.0  # Default: no adjustment
+        if self.entry.onchain_enabled and 'onchain' in self._signal_cache:
+            onchain_signal = self._signal_cache['onchain']['signal']
+            weight = self.entry.signal_weights.get('onchain', 0.15)
+
+            # Check tokenomics grade
+            grade = getattr(onchain_signal, 'tokenomics_grade', 'C')
+            score = getattr(onchain_signal, 'tokenomics_score', 50)
+            is_risky = getattr(onchain_signal, 'is_risky', False)
+            red_flags = getattr(onchain_signal, 'red_flags', [])
+
+            # Block if grade below minimum (D or F)
+            min_grade = self.entry.onchain_min_grade
+            grade_order = {'A+': 6, 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'F': 1}
+            if grade_order.get(grade, 0) < grade_order.get(min_grade, 3):
+                return TradeDecision(
+                    decision=DecisionType.BLOCKED,
+                    direction='neutral',
+                    confidence=0,
+                    position_size_pct=0,
+                    take_profit_pct=0,
+                    stop_loss_pct=0,
+                    signals_used=signals_used,
+                    reasoning=reasoning + [f"On-chain grade {grade} below minimum {min_grade}"],
+                    blocked_reason=f"On-chain grade too low: {grade}",
+                )
+
+            # Calculate signal contribution based on score
+            # High score = bullish signal, low score = bearish signal
+            normalized_score = (score - 50) / 50  # -1 to +1
+            if normalized_score > 0:
+                direction_votes['long'] += weight * normalized_score
+            else:
+                direction_votes['short'] += weight * abs(normalized_score)
+
+            signals_used.append('onchain')
+            reasoning.append(f"On-chain: grade={grade}, score={score}, risky={is_risky}")
+
+            # Adjust position size multiplier based on risk
+            if is_risky and self.entry.onchain_reduce_size_on_risk:
+                onchain_risk_multiplier = 0.5  # Reduce position by 50%
+                reasoning.append("On-chain risk detected: position size reduced 50%")
+
+            # Check for whale risk flags
+            whale_flags = ['whale_concentration', 'single_holder_dominance', 'extreme_concentration']
+            if any(flag in red_flags for flag in whale_flags):
+                onchain_risk_multiplier = min(onchain_risk_multiplier, 0.3)
+                reasoning.append("Whale risk detected: position size reduced 70%")
+
         # 3. Determine direction from weighted votes
         if not signals_used:
             return TradeDecision(
@@ -342,11 +401,14 @@ class DecisionMatrix:
             confidence = meta_result.probability
             reasoning.extend(meta_result.reasoning)
 
-        # 6. Calculate position size
+        # 6. Calculate position size (with on-chain risk adjustment)
         position_size_pct = self._calculate_position_size(
             confidence=confidence,
             portfolio_value=portfolio_value,
         )
+
+        # Apply on-chain risk multiplier
+        position_size_pct *= onchain_risk_multiplier
 
         # 7. Create decision
         if direction == 'long':

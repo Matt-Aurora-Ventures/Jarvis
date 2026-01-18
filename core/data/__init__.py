@@ -38,6 +38,12 @@ from core.data.tokenomics_scorer import (
 from core.data.onchain_analyzer import (
     OnChainAnalyzer, get_onchain_analyzer, OnChainAnalysis
 )
+from core.data.contract_analyzer import (
+    ContractAnalyzer, get_contract_analyzer, ContractVerification, RiskFlag
+)
+from core.data.liquidation_analyzer import (
+    LiquidationAnalyzer, get_liquidation_analyzer, LiquidationLevel, LiquidationAnalysis
+)
 
 __all__ = [
     "DataAnonymizer",
@@ -78,4 +84,14 @@ __all__ = [
     "OnChainAnalyzer",
     "get_onchain_analyzer",
     "OnChainAnalysis",
+    # Contract analysis
+    "ContractAnalyzer",
+    "get_contract_analyzer",
+    "ContractVerification",
+    "RiskFlag",
+    # Liquidation analysis
+    "LiquidationAnalyzer",
+    "get_liquidation_analyzer",
+    "LiquidationLevel",
+    "LiquidationAnalysis",
 ]

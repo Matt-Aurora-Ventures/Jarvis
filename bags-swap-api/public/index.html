@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwapEasy - Simple Token Swaps</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+  <style>
+    .gradient-bg {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+    }
+  </style>
+</head>
+<body class="min-h-screen gradient-bg">
+  <div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <header class="text-center mb-8">
+      <h1 class="text-4xl font-bold text-white mb-2">SwapEasy</h1>
+      <p class="text-white/80">Fast & Simple Solana Token Swaps</p>
+    </header>
+
+    <!-- Main Swap Card -->
+    <div class="max-w-md mx-auto">
+      <div class="card rounded-2xl shadow-xl p-6">
+        <!-- Wallet Connection -->
+        <div class="mb-6">
+          <button id="connectBtn" class="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-lg font-medium transition">
+            Connect Wallet
+          </button>
+          <div id="walletInfo" class="hidden text-center mt-2 text-sm text-gray-600">
+            Connected: <span id="walletAddress" class="font-mono"></span>
+          </div>
+        </div>
+
+        <!-- From Token -->
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">You Pay</label>
+          <div class="flex gap-2">
+            <select id="fromToken" class="flex-1 border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+              <option value="">Select token</option>
+            </select>
+            <input type="number" id="fromAmount" placeholder="0.00"
+              class="w-32 border border-gray-300 rounded-lg px-4 py-3 text-right focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+          </div>
+        </div>
+
+        <!-- Swap Arrow -->
+        <div class="flex justify-center my-2">
+          <button id="swapDirection" class="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition">
+            <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
+            </svg>
+          </button>
+        </div>
+
+        <!-- To Token -->
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">You Receive</label>
+          <div class="flex gap-2">
+            <select id="toToken" class="flex-1 border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+              <option value="">Select token</option>
+            </select>
+            <input type="text" id="toAmount" placeholder="0.00" readonly
+              class="w-32 border border-gray-300 rounded-lg px-4 py-3 text-right bg-gray-50">
+          </div>
+        </div>
+
+        <!-- Quote Details -->
+        <div id="quoteDetails" class="hidden mb-4 p-4 bg-gray-50 rounded-lg text-sm">
+          <div class="flex justify-between mb-1">
+            <span class="text-gray-600">Price Impact</span>
+            <span id="priceImpact" class="font-medium">-</span>
+          </div>
+          <div class="flex justify-between mb-1">
+            <span class="text-gray-600">Min Received</span>
+            <span id="minReceived" class="font-medium">-</span>
+          </div>
+          <div class="flex justify-between mb-1">
+            <span class="text-gray-600">Service Fee</span>
+            <span id="serviceFee" class="font-medium">-</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">Route</span>
+            <span id="route" class="font-medium">-</span>
+          </div>
+        </div>
+
+        <!-- Swap Button -->
+        <button id="swapBtn" disabled
+          class="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-4 px-4 rounded-lg font-medium text-lg transition">
+          Enter an amount
+        </button>
+
+        <!-- Status -->
+        <div id="status" class="hidden mt-4 p-4 rounded-lg text-center"></div>
+      </div>
+
+      <!-- Info -->
+      <div class="mt-6 text-center text-white/70 text-sm">
+        <p>Powered by Bags API | 0.5% service fee</p>
+        <p class="mt-1">Best rates across Solana DEXs</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin;
+    let wallet = null;
+    let currentQuote = null;
+    let tokens = [];
+
+    // Initialize
+    async function init() {
+      await loadTokens();
+      setupEventListeners();
+    }
+
+    // Load popular tokens
+    async function loadTokens() {
+      try {
+        const res = await fetch(`${API_URL}/tokens/popular`);
+        tokens = await res.json();
+
+        const fromSelect = document.getElementById('fromToken');
+        const toSelect = document.getElementById('toToken');
+
+        tokens.forEach(token => {
+          const option1 = new Option(`${token.symbol} - ${token.name}`, token.mint);
+          const option2 = new Option(`${token.symbol} - ${token.name}`, token.mint);
+          option1.dataset.decimals = token.decimals;
+          option2.dataset.decimals = token.decimals;
+          fromSelect.add(option1);
+          toSelect.add(option2);
+        });
+
+        // Default: SOL to USDC
+        fromSelect.value = tokens[0].mint;
+        toSelect.value = tokens[1].mint;
+      } catch (err) {
+        console.error('Failed to load tokens:', err);
+      }
+    }
+
+    // Event listeners
+    function setupEventListeners() {
+      document.getElementById('connectBtn').addEventListener('click', connectWallet);
+      document.getElementById('fromAmount').addEventListener('input', debounce(getQuote, 500));
+      document.getElementById('fromToken').addEventListener('change', getQuote);
+      document.getElementById('toToken').addEventListener('change', getQuote);
+      document.getElementById('swapDirection').addEventListener('click', swapTokens);
+      document.getElementById('swapBtn').addEventListener('click', executeSwap);
+    }
+
+    // Connect wallet (Phantom)
+    async function connectWallet() {
+      try {
+        if (!window.solana || !window.solana.isPhantom) {
+          showStatus('Please install Phantom wallet', 'error');
+          return;
+        }
+
+        const resp = await window.solana.connect();
+        wallet = resp.publicKey.toString();
+
+        document.getElementById('connectBtn').classList.add('hidden');
+        document.getElementById('walletInfo').classList.remove('hidden');
+        document.getElementById('walletAddress').textContent =
+          wallet.slice(0, 4) + '...' + wallet.slice(-4);
+
+        updateSwapButton();
+      } catch (err) {
+        console.error('Wallet connection failed:', err);
+        showStatus('Failed to connect wallet', 'error');
+      }
+    }
+
+    // Get quote
+    async function getQuote() {
+      const fromMint = document.getElementById('fromToken').value;
+      const toMint = document.getElementById('toToken').value;
+      const amount = document.getElementById('fromAmount').value;
+
+      if (!fromMint || !toMint || !amount || parseFloat(amount) <= 0) {
+        document.getElementById('toAmount').value = '';
+        document.getElementById('quoteDetails').classList.add('hidden');
+        updateSwapButton();
+        return;
+      }
+
+      // Get decimals
+      const fromToken = tokens.find(t => t.mint === fromMint);
+      const toToken = tokens.find(t => t.mint === toMint);
+      const amountRaw = Math.floor(parseFloat(amount) * Math.pow(10, fromToken.decimals));
+
+      try {
+        const res = await fetch(`${API_URL}/quote`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            inputMint: fromMint,
+            outputMint: toMint,
+            amount: amountRaw.toString()
+          })
+        });
+
+        if (!res.ok) throw new Error('Quote failed');
+
+        currentQuote = await res.json();
+
+        // Display output amount
+        const outAmount = parseInt(currentQuote.outAmount) / Math.pow(10, toToken.decimals);
+        document.getElementById('toAmount').value = outAmount.toFixed(6);
+
+        // Display quote details
+        const minOut = parseInt(currentQuote.minOutAmount) / Math.pow(10, toToken.decimals);
+        document.getElementById('priceImpact').textContent = currentQuote.priceImpactPct + '%';
+        document.getElementById('minReceived').textContent = minOut.toFixed(6) + ' ' + toToken.symbol;
+        document.getElementById('serviceFee').textContent = currentQuote.serviceFee.percentage;
+        document.getElementById('route').textContent = currentQuote.routePlan.map(r => r.venue).join(' -> ');
+        document.getElementById('quoteDetails').classList.remove('hidden');
+
+        updateSwapButton();
+      } catch (err) {
+        console.error('Quote error:', err);
+        document.getElementById('toAmount').value = '';
+        document.getElementById('quoteDetails').classList.add('hidden');
+        currentQuote = null;
+        updateSwapButton();
+      }
+    }
+
+    // Swap token direction
+    function swapTokens() {
+      const fromSelect = document.getElementById('fromToken');
+      const toSelect = document.getElementById('toToken');
+      const temp = fromSelect.value;
+      fromSelect.value = toSelect.value;
+      toSelect.value = temp;
+      getQuote();
+    }
+
+    // Execute swap
+    async function executeSwap() {
+      if (!wallet || !currentQuote) return;
+
+      const btn = document.getElementById('swapBtn');
+      btn.disabled = true;
+      btn.textContent = 'Preparing...';
+
+      try {
+        // Get swap transaction
+        const res = await fetch(`${API_URL}/swap`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            quoteResponse: currentQuote,
+            userPublicKey: wallet
+          })
+        });
+
+        if (!res.ok) throw new Error('Swap creation failed');
+
+        const swapResult = await res.json();
+
+        btn.textContent = 'Sign in wallet...';
+
+        // Decode and sign transaction
+        const txBytes = Uint8Array.from(atob(swapResult.transaction), c => c.charCodeAt(0));
+        const transaction = solanaWeb3.VersionedTransaction.deserialize(txBytes);
+
+        const signedTx = await window.solana.signTransaction(transaction);
+
+        btn.textContent = 'Sending...';
+
+        // Send transaction
+        const connection = new solanaWeb3.Connection(
+          'https://api.mainnet-beta.solana.com',
+          'confirmed'
+        );
+
+        const signature = await connection.sendRawTransaction(signedTx.serialize(), {
+          skipPreflight: false,
+          maxRetries: 3
+        });
+
+        showStatus(
+          `Swap submitted! <a href="https://solscan.io/tx/${signature}" target="_blank" class="underline">View on Solscan</a>`,
+          'success'
+        );
+
+        // Reset
+        document.getElementById('fromAmount').value = '';
+        document.getElementById('toAmount').value = '';
+        document.getElementById('quoteDetails').classList.add('hidden');
+        currentQuote = null;
+
+      } catch (err) {
+        console.error('Swap failed:', err);
+        showStatus('Swap failed: ' + err.message, 'error');
+      }
+
+      updateSwapButton();
+    }
+
+    // Update swap button state
+    function updateSwapButton() {
+      const btn = document.getElementById('swapBtn');
+
+      if (!wallet) {
+        btn.disabled = true;
+        btn.textContent = 'Connect wallet first';
+      } else if (!currentQuote) {
+        btn.disabled = true;
+        btn.textContent = 'Enter an amount';
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Swap';
+      }
+    }
+
+    // Show status message
+    function showStatus(message, type) {
+      const status = document.getElementById('status');
+      status.innerHTML = message;
+      status.className = `mt-4 p-4 rounded-lg text-center ${
+        type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+      }`;
+      status.classList.remove('hidden');
+
+      if (type === 'success') {
+        setTimeout(() => status.classList.add('hidden'), 10000);
+      }
+    }
+
+    // Debounce helper
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+
+    // Start
+    init();
+  </script>
+</body>
+</html>

@@ -57,6 +57,7 @@ logs/
 cookies/
 browser-data/
 .puppeteer/
+temp_puppeteer_oauth.js
 chrome-data/
 session/
 sessions/

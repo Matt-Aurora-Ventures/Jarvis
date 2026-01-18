@@ -1,9 +1,14 @@
 #!/usr/bin/expect
 # Deploy bot lock fix to VPS using SSH
 
-set password "***SSH_PASSWORD_REDACTED***"
-set host "72.61.7.126"
-set user "jarvis"
+if {![info exists env(VPS_PASSWORD)] || $env(VPS_PASSWORD) eq ""} {
+    puts stderr "ERROR: VPS_PASSWORD not set"
+    exit 1
+}
+
+set password $env(VPS_PASSWORD)
+set host [expr {[info exists env(VPS_HOST)] && $env(VPS_HOST) ne "" ? $env(VPS_HOST) : "72.61.7.126"}]
+set user [expr {[info exists env(VPS_USERNAME)] && $env(VPS_USERNAME) ne "" ? $env(VPS_USERNAME) : "jarvis"}]
 
 # Connect via SSH
 spawn ssh -o StrictHostKeyChecking=no $user@$host

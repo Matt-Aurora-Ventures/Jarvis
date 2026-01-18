@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuickToken - Launch Your Solana Token in Minutes</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .gradient-bg {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+  <nav class="p-6">
+    <div class="max-w-6xl mx-auto flex justify-between items-center">
+      <h1 class="text-2xl font-bold">QuickToken</h1>
+      <a href="https://phantom.app" target="_blank" class="text-sm opacity-80 hover:opacity-100">
+        Get Phantom Wallet →
+      </a>
+    </div>
+  </nav>
+
+  <main class="max-w-2xl mx-auto px-6 py-12">
+    <!-- Hero -->
+    <div class="text-center mb-12">
+      <h2 class="text-4xl md:text-5xl font-bold mb-4">Launch Your Token on Solana</h2>
+      <p class="text-xl opacity-80">No code. No hassle. Earn 1% of all trading volume forever.</p>
+      <p class="mt-4 text-lg">
+        <span class="bg-white/20 px-4 py-2 rounded-full">$49 one-time fee</span>
+      </p>
+    </div>
+
+    <!-- Form -->
+    <div id="app" class="glass rounded-2xl p-8">
+      <!-- Step 1: Token Details -->
+      <div id="step1">
+        <h3 class="text-xl font-semibold mb-6">Token Details</h3>
+        <form id="tokenForm" class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm mb-1 opacity-80">Token Name *</label>
+              <input type="text" name="name" required placeholder="My Token"
+                class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 focus:border-white/50 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm mb-1 opacity-80">Symbol *</label>
+              <input type="text" name="symbol" required placeholder="MTK" maxlength="10"
+                class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 focus:border-white/50 outline-none uppercase">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm mb-1 opacity-80">Description *</label>
+            <textarea name="description" required rows="3" placeholder="Describe your token..."
+              class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 focus:border-white/50 outline-none resize-none"></textarea>
+          </div>
+
+          <div>
+            <label class="block text-sm mb-1 opacity-80">Token Image *</label>
+            <input type="file" name="image" accept="image/*" required
+              class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:bg-white/20 file:text-white hover:file:bg-white/30">
+          </div>
+
+          <div class="grid grid-cols-3 gap-4">
+            <div>
+              <label class="block text-sm mb-1 opacity-80">Twitter</label>
+              <input type="text" name="twitter" placeholder="@handle"
+                class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 focus:border-white/50 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm mb-1 opacity-80">Telegram</label>
+              <input type="text" name="telegram" placeholder="t.me/group"
+                class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 focus:border-white/50 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm mb-1 opacity-80">Website</label>
+              <input type="text" name="website" placeholder="https://"
+                class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 focus:border-white/50 outline-none">
+            </div>
+          </div>
+
+          <button type="submit" id="prepareBtn"
+            class="w-full py-4 rounded-lg bg-white text-purple-600 font-semibold text-lg hover:bg-white/90 transition disabled:opacity-50 disabled:cursor-not-allowed">
+            Continue to Payment →
+          </button>
+        </form>
+      </div>
+
+      <!-- Step 2: Preview & Pay -->
+      <div id="step2" class="hidden">
+        <h3 class="text-xl font-semibold mb-6">Preview Your Token</h3>
+        <div class="flex items-center gap-4 mb-6">
+          <img id="previewImage" class="w-20 h-20 rounded-full object-cover">
+          <div>
+            <h4 id="previewName" class="text-xl font-bold"></h4>
+            <p id="previewSymbol" class="opacity-80"></p>
+          </div>
+        </div>
+        <p id="previewDescription" class="mb-6 opacity-80"></p>
+
+        <div class="bg-white/10 rounded-lg p-4 mb-6">
+          <p class="text-sm opacity-80 mb-2">What you get:</p>
+          <ul class="text-sm space-y-1">
+            <li>✓ Token launched on Solana via Meteora</li>
+            <li>✓ Listed on bags.fm immediately</li>
+            <li>✓ Earn 1% of all trading volume forever</li>
+            <li>✓ Auto-dividend distribution to holders</li>
+          </ul>
+        </div>
+
+        <button id="payBtn"
+          class="w-full py-4 rounded-lg bg-white text-purple-600 font-semibold text-lg hover:bg-white/90 transition">
+          Pay $49 & Launch →
+        </button>
+        <button id="backBtn" class="w-full py-3 mt-2 rounded-lg border border-white/20 hover:bg-white/10 transition">
+          ← Back to edit
+        </button>
+      </div>
+
+      <!-- Loading -->
+      <div id="loading" class="hidden text-center py-12">
+        <div class="animate-spin w-12 h-12 border-4 border-white/30 border-t-white rounded-full mx-auto mb-4"></div>
+        <p id="loadingText">Processing...</p>
+      </div>
+    </div>
+
+    <!-- Features -->
+    <div class="mt-12 grid md:grid-cols-3 gap-6 text-center">
+      <div class="glass rounded-xl p-6">
+        <div class="text-3xl mb-2">⚡</div>
+        <h4 class="font-semibold mb-1">Fast Launch</h4>
+        <p class="text-sm opacity-80">Token live in under 5 minutes</p>
+      </div>
+      <div class="glass rounded-xl p-6">
+        <div class="text-3xl mb-2">💰</div>
+        <h4 class="font-semibold mb-1">Earn Forever</h4>
+        <p class="text-sm opacity-80">1% of all trading volume</p>
+      </div>
+      <div class="glass rounded-xl p-6">
+        <div class="text-3xl mb-2">🔒</div>
+        <h4 class="font-semibold mb-1">Secure</h4>
+        <p class="text-sm opacity-80">Powered by Bags & Meteora</p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="text-center py-8 opacity-60 text-sm">
+    <p>Powered by <a href="https://bags.fm" class="underline">Bags.fm</a> | Built on Solana</p>
+  </footer>
+
+  <script>
+    let currentLaunchId = null;
+    let currentPreview = null;
+
+    const tokenForm = document.getElementById('tokenForm');
+    const step1 = document.getElementById('step1');
+    const step2 = document.getElementById('step2');
+    const loading = document.getElementById('loading');
+    const loadingText = document.getElementById('loadingText');
+
+    function showLoading(text) {
+      step1.classList.add('hidden');
+      step2.classList.add('hidden');
+      loading.classList.remove('hidden');
+      loadingText.textContent = text;
+    }
+
+    function showStep(step) {
+      loading.classList.add('hidden');
+      step1.classList.toggle('hidden', step !== 1);
+      step2.classList.toggle('hidden', step !== 2);
+    }
+
+    // Step 1: Prepare token
+    tokenForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showLoading('Preparing your token...');
+
+      const formData = new FormData(tokenForm);
+
+      try {
+        const res = await fetch('/api/token/prepare', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Failed to prepare token');
+        }
+
+        const data = await res.json();
+        currentLaunchId = data.launchId;
+        currentPreview = data.preview;
+
+        // Update preview
+        document.getElementById('previewImage').src = data.preview.imageUrl;
+        document.getElementById('previewName').textContent = data.preview.name;
+        document.getElementById('previewSymbol').textContent = '$' + data.preview.symbol;
+        document.getElementById('previewDescription').textContent = data.preview.description;
+
+        showStep(2);
+      } catch (err) {
+        alert(err.message);
+        showStep(1);
+      }
+    });
+
+    // Back button
+    document.getElementById('backBtn').addEventListener('click', () => {
+      showStep(1);
+    });
+
+    // Step 2: Pay
+    document.getElementById('payBtn').addEventListener('click', async () => {
+      showLoading('Redirecting to payment...');
+
+      try {
+        const res = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ launchId: currentLaunchId }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Failed to create checkout');
+        }
+
+        const data = await res.json();
+        window.location.href = data.checkoutUrl;
+      } catch (err) {
+        alert(err.message);
+        showStep(2);
+      }
+    });
+  </script>
+</body>
+</html>
