@@ -1,1 +1,5 @@
-"""Performance tests for API latency and caching."""
+"""
+JARVIS Performance Testing Module
+
+Provides performance regression detection and baseline tracking.
+"""
