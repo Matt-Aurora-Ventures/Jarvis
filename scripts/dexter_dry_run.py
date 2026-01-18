@@ -617,6 +617,94 @@ class DexterDryRun:
         print(f"Min Cost: ${min(costs):.3f}")
 
 
+def generate_analysis_report(runner: 'DexterDryRun', results: List['DryRunResult']) -> str:
+    """Generate detailed analysis report for dry run results."""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    report_path = runner.reports_dir / f"analysis_{timestamp}.json"
+
+    # Calculate statistics
+    total = len(results)
+    buy_count = sum(1 for r in results if "BUY" in r.decision)
+    hold_count = sum(1 for r in results if "HOLD" in r.decision)
+    sell_count = sum(1 for r in results if "SELL" in r.decision)
+    error_count = sum(1 for r in results if "ERROR" in r.decision)
+
+    confidences = [r.confidence for r in results]
+    grok_scores = [r.grok_sentiment_score for r in results]
+    costs = [r.total_cost_usd for r in results]
+
+    analysis = {
+        "timestamp": timestamp,
+        "summary": {
+            "total_decisions": total,
+            "buy_count": buy_count,
+            "buy_pct": (buy_count / total * 100) if total > 0 else 0,
+            "hold_count": hold_count,
+            "hold_pct": (hold_count / total * 100) if total > 0 else 0,
+            "sell_count": sell_count,
+            "sell_pct": (sell_count / total * 100) if total > 0 else 0,
+            "error_count": error_count,
+        },
+        "confidence": {
+            "avg": sum(confidences) / len(confidences) if confidences else 0,
+            "min": min(confidences) if confidences else 0,
+            "max": max(confidences) if confidences else 0,
+            "high_confidence_count": sum(1 for c in confidences if c >= 85),
+            "medium_confidence_count": sum(1 for c in confidences if 70 <= c < 85),
+            "low_confidence_count": sum(1 for c in confidences if c < 70),
+        },
+        "grok_scores": {
+            "avg": sum(grok_scores) / len(grok_scores) if grok_scores else 0,
+            "min": min(grok_scores) if grok_scores else 0,
+            "max": max(grok_scores) if grok_scores else 0,
+        },
+        "cost": {
+            "total": sum(costs),
+            "avg": sum(costs) / len(costs) if costs else 0,
+            "min": min(costs) if costs else 0,
+            "max": max(costs) if costs else 0,
+            "within_budget_pct": (sum(1 for c in costs if c <= 0.20) / len(costs) * 100) if costs else 0,
+        },
+        "decisions": [
+            {
+                "symbol": r.symbol,
+                "decision": r.decision,
+                "confidence": r.confidence,
+                "grok_score": r.grok_sentiment_score,
+                "cost": r.total_cost_usd,
+                "iterations": len(r.iterations),
+                "quality": r.reasoning_quality,
+                "fitness": r.decision_fitness,
+            }
+            for r in results
+        ]
+    }
+
+    with open(report_path, 'w') as f:
+        json.dump(analysis, f, indent=2)
+
+    print(f"\nAnalysis report saved to: {report_path}")
+    return str(report_path)
+
+
+def get_extended_token_list() -> List[str]:
+    """Get extended list of 50+ tokens for comprehensive testing."""
+    return [
+        # Major tokens
+        "SOL", "BTC", "ETH", "JUP", "BONK", "WIF", "PYTH", "ORCA", "RAY", "RENDER",
+        # DeFi tokens
+        "AAVE", "UNI", "LINK", "MKR", "SNX", "COMP", "YFI", "SUSHI", "CRV", "BAL",
+        # Layer 2 / Infrastructure
+        "MATIC", "ARB", "OP", "IMX", "STRK", "MINA", "NEAR", "AVAX", "FTM", "ATOM",
+        # Meme tokens
+        "DOGE", "SHIB", "PEPE", "FLOKI", "TURBO", "BRETT", "MYRO", "POPCAT", "GIGA", "MOG",
+        # AI / Gaming
+        "FET", "AGIX", "OCEAN", "TAO", "AKT", "RNDR", "IMX", "GALA", "SAND", "MANA",
+        # Additional Solana ecosystem
+        "MNGO", "SERUM", "STEP", "ATLAS", "POLIS", "GENE", "PORT", "SLIM", "FIDA", "MAPS",
+    ]
+
+
 async def main():
     """Main entry point for dry run."""
     parser = argparse.ArgumentParser(
@@ -631,6 +719,9 @@ async def main():
     parser.add_argument("--cost-limit", type=float, default=0.50, help="Max cost per decision (default: $0.50)")
     parser.add_argument("--compare", action="store_true", help="Compare with sentiment pipeline")
     parser.add_argument("--multi", help="Analyze multiple tokens (comma-separated)")
+    parser.add_argument("--extended", action="store_true", help="Run on extended token set (50+ tokens)")
+    parser.add_argument("--output-dir", help="Custom output directory for this run")
+    parser.add_argument("--analysis-report", action="store_true", help="Generate detailed analysis report")
 
     args = parser.parse_args()
 
@@ -642,8 +733,21 @@ async def main():
         debug=args.debug
     )
 
+    # Set custom output dir if provided
+    if args.output_dir:
+        custom_dir = Path(args.output_dir)
+        custom_dir.mkdir(parents=True, exist_ok=True)
+        runner.data_dir = custom_dir
+        runner.reports_dir = custom_dir / "reports"
+        runner.reports_dir.mkdir(parents=True, exist_ok=True)
+
     try:
-        if args.multi:
+        if args.extended:
+            # Run on 50+ token extended set
+            symbols = get_extended_token_list()
+            print(f"\nRunning extended dry run on {len(symbols)} tokens...")
+            results = await runner.run_multi_dry_run(symbols)
+        elif args.multi:
             symbols = [s.strip().upper() for s in args.multi.split(",")]
             results = await runner.run_multi_dry_run(symbols)
         elif args.compare:
@@ -659,6 +763,10 @@ async def main():
         # Generate HTML report if requested
         if args.html:
             runner.generate_html_report(results)
+
+        # Generate analysis report if requested
+        if args.analysis_report:
+            generate_analysis_report(runner, results)
 
         print(f"\n{'='*55}")
         print("Dry run completed successfully!")

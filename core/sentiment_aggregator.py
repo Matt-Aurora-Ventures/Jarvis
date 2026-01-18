@@ -13,7 +13,18 @@ import json
 import sqlite3
 from contextlib import contextmanager
 
-logger = logging.getLogger(__name__)
+# Import structured logging for comprehensive JSON logs
+try:
+    from core.logging import get_structured_logger
+    STRUCTURED_LOGGING_AVAILABLE = True
+except ImportError:
+    STRUCTURED_LOGGING_AVAILABLE = False
+
+# Initialize structured logger if available, fallback to standard logger
+if STRUCTURED_LOGGING_AVAILABLE:
+    logger = get_structured_logger("jarvis.sentiment", service="sentiment_aggregator")
+else:
+    logger = logging.getLogger(__name__)
 
 
 class SentimentSource(Enum):
@@ -305,6 +316,23 @@ class SentimentAggregator:
 
         # Save aggregated result
         self._save_aggregated(result)
+
+        # Structured log event for sentiment aggregation
+        if STRUCTURED_LOGGING_AVAILABLE and hasattr(logger, 'log_event'):
+            logger.log_event(
+                "SENTIMENT_AGGREGATED",
+                symbol=symbol,
+                overall_score=overall_score,
+                overall_label=overall_label.value,
+                overall_confidence=overall_confidence,
+                source_count=len(by_source),
+                sources=list(source_scores.keys()),
+                trend=trend,
+                trend_change=trend_change,
+                warning=warning if warning else None,
+            )
+        else:
+            logger.debug(f"Aggregated sentiment for {symbol}: {overall_score:.1f} ({overall_label.value})")
 
         return result
 

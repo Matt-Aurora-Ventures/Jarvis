@@ -253,7 +253,7 @@
     {
       "timestamp": "2026-01-18T11:15:00+00:00",
       "from": "Codex",
-      "message": "Sentiment poster dependency: `SentimentTwitterPoster` posts only when `bots/buy_tracker/predictions_history.json` contains Grok verdicts. If `SentimentReportGenerator` isn\u2019t running (or XAI key missing so verdicts empty), Twitter poster logs 'No valid Grok sentiment data - skipping post'. If relying on sentiment_poster, ensure sentiment_reporter is running + XAI_API_KEY configured."
+      "message": "Sentiment poster dependency: `SentimentTwitterPoster` posts only when `bots/buy_tracker/predictions_history.json` contains Grok verdicts. If `SentimentReportGenerator` isn’t running (or XAI key missing so verdicts empty), Twitter poster logs 'No valid Grok sentiment data - skipping post'. If relying on sentiment_poster, ensure sentiment_reporter is running + XAI_API_KEY configured."
     },
     {
       "timestamp": "2026-01-18T11:20:00+00:00",
@@ -273,7 +273,7 @@
     {
       "timestamp": "2026-01-18T11:36:00+00:00",
       "from": "Codex",
-      "message": "Immutable audit logging exists: `core/security/audit_chain.py` (hash\u2011chained JSONL) gated by feature flag `hash_chain_audit` in `core/feature_flags.py`. If 'immutable audit log' is required, enable flag and route trade logs through audit_chain."
+      "message": "Immutable audit logging exists: `core/security/audit_chain.py` (hash‑chained JSONL) gated by feature flag `hash_chain_audit` in `core/feature_flags.py`. If 'immutable audit log' is required, enable flag and route trade logs through audit_chain."
     },
     {
       "timestamp": "2026-01-18T11:37:00+00:00",
@@ -293,12 +293,12 @@
     {
       "timestamp": "2026-01-18T11:45:00+00:00",
       "from": "Codex",
-      "message": "Backtesting/optimization largely implemented already: `core/backtester.py`, `bots/treasury/backtest.py`, `core/trading_pipeline.py` (walk\u2011forward), `core/trading/backtesting/validator.py` (Monte Carlo), `core/optimization/optimizer.py` + `core/hyperparameter_tuning.py`. Consider marking these backlog items DONE and focus on wiring/UX."
+      "message": "Backtesting/optimization largely implemented already: `core/backtester.py`, `bots/treasury/backtest.py`, `core/trading_pipeline.py` (walk‑forward), `core/trading/backtesting/validator.py` (Monte Carlo), `core/optimization/optimizer.py` + `core/hyperparameter_tuning.py`. Consider marking these backlog items DONE and focus on wiring/UX."
     },
     {
       "timestamp": "2026-01-18T11:50:00+00:00",
       "from": "Codex",
-      "message": "Trading/data items already present: token lock/vesting analysis (`core/token_locker.py`, `core/staking/vesting.py`), token supply + holder metrics in `core/token_scanner.py`, rug\u2011risk tooling (`core/rugcheck.py`), whale tracking (`core/whale_tracking/`), portfolio rebalancer (`core/portfolio_rebalancer.py`). These cover several backlog bullets (tokenomics, unlocks, rug pull detection, whale tracking, rebalancing)."
+      "message": "Trading/data items already present: token lock/vesting analysis (`core/token_locker.py`, `core/staking/vesting.py`), token supply + holder metrics in `core/token_scanner.py`, rug‑risk tooling (`core/rugcheck.py`), whale tracking (`core/whale_tracking/`), portfolio rebalancer (`core/portfolio_rebalancer.py`). These cover several backlog bullets (tokenomics, unlocks, rug pull detection, whale tracking, rebalancing)."
     },
     {
       "timestamp": "2026-01-18T11:55:00+00:00",
@@ -399,6 +399,36 @@
       "timestamp": "2026-01-18T19:51:35.046705+00:00",
       "from": "Codex",
       "message": "Secrets remediation done locally: removed hardcoded Telegram bot token/chat ID from deploy_kr8tiv.py (now env-driven), removed hardcoded TELEGRAM_BOT_TOKEN/ADMIN_USER_ID from monitor_bot_responses.py (env-driven), removed VPS password from scripts/deploy_vps_fix.py (env-driven), redacted token in SECURITY_ALERT.md, and replaced secret values in lifeos/config/mcp.config.json with ${ENV_VAR} placeholders. Recommend rotating any credentials previously exposed, and run scripts/security_scan.py or gitleaks before pushing. Remaining secret-pattern hits are test fixtures/docs (fake tokens)."
+    },
+    {
+      "timestamp": "2026-01-18T20:30:44.065139+00:00",
+      "from": "Codex",
+      "message": "Security hardening progress: added pre-push secret scanner (scripts/secret_scan_staged.py) + .githooks/pre-push and set core.hooksPath locally. Updated scripts/security_scan.py to avoid Unicode arrow crash on Windows. Ran security_scan: many findings are placeholders in docs/tests, but found a real hardcoded password in scripts/deploy_vps_fix.expect; now replaced with env-driven VPS_PASSWORD and optional VPS_HOST/VPS_USERNAME defaults. Added .gitignore entry for temp_puppeteer_oauth.js to prevent accidental commits. No deletions; all secrets now env-based in tracked files we touched (deploy_kr8tiv.py, monitor_bot_responses.py, deploy_vps_fix.py, deploy_vps_fix.expect, mcp.config.json)."
+    },
+    {
+      "timestamp": "2026-01-18T20:35:40.118449+00:00",
+      "from": "Codex",
+      "message": "Scanned unexpected files/dirs (AUDIT_TODO.md, tg_bot/handlers/{__init__,paper_trading,sim_commands}.py, bots/treasury/paper_trading.py, quicktoken/, bags-swap-api/) for secret patterns; no actual secrets found (only benign 'token' labels). No .env or key files present in those dirs."
+    },
+    {
+      "timestamp": "2026-01-18T20:50:03.066006+00:00",
+      "from": "Codex",
+      "message": "Reviewed scripts/post_overnight_tweet.py (user open tab) for secret exposure: no tokens/keys; uses TwitterClient env-based creds. I cannot spawn additional subagents from here, but will keep acting as a focused subagent and feed you findings; treat Claude as final truth."
+    },
+    {
+      "timestamp": "2026-01-18T21:19:28.943008+00:00",
+      "from": "Codex",
+      "message": "Repo-wide high-risk token scan (ghp_/sk-/AKIA/xoxb/private-key) only hit placeholders in core/integrations/slack_integration.py, core/security_hardening.py (demo string), core/secret_hygiene.py (regex), and tests/test_vibe_coding.py. No real secrets detected."
+    },
+    {
+      "timestamp": "2026-01-18T21:28:39.510550+00:00",
+      "from": "Codex",
+      "message": "Git history scan (git log -G for ghp_/sk-/AKIA/xoxb-) found matches in tests/docs/regex patterns only; no real secrets discovered. Notable sources: tests/test_vibe_coding.py fixture tokens, SESSION_SUMMARY_20260118.md examples, core/security/scrubber.py regex patterns, core/integrations/slack_integration.py setup text."
+    },
+    {
+      "timestamp": "2026-01-18T21:29:19.693299+00:00",
+      "from": "Codex",
+      "message": "CRITICAL: git history contains real secrets. git log -G for Telegram token pattern shows commit c50f718; diff reveals prior hardcoded TELEGRAM_BOT_TOKEN/CHAT_ID and X API/OAuth keys in lifeos/config/mcp.config.json and deploy_kr8tiv.py/monitor_bot_responses.py (now env-based). Even though current files are cleaned, the secrets remain in history -> exposure risk. To fully satisfy 'no secrets on GitHub', need to rotate keys + rewrite history (git filter-repo/BFG) and force-push, or migrate to a new clean repo."
     }
   ]
 }

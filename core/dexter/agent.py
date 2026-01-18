@@ -20,7 +20,18 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+# Import structured logging for comprehensive JSON logs
+try:
+    from core.logging import get_structured_logger
+    STRUCTURED_LOGGING_AVAILABLE = True
+except ImportError:
+    STRUCTURED_LOGGING_AVAILABLE = False
+
+# Initialize structured logger if available, fallback to standard logger
+if STRUCTURED_LOGGING_AVAILABLE:
+    logger = get_structured_logger("jarvis.dexter", service="dexter_agent")
+else:
+    logger = logging.getLogger(__name__)
 
 
 class DecisionType(Enum):
@@ -176,6 +187,22 @@ class DexterAgent:
         decision.cost_usd = self.total_cost
         decision.tools_used = list(set(self.scratchpad_tools()))
 
+        # Structured log event for ReAct decision
+        if STRUCTURED_LOGGING_AVAILABLE and hasattr(logger, 'log_event'):
+            logger.log_event(
+                "REACT_DECISION",
+                decision=decision.decision.value,
+                symbol=symbol,
+                confidence=decision.confidence,
+                grok_sentiment_score=decision.grok_sentiment_score,
+                iterations=decision.iterations,
+                tools_used=decision.tools_used,
+                cost_usd=decision.cost_usd,
+                rationale=decision.rationale[:200] if decision.rationale else None,
+            )
+        else:
+            logger.info(f"Dexter decision for {symbol}: {decision.decision.value} (confidence: {decision.confidence:.1f}%)")
+
         return decision
 
     async def _gather_market_data(self, symbol: str) -> Dict[str, Any]:
@@ -260,6 +287,16 @@ class DexterAgent:
             "result": result,
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
+
+        # Structured log event for ReAct iteration
+        if STRUCTURED_LOGGING_AVAILABLE and hasattr(logger, 'log_event'):
+            logger.log_event(
+                "REACT_ITERATION",
+                iteration=self.iteration_count,
+                action=tool,
+                args=args,
+                result=result[:100] if result else None,
+            )
 
     def _log_decision(self, action: str, symbol: str, rationale: str):
         """Log the final decision."""

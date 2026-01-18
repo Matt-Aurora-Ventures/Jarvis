@@ -2996,5 +2996,2184 @@
       "sentiment_grade": "B",
       "dry_run": true
     }
+  },
+  {
+    "timestamp": "2026-01-18T20:36:58.146193",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "INMU",
+      "reason": "liquidity_check_failed",
+      "risk_tier": "HIGH_RISK"
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.124339",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "6a71fa0a",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.154432",
+    "action": "CLOSE_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "6a71fa0a",
+      "token": "SOL",
+      "entry_price": 100.0,
+      "exit_price": 100.0,
+      "pnl_usd": 0.0,
+      "pnl_pct": 0.0,
+      "reason": "TP hit",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.340429",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "39a555c9",
+      "token": "SOL0",
+      "token_mint": "UniqueEstablishedMint0",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.387158",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "37ecc1fe",
+      "token": "SOL1",
+      "token_mint": "UniqueEstablishedMint1",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.431401",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "95408a61",
+      "token": "SOL2",
+      "token_mint": "UniqueEstablishedMint2",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.481844",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "9ae4fd0c",
+      "token": "SOL3",
+      "token_mint": "UniqueEstablishedMint3",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.535367",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "9f46c014",
+      "token": "SOL4",
+      "token_mint": "UniqueEstablishedMint4",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.586585",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "ff7b95f0",
+      "token": "SOL5",
+      "token_mint": "UniqueEstablishedMint5",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.636575",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "eeabfe49",
+      "token": "SOL6",
+      "token_mint": "UniqueEstablishedMint6",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.686514",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "88ddd960",
+      "token": "SOL7",
+      "token_mint": "UniqueEstablishedMint7",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.736634",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "cb572ec7",
+      "token": "SOL8",
+      "token_mint": "UniqueEstablishedMint8",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.790153",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "eb653d23",
+      "token": "SOL9",
+      "token_mint": "UniqueEstablishedMint9",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.807612",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "EXCESS",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.943811",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "186f80e4",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:50.996330",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "6592190e",
+      "token": "PUMP",
+      "token_mint": "pumpHighRiskToken123",
+      "amount_usd": 15.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:51.138609",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "92541dc9",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:51.273080",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "9c7bf069",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:51.387598",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "f2c3cb99",
+      "token": "JUP",
+      "token_mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:51.505365",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "bcdce698",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:51.524608",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "duplicate",
+      "existing_positions": 1
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:51.637967",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "66e2b3b0",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:40:51.685064",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "68a89852",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:37.932828",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "d8fdc1e5",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:37.964608",
+    "action": "CLOSE_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "d8fdc1e5",
+      "token": "SOL",
+      "entry_price": 100.0,
+      "exit_price": 100.0,
+      "pnl_usd": 0.0,
+      "pnl_pct": 0.0,
+      "reason": "TP hit",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.094975",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "5f64287d",
+      "token": "SOL0",
+      "token_mint": "UniqueEstablishedMint0",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.143106",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "59e8ae23",
+      "token": "SOL1",
+      "token_mint": "UniqueEstablishedMint1",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.186949",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "cc165a15",
+      "token": "SOL2",
+      "token_mint": "UniqueEstablishedMint2",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.233629",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "7b190618",
+      "token": "SOL3",
+      "token_mint": "UniqueEstablishedMint3",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.280382",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "6e86e774",
+      "token": "SOL4",
+      "token_mint": "UniqueEstablishedMint4",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.329522",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "0ca2ad7a",
+      "token": "SOL5",
+      "token_mint": "UniqueEstablishedMint5",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.452329",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "c0256799",
+      "token": "SOL6",
+      "token_mint": "UniqueEstablishedMint6",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.572139",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "4c0bfbea",
+      "token": "SOL7",
+      "token_mint": "UniqueEstablishedMint7",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.685139",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "e64ac321",
+      "token": "SOL8",
+      "token_mint": "UniqueEstablishedMint8",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.741392",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "e3468e75",
+      "token": "SOL9",
+      "token_mint": "UniqueEstablishedMint9",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.760771",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "EXCESS",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.892176",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "8d84b0b7",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:38.941387",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "8f3ed847",
+      "token": "PUMP",
+      "token_mint": "pumpHighRiskToken123",
+      "amount_usd": 15.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:39.086797",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "8fe2f725",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:39.223672",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "dc364124",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:39.348589",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "988ffc94",
+      "token": "JUP",
+      "token_mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:39.476090",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "8bc29836",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:39.495094",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "duplicate",
+      "existing_positions": 1
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:39.617578",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "fdf1025d",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:39.667097",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "657af6c9",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:39.848374",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "c06f4c52",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:39.917462",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "9a8fef5c",
+      "token": "JUP",
+      "token_mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:40.035840",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "07a09340",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:40.078587",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "spending_limit",
+      "limit_reason": "Daily limit reached. Used $5805.00/500.0. Remaining: $-5305.00",
+      "amount_usd": 100.0
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:40.149510",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "amount_exceeds_max",
+      "amount_usd": 100.0,
+      "max_trade_usd": 50.0
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:47:40.439424",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "bd612b41",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:31.817341",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "4ca29f44",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:31.835290",
+    "action": "CLOSE_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "4ca29f44",
+      "token": "SOL",
+      "entry_price": 100.0,
+      "exit_price": 100.0,
+      "pnl_usd": 0.0,
+      "pnl_pct": 0.0,
+      "reason": "TP hit",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.044374",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "f81429a6",
+      "token": "SOL0",
+      "token_mint": "UniqueEstablishedMint0",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.079903",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "97678ea4",
+      "token": "SOL1",
+      "token_mint": "UniqueEstablishedMint1",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.114892",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "7e2eaf55",
+      "token": "SOL2",
+      "token_mint": "UniqueEstablishedMint2",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.148861",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "bffd1001",
+      "token": "SOL3",
+      "token_mint": "UniqueEstablishedMint3",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.186448",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "94f3f4a3",
+      "token": "SOL4",
+      "token_mint": "UniqueEstablishedMint4",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.224000",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "4e3b5650",
+      "token": "SOL5",
+      "token_mint": "UniqueEstablishedMint5",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.267380",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "dc835190",
+      "token": "SOL6",
+      "token_mint": "UniqueEstablishedMint6",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.306588",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "47314f56",
+      "token": "SOL7",
+      "token_mint": "UniqueEstablishedMint7",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.338155",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "d442e129",
+      "token": "SOL8",
+      "token_mint": "UniqueEstablishedMint8",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.369129",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "5a2ad37a",
+      "token": "SOL9",
+      "token_mint": "UniqueEstablishedMint9",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.380354",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "EXCESS",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.477734",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "fb4ec880",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.515251",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "1db6af9c",
+      "token": "PUMP",
+      "token_mint": "pumpHighRiskToken123",
+      "amount_usd": 15.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.578715",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "e5a76fb1",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.634462",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "c37b8d77",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.677243",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "45cc7bd5",
+      "token": "JUP",
+      "token_mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.780032",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "b3d3a856",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.796058",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "duplicate",
+      "existing_positions": 1
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.837536",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "09606044",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.869967",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "b7050b70",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:32.914109",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "fae9d3de",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:33.017630",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "d192cb59",
+      "token": "JUP",
+      "token_mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:33.123444",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "bf4c83a0",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:33.151859",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "spending_limit",
+      "limit_reason": "Daily limit reached. Used $7095.00/500.0. Remaining: $-6595.00",
+      "amount_usd": 100.0
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:33.672713",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "amount_exceeds_max",
+      "amount_usd": 100.0,
+      "max_trade_usd": 50.0
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:53:33.842791",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "dffdc966",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:50.558062",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "94b723b7",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:50.581602",
+    "action": "CLOSE_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "94b723b7",
+      "token": "SOL",
+      "entry_price": 100.0,
+      "exit_price": 100.0,
+      "pnl_usd": 0.0,
+      "pnl_pct": 0.0,
+      "reason": "TP hit",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:50.726944",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "c9b02d05",
+      "token": "SOL0",
+      "token_mint": "UniqueEstablishedMint0",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:50.767107",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "5df0d47b",
+      "token": "SOL1",
+      "token_mint": "UniqueEstablishedMint1",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:50.807072",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "f71164ce",
+      "token": "SOL2",
+      "token_mint": "UniqueEstablishedMint2",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:50.846172",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "6c6b22f9",
+      "token": "SOL3",
+      "token_mint": "UniqueEstablishedMint3",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:50.882216",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "95d93995",
+      "token": "SOL4",
+      "token_mint": "UniqueEstablishedMint4",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:50.921136",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "a489a40e",
+      "token": "SOL5",
+      "token_mint": "UniqueEstablishedMint5",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:50.955900",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "6d5fef77",
+      "token": "SOL6",
+      "token_mint": "UniqueEstablishedMint6",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:50.987175",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "d2717108",
+      "token": "SOL7",
+      "token_mint": "UniqueEstablishedMint7",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.022835",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "5fa43ab6",
+      "token": "SOL8",
+      "token_mint": "UniqueEstablishedMint8",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.167742",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "65a2dd35",
+      "token": "SOL9",
+      "token_mint": "UniqueEstablishedMint9",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.183334",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "EXCESS",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.230910",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "e0a1ea1e",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.273043",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "3a87aae7",
+      "token": "PUMP",
+      "token_mint": "pumpHighRiskToken123",
+      "amount_usd": 15.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.345373",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "fcd3f162",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.405933",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "fa384f58",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.474401",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "b46b25cb",
+      "token": "JUP",
+      "token_mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.528231",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "c951c5df",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.542396",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "duplicate",
+      "existing_positions": 1
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.587462",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "408f6546",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.623810",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "061514ff",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.750397",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "eb6e9cf4",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.813003",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "e240bcf5",
+      "token": "JUP",
+      "token_mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.868610",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "c0792b34",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.905094",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "spending_limit",
+      "limit_reason": "Daily limit reached. Used $8385.00/500.0. Remaining: $-7885.00",
+      "amount_usd": 100.0
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:51.940263",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "amount_exceeds_max",
+      "amount_usd": 100.0,
+      "max_trade_usd": 50.0
+    }
+  },
+  {
+    "timestamp": "2026-01-18T20:54:52.080671",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "99a9b9f9",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.067963",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "2980b9fe",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.094355",
+    "action": "CLOSE_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "2980b9fe",
+      "token": "SOL",
+      "entry_price": 100.0,
+      "exit_price": 100.0,
+      "pnl_usd": 0.0,
+      "pnl_pct": 0.0,
+      "reason": "TP hit",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.210298",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "abfe6e0e",
+      "token": "SOL0",
+      "token_mint": "UniqueEstablishedMint0",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.247909",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "3eb92d9a",
+      "token": "SOL1",
+      "token_mint": "UniqueEstablishedMint1",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.284118",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "298ee90e",
+      "token": "SOL2",
+      "token_mint": "UniqueEstablishedMint2",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.317523",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "b0085c2f",
+      "token": "SOL3",
+      "token_mint": "UniqueEstablishedMint3",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.354975",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "c0647ba3",
+      "token": "SOL4",
+      "token_mint": "UniqueEstablishedMint4",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.385233",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "dd7c4ec4",
+      "token": "SOL5",
+      "token_mint": "UniqueEstablishedMint5",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.426919",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "5aae5b85",
+      "token": "SOL6",
+      "token_mint": "UniqueEstablishedMint6",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.467810",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "fa1000fe",
+      "token": "SOL7",
+      "token_mint": "UniqueEstablishedMint7",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.505202",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "237bc907",
+      "token": "SOL8",
+      "token_mint": "UniqueEstablishedMint8",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.541549",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "3156efcc",
+      "token": "SOL9",
+      "token_mint": "UniqueEstablishedMint9",
+      "amount_usd": 2.5,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.562918",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "EXCESS",
+      "reason": "max_positions"
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.669938",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "b3e67126",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.716412",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "4dfbb4b5",
+      "token": "PUMP",
+      "token_mint": "pumpHighRiskToken123",
+      "amount_usd": 15.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.834008",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "4a69b9cf",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.894906",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "ddfbd6ea",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:09.998128",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "d1d40c9b",
+      "token": "JUP",
+      "token_mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:10.137961",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "9095c4fd",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:10.177989",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "duplicate",
+      "existing_positions": 1
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:10.343635",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "fb1e97c6",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:10.467583",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "75e6cfcc",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:10.592606",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "2058c867",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:10.660702",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "02e22a2e",
+      "token": "JUP",
+      "token_mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 118.0,
+      "sl_price": 88.0,
+      "sentiment_grade": "B",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:10.717323",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "f6abdc50",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:10.755127",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "spending_limit",
+      "limit_reason": "Daily limit reached. Used $9675.00/500.0. Remaining: $-9175.00",
+      "amount_usd": 100.0
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:10.789397",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 12345,
+    "success": false,
+    "details": {
+      "token": "SOL",
+      "reason": "amount_exceeds_max",
+      "amount_usd": 100.0,
+      "max_trade_usd": 50.0
+    }
+  },
+  {
+    "timestamp": "2026-01-18T21:00:10.967576",
+    "action": "OPEN_POSITION",
+    "user_id": 12345,
+    "success": true,
+    "details": {
+      "position_id": "49159c47",
+      "token": "SOL",
+      "token_mint": "So11111111111111111111111111111111111111112",
+      "amount_usd": 100.0,
+      "entry_price": 100.0,
+      "tp_price": 130.0,
+      "sl_price": 92.0,
+      "sentiment_grade": "A",
+      "dry_run": true
+    }
   }
 ]
