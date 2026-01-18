@@ -23,6 +23,10 @@ from tg_bot.handlers.trading import balance, positions, wallet, dashboard, butto
 from tg_bot.handlers import treasury as treasury_handlers
 from tg_bot.handlers.sim_commands import sim, sim_buy, sim_sell, sim_pos
 
+# Quick Wins imports (v4.9.0)
+from tg_bot.handlers.commands.search_command import search_command, search_with_prices
+from tg_bot.handlers.commands.export_command import export_command, export_positions, export_trades
+
 
 def main():
     config = get_config()
@@ -111,6 +115,7 @@ def main():
     app.add_handler(CommandHandler("newpairs", newpairs))
     app.add_handler(CommandHandler("signals", signals))
     app.add_handler(CommandHandler("analyze", analyze))
+    app.add_handler(CommandHandler("a", analyze))  # Quick alias for analyze
     app.add_handler(CommandHandler("digest", digest))
     app.add_handler(CommandHandler("reload", reload))
     app.add_handler(CommandHandler("keystatus", keystatus))
@@ -131,6 +136,7 @@ def main():
     app.add_handler(CommandHandler("metrics", metrics))
     app.add_handler(CommandHandler("clistats", clistats))
     app.add_handler(CommandHandler("stats", clistats))
+    app.add_handler(CommandHandler("s", clistats))  # Quick alias for stats
     app.add_handler(CommandHandler("queue", cliqueue))
     app.add_handler(CommandHandler("q", cliqueue))
     app.add_handler(CommandHandler("uptime", uptime))
@@ -174,6 +180,13 @@ def main():
     app.add_handler(CommandHandler("compare", compare))
     app.add_handler(CommandHandler("watchlist", watchlist))
     app.add_handler(CommandHandler("w", watchlist))
+
+    # Quick Wins Commands (v4.9.0)
+    app.add_handler(CommandHandler("search", search_command))
+    app.add_handler(CommandHandler("searchp", search_with_prices))
+    app.add_handler(CommandHandler("export", export_command))
+    app.add_handler(CommandHandler("exportpos", export_positions))
+    app.add_handler(CommandHandler("exporttrades", export_trades))
 
     app.add_handler(CommandHandler("addscam", addscam))
     app.add_handler(CommandHandler("trust", trust))

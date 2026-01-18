@@ -429,6 +429,11 @@
       "timestamp": "2026-01-18T21:29:19.693299+00:00",
       "from": "Codex",
       "message": "CRITICAL: git history contains real secrets. git log -G for Telegram token pattern shows commit c50f718; diff reveals prior hardcoded TELEGRAM_BOT_TOKEN/CHAT_ID and X API/OAuth keys in lifeos/config/mcp.config.json and deploy_kr8tiv.py/monitor_bot_responses.py (now env-based). Even though current files are cleaned, the secrets remain in history -> exposure risk. To fully satisfy 'no secrets on GitHub', need to rotate keys + rewrite history (git filter-repo/BFG) and force-push, or migrate to a new clean repo."
+    },
+    {
+      "timestamp": "2026-01-18T23:28:33.213643+00:00",
+      "from": "Codex",
+      "message": "Current tree scan for TELEGRAM_BOT_TOKEN/X_API_KEY shows env-only usage; no inline values in code. History still contains real Telegram/X credentials (commit c50f718). Recommend history rewrite later using git filter-repo with regex replacements for telegram token pattern and X_* JSON fields."
     }
   ]
 }

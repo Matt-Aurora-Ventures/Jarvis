@@ -1,9 +1,9 @@
 {
   "last_image_date": "2026-01-18",
   "daily_image_count": 0,
-  "total_input_tokens": 177133,
-  "total_output_tokens": 190249,
+  "total_input_tokens": 182666,
+  "total_output_tokens": 196194,
   "total_images": 0,
-  "daily_cost": 0.9789549999999996,
-  "all_time_cost": 3.7393999999999985
+  "daily_cost": 1.0957949999999999,
+  "all_time_cost": 3.856240000000003
 }
