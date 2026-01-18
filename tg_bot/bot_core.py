@@ -1524,32 +1524,46 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         from tg_bot.services.claude_cli_handler import get_claude_cli_handler
         from core.telegram_console_bridge import get_console_bridge
-        
+        import os
+
         cli_handler = get_claude_cli_handler()
         bridge = get_console_bridge()
-        
+
+        # Check if Claude CLI is available
+        if not cli_handler._claude_path or cli_handler._claude_path == "claude":
+            # Claude CLI not found - provide helpful message
+            await update.message.reply_text(
+                "⚠️ <b>Claude CLI Not Available</b>\n\n"
+                "The /code command requires Claude Code CLI to be installed.\n\n"
+                "<b>Setup (local only):</b>\n"
+                "<code>npm install -g @anthropic-ai/claude-code</code>\n\n"
+                "Note: This feature is designed for local development, not VPS deployment.",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
         user_id = update.effective_user.id if update.effective_user else 0
         username = update.effective_user.username or "admin" if update.effective_user else "admin"
         message = " ".join(context.args)
         chat_id = update.effective_chat.id if update.effective_chat else 0
-        
+
         # Store in memory
         bridge.memory.add_message(user_id, username, "user", message, chat_id)
-        
+
         # Send confirmation
         confirm_msg = await update.message.reply_text(
             "🔄 <b>Processing coding request...</b>\n\n"
             f"<i>{message[:200]}{'...' if len(message) > 200 else ''}</i>",
             parse_mode=ParseMode.HTML
         )
-        
+
         # Execute via Claude CLI
         async def send_status(msg: str):
             try:
                 await confirm_msg.edit_text(msg, parse_mode=ParseMode.HTML)
             except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
-        
+
         success, summary, output = await cli_handler.execute(
             message, user_id, username=username, send_update=send_status
         )
@@ -4634,21 +4648,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if not cli_handler.is_admin(user_id, username):
                     logger.warning(f"Unauthorized coding request from user {user_id} ({username})")
                     return
-                
+
+                # Check if Claude CLI is available
+                if not cli_handler._claude_path or cli_handler._claude_path == "claude":
+                    logger.warning("Claude CLI not available on this deployment")
+                    return
+
                 # Send confirmation
                 confirm_msg = await update.message.reply_text(
                     "🔄 <b>Processing coding request...</b>\n\n"
                     f"<i>{text[:200]}{'...' if len(text) > 200 else ''}</i>",
                     parse_mode=ParseMode.HTML
                 )
-                
+
                 # Execute via Claude CLI
                 async def send_status(msg: str):
                     try:
                         await confirm_msg.edit_text(msg, parse_mode=ParseMode.HTML)
                     except Exception:  # noqa: BLE001 - intentional catch-all
                         pass
-                
+
                 success, summary, output = await cli_handler.execute(
                     text,
                     user_id,
