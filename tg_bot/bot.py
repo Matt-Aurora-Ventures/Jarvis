@@ -31,21 +31,34 @@ def main():
     # Single instance lock - prevent multiple bots polling simultaneously
     lock_file = "/tmp/jarvis_bot.lock"
     lock = None
-    try:
-        lock = open(lock_file, 'w')
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        lock.write(str(os.getpid()))
-        lock.flush()
-    except (IOError, OSError) as e:
-        print("\n" + "=" * 50)
-        print("ERROR: Another bot instance is already running!")
-        print("=" * 50)
-        print(f"\nLock file: {lock_file}")
-        print("To force start, remove the lock file:")
-        print(f"  rm {lock_file}")
-        print("\nWaiting 5 seconds before exiting...")
-        time.sleep(5)
-        sys.exit(1)
+    max_wait_time = 30  # Max 30 seconds to acquire lock before giving up
+    waited = 0
+
+    while True:
+        try:
+            lock = open(lock_file, 'w')
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock.write(str(os.getpid()))
+            lock.flush()
+            print(f"✓ Lock acquired by PID: {os.getpid()}")
+            break  # Successfully acquired lock, proceed with bot
+        except (IOError, OSError) as e:
+            waited += 1
+            if waited == 1:
+                print(f"⏳ Waiting for bot lock to become available (max {max_wait_time}s)...")
+            elif waited % 5 == 0:
+                print(f"⏳ Still waiting ({waited}s/{max_wait_time}s)...")
+
+            if waited >= max_wait_time:
+                print("\n" + "=" * 50)
+                print("ERROR: Could not acquire bot lock after 30 seconds")
+                print("=" * 50)
+                print(f"\nLock file: {lock_file}")
+                print("To force start, remove the lock file:")
+                print(f"  rm {lock_file}")
+                sys.exit(1)
+
+            time.sleep(1)  # Wait 1 second and retry
 
     config = get_config()
 
