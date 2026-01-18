@@ -1,5 +1,6 @@
 """Jarvis Telegram bot entrypoint."""
 
+import os
 import sys
 from datetime import datetime, timezone
 
