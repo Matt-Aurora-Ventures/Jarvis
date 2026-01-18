@@ -5175,5 +5175,16 @@
       "sentiment_grade": "A",
       "dry_run": true
     }
+  },
+  {
+    "timestamp": "2026-01-18T22:03:55.476991",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "USOR",
+      "reason": "liquidity_check_failed",
+      "risk_tier": "MICRO"
+    }
   }
 ]
