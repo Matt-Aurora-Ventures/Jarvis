@@ -17,7 +17,8 @@ import asyncio
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode, ReplyKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
 
 from core.public_user_manager import PublicUserManager, UserProfile, UserRiskLevel, Wallet

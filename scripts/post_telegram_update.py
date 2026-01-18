@@ -112,7 +112,7 @@ async def post_to_telegram(
             parse_mode="HTML",
         )
 
-        print(f"✓ Message sent (ID: {msg.message_id})")
+        print(f"[OK] Message sent (ID: {msg.message_id})")
 
         # Pin message if requested
         if pin:
@@ -122,15 +122,15 @@ async def post_to_telegram(
                 message_id=msg.message_id,
                 disable_notification=False,
             )
-            print("✓ Message pinned")
+            print("[OK] Message pinned")
 
         return True
 
     except TelegramError as e:
-        print(f"✗ Telegram error: {e}")
+        print(f"[ERROR] Telegram error: {e}")
         return False
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         return False
 
 
@@ -199,10 +199,10 @@ async def main():
 
     print()
     if success:
-        print("✓ Update posted successfully!")
+        print("[OK] Update posted successfully!")
         sys.exit(0)
     else:
-        print("✗ Failed to post update")
+        print("[ERROR] Failed to post update")
         sys.exit(1)
 
 

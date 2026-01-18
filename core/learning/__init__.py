@@ -9,6 +9,7 @@ Analyzes performance metrics and autonomously improves Jarvis:
 """
 
 from .engagement_analyzer import EngagementAnalyzer
-from .content_optimizer import ContentOptimizer
+# ContentOptimizer not implemented yet
+# from .content_optimizer import ContentOptimizer
 
-__all__ = ["EngagementAnalyzer", "ContentOptimizer"]
+__all__ = ["EngagementAnalyzer"]
