@@ -744,7 +744,7 @@ Welcome to the Jarvis Treasury Management System.
 <code>{treasury.address[:12]}...{treasury.address[-4:]}</code>
 
 <b>SOL Balance:</b>
-  {sol_balance:.4f} SOL (${sol_usd:.2f})
+  <code>{sol_balance:.4f}</code> SOL (<code>${sol_usd:.2f}</code>)
 
 <b>Token Holdings:</b>
 {token_text}
