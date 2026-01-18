@@ -501,6 +501,60 @@ async def create_autonomous_x_engine():
     )
 
 
+async def create_autonomous_manager():
+    """Create and run the autonomous manager (moderation, learning, vibe coding)."""
+    from core.moderation.toxicity_detector import ToxicityDetector
+    from core.moderation.auto_actions import AutoActions
+    from core.learning.engagement_analyzer import EngagementAnalyzer
+    from core.vibe_coding.sentiment_mapper import SentimentMapper
+    from core.vibe_coding.regime_adapter import RegimeAdapter
+    from core.autonomous_manager import get_autonomous_manager
+    from bots.twitter.grok_client import get_grok_client
+    from core.sentiment_aggregator import get_sentiment_aggregator
+
+    try:
+        # Initialize all components
+        logger.info("[autonomous_manager] Initializing autonomous system components...")
+
+        # Moderation
+        toxicity_detector = ToxicityDetector()
+        auto_actions = AutoActions()
+        logger.info("[autonomous_manager] Moderation initialized")
+
+        # Learning
+        engagement_analyzer = EngagementAnalyzer(data_dir="data/learning")
+        logger.info("[autonomous_manager] Learning analyzer initialized")
+
+        # Vibe coding
+        sentiment_mapper = SentimentMapper()
+        regime_adapter = RegimeAdapter()
+        logger.info("[autonomous_manager] Vibe coding initialized")
+
+        # Get shared services
+        grok_client = get_grok_client()
+        sentiment_agg = get_sentiment_aggregator()
+
+        # Get or create autonomous manager
+        manager = await get_autonomous_manager(
+            toxicity_detector=toxicity_detector,
+            auto_actions=auto_actions,
+            engagement_analyzer=engagement_analyzer,
+            sentiment_mapper=sentiment_mapper,
+            regime_adapter=regime_adapter,
+            grok_client=grok_client,
+            sentiment_agg=sentiment_agg,
+        )
+
+        logger.info("[autonomous_manager] All components initialized, starting loops...")
+
+        # Run the autonomous manager (this runs all loops continuously)
+        await manager.run()
+
+    except Exception as e:
+        logger.error(f"[autonomous_manager] Failed to start: {e}", exc_info=True)
+        raise
+
+
 def validate_startup() -> bool:
     """
     Validate critical configuration before starting.
@@ -622,6 +676,7 @@ async def main():
     supervisor.register("twitter_poster", create_twitter_poster, min_backoff=30.0, max_backoff=300.0)
     supervisor.register("telegram_bot", create_telegram_bot, min_backoff=10.0, max_backoff=60.0)
     supervisor.register("autonomous_x", create_autonomous_x_engine, min_backoff=30.0, max_backoff=300.0)
+    supervisor.register("autonomous_manager", create_autonomous_manager, min_backoff=15.0, max_backoff=120.0)
 
     print("Registered components:")
     for name in supervisor.components:
