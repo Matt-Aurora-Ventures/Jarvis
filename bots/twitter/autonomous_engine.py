@@ -814,9 +814,11 @@ class XMemory:
                 if conn:
                     conn.close()
 
-    def is_similar_to_recent(self, content: str, hours: int = 12, threshold: float = 0.5) -> Tuple[bool, Optional[str]]:
+    def is_similar_to_recent(self, content: str, hours: int = 48, threshold: float = 0.5) -> Tuple[bool, Optional[str]]:
         """
-        Check if content is too similar to recent tweets.
+        Check if content is too similar to recent tweets within the last N hours.
+
+        Extended duplicate window to 48h to prevent bot spam patterns.
 
         Uses multiple detection methods:
         1. Extract key entities (tokens, prices) and check for duplicates
