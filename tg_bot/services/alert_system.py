@@ -19,7 +19,8 @@ from typing import Optional, List, Dict, Any, Callable, Set
 from dataclasses import dataclass, field
 from enum import Enum
 
-from telegram import Update, ParseMode
+from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
