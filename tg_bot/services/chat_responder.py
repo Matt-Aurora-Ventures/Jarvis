@@ -30,6 +30,22 @@ logger = logging.getLogger(__name__)
 # Persistent memory import (lazy-loaded to avoid circular imports)
 _persistent_memory = None
 
+# Dexter finance integration (lazy-loaded)
+_bot_finance_integration = None
+
+
+def get_bot_finance_integration():
+    """Get Dexter bot finance integration (lazy load)."""
+    global _bot_finance_integration
+    if _bot_finance_integration is None:
+        try:
+            from core.dexter.bot_integration import get_bot_finance_integration as get_dexter_integration
+            _bot_finance_integration = get_dexter_integration()
+            logger.info("Dexter finance integration loaded for Telegram")
+        except Exception as e:
+            logger.debug(f"Could not load Dexter integration: {e}")
+    return _bot_finance_integration
+
 
 def get_persistent_memory():
     """Get persistent conversation memory (lazy load)."""
@@ -521,6 +537,26 @@ class ChatResponder:
 
         return False
 
+    async def _try_dexter_finance_response(self, text: str) -> Optional[str]:
+        """
+        Try to handle as a financial question using Dexter ReAct.
+
+        Returns response if this is a finance question, None otherwise.
+        Dexter uses Grok heavily (1.0 weighting) for all analysis.
+        """
+        try:
+            dexter = get_bot_finance_integration()
+            if not dexter:
+                return None
+
+            # Let Dexter check if this is a finance question
+            response = await dexter.handle_telegram_message(text, user_id=0)
+            return response
+
+        except Exception as e:
+            logger.debug(f"Dexter finance handling failed: {e}")
+            return None
+
     def get_blocked_response(self) -> str:
         """Response for blocked harmful requests."""
         return "i can't help with that. some things are off limits for good reason."
@@ -701,6 +737,13 @@ class ChatResponder:
 
         # Detect engagement topic for context-aware responses
         engagement_topic = self.detect_engagement_topic(text)
+
+        # TRY DEXTER FINANCE: Check if this is a financial question
+        # Dexter uses Grok heavily (1.0 weighting) for all responses
+        finance_response = await self._try_dexter_finance_response(text)
+        if finance_response:
+            logger.info(f"Dexter handled finance question from user {user_id}")
+            return finance_response
 
         # Update Jarvis internal state for sentience
         update_jarvis_state(
