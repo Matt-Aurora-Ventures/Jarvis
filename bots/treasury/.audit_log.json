@@ -5186,5 +5186,16 @@
       "reason": "liquidity_check_failed",
       "risk_tier": "MICRO"
     }
+  },
+  {
+    "timestamp": "2026-01-18T22:58:45.748540",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "USOR",
+      "reason": "liquidity_check_failed",
+      "risk_tier": "MICRO"
+    }
   }
 ]
