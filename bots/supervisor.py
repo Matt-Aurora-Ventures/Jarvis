@@ -458,6 +458,16 @@ async def create_telegram_bot():
     env = os.environ.copy()
     env["PYTHONPATH"] = str(project_root) + os.pathsep + env.get("PYTHONPATH", "")
 
+    # Kill any lingering telegram bot processes from previous runs
+    try:
+        if sys.platform == "win32":
+            os.system("taskkill /F /IM python.exe /FI \"CMDLINE *tg_bot*\" 2>nul")
+        else:
+            os.system("pkill -f 'python.*tg_bot' 2>/dev/null || true")
+        await asyncio.sleep(2)  # Wait for process to fully terminate
+    except Exception as e:
+        logger.warning(f"Failed to clean up lingering processes: {e}")
+
     proc = subprocess.Popen(
         [sys.executable, str(project_root / "tg_bot" / "bot.py")],
         env=env,
@@ -468,6 +478,9 @@ async def create_telegram_bot():
         while True:
             ret = proc.poll()
             if ret is not None:
+                logger.error(f"Telegram bot exited with code {ret}")
+                # Wait longer before allowing restart to give Telegram time to clean up
+                await asyncio.sleep(15)
                 raise RuntimeError(f"Telegram bot exited with code {ret}")
             await asyncio.sleep(5)
     finally:
@@ -477,6 +490,7 @@ async def create_telegram_bot():
                 proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 proc.kill()
+                logger.warning("Telegram bot process killed (timeout on terminate)")
 
 
 async def create_autonomous_x_engine():
