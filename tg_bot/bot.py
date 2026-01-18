@@ -24,6 +24,28 @@ from tg_bot.handlers import treasury as treasury_handlers
 
 def main():
     """Run the bot."""
+    import fcntl
+    import time
+
+    # Single instance lock - prevent multiple bots polling simultaneously
+    lock_file = "/tmp/jarvis_bot.lock"
+    lock = None
+    try:
+        lock = open(lock_file, 'w')
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock.write(str(os.getpid()))
+        lock.flush()
+    except (IOError, OSError) as e:
+        print("\n" + "=" * 50)
+        print("ERROR: Another bot instance is already running!")
+        print("=" * 50)
+        print(f"\nLock file: {lock_file}")
+        print("To force start, remove the lock file:")
+        print(f"  rm {lock_file}")
+        print("\nWaiting 5 seconds before exiting...")
+        time.sleep(5)
+        sys.exit(1)
+
     config = get_config()
 
     # Validate config
