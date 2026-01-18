@@ -735,7 +735,7 @@ if __name__ == "__main__":
     test_file = Path("/tmp/test_secret.py")
     test_file.write_text("""
     # This is a test file
-    API_KEY = "sk-1234567890abcdefghijklmnopqrstuv"  # Bad!
+    API_KEY = "sk-1234567890abcdefghijklmnopqrstuv"  # Bad! secret-scan:ignore
     password = "example_password"  # Detected but filtered
     """)
     

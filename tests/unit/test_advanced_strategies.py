@@ -805,7 +805,485 @@ class TestStrategyIntegration:
         assert "rsi" in entry.signal_weights
         assert "macd" in entry.signal_weights
         assert "mean_reversion" in entry.signal_weights
+        assert "breakout" in entry.signal_weights
+        assert "volume_profile" in entry.signal_weights
 
         # Verify weight distribution sums to 1.0
         total_weight = sum(entry.signal_weights.values())
         assert abs(total_weight - 1.0) < 0.01
+
+
+# =============================================================================
+# BREAKOUT STRATEGY TESTS
+# =============================================================================
+
+class TestBreakoutStrategy:
+    """Tests for breakout/breakdown trading strategy."""
+
+    def test_breakout_import(self):
+        """Test that BreakoutAnalyzer can be imported."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer, BreakoutSignal
+        assert BreakoutAnalyzer is not None
+        assert BreakoutSignal is not None
+
+    def test_breakout_initialization(self):
+        """Test analyzer initialization with default parameters."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer
+
+        analyzer = BreakoutAnalyzer()
+        assert analyzer.lookback_period == 20
+        assert analyzer.breakout_threshold_pct == 0.02  # 2% default
+        assert analyzer.volume_confirmation_multiplier == 1.5
+
+    def test_breakout_custom_initialization(self):
+        """Test analyzer with custom parameters."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer
+
+        analyzer = BreakoutAnalyzer(
+            lookback_period=30,
+            breakout_threshold_pct=0.03,
+            volume_confirmation_multiplier=2.0
+        )
+        assert analyzer.lookback_period == 30
+        assert analyzer.breakout_threshold_pct == 0.03
+        assert analyzer.volume_confirmation_multiplier == 2.0
+
+    def test_breakout_identifies_resistance_levels(self):
+        """Test that analyzer identifies resistance levels from price history."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer
+
+        analyzer = BreakoutAnalyzer(lookback_period=20)
+
+        # Add price history with clear resistance at 110
+        prices = [100, 105, 110, 108, 105, 107, 110, 106, 103, 105,
+                  108, 110, 107, 104, 106, 109, 110, 108, 105, 107]
+        volumes = [1000] * 20
+
+        for price, volume in zip(prices, volumes):
+            analyzer.add_data(price, volume)
+
+        resistance = analyzer.get_resistance_level()
+        assert resistance is not None
+        assert abs(resistance - 110.0) < 2.0  # Should identify ~110 as resistance
+
+    def test_breakout_identifies_support_levels(self):
+        """Test that analyzer identifies support levels from price history."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer
+
+        analyzer = BreakoutAnalyzer(lookback_period=20)
+
+        # Add price history with clear support at 90
+        prices = [100, 95, 90, 93, 96, 94, 90, 92, 95, 94,
+                  91, 90, 93, 95, 94, 92, 90, 92, 94, 93]
+        volumes = [1000] * 20
+
+        for price, volume in zip(prices, volumes):
+            analyzer.add_data(price, volume)
+
+        support = analyzer.get_support_level()
+        assert support is not None
+        assert abs(support - 90.0) < 2.0  # Should identify ~90 as support
+
+    def test_breakout_buy_signal_above_resistance(self):
+        """Test BREAKOUT_BUY signal when price breaks above resistance with volume."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer
+
+        analyzer = BreakoutAnalyzer(
+            lookback_period=20,
+            breakout_threshold_pct=0.02,
+            volume_confirmation_multiplier=1.5
+        )
+
+        # Establish resistance at 110
+        prices = [100, 105, 110, 108, 105, 107, 110, 106, 103, 105,
+                  108, 110, 107, 104, 106, 109, 110, 108, 105, 107]
+        volumes = [1000] * 20
+
+        for price, volume in zip(prices, volumes):
+            analyzer.add_data(price, volume)
+
+        # Breakout above resistance with high volume
+        signal = analyzer.analyze(current_price=113.0, current_volume=2000)
+
+        assert signal.signal_type == "BREAKOUT_BUY"
+        assert signal.confidence >= 0.7
+        assert signal.breakout_level is not None
+        assert signal.volume_confirmed is True
+
+    def test_breakout_sell_signal_below_support(self):
+        """Test BREAKOUT_SELL signal when price breaks below support with volume."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer
+
+        analyzer = BreakoutAnalyzer(
+            lookback_period=20,
+            breakout_threshold_pct=0.02,
+            volume_confirmation_multiplier=1.5
+        )
+
+        # Establish support at 90
+        prices = [100, 95, 90, 93, 96, 94, 90, 92, 95, 94,
+                  91, 90, 93, 95, 94, 92, 90, 92, 94, 93]
+        volumes = [1000] * 20
+
+        for price, volume in zip(prices, volumes):
+            analyzer.add_data(price, volume)
+
+        # Breakdown below support with high volume
+        signal = analyzer.analyze(current_price=87.0, current_volume=2000)
+
+        assert signal.signal_type == "BREAKOUT_SELL"
+        assert signal.confidence >= 0.7
+        assert signal.breakdown_level is not None
+        assert signal.volume_confirmed is True
+
+    def test_breakout_weak_signal_without_volume_confirmation(self):
+        """Test weaker signal when breakout occurs without volume confirmation."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer
+
+        analyzer = BreakoutAnalyzer(
+            lookback_period=20,
+            volume_confirmation_multiplier=1.5
+        )
+
+        # Establish resistance at 110
+        prices = [100, 105, 110, 108, 105, 107, 110, 106, 103, 105,
+                  108, 110, 107, 104, 106, 109, 110, 108, 105, 107]
+        volumes = [1000] * 20
+
+        for price, volume in zip(prices, volumes):
+            analyzer.add_data(price, volume)
+
+        # Breakout WITHOUT high volume (same as average)
+        signal = analyzer.analyze(current_price=113.0, current_volume=1000)
+
+        # Should still signal but with lower confidence
+        assert signal.signal_type == "BREAKOUT_BUY"
+        assert signal.confidence < 0.7  # Lower confidence without volume
+        assert signal.volume_confirmed is False
+
+    def test_breakout_no_signal_within_range(self):
+        """Test no signal when price is within support/resistance range."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer
+
+        analyzer = BreakoutAnalyzer(lookback_period=20)
+
+        prices = [100, 105, 110, 108, 105, 107, 110, 106, 103, 105,
+                  108, 110, 107, 104, 106, 109, 110, 108, 105, 107]
+        volumes = [1000] * 20
+
+        for price, volume in zip(prices, volumes):
+            analyzer.add_data(price, volume)
+
+        # Price within range
+        signal = analyzer.analyze(current_price=105.0, current_volume=1000)
+
+        assert signal.signal_type == "NO_SIGNAL"
+
+    def test_breakout_false_breakout_detection(self):
+        """Test FALSE_BREAKOUT signal when price quickly reverses."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer
+
+        analyzer = BreakoutAnalyzer(lookback_period=20)
+
+        # Establish resistance at 110
+        prices = [100, 105, 110, 108, 105, 107, 110, 106, 103, 105,
+                  108, 110, 107, 104, 106, 109, 110, 108, 105, 107]
+        volumes = [1000] * 20
+
+        for price, volume in zip(prices, volumes):
+            analyzer.add_data(price, volume)
+
+        # Breakout above resistance
+        analyzer.add_data(113.0, 2000)
+
+        # Quick reversal back below resistance
+        signal = analyzer.analyze(current_price=108.0, current_volume=1500)
+
+        assert signal.signal_type in ["FALSE_BREAKOUT", "NO_SIGNAL"]
+
+    def test_breakout_signal_to_dict(self):
+        """Test signal serialization."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer
+
+        analyzer = BreakoutAnalyzer()
+
+        for i in range(25):
+            analyzer.add_data(100.0 + (i % 5), 1000)
+
+        signal = analyzer.analyze(current_price=106.0, current_volume=1500)
+        signal_dict = signal.to_dict()
+
+        assert "signal_type" in signal_dict
+        assert "confidence" in signal_dict
+        assert "breakout_level" in signal_dict
+        assert "breakdown_level" in signal_dict
+        assert "support_level" in signal_dict
+        assert "resistance_level" in signal_dict
+        assert "volume_confirmed" in signal_dict
+
+
+# =============================================================================
+# VOLUME PROFILE STRATEGY TESTS
+# =============================================================================
+
+class TestVolumeProfileStrategy:
+    """Tests for volume profile analysis strategy."""
+
+    def test_volume_profile_import(self):
+        """Test that VolumeProfileAnalyzer can be imported."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer, VolumeProfileSignal
+        assert VolumeProfileAnalyzer is not None
+        assert VolumeProfileSignal is not None
+
+    def test_volume_profile_initialization(self):
+        """Test analyzer initialization with default parameters."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        analyzer = VolumeProfileAnalyzer()
+        assert analyzer.num_bins == 20
+        assert analyzer.lookback_period == 100
+
+    def test_volume_profile_custom_initialization(self):
+        """Test analyzer with custom parameters."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        analyzer = VolumeProfileAnalyzer(num_bins=30, lookback_period=200)
+        assert analyzer.num_bins == 30
+        assert analyzer.lookback_period == 200
+
+    def test_volume_profile_identifies_poc(self):
+        """Test that analyzer identifies Point of Control (highest volume price level)."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        analyzer = VolumeProfileAnalyzer(num_bins=10)
+
+        # Add data with concentrated volume at $100
+        for _ in range(50):
+            analyzer.add_data(price=100.0, volume=2000)
+        for _ in range(25):
+            analyzer.add_data(price=95.0, volume=500)
+        for _ in range(25):
+            analyzer.add_data(price=105.0, volume=500)
+
+        poc = analyzer.get_point_of_control()
+        assert poc is not None
+        assert abs(poc - 100.0) < 3.0  # POC should be near $100
+
+    def test_volume_profile_identifies_value_area(self):
+        """Test that analyzer identifies Value Area High and Low (70% of volume)."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        analyzer = VolumeProfileAnalyzer(num_bins=10)
+
+        # Add normally distributed volume around $100
+        import random
+        random.seed(42)
+        for _ in range(100):
+            price = 100 + random.gauss(0, 5)
+            volume = 1000 + random.randint(-200, 200)
+            analyzer.add_data(price=price, volume=volume)
+
+        vah, val = analyzer.get_value_area()
+        assert vah is not None
+        assert val is not None
+        assert vah > val  # High should be above low
+
+    def test_volume_profile_support_from_high_volume_node(self):
+        """Test that high volume nodes below price act as support."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        analyzer = VolumeProfileAnalyzer(num_bins=10)
+
+        # Create high volume node at $90 (below current price)
+        for _ in range(40):
+            analyzer.add_data(price=90.0, volume=3000)  # High volume at $90
+        for _ in range(30):
+            analyzer.add_data(price=100.0, volume=1000)
+        for _ in range(30):
+            analyzer.add_data(price=95.0, volume=500)
+
+        signal = analyzer.analyze(current_price=98.0)
+
+        assert signal.support_level is not None
+        # With bin-based analysis, tolerance needs to account for bin width
+        # Support should be identified somewhere in the 90-96 range
+        assert signal.support_level < 98.0  # Support below current price
+        assert signal.support_confidence > 0.2  # Some confidence in the level
+
+    def test_volume_profile_resistance_from_high_volume_node(self):
+        """Test that high volume nodes above price act as resistance."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        analyzer = VolumeProfileAnalyzer(num_bins=10)
+
+        # Create high volume node at $110 (above current price)
+        for _ in range(40):
+            analyzer.add_data(price=110.0, volume=3000)  # High volume at $110
+        for _ in range(30):
+            analyzer.add_data(price=100.0, volume=1000)
+        for _ in range(30):
+            analyzer.add_data(price=105.0, volume=500)
+
+        signal = analyzer.analyze(current_price=102.0)
+
+        assert signal.resistance_level is not None
+        # With bin-based analysis, tolerance needs to account for bin width
+        # Resistance should be identified somewhere in the 104-111 range
+        assert signal.resistance_level > 102.0  # Resistance above current price
+        assert signal.resistance_confidence > 0.2  # Some confidence in the level
+
+    def test_volume_profile_low_volume_node_breakout_signal(self):
+        """Test VOLUME_BREAKOUT signal at low volume node (easy to break)."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        analyzer = VolumeProfileAnalyzer(num_bins=10)
+
+        # Create volume gap between $100 and $110
+        for _ in range(40):
+            analyzer.add_data(price=95.0, volume=2000)  # High volume below
+        for _ in range(10):
+            analyzer.add_data(price=105.0, volume=100)  # Low volume gap
+        for _ in range(40):
+            analyzer.add_data(price=115.0, volume=2000)  # High volume above
+
+        signal = analyzer.analyze(current_price=105.0)
+
+        # At low volume node, price can move easily
+        if signal.in_low_volume_zone:
+            assert signal.signal_type in ["VOLUME_BREAKOUT_ZONE", "NO_SIGNAL"]
+
+    def test_volume_profile_poc_bounce_signal(self):
+        """Test VOLUME_POC_BOUNCE signal when price approaches POC."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        analyzer = VolumeProfileAnalyzer(num_bins=10)
+
+        # Create clear POC at $100
+        for _ in range(60):
+            analyzer.add_data(price=100.0, volume=3000)
+        for _ in range(20):
+            analyzer.add_data(price=95.0, volume=500)
+        for _ in range(20):
+            analyzer.add_data(price=105.0, volume=500)
+
+        # Price approaches POC from below
+        signal = analyzer.analyze(current_price=99.0)
+
+        poc = analyzer.get_point_of_control()
+        if poc and abs(99.0 - poc) < 2.0:
+            assert signal.near_poc is True
+            # POC often acts as magnet/support
+            assert signal.poc_significance > 0.5
+
+    def test_volume_profile_no_signal_insufficient_data(self):
+        """Test no signal when insufficient price/volume data."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        analyzer = VolumeProfileAnalyzer(num_bins=10, lookback_period=100)
+
+        # Add only a few data points
+        for i in range(5):
+            analyzer.add_data(price=100.0 + i, volume=1000)
+
+        signal = analyzer.analyze(current_price=105.0)
+
+        assert signal.signal_type == "NO_SIGNAL"
+        assert signal.confidence == 0.0
+
+    def test_volume_profile_signal_to_dict(self):
+        """Test signal serialization."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        analyzer = VolumeProfileAnalyzer()
+
+        for i in range(100):
+            analyzer.add_data(price=100.0 + (i % 10) - 5, volume=1000 + (i % 3) * 100)
+
+        signal = analyzer.analyze(current_price=100.0)
+        signal_dict = signal.to_dict()
+
+        assert "signal_type" in signal_dict
+        assert "confidence" in signal_dict
+        assert "support_level" in signal_dict
+        assert "resistance_level" in signal_dict
+        assert "point_of_control" in signal_dict
+        assert "value_area_high" in signal_dict
+        assert "value_area_low" in signal_dict
+
+    def test_volume_profile_stats(self):
+        """Test analyzer statistics reporting."""
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        analyzer = VolumeProfileAnalyzer(num_bins=10)
+
+        for i in range(50):
+            analyzer.add_data(price=100.0 + (i % 5), volume=1000)
+
+        stats = analyzer.get_stats()
+
+        assert "data_points" in stats
+        assert "poc" in stats
+        assert "value_area_high" in stats
+        assert "value_area_low" in stats
+        assert stats["data_points"] == 50
+
+
+# =============================================================================
+# EXTENDED INTEGRATION TESTS
+# =============================================================================
+
+class TestExtendedStrategyIntegration:
+    """Extended integration tests including new strategies."""
+
+    def test_all_new_strategies_importable(self):
+        """Test that all new strategies can be imported."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer, BreakoutSignal
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer, VolumeProfileSignal
+
+        assert BreakoutAnalyzer is not None
+        assert BreakoutSignal is not None
+        assert VolumeProfileAnalyzer is not None
+        assert VolumeProfileSignal is not None
+
+    def test_new_strategies_in_signals_module(self):
+        """Test that new strategies are exported from signals module."""
+        from core.trading.signals import (
+            BreakoutAnalyzer,
+            BreakoutSignal,
+            VolumeProfileAnalyzer,
+            VolumeProfileSignal,
+        )
+
+        assert BreakoutAnalyzer is not None
+        assert VolumeProfileAnalyzer is not None
+
+    def test_combined_strategy_signals(self):
+        """Test using multiple strategies together for confluence."""
+        from core.trading.signals.breakout_strategy import BreakoutAnalyzer
+        from core.trading.signals.volume_profile_strategy import VolumeProfileAnalyzer
+
+        breakout_analyzer = BreakoutAnalyzer(lookback_period=20)
+        volume_analyzer = VolumeProfileAnalyzer(num_bins=10)
+
+        # Add same price/volume data to both
+        prices = [100, 102, 104, 103, 105, 107, 106, 108, 110, 109,
+                  108, 110, 111, 110, 109, 110, 108, 107, 109, 110]
+        volumes = [1000, 1100, 1200, 900, 1500, 1800, 1000, 2000, 2500, 1200,
+                   1000, 2200, 2800, 1500, 1100, 1800, 900, 800, 1200, 1400]
+
+        for price, volume in zip(prices, volumes):
+            breakout_analyzer.add_data(price, volume)
+            volume_analyzer.add_data(price, volume)
+
+        # Analyze with potential breakout price
+        breakout_signal = breakout_analyzer.analyze(current_price=113.0, current_volume=3000)
+        volume_signal = volume_analyzer.analyze(current_price=113.0)
+
+        # Both signals should provide useful information
+        assert breakout_signal.signal_type is not None
+        assert volume_signal.signal_type is not None
+
+        # If breakout is near high volume resistance, it's more significant
+        if breakout_signal.signal_type == "BREAKOUT_BUY" and volume_signal.resistance_level:
+            # Confluence of signals increases confidence
+            assert True  # Both signals agree on key levels

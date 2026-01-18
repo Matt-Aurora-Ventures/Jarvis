@@ -14,6 +14,8 @@ from .rsi_strategy import RSISignal, RSIAnalyzer
 from .macd_strategy import MACDSignal, MACDAnalyzer
 from .dca_strategy import DCASignal, DCAAnalyzer
 from .mean_reversion import MeanReversionSignal, MeanReversionAnalyzer
+from .breakout_strategy import BreakoutSignal, BreakoutAnalyzer
+from .volume_profile_strategy import VolumeProfileSignal, VolumeProfileAnalyzer
 
 __all__ = [
     # Original signals
@@ -33,4 +35,8 @@ __all__ = [
     'DCAAnalyzer',
     'MeanReversionSignal',
     'MeanReversionAnalyzer',
+    'BreakoutSignal',
+    'BreakoutAnalyzer',
+    'VolumeProfileSignal',
+    'VolumeProfileAnalyzer',
 ]

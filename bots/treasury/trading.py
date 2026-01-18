@@ -25,6 +25,13 @@ from .wallet import SecureWallet, WalletInfo
 from .jupiter import JupiterClient, SwapQuote, SwapResult, LimitOrderManager
 from .scorekeeper import get_scorekeeper, Scorekeeper
 
+# Import structured logging for comprehensive JSON logs
+try:
+    from core.logging import get_structured_logger, JsonFormatter
+    STRUCTURED_LOGGING_AVAILABLE = True
+except ImportError:
+    STRUCTURED_LOGGING_AVAILABLE = False
+
 # Import safe state management for race-condition-free file access
 try:
     from core.safe_state import SafeState
@@ -71,7 +78,11 @@ try:
 except ImportError:
     COINGLASS_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+# Initialize structured logger if available, fallback to standard logger
+if STRUCTURED_LOGGING_AVAILABLE:
+    logger = get_structured_logger("jarvis.trading", service="trading_engine")
+else:
+    logger = logging.getLogger(__name__)
 
 
 class TradeDirection(Enum):
@@ -1278,7 +1289,25 @@ class TradingEngine:
                 "dry_run": True,
             }, user_id, True)
 
-            logger.info(f"[DRY RUN] Opened position {position_id}: {token_symbol}")
+            # Structured log event for position opening
+            if STRUCTURED_LOGGING_AVAILABLE and hasattr(logger, 'log_event'):
+                logger.log_event(
+                    "POSITION_OPENED",
+                    position_id=position_id,
+                    symbol=token_symbol,
+                    token_mint=token_mint,
+                    amount_usd=amount_usd,
+                    entry_price=current_price,
+                    tp_price=tp_price,
+                    sl_price=sl_price,
+                    sentiment_grade=sentiment_grade,
+                    sentiment_score=sentiment_score,
+                    risk_tier=risk_tier,
+                    dry_run=True,
+                    user_id=str(user_id) if user_id else None,
+                )
+            else:
+                logger.info(f"[DRY RUN] Opened position {position_id}: {token_symbol}")
             return True, f"[DRY RUN] Position opened", position
 
         # Execute real trade
@@ -1351,7 +1380,26 @@ class TradingEngine:
                 "dry_run": False,
             }, user_id, True)
 
-            logger.info(f"Opened position {position_id}: {token_symbol} @ ${current_price}")
+            # Structured log event for live trade
+            if STRUCTURED_LOGGING_AVAILABLE and hasattr(logger, 'log_event'):
+                logger.log_event(
+                    "POSITION_OPENED",
+                    position_id=position_id,
+                    symbol=token_symbol,
+                    token_mint=token_mint,
+                    amount_usd=amount_usd,
+                    entry_price=current_price,
+                    tp_price=tp_price,
+                    sl_price=sl_price,
+                    sentiment_grade=sentiment_grade,
+                    sentiment_score=sentiment_score,
+                    risk_tier=risk_tier,
+                    tx_signature=result.signature,
+                    dry_run=False,
+                    user_id=str(user_id) if user_id else None,
+                )
+            else:
+                logger.info(f"Opened position {position_id}: {token_symbol} @ ${current_price}")
             
             # Track in scorekeeper for persistent P&L tracking
             try:
@@ -1465,7 +1513,23 @@ class TradingEngine:
                 "dry_run": True,
             }, user_id, True)
 
-            logger.info(f"[DRY RUN] Closed position {position_id}: P&L ${position.pnl_usd:+.2f}")
+            # Structured log event for dry run close
+            if STRUCTURED_LOGGING_AVAILABLE and hasattr(logger, 'log_event'):
+                logger.log_event(
+                    "POSITION_CLOSED",
+                    position_id=position_id,
+                    symbol=position.token_symbol,
+                    token_mint=position.token_mint,
+                    entry_price=position.entry_price,
+                    exit_price=current_price,
+                    pnl_usd=position.pnl_usd,
+                    pnl_pct=position.pnl_pct,
+                    reason=reason,
+                    dry_run=True,
+                    user_id=str(user_id) if user_id else None,
+                )
+            else:
+                logger.info(f"[DRY RUN] Closed position {position_id}: P&L ${position.pnl_usd:+.2f}")
             return True, f"[DRY RUN] Closed with P&L: ${position.pnl_usd:+.2f} ({position.pnl_pct:+.1f}%)"
 
         # Execute real close
@@ -1552,8 +1616,25 @@ class TradingEngine:
                 "dry_run": False,
             }, user_id, True)
 
-            logger.info(f"Closed position {position_id}: P&L ${position.pnl_usd:+.2f}")
-            
+            # Structured log event for live close
+            if STRUCTURED_LOGGING_AVAILABLE and hasattr(logger, 'log_event'):
+                logger.log_event(
+                    "POSITION_CLOSED",
+                    position_id=position_id,
+                    symbol=position.token_symbol,
+                    token_mint=position.token_mint,
+                    entry_price=position.entry_price,
+                    exit_price=current_price,
+                    pnl_usd=position.pnl_usd,
+                    pnl_pct=position.pnl_pct,
+                    reason=reason,
+                    tx_signature=result.signature,
+                    dry_run=False,
+                    user_id=str(user_id) if user_id else None,
+                )
+            else:
+                logger.info(f"Closed position {position_id}: P&L ${position.pnl_usd:+.2f}")
+
             # Track in scorekeeper
             try:
                 scorekeeper = get_scorekeeper()

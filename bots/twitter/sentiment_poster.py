@@ -29,7 +29,18 @@ from bots.twitter.claude_content import ClaudeContentGenerator
 from bots.twitter.grok_client import GrokClient
 from bots.twitter.autonomous_engine import XMemory
 
-logger = logging.getLogger(__name__)
+# Import structured logging for comprehensive JSON logs
+try:
+    from core.logging import get_structured_logger
+    STRUCTURED_LOGGING_AVAILABLE = True
+except ImportError:
+    STRUCTURED_LOGGING_AVAILABLE = False
+
+# Initialize structured logger if available, fallback to standard logger
+if STRUCTURED_LOGGING_AVAILABLE:
+    logger = get_structured_logger("jarvis.twitter.sentiment_poster", service="sentiment_poster")
+else:
+    logger = logging.getLogger(__name__)
 
 # Shared memory for cross-module deduplication
 _shared_memory: Optional['XMemory'] = None
@@ -295,7 +306,20 @@ Return ONLY a JSON object: {{"tweets": ["tweet1", "tweet2", "tweet3"]}}"""
                 await asyncio.sleep(1)  # Rate limit
 
             self._last_post_time = datetime.now(timezone.utc)
-            logger.info(f"Posted sentiment report thread ({len(tweets)} tweets)")
+
+            # Structured log event for sentiment post
+            if STRUCTURED_LOGGING_AVAILABLE and hasattr(logger, 'log_event'):
+                logger.log_event(
+                    "SENTIMENT_POSTED",
+                    tweet_count=len(tweets),
+                    bullish_count=len(bullish),
+                    bearish_count=len(bearish),
+                    neutral_count=len(neutral),
+                    top_tokens=[t['symbol'] for t in top_tokens[:3]],
+                    generator="claude",
+                )
+            else:
+                logger.info(f"Posted sentiment report thread ({len(tweets)} tweets)")
 
         except Exception as e:
             logger.error(f"Failed to post sentiment report: {e}", exc_info=True)

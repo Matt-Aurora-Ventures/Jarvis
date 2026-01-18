@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dexter Decision Report - 20260118_154933</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #eee;
+            min-height: 100vh;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 {
+            color: #00d4ff;
+            border-bottom: 3px solid #00d4ff;
+            padding-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h2 { color: #00ff88; margin-top: 30px; }
+        .status-badge {
+            font-size: 18px;
+            padding: 8px 20px;
+            border-radius: 20px;
+            background: #00ff8820;
+            border: 2px solid #00ff88;
+            color: #00ff88;
+        }
+        .card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .metric {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        .metric-label { color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+        .metric-value { font-size: 32px; font-weight: bold; margin: 10px 0; }
+        .metric-sub { color: #666; font-size: 11px; }
+        .green { color: #00ff88; }
+        .red { color: #ff4444; }
+        .yellow { color: #ffaa00; }
+        .blue { color: #00d4ff; }
+        .progress-bar {
+            background: #0a0a1a;
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+        .progress-buy { background: linear-gradient(90deg, #00ff88, #00cc66); }
+        .progress-hold { background: linear-gradient(90deg, #ffaa00, #ff8800); }
+        .progress-sell { background: linear-gradient(90deg, #ff4444, #cc3333); }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; }
+        th { background: #0f3460; color: #00d4ff; }
+        .footer { text-align: center; margin-top: 40px; color: #666; font-size: 12px; }
+        .recommendation {
+            background: #0f3460;
+            border-left: 4px solid #00d4ff;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .chart-placeholder {
+            background: #0a0a1a;
+            border-radius: 8px;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            Dexter Decision Report
+            <span class="status-badge">READY</span>
+        </h1>
+        <p style="color: #888;">Generated: 2026-01-18 15:49:33 UTC</p>
+
+        <!-- Decision Breakdown -->
+        <div class="card">
+            <h2>Decision Breakdown</h2>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Total Decisions</div>
+                    <div class="metric-value blue">25</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">BUY Signals</div>
+                    <div class="metric-value green">7</div>
+                    <div class="metric-sub">28.0% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">HOLD Signals</div>
+                    <div class="metric-value yellow">15</div>
+                    <div class="metric-sub">60.0% of total</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">SELL Signals</div>
+                    <div class="metric-value red">3</div>
+                    <div class="metric-sub">12.0% of total</div>
+                </div>
+            </div>
+
+            <h3 style="color: #888; margin-top: 20px;">Decision Distribution</h3>
+            <div class="progress-bar" style="height: 30px;">
+                <div class="progress-fill progress-buy" style="width: 28.000000000000004%; display: inline-block;"></div>
+                <div class="progress-fill progress-hold" style="width: 60.0%; display: inline-block;"></div>
+                <div class="progress-fill progress-sell" style="width: 12.0%; display: inline-block;"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #888;">
+                <span>BUY 28.0%</span>
+                <span>HOLD 60.0%</span>
+                <span>SELL 12.0%</span>
+            </div>
+        </div>
+
+        <!-- Accuracy vs Price Movement -->
+        <div class="card">
+            <h2>Accuracy vs Price Movement</h2>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">5-Minute Accuracy</div>
+                    <div class="metric-value green">72.0%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">1-Hour Accuracy</div>
+                    <div class="metric-value green">76.0%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">4-Hour Accuracy</div>
+                    <div class="metric-value green">84.0%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Win/Loss</div>
+                    <div class="metric-value">3/7</div>
+                    <div class="metric-sub">10 trades evaluated</div>
+                </div>
+            </div>
+
+            <div class="recommendation">
+                <strong>Target:</strong> 60%+ accuracy for production use.
+                Current accuracy meets target.
+            </div>
+        </div>
+
+        <!-- Confidence Scores -->
+        <div class="card">
+            <h2>Confidence Analysis</h2>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Avg Confidence</div>
+                    <div class="metric-value blue">65.9%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Avg Grok Score</div>
+                    <div class="metric-value blue">66.6</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">High Conf (85%+)</div>
+                    <div class="metric-value green">3</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Low Conf (&lt;70%)</div>
+                    <div class="metric-value yellow">15</div>
+                </div>
+            </div>
+
+            <h3 style="color: #888; margin-top: 20px;">Confidence Distribution</h3>
+            <table>
+                <tr>
+                    <th>Confidence Level</th>
+                    <th>Count</th>
+                    <th>Action</th>
+                </tr>
+                <tr>
+                    <td>High (85%+)</td>
+                    <td class="green">3</td>
+                    <td>Full position size</td>
+                </tr>
+                <tr>
+                    <td>Medium (70-84%)</td>
+                    <td class="yellow">7</td>
+                    <td>Reduced position size</td>
+                </tr>
+                <tr>
+                    <td>Low (&lt;70%)</td>
+                    <td class="red">15</td>
+                    <td>Skip or minimal position</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- Cost Efficiency -->
+        <div class="card">
+            <h2>Cost Efficiency</h2>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Total Cost</div>
+                    <div class="metric-value">$1.13</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Avg Cost/Decision</div>
+                    <div class="metric-value green">$0.0451</div>
+                    <div class="metric-sub">Target: &lt;$0.20</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">P50 Cost</div>
+                    <div class="metric-value">$0.0439</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">P95 Cost</div>
+                    <div class="metric-value">$0.0685</div>
+                </div>
+            </div>
+
+            <div class="recommendation">
+                <strong>Budget Compliance:</strong> 100.0% of decisions within $0.20 target.
+                Cost efficiency is excellent.
+            </div>
+        </div>
+
+        <!-- System Comparison -->
+        <div class="card">
+            <h2>Comparison: Dexter vs Sentiment Pipeline</h2>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-label">Agreement Rate</div>
+                    <div class="metric-value blue">0.0%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Dexter Better</div>
+                    <div class="metric-value green">0</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Pipeline Better</div>
+                    <div class="metric-value yellow">0</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Equal</div>
+                    <div class="metric-value">0</div>
+                </div>
+            </div>
+
+            <div class="recommendation">
+                <strong>Insight:</strong>
+                Low agreement - Dexter provides different perspective.
+                
+            </div>
+        </div>
+
+        <!-- Production Readiness -->
+        <div class="card">
+            <h2>Production Readiness Checklist</h2>
+            <table>
+                <tr>
+                    <th>Criteria</th>
+                    <th>Status</th>
+                    <th>Value</th>
+                    <th>Target</th>
+                </tr>
+                <tr>
+                    <td>1-Hour Accuracy</td>
+                    <td><span class="green">PASS</span></td>
+                    <td>76.0%</td>
+                    <td>&ge;60%</td>
+                </tr>
+                <tr>
+                    <td>Cost per Decision</td>
+                    <td><span class="green">PASS</span></td>
+                    <td>$0.0451</td>
+                    <td>&le;$0.20</td>
+                </tr>
+                <tr>
+                    <td>Decision Variety</td>
+                    <td><span class="green">PASS</span></td>
+                    <td>28.0% BUY</td>
+                    <td>&lt;80% BUY</td>
+                </tr>
+                <tr>
+                    <td>Confidence Calibration</td>
+                    <td><span class="green">PASS</span></td>
+                    <td>65.9%</td>
+                    <td>&ge;60%</td>
+                </tr>
+                <tr>
+                    <td>Total Decisions Tested</td>
+                    <td><span class="yellow">WARN</span></td>
+                    <td>25</td>
+                    <td>&ge;50</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="footer">
+            <p>Dexter ReAct Agent - Decision Quality Report</p>
+            <p>Generated by Jarvis LifeOS | 2026</p>
+        </div>
+    </div>
+</body>
+</html>

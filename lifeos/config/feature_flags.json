@@ -5,6 +5,18 @@
       "description": "Enable Dexter ReAct agent for Telegram finance queries",
       "rollout_percentage": 0,
       "user_whitelist": [],
+      "start_date": "",
+      "end_date": "",
+      "created_at": "2026-01-18",
+      "updated_at": "2026-01-18"
+    },
+    "DEXTER_REACT_ENABLED": {
+      "enabled": true,
+      "description": "Enable Dexter ReAct agent for Telegram finance queries (new flag name)",
+      "rollout_percentage": 0,
+      "user_whitelist": [],
+      "start_date": "",
+      "end_date": "",
       "created_at": "2026-01-18",
       "updated_at": "2026-01-18"
     },
@@ -13,6 +25,28 @@
       "description": "Enable advanced trading features: trailing stops, DCA strategies",
       "rollout_percentage": 0,
       "user_whitelist": [],
+      "start_date": "",
+      "end_date": "",
+      "created_at": "2026-01-18",
+      "updated_at": "2026-01-18"
+    },
+    "ADVANCED_STRATEGIES_ENABLED": {
+      "enabled": false,
+      "description": "Enable advanced trading strategies (DCA, grid trading, etc.)",
+      "rollout_percentage": 0,
+      "user_whitelist": [],
+      "start_date": "",
+      "end_date": "",
+      "created_at": "2026-01-18",
+      "updated_at": "2026-01-18"
+    },
+    "ON_CHAIN_ANALYSIS_ENABLED": {
+      "enabled": false,
+      "description": "Enable on-chain tokenomics analysis for trading decisions",
+      "rollout_percentage": 0,
+      "user_whitelist": [],
+      "start_date": "",
+      "end_date": "",
       "created_at": "2026-01-18",
       "updated_at": "2026-01-18"
     },
@@ -21,6 +55,18 @@
       "description": "Enable new Telegram UI with inline buttons and drill-down menus",
       "rollout_percentage": 0,
       "user_whitelist": [],
+      "start_date": "",
+      "end_date": "",
+      "created_at": "2026-01-18",
+      "updated_at": "2026-01-18"
+    },
+    "TELEGRAM_UI_ENHANCED_ENABLED": {
+      "enabled": false,
+      "description": "Enable enhanced Telegram UI components with rich formatting",
+      "rollout_percentage": 0,
+      "user_whitelist": [],
+      "start_date": "",
+      "end_date": "",
       "created_at": "2026-01-18",
       "updated_at": "2026-01-18"
     },
@@ -29,6 +75,8 @@
       "description": "Allow real trades (vs paper trading)",
       "rollout_percentage": 0,
       "user_whitelist": [],
+      "start_date": "",
+      "end_date": "",
       "created_at": "2026-01-18",
       "updated_at": "2026-01-18"
     },
@@ -37,6 +85,18 @@
       "description": "Enable new structured logging system with JSON output",
       "rollout_percentage": 0,
       "user_whitelist": [],
+      "start_date": "",
+      "end_date": "",
+      "created_at": "2026-01-18",
+      "updated_at": "2026-01-18"
+    },
+    "GROK_FALLBACK_ENABLED": {
+      "enabled": true,
+      "description": "Enable Grok API fallback for AI responses when primary fails",
+      "rollout_percentage": 0,
+      "user_whitelist": [],
+      "start_date": "",
+      "end_date": "",
       "created_at": "2026-01-18",
       "updated_at": "2026-01-18"
     }

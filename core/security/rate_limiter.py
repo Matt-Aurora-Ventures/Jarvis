@@ -375,6 +375,190 @@ class RateLimitExceeded(Exception):
         self.retry_after = retry_after
 
 
+# ============================================================
+# Token Bucket Rate Limiter (Enhanced)
+# ============================================================
+
+@dataclass
+class TokenBucketResult:
+    """Result of a token bucket rate limit check."""
+    allowed: bool
+    remaining: int
+    limit: int
+    retry_after: Optional[float] = None
+    status_code: int = 200
+
+    def __post_init__(self):
+        if not self.allowed:
+            self.status_code = 429
+
+
+class TokenBucket:
+    """
+    Token bucket implementation for rate limiting.
+
+    Tokens are added at a fixed rate and consumed per request.
+    Allows for bursting up to bucket capacity.
+    """
+
+    def __init__(self, capacity: int, refill_rate: float):
+        """
+        Initialize token bucket.
+
+        Args:
+            capacity: Maximum tokens (bucket size)
+            refill_rate: Tokens added per second
+        """
+        self.capacity = capacity
+        self.refill_rate = refill_rate
+        self.tokens = float(capacity)
+        self.last_refill = time.time()
+
+    def _refill(self) -> None:
+        """Refill tokens based on elapsed time."""
+        now = time.time()
+        elapsed = now - self.last_refill
+        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+        self.last_refill = now
+
+    def consume(self, tokens: int = 1) -> Tuple[bool, float]:
+        """
+        Attempt to consume tokens.
+
+        Args:
+            tokens: Number of tokens to consume
+
+        Returns:
+            (success, wait_time) - wait_time is 0 if successful
+        """
+        self._refill()
+
+        if self.tokens >= tokens:
+            self.tokens -= tokens
+            return True, 0.0
+        else:
+            # Calculate wait time
+            tokens_needed = tokens - self.tokens
+            wait_time = tokens_needed / self.refill_rate
+            return False, wait_time
+
+    @property
+    def available(self) -> int:
+        """Get available tokens."""
+        self._refill()
+        return int(self.tokens)
+
+
+class TokenBucketRateLimiter:
+    """
+    Token bucket rate limiter with support for multiple bucket types.
+
+    Supports rate limiting by:
+    - user_id: Per-user limits
+    - ip: Per-IP limits
+    - endpoint: Per-endpoint limits
+    """
+
+    def __init__(
+        self,
+        max_requests_per_minute: int = 100,
+        bucket_type: str = "user_id",
+        burst_size: Optional[int] = None
+    ):
+        """
+        Initialize token bucket rate limiter.
+
+        Args:
+            max_requests_per_minute: Maximum requests per minute
+            bucket_type: Type of bucketing ("user_id", "ip", "endpoint")
+            burst_size: Maximum burst size (defaults to requests_per_minute)
+        """
+        self.max_requests_per_minute = max_requests_per_minute
+        self.bucket_type = bucket_type
+        self.burst_size = burst_size or max_requests_per_minute
+
+        # Refill rate (tokens per second)
+        self.refill_rate = max_requests_per_minute / 60.0
+
+        # Buckets indexed by identifier
+        self._buckets: Dict[str, TokenBucket] = {}
+
+    def _get_bucket(self, identifier: str) -> TokenBucket:
+        """Get or create bucket for identifier."""
+        if identifier not in self._buckets:
+            self._buckets[identifier] = TokenBucket(
+                capacity=self.burst_size,
+                refill_rate=self.refill_rate
+            )
+        return self._buckets[identifier]
+
+    def check(self, identifier: str, tokens: int = 1) -> TokenBucketResult:
+        """
+        Check if request is allowed.
+
+        Args:
+            identifier: User ID, IP, or endpoint path
+            tokens: Number of tokens to consume
+
+        Returns:
+            TokenBucketResult with allowed status
+        """
+        bucket = self._get_bucket(identifier)
+        allowed, wait_time = bucket.consume(tokens)
+
+        return TokenBucketResult(
+            allowed=allowed,
+            remaining=bucket.available,
+            limit=self.max_requests_per_minute,
+            retry_after=wait_time if not allowed else None
+        )
+
+    def reset(self, identifier: str) -> None:
+        """Reset bucket for identifier."""
+        if identifier in self._buckets:
+            del self._buckets[identifier]
+
+    def get_status(self, identifier: str) -> Dict[str, Any]:
+        """Get status for identifier."""
+        if identifier not in self._buckets:
+            return {
+                "identifier": identifier,
+                "remaining": self.burst_size,
+                "limit": self.max_requests_per_minute
+            }
+
+        bucket = self._buckets[identifier]
+        return {
+            "identifier": identifier,
+            "remaining": bucket.available,
+            "limit": self.max_requests_per_minute,
+            "refill_rate": self.refill_rate
+        }
+
+
+# Convenience function for simple rate limiting
+def simple_rate_check(
+    identifier: str,
+    max_per_minute: int = 100
+) -> TokenBucketResult:
+    """
+    Simple rate limit check.
+
+    Args:
+        identifier: User/IP/endpoint identifier
+        max_per_minute: Maximum requests per minute
+
+    Returns:
+        TokenBucketResult
+    """
+    # Use a module-level cache for the limiter
+    global _simple_limiter
+    if '_simple_limiter' not in globals() or _simple_limiter.max_requests_per_minute != max_per_minute:
+        _simple_limiter = TokenBucketRateLimiter(max_requests_per_minute=max_per_minute)
+
+    return _simple_limiter.check(identifier)
+
+
 # Testing
 if __name__ == "__main__":
     async def test():

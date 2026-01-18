@@ -159,9 +159,10 @@ class FeatureFlagManager:
 
         Evaluation order:
         1. Environment variable override (FF_FLAG_NAME)
-        2. User whitelist (if user_id provided)
-        3. Percentage rollout (if user_id provided and percentage > 0)
-        4. Base enabled state
+        2. Time-based activation (start_date, end_date)
+        3. User whitelist (if user_id provided)
+        4. Percentage rollout (if user_id provided and percentage > 0)
+        5. Base enabled state
 
         Args:
             flag_name: Name of the flag to check
@@ -182,7 +183,11 @@ class FeatureFlagManager:
         if flag is None:
             return False
 
-        # 3. Check user whitelist
+        # 3. Check time-based activation
+        if not flag.is_time_active():
+            return False
+
+        # 4. Check user whitelist
         if user_id and flag.user_whitelist:
             if str(user_id) in flag.user_whitelist:
                 return True
@@ -192,11 +197,11 @@ class FeatureFlagManager:
             # Whitelist exists but user not in it and no percentage rollout
             return False
 
-        # 4. Check percentage rollout
+        # 5. Check percentage rollout
         if user_id and flag.rollout_percentage > 0:
             return self._check_percentage(flag_name, user_id, flag.rollout_percentage)
 
-        # 5. Return base enabled state
+        # 6. Return base enabled state
         return flag.enabled
 
     def _check_percentage(self, flag_name: str, user_id: str, percentage: int) -> bool:
@@ -219,6 +224,44 @@ class FeatureFlagManager:
         bucket = hash_val % 100
 
         return bucket < percentage
+
+    def get_variant(
+        self,
+        flag_name: str,
+        user_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Get the A/B test variant for a user.
+
+        Uses consistent hashing to assign users to variants.
+        Returns None if flag doesn't exist or doesn't have A/B test config.
+
+        Args:
+            flag_name: Name of the flag with A/B test config
+            user_id: User identifier for consistent assignment
+
+        Returns:
+            Variant name (e.g., "control" or "treatment") or None
+        """
+        self._maybe_reload()
+
+        flag = self._flags.get(flag_name)
+        if flag is None:
+            return None
+
+        if not flag.ab_test or not flag.ab_test.variants:
+            return None
+
+        if not user_id:
+            # Return first variant as default when no user_id
+            return flag.ab_test.variants[0]
+
+        # Use consistent hashing to assign variant
+        hash_input = f"{flag_name}:variant:{user_id}".encode('utf-8')
+        hash_val = int(hashlib.md5(hash_input).hexdigest(), 16)
+        variant_index = hash_val % len(flag.ab_test.variants)
+
+        return flag.ab_test.variants[variant_index]
 
     def get_flag(self, flag_name: str) -> Optional[FeatureFlagConfig]:
         """
