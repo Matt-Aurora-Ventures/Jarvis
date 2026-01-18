@@ -418,6 +418,10 @@ class TradingEngine:
             self._coinglass = CoinGlassClient()
             logger.info("CoinGlass client initialized")
 
+        # CRITICAL: Mutex for trade execution to prevent race conditions from concurrent X/Telegram bot trades
+        # Ensures only one trade executes at a time, protecting against position limit overruns
+        self._trade_execution_lock = asyncio.Lock()
+
         # Load existing state
         self._load_state()
 
@@ -1252,10 +1256,11 @@ class TradingEngine:
         )
 
         if self.dry_run:
-            # Simulate trade
-            position.status = TradeStatus.OPEN
-            self.positions[position_id] = position
-            self._save_state()
+            # Simulate trade - CRITICAL: Use lock to prevent concurrent modifications
+            async with self._trade_execution_lock:
+                position.status = TradeStatus.OPEN
+                self.positions[position_id] = position
+                self._save_state()
 
             # Track daily volume even in dry run
             self._add_daily_volume(amount_usd)
@@ -1324,8 +1329,10 @@ class TradingEngine:
                 position.tp_order_id = tp_id
                 position.sl_order_id = sl_id
 
-            self.positions[position_id] = position
-            self._save_state()
+            # CRITICAL: Use lock to prevent concurrent modifications during position registration
+            async with self._trade_execution_lock:
+                self.positions[position_id] = position
+                self._save_state()
 
             # Track daily volume
             self._add_daily_volume(amount_usd)
@@ -1439,10 +1446,12 @@ class TradingEngine:
             position.pnl_pct = ((current_price - position.entry_price) / position.entry_price) * 100
             position.pnl_usd = position.amount_usd * (position.pnl_pct / 100)
 
-            # Move to history
-            self.trade_history.append(position)
-            del self.positions[position_id]
-            self._save_state()
+            # CRITICAL: Use lock to prevent concurrent close operations
+            async with self._trade_execution_lock:
+                # Move to history
+                self.trade_history.append(position)
+                del self.positions[position_id]
+                self._save_state()
 
             # Audit log for dry run close
             self._log_audit("CLOSE_POSITION", {
