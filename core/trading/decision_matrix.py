@@ -70,9 +70,12 @@ class EntryConditions:
     # Signal combination
     require_multiple_signals: bool = False  # Require 2+ signals to agree
     signal_weights: Dict[str, float] = field(default_factory=lambda: {
-        'liquidation': 0.4,
-        'ma': 0.3,
-        'sentiment': 0.3,
+        'liquidation': 0.35,
+        'ma': 0.25,
+        'sentiment': 0.25,
+        'rsi': 0.08,
+        'macd': 0.05,
+        'mean_reversion': 0.02,
     })
 
 

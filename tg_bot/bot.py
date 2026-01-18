@@ -162,6 +162,12 @@ def main():
     app.add_handler(CommandHandler("pnl", treasury_handlers.handle_pnl))
     app.add_handler(CommandHandler("sector", treasury_handlers.handle_sector))
     app.add_handler(CommandHandler("settings", settings))
+
+    # Interactive UI Commands (v4.8.0)
+    app.add_handler(CommandHandler("compare", compare))
+    app.add_handler(CommandHandler("watchlist", watchlist))
+    app.add_handler(CommandHandler("w", watchlist))
+
     app.add_handler(CommandHandler("addscam", addscam))
     app.add_handler(CommandHandler("trust", trust))
     app.add_handler(CommandHandler("trustscore", trustscore))

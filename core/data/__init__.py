@@ -8,6 +8,7 @@ Provides:
 - GDPR-compliant data deletion (Prompt #89)
 - Data quality validation (Prompt #90)
 - Trade outcome aggregation (Prompt #91)
+- On-chain analysis and tokenomics scoring
 """
 
 from core.data.anonymizer import DataAnonymizer, get_anonymizer
@@ -22,6 +23,20 @@ from core.data.free_price_api import (
 )
 from core.data.free_trending_api import (
     FreeTrendingAPI, get_free_trending_api, get_trending_tokens, get_top_gainers, TrendingToken
+)
+
+# On-chain analysis modules
+from core.data.solscan_api import (
+    SolscanAPI, get_solscan_api, TokenInfo, HolderInfo, TransactionInfo
+)
+from core.data.holders_analyzer import (
+    HoldersAnalyzer, get_holders_analyzer, HolderDistribution, ConcentrationSignal
+)
+from core.data.tokenomics_scorer import (
+    TokenomicsScorer, get_tokenomics_scorer, TokenomicsScore, TokenomicsGrade
+)
+from core.data.onchain_analyzer import (
+    OnChainAnalyzer, get_onchain_analyzer, OnChainAnalysis
 )
 
 __all__ = [
@@ -46,4 +61,21 @@ __all__ = [
     "get_trending_tokens",
     "get_top_gainers",
     "TrendingToken",
+    # On-chain analysis
+    "SolscanAPI",
+    "get_solscan_api",
+    "TokenInfo",
+    "HolderInfo",
+    "TransactionInfo",
+    "HoldersAnalyzer",
+    "get_holders_analyzer",
+    "HolderDistribution",
+    "ConcentrationSignal",
+    "TokenomicsScorer",
+    "get_tokenomics_scorer",
+    "TokenomicsScore",
+    "TokenomicsGrade",
+    "OnChainAnalyzer",
+    "get_onchain_analyzer",
+    "OnChainAnalysis",
 ]

@@ -77,6 +77,20 @@ except ImportError:
     AntiScamProtection = None
     create_antiscam_handler = None
 
+# Interactive UI components
+try:
+    from tg_bot.handlers.interactive_ui import (
+        is_new_ui_enabled,
+        build_analyze_keyboard,
+        get_session_manager,
+    )
+    INTERACTIVE_UI_AVAILABLE = True
+except ImportError:
+    INTERACTIVE_UI_AVAILABLE = False
+    is_new_ui_enabled = lambda: False
+    build_analyze_keyboard = None
+    get_session_manager = None
+
 # Global anti-scam instance
 _ANTISCAM: "AntiScamProtection | None" = None
 
@@ -714,22 +728,43 @@ async def analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         message = fmt.format_single_analysis(signal)
 
-        # Add refresh button
-        keyboard = [[
-            InlineKeyboardButton(
-                "Refresh (uses API)",
-                callback_data=f"analyze_{token}",
-            ),
-            InlineKeyboardButton(
-                "DexScreener",
-                url=fmt.get_dexscreener_link(signal.address),
-            ),
-        ]]
+        # Check if interactive UI is enabled
+        use_interactive = INTERACTIVE_UI_AVAILABLE and is_new_ui_enabled()
+
+        if use_interactive:
+            # Use enhanced interactive keyboard with drill-down buttons
+            keyboard = build_analyze_keyboard(address, signal.symbol or symbol)
+
+            # Create drill-down session for this user
+            user_id = update.effective_user.id if update.effective_user else 0
+            if user_id and get_session_manager:
+                session_manager = get_session_manager()
+                session_manager.create_session(
+                    user_id=user_id,
+                    token_address=address,
+                    token_symbol=signal.symbol or symbol,
+                    current_view="main"
+                )
+
+            # Add hint about interactive features
+            message += "\n\n_Tap buttons below to drill down_"
+        else:
+            # Fallback to original button layout
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "Refresh (uses API)",
+                    callback_data=f"analyze_{token}",
+                ),
+                InlineKeyboardButton(
+                    "DexScreener",
+                    url=fmt.get_dexscreener_link(signal.address),
+                ),
+            ]])
 
         await update.message.reply_text(
             message,
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            reply_markup=keyboard,
             disable_web_page_preview=True,
         )
 
@@ -745,9 +780,151 @@ async def analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def compare(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle /compare command - compare multiple tokens side by side.
+
+    Usage: /compare SOL USDC WIF
+    """
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text(
+            "Usage: `/compare <token1> <token2> [token3...]`\n\n"
+            "Examples:\n"
+            "`/compare SOL USDC WIF`\n"
+            "`/compare BONK JUP`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    tokens = context.args[:5]  # Max 5 tokens
+
+    await update.message.reply_text(
+        f"_Comparing {', '.join(tokens)}..._",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+    try:
+        from tg_bot.handlers.token_dashboard import (
+            format_token_comparison,
+            build_compare_keyboard,
+            get_grade_for_token,
+            get_risk_for_token,
+        )
+
+        service = get_signal_service()
+
+        # Known tokens mapping
+        known_tokens = {
+            "SOL": "So11111111111111111111111111111111111111112",
+            "BONK": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+            "WIF": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+            "JUP": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+            "USDC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "PYTH": "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3",
+            "RAY": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
+        }
+
+        comparison_data = []
+
+        for token in tokens:
+            address = known_tokens.get(token.upper(), token)
+            signal = await service.get_comprehensive_signal(
+                address,
+                symbol=token.upper() if token.upper() in known_tokens else "",
+                include_sentiment=False,  # Don't use expensive API for comparison
+            )
+
+            grade = await get_grade_for_token(address)
+            risk = await get_risk_for_token(address)
+
+            comparison_data.append({
+                "symbol": signal.symbol or token.upper(),
+                "grade": grade,
+                "score": int(signal.signal_score + 50),  # Normalize to 0-100
+                "volume_24h": signal.volume_24h,
+                "liquidity_usd": signal.liquidity_usd,
+                "risk": risk,
+            })
+
+        message = format_token_comparison(comparison_data)
+        keyboard = build_compare_keyboard([t.upper() for t in tokens])
+
+        await update.message.reply_text(
+            message,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard,
+        )
+
+    except Exception as e:
+        logger.error(f"Compare failed: {e}")
+        await update.message.reply_text(
+            f"*Compare Error*\n\n`{str(e)[:100]}`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
-@admin_only
+async def watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle /watchlist or /w command - show and manage token watchlist.
+    """
+    user_id = update.effective_user.id if update.effective_user else 0
+
+    if not user_id:
+        await update.message.reply_text("Could not identify user.")
+        return
+
+    try:
+        from tg_bot.handlers.interactive_ui import WatchlistManager, build_watchlist_keyboard
+        from tg_bot.handlers.token_dashboard import format_watchlist
+
+        # Check for add subcommand: /watchlist add SOL
+        if context.args and len(context.args) >= 2 and context.args[0].lower() == "add":
+            token = context.args[1]
+
+            known_tokens = {
+                "SOL": "So11111111111111111111111111111111111111112",
+                "BONK": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+                "WIF": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+                "JUP": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+            }
+
+            address = known_tokens.get(token.upper(), token)
+            symbol = token.upper() if token.upper() in known_tokens else token[:8]
+
+            manager = WatchlistManager()
+            added = manager.add_token(user_id, address, symbol)
+
+            if added:
+                await update.message.reply_text(
+                    f"Added *{symbol}* to your watchlist.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            else:
+                await update.message.reply_text(
+                    f"*{symbol}* is already on your watchlist.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            return
+
+        # Show watchlist
+        manager = WatchlistManager()
+        user_watchlist = manager.get_watchlist(user_id)
+
+        message = format_watchlist(user_watchlist)
+        keyboard = build_watchlist_keyboard(user_watchlist, user_id)
+
+        await update.message.reply_text(
+            message,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard,
+        )
+
+    except Exception as e:
+        logger.error(f"Watchlist error: {e}")
+        await update.message.reply_text(
+            f"*Watchlist Error*\n\n`{str(e)[:100]}`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
 @admin_only
@@ -840,42 +1017,133 @@ async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @admin_only
 async def flags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /flags command - show feature flags (admin only).
-    
+
     Usage:
-    - /flags - Show all flags
-    - /flags enable <name> - Enable a flag
-    - /flags disable <name> - Disable a flag
+    - /flags - Show all flags (both systems)
+    - /flags FLAG_NAME on/off - Toggle new config flag
+    - /flags FLAG_NAME 50 - Set 50% rollout
+    - /flags reload - Reload from config file
+    - /flags enable <name> - Enable legacy flag
+    - /flags disable <name> - Disable legacy flag
     """
     try:
+        # Try new config-based system first
+        try:
+            from core.config.feature_flags import get_feature_flag_manager
+            manager = get_feature_flag_manager()
+            has_new_system = True
+        except ImportError:
+            manager = None
+            has_new_system = False
+
+        # Also load legacy system
         from core.feature_flags import get_feature_flags
         ff = get_feature_flags()
-        
-        # Check for enable/disable subcommands
+
+        # Handle subcommands
         if context.args:
-            action = context.args[0].lower()
-            if action in ("enable", "disable") and len(context.args) > 1:
+            arg1 = context.args[0].lower()
+
+            # Reload command (new system only)
+            if arg1 == "reload" and has_new_system:
+                manager.reload_from_file()
+                await update.message.reply_text(
+                    "feature flags reloaded from config.",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            # Legacy enable/disable commands
+            if arg1 in ("enable", "disable") and len(context.args) > 1:
                 flag_name = context.args[1]
                 if flag_name not in ff.flags:
-                    await update.message.reply_text(f"Unknown flag: {flag_name}", parse_mode=ParseMode.HTML)
+                    await update.message.reply_text(f"Unknown legacy flag: {flag_name}", parse_mode=ParseMode.HTML)
                     return
-                
-                if action == "enable":
+
+                if arg1 == "enable":
                     ff.enable(flag_name)
-                    await update.message.reply_text(f"✅ Enabled: <code>{flag_name}</code>", parse_mode=ParseMode.HTML)
+                    await update.message.reply_text(f"\u2705 Enabled: <code>{flag_name}</code>", parse_mode=ParseMode.HTML)
                 else:
                     ff.disable(flag_name)
-                    await update.message.reply_text(f"❌ Disabled: <code>{flag_name}</code>", parse_mode=ParseMode.HTML)
+                    await update.message.reply_text(f"\u274c Disabled: <code>{flag_name}</code>", parse_mode=ParseMode.HTML)
                 return
-        
-        all_flags = ff.get_all_flags()
-        
-        lines = ["<b>Feature Flags</b>", "", "<i>Use: /flags enable|disable &lt;name&gt;</i>", ""]
-        
-        for name, flag in sorted(all_flags.items()):
-            state = flag["state"]
-            emoji = "✅" if state == "on" else "❌" if state == "off" else "⚡"
-            lines.append(f"{emoji} <code>{name}</code>: {state}")
-        
+
+            # New system: FLAG_NAME on/off/percentage
+            if has_new_system and len(context.args) >= 2:
+                flag_name = context.args[0].upper()
+                value = context.args[1].lower()
+
+                if value in ("on", "true", "enable", "1"):
+                    manager.set_flag(flag_name, enabled=True)
+                    await update.message.reply_text(
+                        f"\u2705 <code>{flag_name}</code> enabled",
+                        parse_mode=ParseMode.HTML,
+                    )
+                    return
+                elif value in ("off", "false", "disable", "0"):
+                    manager.set_flag(flag_name, enabled=False)
+                    await update.message.reply_text(
+                        f"\u274c <code>{flag_name}</code> disabled",
+                        parse_mode=ParseMode.HTML,
+                    )
+                    return
+                elif value.isdigit():
+                    percentage = int(value)
+                    manager.set_flag(flag_name, enabled=True, percentage=percentage)
+                    await update.message.reply_text(
+                        f"\U0001f4ca <code>{flag_name}</code> set to {percentage}% rollout",
+                        parse_mode=ParseMode.HTML,
+                    )
+                    return
+
+            # Show specific flag (new system)
+            if has_new_system:
+                flag_name = context.args[0].upper()
+                flag = manager.get_flag(flag_name)
+                if flag:
+                    status = "\u2705 ON" if flag.enabled else "\u274c OFF"
+                    lines = [
+                        f"<b>{flag_name}</b>",
+                        "",
+                        f"status: {status}",
+                        f"description: {flag.description}",
+                        f"rollout: {flag.rollout_percentage}%",
+                    ]
+                    if flag.user_whitelist:
+                        lines.append(f"whitelist: {len(flag.user_whitelist)} users")
+                    lines.append(f"updated: {flag.updated_at}")
+                    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+                    return
+
+        # Show all flags from both systems
+        lines = ["<b>feature flags</b>", ""]
+
+        # New config-based flags
+        if has_new_system:
+            new_flags = manager.get_all_flags()
+            if new_flags:
+                lines.append("<i>config flags (/flags FLAG on/off):</i>")
+                for name, data in sorted(new_flags.items()):
+                    enabled = data.get("enabled", False)
+                    percentage = data.get("rollout_percentage", 0)
+                    if enabled and percentage > 0:
+                        status = f"\U0001f4ca {percentage}%"
+                    elif enabled:
+                        status = "\u2705"
+                    else:
+                        status = "\u274c"
+                    lines.append(f"  {status} <code>{name}</code>")
+                lines.append("")
+
+        # Legacy flags
+        legacy_flags = ff.get_all_flags()
+        if legacy_flags:
+            lines.append("<i>legacy flags (/flags enable|disable name):</i>")
+            for name, flag in sorted(legacy_flags.items()):
+                state = flag["state"]
+                emoji = "\u2705" if state == "on" else "\u274c" if state == "off" else "\u26a1"
+                lines.append(f"  {emoji} <code>{name}</code>: {state}")
+
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
     except Exception as e:
         await update.message.reply_text(f"Feature flags error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
