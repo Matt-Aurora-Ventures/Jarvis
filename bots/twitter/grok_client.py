@@ -203,7 +203,7 @@ class GrokClient:
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are JARVIS, a chrome humanoid AI assistant. Generate concise, engaging tweets in lowercase with casual energy. Never exceed 280 characters."
+                        "content": "You are JARVIS, a chrome humanoid AI assistant. Generate concise, engaging tweets in lowercase with casual energy. Can be up to 4,000 characters (Premium X)."
                     },
                     {
                         "role": "user",
@@ -224,9 +224,15 @@ class GrokClient:
 
             content = data["choices"][0]["message"]["content"].strip()
 
-            # Ensure content fits tweet
-            if len(content) > 280:
-                content = content[:277] + "..."
+            # Ensure content fits tweet (X Premium: 4,000 character limit) with word-boundary truncation
+            max_chars = 4000
+            if len(content) > max_chars:
+                truncated = content[:max_chars - 3]
+                last_space = truncated.rfind(' ')
+                if last_space > max_chars - 500:
+                    content = content[:last_space] + "..."
+                else:
+                    content = truncated + "..."
 
             # Clean up any quotes if Grok wrapped the response
             content = content.strip('"\'')
@@ -389,7 +395,7 @@ Data/context:
 {data}
 
 Rules:
-- Each tweet must be under 280 characters
+- Each tweet can be up to 4,000 characters (Premium X)
 - Use lowercase throughout
 - Number each tweet (1/, 2/, etc)
 - Make it informative but fun
@@ -412,7 +418,8 @@ Generate the thread (separate each tweet with ---):"""
         parts = response.content.split("---")
         for part in parts[:max_tweets]:
             tweet = part.strip()
-            if tweet and len(tweet) <= 280:
+            # Allow tweets up to 4,000 characters (X Premium limit)
+            if tweet and len(tweet) <= 4000:
                 tweets.append(tweet)
 
         return tweets

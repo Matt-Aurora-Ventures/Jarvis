@@ -271,114 +271,48 @@ class TwitterClient:
         return username.lower() == expected
 
     def connect(self) -> bool:
-        """Initialize the X API connection"""
-        if not (self.credentials.is_valid() or self.credentials.has_oauth2()):
+        """Initialize the X API connection - Use OAuth 1.0a (tweepy) as primary"""
+        if not self.credentials.is_valid():
             logger.error("Invalid X credentials - check environment variables")
             return False
 
         try:
             expected = self._get_expected_username()
 
-            # Check if we have OAuth 2.0 for @Jarvis_lifeos
-            if self.credentials.has_oauth2():
-                # Verify OAuth 2.0 token
-                import requests
-                headers = {"Authorization": f"Bearer {self.credentials.oauth2_access_token}"}
-                resp = requests.get("https://api.twitter.com/2/users/me", headers=headers)
-                if resp.status_code == 200:
-                    user = resp.json().get("data", {})
-                    self._username = user.get("username")
-                    self._user_id = user.get("id")
-                    if not self._username_matches(self._username, expected):
-                        logger.error(
-                            "OAuth 2.0 account mismatch: expected @%s, got @%s",
-                            expected or "any",
-                            self._username or "unknown",
-                        )
-                        self._use_oauth2 = False
-                        self._username = None
-                        self._user_id = None
-                        return False
-                    self._use_oauth2 = True
-                    logger.info(f"Connected to X as @{self._username} (via OAuth 2.0)")
-                elif resp.status_code == 401:
-                    # Token expired, try to refresh
-                    logger.warning("OAuth 2.0 token expired, attempting refresh...")
-                    if self._refresh_oauth2_token():
-                        return self.connect()  # Retry with new token
-                    else:
-                        logger.error("Failed to refresh OAuth 2.0 token")
-                        self._use_oauth2 = False
-
-            # Also init tweepy for media uploads (v1.1 API)
+            # PRIMARY: Use OAuth 1.0a (tweepy) - skip OAuth 2.0 which is expired
             tweepy_username = None
             tweepy_user_id = None
-            if HAS_TWEEPY and self.credentials.is_valid():
-                auth = tweepy.OAuth1UserHandler(
-                    self.credentials.api_key,
-                    self.credentials.api_secret,
-                    self.credentials.access_token,
-                    self.credentials.access_token_secret
-                )
-                self._tweepy_api = tweepy.API(auth, wait_on_rate_limit=True)
-
-                # Also init v2 client as fallback (for @aurora_ventures)
-                self._tweepy_client = tweepy.Client(
-                    bearer_token=self.credentials.bearer_token,
-                    consumer_key=self.credentials.api_key,
-                    consumer_secret=self.credentials.api_secret,
-                    access_token=self.credentials.access_token,
-                    access_token_secret=self.credentials.access_token_secret,
-                    wait_on_rate_limit=True
-                )
-
+            if HAS_TWEEPY:
                 try:
+                    auth = tweepy.OAuth1UserHandler(
+                        self.credentials.api_key,
+                        self.credentials.api_secret,
+                        self.credentials.access_token,
+                        self.credentials.access_token_secret
+                    )
+                    self._tweepy_api = tweepy.API(auth, wait_on_rate_limit=True)
+
+                    # Init v2 client (primary for posting)
+                    self._tweepy_client = tweepy.Client(
+                        consumer_key=self.credentials.api_key,
+                        consumer_secret=self.credentials.api_secret,
+                        access_token=self.credentials.access_token,
+                        access_token_secret=self.credentials.access_token_secret,
+                        wait_on_rate_limit=True
+                    )
+
                     me = self._tweepy_client.get_me()
                     if me and me.data:
                         tweepy_username = me.data.username
                         tweepy_user_id = str(me.data.id)
+                        self._username = tweepy_username
+                        self._user_id = tweepy_user_id
+                        logger.info(f"Connected to X as @{self._username} (OAuth 1.0a via tweepy)")
+                        return True
                 except Exception as e:
-                    logger.warning(f"Failed to verify tweepy account: {e}")
+                    logger.warning(f"OAuth 1.0a connection failed: {e}")
 
-                if tweepy_username and not self._username_matches(tweepy_username, expected):
-                    logger.error(
-                        "Tweepy account mismatch: expected @%s, got @%s",
-                        expected or "any",
-                        tweepy_username,
-                    )
-                    self._tweepy_api = None
-                    self._tweepy_client = None
-                    if not self._use_oauth2:
-                        return False
-
-                if self._use_oauth2 and self._username and tweepy_username:
-                    if tweepy_username.lower() != self._username.lower():
-                        logger.error(
-                            "Tweepy account does not match OAuth 2.0 account (@%s vs @%s). "
-                            "Disabling tweepy to prevent cross-account posting.",
-                            tweepy_username,
-                            self._username,
-                        )
-                        self._tweepy_api = None
-                        self._tweepy_client = None
-
-            # If OAuth 2.0 worked, we're done
-            if self._use_oauth2 and self._username:
-                return True
-
-            # If tweepy connected to the expected account, allow it even if OAuth 2.0 failed
-            # This handles the case where OAuth 2.0 tokens expired but JARVIS_ACCESS_TOKEN works
-            if self._tweepy_client and tweepy_username:
-                if self._username_matches(tweepy_username, expected):
-                    self._username = tweepy_username
-                    self._user_id = tweepy_user_id
-                    logger.info(f"Connected to X as @{self._username} (via tweepy with Jarvis tokens)")
-                    return True
-                else:
-                    logger.error(f"Tweepy connected to wrong account: @{tweepy_username}, expected @{expected}")
-                    return False
-
-            logger.error("Failed to verify X credentials")
+            logger.error("Failed to connect to X with available credentials")
             return False
 
         except Exception as e:
@@ -468,10 +402,19 @@ class TwitterClient:
         if not self.is_connected:
             return TweetResult(success=False, error="Not connected to X")
 
-        # Validate text length
-        if len(text) > 280:
-            logger.warning(f"Tweet too long ({len(text)} chars), truncating")
-            text = text[:277] + "..."
+        # Validate text length (Premium X: 4,000 character limit)
+        # X Premium supports up to 4,000 characters
+        max_chars = 4000
+        if len(text) > max_chars:
+            logger.warning(f"Tweet too long ({len(text)} chars), truncating at word boundary to {max_chars} chars")
+            # Find last space before max_chars to preserve word boundaries
+            truncated = text[:max_chars - 3]
+            last_space = truncated.rfind(' ')
+            if last_space > max_chars - 500:  # Only use last space if it's not too early
+                text = text[:last_space] + "..."
+            else:
+                # Fallback: just use max_chars - 3 (handles case with no spaces)
+                text = truncated + "..."
 
         try:
             loop = asyncio.get_event_loop()

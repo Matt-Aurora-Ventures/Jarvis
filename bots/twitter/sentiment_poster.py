@@ -188,7 +188,7 @@ Tweet 2: Top 2 bullish picks with SHORT contract addresses (format: abc123...wxy
 Tweet 3: Closing with NFA, telegram link (t.me/kr8tiventry) for full report
 
 CRITICAL RULES:
-- Each tweet MUST be under 280 characters
+- Each tweet can be up to 4,000 characters (Premium X)
 - Use short contract format: first6...last4 (e.g., 8Lm6vG...pump)
 - Lowercase casual energy, no periods at end
 - Include NFA naturally
@@ -234,9 +234,9 @@ Return ONLY a JSON object: {{"tweets": ["tweet1", "tweet2", "tweet3"]}}"""
                         try:
                             data = json.loads(fixed)
                         except json.JSONDecodeError:
-                            # Last resort: extract tweets via regex
+                            # Last resort: extract tweets via regex (up to 4,000 chars for Premium X)
                             import re
-                            tweet_matches = re.findall(r'"([^"]{10,280})"', content)
+                            tweet_matches = re.findall(r'"([^"]{10,4000})"', content)
                             if tweet_matches:
                                 tweets = tweet_matches[:3]
                                 data = None
@@ -247,14 +247,20 @@ Return ONLY a JSON object: {{"tweets": ["tweet1", "tweet2", "tweet3"]}}"""
                     tweets = [content]
             except json.JSONDecodeError as e:
                 logger.warning(f"JSON parse failed: {e}, using raw content")
-                tweets = [response.content[:280]]
+                tweets = [response.content[:4000]]
 
             # Post tweets as thread
             reply_to = None
             for i, tweet in enumerate(tweets[:3]):
-                # Ensure under 280
-                if len(tweet) > 280:
-                    tweet = tweet[:277] + "..."
+                # Ensure under 4,000 chars (X Premium limit) with word-boundary truncation
+                max_chars = 4000
+                if len(tweet) > max_chars:
+                    truncated = tweet[:max_chars - 3]
+                    last_space = truncated.rfind(' ')
+                    if last_space > max_chars - 500:
+                        tweet = tweet[:last_space] + "..."
+                    else:
+                        tweet = truncated + "..."
                 result = await self._post_tweet(tweet, reply_to=reply_to)
                 if result:
                     reply_to = result  # Chain as thread
