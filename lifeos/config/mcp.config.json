@@ -49,7 +49,7 @@
         "mcp_obsidian.server"
       ],
       "env": {
-        "OBSIDIAN_API_KEY": "SET_OBSIDIAN_API_KEY",
+        "OBSIDIAN_API_KEY": "${OBSIDIAN_API_KEY}",
         "OBSIDIAN_HOST": "127.0.0.1",
         "OBSIDIAN_PORT": "27124",
         "OBSIDIAN_VAULT_PATH": "${HOME}/Documents/Obsidian/LifeOSVault"
@@ -177,7 +177,7 @@
       "command": "claude-vibe-telegram",
       "args": [],
       "env": {
-        "TELEGRAM_BOT_TOKEN": "<redacted>",
+        "TELEGRAM_BOT_TOKEN": "${TELEGRAM_BOT_TOKEN}",
         "TELEGRAM_ADMIN_IDS": "8527130908",
         "CLAUDE_VIBE_DIR": "${HOME}/Desktop/LifeOS"
       }
@@ -191,11 +191,11 @@
         "${HOME}/Documents/Jarvis context/mcp-servers/x-api/dist/index.js"
       ],
       "env": {
-        "X_API_KEY": "jgQMZlTpEAQx53vpdaUk3rSVM",
-        "X_API_SECRET": "dfFogyZXwsIP12oAFykzXpDjQbxJUHLf7xUs8iglHidwMRa22q",
-        "X_ACCESS_TOKEN": "1470407998447181838-O1hqvlBVmAonkb6ypeZj9xJmnULLqS",
-        "X_ACCESS_TOKEN_SECRET": "tBrMOp58VqMcrodUNqATiRPLrAqmuSoodpSp0c41Oo5gr",
-        "X_BEARER_TOKEN": "AAAAAAAAAAAAAAAAAAAAALYzvQEAAAAAKfKnhB4Py3HWksKwSEkoTUyx7ss%3DSJIZvXZET2cAH6fZN2H4UffmCaSF39Xx91rzm62fLJa6R62ewo"
+        "X_API_KEY": "${X_API_KEY}",
+        "X_API_SECRET": "${X_API_SECRET}",
+        "X_ACCESS_TOKEN": "${X_ACCESS_TOKEN}",
+        "X_ACCESS_TOKEN_SECRET": "${X_ACCESS_TOKEN_SECRET}",
+        "X_BEARER_TOKEN": "${X_BEARER_TOKEN}"
       }
     },
     {

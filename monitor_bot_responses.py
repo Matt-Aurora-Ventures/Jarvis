@@ -6,14 +6,19 @@ Tracks messages sent and waits for responses
 Useful for testing Dexter without SSH access
 """
 
+import os
 import requests
 import json
 import time
 from datetime import datetime
 from collections import defaultdict
 
-TELEGRAM_BOT_TOKEN = '8047602125:AAFSWTVDonm0TV7h1DBtKvPiBI4x5A7c1Ag'
-ADMIN_USER_ID = 8527130908
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+_admin_ids = os.getenv("TELEGRAM_ADMIN_IDS", "")
+ADMIN_USER_ID = int(_admin_ids.split(",")[0]) if _admin_ids else 0
+
+if not TELEGRAM_BOT_TOKEN or not ADMIN_USER_ID:
+    raise SystemExit("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_ADMIN_IDS in environment")
 
 # Finance test questions
 TEST_QUESTIONS = [
@@ -29,7 +34,7 @@ def send_message(msg):
         "chat_id": ADMIN_USER_ID,
         "text": msg
     }
-    response = requests.post(url, json=payload)
+    response = requests.post(url, json=payload, timeout=10)
     data = response.json()
 
     if data.get('ok'):

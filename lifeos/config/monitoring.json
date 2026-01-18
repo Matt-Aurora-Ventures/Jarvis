@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "port": 8080,
+  "retention_days": 30,
+  "metrics_interval_seconds": 5,
+  "alert_rules_file": "lifeos/config/alert_rules.json",
+  "slack_webhook": null,
+  "email_recipients": []
+}

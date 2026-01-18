@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dexter ReAct Dry Run Report - 20260118_135138</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; background: #1a1a2e; color: #eee; }
+        h1 { color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px; }
+        h2 { color: #00ff88; }
+        .result-card { background: #16213e; border-radius: 8px; padding: 20px; margin: 20px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .buy { border-left: 4px solid #00ff88; }
+        .sell { border-left: 4px solid #ff4444; }
+        .hold { border-left: 4px solid #ffaa00; }
+        .error { border-left: 4px solid #ff0000; }
+        .metric { display: inline-block; margin: 10px 20px 10px 0; }
+        .metric-label { color: #888; font-size: 12px; }
+        .metric-value { font-size: 24px; font-weight: bold; }
+        .green { color: #00ff88; }
+        .red { color: #ff4444; }
+        .yellow { color: #ffaa00; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; }
+        th { background: #0f3460; color: #00d4ff; }
+        tr:hover { background: #1f4068; }
+        .iteration { background: #0f3460; border-radius: 4px; padding: 10px; margin: 5px 0; }
+        .summary { background: #0f3460; border-radius: 8px; padding: 20px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>Dexter ReAct Agent Dry Run Report</h1>
+    <p>Generated: 2026-01-18 13:51:38</p>
+
+    <div class="summary">
+        <h2>Summary</h2>
+        <div class="metric">
+            <div class="metric-label">Total Runs</div>
+            <div class="metric-value">5</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Avg Cost</div>
+            <div class="metric-value">$0.030</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Avg Confidence</div>
+            <div class="metric-value">47%</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">BUY Signals</div>
+            <div class="metric-value green">3</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">HOLD Signals</div>
+            <div class="metric-value yellow">2</div>
+        </div>
+    </div>
+
+    <div class="result-card buy">
+        <h2>SOL</h2>
+        <div class="metric">
+            <div class="metric-label">Decision</div>
+            <div class="metric-value green">TRADE_BUY</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Confidence</div>
+            <div class="metric-value">85%</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Grok Score</div>
+            <div class="metric-value">78/100</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Cost</div>
+            <div class="metric-value">$0.030</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Elapsed</div>
+            <div class="metric-value">122ms</div>
+        </div>
+
+        <h3>Reasoning Quality: HIGH (85%+ confidence)</h3>
+        <h3>Decision Fitness: STRONG BUY</h3>
+
+        <p><strong>Rationale:</strong> SENTIMENT_SCORE: 82
+CONFIDENCE: 85
+RECOMMENDATION: BUY
+
+Strong BUY signal. Bullish sentiment (67.5 avg), golden cross forming, whale accumulation detected. Entry: $142, TP: $213 (50%), SL: $121 (15%).</p>
+
+        <h3>Iterations</h3>
+        <table>
+            <tr>
+                <th>#</th>
+                <th>Reasoning</th>
+                <th>Tool</th>
+                <th>Cost</th>
+            </tr>
+
+            <tr>
+                <td>1</td>
+                <td>Starting analysis for SOL...</td>
+                <td>sentiment_aggregation</td>
+                <td>$0.015</td>
+            </tr>
+
+        </table>
+    </div>
+
+    <div class="result-card hold">
+        <h2>BTC</h2>
+        <div class="metric">
+            <div class="metric-label">Decision</div>
+            <div class="metric-value yellow">HOLD</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Confidence</div>
+            <div class="metric-value">0%</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Grok Score</div>
+            <div class="metric-value">65/100</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Cost</div>
+            <div class="metric-value">$0.030</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Elapsed</div>
+            <div class="metric-value">124ms</div>
+        </div>
+
+        <h3>Reasoning Quality: UNCERTAIN (<50% confidence)</h3>
+        <h3>Decision Fitness: HOLD - Wait for better signal</h3>
+
+        <p><strong>Rationale:</strong> </p>
+
+        <h3>Iterations</h3>
+        <table>
+            <tr>
+                <th>#</th>
+                <th>Reasoning</th>
+                <th>Tool</th>
+                <th>Cost</th>
+            </tr>
+
+            <tr>
+                <td>1</td>
+                <td>Starting analysis for BTC...</td>
+                <td>sentiment_aggregation</td>
+                <td>$0.015</td>
+            </tr>
+
+        </table>
+    </div>
+
+    <div class="result-card buy">
+        <h2>ETH</h2>
+        <div class="metric">
+            <div class="metric-label">Decision</div>
+            <div class="metric-value green">TRADE_BUY</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Confidence</div>
+            <div class="metric-value">78%</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Grok Score</div>
+            <div class="metric-value">72/100</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Cost</div>
+            <div class="metric-value">$0.030</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Elapsed</div>
+            <div class="metric-value">124ms</div>
+        </div>
+
+        <h3>Reasoning Quality: MEDIUM (70-84% confidence)</h3>
+        <h3>Decision Fitness: MODERATE BUY</h3>
+
+        <p><strong>Rationale:</strong> SENTIMENT_SCORE: 75
+CONFIDENCE: 78
+RECOMMENDATION: BUY
+
+Moderate BUY signal. Good entry point below $3,500. TP: $4,500 (30%), SL: $3,100 (10%).</p>
+
+        <h3>Iterations</h3>
+        <table>
+            <tr>
+                <th>#</th>
+                <th>Reasoning</th>
+                <th>Tool</th>
+                <th>Cost</th>
+            </tr>
+
+            <tr>
+                <td>1</td>
+                <td>Starting analysis for ETH...</td>
+                <td>sentiment_aggregation</td>
+                <td>$0.015</td>
+            </tr>
+
+        </table>
+    </div>
+
+    <div class="result-card buy">
+        <h2>WIF</h2>
+        <div class="metric">
+            <div class="metric-label">Decision</div>
+            <div class="metric-value green">TRADE_BUY</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Confidence</div>
+            <div class="metric-value">72%</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Grok Score</div>
+            <div class="metric-value">85/100</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Cost</div>
+            <div class="metric-value">$0.030</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Elapsed</div>
+            <div class="metric-value">115ms</div>
+        </div>
+
+        <h3>Reasoning Quality: MEDIUM (70-84% confidence)</h3>
+        <h3>Decision Fitness: MODERATE BUY</h3>
+
+        <p><strong>Rationale:</strong> SENTIMENT_SCORE: 88
+CONFIDENCE: 72
+RECOMMENDATION: BUY
+
+Speculative BUY. High risk/reward. TP: $3.70 (50%), SL: $1.80 (25%). Position size: small due to volatility.</p>
+
+        <h3>Iterations</h3>
+        <table>
+            <tr>
+                <th>#</th>
+                <th>Reasoning</th>
+                <th>Tool</th>
+                <th>Cost</th>
+            </tr>
+
+            <tr>
+                <td>1</td>
+                <td>Starting analysis for WIF...</td>
+                <td>sentiment_aggregation</td>
+                <td>$0.015</td>
+            </tr>
+
+        </table>
+    </div>
+
+    <div class="result-card hold">
+        <h2>BONK</h2>
+        <div class="metric">
+            <div class="metric-label">Decision</div>
+            <div class="metric-value yellow">HOLD</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Confidence</div>
+            <div class="metric-value">0%</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Grok Score</div>
+            <div class="metric-value">70/100</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Cost</div>
+            <div class="metric-value">$0.030</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Elapsed</div>
+            <div class="metric-value">119ms</div>
+        </div>
+
+        <h3>Reasoning Quality: UNCERTAIN (<50% confidence)</h3>
+        <h3>Decision Fitness: HOLD - Wait for better signal</h3>
+
+        <p><strong>Rationale:</strong> </p>
+
+        <h3>Iterations</h3>
+        <table>
+            <tr>
+                <th>#</th>
+                <th>Reasoning</th>
+                <th>Tool</th>
+                <th>Cost</th>
+            </tr>
+
+            <tr>
+                <td>1</td>
+                <td>Starting analysis for BONK...</td>
+                <td>sentiment_aggregation</td>
+                <td>$0.015</td>
+            </tr>
+
+        </table>
+    </div>
+
+</body>
+</html>
