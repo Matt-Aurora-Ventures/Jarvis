@@ -202,9 +202,10 @@ class AutonomousManager:
 
     def get_status(self) -> Dict:
         """Get current autonomous system status."""
+        uptime_delta = datetime.now(timezone.utc) - self.start_time
         return {
             "running": self.is_running,
-            "uptime": (datetime.now(timezone.utc) - self.start_time).isoformat(),
+            "uptime": str(uptime_delta),  # Convert timedelta to string
             "stats": self.stats,
             "moderation": self.auto_actions.get_statistics() if self.auto_actions else None,
             "learning": self.engagement_analyzer.get_summary() if self.engagement_analyzer else None,
