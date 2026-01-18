@@ -25,6 +25,15 @@ from typing import Optional, List, Dict, Tuple
 
 import aiohttp
 
+# Voice bible validation (lazy-loaded to avoid circular imports)
+try:
+    from core.jarvis_voice_bible import validate_jarvis_response
+except ImportError:
+    # Fallback: no validation if module not available
+    def validate_jarvis_response(response: str):
+        """Fallback: no validation if voice bible unavailable"""
+        return True, []
+
 logger = logging.getLogger(__name__)
 
 # Persistent memory import (lazy-loaded to avoid circular imports)
@@ -835,6 +844,13 @@ class ChatResponder:
                 moderation_context=moderation_ctx,
             )
             if reply:
+                # VOICE BIBLE VALIDATION: Ensure response adheres to Jarvis personality
+                is_valid, issues = validate_jarvis_response(reply)
+                if not is_valid:
+                    logger.warning(f"Response failed voice bible validation: {issues}")
+                    # Log issue for monitoring but still return response
+                    # (Jarvis should stay true to voice even if imperfect)
+
                 # Store JARVIS response in memory and conversation history
                 if memory:
                     try:
@@ -863,6 +879,10 @@ class ChatResponder:
         if self.xai_api_key:
             reply = await self._generate_with_xai(text, username, chat_title, is_private, is_admin)
             if reply:
+                # VOICE BIBLE VALIDATION: Ensure response adheres to Jarvis personality
+                is_valid, issues = validate_jarvis_response(reply)
+                if not is_valid:
+                    logger.warning(f"xAI response failed voice bible validation: {issues}")
                 return reply
 
         return "Running without AI keys. Ask an admin to configure ANTHROPIC_API_KEY."
