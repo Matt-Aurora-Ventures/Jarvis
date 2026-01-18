@@ -1,0 +1,72 @@
+{
+  "signal_detection": {
+    "target_ms": 50,
+    "description": "Complete signal detection including all sub-phases"
+  },
+  "signal_detection.liquidation": {
+    "target_ms": 20,
+    "description": "Liquidation analysis from CoinGlass data"
+  },
+  "signal_detection.ma_analysis": {
+    "target_ms": 15,
+    "description": "Dual moving average calculation"
+  },
+  "signal_detection.sentiment": {
+    "target_ms": 25,
+    "description": "Sentiment scoring and analysis"
+  },
+  "signal_detection.decision_matrix": {
+    "target_ms": 5,
+    "description": "Multi-signal decision matrix computation"
+  },
+  "position_sizing": {
+    "target_ms": 10,
+    "description": "Calculate position size based on risk parameters"
+  },
+  "risk_checks": {
+    "target_ms": 5,
+    "description": "Validate trade against risk limits"
+  },
+  "jupiter_quote": {
+    "target_ms": 200,
+    "description": "Get quote from Jupiter DEX (external API)",
+    "external": true
+  },
+  "execution": {
+    "target_ms": 100,
+    "description": "Execute trade on Solana (external transaction)",
+    "external": true
+  },
+  "full_trade": {
+    "target_ms": 400,
+    "description": "Complete trade lifecycle including external calls"
+  },
+  "api.jupiter.quote": {
+    "target_ms": 200,
+    "description": "Jupiter quote API latency"
+  },
+  "api.jupiter.swap": {
+    "target_ms": 300,
+    "description": "Jupiter swap API latency"
+  },
+  "api.birdeye.price": {
+    "target_ms": 150,
+    "description": "Birdeye price API latency"
+  },
+  "api.coinglass.liquidations": {
+    "target_ms": 200,
+    "description": "CoinGlass liquidation API latency"
+  },
+  "query.positions": {
+    "target_ms": 20,
+    "description": "Query open positions"
+  },
+  "query.trades": {
+    "target_ms": 30,
+    "description": "Query trade history"
+  },
+  "query.logs": {
+    "target_ms": 50,
+    "description": "Query log entries"
+  }
+}

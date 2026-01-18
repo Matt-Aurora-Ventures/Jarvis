@@ -12,6 +12,12 @@ from tg_bot.handlers import error_handler, admin_only
 from tg_bot.handlers.admin import reload, config_cmd, logs, system
 from tg_bot.handlers.sentiment import digest
 
+# Import interactive UI components
+from tg_bot.handlers.interactive_ui import (
+    is_new_ui_enabled,
+    route_interactive_callback,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -391,6 +397,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     config = get_config()
+
+    # Route to interactive UI handler for new UI callbacks
+    # This handles: chart:, holders:, trades:, signal:, details:, ui_close:, etc.
+    if is_new_ui_enabled():
+        interactive_prefixes = (
+            "chart:", "holders:", "holders_page:", "holders_top100:",
+            "trades:", "trades_whales:", "trades_100:",
+            "signal:", "signal_details:", "signal_remind:",
+            "details:", "analyze_back:", "ui_close:",
+            "chart_1h:", "chart_4h:", "chart_1d:", "chart_1w:",
+            "watch_view:", "watch_remove:", "watch_add", "watch_clear", "watch_refresh",
+            "compare_sort:", "compare_details:",
+            "noop",
+        )
+        if data.startswith(interactive_prefixes) or data == "noop":
+            handled = await route_interactive_callback(query, context, user_id)
+            if handled:
+                return
 
     # Quick action callbacks (top of menu for admins)
     if data == "quick_dashboard":

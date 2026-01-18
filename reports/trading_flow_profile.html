@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trade Execution Profiling Report</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 20px; background: #1a1a2e; color: #eee; }
+        h1 { color: #00d4ff; }
+        .report { background: #16213e; padding: 20px; border-radius: 8px; max-width: 900px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; }
+        th { background: #0f3460; color: #00d4ff; }
+        tr:hover { background: #1f4068; }
+        .ok { color: #00ff88; }
+        .slow { color: #ff6b6b; font-weight: bold; }
+        .fast { color: #4ecdc4; }
+        .indent-1 { padding-left: 30px; }
+        .indent-2 { padding-left: 60px; }
+        .summary { background: #0f3460; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        .bottleneck { color: #ff6b6b; font-weight: bold; }
+        .timestamp { color: #888; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="report">
+        <h1>Trade Execution Profiling Report</h1>
+        <p class="timestamp">Generated: 2026-01-18T13:32:28.728284</p>
+
+        <div class="summary">
+            <h3>Summary</h3>
+            <p>Total Trade Time: <strong>722.26ms</strong></p>
+            <p class="bottleneck">Bottleneck: full_trade (361.19ms, 50% of total)</p>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Phase</th>
+                    <th>Time (ms)</th>
+                    <th>Memory (MB)</th>
+                    <th>Calls</th>
+                    <th>Baseline</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="">execution</td>
+                    <td>93.28</td>
+                    <td>0.00</td>
+                    <td>3</td>
+                    <td>100ms</td>
+                    <td class="ok">OK</td>
+                </tr>
+                <tr>
+                    <td class="">full_trade</td>
+                    <td>361.19</td>
+                    <td>0.00</td>
+                    <td>3</td>
+                    <td>400ms</td>
+                    <td class="ok">OK</td>
+                </tr>
+                <tr>
+                    <td class="">jupiter_quote</td>
+                    <td>148.91</td>
+                    <td>0.00</td>
+                    <td>3</td>
+                    <td>200ms</td>
+                    <td class="fast">FAST</td>
+                </tr>
+                <tr>
+                    <td class="">position_sizing</td>
+                    <td>19.09</td>
+                    <td>0.00</td>
+                    <td>3</td>
+                    <td>10ms</td>
+                    <td class="slow">SLOW</td>
+                </tr>
+                <tr>
+                    <td class="">risk_checks</td>
+                    <td>17.76</td>
+                    <td>0.00</td>
+                    <td>3</td>
+                    <td>5ms</td>
+                    <td class="slow">SLOW</td>
+                </tr>
+                <tr>
+                    <td class="">signal_detection</td>
+                    <td>82.03</td>
+                    <td>0.00</td>
+                    <td>3</td>
+                    <td>50ms</td>
+                    <td class="slow">SLOW</td>
+                </tr>
+                <tr>
+                    <td class="indent-1">|- decision_matrix</td>
+                    <td>15.51</td>
+                    <td>0.00</td>
+                    <td>3</td>
+                    <td>5ms</td>
+                    <td class="slow">SLOW</td>
+                </tr>
+                <tr>
+                    <td class="indent-1">|- liquidation</td>
+                    <td>19.85</td>
+                    <td>0.00</td>
+                    <td>3</td>
+                    <td>20ms</td>
+                    <td class="ok">OK</td>
+                </tr>
+                <tr>
+                    <td class="indent-1">|- ma_analysis</td>
+                    <td>15.31</td>
+                    <td>0.00</td>
+                    <td>3</td>
+                    <td>15ms</td>
+                    <td class="ok">OK</td>
+                </tr>
+                <tr>
+                    <td class="indent-1">|- sentiment</td>
+                    <td>31.22</td>
+                    <td>0.00</td>
+                    <td>3</td>
+                    <td>25ms</td>
+                    <td class="slow">SLOW</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Recommendations</h3>
+        <ul>
+            <li><strong>position_sizing</strong>: 9.1ms over baseline. Consider optimization.</li>
+            <li><strong>risk_checks</strong>: 12.8ms over baseline. Consider optimization.</li>
+            <li><strong>signal_detection</strong>: 32.0ms over baseline. Consider optimization.</li>
+            <li><strong>signal_detection.decision_matrix</strong>: 10.5ms over baseline. Consider optimization.</li>
+            <li><strong>signal_detection.sentiment</strong>: 6.2ms over baseline. Consider optimization.</li>
+        </ul>
+    </div>
+</body>
+</html>
