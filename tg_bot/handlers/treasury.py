@@ -26,9 +26,17 @@ class TreasuryHandler:
 
     def __init__(self, data_dir: str = None):
         """Initialize treasury handler."""
-        self.data_dir = Path(data_dir or "./bots/treasury")
+        if data_dir:
+            self.data_dir = Path(data_dir)
+        else:
+            # Use absolute path based on this file's location
+            self.data_dir = Path(__file__).resolve().parents[2] / "bots" / "treasury"
+
         self.positions_file = self.data_dir / ".positions.json"
         self.trades_file = self.data_dir / ".trade_history.json"
+
+        # Ensure data directory exists
+        self.data_dir.mkdir(parents=True, exist_ok=True)
 
     @error_handler
     async def handle_treasury(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
