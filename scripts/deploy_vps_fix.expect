@@ -1,0 +1,35 @@
+#!/usr/bin/expect
+# Deploy bot lock fix to VPS using SSH
+
+set password "***SSH_PASSWORD_REDACTED***"
+set host "72.61.7.126"
+set user "jarvis"
+
+# Connect via SSH
+spawn ssh -o StrictHostKeyChecking=no $user@$host
+
+expect {
+    "password:" {
+        send -- "$password\r"
+        expect {
+            "\$" {
+                send -- "cd /home/jarvis/Jarvis\r"
+                expect "\$"
+
+                send -- "echo '=== Pulling latest code ==='\r"
+                expect "\$"
+                send -- "git pull origin main\r"
+                expect "\$"
+
+                send -- "echo '=== Running redeploy script ==='\r"
+                expect "\$"
+                send -- "bash scripts/redeploy_bot_fix.sh\r"
+                expect "\$"
+
+                send -- "echo '=== Deployment complete ==='\r"
+                expect "\$"
+                send -- "exit\r"
+            }
+        }
+    }
+}
