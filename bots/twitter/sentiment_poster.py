@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from bots.twitter.twitter_client import TwitterClient, TwitterCredentials
 from bots.twitter.claude_content import ClaudeContentGenerator
+from bots.twitter.grok_client import GrokClient
 from bots.twitter.autonomous_engine import XMemory
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,7 @@ class SentimentTwitterPoster:
     ):
         self.twitter = twitter_client
         self.claude = claude_client
+        self.grok = GrokClient()  # Fallback for Claude failures
         self.interval_minutes = interval_minutes
         self._running = False
         self._last_post_time: Optional[datetime] = None
@@ -122,6 +124,35 @@ class SentimentTwitterPoster:
         except Exception as e:
             logger.error(f"Failed to load predictions: {e}")
             return None
+
+    async def _generate_grok_fallback_tweet(self, bullish: list, bearish: list, top_tokens: list) -> str:
+        """Generate tweet using Grok as fallback when Claude is unavailable."""
+        try:
+            stats = f"{len(bullish)} bullish, {len(bearish)} bearish"
+            top_symbol = top_tokens[0]['symbol'].upper() if top_tokens else "SOL"
+
+            prompt = f"""Generate a Twitter post about this microcap sentiment scan.
+Stats: {stats} tokens analyzed
+Top pick: ${top_symbol}
+
+Tone: Casual, lowercase, direct. Include NFA naturally.
+Mention: t.me/kr8tiventry for full analysis
+Max 280 chars (single tweet, not a thread)
+Return ONLY the tweet text."""
+
+            response = await self.grok.generate_tweet(prompt, max_tokens=100, temperature=0.8)
+            if response.success:
+                tweet = response.content.strip()
+                # Ensure single tweet
+                if len(tweet) > 280:
+                    tweet = tweet[:277] + "..."
+                logger.info(f"Grok fallback generated: {tweet[:80]}...")
+                return tweet
+        except Exception as e:
+            logger.warning(f"Grok fallback failed: {e}")
+
+        # Ultimate fallback: static template
+        return f"grok scan: {len(bullish)} bullish, {len(bearish)} bearish\n\nt.me/kr8tiventry for analysis. NFA 🤖"
 
     async def _post_sentiment_report(self):
         """Generate and post sentiment report tweet."""
@@ -200,13 +231,9 @@ Return ONLY a JSON object: {{"tweets": ["tweet1", "tweet2", "tweet3"]}}"""
 
             if not response.success:
                 logger.error(f"Claude generation failed: {response.error}")
-                # Fallback tweet with data
-                if top_tokens:
-                    t = top_tokens[0]
-                    ca_short = f"{t['contract'][:6]}...{t['contract'][-4:]}" if t['contract'] else ""
-                    tweet_text = f"grok scan: {len(bullish)} bullish, {len(bearish)} bearish\n\nwatching ${t['symbol'].lower()}\nca: {ca_short}\n\nt.me/kr8tiventry for full. NFA 🤖"
-                else:
-                    tweet_text = f"grok scan: {len(bullish)} bullish, {len(bearish)} bearish\n\nt.me/kr8tiventry for full report. NFA 🤖"
+                # Try Grok fallback for tweet generation
+                logger.info("Using Grok fallback for tweet generation...")
+                tweet_text = await self._generate_grok_fallback_tweet(bullish, bearish, top_tokens)
                 await self._post_tweet(tweet_text)
                 return
 
