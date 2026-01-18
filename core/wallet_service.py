@@ -26,15 +26,16 @@ import json
 # Encryption
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 import base64
 
 # Solana
 from solders.keypair import Keypair
-from solders.pubkey import PublicKey
-from solders.rpc.async_client import AsyncClient
-from solders.rpc.commitment import Confirmed
+from solders.pubkey import Pubkey
+# Note: RPC client will be used from market data service
+# from solders.rpc.async_client import AsyncClient
+# from solders.rpc.commitment import Confirmed
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class WalletEncryption:
 
     def _derive_key(self, salt: bytes, password: str) -> bytes:
         """Derive encryption key from password and salt."""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
@@ -214,7 +215,7 @@ class SolanaWalletGenerator:
     def _generate_seed_phrase(self) -> str:
         """Generate BIP-39 seed phrase (12 or 24 words)."""
         # Simplified - in production use mnemonic library
-        words = secrets.choice(range(2048)) for _ in range(12)
+        words = [secrets.choice(range(2048)) for _ in range(12)]
         return " ".join(self._get_bip39_word(w) for w in words)
 
     def _get_bip39_word(self, index: int) -> str:
@@ -247,7 +248,7 @@ class SolanaWalletGenerator:
             True if valid format
         """
         try:
-            PublicKey(address)
+            Pubkey(address)
             return True
         except Exception:
             return False
@@ -271,13 +272,7 @@ class WalletService:
         self.generator = SolanaWalletGenerator()
         self.encryption = WalletEncryption()
         self.rpc_url = rpc_url
-        self.rpc_client: Optional[AsyncClient] = None
-
-    async def get_rpc_client(self) -> AsyncClient:
-        """Get or create RPC client."""
-        if not self.rpc_client:
-            self.rpc_client = AsyncClient(self.rpc_url)
-        return self.rpc_client
+        # Note: RPC client for balance checking delegated to MarketDataService
 
     # ==================== WALLET GENERATION ====================
 
@@ -367,6 +362,9 @@ class WalletService:
         """
         Get SOL balance for address.
 
+        Note: Balance checking delegated to MarketDataService
+        This is a placeholder that returns None - use MarketDataService.get_wallet_balance instead.
+
         Args:
             address: Solana address
 
@@ -377,16 +375,9 @@ class WalletService:
             if not self.generator.validate_address(address):
                 return None
 
-            client = await self.get_rpc_client()
-            pubkey = PublicKey(address)
-
-            response = await client.get_balance(pubkey, Confirmed)
-            balance_lamports = response.value
-
-            # Convert lamports to SOL (1 SOL = 1e9 lamports)
-            balance_sol = balance_lamports / 1e9
-
-            return balance_sol
+            # Balance checking is delegated to MarketDataService which has RPC access
+            logger.warning(f"Balance check requested but delegated to MarketDataService for {address}")
+            return None
 
         except Exception as e:
             logger.error(f"Failed to get balance: {e}")
