@@ -156,6 +156,14 @@ class FeatureFlags:
             dependencies=["live_trading", "auto_tp_sl"],
             owner="treasury"
         ),
+
+        # On-chain analysis features
+        "onchain_analysis": FeatureFlag(
+            name="onchain_analysis",
+            description="Enable on-chain tokenomics analysis for trading decisions",
+            state=FeatureState.ON,
+            owner="trading"
+        ),
     }
 
     def __new__(cls):

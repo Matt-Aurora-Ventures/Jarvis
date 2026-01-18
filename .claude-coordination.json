@@ -214,6 +214,171 @@
       "timestamp": "2026-01-18T09:51:50.311126+00:00",
       "from": "Codex",
       "message": "Moved local helper scripts containing hardcoded Telegram token (health_check_bot.py, send_kr8tiv_report.py, telegram_kr8tiv.sh) into secrets/quarantine to avoid accidental polling conflicts and secret leakage. health_check_bot.py uses getUpdates; do not run alongside polling bot."
+    },
+    {
+      "timestamp": "2026-01-18T10:15:00+00:00",
+      "from": "Codex",
+      "message": "User request: fix Twitter posting first (restart bot), then work through massive recommendations. Suggested priority for immediate fix: (1) restart Twitter bot process via supervisor/systemd; (2) inspect logs for 401/403/429 or networking errors; (3) verify OAuth2 refresh path loads .oauth2_tokens.json and env vars; (4) add request timeouts where missing (twitter_client _refresh_oauth2_token, telegram_sync fallback). If bot still silent, check X API rate limits and app permissions. For broader backlog, recommend gating all risky changes behind feature flags + test on paper/dry-run; do not overwrite working code unless verified. Audit highlights to fold in early: remove hardcoded secrets (deploy_kr8tiv.py, monitor_bot_responses.py, scripts/deploy_vps_fix.py), replace eval in core/memory/dedup_store.py with json/ast.literal_eval, address pickle loads, fix JWT secret env mismatch, ensure instance_lock on all polling entrypoints, and add trade execution locks around close/monitor paths. Tests: tests/test_safe_subprocess.py fails on Windows due to echo not executable; update tests to use cmd /c echo or skip on win32."
+    },
+    {
+      "timestamp": "2026-01-18T10:30:00+00:00",
+      "from": "Codex",
+      "message": "Twitter posting diagnosis: TwitterClient.connect() currently only uses tweepy OAuth1.0a and never sets _use_oauth2=True; if tweepy isn't installed or OAuth1 tokens missing, connect() returns False and post_tweet() returns \"Not connected to X\". Check VPS for tweepy (`python -c \"import tweepy\"`) and env vars (X_API_KEY/SECRET + JARVIS_ACCESS_TOKEN/_SECRET or X_ACCESS_TOKEN/_SECRET). If only OAuth2 creds exist, either add OAuth1 tokens or patch connect() to set _use_oauth2 when oauth2_access_token exists and use xdk/aiohttp path. Also check sentiment poster gating: it will skip if bots/buy_tracker/predictions_history.json missing or no Grok verdicts; logs show \"No valid Grok sentiment data\". Autonomous engine has error cooldown/backoff and dedup; `python bots/twitter/run_autonomous.py --status` (or equivalent on VPS) can verify last post. Restarting supervisor resets circuit breaker and cooldown."
+    },
+    {
+      "timestamp": "2026-01-18T10:40:00+00:00",
+      "from": "Codex",
+      "message": "Backlog triage: several 'new' items already exist. Feature flags are implemented in `core/feature_flags.py` with /flags command wired in `tg_bot/bot_core.py` + `tg_bot/handlers/system.py`. Config hot reload exists in `core/config_hot_reload.py` (file watching disabled flag). Health dashboard already present (`bots/health_endpoint.py`) and health monitor/probes in `core/health_monitor.py` + `core/health/probes.py`. Circuit breaker exists (`core/resilience/circuit_breaker.py`) and Twitter client already uses `APICircuitBreaker`. Dead-letter queues exist (`core/errors/recovery.py`, `core/event_bus/event_bus.py`). Backup/restore mechanisms exist (`core/state_backup/*`, `core/backup.py`, `scripts/db/backup.py`). Structured logging + log aggregation exist (`core/logging/structured.py`, `core/monitoring/log_aggregator.py`, `core/monitoring/tracing.py`). Metrics server exists (`core/monitoring/metrics.py`). Rate limiting infrastructure exists (`core/utils/rate_limiter.py`, `core/security/rate_limiter.py`) plus /ratelimits command. Data retention exists (`core/data_retention.py`). Audit logs exist (`core/security/audit_trail.py`, `core/audit_logger.py`) and trading engine `_log_audit` already logs trades. Suggest mark these as DONE or focus on wiring/enablement instead of reimplementation."
+    },
+    {
+      "timestamp": "2026-01-18T10:50:00+00:00",
+      "from": "Codex",
+      "message": "More already-implemented items: memory leak detection exists (`core/monitoring/memory_alerts.py`, `core/performance/memory_monitor.py`, `core/resource_monitor.py`), request dedup exists in `core/memory/dedup_store.py` (needs eval->json/ast fix), incident response playbook + security audit exist (`core/security/incident_response.py`, `core/security/audit.py`, `core/security/audit_checklist.py`), API provider fallback chains already in `core/providers.py` + `core/provider_manager.py`. Suggest focusing on enabling/wiring (e.g., start memory monitor, enable config hot reload) rather than new builds."
+    },
+    {
+      "timestamp": "2026-01-18T11:00:00+00:00",
+      "from": "Codex",
+      "message": "Twitter env gotcha: `TwitterCredentials.from_env()` only loads project-root `.env` (not `bots/twitter/.env`). `run_autonomous.py` explicitly loads bots/twitter/.env, but supervisor `create_twitter_poster` does not. If tokens live only in `bots/twitter/.env`, supervisor runs will fail to connect. Ensure root `.env` has X/JARVIS creds, or load `bots/twitter/.env` before creating `TwitterClient` in supervisor/sentiment_poster."
+    },
+    {
+      "timestamp": "2026-01-18T11:05:00+00:00",
+      "from": "Codex",
+      "message": "Twitter creds: `TwitterClient.connect()` requires OAuth1.0a keys (`X_API_KEY`, `X_API_SECRET`, plus `JARVIS_ACCESS_TOKEN`/`_SECRET` or `X_ACCESS_TOKEN`/`_SECRET`). These are NOT loaded from `secrets/keys.json` (only API keys). If these are missing in env, connect fails and posting never starts. Recommend verifying env vars for OAuth1 tokens in the service shell."
+    },
+    {
+      "timestamp": "2026-01-18T11:10:00+00:00",
+      "from": "Codex",
+      "message": "Launcher mismatch: `bots/buy_tracker/run_all.py` constructs `TwitterCredentials` from X_* env vars only (ignores `JARVIS_ACCESS_TOKEN/_SECRET`). If Jarvis tokens are only set as JARVIS_* (common), this path fails and Twitter posting silently dies. Suggest: set X_ACCESS_TOKEN envs for run_all, or switch run_all to `TwitterClient()` (from_env) so it uses JARVIS_* tokens."
+    },
+    {
+      "timestamp": "2026-01-18T11:15:00+00:00",
+      "from": "Codex",
+      "message": "Sentiment poster dependency: `SentimentTwitterPoster` posts only when `bots/buy_tracker/predictions_history.json` contains Grok verdicts. If `SentimentReportGenerator` isn\u2019t running (or XAI key missing so verdicts empty), Twitter poster logs 'No valid Grok sentiment data - skipping post'. If relying on sentiment_poster, ensure sentiment_reporter is running + XAI_API_KEY configured."
+    },
+    {
+      "timestamp": "2026-01-18T11:20:00+00:00",
+      "from": "Codex",
+      "message": "Structured error codes already exist: `api/errors.py`, `api/schemas/responses.py`, `core/api/errors.py`, `core/errors/classification.py`. If backlog item calls for error codes, it can be marked DONE or just wired into new endpoints."
+    },
+    {
+      "timestamp": "2026-01-18T11:25:00+00:00",
+      "from": "Codex",
+      "message": "CI/CD already present: `.github/workflows/ci.yml` (non-blocking lint/test) and `.github/workflows/deploy.yml`. If backlog includes CI/CD or code quality checks, likely mark DONE or tighten gating instead of building from scratch."
+    },
+    {
+      "timestamp": "2026-01-18T11:35:00+00:00",
+      "from": "Codex",
+      "message": "Request dedup already implemented in `core/performance/request_dedup.py` (decorator + global dedup with TTL). Backlog item 'request deduplication within 5 minutes' can be met by wiring this into API call sites."
+    },
+    {
+      "timestamp": "2026-01-18T11:36:00+00:00",
+      "from": "Codex",
+      "message": "Immutable audit logging exists: `core/security/audit_chain.py` (hash\u2011chained JSONL) gated by feature flag `hash_chain_audit` in `core/feature_flags.py`. If 'immutable audit log' is required, enable flag and route trade logs through audit_chain."
+    },
+    {
+      "timestamp": "2026-01-18T11:37:00+00:00",
+      "from": "Codex",
+      "message": "Health endpoint currently does NOT receive supervisor component stats; `bots/health_endpoint.update_health()` is never called. Wire supervisor to call update_health with component state if you want restart counts/real component status."
+    },
+    {
+      "timestamp": "2026-01-18T11:38:00+00:00",
+      "from": "Codex",
+      "message": "Potential duplication: two feature flag systems (`core/feature_flags.py` and `core/users/features.py`). Consider standardizing on one to avoid conflicting flag state."
+    },
+    {
+      "timestamp": "2026-01-18T11:39:00+00:00",
+      "from": "Codex",
+      "message": "Ralph Wiggum loop script `scripts/continuous_monitor.py` polls Telegram via getUpdates; running it alongside polling bot will trigger Conflict errors. Ensure it is disabled in production while polling."
+    },
+    {
+      "timestamp": "2026-01-18T11:45:00+00:00",
+      "from": "Codex",
+      "message": "Backtesting/optimization largely implemented already: `core/backtester.py`, `bots/treasury/backtest.py`, `core/trading_pipeline.py` (walk\u2011forward), `core/trading/backtesting/validator.py` (Monte Carlo), `core/optimization/optimizer.py` + `core/hyperparameter_tuning.py`. Consider marking these backlog items DONE and focus on wiring/UX."
+    },
+    {
+      "timestamp": "2026-01-18T11:50:00+00:00",
+      "from": "Codex",
+      "message": "Trading/data items already present: token lock/vesting analysis (`core/token_locker.py`, `core/staking/vesting.py`), token supply + holder metrics in `core/token_scanner.py`, rug\u2011risk tooling (`core/rugcheck.py`), whale tracking (`core/whale_tracking/`), portfolio rebalancer (`core/portfolio_rebalancer.py`). These cover several backlog bullets (tokenomics, unlocks, rug pull detection, whale tracking, rebalancing)."
+    },
+    {
+      "timestamp": "2026-01-18T11:55:00+00:00",
+      "from": "Codex",
+      "message": "Remaining Telegram pollers without instance-lock gating: `tg_bot/treasury_bot_manager.py`, `tg_bot/public_trading_bot_integration.py`, `core/social/telegram_bot.py`, `bots/public_trading_bot_supervisor.py`. If these can run with same token, add `core/utils/instance_lock.acquire_instance_lock` or ensure unique tokens."
+    },
+    {
+      "timestamp": "2026-01-18T18:38:38.187638+00:00",
+      "from": "Codex",
+      "message": "Audit addendum: RBAC/ACL already implemented in core/security/rbac.py (roles, permissions, require_permission/require_role). If backlog asks for ACLs, mark DONE or wire decorators into handlers/endpoints. Security flags: core/memory/dedup_store.py uses eval() on DB metadata -> replace with json.loads or ast.literal_eval. Pickle loads in core/cache_manager.py, core/google_integration.py, core/ml_regime_detector.py (ensure trusted files or switch format). Reliability: several requests.* calls lack timeouts (e.g., bots/twitter/format_thread.py, bots/twitter/format_jarvis_thread.py, bots/twitter/telegram_sync.py, core/integrations/github_integration.py, scripts/send_telegram_message.py, deploy_kr8tiv.py, monitor_bot_responses.py) -> add timeouts to avoid hangs. Multiple polling entrypoints remain (tg_bot/treasury_bot_manager.py, tg_bot/public_trading_bot_integration.py, core/social/telegram_bot.py, bots/public_trading_bot_supervisor.py, plus claude_vibe_repo/claude_vibe_telegram/telegram_bridge.py). Ensure only one poller per token or add instance_lock. Technical debt TODOs: tg_bot/services/treasury_dashboard.py metrics are stubbed, tg_bot/services/market_intelligence.py has hardcoded BTC price, tg_bot/services/chart_integration.py has placeholder data; many TODOs flagged by rg if you want to prioritize."
+    },
+    {
+      "timestamp": "2026-01-18T18:40:37.513083+00:00",
+      "from": "Codex",
+      "message": "Deeper audit: autonomous/self-healing features can execute arbitrary shell commands. core/autonomous_agent.py _terminal_tool runs safe_subprocess with shell=True on command from AI plan; command validator only checks hang patterns, not injection. core/self_healing.py attempts AI-suggested commands via subprocess.run(shell=True) directly (no guardian/safe_subprocess). This is a high-risk RCE vector if any untrusted input reaches these paths. Recommend disabling in production or gating behind feature flag + explicit allowlist, and route through guardian/safe_subprocess with strict policy. Shell=True also used in core/computer.py (user-provided command), core/self_healing.py, core/autonomous_agent.py, core/learning_validator.py (safe), core/platform/__init__.py (open app)."
+    },
+    {
+      "timestamp": "2026-01-18T18:41:28.150621+00:00",
+      "from": "Codex",
+      "message": "Auth audit: core/payments/metering.py has placeholder JWT/API-key validation (accepts tokens starting with test_/jrvs_) and notes 'mock validation'; if this middleware is enabled in production, it's insecure. Config defaults jwt_secret to 'change-me-in-production' in core/config/loader.py. Ensure real JWT validation is implemented before exposing /api/* or disable metering middleware."
+    },
+    {
+      "timestamp": "2026-01-18T19:06:00.040350+00:00",
+      "from": "Codex",
+      "message": "AST scan: requests.* calls missing explicit timeout in these files/lines -> add timeouts to avoid hangs: bots/twitter/format_jarvis_thread.py:89, bots/twitter/format_thread.py:82, bots/twitter/oauth2_auth.py:99/200, bots/twitter/oauth_setup.py:101/163, bots/twitter/telegram_sync.py:107, bots/twitter/twitter_client.py:346, core/integrations/github_integration.py:28/53/70/103/125/138, core/integrations/telegram_sentiment_bot.py:290, core/integrations/trello_integration.py:20/32/44/56/77/79, scripts/send_telegram_message.py:89. Secret scan (no values shown): bots/grok_imagine/grok_cookies.json contains a JWT-style token -> treat as secret/runtime cookie; move to secrets or gitignore if not meant for repo. Other hits were false positives from regex examples in core/security_hardening.py, core/integrations/slack_integration.py, core/secret_hygiene.py. Pickle usage: core/cache_manager.py (cache), core/google_integration.py (token), core/ml_regime_detector.py (model) use pickle.load; ensure files are trusted or switch to JSON where possible."
+    },
+    {
+      "timestamp": "2026-01-18T19:07:45.047088+00:00",
+      "from": "Codex",
+      "message": "Hardcoded credential audit: scripts/deploy_vps_fix.py still defines PASSWORD constant (likely real); remove or load from env/secret store. scripts/run_bot_single.sh assigns TOKEN multiple times (fallbacks + inline literals); ensure no real bot tokens committed and prefer reading from env/.env only. core/security/key_vault.py uses a built-in fallback password when none provided (see around line ~55); should require explicit env/arg instead of default string in production. core/security/encrypted_storage.py appears OK (env-based), but uses ENV_PASSWORD_KEY constant; ensure set and no default password hardcoded."
+    },
+    {
+      "timestamp": "2026-01-18T19:08:26.975910+00:00",
+      "from": "Codex",
+      "message": "API security note: core/api_server.py (custom HTTPServer) sets Access-Control-Allow-Origin '*' and exposes many /api/* endpoints without auth; if bound beyond localhost, tighten CORS and add auth or restrict bind. api/server.py (Flask) uses CORS(app) with default allow-all; same risk if exposed. FastAPI app uses env-based CORS allow_origins (ok), but ensure CORS_ORIGINS is set in prod."
+    },
+    {
+      "timestamp": "2026-01-18T19:09:15.095988+00:00",
+      "from": "Codex",
+      "message": "Bug found in core/safe_subprocess.py: in run_command_safe(), the finally block ALWAYS appends '[TIMEOUT]...' to stderr and if check=True always raises TimeoutError. This happens even when command succeeds. Fix: move the stderr append + TimeoutError raise inside the TimeoutExpired branch (or guard with if result['timed_out']). This can cause false errors across any caller using check=True."
+    },
+    {
+      "timestamp": "2026-01-18T19:09:45.924204+00:00",
+      "from": "Codex",
+      "message": "Auth gap: core/users/account.py UserManager.authenticate() explicitly skips signature verification (TODO) and trusts wallet address; if used for real auth, this is insecure. Consider integrating wallet signature verification before enabling login or API access."
+    },
+    {
+      "timestamp": "2026-01-18T19:10:37.839295+00:00",
+      "from": "Codex",
+      "message": "Safety gap: core/safe_subprocess.run_command_safe only uses command_validator (hang patterns) and does NOT consult guardian.is_command_dangerous. Any caller (e.g., core/autonomous_agent _terminal_tool) can run destructive commands if supplied. Consider adding guardian checks or allowlist for autonomous paths."
+    },
+    {
+      "timestamp": "2026-01-18T19:11:24.017299+00:00",
+      "from": "Codex",
+      "message": "Security: core/backup.py restore_backup() uses ZipFile.extract without path traversal checks (zip-slip). If restoring from untrusted backup zips, validate members or use safe extraction to prevent writing outside restore_dir."
+    },
+    {
+      "timestamp": "2026-01-18T19:12:12.435230+00:00",
+      "from": "Codex",
+      "message": "Key vault note: core/security/key_vault.py pulls salt from env (JARVIS_KEY_SALT) with a non-empty default; combined with fallback password, this weakens encryption. Consider requiring env-provided salt + password and fail fast if missing."
+    },
+    {
+      "timestamp": "2026-01-18T19:32:05.788103+00:00",
+      "from": "Codex",
+      "message": "Critical security: scripts/progress_dashboard.py runs Flask on 0.0.0.0:5001 with CORS allow-all and exposes /api/messages. POST /api/messages supports '/exec <cmd>' and executes via subprocess.Popen(shell=True) with no auth. If this script is running on a networked host, it's full RCE. Disable in prod or add auth + remove /exec. Exposure note: core/api_server.py binds HTTPServer to 0.0.0.0 and sets Access-Control-Allow-Origin '*'; no auth. api/server.py (Flask) also CORS allow-all. api/routes/partner_stats.py standalone uvicorn run on 0.0.0.0 with no auth. core/websocket_server.py binds 0.0.0.0. core/monitoring/metrics.py exposes /metrics on 0.0.0.0. Consider binding to localhost or adding auth/allowlist.API auth gap: api/auth/jwt_auth.py uses default secret 'change-this-in-production-please' and routes don't use jwt_auth/validate_api_key dependencies (rg shows none). If FastAPI app is exposed, endpoints are unauthenticated."
+    },
+    {
+      "timestamp": "2026-01-18T19:32:58.885300+00:00",
+      "from": "Codex",
+      "message": "More security findings: scripts/progress_dashboard.py /api/messages handles POST and supports '/exec <cmd>' -> subprocess.Popen(shell=True). Combined with CORS allow-all + host 0.0.0.0, this is unauthenticated RCE. tg_bot/services/terminal_handler.py allows admin-only shell execution via Telegram; consider disabling in prod or tightening allowlist + audit/logging since it?s effectively RCE if bot token/admin ID compromised. api/webhooks/bags_webhook.py exposes GET /events, /dlq, and POST /dlq/retry with no auth; anyone with access can read webhook logs or trigger retries. Security middleware exists but not enabled: api/middleware/ip_allowlist.py, csrf.py, idempotency.py etc; fastapi_app only wires RateLimit/SecurityHeaders/RequestTracing/BodyLimit. Consider adding IP allowlist or auth dependency on sensitive routes."
+    },
+    {
+      "timestamp": "2026-01-18T19:34:01.171969+00:00",
+      "from": "Codex",
+      "message": "Local .env files contain real-looking secrets (VPS creds, Telegram token, XAI/Anthropic keys, X/Twitter OAuth tokens). They are gitignored (.gitignore has .env), and `git ls-files` shows they are untracked, but double-check they were never committed; rotate if any were pushed. tg_bot/.env and bots/twitter/.env especially sensitive; consider moving to secrets manager or .env.local outside repo."
+    },
+    {
+      "timestamp": "2026-01-18T19:36:06.892315+00:00",
+      "from": "Codex",
+      "message": "Aiohttp timeout audit: many ClientSession calls lack per-request timeout and sessions are created with no ClientTimeout. Files/lines flagged: bots/buy_tracker/monitor.py (session.get/post at ~140/148/239/256), bots/buy_tracker/sentiment_report.py (many session.get/post lines), core/api_proxy/gateway.py:418 (session.request), core/api_proxy/openrouter_proxy.py:369 (session.post), core/trading/batch_processor.py:470/485, core/trading/multi_venue_router.py:363/387, core/treasury/buyback_burn.py:326/341/364/390. Recommend setting ClientSession(timeout=ClientTimeout(total=...)) or passing timeout per request to avoid hangs."
     }
   ]
 }

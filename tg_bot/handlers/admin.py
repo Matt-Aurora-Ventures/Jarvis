@@ -72,15 +72,22 @@ async def system(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             lines.append("\u2753 <b>Health:</b> Unknown")
 
-        # Feature flags
+        # Feature flags (try new system first, fall back to legacy)
         try:
-            from core.feature_flags import get_feature_flags
-            ff = get_feature_flags()
-            enabled = len(ff.get_enabled_flags())
-            total = len(ff.flags)
-            lines.append(f"\U0001f39a\ufe0f <b>Features:</b> {enabled}/{total} enabled")
+            from core.config.feature_flags import get_feature_flag_manager
+            manager = get_feature_flag_manager()
+            enabled = len(manager.get_enabled_flags())
+            total = len(manager.get_all_flags())
+            lines.append(f"\U0001f39a\ufe0f <b>Features:</b> {enabled}/{total} enabled (config)")
         except Exception:
-            pass
+            try:
+                from core.feature_flags import get_feature_flags
+                ff = get_feature_flags()
+                enabled = len(ff.get_enabled_flags())
+                total = len(ff.flags)
+                lines.append(f"\U0001f39a\ufe0f <b>Features:</b> {enabled}/{total} enabled")
+            except Exception:
+                pass
 
         # Scorekeeper
         try:
@@ -328,3 +335,134 @@ async def memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Memory error: {e}")
         await update.message.reply_text(f"memory error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@error_handler
+@admin_only
+async def flags(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle /flags command - view/update feature flags (admin only).
+
+    Usage:
+        /flags - Show all feature flags
+        /flags FLAG_NAME - Show specific flag details
+        /flags FLAG_NAME on - Enable flag
+        /flags FLAG_NAME off - Disable flag
+        /flags FLAG_NAME 50 - Set 50% rollout
+        /flags reload - Reload from config file
+    """
+    try:
+        from core.config.feature_flags import get_feature_flag_manager
+
+        manager = get_feature_flag_manager()
+
+        # Handle subcommands
+        if context.args:
+            arg1 = context.args[0].upper()
+
+            # Reload command
+            if arg1 == "RELOAD":
+                manager.reload_from_file()
+                await update.message.reply_text(
+                    "feature flags reloaded from config.",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            # Flag name provided
+            flag_name = arg1
+
+            # Check if setting value
+            if len(context.args) >= 2:
+                value = context.args[1].lower()
+
+                if value in ("on", "true", "enable", "1"):
+                    manager.set_flag(flag_name, enabled=True)
+                    await update.message.reply_text(
+                        f"\u2705 <code>{flag_name}</code> enabled",
+                        parse_mode=ParseMode.HTML,
+                    )
+                elif value in ("off", "false", "disable", "0"):
+                    manager.set_flag(flag_name, enabled=False)
+                    await update.message.reply_text(
+                        f"\u274c <code>{flag_name}</code> disabled",
+                        parse_mode=ParseMode.HTML,
+                    )
+                elif value.isdigit():
+                    percentage = int(value)
+                    manager.set_flag(flag_name, enabled=True, percentage=percentage)
+                    await update.message.reply_text(
+                        f"\U0001f4ca <code>{flag_name}</code> set to {percentage}% rollout",
+                        parse_mode=ParseMode.HTML,
+                    )
+                else:
+                    await update.message.reply_text(
+                        f"invalid value: {value}. use on/off or a percentage.",
+                        parse_mode=ParseMode.HTML,
+                    )
+                return
+
+            # Show specific flag details
+            flag = manager.get_flag(flag_name)
+            if flag:
+                status = "\u2705 ON" if flag.enabled else "\u274c OFF"
+                lines = [
+                    f"<b>{flag_name}</b>",
+                    "",
+                    f"status: {status}",
+                    f"description: {flag.description}",
+                    f"rollout: {flag.rollout_percentage}%",
+                ]
+                if flag.user_whitelist:
+                    lines.append(f"whitelist: {len(flag.user_whitelist)} users")
+                lines.append(f"updated: {flag.updated_at}")
+
+                await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+            else:
+                await update.message.reply_text(
+                    f"flag not found: {flag_name}",
+                    parse_mode=ParseMode.HTML,
+                )
+            return
+
+        # Show all flags
+        all_flags = manager.get_all_flags()
+
+        if not all_flags:
+            await update.message.reply_text(
+                "no feature flags configured.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        lines = [
+            "<b>feature flags</b>",
+            "",
+            "<i>/flags FLAG_NAME on/off to toggle</i>",
+            "",
+        ]
+
+        for name, data in sorted(all_flags.items()):
+            enabled = data.get("enabled", False)
+            percentage = data.get("rollout_percentage", 0)
+
+            if enabled and percentage > 0:
+                status = f"\U0001f4ca {percentage}%"
+            elif enabled:
+                status = "\u2705"
+            else:
+                status = "\u274c"
+
+            description = data.get("description", "")[:40]
+            if len(data.get("description", "")) > 40:
+                description += "..."
+
+            lines.append(f"{status} <code>{name}</code>")
+            if description:
+                lines.append(f"   <i>{description}</i>")
+
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error(f"Flags error: {e}")
+        await update.message.reply_text(f"flags error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
