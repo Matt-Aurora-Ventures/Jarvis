@@ -653,6 +653,74 @@ class JarvisBuyBot:
                     )
                     await asyncio.sleep(0.2)
 
+            elif section_type == "bluechip":
+                # Load blue-chip tokens from temp file
+                import tempfile
+                import json
+                from core.enhanced_market_data import HIGH_LIQUIDITY_SOLANA_TOKENS
+
+                bluechip_file = Path(tempfile.gettempdir()) / "jarvis_bluechip_tokens.json"
+
+                if bluechip_file.exists():
+                    with open(bluechip_file) as f:
+                        bluechips = json.load(f)
+
+                    # Group by category for better UX
+                    by_category = {}
+                    for token in bluechips:
+                        cat = token.get("category", "Other")
+                        if cat not in by_category:
+                            by_category[cat] = []
+                        by_category[cat].append(token)
+
+                    # Category emojis
+                    category_emojis = {
+                        "L1": "⚡",
+                        "DeFi": "💱",
+                        "Infrastructure": "🛠️",
+                        "Meme": "🐕",
+                        "Wrapped": "🔗",
+                        "LST": "💧",
+                        "Stablecoin": "💵",
+                        "Other": "📊"
+                    }
+
+                    # Send each category
+                    for cat in ["L1", "DeFi", "Infrastructure", "Meme", "Wrapped", "LST", "Stablecoin"]:
+                        if cat in by_category:
+                            category_emoji = category_emojis.get(cat, "📊")
+                            await self.bot.send_message(
+                                chat_id=chat_id,
+                                text=f"\n{category_emoji} <b>{cat}</b> Blue Chips",
+                                parse_mode=ParseMode.HTML,
+                            )
+
+                            for token in by_category[cat]:
+                                keyboard = create_ape_buttons_with_tp_sl(
+                                    symbol=token["symbol"],
+                                    asset_type="token",
+                                    contract_address=token.get("contract", ""),
+                                    entry_price=token.get("price_usd", 0.0),
+                                    grade="",
+                                )
+
+                                price_str = f"${token.get('price_usd', 0):.8f}" if token.get('price_usd', 0) < 0.01 else f"${token.get('price_usd', 0):.4f}"
+                                change_emoji = "🟢" if token.get("change_24h", 0) > 0 else "🔴"
+                                msg = f"💎 <b>{token['symbol']}</b> - {price_str} {change_emoji} {token.get('change_24h', 0):+.1f}%"
+                                await self.bot.send_message(
+                                    chat_id=chat_id,
+                                    text=msg,
+                                    parse_mode=ParseMode.HTML,
+                                    reply_markup=keyboard,
+                                )
+                                await asyncio.sleep(0.15)
+                else:
+                    await self.bot.send_message(
+                        chat_id=chat_id,
+                        text="⚠️ Blue-chip data not available. Wait for next report.",
+                        parse_mode=ParseMode.HTML,
+                    )
+
             elif section_type == "top_picks":
                 # Load picks from temp file
                 import tempfile
