@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import os
 import requests
 import json
 import time
 import sys
 
-TELEGRAM_BOT_TOKEN = '***TELEGRAM_TOKEN_REDACTED***'
-TELEGRAM_CHAT_ID = '-1003408655098'
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
+if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+    print("ERROR: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set", file=sys.stderr)
+    sys.exit(1)
 
 MSG = """YO KR8TIV!! 🚀🎨
 
@@ -67,7 +72,7 @@ send_url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
 payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': MSG}
 
 print('📤 Sending message...', file=sys.stderr)
-r = requests.post(send_url, json=payload)
+r = requests.post(send_url, json=payload, timeout=10)
 data = r.json()
 
 if data.get('ok'):
@@ -80,7 +85,7 @@ if data.get('ok'):
 
     print('📌 Pinning message...', file=sys.stderr)
     time.sleep(1)
-    pr = requests.post(pin_url, json=pin_payload)
+    pr = requests.post(pin_url, json=pin_payload, timeout=10)
     pd = pr.json()
 
     if pd.get('ok'):

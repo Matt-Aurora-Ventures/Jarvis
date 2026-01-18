@@ -10,7 +10,7 @@
 
 **Exposed Telegram Bot Token** in git commit `bfc8d2d` (v4.6.0):
 ```
-TELEGRAM_BOT_TOKEN=***TELEGRAM_TOKEN_REDACTED***
+TELEGRAM_BOT_TOKEN=<redacted>
 TELEGRAM_ADMIN_IDS=8527130908
 ```
 

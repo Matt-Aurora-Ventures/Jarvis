@@ -1,0 +1,52 @@
+{
+  "rules": [
+    {
+      "id": "high_error_rate",
+      "condition": "errors_per_hour > 10",
+      "severity": "warning",
+      "actions": ["telegram", "log"],
+      "cooldown_minutes": 30,
+      "message": "Error rate exceeds 10 per hour"
+    },
+    {
+      "id": "component_down",
+      "condition": "component.status == 'crashed'",
+      "severity": "critical",
+      "actions": ["telegram", "email", "log"],
+      "cooldown_minutes": 5,
+      "message": "A component has crashed"
+    },
+    {
+      "id": "high_drawdown",
+      "condition": "portfolio.drawdown < -20",
+      "severity": "warning",
+      "actions": ["telegram", "log"],
+      "cooldown_minutes": 60,
+      "message": "Portfolio drawdown exceeds 20%"
+    },
+    {
+      "id": "api_latency_high",
+      "condition": "api_latency_p95 > 1000",
+      "severity": "warning",
+      "actions": ["log"],
+      "cooldown_minutes": 15,
+      "message": "API latency P95 exceeds 1 second"
+    },
+    {
+      "id": "memory_critical",
+      "condition": "memory_percent > 90",
+      "severity": "critical",
+      "actions": ["telegram", "log"],
+      "cooldown_minutes": 10,
+      "message": "Memory usage exceeds 90%"
+    },
+    {
+      "id": "multiple_restarts",
+      "condition": "component.restart_count > 10",
+      "severity": "warning",
+      "actions": ["telegram", "log"],
+      "cooldown_minutes": 60,
+      "message": "Component has restarted more than 10 times"
+    }
+  ]
+}
