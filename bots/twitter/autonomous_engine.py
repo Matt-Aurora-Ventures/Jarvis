@@ -3629,7 +3629,7 @@ Reply type guidance:
 
             # Add contract address for token tweets
             if draft.contract_address and draft.contract_address not in content:
-                if len(content) + len(draft.contract_address) + 5 < 280:
+                if len(content) + len(draft.contract_address) + 5 < 4000:
                     content += f"\n\n{draft.contract_address[:20]}..."
             
             # Generate image if requested
