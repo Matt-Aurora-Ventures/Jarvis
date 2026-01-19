@@ -43,6 +43,7 @@ DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 X_MEMORY_DB = DATA_DIR / "jarvis_x_memory.db"
 POSTED_LOG = DATA_DIR / "x_posted_log.json"
 DUPLICATE_DETECTION_HOURS = 48
+X_ENGINE_STATE = DATA_DIR / ".x_engine_state.json"  # Persistent state to prevent spam on restart
 THREAD_SCHEDULE = {
     (0, 8): {"topic": "Weekly market outlook", "content_type": "weekly_market_outlook"},
     (2, 14): {"topic": "Token deep dive", "content_type": "token_deep_dive"},
@@ -59,7 +60,6 @@ def _load_env():
                 os.environ.setdefault(k.strip(), v.strip().strip('"'))
 
 _load_env()
-
 
 # =============================================================================
 # JARVIS VOICE FOR X
@@ -273,7 +273,6 @@ ROAST_CRITERIA = {
     "dead_volume": lambda vol: vol < 1000,
 }
 
-
 @dataclass
 class ImageGenParams:
     """Tunable parameters for Grok image generation."""
@@ -308,7 +307,6 @@ class ImageGenParams:
         
         return ". ".join(parts)
 
-
 @dataclass
 class TweetDraft:
     """A draft tweet ready to post."""
@@ -322,7 +320,6 @@ class TweetDraft:
     image_prompt: Optional[str] = None
     image_params: Optional[ImageGenParams] = None
     priority: int = 0
-
 
 # Generic phrases that indicate low-quality/irrelevant content
 GENERIC_CONTENT_PATTERNS = [
@@ -339,7 +336,6 @@ GENERIC_CONTENT_PATTERNS = [
     "quiet day in the markets",
     "not much happening",
 ]
-
 
 def is_content_relevant(content: str, category: str) -> bool:
     """
@@ -370,7 +366,6 @@ def is_content_relevant(content: str, category: str) -> bool:
         return False
 
     return True
-
 
 class XMemory:
     """Persistent memory for X/Twitter interactions."""
@@ -1412,7 +1407,6 @@ class XMemory:
 
         return insights
 
-
 class AutonomousEngine:
     """
     Main autonomous Twitter engine for Jarvis.
@@ -1422,7 +1416,6 @@ class AutonomousEngine:
     def __init__(self):
         self.memory = XMemory()
         self._running = False
-        self._last_post_time = 0
         self._post_interval = 1800  # 30 minutes default - more active posting
         self._grok_client = None
         self._twitter_client = None
@@ -1434,8 +1427,82 @@ class AutonomousEngine:
         self._consecutive_errors = 0
         self._last_error_time = 0
         self._error_cooldown_base = 300  # Base 5 minutes, exponentially increases
+        
+        # Load persistent state (prevents spam on restart)
+        self._load_state()
 
         # Fingerprint cleanup is now handled by MemoryStore.cleanup_expired()
+    
+    def _load_state(self):
+        """Load persistent state from file to survive restarts."""
+        try:
+            if X_ENGINE_STATE.exists():
+                data = json.loads(X_ENGINE_STATE.read_text())
+                self._last_post_time = data.get("last_post_time", time.time())
+                self._consecutive_errors = data.get("consecutive_errors", 0)
+                self._last_error_time = data.get("last_error_time", 0)
+                
+                # If last post was recent (within 2 hours), respect it
+                time_since = time.time() - self._last_post_time
+                if time_since < 7200:  # 2 hours
+                    logger.info(f"X Bot: Loaded state - last post {time_since/60:.0f} min ago")
+                else:
+                    # Old state, reset to allow posting after interval
+                    self._last_post_time = time.time() - self._post_interval + 300  # Allow post in 5 min
+                    logger.info("X Bot: Old state found, allowing post in 5 min")
+            else:
+                # No state file - check database for last post time as fallback
+                self._last_post_time = self._get_last_post_from_db()
+                if self._last_post_time:
+                    time_since = time.time() - self._last_post_time
+                    logger.info(f"X Bot: No state file, loaded from DB - last post {time_since/60:.0f} min ago")
+                else:
+                    # No state file AND no DB record = truly first run
+                    self._last_post_time = time.time()
+                    logger.info("X Bot: No state file or DB record, initialized fresh (will post in 30 min)")
+        except Exception as e:
+            logger.warning(f"X Bot: Failed to load state: {e}, using defaults")
+            self._last_post_time = time.time()
+    
+    def _get_last_post_from_db(self) -> Optional[float]:
+        """Get last post timestamp from database as fallback when state file missing."""
+        try:
+            recent = self.memory.get_recent_tweets(hours=2)
+            if recent and recent[0].get("posted_at"):
+                # Parse ISO timestamp and convert to epoch
+                posted_at = datetime.fromisoformat(recent[0]["posted_at"].replace("Z", "+00:00"))
+                return posted_at.timestamp()
+        except Exception as e:
+            logger.debug(f"X Bot: Could not get last post from DB: {e}")
+        return None
+
+    def _save_state(self):
+        """Save persistent state to file."""
+        try:
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            state = {
+                "last_post_time": self._last_post_time,
+                "consecutive_errors": self._consecutive_errors,
+                "last_error_time": self._last_error_time,
+                "saved_at": datetime.now(timezone.utc).isoformat()
+            }
+            X_ENGINE_STATE.write_text(json.dumps(state, indent=2))
+        except Exception as e:
+            logger.warning(f"X Bot: Failed to save state: {e}")
+    
+    def _save_startup_notification_time(self):
+        """Save the startup notification time to prevent spam on restarts."""
+        try:
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            # Load existing state or create new
+            if X_ENGINE_STATE.exists():
+                state = json.loads(X_ENGINE_STATE.read_text())
+            else:
+                state = {}
+            state["last_startup_notification"] = time.time()
+            X_ENGINE_STATE.write_text(json.dumps(state, indent=2))
+        except Exception as e:
+            logger.warning(f"X Bot: Failed to save startup notification time: {e}")
 
     def _record_error(self):
         """Record an error and trigger exponential backoff."""
@@ -1751,8 +1818,8 @@ class AutonomousEngine:
         self._spam_scan_interval = 300  # Scan for spam bots every 5 min
         logger.info("Starting autonomous posting loop")
 
-        # Send startup notification
-        await self.report_to_telegram("<b>X Bot Started</b>\n\nAutonomous posting loop is now active.")
+        # Startup notification disabled per user request (no restart reports)
+        logger.info("Startup notification disabled - bot restarting silently")
 
         while self._running:
             try:
@@ -1788,9 +1855,8 @@ class AutonomousEngine:
                 logger.error(f"Run loop error: {e}")
                 await asyncio.sleep(60)
 
-        # Send shutdown notification
-        await self.report_to_telegram("<b>X Bot Stopped</b>\n\nAutonomous posting loop has been stopped.")
-        logger.info("Autonomous posting loop stopped")
+        # Shutdown notification disabled per user request (no restart reports)
+        logger.info("Autonomous posting loop stopped (notification disabled)")
     
     def stop(self):
         """Stop the autonomous posting loop."""
@@ -3753,6 +3819,7 @@ Reply type guidance:
         tweet_ids = await self.post_thread(thread)
         if tweet_ids:
             self._last_post_time = time.time()
+            self._save_state()  # Persist to prevent spam on restart
             self._last_thread_schedule_key = schedule_key
 
             try:
@@ -4070,6 +4137,7 @@ Reply type guidance:
                             tweet_ids = await self.post_thread(result)
                             if tweet_ids:
                                 self._last_post_time = time.time()
+                                self._save_state()  # Persist to prevent spam on restart
                                 # Record thread (primary topic)
                                 autonomy.record_tweet_posted(
                                     tweet_id=tweet_ids[0],
@@ -4102,6 +4170,7 @@ Reply type guidance:
 
                             if tweet_id:
                                 self._last_post_time = time.time()
+                                self._save_state()  # Persist to prevent spam on restart
                                 self._record_success()  # Reset error tracking on successful post
 
                                 # Record to autonomy systems for learning
@@ -4129,7 +4198,6 @@ Reply type guidance:
             self._record_error()  # Track error for exponential backoff
         
         return None
-
 
     # =========================================================================
     # Cross-Platform Reporting
@@ -4210,7 +4278,6 @@ Reply type guidance:
             await self.report_to_telegram(report)
         except Exception as e:
             logger.error(f"Milestone report error: {e}")
-
 
 # Singleton instance
 _autonomous_engine: Optional[AutonomousEngine] = None
