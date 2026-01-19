@@ -68,6 +68,36 @@ from core.monitoring.log_aggregator import (
     get_log_aggregator,
     setup_log_aggregation,
 )
+# New comprehensive monitoring modules
+from core.monitoring.health_check import (
+    SystemHealthChecker,
+    HealthLevel,
+    ComponentStatus,
+    get_system_health_checker,
+)
+from core.monitoring.alerter import (
+    Alerter,
+    AlertType,
+    AlertResult,
+    get_alerter,
+)
+from core.monitoring.alert_rules import (
+    AlertRulesEngine,
+    get_alert_rules_engine,
+)
+from core.monitoring.performance_tracker import (
+    PerformanceTracker,
+    get_performance_tracker,
+)
+from core.monitoring.budget_tracker import (
+    BudgetTracker,
+    get_budget_tracker,
+)
+from core.monitoring.dashboard_data import (
+    DashboardDataProvider,
+    create_dashboard_router,
+    get_dashboard_provider,
+)
 
 __all__ = [
     "HealthMonitor",
@@ -144,4 +174,27 @@ __all__ = [
     "AggregatingHandler",
     "get_log_aggregator",
     "setup_log_aggregation",
+    # System health checker
+    "SystemHealthChecker",
+    "HealthLevel",
+    "ComponentStatus",
+    "get_system_health_checker",
+    # Alerter
+    "Alerter",
+    "AlertType",
+    "AlertResult",
+    "get_alerter",
+    # Alert rules
+    "AlertRulesEngine",
+    "get_alert_rules_engine",
+    # Performance tracker
+    "PerformanceTracker",
+    "get_performance_tracker",
+    # Budget tracker
+    "BudgetTracker",
+    "get_budget_tracker",
+    # Dashboard data
+    "DashboardDataProvider",
+    "create_dashboard_router",
+    "get_dashboard_provider",
 ]
