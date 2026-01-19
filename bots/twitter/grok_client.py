@@ -55,7 +55,9 @@ class GrokClient:
     BASE_URL = "https://api.x.ai/v1"
     CHAT_MODEL = "grok-3"
     IMAGE_MODEL = "grok-2-image"
-    STATE_FILE = Path(__file__).parent / ".grok_state.json"
+    # State file - centralized under ~/.lifeos/data/
+    from core.state_paths import STATE_PATHS
+    STATE_FILE = STATE_PATHS.grok_state
 
     # Cost per 1K tokens (xAI Grok pricing - update as needed)
     COST_PER_1K_INPUT = 0.005   # $0.005 per 1K input tokens

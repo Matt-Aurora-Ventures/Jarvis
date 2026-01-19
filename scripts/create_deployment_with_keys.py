@@ -144,7 +144,7 @@ def main():
     # Make executable (on Unix-like systems)
     try:
         os.chmod(output_file, 0o755)
-    except:
+    except OSError:
         pass  # Windows doesn't use chmod
 
     print_header("[OK] DEPLOYMENT SCRIPT GENERATED")

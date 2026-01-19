@@ -38,12 +38,13 @@ from bots.twitter.telegram_sync import sync_tweet_to_telegram
 
 logger = logging.getLogger(__name__)
 
-# Paths
+# Paths - centralized state under ~/.lifeos/
+from core.state_paths import STATE_PATHS
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 X_MEMORY_DB = DATA_DIR / "jarvis_x_memory.db"
 POSTED_LOG = DATA_DIR / "x_posted_log.json"
 DUPLICATE_DETECTION_HOURS = 48
-X_ENGINE_STATE = DATA_DIR / ".x_engine_state.json"  # Persistent state to prevent spam on restart
+X_ENGINE_STATE = STATE_PATHS.x_engine_state  # Persistent state to prevent spam on restart
 THREAD_SCHEDULE = {
     (0, 8): {"topic": "Weekly market outlook", "content_type": "weekly_market_outlook"},
     (2, 14): {"topic": "Token deep dive", "content_type": "token_deep_dive"},

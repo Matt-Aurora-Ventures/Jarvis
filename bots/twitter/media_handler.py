@@ -334,7 +334,7 @@ class MediaHandler:
                 try:
                     font_large = ImageFont.truetype("arial.ttf", 48)
                     font_medium = ImageFont.truetype("arial.ttf", 32)
-                except:
+                except (OSError, IOError):
                     font_large = ImageFont.load_default()
                     font_medium = font_large
 

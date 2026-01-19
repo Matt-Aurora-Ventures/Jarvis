@@ -250,10 +250,13 @@ class TradingEngine:
     - Spending caps and audit logging (per guide)
     """
 
-    POSITIONS_FILE = Path(__file__).parent / '.positions.json'
-    HISTORY_FILE = Path(__file__).parent / '.trade_history.json'
-    AUDIT_LOG_FILE = Path(__file__).parent / '.audit_log.json'
-    DAILY_VOLUME_FILE = Path(__file__).parent / '.daily_volume.json'
+    # State files - centralized under ~/.lifeos/trading/
+    # Migration: Old files in bots/treasury/ will be auto-migrated on first access
+    from core.state_paths import STATE_PATHS
+    POSITIONS_FILE = STATE_PATHS.positions
+    HISTORY_FILE = STATE_PATHS.trading_dir / 'trade_history.json'
+    AUDIT_LOG_FILE = STATE_PATHS.audit_log
+    DAILY_VOLUME_FILE = STATE_PATHS.trading_dir / 'daily_volume.json'
 
     # CRITICAL: Spending caps to protect treasury (per guide)
     MAX_TRADE_USD = 100.0      # Maximum single trade size

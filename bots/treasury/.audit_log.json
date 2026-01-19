@@ -5197,5 +5197,52 @@
       "reason": "liquidity_check_failed",
       "risk_tier": "MICRO"
     }
+  },
+  {
+    "timestamp": "2026-01-19T02:14:16.594602",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "00cf7740",
+      "token": "NVDAX",
+      "token_mint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+      "amount_usd": 6.500216050804501,
+      "entry_price": 185.34,
+      "tp_price": 203.87400000000002,
+      "sl_price": 177.9264,
+      "sentiment_grade": "B",
+      "tx_signature": "29Gp4mdxDTt1a9mBwJ5N7q4CkofW22c3rfKGMUWdDAP21BKGRHp9hjV3QQ7ua8zpgFXkPCVVhAAGBHg2kQwheKUT",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-19T02:14:34.861244",
+    "action": "OPEN_POSITION",
+    "user_id": 8527130908,
+    "success": true,
+    "details": {
+      "position_id": "c6573194",
+      "token": "TSLAX",
+      "token_mint": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+      "amount_usd": 6.161451408897,
+      "entry_price": 435.9,
+      "tp_price": 479.49,
+      "sl_price": 418.46399999999994,
+      "sentiment_grade": "B",
+      "tx_signature": "3R7bsghVgB8NFiDczRog3qMCw6TP2aaGPkPmqKqJsTMoQbCe8Ca3H5SXWXJFsMnaqELG6sGzfia1Mc15kecLf8i7",
+      "dry_run": false
+    }
+  },
+  {
+    "timestamp": "2026-01-19T02:15:02.825930",
+    "action": "OPEN_POSITION_REJECTED",
+    "user_id": 8527130908,
+    "success": false,
+    "details": {
+      "token": "USOR",
+      "reason": "liquidity_check_failed",
+      "risk_tier": "MICRO"
+    }
   }
 ]
