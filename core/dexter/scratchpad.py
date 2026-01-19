@@ -1,16 +1,13 @@
 """
-Dexter Scratchpad - Decision Logging and Transparency
+Dexter Scratchpad - Append-only decision logging for transparency.
 
-Logs all reasoning steps and tool execution for full transparency and debugging.
-Provides append-only JSONL trail of the entire reasoning process.
-
-Built on Dexter framework: https://github.com/virattt/dexter
-License: MIT
+Logs all reasoning steps, tool executions, and final trading decisions
+for full transparency and debugging.
 """
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -18,142 +15,169 @@ logger = logging.getLogger(__name__)
 
 
 class Scratchpad:
-    """
-    Append-only log of all Dexter reasoning steps and decisions.
+    """Append-only JSONL logging for Dexter reasoning and decisions."""
 
-    Each entry is a JSON object with:
-    - ts: ISO timestamp
-    - type: "start", "reasoning", "action", "decision", "error"
-    - content: Varies by type
+    def __init__(self, session_id: str, scratchpad_dir: Optional[Path] = None):
+        """Initialize scratchpad for a session.
 
-    Enables full audit trail of how trading decisions were made.
-    """
-
-    def __init__(self, session_id: str, scratchpad_dir: str = "data/dexter/scratchpad"):
-        """Initialize scratchpad for a session"""
+        Args:
+            session_id: Unique session identifier
+            scratchpad_dir: Directory for scratchpad logs (default: data/dexter/scratchpad)
+        """
         self.session_id = session_id
-        self.scratchpad_dir = Path(scratchpad_dir)
+        self.scratchpad_dir = scratchpad_dir or Path("data/dexter/scratchpad")
         self.scratchpad_dir.mkdir(parents=True, exist_ok=True)
         self.scratchpad_path = self.scratchpad_dir / f"{session_id}.jsonl"
+        self._entries = []
 
-        # In-memory buffer for this session
-        self.entries = []
+    def log_start(self, goal: str, symbol: Optional[str] = None):
+        """Log the start of a reasoning session.
 
-        logger.info(f"Scratchpad initialized for session {session_id} at {self.scratchpad_path}")
-
-    def start_session(self, goal: str, symbol: Optional[str] = None, **kwargs):
-        """Log session start"""
+        Args:
+            goal: What the agent is trying to accomplish
+            symbol: Optional token symbol being analyzed
+        """
         entry = {
-            "ts": datetime.utcnow().isoformat() + "Z",
+            "ts": datetime.now(timezone.utc).isoformat(),
             "type": "start",
             "goal": goal,
             "symbol": symbol,
-            **kwargs,
         }
         self._append(entry)
+        logger.info(f"Dexter session started: {goal}" + (f" for {symbol}" if symbol else ""))
 
-    def log_reasoning(self, thought: str, iteration: int, **kwargs):
-        """Log a reasoning step in the ReAct loop"""
+    def log_reasoning(self, thought: str, iteration: int):
+        """Log a reasoning step.
+
+        Args:
+            thought: The agent's reasoning at this step
+            iteration: Which iteration of the loop (1-based)
+        """
         entry = {
-            "ts": datetime.utcnow().isoformat() + "Z",
+            "ts": datetime.now(timezone.utc).isoformat(),
             "type": "reasoning",
             "thought": thought,
             "iteration": iteration,
-            **kwargs,
         }
         self._append(entry)
+        logger.debug(f"Iteration {iteration}: {thought[:100]}...")
 
-    def log_action(self, tool: str, args: Dict[str, Any], result: str, **kwargs):
-        """Log tool execution"""
+    def log_action(self, tool: str, args: Dict[str, Any], result: str):
+        """Log a tool execution.
+
+        Args:
+            tool: Name of the tool that was called
+            args: Arguments passed to the tool
+            result: Result from the tool (formatted as string)
+        """
         entry = {
-            "ts": datetime.utcnow().isoformat() + "Z",
+            "ts": datetime.now(timezone.utc).isoformat(),
             "type": "action",
             "tool": tool,
             "args": args,
-            "result": result,
-            **kwargs,
+            "result": result[:500],  # Cap result size
         }
         self._append(entry)
+        logger.info(f"Tool executed: {tool}")
 
-    def log_decision(
-        self,
-        action: str,
-        symbol: str,
-        rationale: str,
-        confidence: float,
-        **kwargs,
-    ):
-        """Log final trading decision"""
+    def log_decision(self, action: str, symbol: str, rationale: str, confidence: float):
+        """Log the final trading decision.
+
+        Args:
+            action: BUY, SELL, or HOLD
+            symbol: Token symbol
+            rationale: Why this decision was made
+            confidence: 0-100 confidence score
+        """
         entry = {
-            "ts": datetime.utcnow().isoformat() + "Z",
+            "ts": datetime.now(timezone.utc).isoformat(),
             "type": "decision",
-            "action": action,  # BUY, SELL, HOLD, ERROR
+            "action": action,
             "symbol": symbol,
             "rationale": rationale,
             "confidence": confidence,
-            **kwargs,
         }
         self._append(entry)
+        logger.info(f"Decision: {action} {symbol} (confidence: {confidence}%)")
 
-    def log_error(self, error_type: str, message: str, **kwargs):
-        """Log an error during reasoning"""
+    def log_error(self, error: str, iteration: int):
+        """Log an error that occurred during reasoning.
+
+        Args:
+            error: Error message
+            iteration: Which iteration the error occurred on
+        """
         entry = {
-            "ts": datetime.utcnow().isoformat() + "Z",
+            "ts": datetime.now(timezone.utc).isoformat(),
             "type": "error",
-            "error_type": error_type,
-            "message": message,
-            **kwargs,
+            "error": error,
+            "iteration": iteration,
         }
         self._append(entry)
-
-    def get_entries(self) -> list:
-        """Get all entries logged so far"""
-        return self.entries.copy()
-
-    def get_summary(self) -> str:
-        """Generate text summary of reasoning for LLM context"""
-        if not self.entries:
-            return "No reasoning steps logged yet"
-
-        summary = []
-        for i, entry in enumerate(self.entries, 1):
-            ts = entry.get("ts", "?")
-            entry_type = entry.get("type", "?")
-
-            if entry_type == "start":
-                summary.append(f"[{i}] START: {entry.get('goal')}")
-            elif entry_type == "reasoning":
-                thought = entry.get("thought", "")
-                iteration = entry.get("iteration", 0)
-                summary.append(f"[{i}] REASON (iter {iteration}): {thought}")
-            elif entry_type == "action":
-                tool = entry.get("tool", "?")
-                result = entry.get("result", "")[:100]  # First 100 chars
-                summary.append(f"[{i}] ACTION: {tool} → {result}...")
-            elif entry_type == "decision":
-                action = entry.get("action", "?")
-                symbol = entry.get("symbol", "?")
-                confidence = entry.get("confidence", 0)
-                summary.append(
-                    f"[{i}] DECISION: {action} {symbol} (confidence: {confidence:.1f}%)"
-                )
-            elif entry_type == "error":
-                msg = entry.get("message", "")
-                summary.append(f"[{i}] ERROR: {msg}")
-
-        return "\n".join(summary)
-
-    def save_to_disk(self):
-        """Write all entries to JSONL file"""
-        try:
-            with open(self.scratchpad_path, "w") as f:
-                for entry in self.entries:
-                    f.write(json.dumps(entry) + "\n")
-            logger.info(f"Scratchpad saved: {len(self.entries)} entries")
-        except Exception as e:
-            logger.error(f"Failed to save scratchpad: {e}")
+        logger.error(f"Error on iteration {iteration}: {error}")
 
     def _append(self, entry: Dict[str, Any]):
-        """Internal: append entry to buffer"""
-        self.entries.append(entry)
-        logger.debug(f"Scratchpad entry: {entry['type']} - {entry.get('tool', entry.get('thought', ''))[:50]}")
+        """Append an entry to the scratchpad.
+
+        Args:
+            entry: Entry to append (dict)
+        """
+        self._entries.append(entry)
+
+        # Append to file
+        try:
+            with open(self.scratchpad_path, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except IOError as e:
+            logger.warning(f"Failed to write to scratchpad: {e}")
+
+    def get_entries(self) -> list:
+        """Get all scratchpad entries for this session.
+
+        Returns:
+            List of logged entries
+        """
+        return self._entries
+
+    def get_summary(self) -> str:
+        """Get a human-readable summary of the reasoning process.
+
+        Returns:
+            Formatted summary of the session
+        """
+        lines = ["=== Dexter Reasoning Session ===", ""]
+
+        for entry in self._entries:
+            ts = entry.get("ts", "")
+            entry_type = entry.get("type", "unknown")
+
+            if entry_type == "start":
+                lines.append(f"Goal: {entry.get('goal')}")
+                if entry.get('symbol'):
+                    lines.append(f"Symbol: {entry['symbol']}")
+                lines.append("")
+
+            elif entry_type == "reasoning":
+                lines.append(f"[Iteration {entry.get('iteration')}] Reasoning:")
+                lines.append(f"  {entry.get('thought')}")
+                lines.append("")
+
+            elif entry_type == "action":
+                lines.append(f"[Action] Called {entry.get('tool')}")
+                lines.append(f"  Result: {entry.get('result')[:200]}...")
+                lines.append("")
+
+            elif entry_type == "decision":
+                lines.append(f"[Decision] {entry.get('action')} {entry.get('symbol')}")
+                lines.append(f"  Confidence: {entry.get('confidence')}%")
+                lines.append(f"  Rationale: {entry.get('rationale')}")
+                lines.append("")
+
+            elif entry_type == "error":
+                lines.append(f"[ERROR] {entry.get('error')}")
+                lines.append("")
+
+        return "\n".join(lines)
+
+
+__all__ = ["Scratchpad"]
