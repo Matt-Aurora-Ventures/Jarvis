@@ -151,7 +151,7 @@ class EngagementAnalyzer:
                         hourly_engagement[hour] = []
 
                     hourly_engagement[hour].append(metric.quality_score)
-                except:
+                except (ValueError, AttributeError):
                     pass
 
             if not hourly_engagement:

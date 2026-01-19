@@ -79,7 +79,7 @@ class HostingerDeployer:
         finally:
             try:
                 ssh.close()
-            except:
+            except Exception:
                 pass
 
     def _deploy(self, ssh: paramiko.SSHClient, username: str) -> bool:

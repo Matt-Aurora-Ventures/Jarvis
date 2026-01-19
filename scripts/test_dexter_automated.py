@@ -44,7 +44,7 @@ def get_log_size():
     output = run_ssh_command(cmd)
     try:
         return int(output.split()[0])
-    except:
+    except (ValueError, IndexError, AttributeError):
         return 0
 
 def get_recent_logs(lines=50):
@@ -58,7 +58,7 @@ def count_dexter_invocations():
     output = run_ssh_command(cmd)
     try:
         return int(output.strip())
-    except:
+    except (ValueError, AttributeError):
         return 0
 
 def get_dexter_activity():
@@ -77,7 +77,7 @@ def get_conflicts():
     output = run_ssh_command(cmd)
     try:
         return int(output.strip())
-    except:
+    except (ValueError, AttributeError):
         return 0
 
 def monitor_live(duration_seconds=300):

@@ -21,6 +21,7 @@ Security:
 
 import asyncio
 import fnmatch
+import json
 import logging
 import os
 import re
@@ -28,9 +29,14 @@ import shutil
 import tempfile
 import time
 from collections import defaultdict
+from pathlib import Path
 from typing import Optional, List, Dict, Any, Set, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
+
+# State file for circuit breaker persistence - centralized under ~/.lifeos/
+from core.state_paths import STATE_PATHS
+CIRCUIT_BREAKER_STATE = STATE_PATHS.circuit_breaker_state
 
 from core.security.scrubber import get_scrubber
 
@@ -164,19 +170,70 @@ class XBotCircuitBreaker:
 
     After MAX_CONSECUTIVE_ERRORS, enters cooldown for COOLDOWN_DURATION seconds.
     Also enforces MIN_POST_INTERVAL between posts.
+
+    State is persisted to survive restarts.
     """
     _last_post: Optional[datetime] = None
     _error_count: int = 0
     _cooldown_until: Optional[datetime] = None
     _success_count: int = 0
+    _initialized: bool = False
 
     MIN_POST_INTERVAL = 60  # seconds between posts
     MAX_CONSECUTIVE_ERRORS = 3
     COOLDOWN_DURATION = 1800  # 30 minutes cooldown after errors
 
     @classmethod
+    def _load_state(cls):
+        """Load persisted state from file."""
+        if cls._initialized:
+            return
+        cls._initialized = True
+
+        try:
+            if CIRCUIT_BREAKER_STATE.exists():
+                data = json.loads(CIRCUIT_BREAKER_STATE.read_text())
+                if data.get("last_post"):
+                    cls._last_post = datetime.fromisoformat(data["last_post"])
+                    # Only respect if within last hour
+                    if (datetime.now() - cls._last_post).total_seconds() > 3600:
+                        cls._last_post = None
+                if data.get("cooldown_until"):
+                    cooldown = datetime.fromisoformat(data["cooldown_until"])
+                    if cooldown > datetime.now():
+                        cls._cooldown_until = cooldown
+                cls._error_count = data.get("error_count", 0)
+                cls._success_count = data.get("success_count", 0)
+                logger.info(f"XBotCircuitBreaker: Loaded state - last_post={cls._last_post}, errors={cls._error_count}")
+            else:
+                # No state file = first run, set last_post to now to prevent immediate spam
+                cls._last_post = datetime.now()
+                logger.info("XBotCircuitBreaker: No state file, initialized with cooldown")
+        except Exception as e:
+            logger.warning(f"XBotCircuitBreaker: Failed to load state: {e}")
+            cls._last_post = datetime.now()  # Safe default
+
+    @classmethod
+    def _save_state(cls):
+        """Save state to file."""
+        try:
+            CIRCUIT_BREAKER_STATE.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                "last_post": cls._last_post.isoformat() if cls._last_post else None,
+                "cooldown_until": cls._cooldown_until.isoformat() if cls._cooldown_until else None,
+                "error_count": cls._error_count,
+                "success_count": cls._success_count,
+                "saved_at": datetime.now().isoformat()
+            }
+            CIRCUIT_BREAKER_STATE.write_text(json.dumps(data, indent=2))
+        except Exception as e:
+            logger.warning(f"XBotCircuitBreaker: Failed to save state: {e}")
+
+    @classmethod
     def can_post(cls) -> tuple[bool, str]:
         """Check if posting is allowed."""
+        cls._load_state()  # Ensure state is loaded
+
         # Kill switch check
         if os.getenv("X_BOT_ENABLED", "true").lower() == "false":
             return False, "X_BOT_ENABLED=false"
@@ -197,14 +254,17 @@ class XBotCircuitBreaker:
     @classmethod
     def record_success(cls):
         """Record a successful post."""
+        cls._load_state()  # Ensure state is loaded
         cls._last_post = datetime.now()
         cls._error_count = 0
         cls._success_count += 1
+        cls._save_state()  # Persist state
         logger.debug(f"XBotCircuitBreaker: success #{cls._success_count}")
 
     @classmethod
     def record_error(cls):
         """Record an error. Triggers cooldown after MAX_CONSECUTIVE_ERRORS."""
+        cls._load_state()  # Ensure state is loaded
         cls._error_count += 1
         logger.warning(f"XBotCircuitBreaker: error #{cls._error_count}/{cls.MAX_CONSECUTIVE_ERRORS}")
 
@@ -213,6 +273,8 @@ class XBotCircuitBreaker:
             cls._error_count = 0
             logger.error(f"XBotCircuitBreaker: COOLDOWN ACTIVATED for {cls.COOLDOWN_DURATION}s")
 
+        cls._save_state()  # Persist state
+
     @classmethod
     def reset(cls):
         """Reset the circuit breaker (for testing)."""
@@ -220,10 +282,12 @@ class XBotCircuitBreaker:
         cls._error_count = 0
         cls._cooldown_until = None
         cls._success_count = 0
+        cls._save_state()
 
     @classmethod
     def status(cls) -> dict:
         """Get circuit breaker status."""
+        cls._load_state()  # Ensure state is loaded
         can_post, reason = cls.can_post()
         return {
             "can_post": can_post,

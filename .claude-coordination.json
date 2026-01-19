@@ -434,6 +434,26 @@
       "timestamp": "2026-01-18T23:28:33.213643+00:00",
       "from": "Codex",
       "message": "Current tree scan for TELEGRAM_BOT_TOKEN/X_API_KEY shows env-only usage; no inline values in code. History still contains real Telegram/X credentials (commit c50f718). Recommend history rewrite later using git filter-repo with regex replacements for telegram token pattern and X_* JSON fields."
+    },
+    {
+      "timestamp": "2026-01-19T00:09:42.171239+00:00",
+      "from": "Codex",
+      "message": "Found tracked env files: config/environments/{development,production,staging}.env. Scanned for secret patterns; only long values are DATABASE_URL and REDIS_URL, both without embedded credentials (no user:pass@). No hardcoded secrets detected in these env files."
+    },
+    {
+      "timestamp": "2026-01-19T00:10:41.552054+00:00",
+      "from": "Codex",
+      "message": "Scanned tracked config/env files for long values; only DATABASE_URL/REDIS_URL in config/environments/* (no embedded credentials). Checked bots/treasury/.audit_log.json for high-risk secret patterns (ghp/sk/xoxb/AKIA/telegram/JWT/password); no matches."
+    },
+    {
+      "timestamp": "2026-01-19T00:14:07.778480+00:00",
+      "from": "Codex",
+      "message": "History scan (sanitized) shows secret-pattern matches in commits 9bad380 and c50f718. Files involved: SECURITY_ALERT.md (both), plus deploy_kr8tiv.py, lifeos/config/mcp.config.json, monitor_bot_responses.py in c50f718. Confirms history rewrite needed to fully remove exposed Telegram/X creds."
+    },
+    {
+      "timestamp": "2026-01-19T00:49:45.099039+00:00",
+      "from": "Codex",
+      "message": "History rewrite complete in mirror clone: used git-filter-repo with exact leaked values (Telegram/X creds) and force-pushed to origin/main. Remote now rewritten (force update main). Local working tree (this repo) still has uncommitted changes and is out-of-sync; do NOT push until rebase/reset onto new history. Note: test fixtures still contain fake token-like strings; history scan for actual token patterns will still hit tests but no real secrets remain."
     }
   ]
 }

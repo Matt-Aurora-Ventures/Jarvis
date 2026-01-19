@@ -223,6 +223,11 @@ class ClaudeCLIHandler:
     RATE_LIMIT_MAX_REQUESTS = 5  # max requests per window
     RATE_LIMIT_MIN_GAP = 5  # minimum seconds between requests
 
+    # Circuit breaker configuration (like X bot)
+    CIRCUIT_BREAKER_ERROR_THRESHOLD = 3  # errors before tripping
+    CIRCUIT_BREAKER_COOLDOWN = 1800  # 30 minutes cooldown when tripped
+    CIRCUIT_BREAKER_WINDOW = 300  # 5 minute window for counting errors
+
     # Auto-retry configuration
     MAX_RETRIES = 2
     RETRY_BASE_DELAY = 2  # seconds
@@ -361,6 +366,10 @@ class ClaudeCLIHandler:
         # Rate limiting tracker: user_id -> list of request timestamps
         self._request_history: Dict[int, List[float]] = defaultdict(list)
 
+        # Circuit breaker state
+        self._error_timestamps: List[float] = []  # Recent error timestamps
+        self._circuit_breaker_tripped_at: Optional[float] = None
+
         # Execution metrics
         self._metrics = {
             "total_executions": 0,
@@ -468,6 +477,79 @@ class ClaudeCLIHandler:
     def record_request(self, user_id: int) -> None:
         """Record a request for rate limiting."""
         self._request_history[user_id].append(time.time())
+
+    def check_circuit_breaker(self) -> Tuple[bool, str]:
+        """Check if circuit breaker is tripped.
+
+        Returns:
+            Tuple of (allowed, reason_if_blocked)
+        """
+        now = time.time()
+
+        # Check if circuit breaker is currently tripped
+        if self._circuit_breaker_tripped_at:
+            time_since_trip = now - self._circuit_breaker_tripped_at
+            if time_since_trip < self.CIRCUIT_BREAKER_COOLDOWN:
+                remaining = int(self.CIRCUIT_BREAKER_COOLDOWN - time_since_trip)
+                minutes = remaining // 60
+                seconds = remaining % 60
+                return False, f"circuit breaker active. too many errors. cooldown: {minutes}m {seconds}s"
+            else:
+                # Cooldown expired, reset circuit breaker
+                self._circuit_breaker_tripped_at = None
+                self._error_timestamps = []
+                logger.info("Circuit breaker reset after cooldown")
+
+        # Clean old errors outside window
+        window_start = now - self.CIRCUIT_BREAKER_WINDOW
+        self._error_timestamps = [ts for ts in self._error_timestamps if ts > window_start]
+
+        return True, ""
+
+    def record_error(self) -> None:
+        """Record an error for circuit breaker tracking."""
+        now = time.time()
+        self._error_timestamps.append(now)
+
+        # Clean old errors
+        window_start = now - self.CIRCUIT_BREAKER_WINDOW
+        self._error_timestamps = [ts for ts in self._error_timestamps if ts > window_start]
+
+        # Check if we should trip the circuit breaker
+        if len(self._error_timestamps) >= self.CIRCUIT_BREAKER_ERROR_THRESHOLD:
+            self._circuit_breaker_tripped_at = now
+            logger.warning(
+                f"Circuit breaker TRIPPED: {len(self._error_timestamps)} errors in "
+                f"{self.CIRCUIT_BREAKER_WINDOW}s window. Cooldown: {self.CIRCUIT_BREAKER_COOLDOWN}s"
+            )
+
+    def get_circuit_breaker_status(self) -> Dict:
+        """Get current circuit breaker status."""
+        now = time.time()
+
+        # Clean old errors
+        window_start = now - self.CIRCUIT_BREAKER_WINDOW
+        recent_errors = [ts for ts in self._error_timestamps if ts > window_start]
+
+        if self._circuit_breaker_tripped_at:
+            time_since_trip = now - self._circuit_breaker_tripped_at
+            if time_since_trip < self.CIRCUIT_BREAKER_COOLDOWN:
+                remaining = int(self.CIRCUIT_BREAKER_COOLDOWN - time_since_trip)
+                return {
+                    "state": "OPEN",
+                    "errors_in_window": len(recent_errors),
+                    "threshold": self.CIRCUIT_BREAKER_ERROR_THRESHOLD,
+                    "cooldown_remaining": remaining,
+                    "tripped_at": datetime.fromtimestamp(self._circuit_breaker_tripped_at).isoformat(),
+                }
+
+        return {
+            "state": "CLOSED",
+            "errors_in_window": len(recent_errors),
+            "threshold": self.CIRCUIT_BREAKER_ERROR_THRESHOLD,
+            "cooldown_remaining": 0,
+            "tripped_at": None,
+        }
 
     def is_transient_error(self, error_msg: str) -> bool:
         """Check if error is likely transient and worth retrying."""
@@ -962,6 +1044,12 @@ class ClaudeCLIHandler:
             logger.warning(f"Unauthorized Claude CLI attempt by user {user_id} ({username})")
             return False, "access denied. admin only.", "Access denied. Admin only."
 
+        # Check circuit breaker FIRST (before rate limits)
+        cb_allowed, cb_msg = self.check_circuit_breaker()
+        if not cb_allowed:
+            logger.warning(f"Circuit breaker blocked request from user {user_id}: {cb_msg}")
+            return False, cb_msg, "Circuit breaker active."
+
         # Check rate limits
         allowed, rate_msg = self.check_rate_limit(user_id)
         if not allowed:
@@ -1054,6 +1142,7 @@ Execute this request. Be concise in your response. Follow any standing instructi
                     sandbox_dir, sandbox_root, before_stats = self._prepare_isolated_workspace()
                 except Exception as e:
                     self.record_execution(False, time.time() - start_time, user_id)
+                    self.record_error()  # Circuit breaker tracking
                     jarvis_error = self.get_jarvis_response(False, "sandbox setup failed")
                     return False, jarvis_error, f"Sandbox setup failed: {e}"
 
@@ -1078,11 +1167,13 @@ Execute this request. Be concise in your response. Follow any standing instructi
 
                 if apply_error:
                     self.record_execution(False, time.time() - start_time, user_id)
+                    self.record_error()  # Circuit breaker tracking
                     jarvis_error = self.get_jarvis_response(False, "failed to apply changes")
                     return False, jarvis_error, f"Apply changes failed: {apply_error}"
 
                 if not cli_success:
                     self.record_execution(False, time.time() - start_time, user_id)
+                    self.record_error()  # Circuit breaker tracking
                     error_output = stderr_str or "Command execution failed."
                     sanitized_error = self.sanitize_output(error_output, paranoid=True)
                     summary_error = sanitized_error[:200] if sanitized_error else "execution failed"
@@ -1139,10 +1230,12 @@ Execute this request. Be concise in your response. Follow any standing instructi
             except FileNotFoundError:
                 logger.error(f"Claude CLI not found at: {self._claude_path}")
                 self.record_execution(False, time.time() - start_time, user_id)
+                self.record_error()  # Circuit breaker tracking
                 return False, "Claude CLI not found", f"Tried: {self._claude_path}. Install via: npm install -g @anthropic-ai/claude-code"
             except Exception as e:
                 logger.error(f"Claude CLI execution error: {e}")
                 self.record_execution(False, time.time() - start_time, user_id)
+                self.record_error()  # Circuit breaker tracking
                 return False, f"Error: {str(e)[:100]}", str(e)
             finally:
                 # Clean up queue tracking
