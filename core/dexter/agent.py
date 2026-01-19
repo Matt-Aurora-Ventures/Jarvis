@@ -5,10 +5,49 @@ Uses Grok-3 to reason about market conditions and make intelligent trading decis
 """
 
 import logging
+from enum import Enum
 from typing import Dict, Any, Optional
 import uuid
 
 logger = logging.getLogger(__name__)
+
+
+class DecisionType(str, Enum):
+    """Decision types for Dexter agent."""
+    BUY = "BUY"
+    SELL = "SELL"
+    HOLD = "HOLD"
+    UNKNOWN = "UNKNOWN"
+
+
+class ReActDecision:
+    """ReAct decision output."""
+
+    def __init__(self, action: str, symbol: str, confidence: float, rationale: str, iterations: int = 0):
+        """Initialize decision.
+
+        Args:
+            action: BUY, SELL, or HOLD
+            symbol: Token symbol
+            confidence: Confidence level (0-100)
+            rationale: Decision rationale
+            iterations: Number of reasoning iterations
+        """
+        self.action = action
+        self.symbol = symbol
+        self.confidence = confidence
+        self.rationale = rationale
+        self.iterations = iterations
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "action": self.action,
+            "symbol": self.symbol,
+            "confidence": self.confidence,
+            "rationale": self.rationale,
+            "iterations": self.iterations,
+        }
 
 
 class DexterAgent:
@@ -36,4 +75,4 @@ class DexterAgent:
             "cost": self._cost,
         }
 
-__all__ = ["DexterAgent"]
+__all__ = ["DexterAgent", "DecisionType", "ReActDecision"]
