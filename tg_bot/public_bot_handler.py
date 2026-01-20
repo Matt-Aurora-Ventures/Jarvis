@@ -28,6 +28,8 @@ from bots.treasury.trading import TradingEngine
 
 logger = logging.getLogger(__name__)
 
+DEMO_AUTHORIZED_USERS = ["matthaynes88"]
+
 
 class PublicBotHandler:
     """
@@ -45,12 +47,89 @@ class PublicBotHandler:
     /help - Help and commands
     """
 
-    def __init__(self, trading_engine: TradingEngine):
+    def __init__(self, trading_engine: Optional[TradingEngine] = None):
         """Initialize public bot handler."""
         self.trading_engine = trading_engine
         self.user_manager = PublicUserManager()
         self.algorithm = AdaptiveAlgorithm()
         self.token_analyzer = TokenAnalyzer()
+
+    def _demo_disclaimer_text(self) -> str:
+        return (
+            "⚠️ JARVIS V1 - EARLY ACCESS WARNING ⚠️\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Look... I need to be completely honest with you.\n\n"
+            "This software is HIGHLY EXPERIMENTAL and largely\n"
+            "UNTESTED. We're building in public and you're\n"
+            "one of the first people to use this.\n\n"
+            "🚨 THE REAL RISKS:\n"
+            "• You are trading with REAL money\n"
+            "• Bugs WILL exist - this is very early software\n"
+            "• You could lose EVERYTHING you deposit\n"
+            "• Smart contracts can fail unexpectedly\n"
+            "• Transactions can get stuck or fail\n"
+            "• The bot might execute trades incorrectly\n"
+            "• Price feeds might lag or be wrong\n"
+            "• There are probably bugs we haven't found yet\n\n"
+            "💸 MY STRONG RECOMMENDATION:\n"
+            "Please limit your funds to something you genuinely\n"
+            "wouldn't miss if something catastrophic happened.\n\n"
+            "Suggested: $50-100 MAX for testing\n\n"
+            "We have a LOT of bugs to find and fix. Your\n"
+            "willingness to help test means everything, but\n"
+            "please protect yourself first.\n\n"
+            "This is so, so early. Thank you for being here.\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "By continuing, you fully acknowledge these risks.\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        )
+
+    async def _show_demo_disclaimer(self, update: Update) -> None:
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ I Understand & Accept the Risks", callback_data="demo_accept"),
+                InlineKeyboardButton("❌ Exit", callback_data="demo_exit"),
+            ]
+        ]
+        await update.message.reply_text(
+            self._demo_disclaimer_text(),
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    async def _show_main_menu(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+        text = (
+            "🤖 JARVIS Trading Bot\n\n"
+            "Demo mode enabled.\n\n"
+            "Pick an option:"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("🧠 Jarvis Picks", callback_data="menu_picks"),
+                InlineKeyboardButton("📊 Sentiment", callback_data="menu_sentiment"),
+            ],
+            [
+                InlineKeyboardButton("💰 Buy", callback_data="menu_buy"),
+                InlineKeyboardButton("💸 Sell", callback_data="menu_sell"),
+            ],
+            [
+                InlineKeyboardButton("👛 Wallet", callback_data="menu_wallet"),
+                InlineKeyboardButton("⚙️ Settings", callback_data="menu_settings"),
+            ],
+        ]
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    async def cmd_demo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /demo command (restricted)."""
+        username = update.effective_user.username or ""
+        if username not in DEMO_AUTHORIZED_USERS:
+            await update.message.reply_text("Demo mode is not available.")
+            return
+
+        await self._show_demo_disclaimer(update)
 
     # ==================== START AND REGISTRATION ====================
 
@@ -644,3 +723,84 @@ Questions? Use /support
         except Exception as e:
             logger.error(f"Help command failed: {e}")
             await update.message.reply_text(f"❌ Error: {e}")
+
+    # ==================== CALLBACKS ====================
+
+    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Route inline button callbacks for the public bot."""
+        query = update.callback_query
+        if not query:
+            return
+
+        data = query.data or ""
+        await query.answer()
+
+        if data == "ui_test_ping":
+            await query.edit_message_text("UI callback OK.")
+            return
+
+        if data == "demo_exit":
+            await query.edit_message_text("Demo mode canceled.")
+            return
+
+        if data == "demo_accept":
+            context.user_data["demo_ack"] = True
+            await query.edit_message_text("Demo mode enabled.")
+            await self._show_main_menu(query.message.chat_id, context)
+            return
+
+        if data == "cancel":
+            await query.edit_message_text("Canceled.")
+            return
+
+        if data.startswith("buy_"):
+            token_symbol = data.split("_", 1)[1]
+            await query.edit_message_text(
+                f"Use /buy {token_symbol} <amount> to place an order."
+            )
+            return
+
+        if data.startswith("confirm_buy_"):
+            if not self.trading_engine:
+                await query.edit_message_text("Trading engine not available.")
+                return
+            await query.edit_message_text("Trade execution not wired yet.")
+            return
+
+        if data in {
+            "create_wallet",
+            "import_wallet",
+            "export_wallet",
+            "settings_risk",
+            "settings_limits",
+            "settings_safety",
+            "settings_learning",
+        }:
+            await query.edit_message_text("This action is not wired yet.")
+            return
+
+        if data == "menu_picks":
+            await query.edit_message_text("Use /picks to view Jarvis Picks.")
+            return
+
+        if data == "menu_sentiment":
+            await query.edit_message_text("Use /sentiment <token> to view sentiment.")
+            return
+
+        if data == "menu_buy":
+            await query.edit_message_text("Use /buy <token> <amount> to place a buy.")
+            return
+
+        if data == "menu_sell":
+            await query.edit_message_text("Use /sell to view positions.")
+            return
+
+        if data == "menu_wallet":
+            await query.edit_message_text("Use /wallets to manage wallets.")
+            return
+
+        if data == "menu_settings":
+            await query.edit_message_text("Use /settings to adjust preferences.")
+            return
+
+        await query.edit_message_text("Action not supported yet.")

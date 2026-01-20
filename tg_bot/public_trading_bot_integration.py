@@ -32,6 +32,24 @@ from bots.treasury.trading import TradingEngine
 logger = logging.getLogger(__name__)
 
 
+def register_public_handlers(app: Application, bot_handler: PublicBotHandler) -> None:
+    """Register command and callback handlers for the public trading bot."""
+    from telegram.ext import CommandHandler, CallbackQueryHandler
+
+    app.add_handler(CommandHandler("start", bot_handler.cmd_start))
+    app.add_handler(CommandHandler("analyze", bot_handler.cmd_analyze))
+    app.add_handler(CommandHandler("buy", bot_handler.cmd_buy))
+    app.add_handler(CommandHandler("sell", bot_handler.cmd_sell))
+    app.add_handler(CommandHandler("portfolio", bot_handler.cmd_portfolio))
+    app.add_handler(CommandHandler("performance", bot_handler.cmd_performance))
+    app.add_handler(CommandHandler("wallets", bot_handler.cmd_wallets))
+    app.add_handler(CommandHandler("settings", bot_handler.cmd_settings))
+    app.add_handler(CommandHandler("help", bot_handler.cmd_help))
+    app.add_handler(CommandHandler("demo", bot_handler.cmd_demo))
+
+    app.add_handler(CallbackQueryHandler(bot_handler.handle_callback))
+
+
 class PublicTradingBotIntegration:
     """
     Complete public trading bot integration.
@@ -39,16 +57,23 @@ class PublicTradingBotIntegration:
     Manages lifecycle and coordination of all bot systems.
     """
 
-    def __init__(self, trading_engine: TradingEngine, bot_token: str):
+    def __init__(
+        self,
+        bot_token: str,
+        trading_engine: Optional[TradingEngine] = None,
+        enable_live_trading: bool = False,
+    ):
         """
         Initialize integrated public bot.
 
         Args:
-            trading_engine: Treasury trading engine for order execution
             bot_token: Telegram bot token
+            trading_engine: Optional trading engine (can be wired later)
+            enable_live_trading: Toggle for live trading mode
         """
-        self.trading_engine = trading_engine
         self.bot_token = bot_token
+        self.trading_engine = trading_engine
+        self.enable_live_trading = enable_live_trading
 
         # Initialize all services
         self.user_manager = PublicUserManager()
@@ -109,20 +134,7 @@ class PublicTradingBotIntegration:
             if not self.app or not self.bot_handler:
                 raise RuntimeError("App or bot handler not initialized")
 
-            from telegram.ext import CommandHandler, CallbackQueryHandler
-
-            # Core commands
-            self.app.add_handler(CommandHandler("start", self.bot_handler.cmd_start))
-            self.app.add_handler(CommandHandler("analyze", self.bot_handler.cmd_analyze))
-            self.app.add_handler(CommandHandler("buy", self.bot_handler.cmd_buy))
-            self.app.add_handler(CommandHandler("sell", self.bot_handler.cmd_sell))
-            self.app.add_handler(CommandHandler("portfolio", self.bot_handler.cmd_portfolio))
-            self.app.add_handler(CommandHandler("performance", self.bot_handler.cmd_performance))
-            self.app.add_handler(CommandHandler("wallets", self.bot_handler.cmd_wallets))
-            self.app.add_handler(CommandHandler("settings", self.bot_handler.cmd_settings))
-            self.app.add_handler(CommandHandler("help", self.bot_handler.cmd_help))
-
-            # Callback handlers would go here
+            register_public_handlers(self.app, self.bot_handler)
 
             logger.info("✅ All handlers registered")
 
@@ -434,7 +446,10 @@ async def create_public_trading_bot(trading_engine: TradingEngine,
         Initialized bot integration
     """
     try:
-        bot = PublicTradingBotIntegration(trading_engine, bot_token)
+        bot = PublicTradingBotIntegration(
+            bot_token=bot_token,
+            trading_engine=trading_engine,
+        )
 
         # Initialize services
         success = await bot.initialize()
