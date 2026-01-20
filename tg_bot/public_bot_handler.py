@@ -12,18 +12,23 @@ Enables regular users to:
 This is the public-facing interface separate from admin Treasury Bot.
 """
 
-import logging
 import asyncio
-from typing import Optional, List, Dict, Any
+import logging
+import os
+import secrets
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
 
+from core.public_trading_service import PublicTradingService, ResolvedToken
 from core.public_user_manager import PublicUserManager, UserProfile, UserRiskLevel, Wallet
 from core.adaptive_algorithm import AdaptiveAlgorithm, TradeOutcome
 from core.token_analyzer import TokenAnalyzer
+from core.wallet_service import WalletService, get_wallet_service
+from core import x_sentiment
 from bots.treasury.trading import TradingEngine
 
 logger = logging.getLogger(__name__)
@@ -47,12 +52,20 @@ class PublicBotHandler:
     /help - Help and commands
     """
 
-    def __init__(self, trading_engine: Optional[TradingEngine] = None):
+    def __init__(
+        self,
+        trading_engine: Optional[TradingEngine] = None,
+        wallet_service: Optional[WalletService] = None,
+        public_trading: Optional[PublicTradingService] = None,
+    ):
         """Initialize public bot handler."""
         self.trading_engine = trading_engine
+        self.wallet_service = wallet_service
+        self.public_trading = public_trading
         self.user_manager = PublicUserManager()
         self.algorithm = AdaptiveAlgorithm()
         self.token_analyzer = TokenAnalyzer()
+        self.default_slippage_bps = 100
 
     def _demo_disclaimer_text(self) -> str:
         return (
@@ -122,6 +135,44 @@ class PublicBotHandler:
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
 
+    async def _get_wallet_service(self) -> WalletService:
+        if self.wallet_service is None:
+            self.wallet_service = await get_wallet_service()
+        return self.wallet_service
+
+    async def _get_public_trading(self) -> PublicTradingService:
+        if self.public_trading is None:
+            wallet_service = await self._get_wallet_service()
+            self.public_trading = PublicTradingService(wallet_service)
+        return self.public_trading
+
+    def _get_public_wallet_password(self) -> Optional[str]:
+        for key in (
+            "JARVIS_PUBLIC_WALLET_PASSWORD",
+            "PUBLIC_WALLET_PASSWORD",
+            "JARVIS_WALLET_PASSWORD",
+        ):
+            value = os.environ.get(key)
+            if value:
+                return value
+        return None
+
+    def _risk_warning_block(self) -> str:
+        return (
+            "âš ï¸ V1 Early Access - Bugs may exist\n"
+            "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n"
+            "Only trade what you can afford to lose."
+        )
+
+    def _large_trade_warning(self, amount_sol: float) -> str:
+        if amount_sol <= 0.5:
+            return ""
+        return (
+            "\n\nâš ï¸ LARGER TRADE\n"
+            "You're trading a large amount for early V1 software.\n"
+            "Consider reducing size while testing."
+        )
+
     async def cmd_demo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /demo command (restricted)."""
         username = update.effective_user.username or ""
@@ -132,84 +183,89 @@ class PublicBotHandler:
         await self._show_demo_disclaimer(update)
 
     # ==================== START AND REGISTRATION ====================
-
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start command - register or welcome back."""
+        """Handle /start command - onboarding and wallet creation."""
         try:
             user_id = update.effective_user.id
             username = update.effective_user.username or update.effective_user.first_name
 
-            # Check if user exists
             profile = self.user_manager.get_user_profile(user_id)
-
             if not profile:
-                # New user - register
                 success, profile = self.user_manager.register_user(user_id, username)
                 if not success:
-                    await update.message.reply_text(
-                        "❌ Registration failed. Please try again."
-                    )
+                    await update.message.reply_text("? Registration failed. Please try again.")
                     return
 
-                # Welcome message
-                welcome_text = f"""
-🎉 <b>Welcome to Jarvis Trading Bot!</b>
-
-I'm your AI-powered token analyzer and trading assistant. Here's what I can do:
-
-<b>📊 Analysis</b>
-/analyze &lt;token&gt; - Deep analysis of any Solana token
-    Example: /analyze SOL
-
-<b>💰 Trading</b>
-/buy &lt;token&gt; - Buy a token
-/sell - Close positions
-/portfolio - View your holdings
-/performance - Your trading stats
-
-<b>🔐 Wallets</b>
-/wallets - Create, import, manage wallets
-/export - Export wallet backup
-
-<b>⚙️ Settings</b>
-/settings - Adjust risk level and preferences
-/help - Full command reference
-
-<b>⚡ Tips</b>
-• Start with conservative risk level
-• Always set stop losses
-• Never invest more than you can afford to lose
-• Use /analyze to check tokens first
-
-Ready? Try: /analyze BTC
-"""
-
+            existing_wallet = self.user_manager.get_primary_wallet(user_id)
+            if existing_wallet:
                 await update.message.reply_text(
-                    welcome_text,
-                    parse_mode=ParseMode.HTML
+                    f"? Wallet ready: <code>{existing_wallet.public_key}</code>
+
+"
+                    "Use /wallet for balances or /buy to trade.",
+                    parse_mode=ParseMode.HTML,
                 )
-            else:
-                # Returning user
-                welcome_back = f"""
-👋 Welcome back, {username}!
+                return
 
-Your stats:
-📈 Trades: {self.user_manager.get_user_stats(user_id).total_trades if self.user_manager.get_user_stats(user_id) else 0}
-💵 P&L: ${self.user_manager.get_user_stats(user_id).total_pnl_usd:.2f if self.user_manager.get_user_stats(user_id) else 0}
-
-What would you like to do?
-/analyze - Analyze a token
-/portfolio - View holdings
-/help - Full commands
-"""
+            wallet_password = self._get_public_wallet_password()
+            if not wallet_password:
                 await update.message.reply_text(
-                    welcome_back,
-                    parse_mode=ParseMode.HTML
+                    "? Wallet encryption not configured.
+"
+                    "Set JARVIS_PUBLIC_WALLET_PASSWORD (or PUBLIC_WALLET_PASSWORD)."
                 )
+                return
+
+            wallet_service = await self._get_wallet_service()
+            generated_wallet, encrypted_key = await wallet_service.create_new_wallet(
+                user_password=wallet_password
+            )
+
+            context.user_data["pending_wallet"] = {
+                "public_key": generated_wallet.public_key,
+                "encrypted_key": encrypted_key,
+            }
+
+            onboarding_text = (
+                "<b>?? Your New Wallet</b>
+
+"
+                "Address:
+"
+                f"<code>{generated_wallet.public_key}</code>
+
+"
+                "<b>?? SAVE THIS NOW</b>
+"
+                "This will only be shown once.
+
+"
+                f"Seed phrase:
+<code>{generated_wallet.seed_phrase}</code>
+
+"
+                f"Private key:
+<tg-spoiler>{generated_wallet.private_key}</tg-spoiler>
+
+"
+                "We will NEVER ask for your seed phrase or private key."
+            )
+
+            keyboard = [[
+                InlineKeyboardButton("? I saved my seed phrase", callback_data="onboard_confirm"),
+                InlineKeyboardButton("? Cancel", callback_data="onboard_cancel"),
+            ]]
+
+            await update.message.reply_text(
+                onboarding_text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                disable_web_page_preview=True,
+            )
 
         except Exception as e:
             logger.error(f"Start command failed: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            await update.message.reply_text(f"? Error: {e}")
 
     # ==================== TOKEN ANALYSIS ====================
 
@@ -331,119 +387,68 @@ What would you like to do?
             return None
 
     # ==================== TRADING ====================
-
     async def cmd_buy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /buy <token> <amount_usd> command."""
+        """Handle /buy command - interactive buy flow."""
         try:
             user_id = update.effective_user.id
             profile = self.user_manager.get_user_profile(user_id)
 
             if not profile:
-                await update.message.reply_text(
-                    "❌ Please register first with /start"
-                )
+                await update.message.reply_text("? Please register first with /start")
                 return
 
-            # Check rate limits
-            allowed, reason = self.user_manager.check_rate_limits(user_id)
-            if not allowed:
-                await update.message.reply_text(f"❌ {reason}")
+            token_input = context.args[0] if context.args else None
+            if token_input:
+                await self._handle_buy_token_input(update, context, token_input)
                 return
 
-            if len(context.args) < 2:
-                await update.message.reply_text(
-                    "💰 Buy a token\n\n"
-                    "Usage: /buy &lt;token&gt; &lt;amount_usd&gt;\n"
-                    "Example: /buy SOL 50",
-                    parse_mode=ParseMode.HTML
-                )
-                return
-
-            token_symbol = context.args[0].upper()
-            try:
-                amount_usd = float(context.args[1])
-            except ValueError:
-                await update.message.reply_text(f"❌ Invalid amount: {context.args[1]}")
-                return
-
-            # Validate amount
-            if amount_usd < 10:
-                await update.message.reply_text("❌ Minimum trade size: $10")
-                return
-
-            if amount_usd > 10_000:
-                await update.message.reply_text("❌ Maximum trade size: $10,000")
-                return
-
-            # Get user's primary wallet
-            wallet = self.user_manager.get_primary_wallet(user_id)
-            if not wallet:
-                await update.message.reply_text(
-                    "❌ No wallet found. Create one with /wallets"
-                )
-                return
-
-            # Request confirmation
-            confirm_text = f"""
-💰 <b>Confirm Buy Order</b>
-
-Token: {token_symbol}
-Amount: ${amount_usd:.2f}
-Wallet: {wallet.public_key[:10]}...
-
-<b>Risk Level:</b> {profile.risk_level.name}
-<b>Slippage:</b> 2%
-
-<b>⚠️ Risks:</b>
-• Market volatility
-• Smart contract risk
-• Impermanent loss
-
-<i>Proceed?</i>
-"""
-
-            keyboard = [[
-                InlineKeyboardButton("✅ Confirm", callback_data=f"confirm_buy_{token_symbol}_{amount_usd}"),
-                InlineKeyboardButton("❌ Cancel", callback_data="cancel"),
-            ]]
-
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
+            context.user_data["flow"] = "buy_token"
+            context.user_data["flow_data"] = {}
             await update.message.reply_text(
-                confirm_text,
-                parse_mode=ParseMode.HTML,
-                reply_markup=reply_markup
+                "Send token address or symbol to buy. Example: BONK"
             )
 
         except Exception as e:
             logger.error(f"Buy command failed: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
-
+            await update.message.reply_text(f"? Error: {e}")
     async def cmd_sell(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /sell command - list positions to sell."""
+        """Handle /sell command - list holdings to sell."""
         try:
             user_id = update.effective_user.id
+            profile = self.user_manager.get_user_profile(user_id)
+            if not profile:
+                await update.message.reply_text("? Please register first with /start")
+                return
 
-            # Get user's positions (from trading engine)
-            positions = []  # Would fetch from trading engine in production
+            wallet = self.user_manager.get_primary_wallet(user_id)
+            if not wallet:
+                await update.message.reply_text("? No wallet found. Create one with /start")
+                return
 
-            if not positions:
+            trading = await self._get_public_trading()
+            portfolio = await trading.get_portfolio(wallet.public_key)
+            holdings = [h for h in portfolio.holdings if h.mint != trading.jupiter.SOL_MINT]
+
+            if not holdings:
                 await update.message.reply_text(
-                    "📊 No open positions to sell.\n\n"
-                    "Use /buy to open a position."
+                    "No tokens found to sell. Deposit funds or buy a token first."
                 )
                 return
 
-            # Display positions with sell buttons
-            text = "<b>📊 Your Positions</b>\n\n"
-            for pos in positions:
-                text += f"{pos['symbol']}: {pos['amount']:.4f} @ ${pos['entry']:.6f}\n"
+            context.user_data["sell_holdings"] = holdings
+            keyboard = []
+            for idx, holding in enumerate(holdings[:10]):
+                label = f"{holding.symbol} | {holding.amount:.4f}"
+                keyboard.append([InlineKeyboardButton(label, callback_data=f"sell_pick:{idx}")])
 
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+            await update.message.reply_text(
+                "Select a token to sell:",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
 
         except Exception as e:
             logger.error(f"Sell command failed: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            await update.message.reply_text(f"? Error: {e}")
 
     # ==================== PORTFOLIO ====================
 
@@ -547,68 +552,225 @@ Use /settings to adjust risk level.
         except Exception as e:
             logger.error(f"Performance command failed: {e}")
             await update.message.reply_text(f"❌ Error: {e}")
-
-    # ==================== WALLET MANAGEMENT ====================
-
-    async def cmd_wallets(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /wallets command - wallet management."""
+    async def cmd_wallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /wallet command - show wallet overview."""
         try:
             user_id = update.effective_user.id
-            wallets = self.user_manager.get_user_wallets(user_id)
+            wallet = self.user_manager.get_primary_wallet(user_id)
+            if not wallet:
+                await update.message.reply_text("? No wallet found. Create one with /start")
+                return
 
-            if not wallets:
-                wallet_text = """
-🔐 <b>Wallet Management</b>
+            trading = await self._get_public_trading()
+            portfolio = await trading.get_portfolio(wallet.public_key)
 
-No wallets found. Create one:
+            total_value = portfolio.sol_value_usd + sum(h.value_usd for h in portfolio.holdings)
+            lines = [
+                "<b>?? Wallet</b>",
+                "",
+                f"Address: <code>{wallet.public_key}</code>",
+                f"SOL: {portfolio.sol_balance:.4f} (~${portfolio.sol_value_usd:,.2f})",
+                "",
+                "<b>Top Holdings</b>",
+            ]
 
-<b>Create New Wallet</b>
-The bot will generate a new Solana wallet for you.
-
-<b>Import Existing Wallet</b>
-Import a wallet using your seed phrase or private key.
-
-What would you like to do?
-"""
-
-                keyboard = [[
-                    InlineKeyboardButton("➕ Create New", callback_data="create_wallet"),
-                    InlineKeyboardButton("📥 Import", callback_data="import_wallet"),
-                ]]
-
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
-                await update.message.reply_text(
-                    wallet_text,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=reply_markup
-                )
+            if portfolio.holdings:
+                for holding in portfolio.holdings[:10]:
+                    lines.append(
+                        f"? {holding.symbol}: {holding.amount:.4f} (~${holding.value_usd:,.2f})"
+                    )
             else:
-                # Show existing wallets
-                wallet_text = "<b>🔐 Your Wallets</b>\n\n"
+                lines.append("? No token holdings yet")
 
-                for i, wallet in enumerate(wallets):
-                    primary = "👑 PRIMARY" if wallet.is_primary else ""
-                    wallet_text += f"<b>Wallet {i+1}</b> {primary}\n"
-                    wallet_text += f"Address: <code>{wallet.public_key}</code>\n"
-                    wallet_text += f"Balance: {wallet.balance_sol:.4f} SOL\n\n"
+            lines.append("")
+            lines.append(f"Total value: ${total_value:,.2f}")
 
-                keyboard = [[
-                    InlineKeyboardButton("➕ Add Wallet", callback_data="create_wallet"),
-                    InlineKeyboardButton("📤 Export", callback_data="export_wallet"),
-                ]]
+            keyboard = [
+                [
+                    InlineKeyboardButton("?? Deposit", callback_data="wallet_deposit"),
+                    InlineKeyboardButton("?? Withdraw", callback_data="wallet_withdraw"),
+                ],
+                [
+                    InlineKeyboardButton("?? Export Key", callback_data="wallet_export"),
+                    InlineKeyboardButton("?? Import Wallet", callback_data="wallet_import"),
+                ],
+            ]
 
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
-                await update.message.reply_text(
-                    wallet_text,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=reply_markup
-                )
+            await update.message.reply_text(
+                "
+".join(lines),
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                disable_web_page_preview=True,
+            )
 
         except Exception as e:
-            logger.error(f"Wallets command failed: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Wallet command failed: {e}")
+            await update.message.reply_text(f"? Error: {e}")
+
+    async def cmd_send(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /send command - start send flow."""
+        try:
+            user_id = update.effective_user.id
+            wallet = self.user_manager.get_primary_wallet(user_id)
+            if not wallet:
+                await update.message.reply_text("? No wallet found. Create one with /start")
+                return
+
+            context.user_data["flow"] = "send_address"
+            context.user_data["flow_data"] = {}
+            await update.message.reply_text("Enter destination Solana address:")
+
+        except Exception as e:
+            logger.error(f"Send command failed: {e}")
+            await update.message.reply_text(f"? Error: {e}")
+
+    async def cmd_sentiment(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /sentiment <token> command."""
+        try:
+            if not context.args:
+                await update.message.reply_text(
+                    "Usage: /sentiment <token symbol or address>"
+                )
+                return
+
+            token_input = context.args[0]
+            trading = await self._get_public_trading()
+            resolved = await trading.resolve_token(token_input)
+            if not resolved:
+                await update.message.reply_text("? Could not resolve token.")
+                return
+
+            sentiment = await asyncio.to_thread(
+                x_sentiment.analyze_sentiment,
+                f"${resolved.symbol} Solana token trading sentiment",
+                None,
+                "trading",
+            )
+
+            sentiment_label = "NEUTRAL"
+            score = 50
+            confidence_pct = 50
+            if sentiment:
+                confidence_pct = int(sentiment.confidence * 100)
+                if sentiment.sentiment == "positive":
+                    sentiment_label = "BULLISH"
+                    score = min(100, 50 + confidence_pct // 2)
+                elif sentiment.sentiment == "negative":
+                    sentiment_label = "BEARISH"
+                    score = max(0, 50 - confidence_pct // 2)
+                else:
+                    score = 50
+
+            message = (
+                "?? JARVIS SENTIMENT ANALYSIS
+"
+                "????????????????????????????
+"
+                f"Token: {resolved.symbol}
+"
+                "????????????????????????????
+
+"
+                f"Sentiment Score: {score}/100 ({sentiment_label})
+"
+                f"Confidence: {confidence_pct}%
+
+"
+                "?? V1 Early Access - Trade small amounts
+"
+                "????????????????????????????"
+            )
+
+            context.user_data["sentiment_token"] = {
+                "mint": resolved.mint,
+                "symbol": resolved.symbol,
+            }
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("Buy 0.1 SOL", callback_data="sentiment_buy:0.1"),
+                    InlineKeyboardButton("Buy 0.5 SOL", callback_data="sentiment_buy:0.5"),
+                    InlineKeyboardButton("Buy 1 SOL", callback_data="sentiment_buy:1"),
+                ]
+            ]
+
+            await update.message.reply_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+
+        except Exception as e:
+            logger.error(f"Sentiment command failed: {e}")
+            await update.message.reply_text(f"? Error: {e}")
+
+    async def cmd_picks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /picks command - show Jarvis picks."""
+        try:
+            import json
+            import tempfile
+            from pathlib import Path
+
+            picks_file = Path(tempfile.gettempdir()) / "jarvis_top_picks.json"
+            if not picks_file.exists():
+                await update.message.reply_text("No picks available yet. Try again later.")
+                return
+
+            picks_data = json.loads(picks_file.read_text())
+            if not picks_data:
+                await update.message.reply_text("No picks available yet.")
+                return
+
+            lines = [
+                "?? JARVIS PICKS",
+                "????????????????????????????",
+                f"Updated: {datetime.utcnow().strftime('%H:%M UTC')}",
+                "????????????????????????????",
+                "",
+            ]
+
+            tradeable = []
+            trading = await self._get_public_trading()
+
+            for i, pick in enumerate(picks_data[:5]):
+                symbol = pick.get("symbol", "?")
+                conviction = pick.get("conviction", 0)
+                reasoning = (pick.get("reasoning") or "").strip()
+                lines.append(f"#{i+1} {symbol} | Conviction: {conviction}/100")
+                if reasoning:
+                    lines.append(f"  {reasoning}")
+                lines.append("")
+
+                mint = pick.get("contract") or ""
+                if mint and trading.validate_address(mint):
+                    tradeable.append({"symbol": symbol, "mint": mint})
+
+            await update.message.reply_text("
+".join(lines))
+
+            if tradeable:
+                context.user_data["picks_tokens"] = tradeable
+                for idx, pick in enumerate(tradeable[:3]):
+                    buttons = [
+                        [
+                            InlineKeyboardButton("Buy 0.1 SOL", callback_data=f"pick_buy:{idx}:0.1"),
+                            InlineKeyboardButton("Buy 0.5 SOL", callback_data=f"pick_buy:{idx}:0.5"),
+                            InlineKeyboardButton("Buy 1 SOL", callback_data=f"pick_buy:{idx}:1"),
+                        ]
+                    ]
+                    await update.message.reply_text(
+                        f"{pick['symbol']} quick buy:",
+                        reply_markup=InlineKeyboardMarkup(buttons),
+                    )
+
+        except Exception as e:
+            logger.error(f"Picks command failed: {e}")
+            await update.message.reply_text(f"? Error: {e}")
+
+    # ==================== WALLET MANAGEMENT ====================
+    async def cmd_wallets(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /wallets command - redirect to /wallet."""
+        await self.cmd_wallet(update, context)
 
     # ==================== SETTINGS ====================
 
@@ -666,63 +828,39 @@ What would you like to change?
             await update.message.reply_text(f"❌ Error: {e}")
 
     # ==================== HELP ====================
-
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command - full command reference."""
         try:
             help_text = """
-<b>📚 Jarvis Trading Bot - Command Reference</b>
+<b>Jarvis Trading Bot - Command Reference</b>
 
 <b>Getting Started</b>
-/start - Register and welcome
+/start - Onboarding + wallet creation
+/wallet - Wallet overview
 /help - This message
 
-<b>📊 Analysis</b>
-/analyze &lt;token&gt; - Deep dive token analysis
-    Example: /analyze SOL
-/sentiment &lt;token&gt; - Sentiment score only
-/technicals &lt;token&gt; - Technical indicators
+<b>AI Insights</b>
+/sentiment <token> - Grok sentiment with buy buttons
+/picks - Jarvis picks with quick buy
+/analyze <token> - Token analysis
 
-<b>💰 Trading</b>
-/buy &lt;token&gt; &lt;amount&gt; - Buy token
-    Example: /buy SOL 50
-/sell - List positions to close
-/portfolio - View holdings
+<b>Trading</b>
+/buy - Buy token (interactive)
+/sell - Sell holdings
+/send - Send SOL
+/portfolio - Performance stats
 /performance - Detailed stats
 
-<b>🔐 Wallets</b>
-/wallets - Manage wallets
-/export - Backup wallet
-/balance - SOL balance
-
-<b>⚙️ Settings</b>
-/settings - User preferences
-/risk - Adjust risk level
-/alerts - Notification settings
-
-<b>📈 Learning</b>
-/stats - Algorithm performance stats
-/top_trades - Best performing trades
-/losses - Learn from losses
-
-<b>Tips & Safety</b>
-✅ Always analyze before buying
-✅ Use appropriate risk level
-✅ Set stop losses
-❌ Never invest more than you can lose
-❌ Never share your seed phrase
-
-Questions? Use /support
+<b>Safety</b>
+? Early-access software - trade small amounts
+? Never share your seed phrase or private key
 """
 
-            await update.message.reply_text(
-                help_text,
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
 
         except Exception as e:
             logger.error(f"Help command failed: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            await update.message.reply_text(f"? Error: {e}")
 
     # ==================== CALLBACKS ====================
 

@@ -18,8 +18,35 @@ from typing import Any, Callable, Dict, List, Optional, Type, Union, get_type_hi
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from pydantic import BaseModel
+from pydantic_core import PydanticUndefined
 
 logger = logging.getLogger(__name__)
+
+
+def _json_serializable(obj: Any) -> Any:
+    """Convert object to JSON-serializable form."""
+    if obj is PydanticUndefined or obj is inspect.Parameter.empty:
+        return None
+    if isinstance(obj, type):
+        return obj.__name__
+    if hasattr(obj, "__dict__"):
+        return str(obj)
+    return obj
+
+
+def _clean_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Clean schema of non-serializable values."""
+    cleaned = {}
+    for key, value in schema.items():
+        if value is PydanticUndefined or value is inspect.Parameter.empty:
+            continue
+        if isinstance(value, dict):
+            cleaned[key] = _clean_schema(value)
+        elif isinstance(value, list):
+            cleaned[key] = [_clean_schema(v) if isinstance(v, dict) else _json_serializable(v) for v in value]
+        else:
+            cleaned[key] = _json_serializable(value)
+    return cleaned
 
 
 # =============================================================================
