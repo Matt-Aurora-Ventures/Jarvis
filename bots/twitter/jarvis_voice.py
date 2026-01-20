@@ -55,21 +55,70 @@ class JarvisVoice:
     def _cli_available(self) -> bool:
         return bool(shutil.which(self.cli_path))
 
+    def _get_cli_path(self) -> Optional[str]:
+        """Get the resolved CLI path that actually works."""
+        # Try the configured path first
+        resolved = shutil.which(self.cli_path)
+        if resolved:
+            return resolved
+        # Try common Windows locations
+        common_paths = [
+            r"C:\Users\lucid\AppData\Roaming\npm\claude.cmd",
+            r"C:\Users\lucid\AppData\Roaming\npm\claude",
+        ]
+        for path in common_paths:
+            if os.path.exists(path):
+                return path
+        return None
+
     def _run_cli(self, prompt: str) -> Optional[str]:
-        if not self._cli_available():
+        cli_path = self._get_cli_path()
+        if not cli_path:
+            logger.warning("Claude CLI not found")
             return None
         try:
-            completed = subprocess.run(
-                [self.cli_path, "--print", prompt],
-                capture_output=True,
-                text=True,
-                timeout=180,
-                check=False,
-            )
+            import platform
+
+            # Use short prompt to avoid issues
+            short_prompt = prompt[:2000] if len(prompt) > 2000 else prompt
+
+            # Build command with flags for non-interactive use
+            cmd_args = [
+                cli_path,
+                "--print",
+                "--dangerously-skip-permissions",
+                "--no-session-persistence",
+                short_prompt,
+            ]
+
+            if platform.system() == "Windows":
+                # On Windows, run through cmd.exe for .cmd files
+                completed = subprocess.run(
+                    ["cmd", "/c"] + cmd_args,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                    env={**os.environ, "CI": "true"},  # Disable interactive prompts
+                )
+            else:
+                completed = subprocess.run(
+                    cmd_args,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                    env={**os.environ, "CI": "true"},
+                )
+
             if completed.returncode != 0:
+                logger.warning(f"Claude CLI returned code {completed.returncode}: {completed.stderr[:200] if completed.stderr else 'no stderr'}")
                 return None
             output = (completed.stdout or "").strip()
             return output if output else None
+        except subprocess.TimeoutExpired:
+            logger.error("Claude CLI timed out after 60s")
+            return None
         except Exception as exc:
             logger.error(f"Claude CLI failed: {exc}")
             return None
@@ -93,25 +142,34 @@ class JarvisVoice:
         Returns:
             Tweet text in Jarvis voice, or None on failure
         """
-        if not self.api_key and not self.cli_enabled:
-            logger.error("ANTHROPIC_API_KEY not configured")
+        if not self.api_key and not self._cli_available():
+            logger.error("Neither ANTHROPIC_API_KEY nor Claude CLI available")
             return None
-        
-        client = self._get_client()
-        if not client and not self.cli_enabled:
-            return None
-        
+
         try:
             # Format context into prompt if provided
             full_prompt = prompt
             if context:
                 context_str = "\n".join([f"- {k}: {v}" for k, v in context.items()])
                 full_prompt = f"{prompt}\n\nData:\n{context_str}"
-            
+
             full_prompt += "\n\nGenerate a single tweet. Can be up to 4,000 characters (Premium X). Lowercase. Do NOT end with 'nfa' every time - only occasionally."
 
-            if self.cli_enabled:
-                cli_prompt = f"{JARVIS_SYSTEM_PROMPT}\n\nUSER REQUEST:\n{full_prompt}\n\nReturn ONLY the tweet text."
+            # TRY CLI FIRST (saves API credits)
+            if self._cli_available():
+                cli_prompt = f"""You are JARVIS, an AI trading assistant. Write a tweet in JARVIS voice.
+
+JARVIS VOICE RULES:
+- lowercase only (except $TICKERS)
+- concise, witty, genuine
+- no corporate speak
+- no emojis (rarely one if perfect)
+- max 280 chars for standard tweets, can go longer for detailed analysis
+- sound like a smart friend texting, not a marketing bot
+
+TASK: {full_prompt}
+
+Respond with ONLY the tweet text. No quotes, no explanation, no markdown. Just the raw tweet."""
                 loop = asyncio.get_event_loop()
                 cli_result = await loop.run_in_executor(None, self._run_cli, cli_prompt)
                 if cli_result:
@@ -142,8 +200,14 @@ class JarvisVoice:
                     is_valid, issues = validate_jarvis_response(tweet)
                     if not is_valid:
                         logger.warning(f"Tweet validation issues: {issues}")
+                    logger.info("Tweet generated via Claude CLI (saving API credits)")
                     return tweet
-                logger.warning("Claude CLI enabled but returned no output; skipping API fallback.")
+                logger.warning("Claude CLI returned no output, falling back to API...")
+
+            # FALLBACK TO API if CLI unavailable or failed
+            client = self._get_client()
+            if not client:
+                logger.error("API client unavailable after CLI failed")
                 return None
             
             # Use sync client in async context

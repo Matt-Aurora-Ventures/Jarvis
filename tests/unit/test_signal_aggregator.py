@@ -43,6 +43,16 @@ def aggregator():
 
 
 @pytest.fixture
+def lenient_aggregator():
+    """Create an aggregator with lower confidence threshold for disagreement tests."""
+    return SignalAggregator(
+        storage_path=":memory:",
+        min_strategies=2,
+        min_confidence=0.2,  # Lower threshold to allow conflicting signals
+    )
+
+
+@pytest.fixture
 def sample_signals():
     """Create sample strategy signals for testing."""
     return [
