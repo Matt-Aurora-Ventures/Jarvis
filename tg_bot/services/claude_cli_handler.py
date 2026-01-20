@@ -1114,6 +1114,10 @@ Execute this request. Be concise in your response. Follow any standing instructi
                 # CMD.exe doesn't expand $HOME, causing hook paths to fail
                 bash_path = self._find_bash() if os.name == 'nt' else None
 
+                # NOTE: --dangerously-skip-permissions is blocked on Linux when running as root
+                # Only use it on Windows where it works reliably
+                skip_perms_flag = "--dangerously-skip-permissions" if os.name == 'nt' else ""
+
                 if bash_path:
                     # Run through bash to properly expand $HOME in hook commands
                     # Convert Windows path to bash-compatible format
@@ -1123,16 +1127,18 @@ Execute this request. Be concise in your response. Follow any standing instructi
                     cmd = [
                         bash_path,
                         "-c",
-                        f"'{bash_claude_path}' --print --dangerously-skip-permissions '{escaped_prompt}'"
+                        f"'{bash_claude_path}' --print {skip_perms_flag} '{escaped_prompt}'"
                     ]
                     logger.info(f"Using Git Bash for $HOME expansion, claude path: {bash_claude_path}")
                 else:
                     cmd = [
                         self._claude_path,
                         "--print",  # Non-interactive, print output
-                        "--dangerously-skip-permissions",  # Allow file operations
                         enhanced_prompt
                     ]
+                    # Only add dangerous flag on Windows (blocked on Linux root)
+                    if os.name == 'nt':
+                        cmd.insert(2, "--dangerously-skip-permissions")
 
                 # Execute in isolated workspace
                 sandbox_dir = None
