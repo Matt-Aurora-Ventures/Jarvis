@@ -498,52 +498,28 @@ class ChatResponder:
     def should_engage_organically(self, text: str, chat_type: str) -> bool:
         """
         Determine if JARVIS should organically engage with this message.
-        Much more selective in group chats - only respond when directly engaged.
+
+        TONED DOWN (2026-01-20): Only respond when explicitly addressed.
+        Let humans talk without the bot constantly chiming in.
         """
         if chat_type == "private":
-            return True  # Always engage in DMs
+            return True  # Always engage in DMs - this IS talking to Jarvis
 
         topic = self.detect_engagement_topic(text)
         if not topic:
             return False
 
-        # ALWAYS engage when mentioned - this is a direct request
+        # ONLY engage when explicitly mentioned - this is a direct request
         if topic == "jarvis_mention":
             return True
 
-        # ALWAYS engage when asked about capabilities - they want to know what we do
+        # ONLY engage when asked about capabilities - they want to know what we do
         if topic == "bot_capability":
             return True
 
-        # Engage with direct questions/opinions that seem directed at an AI/bot (50%)
-        # Lowered from 70% to be less chatty
-        if topic in ("tech_question", "opinion_request"):
-            import random
-            return random.random() < 0.5
-
-        # Alpha seeking - people often want bot input (60%)
-        # Lowered from 80%
-        if topic == "alpha_seeking":
-            import random
-            return random.random() < 0.6
-
-        # Sentiment checks - this is what Jarvis is built for (70%)
-        if topic == "sentiment_check":
-            import random
-            return random.random() < 0.7
-
-        # Greetings - much lower now (20%)
-        # Don't be the bot that says hi to everyone
-        if topic == "greeting":
-            import random
-            return random.random() < 0.2
-
-        # Engage with crypto talk rarely to not spam (10%)
-        # Let the humans talk - only chime in occasionally
-        if topic == "crypto_talk":
-            import random
-            return random.random() < 0.1
-
+        # ALL OTHER TOPICS: DON'T engage randomly
+        # Let humans have their conversation without the bot jumping in
+        # They can always say "jarvis" if they want the bot's input
         return False
 
     async def _try_dexter_finance_response(self, text: str) -> Optional[str]:

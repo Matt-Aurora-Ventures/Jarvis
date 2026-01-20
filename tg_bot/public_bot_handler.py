@@ -193,16 +193,15 @@ class PublicBotHandler:
             if not profile:
                 success, profile = self.user_manager.register_user(user_id, username)
                 if not success:
-                    await update.message.reply_text("? Registration failed. Please try again.")
+                    await update.message.reply_text("Registration failed. Please try again.")
                     return
 
             existing_wallet = self.user_manager.get_primary_wallet(user_id)
             if existing_wallet:
                 await update.message.reply_text(
-                    f"? Wallet ready: <code>{existing_wallet.public_key}</code>
+                    f"""Wallet ready: <code>{existing_wallet.public_key}</code>
 
-"
-                    "Use /wallet for balances or /buy to trade.",
+Use /wallet for balances or /buy to trade.""",
                     parse_mode=ParseMode.HTML,
                 )
                 return
@@ -210,8 +209,7 @@ class PublicBotHandler:
             wallet_password = self._get_public_wallet_password()
             if not wallet_password:
                 await update.message.reply_text(
-                    "? Wallet encryption not configured.
-"
+                    "Wallet encryption not configured. "
                     "Set JARVIS_PUBLIC_WALLET_PASSWORD (or PUBLIC_WALLET_PASSWORD)."
                 )
                 return
@@ -226,34 +224,25 @@ class PublicBotHandler:
                 "encrypted_key": encrypted_key,
             }
 
-            onboarding_text = (
-                "<b>?? Your New Wallet</b>
+            onboarding_text = f"""<b>Your New Wallet</b>
 
-"
-                "Address:
-"
-                f"<code>{generated_wallet.public_key}</code>
+Address:
+<code>{generated_wallet.public_key}</code>
 
-"
-                "<b>?? SAVE THIS NOW</b>
-"
-                "This will only be shown once.
+<b>SAVE THIS NOW</b>
+This will only be shown once.
 
-"
-                f"Seed phrase:
+Seed phrase:
 <code>{generated_wallet.seed_phrase}</code>
 
-"
-                f"Private key:
+Private key:
 <tg-spoiler>{generated_wallet.private_key}</tg-spoiler>
 
-"
-                "We will NEVER ask for your seed phrase or private key."
-            )
+We will NEVER ask for your seed phrase or private key."""
 
             keyboard = [[
-                InlineKeyboardButton("? I saved my seed phrase", callback_data="onboard_confirm"),
-                InlineKeyboardButton("? Cancel", callback_data="onboard_cancel"),
+                InlineKeyboardButton("I saved my seed phrase", callback_data="onboard_confirm"),
+                InlineKeyboardButton("Cancel", callback_data="onboard_cancel"),
             ]]
 
             await update.message.reply_text(
@@ -265,7 +254,7 @@ class PublicBotHandler:
 
         except Exception as e:
             logger.error(f"Start command failed: {e}")
-            await update.message.reply_text(f"? Error: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     # ==================== TOKEN ANALYSIS ====================
 
@@ -395,6 +384,10 @@ class PublicBotHandler:
 
             if not profile:
                 await update.message.reply_text("? Please register first with /start")
+                return
+            wallet = self.user_manager.get_primary_wallet(user_id)
+            if not wallet:
+                await update.message.reply_text("No wallet found. Create one with /start")
                 return
 
             token_input = context.args[0] if context.args else None
@@ -566,7 +559,7 @@ Use /settings to adjust risk level.
 
             total_value = portfolio.sol_value_usd + sum(h.value_usd for h in portfolio.holdings)
             lines = [
-                "<b>?? Wallet</b>",
+                "<b>Wallet</b>",
                 "",
                 f"Address: <code>{wallet.public_key}</code>",
                 f"SOL: {portfolio.sol_balance:.4f} (~${portfolio.sol_value_usd:,.2f})",
@@ -577,28 +570,27 @@ Use /settings to adjust risk level.
             if portfolio.holdings:
                 for holding in portfolio.holdings[:10]:
                     lines.append(
-                        f"? {holding.symbol}: {holding.amount:.4f} (~${holding.value_usd:,.2f})"
+                        f"- {holding.symbol}: {holding.amount:.4f} (~${holding.value_usd:,.2f})"
                     )
             else:
-                lines.append("? No token holdings yet")
+                lines.append("- No token holdings yet")
 
             lines.append("")
             lines.append(f"Total value: ${total_value:,.2f}")
 
             keyboard = [
                 [
-                    InlineKeyboardButton("?? Deposit", callback_data="wallet_deposit"),
-                    InlineKeyboardButton("?? Withdraw", callback_data="wallet_withdraw"),
+                    InlineKeyboardButton("Deposit", callback_data="wallet_deposit"),
+                    InlineKeyboardButton("Withdraw", callback_data="wallet_withdraw"),
                 ],
                 [
-                    InlineKeyboardButton("?? Export Key", callback_data="wallet_export"),
-                    InlineKeyboardButton("?? Import Wallet", callback_data="wallet_import"),
+                    InlineKeyboardButton("Export Key", callback_data="wallet_export"),
+                    InlineKeyboardButton("Import Wallet", callback_data="wallet_import"),
                 ],
             ]
 
             await update.message.reply_text(
-                "
-".join(lines),
+                "\n".join(lines),
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 disable_web_page_preview=True,
@@ -662,24 +654,18 @@ Use /settings to adjust risk level.
                 else:
                     score = 50
 
-            message = (
-                "?? JARVIS SENTIMENT ANALYSIS
-"
-                "????????????????????????????
-"
-                f"Token: {resolved.symbol}
-"
-                "????????????????????????????
-
-"
-                f"Sentiment Score: {score}/100 ({sentiment_label})
-"
-                f"Confidence: {confidence_pct}%
-
-"
-                "?? V1 Early Access - Trade small amounts
-"
-                "????????????????????????????"
+            message = "\n".join(
+                [
+                    "JARVIS SENTIMENT ANALYSIS",
+                    "------------------------------",
+                    f"Token: {resolved.symbol}",
+                    "------------------------------",
+                    f"Sentiment Score: {score}/100 ({sentiment_label})",
+                    f"Confidence: {confidence_pct}%",
+                    "",
+                    "V1 Early Access - Trade small amounts",
+                    "------------------------------",
+                ]
             )
 
             context.user_data["sentiment_token"] = {
@@ -722,10 +708,10 @@ Use /settings to adjust risk level.
                 return
 
             lines = [
-                "?? JARVIS PICKS",
-                "????????????????????????????",
+                "JARVIS PICKS",
+                "------------------------------",
                 f"Updated: {datetime.utcnow().strftime('%H:%M UTC')}",
-                "????????????????????????????",
+                "------------------------------",
                 "",
             ]
 
@@ -745,8 +731,7 @@ Use /settings to adjust risk level.
                 if mint and trading.validate_address(mint):
                     tradeable.append({"symbol": symbol, "mint": mint})
 
-            await update.message.reply_text("
-".join(lines))
+            await update.message.reply_text("\n".join(lines))
 
             if tradeable:
                 context.user_data["picks_tokens"] = tradeable
@@ -861,7 +846,6 @@ What would you like to change?
         except Exception as e:
             logger.error(f"Help command failed: {e}")
             await update.message.reply_text(f"? Error: {e}")
-
     # ==================== CALLBACKS ====================
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -887,58 +871,722 @@ What would you like to change?
             await self._show_main_menu(query.message.chat_id, context)
             return
 
-        if data == "cancel":
-            await query.edit_message_text("Canceled.")
+        if data == "onboard_cancel":
+            context.user_data.pop("pending_wallet", None)
+            await query.edit_message_text("Onboarding canceled.")
             return
 
-        if data.startswith("buy_"):
-            token_symbol = data.split("_", 1)[1]
+        if data == "onboard_confirm":
+            pending = context.user_data.get("pending_wallet")
+            if not pending:
+                await query.edit_message_text("No pending wallet found.")
+                return
+            user_id = update.effective_user.id
+            success, _wallet = self.user_manager.create_wallet(
+                user_id=user_id,
+                public_key=pending["public_key"],
+                encrypted_private_key=pending["encrypted_key"],
+                is_primary=True,
+            )
+            context.user_data.pop("pending_wallet", None)
+            if not success:
+                await query.edit_message_text("Wallet setup failed. Try /start again.")
+                return
+            await query.edit_message_text("Wallet created. Use /wallet to view it.")
+            return
+
+        if data == "wallet_deposit":
+            user_id = update.effective_user.id
+            wallet = self.user_manager.get_primary_wallet(user_id)
+            if not wallet:
+                await query.edit_message_text("No wallet found. Use /start to create one.")
+                return
+            deposit_text = f"""FUNDING YOUR WALLET
+--------------------
+
+Send SOL to:
+<code>{wallet.public_key}</code>
+
+IMPORTANT: Early V1 software.
+We recommend $50-100 max while testing."""
+            await query.edit_message_text(deposit_text, parse_mode=ParseMode.HTML)
+            return
+
+        if data == "wallet_withdraw":
+            context.user_data["flow"] = "send_address"
+            context.user_data["flow_data"] = {}
+            await query.edit_message_text("Enter destination Solana address:")
+            return
+
+        if data == "wallet_export":
+            warn_text = """EXPORT PRIVATE KEY
+--------------------
+
+CRITICAL:
+- Never share this with ANYONE
+- We will NEVER ask for your key
+- Anyone with this key controls your funds
+
+Proceed?"""
+            keyboard = [[
+                InlineKeyboardButton("Show Private Key", callback_data="wallet_export_confirm"),
+                InlineKeyboardButton("Cancel", callback_data="cancel"),
+            ]]
             await query.edit_message_text(
-                f"Use /buy {token_symbol} <amount> to place an order."
+                warn_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
             )
             return
 
-        if data.startswith("confirm_buy_"):
-            if not self.trading_engine:
-                await query.edit_message_text("Trading engine not available.")
+        if data == "wallet_export_confirm":
+            user_id = update.effective_user.id
+            wallet = self.user_manager.get_primary_wallet(user_id)
+            if not wallet:
+                await query.edit_message_text("No wallet found. Use /start to create one.")
                 return
-            await query.edit_message_text("Trade execution not wired yet.")
+            wallet_password = self._get_public_wallet_password()
+            if not wallet_password:
+                await query.edit_message_text("Wallet encryption not configured.")
+                return
+            wallet_service = await self._get_wallet_service()
+            try:
+                private_key = wallet_service.decrypt_private_key(
+                    wallet.encrypted_private_key,
+                    wallet_password,
+                )
+            except Exception:
+                await query.edit_message_text("Failed to decrypt key. Check wallet password.")
+                return
+
+            msg = await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"""<b>Private Key (auto-deletes in 60s)</b>
+<tg-spoiler>{private_key}</tg-spoiler>""",
+                parse_mode=ParseMode.HTML,
+            )
+            self._schedule_delete_message(context, query.message.chat_id, msg.message_id)
+            await query.edit_message_text("Private key sent.")
             return
 
-        if data in {
-            "create_wallet",
-            "import_wallet",
-            "export_wallet",
-            "settings_risk",
-            "settings_limits",
-            "settings_safety",
-            "settings_learning",
-        }:
-            await query.edit_message_text("This action is not wired yet.")
+        if data == "wallet_import":
+            context.user_data["flow"] = "import_wallet"
+            context.user_data["flow_data"] = {}
+            await query.edit_message_text("Send your seed phrase or private key:")
+            return
+
+        if data == "cancel":
+            context.user_data.pop("flow", None)
+            context.user_data.pop("flow_data", None)
+            context.user_data.pop("pending_trade", None)
+            context.user_data.pop("pending_send", None)
+            await query.edit_message_text("Canceled.")
+            return
+
+        if data.startswith("buy_amount:"):
+            amount = self._parse_amount(data.split(":", 1)[1])
+            token = context.user_data.get("buy_token")
+            if not token or not amount:
+                await query.edit_message_text("Buy token not set. Use /buy again.")
+                return
+            await self._show_buy_confirmation(query.message.chat_id, context, token, amount)
+            return
+
+        if data == "buy_custom":
+            context.user_data["flow"] = "buy_custom_amount"
+            context.user_data["flow_data"] = {}
+            await query.edit_message_text("Enter amount in SOL:")
+            return
+
+        if data.startswith("sell_pick:"):
+            holding = self._get_holding_from_callback(context, data)
+            if not holding:
+                await query.edit_message_text("Holding not found. Use /sell again.")
+                return
+            await self._prompt_sell_amount(query.message.chat_id, context, holding)
+            return
+
+        if data.startswith("sell_amount:"):
+            pct = self._parse_amount(data.split(":", 1)[1])
+            holding = context.user_data.get("sell_selected")
+            if not holding or pct is None:
+                await query.edit_message_text("Sell selection expired. Use /sell again.")
+                return
+            amount_tokens = holding["amount"] * (pct / 100.0)
+            await self._show_sell_confirmation(
+                query.message.chat_id,
+                context,
+                holding,
+                amount_tokens,
+            )
+            return
+
+        if data == "sell_custom":
+            context.user_data["flow"] = "sell_custom_amount"
+            await query.edit_message_text("Enter token amount to sell:")
+            return
+
+        if data.startswith("confirm_trade:"):
+            trade_id = data.split(":", 1)[1]
+            await self._execute_pending_trade(update, context, trade_id)
+            return
+
+        if data.startswith("sentiment_buy:"):
+            amount = self._parse_amount(data.split(":", 1)[1])
+            token = context.user_data.get("sentiment_token")
+            if not token or not amount:
+                await query.edit_message_text("Sentiment token not set. Use /sentiment again.")
+                return
+            await self._show_buy_confirmation(query.message.chat_id, context, token, amount)
+            return
+
+        if data.startswith("pick_buy:"):
+            token = self._get_pick_from_callback(context, data)
+            if not token:
+                await query.edit_message_text("Pick expired. Use /picks again.")
+                return
+            await self._show_buy_confirmation(
+                query.message.chat_id,
+                context,
+                token,
+                token.get("amount", 0),
+            )
+            return
+
+        if data.startswith("send_amount:"):
+            amount_label = data.split(":", 1)[1]
+            if amount_label == "max":
+                amount = context.user_data.get("send_max")
+            else:
+                amount = self._parse_amount(amount_label)
+            dest = context.user_data.get("send_destination")
+            if not dest or not amount:
+                await query.edit_message_text("Send flow expired. Use /send again.")
+                return
+            await self._show_send_confirmation(query.message.chat_id, context, dest, amount)
+            return
+
+        if data == "send_custom":
+            context.user_data["flow"] = "send_custom_amount"
+            await query.edit_message_text("Enter amount in SOL to send:")
+            return
+
+        if data.startswith("confirm_send:"):
+            send_id = data.split(":", 1)[1]
+            await self._execute_pending_send(update, context, send_id)
             return
 
         if data == "menu_picks":
-            await query.edit_message_text("Use /picks to view Jarvis Picks.")
+            await context.bot.send_message(chat_id=query.message.chat_id, text="Use /picks to view Jarvis Picks.")
             return
 
         if data == "menu_sentiment":
-            await query.edit_message_text("Use /sentiment <token> to view sentiment.")
+            await context.bot.send_message(chat_id=query.message.chat_id, text="Use /sentiment <token> to view sentiment.")
             return
 
         if data == "menu_buy":
-            await query.edit_message_text("Use /buy <token> <amount> to place a buy.")
+            await context.bot.send_message(chat_id=query.message.chat_id, text="Use /buy to place a buy.")
             return
 
         if data == "menu_sell":
-            await query.edit_message_text("Use /sell to view positions.")
+            await context.bot.send_message(chat_id=query.message.chat_id, text="Use /sell to view holdings.")
             return
 
         if data == "menu_wallet":
-            await query.edit_message_text("Use /wallets to manage wallets.")
+            await context.bot.send_message(chat_id=query.message.chat_id, text="Use /wallet to manage your wallet.")
             return
 
         if data == "menu_settings":
-            await query.edit_message_text("Use /settings to adjust preferences.")
+            await context.bot.send_message(chat_id=query.message.chat_id, text="Use /settings to adjust preferences.")
             return
 
         await query.edit_message_text("Action not supported yet.")
+
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle text messages for interactive flows."""
+        if not update.message:
+            return
+        text = (update.message.text or "").strip()
+        flow = context.user_data.get("flow")
+
+        if flow == "buy_token":
+            await self._handle_buy_token_input(update, context, text)
+            return
+
+        if flow == "buy_custom_amount":
+            token = context.user_data.get("buy_token")
+            amount = self._parse_amount(text)
+            if not token or not amount:
+                await update.message.reply_text("Invalid amount. Try again.")
+                return
+            context.user_data.pop("flow", None)
+            await self._show_buy_confirmation(update.message.chat_id, context, token, amount)
+            return
+
+        if flow == "sell_custom_amount":
+            holding = context.user_data.get("sell_selected")
+            amount = self._parse_amount(text)
+            if not holding or not amount:
+                await update.message.reply_text("Invalid amount. Try again.")
+                return
+            context.user_data.pop("flow", None)
+            await self._show_sell_confirmation(update.message.chat_id, context, holding, amount)
+            return
+
+        if flow == "send_address":
+            trading = await self._get_public_trading()
+            if not trading.validate_address(text):
+                await update.message.reply_text("Invalid Solana address. Try again.")
+                return
+            context.user_data["send_destination"] = text
+            context.user_data.pop("flow", None)
+            await self._prompt_send_amount(update.message.chat_id, context, update.effective_user.id)
+            return
+
+        if flow == "send_custom_amount":
+            amount = self._parse_amount(text)
+            dest = context.user_data.get("send_destination")
+            if not dest or not amount:
+                await update.message.reply_text("Invalid amount. Try again.")
+                return
+            context.user_data.pop("flow", None)
+            await self._show_send_confirmation(update.message.chat_id, context, dest, amount)
+            return
+
+        if flow == "import_wallet":
+            context.user_data.pop("flow", None)
+            await self._handle_import_wallet_input(update, context, text)
+            return
+
+    async def _handle_buy_token_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE, token_input: str) -> None:
+        trading = await self._get_public_trading()
+        resolved = await trading.resolve_token(token_input)
+        if not resolved:
+            await update.message.reply_text("Could not resolve token. Try again.")
+            return
+
+        context.user_data["buy_token"] = {
+            "mint": resolved.mint,
+            "symbol": resolved.symbol,
+            "price_usd": resolved.price_usd,
+        }
+        context.user_data.pop("flow", None)
+
+        message = f"""Token: {resolved.symbol}
+Price: ${resolved.price_usd:,.6f}
+
+Select amount to buy:"""
+        keyboard = [
+            [
+                InlineKeyboardButton("0.1 SOL", callback_data="buy_amount:0.1"),
+                InlineKeyboardButton("0.5 SOL", callback_data="buy_amount:0.5"),
+                InlineKeyboardButton("1 SOL", callback_data="buy_amount:1"),
+            ],
+            [InlineKeyboardButton("Custom", callback_data="buy_custom")],
+        ]
+        await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+
+    async def _show_buy_confirmation(
+        self,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        token: Dict[str, Any],
+        amount_sol: float,
+    ) -> None:
+        if amount_sol <= 0:
+            await context.bot.send_message(chat_id=chat_id, text="Invalid amount.")
+            return
+        trading = await self._get_public_trading()
+        quote = await trading.get_buy_quote(
+            token["mint"],
+            amount_sol,
+            self.default_slippage_bps,
+        )
+        if not quote:
+            await context.bot.send_message(chat_id=chat_id, text="Quote unavailable. Try again.")
+            return
+
+        trade_id = secrets.token_hex(6)
+        context.user_data["pending_trade"] = {
+            "id": trade_id,
+            "type": "buy",
+            "token_mint": token["mint"],
+            "symbol": token["symbol"],
+            "amount_sol": amount_sol,
+            "slippage_bps": self.default_slippage_bps,
+        }
+
+        message = f"""JARVIS QUICK BUY
+--------------------
+Token: {token['symbol']}
+Amount: {amount_sol:.4f} SOL
+Est. Receive: {quote.output_amount_ui:.4f}
+Price Impact: {quote.price_impact_pct:.2%}
+
+{self._risk_warning_block()}{self._large_trade_warning(amount_sol)}"""
+
+        keyboard = [[
+            InlineKeyboardButton("Confirm Buy", callback_data=f"confirm_trade:{trade_id}"),
+            InlineKeyboardButton("Cancel", callback_data="cancel"),
+        ]]
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    async def _prompt_sell_amount(
+        self,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        holding: Dict[str, Any],
+    ) -> None:
+        context.user_data["sell_selected"] = holding
+        keyboard = [
+            [
+                InlineKeyboardButton("25%", callback_data="sell_amount:25"),
+                InlineKeyboardButton("50%", callback_data="sell_amount:50"),
+                InlineKeyboardButton("75%", callback_data="sell_amount:75"),
+                InlineKeyboardButton("100%", callback_data="sell_amount:100"),
+            ],
+            [InlineKeyboardButton("Custom", callback_data="sell_custom")],
+        ]
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"Sell {holding['symbol']} - choose amount:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    async def _show_sell_confirmation(
+        self,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        holding: Dict[str, Any],
+        amount_tokens: float,
+    ) -> None:
+        if amount_tokens <= 0:
+            await context.bot.send_message(chat_id=chat_id, text="Invalid amount.")
+            return
+        trading = await self._get_public_trading()
+        quote = await trading.get_sell_quote(
+            holding["mint"],
+            amount_tokens,
+            self.default_slippage_bps,
+        )
+        if not quote:
+            await context.bot.send_message(chat_id=chat_id, text="Quote unavailable. Try again.")
+            return
+
+        trade_id = secrets.token_hex(6)
+        context.user_data["pending_trade"] = {
+            "id": trade_id,
+            "type": "sell",
+            "token_mint": holding["mint"],
+            "symbol": holding["symbol"],
+            "amount_tokens": amount_tokens,
+            "slippage_bps": self.default_slippage_bps,
+        }
+
+        message = f"""JARVIS QUICK SELL
+--------------------
+Token: {holding['symbol']}
+Amount: {amount_tokens:.4f}
+Est. Receive: {quote.output_amount_ui:.4f} SOL
+Price Impact: {quote.price_impact_pct:.2%}
+
+{self._risk_warning_block()}"""
+
+        keyboard = [[
+            InlineKeyboardButton("Confirm Sell", callback_data=f"confirm_trade:{trade_id}"),
+            InlineKeyboardButton("Cancel", callback_data="cancel"),
+        ]]
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    async def _execute_pending_trade(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        trade_id: str,
+    ) -> None:
+        pending = context.user_data.get("pending_trade")
+        if not pending or pending.get("id") != trade_id:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Trade expired. Please try again.",
+            )
+            return
+
+        user_id = update.effective_user.id
+        wallet = self.user_manager.get_primary_wallet(user_id)
+        if not wallet:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="No wallet found.")
+            return
+
+        wallet_password = self._get_public_wallet_password()
+        if not wallet_password:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Wallet encryption not configured.")
+            return
+
+        trading = await self._get_public_trading()
+        try:
+            keypair = trading.load_keypair(wallet.encrypted_private_key, wallet_password)
+        except Exception:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Failed to unlock wallet.")
+            return
+
+        if pending["type"] == "buy":
+            balance = await trading.get_sol_balance(wallet.public_key)
+            amount_sol = pending["amount_sol"]
+            if balance < amount_sol + 0.002:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text="Insufficient SOL balance.")
+                return
+            quote = await trading.get_buy_quote(
+                pending["token_mint"],
+                amount_sol,
+                pending["slippage_bps"],
+            )
+        else:
+            portfolio = await trading.get_portfolio(wallet.public_key)
+            holding = next((h for h in portfolio.holdings if h.mint == pending["token_mint"]), None)
+            if not holding or holding.amount < pending["amount_tokens"]:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text="Insufficient token balance.")
+                return
+            quote = await trading.get_sell_quote(
+                pending["token_mint"],
+                pending["amount_tokens"],
+                pending["slippage_bps"],
+            )
+
+        if not quote:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Quote failed. Try again.")
+            return
+
+        result = await trading.execute_swap(quote, keypair)
+        context.user_data.pop("pending_trade", None)
+
+        if result.success:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"""TRADE EXECUTED
+--------------------
+Signature: {result.signature}
+https://solscan.io/tx/{result.signature}""",
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"Trade failed: {result.error}",
+            )
+
+    async def _prompt_send_amount(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE, user_id: int) -> None:
+        trading = await self._get_public_trading()
+        wallet = self.user_manager.get_primary_wallet(user_id)
+        if not wallet:
+            await context.bot.send_message(chat_id=chat_id, text="No wallet found.")
+            return
+        balance = await trading.get_sol_balance(wallet.public_key)
+        max_amount = max(0.0, balance - 0.002)
+        context.user_data["send_max"] = max_amount
+
+        keyboard = [
+            [
+                InlineKeyboardButton("0.1 SOL", callback_data="send_amount:0.1"),
+                InlineKeyboardButton("0.5 SOL", callback_data="send_amount:0.5"),
+                InlineKeyboardButton("1 SOL", callback_data="send_amount:1"),
+            ],
+            [InlineKeyboardButton("Max", callback_data="send_amount:max")],
+            [InlineKeyboardButton("Custom", callback_data="send_custom")],
+        ]
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"Balance: {balance:.4f} SOL. Choose amount to send:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    async def _show_send_confirmation(
+        self,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        destination: str,
+        amount_sol: float,
+    ) -> None:
+        if amount_sol <= 0:
+            await context.bot.send_message(chat_id=chat_id, text="Invalid amount.")
+            return
+
+        send_id = secrets.token_hex(6)
+        context.user_data["pending_send"] = {
+            "id": send_id,
+            "destination": destination,
+            "amount_sol": amount_sol,
+        }
+
+        message = f"""SEND SOL
+--------------------
+To: {destination}
+Amount: {amount_sol:.4f} SOL
+Fee: ~0.000005 SOL
+
+Confirm transfer?"""
+
+        keyboard = [[
+            InlineKeyboardButton("Send", callback_data=f"confirm_send:{send_id}"),
+            InlineKeyboardButton("Cancel", callback_data="cancel"),
+        ]]
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    async def _execute_pending_send(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        send_id: str,
+    ) -> None:
+        pending = context.user_data.get("pending_send")
+        if not pending or pending.get("id") != send_id:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Send expired. Try again.")
+            return
+
+        user_id = update.effective_user.id
+        wallet = self.user_manager.get_primary_wallet(user_id)
+        if not wallet:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="No wallet found.")
+            return
+
+        wallet_password = self._get_public_wallet_password()
+        if not wallet_password:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Wallet encryption not configured.")
+            return
+
+        trading = await self._get_public_trading()
+        try:
+            keypair = trading.load_keypair(wallet.encrypted_private_key, wallet_password)
+        except Exception:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Failed to unlock wallet.")
+            return
+
+        balance = await trading.get_sol_balance(wallet.public_key)
+        amount_sol = pending["amount_sol"]
+        if balance < amount_sol + 0.002:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Insufficient balance.")
+            return
+
+        try:
+            signature = await trading.send_sol(keypair, pending["destination"], amount_sol)
+        except Exception as exc:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Send failed: {exc}")
+            return
+
+        context.user_data.pop("pending_send", None)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Sent. https://solscan.io/tx/{signature}",
+        )
+
+    async def _handle_import_wallet_input(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        text: str,
+    ) -> None:
+        user_id = update.effective_user.id
+        wallet_password = self._get_public_wallet_password()
+        if not wallet_password:
+            await update.message.reply_text("Wallet encryption not configured.")
+            return
+
+        wallet_service = await self._get_wallet_service()
+        phrase = text.strip()
+        words = phrase.split()
+        try:
+            if len(words) >= 12:
+                generated_wallet, encrypted_key = await wallet_service.import_wallet(
+                    phrase,
+                    user_password=wallet_password,
+                )
+            else:
+                generated_wallet, encrypted_key = await wallet_service.import_from_private_key(
+                    phrase,
+                    user_password=wallet_password,
+                )
+        except Exception as exc:
+            await update.message.reply_text(f"Import failed: {exc}")
+            return
+
+        self.user_manager.import_wallet(
+            user_id=user_id,
+            public_key=generated_wallet.public_key,
+            encrypted_private_key=encrypted_key,
+            is_primary=True,
+        )
+
+        chat_id = update.effective_chat.id
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"Wallet imported: <code>{generated_wallet.public_key}</code>",
+            parse_mode=ParseMode.HTML,
+        )
+
+    def _schedule_delete_message(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        chat_id: int,
+        message_id: int,
+        delay_seconds: int = 60,
+    ) -> None:
+        async def _delete():
+            await asyncio.sleep(delay_seconds)
+            try:
+                await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            except Exception:
+                pass
+
+        asyncio.create_task(_delete())
+
+    def _parse_amount(self, value: str) -> Optional[float]:
+        try:
+            return float(value)
+        except Exception:
+            return None
+
+    def _get_holding_from_callback(self, context: ContextTypes.DEFAULT_TYPE, data: str) -> Optional[Dict[str, Any]]:
+        try:
+            idx = int(data.split(":", 1)[1])
+        except Exception:
+            return None
+        holdings = context.user_data.get("sell_holdings") or []
+        if idx < 0 or idx >= len(holdings):
+            return None
+        holding = holdings[idx]
+        return {
+            "mint": holding.mint,
+            "symbol": holding.symbol,
+            "amount": holding.amount,
+        }
+
+    def _get_pick_from_callback(self, context: ContextTypes.DEFAULT_TYPE, data: str) -> Optional[Dict[str, Any]]:
+        parts = data.split(":")
+        if len(parts) != 3:
+            return None
+        try:
+            idx = int(parts[1])
+            amount = float(parts[2])
+        except Exception:
+            return None
+        picks = context.user_data.get("picks_tokens") or []
+        if idx < 0 or idx >= len(picks):
+            return None
+        token = picks[idx]
+        return {"mint": token["mint"], "symbol": token["symbol"], "amount": amount}

@@ -19,6 +19,7 @@ from typing import Optional, Dict, Any
 from telegram.ext import Application, ContextTypes
 from telegram import Update
 
+from core.public_trading_service import PublicTradingService
 from core.public_user_manager import PublicUserManager, UserRiskLevel
 from core.wallet_service import WalletService, get_wallet_service
 from core.market_data_service import MarketDataService, get_market_data_service
@@ -34,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 def register_public_handlers(app: Application, bot_handler: PublicBotHandler) -> None:
     """Register command and callback handlers for the public trading bot."""
-    from telegram.ext import CommandHandler, CallbackQueryHandler
+    from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, filters
 
     app.add_handler(CommandHandler("start", bot_handler.cmd_start))
     app.add_handler(CommandHandler("analyze", bot_handler.cmd_analyze))
@@ -42,12 +43,17 @@ def register_public_handlers(app: Application, bot_handler: PublicBotHandler) ->
     app.add_handler(CommandHandler("sell", bot_handler.cmd_sell))
     app.add_handler(CommandHandler("portfolio", bot_handler.cmd_portfolio))
     app.add_handler(CommandHandler("performance", bot_handler.cmd_performance))
+    app.add_handler(CommandHandler("wallet", bot_handler.cmd_wallet))
     app.add_handler(CommandHandler("wallets", bot_handler.cmd_wallets))
+    app.add_handler(CommandHandler("send", bot_handler.cmd_send))
+    app.add_handler(CommandHandler("sentiment", bot_handler.cmd_sentiment))
+    app.add_handler(CommandHandler("picks", bot_handler.cmd_picks))
     app.add_handler(CommandHandler("settings", bot_handler.cmd_settings))
     app.add_handler(CommandHandler("help", bot_handler.cmd_help))
     app.add_handler(CommandHandler("demo", bot_handler.cmd_demo))
 
     app.add_handler(CallbackQueryHandler(bot_handler.handle_callback))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot_handler.handle_message))
 
 
 class PublicTradingBotIntegration:
@@ -108,7 +114,12 @@ class PublicTradingBotIntegration:
             self.market_data_service = await get_market_data_service()
 
             logger.info("→ Creating bot handler...")
-            self.bot_handler = PublicBotHandler(self.trading_engine)
+            public_trading = PublicTradingService(self.wallet_service)
+            self.bot_handler = PublicBotHandler(
+                self.trading_engine,
+                wallet_service=self.wallet_service,
+                public_trading=public_trading,
+            )
 
             # Create Telegram application
             logger.info("→ Setting up Telegram application...")

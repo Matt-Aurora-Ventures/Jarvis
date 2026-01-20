@@ -245,59 +245,48 @@ def _should_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
 def _is_message_for_jarvis(text: str, update: Update) -> bool:
     """
     Determine if a message seems directed at Jarvis.
-    
-    Returns True if:
-    - Message mentions Jarvis by name
-    - Message is a question
-    - Message is a direct request/command
+
+    TONED DOWN (2026-01-20): Only respond when:
+    - Message is in a private chat (DM)
     - Message is a reply to Jarvis
-    - Message is in a private chat
+    - Message explicitly mentions "jarvis" by name
+    - Message @mentions the bot
+
+    Does NOT respond to:
+    - General questions (just because they end with ?)
+    - Generic commands (can you, please, etc.)
+    - Trading keywords without explicit Jarvis mention
     """
     text_lower = text.lower().strip()
-    
-    # Private chats - always respond
+
+    # Private chats - always respond (this IS a conversation with Jarvis)
     if update.effective_chat and update.effective_chat.type == "private":
         return True
-    
-    # Reply to Jarvis's message
+
+    # Reply to Jarvis's message - this IS continuing a conversation with Jarvis
     if update.message and update.message.reply_to_message:
         reply_to = update.message.reply_to_message
         if reply_to.from_user and reply_to.from_user.is_bot:
             return True
-    
-    # Direct mentions of Jarvis
-    jarvis_names = ["jarvis", "j", "hey jarvis", "yo jarvis", "@jarvis"]
-    for name in jarvis_names:
-        if text_lower.startswith(name) or f" {name}" in text_lower:
-            return True
-    
-    # Questions (likely seeking response)
-    if text_lower.endswith("?"):
-        # But filter out rhetorical/conversational questions not for bot
-        rhetorical = ["right?", "you know?", "innit?", "huh?", "yeah?", "no?"]
-        if not any(text_lower.endswith(r) for r in rhetorical):
-            return True
-    
-    # Direct commands/requests
-    command_starters = [
-        "can you", "could you", "would you", "please", "tell me", "show me",
-        "what is", "what's", "who is", "who's", "how do", "how does", "how to",
-        "explain", "analyze", "check", "look at", "find", "search", "get me",
-        "give me", "help", "do you know", "do you think", "what do you"
-    ]
-    for starter in command_starters:
-        if text_lower.startswith(starter):
-            return True
-    
-    # Technical/trading queries that Jarvis should answer
-    trading_keywords = [
-        "price", "chart", "token", "coin", "trade", "buy", "sell", "position",
-        "treasury", "wallet", "balance", "sentiment", "signal", "analysis"
-    ]
-    if any(kw in text_lower for kw in trading_keywords) and "?" in text:
+
+    # Bot was @mentioned explicitly
+    bot_username = os.environ.get("TELEGRAM_BOT_USERNAME", "").lower()
+    if bot_username and f"@{bot_username}" in text_lower:
         return True
-    
-    # Otherwise, don't respond to general chatter
+
+    # Direct mentions of Jarvis by name (not just "j" which is too generic)
+    # Must include "jarvis" explicitly somewhere in the message
+    jarvis_patterns = [
+        "jarvis",
+        "hey jarvis",
+        "yo jarvis",
+        "@jarvis",
+    ]
+    for pattern in jarvis_patterns:
+        if pattern in text_lower:
+            return True
+
+    # Otherwise, DON'T respond - let humans talk without the bot chiming in
     return False
 
 

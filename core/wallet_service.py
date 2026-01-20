@@ -491,7 +491,8 @@ class WalletService:
         """
         keypair = self.load_keypair_from_private_key(private_key)
         public_key = str(keypair.pubkey())
-        private_key_b58 = self._secret_to_base58(bytes(keypair))
+        import base58
+        private_key_b58 = base58.b58encode(bytes(keypair)).decode()
         encrypted_key = self.encryption.encrypt_private_key(
             private_key_b58, user_password
         )
@@ -562,9 +563,10 @@ class WalletService:
     # ==================== CLEANUP ====================
 
     async def close(self):
-        """Close RPC connection."""
-        if self.rpc_client:
-            await self.rpc_client.close()
+        """Close RPC connection (if any)."""
+        # Note: RPC client is delegated to MarketDataService
+        # This is kept for interface compatibility
+        pass
 
 
 # Singleton instance
