@@ -83,13 +83,20 @@ class JarvisVoice:
             short_prompt = prompt[:2000] if len(prompt) > 2000 else prompt
 
             # Build command with flags for non-interactive use
+            # NOTE: --dangerously-skip-permissions is blocked on Linux when running as root
+            # So we only use it on Windows where it works reliably
             cmd_args = [
                 cli_path,
                 "--print",
-                "--dangerously-skip-permissions",
                 "--no-session-persistence",
                 short_prompt,
             ]
+
+            # Only add --dangerously-skip-permissions on Windows (blocked on Linux root)
+            if platform.system() == "Windows":
+                cmd_args.insert(2, "--dangerously-skip-permissions")
+
+            logger.info(f"Attempting Claude CLI at {cli_path}")
 
             if platform.system() == "Windows":
                 # On Windows, run through cmd.exe for .cmd files
