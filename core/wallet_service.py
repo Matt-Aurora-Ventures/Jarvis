@@ -33,6 +33,34 @@ import base64
 # Solana
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
+
+try:
+    from bip_utils import (
+        Bip39MnemonicGenerator,
+        Bip39MnemonicValidator,
+        Bip39SeedGenerator,
+        Bip39WordsNum,
+        Bip44,
+        Bip44Coins,
+        Bip44Changes,
+    )
+    HAS_BIP_UTILS = True
+except Exception:
+    HAS_BIP_UTILS = False
+    Bip39MnemonicGenerator = None
+    Bip39MnemonicValidator = None
+    Bip39SeedGenerator = None
+    Bip39WordsNum = None
+    Bip44 = None
+    Bip44Coins = None
+    Bip44Changes = None
+
+try:
+    from nacl.signing import SigningKey
+    HAS_NACL = True
+except Exception:
+    HAS_NACL = False
+    SigningKey = None
 # Note: RPC client will be used from market data service
 # from solders.rpc.async_client import AsyncClient
 # from solders.rpc.commitment import Confirmed
@@ -149,19 +177,13 @@ class SolanaWalletGenerator:
             GeneratedWallet with keys and seed phrase
         """
         try:
-            # Generate keypair (Solders handles this)
-            keypair = Keypair()
+            if not HAS_BIP_UTILS or not HAS_NACL:
+                raise RuntimeError("Mnemonic dependencies missing (bip-utils + pynacl required)")
 
-            # Get public key (address)
-            public_key = str(keypair.pubkey())
-
-            # Get secret key (private key)
-            secret_key = keypair.secret
-            private_key_b58 = self._secret_to_base58(secret_key)
-
-            # Generate seed phrase (simplified - would use mnemonic library in production)
             seed_phrase = self._generate_seed_phrase()
-
+            keypair = self._derive_keypair_from_seed(seed_phrase, derivation_index)
+            public_key = str(keypair.pubkey())
+            private_key_b58 = self._secret_to_base58(bytes(keypair))
             derivation_path = f"m/44'/501'/{derivation_index}'/0'"
 
             logger.info(f"Generated wallet: {public_key[:10]}...")
@@ -189,14 +211,15 @@ class SolanaWalletGenerator:
             GeneratedWallet
         """
         try:
-            # In production, use proper mnemonic library (bip32/bip39)
-            # This is simplified
-            keypair = Keypair()
+            if not HAS_BIP_UTILS or not HAS_NACL:
+                raise RuntimeError("Mnemonic dependencies missing (bip-utils + pynacl required)")
 
+            if not Bip39MnemonicValidator(str(seed_phrase)).Validate():
+                raise ValueError("Invalid seed phrase")
+
+            keypair = self._derive_keypair_from_seed(seed_phrase, derivation_index)
             public_key = str(keypair.pubkey())
-            secret_key = keypair.secret
-            private_key_b58 = self._secret_to_base58(secret_key)
-
+            private_key_b58 = self._secret_to_base58(bytes(keypair))
             derivation_path = f"m/44'/501'/{derivation_index}'/0'"
 
             logger.info(f"Imported wallet: {public_key[:10]}...")
@@ -213,19 +236,28 @@ class SolanaWalletGenerator:
             raise
 
     def _generate_seed_phrase(self) -> str:
-        """Generate BIP-39 seed phrase (12 or 24 words)."""
-        # Simplified - in production use mnemonic library
-        words = [secrets.choice(range(2048)) for _ in range(12)]
-        return " ".join(self._get_bip39_word(w) for w in words)
+        """Generate BIP-39 seed phrase (12 words)."""
+        if not HAS_BIP_UTILS:
+            raise RuntimeError("Mnemonic generation unavailable (bip-utils not installed)")
+        return str(Bip39MnemonicGenerator().FromWordsNumber(Bip39WordsNum.WORDS_NUM_12))
 
-    def _get_bip39_word(self, index: int) -> str:
-        """Get BIP-39 word by index."""
-        # Simplified - would load actual BIP-39 word list
-        common_words = [
-            "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract",
-            "accept", "accident", "account", "accuse", "achieve", "acid", "acknowledge",
-        ]
-        return common_words[index % len(common_words)]
+    def _derive_keypair_from_seed(self, seed_phrase: str, derivation_index: int) -> Keypair:
+        """Derive a Solana keypair from a seed phrase."""
+        if not HAS_BIP_UTILS or not HAS_NACL:
+            raise RuntimeError("Mnemonic dependencies missing (bip-utils + pynacl required)")
+        seed = Bip39SeedGenerator(seed_phrase).Generate()
+        bip44 = (
+            Bip44.FromSeed(seed, Bip44Coins.SOLANA)
+            .Purpose()
+            .Coin()
+            .Account(0)
+            .Change(Bip44Changes.CHAIN_EXT)
+            .AddressIndex(derivation_index)
+        )
+        private_key = bip44.PrivateKey().Raw().ToBytes()
+        signing_key = SigningKey(private_key)
+        secret_key = signing_key.encode() + signing_key.verify_key.encode()
+        return Keypair.from_bytes(secret_key)
 
     def _secret_to_base58(self, secret: bytes) -> str:
         """Convert secret key to base58 format."""
@@ -428,14 +460,48 @@ class WalletService:
             True if valid format
         """
         try:
-            # Basic validation
-            if len(private_key) != 88:  # Base58 encoded 64 bytes
-                return False
             import base58
-            base58.b58decode(private_key)
-            return True
+            decoded = base58.b58decode(private_key)
+            return len(decoded) in (32, 64)
         except Exception:
             return False
+
+    def load_keypair_from_private_key(self, private_key: str) -> Keypair:
+        """Load a Keypair from a base58-encoded private key."""
+        import base58
+        decoded = base58.b58decode(private_key)
+        if len(decoded) == 64:
+            return Keypair.from_bytes(decoded)
+        if len(decoded) == 32:
+            if not HAS_NACL:
+                raise RuntimeError("PyNaCl required to expand 32-byte seeds")
+            signing_key = SigningKey(decoded)
+            secret_key = signing_key.encode() + signing_key.verify_key.encode()
+            return Keypair.from_bytes(secret_key)
+        raise ValueError("Invalid private key length")
+
+    async def import_from_private_key(
+        self, private_key: str, user_password: str = "default"
+    ) -> Tuple[GeneratedWallet, str]:
+        """
+        Import wallet from a base58-encoded private key.
+
+        Returns:
+            (GeneratedWallet, encrypted_private_key)
+        """
+        keypair = self.load_keypair_from_private_key(private_key)
+        public_key = str(keypair.pubkey())
+        private_key_b58 = self._secret_to_base58(bytes(keypair))
+        encrypted_key = self.encryption.encrypt_private_key(
+            private_key_b58, user_password
+        )
+        wallet = GeneratedWallet(
+            public_key=public_key,
+            private_key=private_key_b58,
+            seed_phrase="",
+            derivation_path="imported",
+        )
+        return wallet, encrypted_key
 
     # ==================== SECURITY ====================
 
