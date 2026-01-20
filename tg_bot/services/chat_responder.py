@@ -262,6 +262,116 @@ class ChatResponder:
         self._jarvis_admin = None
         self._last_mood = "neutral"
         self._session_learnings = []  # Things learned this session
+        self._cli_path = "claude"  # CLI path for CLI-first approach
+
+    def _get_cli_path(self) -> Optional[str]:
+        """Get the resolved CLI path that actually works."""
+        import shutil
+        # Try the configured path first
+        resolved = shutil.which(self._cli_path)
+        if resolved:
+            return resolved
+        # Try common Windows locations
+        common_paths = [
+            r"C:\Users\lucid\AppData\Roaming\npm\claude.cmd",
+            r"C:\Users\lucid\AppData\Roaming\npm\claude",
+            "/usr/local/bin/claude",
+            "/root/.npm-global/bin/claude",
+        ]
+        for path in common_paths:
+            if os.path.exists(path):
+                return path
+        return None
+
+    def _cli_available(self) -> bool:
+        """Check if Claude CLI is available."""
+        return bool(self._get_cli_path())
+
+    def _run_cli_for_chat(self, system_prompt: str, user_prompt: str) -> Optional[str]:
+        """
+        Run Claude CLI for chat generation.
+
+        Args:
+            system_prompt: System instructions
+            user_prompt: User message
+
+        Returns:
+            Response text or None if CLI fails
+        """
+        import subprocess
+        import platform
+
+        cli_path = self._get_cli_path()
+        if not cli_path:
+            logger.debug("Claude CLI not found")
+            return None
+
+        try:
+            # Combine prompts for CLI (which doesn't have separate system prompt)
+            combined_prompt = f"""You are JARVIS. Follow these instructions:
+
+{system_prompt}
+
+User message:
+{user_prompt}
+
+Respond briefly (under 200 words) in character as JARVIS:"""
+
+            # Truncate if too long
+            if len(combined_prompt) > 3000:
+                combined_prompt = combined_prompt[:3000]
+
+            # Build command
+            cmd_args = [
+                cli_path,
+                "--print",
+                "--no-session-persistence",
+                combined_prompt,
+            ]
+
+            # Only add --dangerously-skip-permissions on Windows (blocked on Linux root)
+            if platform.system() == "Windows":
+                cmd_args.insert(2, "--dangerously-skip-permissions")
+
+            logger.info(f"Attempting Claude CLI at {cli_path} for chat response")
+
+            if platform.system() == "Windows":
+                # On Windows, run through cmd.exe for .cmd files
+                completed = subprocess.run(
+                    ["cmd", "/c"] + cmd_args,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                    env={**os.environ, "CI": "true"},  # Disable interactive prompts
+                )
+            else:
+                completed = subprocess.run(
+                    cmd_args,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                    env={**os.environ, "CI": "true"},
+                )
+
+            if completed.returncode != 0:
+                stderr_preview = completed.stderr[:200] if completed.stderr else 'no stderr'
+                logger.warning(f"Claude CLI returned code {completed.returncode}: {stderr_preview}")
+                return None
+
+            output = (completed.stdout or "").strip()
+            if output:
+                logger.info("Claude CLI chat response generated successfully")
+                return output
+            return None
+
+        except subprocess.TimeoutExpired:
+            logger.error("Claude CLI timed out after 60s")
+            return None
+        except Exception as exc:
+            logger.error(f"Claude CLI failed: {exc}")
+            return None
 
     def get_self_reflection(self) -> str:
         """Generate Jarvis's self-reflection for enhanced sentience."""
@@ -907,23 +1017,39 @@ class ChatResponder:
         recent_context: Optional[List[Dict]] = None,
         moderation_context: str = "",
     ) -> str:
+        # Build prompts first (needed for both CLI and API)
+        system_prompt = self._system_prompt(
+            chat_title,
+            is_private,
+            is_admin,
+            engagement_topic,
+            conversation_mood=conversation_mood,
+            active_participants=active_participants,
+            recent_context=recent_context,
+            moderation_context=moderation_context,
+        )
+        user_prompt = self._user_prompt(text, username)
+
+        # Try CLI first (uses authenticated OAuth, no API credits)
+        if self._cli_available():
+            logger.info("Trying Claude CLI first for chat response")
+            loop = asyncio.get_event_loop()
+            cli_result = await loop.run_in_executor(
+                None,
+                lambda: self._run_cli_for_chat(system_prompt, user_prompt)
+            )
+            if cli_result:
+                logger.info("Chat response generated via Claude CLI")
+                return self._clean_reply(cli_result)
+            logger.warning("Claude CLI failed, falling back to API")
+
+        # Fall back to Anthropic API
         try:
             if self._anthropic_client is None:
                 import anthropic
-
                 self._anthropic_client = anthropic.Anthropic(api_key=self.anthropic_api_key)
 
-            system_prompt = self._system_prompt(
-                chat_title,
-                is_private,
-                is_admin,
-                engagement_topic,
-                conversation_mood=conversation_mood,
-                active_participants=active_participants,
-                recent_context=recent_context,
-                moderation_context=moderation_context,
-            )
-            user_prompt = self._user_prompt(text, username)
+            logger.info("Using Anthropic API for chat response")
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
@@ -938,7 +1064,7 @@ class ChatResponder:
             content = response.content[0].text if response.content else ""
             return self._clean_reply(content)
         except Exception as exc:
-            logger.warning("Claude reply error: %s", exc)
+            logger.warning("Claude API reply error: %s", exc)
             return ""
 
     def _clean_reply(self, content: str) -> str:
