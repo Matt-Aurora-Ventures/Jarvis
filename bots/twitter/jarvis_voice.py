@@ -143,6 +143,8 @@ class JarvisVoice:
                     if not is_valid:
                         logger.warning(f"Tweet validation issues: {issues}")
                     return tweet
+                logger.warning("Claude CLI enabled but returned no output; skipping API fallback.")
+                return None
             
             # Use sync client in async context
             loop = asyncio.get_event_loop()
