@@ -86,6 +86,23 @@ def is_enabled(
     return get_manager().is_enabled(flag_name, user_id=user_id, context=context)
 
 
+def is_enabled_default(
+    flag_name: str,
+    default: bool = True,
+    user_id: Optional[str] = None,
+    context: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """
+    Check if a feature flag is enabled, falling back to default when missing.
+
+    This is useful for safe gating of critical paths without hard failures
+    when a flag is absent from config.
+    """
+    if get_flag(flag_name) is None:
+        return default
+    return get_manager().is_enabled(flag_name, user_id=user_id, context=context)
+
+
 def get_variant(
     flag_name: str,
     user_id: Optional[str] = None,

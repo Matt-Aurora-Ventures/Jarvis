@@ -57,12 +57,26 @@ class TaskResult:
     started_at: Optional[float] = None
     completed_at: Optional[float] = None
     attempts: int = 0
+    progress: float = 0.0  # 0.0 to 1.0
+    progress_message: str = ""
+    task_type: str = "generic"  # report, trade_batch, analysis, maintenance
+    metadata: Dict[str, Any] = None
+
+    def __post_init__(self):
+        if self.metadata is None:
+            self.metadata = {}
 
     @property
     def duration_ms(self) -> Optional[float]:
         if self.started_at and self.completed_at:
             return (self.completed_at - self.started_at) * 1000
         return None
+
+    def update_progress(self, progress: float, message: str = ""):
+        """Update task progress (0.0 to 1.0)."""
+        self.progress = max(0.0, min(1.0, progress))
+        if message:
+            self.progress_message = message
 
 
 @dataclass(order=True)
@@ -79,6 +93,10 @@ class Task:
     timeout: Optional[float] = field(compare=False, default=None)
     attempts: int = field(compare=False, default=0)
     scheduled_at: Optional[float] = field(compare=False, default=None)
+    task_type: str = field(compare=False, default="generic")
+    on_complete: Optional[Callable[[Any], None]] = field(compare=False, default=None)
+    on_error: Optional[Callable[[Exception], None]] = field(compare=False, default=None)
+    on_progress: Optional[Callable[[float, str], None]] = field(compare=False, default=None)
 
     def __post_init__(self):
         if not self.task_id:
@@ -170,6 +188,10 @@ class TaskQueue:
         retry_delay: float = 1.0,
         timeout: Optional[float] = None,
         delay: float = 0,
+        task_type: str = "generic",
+        on_complete: Optional[Callable[[Any], None]] = None,
+        on_error: Optional[Callable[[Exception], None]] = None,
+        on_progress: Optional[Callable[[float, str], None]] = None,
         **kwargs
     ) -> str:
         """
@@ -183,6 +205,10 @@ class TaskQueue:
             retry_delay: Delay between retries
             timeout: Task timeout
             delay: Delay before execution (seconds)
+            task_type: Type of task (report, trade_batch, analysis, maintenance)
+            on_complete: Callback when task completes successfully
+            on_error: Callback when task fails
+            on_progress: Callback for progress updates (progress: float, message: str)
             **kwargs: Keyword arguments
 
         Returns:
@@ -203,6 +229,10 @@ class TaskQueue:
             retry_delay=retry_delay,
             timeout=timeout or self.default_timeout,
             scheduled_at=time.time() + delay if delay > 0 else None,
+            task_type=task_type,
+            on_complete=on_complete,
+            on_error=on_error,
+            on_progress=on_progress,
         )
 
         async with self._lock:
@@ -214,11 +244,12 @@ class TaskQueue:
             self._results[task.task_id] = TaskResult(
                 task_id=task.task_id,
                 status=TaskStatus.PENDING,
+                task_type=task_type,
             )
             self._stats["enqueued"] += 1
 
         self._event.set()
-        logger.debug(f"Task {task.task_id} enqueued (priority={priority})")
+        logger.debug(f"Task {task.task_id} ({task_type}) enqueued (priority={priority})")
         return task.task_id
 
     async def get_result(
@@ -297,7 +328,7 @@ class TaskQueue:
         return None
 
     async def _execute_task(self, task: Task):
-        """Execute a task with retry support."""
+        """Execute a task with retry support and callbacks."""
         task.attempts += 1
         result = self._results[task.task_id]
         result.status = TaskStatus.RUNNING
@@ -306,11 +337,25 @@ class TaskQueue:
 
         self._running[task.task_id] = task
 
+        # Create progress callback wrapper
+        def progress_callback(progress: float, message: str = ""):
+            result.update_progress(progress, message)
+            if task.on_progress:
+                try:
+                    task.on_progress(progress, message)
+                except Exception as e:
+                    logger.warning(f"Progress callback failed for {task.task_id}: {e}")
+
         try:
+            # Inject progress callback if function supports it
+            kwargs = task.kwargs.copy()
+            if 'progress_callback' in task.func.__code__.co_varnames:
+                kwargs['progress_callback'] = progress_callback
+
             # Execute with timeout
             if asyncio.iscoroutinefunction(task.func):
                 task_result = await asyncio.wait_for(
-                    task.func(*task.args, **task.kwargs),
+                    task.func(*task.args, **kwargs),
                     timeout=task.timeout
                 )
             else:
@@ -319,15 +364,26 @@ class TaskQueue:
                 task_result = await asyncio.wait_for(
                     loop.run_in_executor(
                         None,
-                        lambda: task.func(*task.args, **task.kwargs)
+                        lambda: task.func(*task.args, **kwargs)
                     ),
                     timeout=task.timeout
                 )
 
             result.status = TaskStatus.COMPLETED
             result.result = task_result
+            result.progress = 1.0
             self._stats["completed"] += 1
-            logger.debug(f"Task {task.task_id} completed")
+            logger.debug(f"Task {task.task_id} ({task.task_type}) completed")
+
+            # Call completion callback
+            if task.on_complete:
+                try:
+                    if asyncio.iscoroutinefunction(task.on_complete):
+                        await task.on_complete(task_result)
+                    else:
+                        task.on_complete(task_result)
+                except Exception as e:
+                    logger.warning(f"Completion callback failed for {task.task_id}: {e}")
 
         except asyncio.TimeoutError:
             result.error = "Task timed out"
@@ -342,12 +398,12 @@ class TaskQueue:
             self._running.pop(task.task_id, None)
 
     async def _handle_failure(self, task: Task, result: TaskResult, error: str):
-        """Handle task failure with retry logic."""
+        """Handle task failure with retry logic and error callbacks."""
         if task.attempts < task.max_retries:
             result.status = TaskStatus.RETRYING
             self._stats["retried"] += 1
             logger.warning(
-                f"Task {task.task_id} failed ({error}), "
+                f"Task {task.task_id} ({task.task_type}) failed ({error}), "
                 f"retrying in {task.retry_delay}s "
                 f"(attempt {task.attempts}/{task.max_retries})"
             )
@@ -360,7 +416,18 @@ class TaskQueue:
         else:
             result.status = TaskStatus.FAILED
             self._stats["failed"] += 1
-            logger.error(f"Task {task.task_id} failed permanently: {error}")
+            logger.error(f"Task {task.task_id} ({task.task_type}) failed permanently: {error}")
+
+            # Call error callback
+            if task.on_error:
+                try:
+                    exc = Exception(error)
+                    if asyncio.iscoroutinefunction(task.on_error):
+                        await task.on_error(exc)
+                    else:
+                        task.on_error(exc)
+                except Exception as e:
+                    logger.warning(f"Error callback failed for {task.task_id}: {e}")
 
     async def _scheduler(self):
         """Move scheduled tasks to main queue when ready."""
@@ -384,6 +451,35 @@ class TaskQueue:
             "running": len(self._running),
             "max_workers": self.max_workers,
         }
+
+    def get_tasks_by_type(self, task_type: str) -> List[TaskResult]:
+        """Get all tasks of a specific type."""
+        return [
+            result for result in self._results.values()
+            if result.task_type == task_type
+        ]
+
+    def get_running_tasks_by_type(self, task_type: str) -> List[TaskResult]:
+        """Get running tasks of a specific type."""
+        return [
+            self._results[task_id] for task_id, task in self._running.items()
+            if task.task_type == task_type
+        ]
+
+    def get_progress(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Get task progress information."""
+        result = self._results.get(task_id)
+        if result:
+            return {
+                "task_id": task_id,
+                "status": result.status.value,
+                "progress": result.progress,
+                "progress_message": result.progress_message,
+                "task_type": result.task_type,
+                "attempts": result.attempts,
+                "started_at": result.started_at,
+            }
+        return None
 
     @property
     def is_running(self) -> bool:

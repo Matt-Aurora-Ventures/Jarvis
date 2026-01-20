@@ -171,14 +171,21 @@ class CompressionMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         """Compress response body."""
         # Get response body
-        if isinstance(response, StreamingResponse):
-            # For streaming responses, collect chunks
+        if hasattr(response, "body_iterator"):
+            # For streaming responses (including FastAPI's _StreamingResponse), collect chunks
             body_parts = []
             async for chunk in response.body_iterator:
+                if isinstance(chunk, str):
+                    chunk = chunk.encode("utf-8")
                 body_parts.append(chunk)
             body = b"".join(body_parts)
-        else:
+        elif hasattr(response, "body"):
             body = response.body
+            if isinstance(body, str):
+                body = body.encode("utf-8")
+        else:
+            # Can't get body, return original response
+            return response
 
         # Check minimum size
         original_size = len(body)

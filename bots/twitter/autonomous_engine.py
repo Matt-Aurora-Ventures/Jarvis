@@ -43,7 +43,6 @@ from core.state_paths import STATE_PATHS
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 X_MEMORY_DB = DATA_DIR / "jarvis_x_memory.db"
 POSTED_LOG = DATA_DIR / "x_posted_log.json"
-DUPLICATE_DETECTION_HOURS = 48
 X_ENGINE_STATE = STATE_PATHS.x_engine_state  # Persistent state to prevent spam on restart
 THREAD_SCHEDULE = {
     (0, 8): {"topic": "Weekly market outlook", "content_type": "weekly_market_outlook"},
@@ -61,6 +60,27 @@ def _load_env():
                 os.environ.setdefault(k.strip(), v.strip().strip('"'))
 
 _load_env()
+
+
+def _get_duplicate_detection_hours() -> int:
+    raw = os.getenv("X_DUPLICATE_DETECTION_HOURS", "48").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 48
+    return max(1, min(value, 168))
+
+
+def _get_duplicate_similarity_threshold() -> float:
+    raw = os.getenv("X_DUPLICATE_SIMILARITY", "0.4").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 0.4
+    return max(0.1, min(value, 0.95))
+
+
+DUPLICATE_DETECTION_HOURS = _get_duplicate_detection_hours()
 
 # =============================================================================
 # JARVIS VOICE FOR X
@@ -1149,7 +1169,7 @@ class XMemory:
                 entity_type="tweet",
                 memory_type=MemoryType.DUPLICATE_CONTENT,
                 hours=hours,
-                similarity_threshold=0.4  # Catch more duplicates with lower threshold
+                similarity_threshold=_get_duplicate_similarity_threshold()
             )
 
             if is_dup:
@@ -1824,6 +1844,11 @@ class AutonomousEngine:
 
         while self._running:
             try:
+                if os.getenv("X_BOT_ENABLED", "true").lower() == "false":
+                    logger.warning("X_BOT_ENABLED=false - autonomous X posting paused")
+                    await asyncio.sleep(60)
+                    continue
+
                 # Run one iteration
                 tweet_id = await self.run_once()
 

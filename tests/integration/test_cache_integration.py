@@ -80,7 +80,8 @@ class TestLRUCacheIntegration:
         try:
             from core.cache import LRUCache
 
-            cache = LRUCache(max_size=3)
+            # LRUCache uses 'maxsize' parameter
+            cache = LRUCache(maxsize=3)
 
             cache.set("a", 1)
             cache.set("b", 2)

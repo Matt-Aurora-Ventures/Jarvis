@@ -436,6 +436,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await report(cb_update, context)
         return
 
+    # Handle quick command callbacks
+    quick_callbacks = [
+        "quick_positions", "quick_balance", "quick_market", "quick_wallet",
+        "quick_alerts", "quick_health", "quick_stats", "quick_trending",
+        "quick_full_menu"
+    ]
+    if data in quick_callbacks:
+        from tg_bot.handlers.commands.quick_command import handle_quick_callback
+        await handle_quick_callback(update, context)
+        return
+
     # Menu navigation callbacks
     if data == "menu_trending":
         await _handle_trending_inline(query)

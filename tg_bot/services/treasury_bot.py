@@ -28,6 +28,16 @@ from telegram.constants import ParseMode
 from bots.treasury.trading import TradingEngine, Position
 from .treasury_dashboard import TreasuryDashboard
 
+# Import emergency stop manager
+try:
+    from core.trading.emergency_stop import get_emergency_stop_manager, StopLevel, UnwindStrategy
+    EMERGENCY_STOP_AVAILABLE = True
+except ImportError:
+    EMERGENCY_STOP_AVAILABLE = False
+    get_emergency_stop_manager = None
+    StopLevel = None
+    UnwindStrategy = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -239,6 +249,204 @@ Choose a reporting period:"""
             reply_markup=keyboard
         )
 
+    async def cmd_emergency_stop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /stop command - activate emergency trading halt."""
+        if not self._check_admin(update):
+            await update.message.reply_text(
+                "❌ <b>Access Denied</b>\n\nEmergency controls require admin privileges.",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        if not EMERGENCY_STOP_AVAILABLE:
+            await update.message.reply_text(
+                "❌ Emergency stop system not available",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        # Parse command arguments
+        args = context.args or []
+        level = args[0].upper() if args else "SOFT"
+        reason = " ".join(args[1:]) if len(args) > 1 else "Manual stop via Telegram"
+
+        emergency_manager = get_emergency_stop_manager()
+        user_id = update.effective_user.id
+
+        # Activate appropriate stop level
+        if level == "KILL":
+            success, msg = emergency_manager.activate_kill_switch(
+                reason=reason,
+                activated_by=f"telegram_user_{user_id}",
+                unwind_strategy=UnwindStrategy.IMMEDIATE
+            )
+            icon = "🚨"
+        elif level == "HARD":
+            success, msg = emergency_manager.activate_hard_stop(
+                reason=reason,
+                activated_by=f"telegram_user_{user_id}",
+                unwind_strategy=UnwindStrategy.GRACEFUL
+            )
+            icon = "🛑"
+        else:  # SOFT
+            success, msg = emergency_manager.activate_soft_stop(
+                reason=reason,
+                activated_by=f"telegram_user_{user_id}"
+            )
+            icon = "⚠️"
+
+        if success:
+            status = emergency_manager.get_status()
+            response = f"""{icon} <b>EMERGENCY STOP ACTIVATED</b>
+
+<b>Level:</b> {status['level']}
+<b>Reason:</b> {reason}
+<b>Trading:</b> {'❌ BLOCKED' if not status['trading_allowed'] else '✅ Allowed'}
+<b>Should Unwind:</b> {'Yes' if status['should_unwind'] else 'No'}
+<b>Strategy:</b> {status['unwind_strategy']}
+
+Use /resume to restore normal trading.
+Use /stop_status to check current state.
+"""
+        else:
+            response = f"❌ <b>Failed to activate emergency stop</b>\n\n{msg}"
+
+        await update.message.reply_text(response, parse_mode=ParseMode.HTML)
+
+    async def cmd_resume_trading(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /resume command - resume normal trading."""
+        if not self._check_admin(update):
+            await update.message.reply_text(
+                "❌ <b>Access Denied</b>\n\nEmergency controls require admin privileges.",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        if not EMERGENCY_STOP_AVAILABLE:
+            await update.message.reply_text(
+                "❌ Emergency stop system not available",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        emergency_manager = get_emergency_stop_manager()
+        user_id = update.effective_user.id
+
+        success, msg = emergency_manager.resume_trading(
+            resumed_by=f"telegram_user_{user_id}"
+        )
+
+        if success:
+            response = """✅ <b>TRADING RESUMED</b>
+
+All emergency stops cleared.
+Normal trading operations restored.
+
+Use /stop to activate emergency stop again if needed.
+"""
+        else:
+            response = f"❌ <b>Failed to resume trading</b>\n\n{msg}"
+
+        await update.message.reply_text(response, parse_mode=ParseMode.HTML)
+
+    async def cmd_stop_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /stop_status command - show emergency stop status."""
+        if not self._check_admin(update):
+            return
+
+        if not EMERGENCY_STOP_AVAILABLE:
+            await update.message.reply_text(
+                "❌ Emergency stop system not available",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        emergency_manager = get_emergency_stop_manager()
+        status = emergency_manager.get_status()
+
+        # Determine icon
+        if status['level'] == 'KILL_SWITCH':
+            icon = "🚨"
+        elif status['level'] == 'HARD_STOP':
+            icon = "🛑"
+        elif status['level'] == 'SOFT_STOP':
+            icon = "⚠️"
+        elif status['level'] == 'TOKEN_PAUSE':
+            icon = "⏸️"
+        else:
+            icon = "✅"
+
+        response = f"""{icon} <b>EMERGENCY STOP STATUS</b>
+
+<b>Current Level:</b> {status['level']}
+<b>Trading Allowed:</b> {'✅ Yes' if status['trading_allowed'] else '❌ No'}
+"""
+
+        if status['activated_at']:
+            response += f"<b>Activated:</b> {status['activated_at']}\n"
+            response += f"<b>By:</b> {status['activated_by']}\n"
+            response += f"<b>Reason:</b> {status['reason']}\n"
+
+        if status['paused_tokens']:
+            response += f"\n<b>Paused Tokens:</b> {len(status['paused_tokens'])}\n"
+            for token in list(status['paused_tokens'])[:5]:
+                response += f"  • {token[:8]}...\n"
+
+        if status['should_unwind']:
+            response += f"\n<b>Unwind Strategy:</b> {status['unwind_strategy']}\n"
+
+        if status['level'] == 'NONE':
+            response += "\n<i>Normal trading operations</i>"
+
+        await update.message.reply_text(response, parse_mode=ParseMode.HTML)
+
+    async def cmd_pause_token(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /pause_token command - pause trading for specific token."""
+        if not self._check_admin(update):
+            return
+
+        if not EMERGENCY_STOP_AVAILABLE:
+            await update.message.reply_text(
+                "❌ Emergency stop system not available",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        # Parse arguments
+        args = context.args or []
+        if not args:
+            await update.message.reply_text(
+                "Usage: /pause_token <token_mint> [reason]",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        token_mint = args[0]
+        reason = " ".join(args[1:]) if len(args) > 1 else "Manual pause via Telegram"
+
+        emergency_manager = get_emergency_stop_manager()
+        user_id = update.effective_user.id
+
+        success, msg = emergency_manager.pause_token(
+            token_mint=token_mint,
+            reason=reason,
+            activated_by=f"telegram_user_{user_id}"
+        )
+
+        if success:
+            response = f"""⏸️ <b>TOKEN PAUSED</b>
+
+<b>Token:</b> {token_mint[:8]}...
+<b>Reason:</b> {reason}
+
+Trading for this token is now blocked.
+Use /resume_token {token_mint} to resume.
+"""
+        else:
+            response = f"❌ <b>Failed to pause token</b>\n\n{msg}"
+
+        await update.message.reply_text(response, parse_mode=ParseMode.HTML)
+
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /treasury_help command."""
         help_msg = """👑 <b>JARVIS TREASURY BOT</b> - Command Reference
@@ -250,6 +458,13 @@ Choose a reporting period:"""
   /treasury_report - Performance analytics by period
   /treasury_settings - Configuration and risk management
   /treasury_help - This help message
+
+<b>Emergency Controls:</b>
+  /stop [SOFT|HARD|KILL] [reason] - Emergency trading halt
+  /resume - Resume normal trading
+  /stop_status - Check emergency stop state
+  /pause_token <mint> [reason] - Pause specific token
+  /resume_token <mint> - Resume specific token
 
 <b>Dashboard Features:</b>
   ✅ Real-time P&L tracking
@@ -272,9 +487,14 @@ Choose a reporting period:"""
 
 <b>Safety Features:</b>
   🔒 Admin-only access
-  🔒 Confirmation on mode changes
+  🔒 Emergency stop controls
   🔒 Real-time position monitoring
   🔒 Automatic stop loss enforcement
+
+<b>Emergency Stop Levels:</b>
+  • SOFT - Block new positions only
+  • HARD - Block new + close existing (graceful)
+  • KILL - Immediate halt + unwind all positions
 
 <b>Keyboard Shortcuts:</b>
   • Use inline buttons for quick navigation

@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from api.pagination import PaginationParams
 
 router = APIRouter(prefix="/api/treasury/reports", tags=["Treasury Reports"])
 
@@ -27,9 +28,15 @@ class ReportRequest(BaseModel):
 @router.get("")
 async def list_reports(
     period: Optional[str] = Query(None, description="Filter by period: daily, weekly, monthly"),
-    limit: int = Query(10, ge=1, le=100, description="Maximum reports to return"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
 ):
-    """List available treasury reports."""
+    """
+    List available treasury reports with pagination.
+
+    Supports filtering by period (daily, weekly, monthly).
+    Returns paginated results with metadata.
+    """
     try:
         from core.treasury.reports import get_report_generator, ReportPeriod
 
@@ -42,11 +49,29 @@ async def list_reports(
             except ValueError:
                 raise HTTPException(400, f"Invalid period: {period}")
 
-        reports = await generator.list_reports(period=period_filter, limit=limit)
+        # Calculate offset for pagination
+        offset = (page - 1) * page_size
+
+        # Get reports with pagination applied at the source if possible
+        # For now, we'll use limit to get slightly more than needed
+        reports = await generator.list_reports(period=period_filter, limit=page_size * page)
+
+        # Apply pagination to results
+        total = len(reports)
+        page_reports = reports[offset:offset + page_size]
+
+        total_pages = (total + page_size - 1) // page_size
 
         return {
-            "reports": reports,
-            "count": len(reports),
+            "reports": page_reports,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1,
+            },
         }
 
     except HTTPException:

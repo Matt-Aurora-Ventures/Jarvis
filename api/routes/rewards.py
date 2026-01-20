@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
+from api.pagination import PaginationParams, PaginatedResponse
 from core.staking.rewards_calculator import (
     StakerRewardsCalculator,
     StakeTier,
@@ -288,15 +289,25 @@ async def get_pool_summary(
 async def get_reward_history(
     wallet: str,
     days: int = Query(30, ge=1, le=365, description="Days of history"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     calculator: StakerRewardsCalculator = Depends(get_calculator),
 ):
     """
-    Get reward claim history for a wallet.
+    Get reward claim history for a wallet with pagination.
 
     Returns list of past reward claims with full breakdown.
+    Supports pagination for large histories.
     """
     try:
+        # Get full history for the period
         history = await calculator.get_reward_history(wallet, days)
+
+        # Apply pagination
+        total = len(history)
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_history = history[start:end]
 
         return RewardHistoryResponse(
             wallet=wallet,
@@ -311,7 +322,7 @@ async def get_reward_history(
                     claimed_at=item.get("claimed_at", ""),
                     tx_signature=item.get("tx_signature"),
                 )
-                for item in history
+                for item in page_history
             ],
         )
     except Exception as e:

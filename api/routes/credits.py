@@ -14,9 +14,11 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, EmailStr
+
+from api.pagination import PaginationParams, paginate
 
 logger = logging.getLogger("jarvis.api.credits")
 
@@ -405,14 +407,18 @@ async def create_checkout(
 @router.get("/history/{user_id}", response_model=HistoryResponse)
 async def get_history(
     user_id: str,
-    page: int = 1,
-    limit: int = 20,
-    type: Optional[str] = None,
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    type: Optional[str] = Query(None, description="Filter by transaction type"),
     service: CreditsService = Depends(get_credits_service),
 ):
-    """Get user's transaction history."""
+    """
+    Get user's transaction history with pagination.
+
+    Supports optional filtering by transaction type (purchase, consumption, bonus, refund).
+    """
     try:
-        return service.get_transactions(user_id, page, limit, type)
+        return service.get_transactions(user_id, page, page_size, type)
     except Exception as e:
         logger.error(f"Error fetching history: {e}")
         raise HTTPException(500, str(e))

@@ -18,7 +18,7 @@ import tg_bot.bot_core as bot_core
 from tg_bot.bot_core import *  # re-export non-underscore symbols for legacy imports
 from tg_bot.handlers.commands import start, help_command, status, subscribe, unsubscribe
 from tg_bot.handlers.sentiment import trending, digest, report, sentiment, picks
-from tg_bot.handlers.admin import reload, config_cmd, logs, system, away, back, awaystatus, memory
+from tg_bot.handlers.admin import reload, config_cmd, logs, system, away, back, awaystatus, memory, sysmem
 from tg_bot.handlers.trading import balance, positions, wallet, dashboard, button_callback, calibrate
 from tg_bot.handlers import treasury as treasury_handlers
 from tg_bot.handlers.sim_commands import sim, sim_buy, sim_sell, sim_pos
@@ -26,6 +26,16 @@ from tg_bot.handlers.sim_commands import sim, sim_buy, sim_sell, sim_pos
 # Quick Wins imports (v4.9.0)
 from tg_bot.handlers.commands.search_command import search_command, search_with_prices
 from tg_bot.handlers.commands.export_command import export_command, export_positions, export_trades
+from tg_bot.handlers.commands.quick_command import quick_command, handle_quick_callback
+
+# Portfolio Analytics imports (v5.0.0)
+from tg_bot.handlers.analytics import analytics_command, stats_command, performers_command, tokenperf_command
+
+# Watchlist imports (v4.11.0)
+from tg_bot.handlers.commands.watchlist_command import watch_command, unwatch_command
+
+# Commands reference (v5.1.0)
+from tg_bot.handlers.commands.commands_command import commands_command
 
 
 def main():
@@ -91,9 +101,18 @@ def main():
     # Build application
     app = Application.builder().token(config.telegram_token).build()
 
+    # Set up graceful shutdown handling
+    try:
+        from tg_bot.shutdown_handler import setup_telegram_shutdown
+        setup_telegram_shutdown(app)
+        print("Graceful shutdown: ENABLED")
+    except ImportError as e:
+        print(f"Graceful shutdown: NOT AVAILABLE ({e})")
+
     # Add handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("commands", commands_command))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("subscribe", subscribe))
     app.add_handler(CommandHandler("unsubscribe", unsubscribe))
@@ -133,6 +152,7 @@ def main():
     app.add_handler(CommandHandler("back", back))
     app.add_handler(CommandHandler("awaystatus", awaystatus))
     app.add_handler(CommandHandler("memory", memory))
+    app.add_handler(CommandHandler("sysmem", sysmem))
     app.add_handler(CommandHandler("metrics", metrics))
     app.add_handler(CommandHandler("clistats", clistats))
     app.add_handler(CommandHandler("stats", clistats))
@@ -180,6 +200,8 @@ def main():
     app.add_handler(CommandHandler("compare", compare))
     app.add_handler(CommandHandler("watchlist", watchlist))
     app.add_handler(CommandHandler("w", watchlist))
+    app.add_handler(CommandHandler("watch", watch_command))
+    app.add_handler(CommandHandler("unwatch", unwatch_command))
 
     # Quick Wins Commands (v4.9.0)
     app.add_handler(CommandHandler("search", search_command))
@@ -187,6 +209,16 @@ def main():
     app.add_handler(CommandHandler("export", export_command))
     app.add_handler(CommandHandler("exportpos", export_positions))
     app.add_handler(CommandHandler("exporttrades", export_trades))
+
+    # Quick Access Commands (v4.10.0)
+    app.add_handler(CommandHandler("quick", quick_command))
+    app.add_handler(CommandHandler("q", quick_command))
+
+    # Portfolio Analytics Commands (v5.0.0)
+    app.add_handler(CommandHandler("analytics", analytics_command))
+    app.add_handler(CommandHandler("perfstats", stats_command))  # Avoid conflict with /stats (clistats)
+    app.add_handler(CommandHandler("performers", performers_command))
+    app.add_handler(CommandHandler("tokenperf", tokenperf_command))
 
     app.add_handler(CommandHandler("addscam", addscam))
     app.add_handler(CommandHandler("trust", trust))

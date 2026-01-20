@@ -6,6 +6,8 @@ from typing import Any, Dict
 pytest.importorskip("pydantic")
 pytest.importorskip("fastapi")
 
+from pydantic import ValidationError
+
 
 class TestHealthContract:
     """Contract tests for health endpoint."""

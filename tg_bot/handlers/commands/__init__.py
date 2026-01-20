@@ -31,6 +31,10 @@ from tg_bot.handlers.commands.watchlist_command import (
     watchlist_command,
     handle_watchlist_callback,
 )
+from tg_bot.handlers.commands.quick_command import (
+    quick_command,
+    handle_quick_callback,
+)
 
 __all__ = [
     # Original commands
@@ -44,4 +48,6 @@ __all__ = [
     "handle_analyze_callback",
     "watchlist_command",
     "handle_watchlist_callback",
+    "quick_command",
+    "handle_quick_callback",
 ]

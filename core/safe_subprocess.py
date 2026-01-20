@@ -171,11 +171,12 @@ def run_command_safe(
         finally:
             # Always unregister from watchdog
             watchdog.unregister(proc.pid)
-            
-            result["stderr"] += f"\n[TIMEOUT] Command exceeded {timeout}s limit and was killed"
-            
-            if check:
-                raise TimeoutError(f"Command timed out after {timeout}s: {command}")
+            if result["timed_out"]:
+                result["stderr"] += (
+                    f"\n[TIMEOUT] Command exceeded {timeout}s limit and was killed"
+                )
+                if check:
+                    raise TimeoutError(f"Command timed out after {timeout}s: {command}")
                 
     except Exception as e:
         logger.error(f"Command execution error: {e}")

@@ -65,6 +65,8 @@ browser_profile/
 *_cookies.json
 grok_cookies.json
 x_cookies.json
+!tg_bot/sessions/
+!tg_bot/sessions/**
 
 # === TRANSCRIPTS & PERSONAL DATA ===
 transcripts/
@@ -147,6 +149,10 @@ tests/__pycache__/
 *.temp
 .cache/
 *.cache
+
+# === LOCAL NOTES ===
+AUDIT_200_POINT_CHECKLIST.md
+thoughts/shared/handoffs/**/current.md
 
 # === NOTION EXTRACTION DATA ===
 # Generated data from Notion extractions (large JSON files)
@@ -239,3 +245,9 @@ temp_*.txt
 # Temporary directories created by Claude Code CLI sessions
 tmpclaude-*/
 tmpclaude-*-cwd
+
+# === LOCAL NOTES ===
+# Local audit/handoff notes (keep out of repo)
+AUDIT_200_POINT_CHECKLIST.md
+thoughts/shared/handoffs/kraken-backup-recovery-20260118/current.md
+thoughts/shared/handoffs/kraken-health-monitoring-20260118/current.md

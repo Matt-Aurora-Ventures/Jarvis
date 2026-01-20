@@ -4,6 +4,48 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [4.6.1] - 2026-01-20
+
+### Added
+- Multi-level cache manager with memory/file/redis tiers, TTLs, LRU eviction, invalidation, stats, and request deduplication (`core/caching/cache_manager.py`).
+- Query optimization toolkit for batching, request coalescing, connection pooling, and deduplicated fetches (`core/data/query_optimizer.py`).
+- Comprehensive audit logger with hash-chain integrity and automatic secret redaction (`core/security/comprehensive_audit_logger.py`).
+- Enhanced rate limiter with IP/user scopes, DDoS detection, and auto-blacklisting (`core/security/enhanced_rate_limiter.py`).
+- Enhanced secrets manager with encryption, versioned rotation, and access auditing (`core/security/enhanced_secrets_manager.py`).
+- Scam detector for pump-and-dump, wash trading, and coordinated manipulation patterns (`core/security/scam_detector.py`).
+- Transaction verifier for contract authenticity, liquidity checks, and risk flags (`core/security/transaction_verifier.py`).
+- Social toolkit configs for visuals, viral hooks, and trending logic (`core/social/config.py`).
+- Image generator for sentiment/price/portfolio charts for X posts (`core/social/image_generator.py`).
+- Trending token tracker with cached exchange feeds and change detection (`core/social/trending_tracker.py`).
+- Viral optimizer with hashtags, hooks, and timing recommendations (`core/social/viral_optimizer.py`).
+- Telegram command framework with parsing, permissions, rate limits, and history (`tg_bot/ui/command_framework.py`).
+- Interactive Telegram menus for portfolio/trading/settings navigation (`tg_bot/ui/interactive_menus.py`).
+- Watchlist manager with persistence and price alerts (`tg_bot/ui/watchlist_manager.py`).
+- Session manager for drill-down UI state + user preferences with persistence (`tg_bot/sessions/session_manager.py`).
+- Matplotlib dependency for Telegram chart rendering (`tg_bot/requirements.txt`, `requirements.txt`).
+- PyNaCl for encrypted treasury keypair support (`requirements.txt`).
+- X duplicate tuning via `X_DUPLICATE_DETECTION_HOURS` + `X_DUPLICATE_SIMILARITY` (`bots/twitter/autonomous_engine.py`).
+- Telegram JobQueue extras for scheduled digests (`tg_bot/requirements.txt`).
+- Unit tests for caching/query optimizer and new security/social modules (`tests/unit`, `tests/performance`, `tests/unit/security`, `tests/unit/social`).
+- Telegram UI test coverage for commands, menus, inline buttons, and watchlists (`tests/unit/test_tg_ui_*`).
+- Reliability audit notes and incident writeups (`audit_reports/`).
+
+### Changed
+- X autonomous posting now respects `X_BOT_ENABLED` kill switch (`bots/twitter/autonomous_engine.py`).
+- Sentiment poster honors `X_BOT_ENABLED` gate (`bots/twitter/sentiment_poster.py`).
+- X read endpoints back off on 401/403 to reduce log noise and protect limits (`bots/twitter/twitter_client.py`).
+- X posting length now honors `X_MAX_TWEET_LENGTH`/`TWITTER_MAX_TWEET_LENGTH` (default 280) (`bots/twitter/twitter_client.py`).
+- Jarvis voice validation + Twitter compliance now respect `X_MAX_TWEET_LENGTH` (`core/jarvis_voice_bible.py`, `core/social/twitter_compliance.py`).
+- Treasury trading now blocks `open_position` when kill switch is enabled (`bots/treasury/trading.py`).
+- Treasury manager + trade adapters now honor kill switch, emergency shutdown, and `LIVE_TRADING_ENABLED` (`core/treasury/manager.py`, `core/trading/batch_processor.py`, `core/trading/bags_adapter.py`).
+- `tg_bot/sessions` is now tracked to prevent missing-module deploys (`.gitignore`, `tg_bot/sessions`).
+- Desktop-only audio/wakeword deps are now Windows-only to avoid Linux install failures (`requirements.txt`).
+
+### Fixed
+- Telegram analytics handler import error (missing `is_admin`) to prevent bot crash (`tg_bot/bot_core.py`).
+
+---
+
 # [4.6.0] - 2026-01-14
 
 ### 🚀 **MASSIVE RELEASE: Autonomous Intelligence & Full-Stack Expansion**

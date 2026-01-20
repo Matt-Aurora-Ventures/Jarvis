@@ -21,6 +21,16 @@ from .position_sizer import (
     RiskParameters,
     get_position_sizer,
 )
+from .signal_aggregator import (
+    SignalAggregator,
+    StrategySignal,
+    AggregatedSignal,
+    StrategyPerformance,
+    SignalAction,
+    ConsensusType,
+    aggregate_signals,
+    get_signal_aggregator,
+)
 
 __all__ = [
     # Fusion
@@ -35,4 +45,13 @@ __all__ = [
     "SizingMethod",
     "RiskParameters",
     "get_position_sizer",
+    # Signal Aggregation
+    "SignalAggregator",
+    "StrategySignal",
+    "AggregatedSignal",
+    "StrategyPerformance",
+    "SignalAction",
+    "ConsensusType",
+    "aggregate_signals",
+    "get_signal_aggregator",
 ]

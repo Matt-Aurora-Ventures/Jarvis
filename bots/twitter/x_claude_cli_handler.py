@@ -986,16 +986,21 @@ Include @{author} at the start. MUST be under 270 characters."""
         import shutil
 
         # Try common bash locations on Windows
+        # Try common bash locations on Windows - prioritize Git Bash over WSL
         bash_locations = [
-            shutil.which("bash"),  # Git Bash in PATH
             r"C:\Program Files\Git\bin\bash.exe",
             r"C:\Program Files (x86)\Git\bin\bash.exe",
             r"C:\Git\bin\bash.exe",
+            shutil.which("bash"),  # Fallback to PATH
         ]
 
         for bash_path in bash_locations:
             if bash_path and os.path.isfile(bash_path):
+                # Avoid WSL bash which causes issues with Windows paths
+                if "system32" in bash_path.lower() or "syswow64" in bash_path.lower():
+                    continue
                 return bash_path
+        return None
         return None
 
     async def execute_command(self, command: str, username: str = "") -> tuple[bool, str, str]:

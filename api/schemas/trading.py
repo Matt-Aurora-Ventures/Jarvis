@@ -1,8 +1,15 @@
 """Trading-related Pydantic schemas."""
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, field_validator
 from typing import Optional, List, Any
 from enum import Enum
 from datetime import datetime
+from api.schemas.validators import (
+    sanitize_string,
+    validate_symbol,
+    validate_positive_number,
+    validate_range,
+    CONSTRAINTS,
+)
 
 
 class OrderSide(str, Enum):
@@ -27,34 +34,92 @@ class OrderStatus(str, Enum):
 
 
 class CreateOrderRequest(BaseModel):
-    """Request schema for creating an order."""
-    symbol: str = Field(..., min_length=1, max_length=20, description="Trading pair symbol")
+    """Request schema for creating an order with enhanced validation."""
+    symbol: str = Field(
+        ...,
+        min_length=1,
+        max_length=20,
+        description="Trading pair symbol (e.g., SOL/USDC)",
+        examples=["SOL/USDC", "BTC/USDC"]
+    )
     side: OrderSide = Field(..., description="Order side (buy/sell)")
     order_type: OrderType = Field(default=OrderType.MARKET, description="Order type")
-    amount: float = Field(..., gt=0, le=1000000, description="Order amount")
-    price: Optional[float] = Field(None, gt=0, description="Limit price (required for limit orders)")
-    stop_price: Optional[float] = Field(None, gt=0, description="Stop price (required for stop orders)")
+    amount: float = Field(
+        ...,
+        gt=0,
+        le=1_000_000,
+        description="Order amount in base currency"
+    )
+    price: Optional[float] = Field(
+        None,
+        gt=0,
+        le=1_000_000,
+        description="Limit price (required for limit orders)"
+    )
+    stop_price: Optional[float] = Field(
+        None,
+        gt=0,
+        le=1_000_000,
+        description="Stop price (required for stop orders)"
+    )
     reduce_only: bool = Field(default=False, description="Reduce position only")
     post_only: bool = Field(default=False, description="Post only (maker)")
-    client_order_id: Optional[str] = Field(None, max_length=64, description="Client order ID")
-    
+    client_order_id: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        description="Client-provided order ID"
+    )
+
+    @validator('symbol')
+    def validate_and_normalize_symbol(cls, v):
+        """Validate and normalize symbol format."""
+        if not v:
+            raise ValueError("Symbol cannot be empty")
+        v = v.strip().upper()
+        # Allow formats: BTC, SOL/USDC, etc.
+        if not all(c.isalnum() or c == '/' for c in v):
+            raise ValueError("Symbol can only contain letters, numbers, and /")
+        return v
+
+    @validator('client_order_id')
+    def validate_client_order_id(cls, v):
+        """Sanitize client order ID."""
+        if v:
+            return sanitize_string(v, max_length=64)
+        return v
+
     @validator('price')
     def price_required_for_limit(cls, v, values):
+        """Ensure price is provided for limit orders."""
         order_type = values.get('order_type')
         if order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT) and v is None:
             raise ValueError('Price is required for limit orders')
+        if v is not None and v <= 0:
+            raise ValueError('Price must be positive')
         return v
-    
+
     @validator('stop_price')
     def stop_price_required_for_stop(cls, v, values):
+        """Ensure stop price is provided for stop orders."""
         order_type = values.get('order_type')
         if order_type in (OrderType.STOP, OrderType.STOP_LIMIT) and v is None:
             raise ValueError('Stop price is required for stop orders')
+        if v is not None and v <= 0:
+            raise ValueError('Stop price must be positive')
         return v
-    
-    @validator('symbol')
-    def symbol_uppercase(cls, v):
-        return v.upper()
+
+    @validator('amount')
+    def validate_amount(cls, v):
+        """Validate amount precision and range."""
+        if v <= 0:
+            raise ValueError('Amount must be positive')
+        if v > 1_000_000:
+            raise ValueError('Amount exceeds maximum allowed (1,000,000)')
+        # Check for reasonable precision (max 8 decimal places)
+        if len(str(v).split('.')[-1]) > 8:
+            raise ValueError('Amount has too many decimal places (max 8)')
+        return v
     
     class Config:
         json_schema_extra = {

@@ -1,5 +1,1 @@
-"""
-JARVIS Performance Testing Module
-
-Provides performance regression detection and baseline tracking.
-"""
+"""Performance and load tests for Jarvis trading system."""

@@ -2,6 +2,7 @@
 JARVIS Social Media Integration
 
 Twitter/X bot and Telegram prediction bot for public engagement.
+Includes image generation, viral optimization, and trending tracking.
 """
 
 from .twitter_bot import (
@@ -23,6 +24,19 @@ from .telegram_bot import (
     UserAccount,
     get_telegram_bot,
 )
+from .image_generator import (
+    ImageGenerator,
+    ImageConfig,
+)
+from .viral_optimizer import (
+    ViralOptimizer,
+    PostingSchedule,
+)
+from .trending_tracker import (
+    TrendingTokenTracker,
+    PumpDumpDetector,
+    MentionTracker,
+)
 
 __all__ = [
     # Twitter
@@ -38,4 +52,14 @@ __all__ = [
     "JarvisTelegramBot",
     "UserAccount",
     "get_telegram_bot",
+    # Image Generation
+    "ImageGenerator",
+    "ImageConfig",
+    # Viral Optimization
+    "ViralOptimizer",
+    "PostingSchedule",
+    # Trending Tracking
+    "TrendingTokenTracker",
+    "PumpDumpDetector",
+    "MentionTracker",
 ]

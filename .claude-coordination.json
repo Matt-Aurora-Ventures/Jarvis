@@ -454,6 +454,16 @@
       "timestamp": "2026-01-19T00:49:45.099039+00:00",
       "from": "Codex",
       "message": "History rewrite complete in mirror clone: used git-filter-repo with exact leaked values (Telegram/X creds) and force-pushed to origin/main. Remote now rewritten (force update main). Local working tree (this repo) still has uncommitted changes and is out-of-sync; do NOT push until rebase/reset onto new history. Note: test fixtures still contain fake token-like strings; history scan for actual token patterns will still hit tests but no real secrets remain."
+    },
+    {
+      "timestamp": "2026-01-19T03:10:42.233271+00:00",
+      "from": "Codex",
+      "message": "Created fresh working clone at C:/Users/lucid/OneDrive/Desktop/Projects/Jarvis-clean from rewritten origin/main. Old repo remains as backup (history diverged). Copied over .grok_state.json and untracked notes (AUDIT_200_POINT_CHECKLIST.md, handoff current.md files) into Jarvis-clean. Jarvis-clean has only those local changes; recommend using it for future work and avoiding pushes from old repo."
+    },
+    {
+      "timestamp": "2026-01-19T03:16:57.285129+00:00",
+      "from": "Codex",
+      "message": "Additional sync: restored untracked tests/dexter/__init__.py from stash into Jarvis-clean. Jarvis-clean now has only local notes (.grok_state.json, AUDIT_200_POINT_CHECKLIST.md, handoff current.md files, tests/dexter/__init__.py). Scanned those notes for token patterns; no matches."
     }
   ]
 }

@@ -310,6 +310,12 @@ def _parse_admin_ids(value: str) -> List[int]:
     return ids
 
 
+def is_admin(user_id: int, admin_ids: List[int]) -> bool:
+    if not user_id:
+        return False
+    return user_id in admin_ids
+
+
 def _get_treasury_admin_ids(config) -> List[int]:
     ids_str = os.environ.get("TREASURY_ADMIN_IDS", "")
     if ids_str:

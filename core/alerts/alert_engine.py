@@ -238,7 +238,8 @@ class AlertEngine:
         user_id: str,
         alert_type: AlertType,
         channels: List[DeliveryChannel],
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
+        replace_existing: bool = False
     ) -> AlertSubscription:
         """Subscribe user to an alert type"""
 
@@ -252,11 +253,12 @@ class AlertEngine:
         if user_id not in self.subscriptions:
             self.subscriptions[user_id] = []
 
-        # Remove existing subscription for same type
-        self.subscriptions[user_id] = [
-            s for s in self.subscriptions[user_id]
-            if s.alert_type != alert_type
-        ]
+        # Remove existing subscription for same type (only if replace_existing)
+        if replace_existing:
+            self.subscriptions[user_id] = [
+                s for s in self.subscriptions[user_id]
+                if s.alert_type != alert_type
+            ]
 
         self.subscriptions[user_id].append(subscription)
         self._save()
@@ -472,6 +474,131 @@ class AlertEngine:
                 if d >= today
             }
 
+    # ==================== PRICE ALERT MANAGEMENT ====================
+
+    async def add_price_alert(
+        self,
+        user_id: str,
+        token: str,
+        threshold_price: float,
+        direction: str,  # "above" or "below"
+        percentage: Optional[float] = None
+    ) -> str:
+        """
+        Add a price alert for a user
+
+        Args:
+            user_id: User ID
+            token: Token symbol
+            threshold_price: Price threshold (absolute)
+            direction: "above" or "below"
+            percentage: Optional percentage change threshold
+
+        Returns:
+            Alert ID
+        """
+        alert_id = hashlib.sha256(
+            f"{user_id}{token}{threshold_price}{direction}".encode()
+        ).hexdigest()[:12].upper()
+
+        filters = {
+            "tokens": [token],
+            "price_threshold": threshold_price,
+            "direction": direction,
+            "alert_id": f"PRICE-{alert_id}"
+        }
+
+        if percentage is not None:
+            filters["percentage_change"] = percentage
+
+        await self.subscribe(
+            user_id=user_id,
+            alert_type=AlertType.PRICE_THRESHOLD,
+            channels=[DeliveryChannel.TELEGRAM],
+            filters=filters
+        )
+
+        return f"PRICE-{alert_id}"
+
+    async def add_percentage_alert(
+        self,
+        user_id: str,
+        token: str,
+        percentage_change: float,
+        direction: str  # "up" or "down"
+    ) -> str:
+        """
+        Add a percentage change alert
+
+        Args:
+            user_id: User ID
+            token: Token symbol
+            percentage_change: Percentage threshold (e.g., 5.0 for 5%)
+            direction: "up" or "down"
+
+        Returns:
+            Alert ID
+        """
+        alert_id = hashlib.sha256(
+            f"{user_id}{token}{percentage_change}{direction}".encode()
+        ).hexdigest()[:12].upper()
+
+        filters = {
+            "tokens": [token],
+            "percentage_change": percentage_change,
+            "direction": direction,
+            "alert_id": f"PCT-{alert_id}"
+        }
+
+        await self.subscribe(
+            user_id=user_id,
+            alert_type=AlertType.PRICE_THRESHOLD,
+            channels=[DeliveryChannel.TELEGRAM],
+            filters=filters
+        )
+
+        return f"PCT-{alert_id}"
+
+    async def remove_alert(self, user_id: str, alert_id: str) -> bool:
+        """Remove a specific alert by ID"""
+        if user_id not in self.subscriptions:
+            return False
+
+        # Find and remove subscription with matching alert_id
+        for sub in self.subscriptions[user_id][:]:
+            if sub.filters.get("alert_id") == alert_id:
+                self.subscriptions[user_id].remove(sub)
+                self._save()
+                return True
+
+        return False
+
+    async def get_user_alerts(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get all alerts for a user"""
+        if user_id not in self.subscriptions:
+            return []
+
+        alerts = []
+        for sub in self.subscriptions[user_id]:
+            if sub.alert_type == AlertType.PRICE_THRESHOLD:
+                alert_info = {
+                    "alert_id": sub.filters.get("alert_id", "UNKNOWN"),
+                    "token": sub.filters.get("tokens", ["UNKNOWN"])[0],
+                    "type": "price" if "price_threshold" in sub.filters else "percentage",
+                }
+
+                if "price_threshold" in sub.filters:
+                    alert_info["threshold"] = sub.filters["price_threshold"]
+                    alert_info["direction"] = sub.filters.get("direction", "unknown")
+
+                if "percentage_change" in sub.filters:
+                    alert_info["percentage"] = sub.filters["percentage_change"]
+                    alert_info["direction"] = sub.filters.get("direction", "unknown")
+
+                alerts.append(alert_info)
+
+        return alerts
+
     # ==================== ALERT TRIGGERS ====================
 
     async def trigger_price_alert(
@@ -494,6 +621,34 @@ class AlertEngine:
             data={
                 "current_price": current_price,
                 "threshold_price": threshold_price,
+                "direction": direction
+            },
+            token=token
+        )
+
+    async def trigger_percentage_alert(
+        self,
+        token: str,
+        current_price: float,
+        baseline_price: float,
+        percentage_change: float,
+        direction: str  # "up" or "down"
+    ):
+        """Trigger a percentage change alert"""
+
+        emoji = "📈" if direction == "up" else "📉"
+        title = f"{emoji} ${token} {abs(percentage_change):.1f}% {direction.upper()}"
+        message = f"${token} moved {percentage_change:+.2f}% from ${baseline_price:.6f} to ${current_price:.6f}"
+
+        await self.create_alert(
+            alert_type=AlertType.PRICE_THRESHOLD,
+            title=title,
+            message=message,
+            priority=AlertPriority.HIGH if abs(percentage_change) > 10 else AlertPriority.MEDIUM,
+            data={
+                "current_price": current_price,
+                "baseline_price": baseline_price,
+                "percentage_change": percentage_change,
                 "direction": direction
             },
             token=token

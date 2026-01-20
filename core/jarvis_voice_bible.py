@@ -5,6 +5,8 @@ Single source of truth for Jarvis personality across ALL modules.
 Import from here, never duplicate the voice prompt.
 """
 
+import os
+
 # =============================================================================
 # THE GOSPEL - JARVIS VOICE SYSTEM PROMPT
 # =============================================================================
@@ -192,8 +194,13 @@ def validate_jarvis_response(text: str) -> tuple[bool, list[str]]:
     issues = []
     
     # Check length
-    if len(text) > 280:
-        issues.append(f"Too long: {len(text)} chars (max 280)")
+    try:
+        max_len = int(os.getenv("X_MAX_TWEET_LENGTH", "280"))
+    except ValueError:
+        max_len = 280
+    max_len = max(1, min(max_len, 4000))
+    if len(text) > max_len:
+        issues.append(f"Too long: {len(text)} chars (max {max_len})")
     
     # Check banned phrases
     text_lower = text.lower()
