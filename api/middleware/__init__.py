@@ -7,10 +7,12 @@ from api.middleware.ip_allowlist import IPAllowlistMiddleware
 from api.middleware.body_limit import BodySizeLimitMiddleware
 from api.middleware.idempotency import IdempotencyMiddleware
 from api.middleware.csp_nonce import CSPNonceMiddleware
+from api.middleware.request_validation import RequestValidationMiddleware
+from api.middleware.timeout import TimeoutMiddleware, TimeoutConfig, get_current_timeout
 
 __all__ = [
     "RateLimitMiddleware",
-    "SecurityHeadersMiddleware", 
+    "SecurityHeadersMiddleware",
     "RequestTracingMiddleware",
     "request_id_var",
     "CSRFMiddleware",
@@ -18,4 +20,8 @@ __all__ = [
     "BodySizeLimitMiddleware",
     "IdempotencyMiddleware",
     "CSPNonceMiddleware",
+    "RequestValidationMiddleware",
+    "TimeoutMiddleware",
+    "TimeoutConfig",
+    "get_current_timeout",
 ]

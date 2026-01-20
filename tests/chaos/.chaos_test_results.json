@@ -1,0 +1,21 @@
+{
+  "config": {
+    "fault_type": "mixed",
+    "fault_rate": 0.3,
+    "duration_seconds": 5,
+    "latency_range_ms": "100-500"
+  },
+  "results": {
+    "total_requests": 50,
+    "faults_injected": 14,
+    "successful_requests": 45,
+    "failed_requests": 5,
+    "fallback_used": 5,
+    "recovered": 5,
+    "fault_injection_rate_pct": 28.0,
+    "success_rate_pct": 90.0,
+    "recovery_rate_pct": 35.71
+  },
+  "duration_seconds": 4.1,
+  "timestamp": "2026-01-19T17:32:30.158775"
+}

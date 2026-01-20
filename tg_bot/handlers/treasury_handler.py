@@ -70,6 +70,27 @@ def register_treasury_handlers(
         treasury_bot.cmd_help
     ))
 
+    # Register emergency stop command handlers
+    app.add_handler(CommandHandler(
+        "stop",
+        treasury_bot.cmd_emergency_stop
+    ))
+
+    app.add_handler(CommandHandler(
+        "resume",
+        treasury_bot.cmd_resume_trading
+    ))
+
+    app.add_handler(CommandHandler(
+        "stop_status",
+        treasury_bot.cmd_stop_status
+    ))
+
+    app.add_handler(CommandHandler(
+        "pause_token",
+        treasury_bot.cmd_pause_token
+    ))
+
     # Register callback handlers
     app.add_handler(CallbackQueryHandler(
         treasury_bot.handle_callback

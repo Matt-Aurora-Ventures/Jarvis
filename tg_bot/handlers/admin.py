@@ -1,6 +1,7 @@
 """Admin-only handlers."""
 
 import logging
+import time
 from pathlib import Path
 
 from telegram import Update
@@ -335,6 +336,146 @@ async def memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Memory error: {e}")
         await update.message.reply_text(f"memory error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+
+@error_handler
+@admin_only
+async def sysmem(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle /sysmem command - show system memory profiling (admin only).
+
+    Usage:
+        /sysmem - Show current memory status
+        /sysmem start - Start background monitoring
+        /sysmem stop - Stop background monitoring
+        /sysmem snapshot - Take manual snapshot
+        /sysmem trend - Show memory trend
+        /sysmem alerts - Show recent alerts
+        /sysmem clear - Clear alerts
+    """
+    try:
+        from core.performance.memory_monitor import memory_monitor
+        import datetime
+
+        # Parse subcommand
+        subcommand = context.args[0].lower() if context.args else "status"
+
+        if subcommand == "start":
+            if not memory_monitor._tracking:
+                memory_monitor.start_tracking()
+            memory_monitor.start_background_monitoring()
+            await update.message.reply_text(
+                "memory monitoring started.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        elif subcommand == "stop":
+            memory_monitor.stop_background_monitoring()
+            await update.message.reply_text(
+                "memory monitoring stopped.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        elif subcommand == "snapshot":
+            snapshot = memory_monitor.take_snapshot()
+            lines = [
+                "<b>memory snapshot</b>",
+                "",
+                f"rss: {snapshot.rss_mb:.1f}mb",
+                f"heap: {snapshot.heap_mb:.1f}mb",
+                f"gc: {snapshot.gc_counts}",
+                f"time: {datetime.datetime.fromtimestamp(snapshot.timestamp).strftime('%H:%M:%S')}"
+            ]
+            await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+            return
+
+        elif subcommand == "trend":
+            trend = memory_monitor.get_memory_trend()
+            emoji = {"increasing": "📈", "decreasing": "📉", "stable": "➡️"}.get(trend["trend"], "❓")
+            lines = [
+                "<b>memory trend (60min)</b>",
+                "",
+                f"{emoji} trend: {trend['trend']}",
+                f"samples: {trend.get('samples', 0)}",
+            ]
+            if trend.get("growth_mb") is not None:
+                lines.append(f"growth: {trend['growth_mb']:.1f}mb")
+                lines.append(f"rate: {trend['growth_rate_mb_per_min']:.2f}mb/min")
+            await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+            return
+
+        elif subcommand == "alerts":
+            alerts = memory_monitor.get_alerts(since=time.time() - 3600)
+            if not alerts:
+                await update.message.reply_text(
+                    "no alerts in last hour.",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            lines = ["<b>memory alerts (1h)</b>", ""]
+            for alert in alerts[-10:]:
+                emoji = "⚠️" if alert.severity == "warning" else "🚨"
+                timestamp = datetime.datetime.fromtimestamp(alert.timestamp).strftime('%H:%M:%S')
+                lines.append(f"{emoji} [{timestamp}] {alert.message}")
+
+            await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+            return
+
+        elif subcommand == "clear":
+            memory_monitor.clear_alerts()
+            await update.message.reply_text(
+                "alerts cleared.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        # Default: show status
+        if not memory_monitor.snapshots:
+            await update.message.reply_text(
+                "no memory data. use /sysmem start to begin monitoring.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        latest = memory_monitor.snapshots[-1]
+        trend = memory_monitor.get_memory_trend()
+        recent_alerts = memory_monitor.get_alerts(since=time.time() - 3600)
+
+        lines = [
+            "<b>system memory</b>",
+            "",
+            f"rss: {latest.rss_mb:.1f}mb",
+            f"heap: {latest.heap_mb:.1f}mb",
+            f"gc: {latest.gc_counts}",
+        ]
+
+        if memory_monitor.baseline:
+            growth = latest.rss_mb - memory_monitor.baseline.rss_mb
+            lines.append(f"growth: {growth:+.1f}mb")
+
+        if trend["trend"] != "unknown":
+            emoji = {"increasing": "📈", "decreasing": "📉", "stable": "➡️"}.get(trend["trend"], "❓")
+            lines.append(f"{emoji} trend: {trend['trend']}")
+
+        if recent_alerts:
+            critical = len([a for a in recent_alerts if a.severity == "critical"])
+            warning = len([a for a in recent_alerts if a.severity == "warning"])
+            if critical > 0:
+                lines.append(f"🚨 alerts: {critical} critical, {warning} warning")
+            elif warning > 0:
+                lines.append(f"⚠️ alerts: {warning} warning")
+
+        lines.append("")
+        lines.append("<i>/sysmem start|stop|snapshot|trend|alerts</i>")
+
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error(f"Sysmem error: {e}")
+        await update.message.reply_text(f"sysmem error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
 @error_handler

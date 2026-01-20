@@ -5,6 +5,7 @@ Prompt #38: DCA and scheduled order processor
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -15,8 +16,20 @@ import aiohttp
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+from core.feature_manager import is_enabled_default
+from core.security.emergency_shutdown import is_emergency_shutdown
 
 logger = logging.getLogger(__name__)
+
+_KILL_SWITCH_VALUES = ("1", "true", "yes", "on")
+
+
+def _kill_switch_active() -> bool:
+    """Check if the global kill switch is active via environment flags."""
+    return (
+        os.getenv("LIFEOS_KILL_SWITCH", "").lower() in _KILL_SWITCH_VALUES
+        or os.getenv("KILL_SWITCH", "").lower() in _KILL_SWITCH_VALUES
+    )
 
 
 # =============================================================================
@@ -466,6 +479,18 @@ class BatchTradeProcessor:
         slippage_bps: int
     ) -> Dict[str, Any]:
         """Execute trade via Bags API"""
+        if _kill_switch_active():
+            logger.warning("Batch trade blocked: kill switch active")
+            raise ValueError("Kill switch active")
+
+        if is_emergency_shutdown():
+            logger.error("Batch trade blocked: emergency shutdown active")
+            raise ValueError("Emergency shutdown active")
+
+        if not is_enabled_default("LIVE_TRADING_ENABLED", default=True):
+            logger.warning("Batch trade blocked: LIVE_TRADING_ENABLED=false")
+            raise ValueError("Live trading disabled by feature flag")
+
         # Get quote
         async with self._session.post(
             "https://public-api-v2.bags.fm/api/v1/trade/quote",

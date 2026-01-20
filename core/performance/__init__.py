@@ -23,6 +23,12 @@ from core.performance.metrics_collector import (
     record_metric,
     generate_regression_report,
 )
+from core.performance.memory_monitor import (
+    MemoryMonitor,
+    MemorySnapshot,
+    MemoryAlert,
+    memory_monitor,
+)
 
 __all__ = [
     # Profiler
@@ -49,4 +55,9 @@ __all__ = [
     "get_metrics_collector",
     "record_metric",
     "generate_regression_report",
+    # Memory monitor
+    "MemoryMonitor",
+    "MemorySnapshot",
+    "MemoryAlert",
+    "memory_monitor",
 ]

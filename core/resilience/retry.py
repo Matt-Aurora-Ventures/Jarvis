@@ -75,6 +75,46 @@ CONSERVATIVE_RETRY = RetryPolicy(max_attempts=3, base_delay=2.0, max_delay=60.0,
 API_RETRY = RetryPolicy(max_attempts=3, base_delay=1.0, max_delay=10.0, retryable_exceptions=[ConnectionError, TimeoutError, OSError])
 RPC_RETRY = RetryPolicy(max_attempts=5, base_delay=0.5, max_delay=15.0, jitter=True)
 
+# API-specific retry policies
+JUPITER_QUOTE_RETRY = RetryPolicy(
+    max_attempts=3,
+    base_delay=0.5,
+    max_delay=10.0,
+    retryable_exceptions=[ConnectionError, TimeoutError, OSError]
+)
+
+JUPITER_SWAP_RETRY = RetryPolicy(
+    max_attempts=5,
+    base_delay=1.0,
+    max_delay=30.0,
+    exponential_base=2.5,
+    retryable_exceptions=[ConnectionError, TimeoutError, OSError]
+)
+
+BIRDEYE_API_RETRY = RetryPolicy(
+    max_attempts=3,
+    base_delay=1.0,
+    max_delay=15.0,
+    jitter=True,
+    retryable_exceptions=[ConnectionError, TimeoutError, OSError]
+)
+
+TWITTER_API_RETRY = RetryPolicy(
+    max_attempts=3,
+    base_delay=2.0,
+    max_delay=30.0,
+    exponential_base=2.0,
+    retryable_exceptions=[ConnectionError, TimeoutError, OSError]
+)
+
+SOLANA_RPC_RETRY = RetryPolicy(
+    max_attempts=5,
+    base_delay=0.5,
+    max_delay=20.0,
+    jitter=True,
+    retryable_exceptions=[ConnectionError, TimeoutError, OSError]
+)
+
 
 class RetryExhausted(Exception):
     """Raised when all retry attempts are exhausted."""

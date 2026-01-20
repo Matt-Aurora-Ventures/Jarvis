@@ -36,4 +36,46 @@ class MetaRouter:
         else:
             return "Market status: BTC $98K, SOL $148K, trading volume normal"
 
-__all__ = ["MetaRouter"]
+def _extract_symbol(query: str) -> Optional[str]:
+    """Extract trading symbol from natural language query.
+
+    Args:
+        query: Natural language query
+
+    Returns:
+        Extracted symbol or None if not found
+    """
+    import re
+
+    # Common crypto symbols to look for
+    symbols = ["BTC", "ETH", "SOL", "BONK", "WIF", "JUP", "RNDR", "PYTH", "JTO", "DOGE", "SHIB"]
+
+    query_upper = query.upper()
+    for symbol in symbols:
+        if symbol in query_upper:
+            return symbol
+
+    # Try to find any uppercase token pattern (3-5 letters)
+    token_pattern = re.search(r'\b([A-Z]{3,5})\b', query.upper())
+    if token_pattern:
+        return token_pattern.group(1)
+
+    return None
+
+
+async def financial_research(query: str) -> str:
+    """Standalone function for financial research.
+
+    Wraps MetaRouter.financial_research for backward compatibility.
+
+    Args:
+        query: Natural language query for analysis
+
+    Returns:
+        Research results as formatted string
+    """
+    router = MetaRouter()
+    return await router.financial_research(query)
+
+
+__all__ = ["MetaRouter", "financial_research", "_extract_symbol"]

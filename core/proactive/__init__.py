@@ -26,6 +26,9 @@ Usage:
     suggest("Opportunity", "BTC momentum increasing", Priority.HIGH)
 """
 
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
+
 from .suggestions import (
     # Types
     TriggerType,
@@ -48,6 +51,26 @@ from .suggestions import (
     suggest,
 )
 
+def _load_legacy_proactive_module():
+    legacy_path = Path(__file__).resolve().parents[1] / "proactive.py"
+    if not legacy_path.exists():
+        return None
+    spec = spec_from_file_location("core._proactive_legacy", legacy_path)
+    if spec is None or spec.loader is None:
+        return None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_legacy_proactive = _load_legacy_proactive_module()
+ProactiveMonitor = (
+    getattr(_legacy_proactive, "ProactiveMonitor", None) if _legacy_proactive else None
+)
+start_monitoring = (
+    getattr(_legacy_proactive, "start_monitoring", None) if _legacy_proactive else None
+)
+
 __all__ = [
     "TriggerType",
     "SuggestionCategory",
@@ -61,4 +84,6 @@ __all__ = [
     "get_suggestion_engine",
     "start_suggestion_engine",
     "suggest",
+    "ProactiveMonitor",
+    "start_monitoring",
 ]

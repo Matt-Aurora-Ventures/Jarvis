@@ -1,0 +1,65 @@
+Provider chain: llama-3.3-70b-versatile \u2192 llama-3.1-8b-instant \u2192 llama3.1:8b \u2192 qwen2.5:1.5b
+\u2713 Using Groq llama-3.3-70b-versatile (intelligence: 90) - FAST
+Provider chain: llama-3.3-70b-versatile \u2192 llama-3.1-8b-instant \u2192 llama3.1:8b \u2192 qwen2.5:1.5b
+\u2713 Using Groq llama-3.3-70b-versatile (intelligence: 90) - FAST
+INFO:jarvis.memory:Memory store initialized at C:\Users\lucid\OneDrive\Desktop\Projects\Jarvis\data\jarvis_memory.db
+INFO:jarvis.orchestrator:Self-improving orchestrator initialized
+INFO:jarvis.self_improving.integration:Self-improving orchestrator initialized: C:\Users\lucid\OneDrive\Desktop\Projects\Jarvis\data\jarvis_memory.db
+INFO:apscheduler.scheduler:Adding job tentatively -- it will be properly scheduled when the scheduler starts
+INFO:apscheduler.scheduler:Adding job tentatively -- it will be properly scheduled when the scheduler starts
+INFO:apscheduler.scheduler:Adding job tentatively -- it will be properly scheduled when the scheduler starts
+INFO:apscheduler.scheduler:Added job "SelfImprovingScheduler._run_nightly_reflection" to job store "default"
+INFO:apscheduler.scheduler:Added job "SelfImprovingScheduler._run_proactive_check" to job store "default"
+INFO:apscheduler.scheduler:Added job "SelfImprovingScheduler._run_consolidation" to job store "default"
+INFO:apscheduler.scheduler:Scheduler started
+INFO:jarvis.scheduler:Self-improving scheduler started
+INFO:jarvis.self_improving.integration:Self-improving scheduler started
+An error occurred while enumerating through a collection: Collection was modified; enumeration operation may not 
+execute..
+At line:5 char:17
++ ...             $textNodes[0].AppendChild($template.CreateTextNode("Jarvi ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (System.Runtime....l.Dom.IXmlNode]:IteratorToEnumeratorAdapter`1) [],  
+   RuntimeException
+    + FullyQualifiedErrorId : BadEnumeration
+ 
+You cannot call a method on a null-valued expression.
+At line:6 char:17
++ ...             $textNodes[1].AppendChild($template.CreateTextNode("All 1 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : InvokeMethodOnNull
+ 
+An error occurred while enumerating through a collection: Collection was modified; enumeration operation may not 
+execute..
+At line:5 char:17
++ ...             $textNodes[0].AppendChild($template.CreateTextNode("Jarvi ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (System.Runtime....l.Dom.IXmlNode]:IteratorToEnumeratorAdapter`1) [],  
+   RuntimeException
+    + FullyQualifiedErrorId : BadEnumeration
+ 
+You cannot call a method on a null-valued expression.
+At line:6 char:17
++ ...             $textNodes[1].AppendChild($template.CreateTextNode("Low R ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : InvokeMethodOnNull
+ 
+An error occurred while enumerating through a collection: Collection was modified; enumeration operation may not 
+execute..
+At line:5 char:17
++ ...             $textNodes[0].AppendChild($template.CreateTextNode("LifeO ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (System.Runtime....l.Dom.IXmlNode]:IteratorToEnumeratorAdapter`1) [],  
+   RuntimeException
+    + FullyQualifiedErrorId : BadEnumeration
+ 
+You cannot call a method on a null-valued expression.
+At line:6 char:17
++ ...             $textNodes[1].AppendChild($template.CreateTextNode("Good  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : InvokeMethodOnNull
+ 
+WARNING:root:Tried to import the tflite runtime, but it was not found. Trying to switching to onnxruntime instead, if appropriate models are available.

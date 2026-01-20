@@ -11,8 +11,10 @@ from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 import json
 import aiohttp
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 import redis.asyncio as redis
+
+from api.pagination import PaginationParams, paginate
 
 logger = logging.getLogger(__name__)
 
@@ -396,38 +398,64 @@ def create_partner_stats_routes(service: PartnerStatsService) -> APIRouter:
 
     @router.get("/stats/history")
     async def get_stats_history(
-        period: str = "day",
-        limit: int = 30
+        period: str = Query("day", description="Period: day, week, or month"),
+        page: int = Query(1, ge=1, description="Page number"),
+        page_size: int = Query(30, ge=1, le=100, description="Items per page"),
     ):
         """
-        Get historical stats time series
+        Get historical stats time series with pagination.
 
         Args:
         - period: "day" | "week" | "month"
-        - limit: Number of periods to return
+        - page: Page number (1-indexed)
+        - page_size: Items per page
         """
-        history = await service.get_stats_history(period, limit)
+        # Fetch more data than needed to support pagination
+        history = await service.get_stats_history(period, limit=page_size * page)
+
+        # Format the data
+        formatted = [
+            {
+                "start_time": h.start_time.isoformat(),
+                "end_time": h.end_time.isoformat(),
+                "fees_earned": h.fees_earned,
+                "fees_earned_sol": h.fees_earned / 1e9,
+                "volume": h.volume,
+                "volume_sol": h.volume / 1e9,
+                "trade_count": h.trade_count,
+                "unique_users": h.unique_users
+            }
+            for h in history
+        ]
+
+        # Apply pagination
+        total = len(formatted)
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_data = formatted[start:end]
+
+        total_pages = (total + page_size - 1) // page_size
+
         return {
             "period": period,
-            "data": [
-                {
-                    "start_time": h.start_time.isoformat(),
-                    "end_time": h.end_time.isoformat(),
-                    "fees_earned": h.fees_earned,
-                    "fees_earned_sol": h.fees_earned / 1e9,
-                    "volume": h.volume,
-                    "volume_sol": h.volume / 1e9,
-                    "trade_count": h.trade_count,
-                    "unique_users": h.unique_users
-                }
-                for h in history
-            ]
+            "data": page_data,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1,
+            }
         }
 
     @router.get("/tokens")
-    async def get_token_stats(limit: int = 50):
+    async def get_token_stats(
+        page: int = Query(1, ge=1, description="Page number"),
+        page_size: int = Query(50, ge=1, le=100, description="Items per page"),
+    ):
         """
-        Get stats per token traded
+        Get stats per token traded with pagination.
 
         Returns list of tokens with:
         - token_mint: Mint address
@@ -436,20 +464,41 @@ def create_partner_stats_routes(service: PartnerStatsService) -> APIRouter:
         - fees_earned: Fees earned from this token
         - trade_count: Number of trades
         """
-        tokens = await service.get_token_stats(limit)
+        # Fetch more tokens to support pagination
+        tokens = await service.get_token_stats(limit=page_size * page)
+
+        # Format tokens
+        formatted = [
+            {
+                "token_mint": t.token_mint,
+                "token_symbol": t.token_symbol,
+                "total_volume": t.total_volume,
+                "total_volume_sol": t.total_volume / 1e9,
+                "fees_earned": t.fees_earned,
+                "fees_earned_sol": t.fees_earned / 1e9,
+                "trade_count": t.trade_count
+            }
+            for t in tokens
+        ]
+
+        # Apply pagination
+        total = len(formatted)
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_tokens = formatted[start:end]
+
+        total_pages = (total + page_size - 1) // page_size
+
         return {
-            "tokens": [
-                {
-                    "token_mint": t.token_mint,
-                    "token_symbol": t.token_symbol,
-                    "total_volume": t.total_volume,
-                    "total_volume_sol": t.total_volume / 1e9,
-                    "fees_earned": t.fees_earned,
-                    "fees_earned_sol": t.fees_earned / 1e9,
-                    "trade_count": t.trade_count
-                }
-                for t in tokens
-            ]
+            "tokens": page_tokens,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1,
+            }
         }
 
     @router.get("/tokens/top")
@@ -499,10 +548,33 @@ def create_partner_stats_routes(service: PartnerStatsService) -> APIRouter:
         }
 
     @router.get("/claims/history")
-    async def get_claim_history(limit: int = 50):
-        """Get history of fee claims"""
-        claims = await service.get_claim_history(limit)
-        return {"claims": claims}
+    async def get_claim_history(
+        page: int = Query(1, ge=1, description="Page number"),
+        page_size: int = Query(50, ge=1, le=100, description="Items per page"),
+    ):
+        """Get history of fee claims with pagination."""
+        # Fetch more claims to support pagination
+        claims = await service.get_claim_history(limit=page_size * page)
+
+        # Apply pagination
+        total = len(claims)
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_claims = claims[start:end]
+
+        total_pages = (total + page_size - 1) // page_size
+
+        return {
+            "claims": page_claims,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1,
+            }
+        }
 
     @router.get("/dashboard")
     async def get_dashboard():

@@ -15,6 +15,14 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 
+from core.resilience.retry import retry, JUPITER_QUOTE_RETRY, JUPITER_SWAP_RETRY
+from core.security.tx_confirmation import (
+    TransactionConfirmationService,
+    CommitmentLevel,
+    TransactionStatus,
+    get_confirmation_service
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -153,6 +161,9 @@ class JupiterClient:
         self._token_cache: Dict[str, TokenInfo] = {}
         self._recent_priority_fees: List[int] = []  # Track recent fees for dynamic calculation
 
+        # Initialize transaction confirmation service
+        self._confirmation_service: Optional[TransactionConfirmationService] = None
+
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:
@@ -163,6 +174,17 @@ class JupiterClient:
         """Close the client session."""
         if self._session and not self._session.closed:
             await self._session.close()
+        if self._confirmation_service:
+            await self._confirmation_service.close()
+
+    def _get_confirmation_service(self) -> TransactionConfirmationService:
+        """Get or create transaction confirmation service."""
+        if self._confirmation_service is None:
+            self._confirmation_service = TransactionConfirmationService(
+                rpc_url=self.rpc_url,
+                commitment=CommitmentLevel.CONFIRMED
+            )
+        return self._confirmation_service
 
     async def _fetch_dexscreener_pairs(self, mint: str) -> List[Dict]:
         """Fetch DexScreener pairs for a mint, filtered to Solana."""
@@ -362,6 +384,7 @@ class JupiterClient:
 
         return 0.0
 
+    @retry(policy=JUPITER_QUOTE_RETRY)
     async def get_quote(
         self,
         input_mint: str,
@@ -371,7 +394,7 @@ class JupiterClient:
         mode: SwapMode = SwapMode.EXACT_IN
     ) -> Optional[SwapQuote]:
         """
-        Get a swap quote from Jupiter.
+        Get a swap quote from Jupiter with automatic retry.
 
         Args:
             input_mint: Input token mint address
@@ -385,54 +408,54 @@ class JupiterClient:
         """
         session = await self._get_session()
 
-        try:
-            params = {
-                'inputMint': input_mint,
-                'outputMint': output_mint,
-                'amount': str(amount),
-                'slippageBps': slippage_bps,
-                'swapMode': mode.value
-            }
+        params = {
+            'inputMint': input_mint,
+            'outputMint': output_mint,
+            'amount': str(amount),
+            'slippageBps': slippage_bps,
+            'swapMode': mode.value
+        }
 
-            async with session.get(f"{self.JUPITER_API}/quote", params=params) as resp:
-                if resp.status != 200:
-                    logger.error(f"Quote failed: {resp.status}")
-                    return None
+        async with session.get(f"{self.JUPITER_API}/quote", params=params) as resp:
+            if resp.status != 200:
+                error_msg = f"Quote failed: {resp.status}"
+                logger.error(error_msg)
+                # Raise for retry if it's a retryable status code
+                if resp.status in (429, 500, 502, 503, 504):
+                    raise ConnectionError(error_msg)
+                return None
 
-                data = await resp.json()
+            data = await resp.json()
 
-                if 'error' in data:
-                    logger.error(f"Quote error: {data['error']}")
-                    return None
+            if 'error' in data:
+                logger.error(f"Quote error: {data['error']}")
+                return None
 
-                # Get token info for decimals
-                input_info = await self.get_token_info(input_mint)
-                output_info = await self.get_token_info(output_mint)
+            # Get token info for decimals
+            input_info = await self.get_token_info(input_mint)
+            output_info = await self.get_token_info(output_mint)
 
-                input_decimals = input_info.decimals if input_info else 9
-                output_decimals = output_info.decimals if output_info else 9
+            input_decimals = input_info.decimals if input_info else 9
+            output_decimals = output_info.decimals if output_info else 9
 
-                input_amount = int(data.get('inAmount', 0))
-                output_amount = int(data.get('outAmount', 0))
+            input_amount = int(data.get('inAmount', 0))
+            output_amount = int(data.get('outAmount', 0))
 
-                return SwapQuote(
-                    input_mint=input_mint,
-                    output_mint=output_mint,
-                    input_amount=input_amount,
-                    output_amount=output_amount,
-                    input_amount_ui=input_amount / (10 ** input_decimals),
-                    output_amount_ui=output_amount / (10 ** output_decimals),
-                    price_impact_pct=float(data.get('priceImpactPct', 0)),
-                    slippage_bps=slippage_bps,
-                    fees_usd=0.0,  # Calculate from route
-                    route_plan=data.get('routePlan', []),
-                    quote_response=data
-                )
+            return SwapQuote(
+                input_mint=input_mint,
+                output_mint=output_mint,
+                input_amount=input_amount,
+                output_amount=output_amount,
+                input_amount_ui=input_amount / (10 ** input_decimals),
+                output_amount_ui=output_amount / (10 ** output_decimals),
+                price_impact_pct=float(data.get('priceImpactPct', 0)),
+                slippage_bps=slippage_bps,
+                fees_usd=0.0,  # Calculate from route
+                route_plan=data.get('routePlan', []),
+                quote_response=data
+            )
 
-        except Exception as e:
-            logger.error(f"Failed to get quote: {e}")
-            return None
-
+    @retry(policy=JUPITER_SWAP_RETRY)
     async def get_swap_transaction(
         self,
         quote: SwapQuote,
@@ -441,7 +464,7 @@ class JupiterClient:
         compute_unit_price_micro_lamports: int = None
     ) -> Optional[bytes]:
         """
-        Get the swap transaction for signing.
+        Get the swap transaction for signing with automatic retry.
 
         Args:
             quote: Quote from get_quote()
@@ -454,35 +477,35 @@ class JupiterClient:
         """
         session = await self._get_session()
 
-        try:
-            payload = {
-                'quoteResponse': quote.quote_response,
-                'userPublicKey': user_public_key,
-                'wrapAndUnwrapSol': wrap_unwrap_sol,
-                'dynamicComputeUnitLimit': True,
-            }
+        payload = {
+            'quoteResponse': quote.quote_response,
+            'userPublicKey': user_public_key,
+            'wrapAndUnwrapSol': wrap_unwrap_sol,
+            'dynamicComputeUnitLimit': True,
+        }
 
-            if compute_unit_price_micro_lamports:
-                payload['computeUnitPriceMicroLamports'] = compute_unit_price_micro_lamports
+        if compute_unit_price_micro_lamports:
+            payload['computeUnitPriceMicroLamports'] = compute_unit_price_micro_lamports
 
-            async with session.post(
-                f"{self.JUPITER_API}/swap",
-                json=payload
-            ) as resp:
-                if resp.status != 200:
-                    error = await resp.text()
-                    logger.error(f"Swap transaction failed: {error}")
-                    return None
+        async with session.post(
+            f"{self.JUPITER_API}/swap",
+            json=payload
+        ) as resp:
+            if resp.status != 200:
+                error = await resp.text()
+                error_msg = f"Swap transaction failed: {resp.status} - {error}"
+                logger.error(error_msg)
+                # Raise for retry if it's a retryable status code
+                if resp.status in (429, 500, 502, 503, 504):
+                    raise ConnectionError(error_msg)
+                return None
 
-                data = await resp.json()
-                swap_transaction = data.get('swapTransaction')
+            data = await resp.json()
+            swap_transaction = data.get('swapTransaction')
 
-                if swap_transaction:
-                    import base64
-                    return base64.b64decode(swap_transaction)
-
-        except Exception as e:
-            logger.error(f"Failed to get swap transaction: {e}")
+            if swap_transaction:
+                import base64
+                return base64.b64decode(swap_transaction)
 
         return None
 
@@ -827,9 +850,37 @@ class JupiterClient:
 
                 signature = data.get('result', '')
 
+                # Verify transaction on-chain before marking as success
+                confirmation_service = self._get_confirmation_service()
+                verification_result = await confirmation_service.verify_transaction(signature)
+
+                if not verification_result.success:
+                    logger.error(
+                        f"Transaction {signature[:12]}... failed verification: {verification_result.error}"
+                    )
+                    return SwapResult(
+                        success=False,
+                        signature=signature,
+                        error=f"Transaction verification failed: {verification_result.error}"
+                    )
+
                 # Get token info for symbols
                 input_info = await self.get_token_info(quote.input_mint)
                 output_info = await self.get_token_info(quote.output_mint)
+
+                # Log transaction to history
+                await confirmation_service.log_transaction(
+                    result=verification_result,
+                    input_mint=quote.input_mint,
+                    output_mint=quote.output_mint,
+                    input_amount=quote.input_amount_ui,
+                    output_amount=quote.output_amount_ui
+                )
+
+                logger.info(
+                    f"Transaction verified: {signature[:12]}... "
+                    f"({verification_result.status.value}, slot={verification_result.slot})"
+                )
 
                 return SwapResult(
                     success=True,

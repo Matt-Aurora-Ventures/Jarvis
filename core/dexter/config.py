@@ -1,7 +1,20 @@
 """Dexter configuration."""
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import List
+
+
+class DexterModel(str, Enum):
+    """Available models for Dexter agent."""
+    GROK_3 = "grok-3"
+    GROK_2 = "grok-2"
+    CLAUDE = "claude-3-sonnet"
+    GPT4 = "gpt-4-turbo"
+
+    def __str__(self) -> str:
+        return self.value
+
 
 @dataclass
 class DexterConfig:
@@ -18,4 +31,4 @@ class DexterConfig:
         "technical_indicators", "onchain_analysis"
     ])
 
-__all__ = ["DexterConfig"]
+__all__ = ["DexterConfig", "DexterModel"]

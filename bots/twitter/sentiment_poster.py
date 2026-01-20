@@ -168,6 +168,10 @@ Return ONLY the tweet text."""
     async def _post_sentiment_report(self):
         """Generate and post sentiment report tweet."""
         try:
+            if os.getenv("X_BOT_ENABLED", "true").lower() == "false":
+                logger.info("X_BOT_ENABLED=false - skipping sentiment post")
+                return
+
             # Load latest predictions
             predictions = self._load_latest_predictions()
             if not predictions:

@@ -21,7 +21,20 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.feature_manager import is_enabled_default
+from core.security.emergency_shutdown import is_emergency_shutdown
+
 logger = logging.getLogger("jarvis.trading.bags_adapter")
+
+_KILL_SWITCH_VALUES = ("1", "true", "yes", "on")
+
+
+def _kill_switch_active() -> bool:
+    """Check if the global kill switch is active via environment flags."""
+    return (
+        os.getenv("LIFEOS_KILL_SWITCH", "").lower() in _KILL_SWITCH_VALUES
+        or os.getenv("KILL_SWITCH", "").lower() in _KILL_SWITCH_VALUES
+    )
 
 
 # =============================================================================
@@ -465,6 +478,18 @@ class BagsTradeAdapter:
         Returns:
             Tuple of (signature, amount_out)
         """
+        if _kill_switch_active():
+            logger.warning("Swap blocked: kill switch active")
+            raise RuntimeError("Kill switch active")
+
+        if is_emergency_shutdown():
+            logger.error("Swap blocked: emergency shutdown active")
+            raise RuntimeError("Emergency shutdown active")
+
+        if not is_enabled_default("LIVE_TRADING_ENABLED", default=True):
+            logger.warning("Swap blocked: LIVE_TRADING_ENABLED=false")
+            raise RuntimeError("Live trading disabled by feature flag")
+
         slippage_bps = int(slippage * 100)  # Convert % to bps
 
         try:

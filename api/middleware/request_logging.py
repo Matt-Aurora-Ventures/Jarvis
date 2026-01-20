@@ -259,6 +259,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             log["error"] = str(error)
             log["error_type"] = type(error).__name__
             log["status_code"] = 500
+
+            # Add stack trace for 500 errors (truncated)
+            import traceback
+            stack = traceback.format_exc()
+            log["stack_trace"] = stack[:1000] if len(stack) > 1000 else stack
         elif response:
             log["status_code"] = response.status_code
             log["headers"] = mask_headers(dict(response.headers))

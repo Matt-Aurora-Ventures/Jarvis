@@ -7,6 +7,7 @@ and avoid regulatory issues.
 Prompt #157: Twitter Content Compliance
 """
 
+import os
 import re
 import logging
 from dataclasses import dataclass
@@ -14,6 +15,18 @@ from typing import List, Tuple, Dict, Set
 from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+
+def _get_max_tweet_length() -> int:
+    raw = os.getenv("X_MAX_TWEET_LENGTH") or os.getenv("TWITTER_MAX_TWEET_LENGTH")
+    if raw:
+        try:
+            value = int(raw)
+            if 1 <= value <= 4000:
+                return value
+        except ValueError:
+            logger.warning("Invalid X_MAX_TWEET_LENGTH, falling back to 280")
+    return 280
 
 
 class ViolationType(str, Enum):
@@ -98,10 +111,11 @@ class TwitterCompliance:
         content_lower = content.lower()
 
         # Check length
-        if len(content) > self.RATE_LIMITS["max_tweet_length"]:
+        max_len = _get_max_tweet_length()
+        if len(content) > max_len:
             violations.append(ViolationType.TOO_LONG)
-            issues.append(f"Tweet too long: {len(content)} chars (max {self.RATE_LIMITS['max_tweet_length']})")
-            suggestions.append("Shorten the tweet to under 280 characters")
+            issues.append(f"Tweet too long: {len(content)} chars (max {max_len})")
+            suggestions.append(f"Shorten the tweet to under {max_len} characters")
             risk_score += 0.3
 
         # Check hashtag count
@@ -178,18 +192,19 @@ class TwitterCompliance:
         sanitized = content
 
         # Truncate if too long
-        if len(sanitized) > 280:
+        max_len = _get_max_tweet_length()
+        if len(sanitized) > max_len:
             # Try to cut at a sentence boundary
-            if len(sanitized) > 270:
-                # Find last sentence end before 270
-                last_period = sanitized[:270].rfind(".")
-                last_newline = sanitized[:270].rfind("\n")
+            if len(sanitized) > max_len - 10:
+                # Find last sentence end before the limit
+                last_period = sanitized[:max_len - 10].rfind(".")
+                last_newline = sanitized[:max_len - 10].rfind("\n")
                 cut_point = max(last_period, last_newline)
 
-                if cut_point > 200:
+                if cut_point > max(40, max_len - 80):
                     sanitized = sanitized[:cut_point + 1]
                 else:
-                    sanitized = sanitized[:277] + "..."
+                    sanitized = sanitized[:max_len - 3] + "..."
 
         # Replace manipulation words
         for word in self.MANIPULATION_WORDS:

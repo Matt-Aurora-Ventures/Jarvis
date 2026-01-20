@@ -1,0 +1,1 @@
+"""Social module unit tests."""

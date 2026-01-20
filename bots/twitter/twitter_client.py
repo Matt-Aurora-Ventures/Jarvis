@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from functools import wraps
 import tempfile
+import time
 
 import aiohttp
 
@@ -25,6 +26,18 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 # OAuth2 token persistence file (same directory as .env)
 OAUTH2_TOKEN_FILE = Path(__file__).parent / ".oauth2_tokens.json"
+
+
+def _get_max_tweet_length() -> int:
+    raw = os.getenv("X_MAX_TWEET_LENGTH") or os.getenv("TWITTER_MAX_TWEET_LENGTH")
+    if raw:
+        try:
+            value = int(raw)
+            if 1 <= value <= 4000:
+                return value
+        except ValueError:
+            logger.warning("Invalid X_MAX_TWEET_LENGTH, falling back to 280")
+    return 280
 
 
 def _load_oauth2_tokens() -> Dict[str, str]:
@@ -250,6 +263,22 @@ class TwitterClient:
         self._user_id: Optional[str] = None
         self._use_oauth2 = False  # Whether to use OAuth 2.0 for posting
         self._circuit_breaker = APICircuitBreaker("twitter_api")
+        self._read_disabled_until: Optional[float] = None
+        self._read_disabled_reason: Optional[str] = None
+
+    def _read_allowed(self) -> bool:
+        if not self._read_disabled_until:
+            return True
+        if time.time() >= self._read_disabled_until:
+            self._read_disabled_until = None
+            self._read_disabled_reason = None
+            return True
+        return False
+
+    def _disable_reads(self, reason: str, cooldown_seconds: int = 900) -> None:
+        self._read_disabled_until = time.time() + cooldown_seconds
+        self._read_disabled_reason = reason
+        logger.warning(f"Disabling X read endpoints for {cooldown_seconds}s: {reason}")
 
     def _get_expected_username(self) -> str:
         expected = (
@@ -402,9 +431,8 @@ class TwitterClient:
         if not self.is_connected:
             return TweetResult(success=False, error="Not connected to X")
 
-        # Validate text length (Premium X: 4,000 character limit)
-        # X Premium supports up to 4,000 characters
-        max_chars = 4000
+        # Validate text length (default 280 unless overridden via env)
+        max_chars = _get_max_tweet_length()
         if len(text) > max_chars:
             logger.warning(f"Tweet too long ({len(text)} chars), truncating at word boundary to {max_chars} chars")
             # Find last space before max_chars to preserve word boundaries
@@ -684,6 +712,9 @@ class TwitterClient:
         if not self.is_connected:
             return []
 
+        if not self._read_allowed():
+            return []
+
         try:
             loop = asyncio.get_event_loop()
 
@@ -757,6 +788,12 @@ class TwitterClient:
             return []
 
         except Exception as e:
+            status_code = None
+            if HAS_TWEEPY and isinstance(e, TweepyException):
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+            if status_code in (401, 403):
+                self._disable_reads(f"mentions unauthorized ({status_code})")
+                return []
             logger.error(f"Failed to get mentions: {e}")
             return []
 
@@ -841,6 +878,9 @@ class TwitterClient:
         if not self.is_connected:
             return None
 
+        if not self._read_allowed():
+            return None
+
         try:
             loop = asyncio.get_event_loop()
 
@@ -884,6 +924,12 @@ class TwitterClient:
             return None
 
         except Exception as e:
+            status_code = None
+            if HAS_TWEEPY and isinstance(e, TweepyException):
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+            if status_code in (401, 403):
+                self._disable_reads(f"get_tweet unauthorized ({status_code})")
+                return None
             logger.error(f"Failed to get tweet: {e}")
             return None
 
@@ -894,6 +940,9 @@ class TwitterClient:
     ) -> List[Dict[str, Any]]:
         """Search recent tweets"""
         if not self.is_connected:
+            return []
+
+        if not self._read_allowed():
             return []
 
         try:
@@ -935,12 +984,21 @@ class TwitterClient:
             return []
 
         except Exception as e:
+            status_code = None
+            if HAS_TWEEPY and isinstance(e, TweepyException):
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+            if status_code in (401, 403):
+                self._disable_reads(f"search unauthorized ({status_code})")
+                return []
             logger.error(f"Failed to search: {e}")
             return []
 
     async def get_user(self, username: str) -> Optional[Dict[str, Any]]:
         """Get user info by username."""
         if not self.is_connected:
+            return None
+
+        if not self._read_allowed():
             return None
 
         try:
@@ -976,12 +1034,21 @@ class TwitterClient:
             return None
 
         except Exception as e:
+            status_code = None
+            if HAS_TWEEPY and isinstance(e, TweepyException):
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+            if status_code in (401, 403):
+                self._disable_reads(f"get_user unauthorized ({status_code})")
+                return None
             logger.error(f"Failed to get user {username}: {e}")
             return None
 
     async def get_quote_tweets(self, tweet_id: str, max_results: int = 20) -> List[Dict[str, Any]]:
         """Get quote tweets of a specific tweet."""
         if not self.is_connected:
+            return []
+
+        if not self._read_allowed():
             return []
 
         try:
@@ -1032,6 +1099,12 @@ class TwitterClient:
             return []
 
         except Exception as e:
+            status_code = None
+            if HAS_TWEEPY and isinstance(e, TweepyException):
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+            if status_code in (401, 403):
+                self._disable_reads(f"quote_tweets unauthorized ({status_code})")
+                return []
             logger.error(f"Failed to get quote tweets: {e}")
             return []
 

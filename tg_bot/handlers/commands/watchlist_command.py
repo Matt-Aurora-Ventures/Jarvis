@@ -242,6 +242,8 @@ async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     - /watchlist - Show watchlist
     - /watchlist add SOL - Add token
     - /watchlist remove SOL - Remove token
+    - /watchlist alert SOL 100 above - Set price alert
+    - /watchlist alerts - Show active alerts
     """
     user_id = update.effective_user.id if update.effective_user else 0
 
@@ -290,6 +292,81 @@ async def watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             return
 
+        elif subcommand == "alert":
+            # /watchlist alert SOL 100 above
+            if len(context.args) < 4:
+                await update.message.reply_text(
+                    "*Usage:* `/watchlist alert <token> <price> <above|below>`\n\n"
+                    "Example: `/watchlist alert SOL 100 above`",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+
+            try:
+                target_price = float(context.args[2])
+                direction = context.args[3].lower()
+
+                if direction not in ["above", "below"]:
+                    await update.message.reply_text(
+                        "Direction must be 'above' or 'below'",
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    return
+
+                # Create alert using core price_alerts system
+                from core.price_alerts import create_price_alert, AlertType
+
+                alert_type = AlertType.PRICE_ABOVE if direction == "above" else AlertType.PRICE_BELOW
+                alert = create_price_alert(
+                    token_symbol=symbol,
+                    token_mint=address,
+                    alert_type=alert_type,
+                    threshold=target_price,
+                    note=f"Watchlist alert for {symbol}",
+                    repeat=False,
+                )
+
+                await update.message.reply_text(
+                    f"Alert set for *{symbol}*\n"
+                    f"Price {direction} ${target_price:.6f}\n\n"
+                    f"Alert ID: `{alert.id}`",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except ValueError:
+                await update.message.reply_text(
+                    "Invalid price value. Use a number.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            return
+
+    # Show active alerts
+    if context.args and context.args[0].lower() == "alerts":
+        from core.price_alerts import get_alert_manager, AlertStatus
+
+        alert_mgr = get_alert_manager()
+        alerts = alert_mgr.list_alerts(status=AlertStatus.ACTIVE)
+
+        if not alerts:
+            await update.message.reply_text(
+                "*Active Alerts*\n\nNo active alerts.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
+
+        lines = ["*Active Price Alerts*", ""]
+        for alert in alerts:
+            direction = "above" if "above" in alert.alert_type.value else "below"
+            lines.append(
+                f"• *{alert.token_symbol}* - {direction} ${alert.threshold:.6f}\n"
+                f"  ID: `{alert.id}`"
+            )
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
     # Show watchlist
     watchlist = manager.get_watchlist(user_id)
 
@@ -321,6 +398,7 @@ async def handle_watchlist_callback(query, context: ContextTypes.DEFAULT_TYPE):
     - watch_add
     - watch_refresh
     - watch_clear
+    - watch_alert:<address>
     """
     try:
         await query.answer()
@@ -338,7 +416,19 @@ async def handle_watchlist_callback(query, context: ContextTypes.DEFAULT_TYPE):
     manager = WatchlistManager()
 
     try:
-        if action == "watch_view":
+        if action == "watch_alert":
+            # Set price alert for watchlisted token
+            await query.message.edit_text(
+                "*Set Price Alert*\n\n"
+                "Use command:\n"
+                "`/watchlist alert <token> <price> [above|below]`\n\n"
+                "Examples:\n"
+                "`/watchlist alert SOL 100 above`\n"
+                "`/watchlist alert BONK 0.00001 below`",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+        elif action == "watch_view":
             # View token analysis
             from tg_bot.services.signal_service import get_signal_service
             from tg_bot.ui.token_analysis_view import TokenAnalysisView
@@ -444,8 +534,90 @@ async def handle_watchlist_callback(query, context: ContextTypes.DEFAULT_TYPE):
             pass
 
 
+@error_handler
+async def watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Quick command to add token to watchlist.
+
+    Usage: /watch <token>
+    Example: /watch SOL
+    """
+    if not context.args:
+        await update.message.reply_text(
+            "*Usage:* `/watch <token>`\n\n"
+            "Example: `/watch SOL`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    user_id = update.effective_user.id if update.effective_user else 0
+    if not user_id:
+        await update.message.reply_text("Could not identify user.")
+        return
+
+    token = context.args[0]
+    address = KNOWN_TOKENS.get(token.upper(), token)
+    symbol = token.upper() if token.upper() in KNOWN_TOKENS else token[:8]
+
+    manager = WatchlistManager()
+    added = manager.add_token(user_id, address, symbol)
+
+    if added:
+        await update.message.reply_text(
+            f"Added *{symbol}* to your watchlist.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    else:
+        await update.message.reply_text(
+            f"*{symbol}* is already on your watchlist or limit reached.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
+@error_handler
+async def unwatch_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Quick command to remove token from watchlist.
+
+    Usage: /unwatch <token>
+    Example: /unwatch SOL
+    """
+    if not context.args:
+        await update.message.reply_text(
+            "*Usage:* `/unwatch <token>`\n\n"
+            "Example: `/unwatch SOL`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    user_id = update.effective_user.id if update.effective_user else 0
+    if not user_id:
+        await update.message.reply_text("Could not identify user.")
+        return
+
+    token = context.args[0]
+    address = KNOWN_TOKENS.get(token.upper(), token)
+    symbol = token.upper() if token.upper() in KNOWN_TOKENS else token[:8]
+
+    manager = WatchlistManager()
+    removed = manager.remove_token(user_id, address)
+
+    if removed:
+        await update.message.reply_text(
+            f"Removed *{symbol}* from your watchlist.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    else:
+        await update.message.reply_text(
+            f"*{symbol}* was not on your watchlist.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
 __all__ = [
     "watchlist_command",
+    "watch_command",
+    "unwatch_command",
     "handle_watchlist_callback",
     "WatchlistManager",
     "format_watchlist_display",

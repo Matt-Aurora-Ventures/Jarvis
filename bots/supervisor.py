@@ -34,6 +34,15 @@ except ImportError:
     fire_and_forget = None
     TaskTracker = None
 
+# Import shutdown manager
+try:
+    from core.shutdown_manager import get_shutdown_manager, ShutdownPhase
+    SHUTDOWN_MANAGER_AVAILABLE = True
+except ImportError:
+    SHUTDOWN_MANAGER_AVAILABLE = False
+    get_shutdown_manager = None
+    ShutdownPhase = None
+
 
 def systemd_notify(state: str) -> bool:
     """
@@ -127,6 +136,17 @@ class BotSupervisor:
         self.component_funcs: Dict[str, Callable] = {}
         self._running = False
         self._shutdown_event = asyncio.Event()
+
+        # Register with shutdown manager
+        if SHUTDOWN_MANAGER_AVAILABLE:
+            self._shutdown_manager = get_shutdown_manager()
+            self._shutdown_manager.register_hook(
+                name="supervisor",
+                callback=self._graceful_shutdown,
+                phase=ShutdownPhase.IMMEDIATE,
+                timeout=30.0,
+                priority=100,  # High priority - stop supervisor first
+            )
 
     def register(
         self,
@@ -293,18 +313,48 @@ class BotSupervisor:
             self._running = False
             await self._cleanup()
 
+    async def _graceful_shutdown(self):
+        """Graceful shutdown hook for shutdown manager."""
+        logger.info("Supervisor graceful shutdown initiated...")
+        self._running = False
+
+        # Signal all components to stop
+        for name, state in self.components.items():
+            logger.info(f"  [{name}] Requesting shutdown...")
+            if state.task and not state.task.done():
+                state.task.cancel()
+
+        # Wait for components to finish (with timeout per component)
+        for name, state in self.components.items():
+            if state.task and not state.task.done():
+                try:
+                    await asyncio.wait_for(state.task, timeout=5.0)
+                    logger.info(f"  [{name}] Stopped cleanly")
+                except asyncio.TimeoutError:
+                    logger.warning(f"  [{name}] Shutdown timeout (5s)")
+                except asyncio.CancelledError:
+                    logger.info(f"  [{name}] Cancelled")
+                except Exception as e:
+                    logger.error(f"  [{name}] Shutdown error: {e}")
+
     async def _cleanup(self):
         """Clean up all components."""
         logger.info("Supervisor shutting down...")
         systemd_notify("STOPPING=1")
 
-        for name, state in self.components.items():
-            if state.task and not state.task.done():
-                state.task.cancel()
-                try:
-                    await asyncio.wait_for(state.task, timeout=5.0)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
-                    pass
+        # If shutdown manager is available, it handles cleanup
+        if SHUTDOWN_MANAGER_AVAILABLE:
+            # Already handled by _graceful_shutdown
+            pass
+        else:
+            # Fallback to old cleanup logic
+            for name, state in self.components.items():
+                if state.task and not state.task.done():
+                    state.task.cancel()
+                    try:
+                        await asyncio.wait_for(state.task, timeout=5.0)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        pass
 
         logger.info("Supervisor shutdown complete")
 
@@ -618,7 +668,69 @@ def validate_startup() -> bool:
     Validate critical configuration before starting.
 
     Returns True if all critical checks pass, False otherwise.
+    Uses comprehensive config validator for thorough validation.
     """
+    try:
+        from core.config.validator import validate_config, get_validator, ValidationLevel
+
+        # Run comprehensive validation
+        validator = get_validator()
+        is_valid, results = validator.validate(strict=False)
+
+        # Separate by level
+        errors = [r for r in results if r.level == ValidationLevel.ERROR]
+        warnings = [r for r in results if r.level == ValidationLevel.WARNING]
+        infos = [r for r in results if r.level == ValidationLevel.INFO]
+
+        # Print results
+        if errors:
+            print("\n" + "=" * 60)
+            print("  STARTUP VALIDATION: FAILED")
+            print("=" * 60)
+            for err in errors:
+                print(f"  [CRITICAL] {err.key}: {err.message}")
+            if warnings:
+                for warn in warnings[:5]:  # Show first 5 warnings
+                    print(f"  [WARNING] {warn.key}: {warn.message}")
+                if len(warnings) > 5:
+                    print(f"  ... and {len(warnings) - 5} more warnings")
+            print("=" * 60)
+            print(f"\nRun 'python scripts/validate_config.py --fix-hints' for help\n")
+            return False
+
+        if warnings:
+            print("\n" + "-" * 60)
+            print("  STARTUP WARNINGS:")
+            print("-" * 60)
+            for warn in warnings[:10]:  # Show first 10
+                print(f"  [!] {warn.key}: {warn.message}")
+            if len(warnings) > 10:
+                print(f"  ... and {len(warnings) - 10} more warnings")
+            print("-" * 60)
+            print("  Some features may be disabled. Check logs for details.\n")
+
+        # Show group summary
+        print("Configuration Status by Group:")
+        groups = validator.get_group_summary()
+        for group, stats in sorted(groups.items()):
+            configured_pct = (stats["configured"] / stats["total"] * 100) if stats["total"] > 0 else 0
+            status = "✓" if configured_pct > 50 else "!" if configured_pct > 0 else "✗"
+            print(f"  {status} {group:12s}: {stats['configured']:2d}/{stats['total']:2d} ({configured_pct:3.0f}%)")
+        print()
+
+        return True  # Allow startup even with warnings
+
+    except ImportError:
+        # Fallback to basic validation if validator not available
+        logger.warning("Config validator not available, using basic validation")
+        return _basic_validation()
+    except Exception as e:
+        logger.error(f"Config validation error: {e}")
+        return _basic_validation()
+
+
+def _basic_validation() -> bool:
+    """Fallback basic validation if comprehensive validator unavailable."""
     issues = []
     warnings = []
 
@@ -629,24 +741,6 @@ def validate_startup() -> bool:
     # Critical: Admin IDs
     if not os.environ.get("TELEGRAM_ADMIN_IDS"):
         warnings.append("TELEGRAM_ADMIN_IDS not set - admin commands disabled")
-
-    # Warning: Trading credentials
-    if not os.environ.get("WALLET_PRIVATE_KEY"):
-        warnings.append("WALLET_PRIVATE_KEY not set - trading disabled")
-
-    if not os.environ.get("SOLANA_RPC_URL"):
-        warnings.append("SOLANA_RPC_URL not set - using public RPC")
-
-    # Warning: AI APIs
-    if not os.environ.get("XAI_API_KEY") and not os.environ.get("GROK_API_KEY"):
-        warnings.append("XAI_API_KEY/GROK_API_KEY not set - Grok features disabled")
-
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        warnings.append("ANTHROPIC_API_KEY not set - Claude features disabled")
-
-    # Warning: X/Twitter
-    if not os.environ.get("JARVIS_ACCESS_TOKEN"):
-        warnings.append("JARVIS_ACCESS_TOKEN not set - X posting disabled")
 
     # Print results
     if issues:
@@ -745,30 +839,62 @@ async def main():
     print("=" * 60)
     print()
 
-    # Handle shutdown signals
-    loop = asyncio.get_event_loop()
+    # Install signal handlers via shutdown manager
+    if SHUTDOWN_MANAGER_AVAILABLE:
+        shutdown_mgr = get_shutdown_manager()
+        shutdown_mgr.install_signal_handlers()
 
-    def signal_handler():
-        logger.info("Received shutdown signal")
-        supervisor._running = False
-        for name, state in supervisor.components.items():
-            if state.task:
-                state.task.cancel()
+        # Register cleanup hooks for health services
+        if heartbeat:
+            shutdown_mgr.register_hook(
+                name="heartbeat",
+                callback=heartbeat.stop,
+                phase=ShutdownPhase.CLEANUP,
+                timeout=5.0,
+            )
 
-    if sys.platform != "win32":
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, signal_handler)
+        if health_runner:
+            shutdown_mgr.register_hook(
+                name="health_endpoint",
+                callback=health_runner.cleanup,
+                phase=ShutdownPhase.CLEANUP,
+                timeout=5.0,
+            )
+
+        logger.info("Shutdown manager: ENABLED")
+    else:
+        # Fallback to manual signal handling
+        loop = asyncio.get_event_loop()
+
+        def signal_handler():
+            logger.info("Received shutdown signal")
+            supervisor._running = False
+            for name, state in supervisor.components.items():
+                if state.task:
+                    state.task.cancel()
+
+        if sys.platform != "win32":
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(sig, signal_handler)
+
+        logger.info("Shutdown manager: NOT AVAILABLE (using fallback)")
 
     try:
         await supervisor.run_forever()
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received")
     finally:
-        await supervisor._cleanup()
-        if heartbeat:
-            await heartbeat.stop()
-        if health_runner:
-            await health_runner.cleanup()
+        # Trigger shutdown via manager if available
+        if SHUTDOWN_MANAGER_AVAILABLE:
+            shutdown_mgr = get_shutdown_manager()
+            await shutdown_mgr.shutdown()
+        else:
+            # Fallback cleanup
+            await supervisor._cleanup()
+            if heartbeat:
+                await heartbeat.stop()
+            if health_runner:
+                await health_runner.cleanup()
 
 
 if __name__ == "__main__":

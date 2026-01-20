@@ -171,15 +171,26 @@ class WindowsAdapter(PlatformAdapter):
             try:
                 import subprocess
                 ps_script = f'''
+                $ErrorActionPreference = "SilentlyContinue"
                 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
                 $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-                $textNodes = $template.GetElementsByTagName("text")
-                $textNodes[0].AppendChild($template.CreateTextNode("{title}")) | Out-Null
-                $textNodes[1].AppendChild($template.CreateTextNode("{message}")) | Out-Null
+                $textNodes = @($template.GetElementsByTagName("text"))
+                if ($textNodes.Count -ge 1) {{
+                    $textNodes[0].AppendChild($template.CreateTextNode("{title}")) | Out-Null
+                }}
+                if ($textNodes.Count -ge 2) {{
+                    $textNodes[1].AppendChild($template.CreateTextNode("{message}")) | Out-Null
+                }}
                 $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Jarvis")
                 $notifier.Show([Windows.UI.Notifications.ToastNotification]::new($template))
                 '''
-                subprocess.run(["powershell", "-Command", ps_script], timeout=10, check=False)
+                subprocess.run(
+                    ["powershell", "-NoProfile", "-Command", ps_script],
+                    timeout=10,
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
                 return True
             except Exception:
                 return False

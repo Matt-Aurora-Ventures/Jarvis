@@ -12,7 +12,6 @@ from core import (
     guardian,
     hotkeys,
     interview,
-    jarvis,
     missions,
     observer,
     orchestrator,
@@ -23,6 +22,7 @@ from core import (
     mcp_loader,
     resource_monitor,
 )
+import core.jarvis as jarvis_module
 
 # Self-improving integration (optional)
 try:
@@ -40,6 +40,16 @@ def _log_message(log_path: Path, message: str) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as handle:
         handle.write(f"[{_timestamp()}] {message}\n")
+
+
+def _safe_print(message: str) -> None:
+    """Print message with a safe encoding fallback for Windows consoles."""
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        encoding = sys.stdout.encoding or "utf-8"
+        safe = message.encode(encoding, errors="replace").decode(encoding, errors="replace")
+        print(safe)
 
 
 def _parse_time(value: str) -> tuple[int, int]:
@@ -224,7 +234,7 @@ def run() -> None:
 
     # Run Jarvis boot sequence
     try:
-        boot_result = jarvis.boot_sequence()
+        boot_result = jarvis_module.boot_sequence()
         component_status["jarvis"]["ok"] = True
         _log_message(log_path, f"Jarvis boot #{boot_result['boot_count']} complete.")
         if boot_result.get("discoveries"):
@@ -365,7 +375,7 @@ def run() -> None:
         _log_message(log_path, f"⚠ Startup: {ok_count} OK, {fail_count} FAILED: {', '.join(failed_components)}")
         _log_message(log_path, startup_report)
         # Print to console so user sees failures even if not watching logs
-        print(startup_report)
+        _safe_print(startup_report)
         _send_notification("Jarvis Warning", f"{fail_count} component(s) failed: {', '.join(failed_components)}")
     else:
         _log_message(log_path, f"✓ Startup complete: {ok_count}/{len(component_status)} components OK")

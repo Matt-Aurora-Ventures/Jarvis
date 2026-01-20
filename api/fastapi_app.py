@@ -16,11 +16,12 @@ from typing import Any, Dict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.gzip import GZipMiddleware
 
 from api.errors import make_error_response
+from api.versioning import APIVersionMiddleware, create_version_info_router
 
 # Performance: Use orjson for faster JSON responses
 try:
@@ -31,10 +32,13 @@ except ImportError:
 
 # Import new middleware
 try:
-    from api.middleware.rate_limit import RateLimitMiddleware
+    from api.middleware.rate_limit_headers import RateLimitHeadersMiddleware
     from api.middleware.security_headers import SecurityHeadersMiddleware
     from api.middleware.request_tracing import RequestTracingMiddleware
+    from api.middleware.request_logging import RequestLoggingMiddleware
     from api.middleware.body_limit import BodySizeLimitMiddleware
+    from api.middleware.compression import CompressionMiddleware
+    from api.middleware.timeout import TimeoutMiddleware
     HAS_MIDDLEWARE = True
 except ImportError:
     HAS_MIDDLEWARE = False
@@ -250,23 +254,69 @@ Most endpoints require authentication via:
 
     # Add security and performance middleware
     if HAS_MIDDLEWARE:
+        # Request timeout handling
+        if os.getenv("TIMEOUT_ENABLED", "true").lower() == "true":
+            app.add_middleware(TimeoutMiddleware, enabled=True)
+            logger.info("Request timeout middleware enabled")
+
         # Request tracing (adds X-Request-ID)
         app.add_middleware(RequestTracingMiddleware)
-        
+
+        # Comprehensive request/response logging
+        if os.getenv("REQUEST_LOGGING_ENABLED", "true").lower() == "true":
+            log_request_body = os.getenv("LOG_REQUEST_BODY", "false").lower() == "true"
+            log_response_body = os.getenv("LOG_RESPONSE_BODY", "false").lower() == "true"
+            slow_threshold = float(os.getenv("SLOW_REQUEST_THRESHOLD", "1.0"))
+            app.add_middleware(
+                RequestLoggingMiddleware,
+                log_request_body=log_request_body,
+                log_response_body=log_response_body,
+                slow_request_threshold=slow_threshold,
+            )
+            logger.info(f"Request logging enabled (slow threshold: {slow_threshold}s)")
+
         # Security headers (X-Frame-Options, CSP, etc.)
         app.add_middleware(SecurityHeadersMiddleware)
-        
-        # Rate limiting
+
+        # Rate limiting with headers
         if os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true":
-            app.add_middleware(RateLimitMiddleware, enabled=True)
-        
+            requests_per_minute = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+            requests_per_hour = int(os.getenv("RATE_LIMIT_PER_HOUR", "1000"))
+            requests_per_day = int(os.getenv("RATE_LIMIT_PER_DAY", "10000"))
+            burst_limit = int(os.getenv("RATE_LIMIT_BURST", "10"))
+
+            app.add_middleware(
+                RateLimitHeadersMiddleware,
+                requests_per_minute=requests_per_minute,
+                requests_per_hour=requests_per_hour,
+                requests_per_day=requests_per_day,
+                burst_limit=burst_limit,
+                enabled=True,
+                exclude_paths=["/health", "/metrics", "/docs", "/openapi.json", "/redoc"],
+            )
+            logger.info(f"Rate limiting enabled: {requests_per_minute}/min, {requests_per_hour}/hour, {requests_per_day}/day, burst={burst_limit}")
+
         # Request body size limit (10MB default)
         app.add_middleware(BodySizeLimitMiddleware, max_size=10 * 1024 * 1024)
-        
+
+        # Response compression (gzip/brotli) - only compress responses > 1KB
+        compression_enabled = os.getenv("COMPRESSION_ENABLED", "true").lower() == "true"
+        if compression_enabled:
+            compression_threshold = int(os.getenv("COMPRESSION_MIN_SIZE", "1024"))
+            compression_level = int(os.getenv("COMPRESSION_LEVEL", "6"))
+            app.add_middleware(
+                CompressionMiddleware,
+                minimum_size=compression_threshold,
+                compression_level=compression_level,
+            )
+            logger.info(f"Response compression enabled (threshold: {compression_threshold} bytes, level: {compression_level})")
+
         logger.info("Security middleware enabled")
 
-    # GZip compression for responses
-    app.add_middleware(GZipMiddleware, minimum_size=1000)
+    # API Versioning middleware
+    if os.getenv("API_VERSIONING_ENABLED", "true").lower() == "true":
+        app.add_middleware(APIVersionMiddleware)
+        logger.info("API versioning middleware enabled")
 
     # Global exception handlers for standardized error responses
     @app.exception_handler(StarletteHTTPException)
@@ -430,11 +480,89 @@ Most endpoints require authentication via:
         except ImportError:
             return {"traces": [], "error": "Tracing not available"}
 
+    @app.get("/api/compression-stats")
+    async def compression_stats():
+        """Get response compression statistics."""
+        if not HAS_MIDDLEWARE:
+            return {"error": "Compression middleware not available"}
+
+        # Find CompressionMiddleware instance in the middleware stack
+        for middleware in app.user_middleware:
+            if hasattr(middleware, 'cls') and middleware.cls.__name__ == 'CompressionMiddleware':
+                # Can't easily access instance, return info about config
+                return {
+                    "enabled": True,
+                    "minimum_size": int(os.getenv("COMPRESSION_MIN_SIZE", "1024")),
+                    "compression_level": int(os.getenv("COMPRESSION_LEVEL", "6")),
+                    "brotli_available": hasattr(middleware.cls, '__module__'),
+                }
+
+        return {"enabled": False, "error": "Compression middleware not found"}
+
+    @app.get("/api/timeout-stats")
+    async def timeout_stats():
+        """Get request timeout statistics."""
+        if not HAS_MIDDLEWARE:
+            return {"error": "Timeout middleware not available"}
+
+        # Find TimeoutMiddleware instance in the middleware stack
+        for middleware in app.user_middleware:
+            if hasattr(middleware, 'cls') and middleware.cls.__name__ == 'TimeoutMiddleware':
+                # Try to access the instance to get stats
+                if hasattr(middleware, 'kwargs') and 'enabled' in middleware.kwargs:
+                    return {
+                        "enabled": middleware.kwargs['enabled'],
+                        "default_timeout": 30.0,
+                        "max_client_timeout": 120.0,
+                    }
+                return {
+                    "enabled": True,
+                    "default_timeout": 30.0,
+                    "max_client_timeout": 120.0,
+                }
+
+        return {"enabled": False, "error": "Timeout middleware not found"}
+
     return app
 
 
 def _include_routers(app: FastAPI):
     """Include all API routers."""
+
+    # Version info routes (shows available API versions)
+    try:
+        version_info_router = create_version_info_router()
+        app.include_router(version_info_router)
+        logger.info("Included API version info routes")
+    except Exception as e:
+        logger.warning(f"Version info routes not available: {e}")
+
+    # V1 versioned routes (optional - provides /api/v1 prefix)
+    if os.getenv("API_VERSIONING_ENABLED", "true").lower() == "true":
+        try:
+            from api.routes.v1 import create_v1_routers
+            v1_routers = create_v1_routers()
+            for router in v1_routers:
+                app.include_router(router)
+            logger.info(f"Included {len(v1_routers)} v1 versioned routes")
+        except Exception as e:
+            logger.warning(f"V1 versioned routes not available: {e}")
+
+    # Health routes (NEW - enhanced health checks)
+    try:
+        from api.routes.health import router as health_router
+        app.include_router(health_router)
+        logger.info("Included enhanced health routes")
+    except ImportError as e:
+        logger.warning(f"Health routes not available: {e}")
+
+    # Log management routes
+    try:
+        from api.routes.logs import router as logs_router
+        app.include_router(logs_router)
+        logger.info("Included log management routes")
+    except ImportError as e:
+        logger.warning(f"Log management routes not available: {e}")
 
     # Staking routes
     try:
@@ -497,6 +625,15 @@ def _include_routers(app: FastAPI):
         logger.info("Included data consent routes")
     except ImportError as e:
         logger.warning(f"Data consent routes not available: {e}")
+
+    # Market data WebSocket routes
+    try:
+        from api.websocket.market_data import create_market_data_router
+        market_data_router = create_market_data_router()
+        app.include_router(market_data_router)
+        logger.info("Included market data WebSocket routes")
+    except ImportError as e:
+        logger.warning(f"Market data WebSocket routes not available: {e}")
 
 
 def _setup_websockets(app: FastAPI):

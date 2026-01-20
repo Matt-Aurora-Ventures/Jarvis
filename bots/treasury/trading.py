@@ -71,6 +71,25 @@ except ImportError:
     LiquidationAnalyzer = None
     DualMAAnalyzer = None
 
+# Import emergency stop mechanism
+try:
+    from core.trading.emergency_stop import get_emergency_stop_manager, StopLevel
+    EMERGENCY_STOP_AVAILABLE = True
+except ImportError:
+    EMERGENCY_STOP_AVAILABLE = False
+    get_emergency_stop_manager = None
+    StopLevel = None
+
+# Import enhanced risk management
+try:
+    from core.risk import RiskManager, AlertLevel, LimitType
+    RISK_MANAGER_AVAILABLE = True
+except ImportError:
+    RISK_MANAGER_AVAILABLE = False
+    RiskManager = None
+    AlertLevel = None
+    LimitType = None
+
 # Import CoinGlass for liquidation data
 try:
     from integrations.coinglass.client import CoinGlassClient
@@ -432,6 +451,12 @@ class TradingEngine:
             self._coinglass = CoinGlassClient()
             logger.info("CoinGlass client initialized")
 
+        # Initialize enhanced risk management
+        self.risk_manager: Optional[RiskManager] = None
+        if RISK_MANAGER_AVAILABLE:
+            self.risk_manager = RiskManager(enable_alerts=True)
+            logger.info("Enhanced risk manager initialized")
+
         # CRITICAL: Mutex for trade execution to prevent race conditions from concurrent X/Telegram bot trades
         # Ensures only one trade executes at a time, protecting against position limit overruns
         self._trade_execution_lock = asyncio.Lock()
@@ -597,6 +622,32 @@ class TradingEngine:
                     json.dump({'date': today, 'volume_usd': current + amount_usd}, f)
         except Exception as e:
             logger.error(f"Failed to save daily volume: {e}")
+
+    def _calculate_daily_pnl(self) -> float:
+        """
+        Calculate total P&L for today (realized + unrealized).
+
+        Returns:
+            Total daily P&L in USD (positive = profit, negative = loss)
+        """
+        today = datetime.utcnow().date()
+
+        # Realized P&L from closed positions today
+        realized_pnl = sum(
+            p.pnl_usd for p in self.trade_history
+            if p.status == TradeStatus.CLOSED and
+            p.closed_at and
+            datetime.fromisoformat(p.closed_at.replace('Z', '+00:00')).date() == today
+        )
+
+        # Unrealized P&L from positions opened today
+        unrealized_pnl = sum(
+            p.unrealized_pnl for p in self.positions.values()
+            if p.is_open and
+            datetime.fromisoformat(p.opened_at.replace('Z', '+00:00')).date() == today
+        )
+
+        return realized_pnl + unrealized_pnl
 
     def _check_spending_limits(self, amount_usd: float, portfolio_usd: float) -> Tuple[bool, str]:
         """
@@ -1063,6 +1114,10 @@ class TradingEngine:
         Returns:
             Tuple of (success, message, position)
         """
+        if os.environ.get("LIFEOS_KILL_SWITCH", "").lower() in ("1", "true", "yes", "on"):
+            logger.warning("Trade rejected: kill switch active")
+            return False, "Kill switch active - trading disabled", None
+
         # MANDATORY ADMIN CHECK - Only authorized admins can execute trades
         if not user_id:
             logger.warning("Trade rejected: No user_id provided")
@@ -1228,7 +1283,63 @@ class TradingEngine:
                     f"{self.MAX_ALLOCATION_PER_TOKEN*100:.0f}% for {token_symbol}"
                 ), None
 
-        # CRITICAL: Check spending limits before proceeding
+        # ENHANCED: Check comprehensive risk limits via RiskManager
+        if self.risk_manager:
+            # Calculate current daily P&L
+            daily_pnl = self._calculate_daily_pnl()
+
+            # Calculate token concentration
+            existing_token_usd = sum(p.amount_usd for p in existing_in_token)
+            total_token_exposure = existing_token_usd + amount_usd
+
+            # Calculate total deployed capital
+            deployed_capital = sum(p.amount_usd for p in open_positions) + amount_usd
+
+            # Count today's trades
+            today = datetime.utcnow().date()
+            trades_today = len([
+                p for p in self.trade_history
+                if datetime.fromisoformat(p.opened_at.replace('Z', '+00:00')).date() == today
+            ])
+
+            # Check all risk limits
+            all_passed, risk_alerts = self.risk_manager.check_all_limits(
+                position_size=amount_usd,
+                daily_loss=abs(min(daily_pnl, 0)),  # Only pass loss amount
+                token_concentration={token_symbol: (total_token_exposure, portfolio_usd)},
+                deployed_capital=deployed_capital,
+                total_portfolio=portfolio_usd,
+                trades_today=trades_today
+            )
+
+            # If circuit breaker is active, block all trades
+            if self.risk_manager.circuit_breaker_active:
+                self._log_audit("OPEN_POSITION_REJECTED", {
+                    "token": token_symbol,
+                    "reason": "circuit_breaker",
+                }, user_id, False)
+                return False, "🔴 CIRCUIT BREAKER ACTIVE - Trading halted. Contact admin to reset.", None
+
+            # Block trade if any critical limit violated
+            if not all_passed:
+                critical_alerts = [a for a in risk_alerts if a.level in (AlertLevel.CRITICAL, AlertLevel.EMERGENCY)]
+                if critical_alerts:
+                    alert_msg = critical_alerts[0].message
+                    self._log_audit("OPEN_POSITION_REJECTED", {
+                        "token": token_symbol,
+                        "reason": "risk_limit",
+                        "alert": alert_msg,
+                        "amount_usd": amount_usd,
+                    }, user_id, False)
+                    return False, f"⛔ Risk limit exceeded: {alert_msg}", None
+
+            # Log warning alerts but allow trade
+            warning_alerts = [a for a in risk_alerts if a.level == AlertLevel.WARNING]
+            if warning_alerts:
+                for alert in warning_alerts:
+                    logger.warning(f"Risk warning: {alert.message}")
+
+        # CRITICAL: Check spending limits before proceeding (legacy checks)
         allowed, limit_reason = self._check_spending_limits(amount_usd, portfolio_usd)
         if not allowed:
             self._log_audit("OPEN_POSITION_REJECTED", {
@@ -1874,6 +1985,55 @@ class TradingEngine:
             unrealized_pnl=unrealized
         )
 
+    def get_risk_status(self) -> Optional[Dict[str, Any]]:
+        """
+        Get current risk status and alerts.
+
+        Returns:
+            Dict with risk metrics and active alerts, or None if risk manager unavailable
+        """
+        if not self.risk_manager:
+            return None
+
+        open_positions = self.get_open_positions()
+        daily_pnl = self._calculate_daily_pnl()
+
+        # Calculate portfolio peak (simplified - use current portfolio + max loss)
+        from asyncio import get_event_loop
+        try:
+            loop = get_event_loop()
+            _, portfolio_value = loop.run_until_complete(self.get_portfolio_value())
+        except:
+            portfolio_value = 0.0
+
+        portfolio_peak = max(portfolio_value, portfolio_value - daily_pnl if daily_pnl < 0 else portfolio_value)
+
+        # Get risk metrics
+        metrics = self.risk_manager.get_risk_metrics(
+            positions=open_positions,
+            daily_pnl=daily_pnl,
+            portfolio_peak=portfolio_peak,
+            current_portfolio=portfolio_value
+        )
+
+        # Get active alerts
+        alerts = self.risk_manager.get_active_alerts()
+
+        return {
+            'metrics': metrics.to_dict(),
+            'alerts': [
+                {
+                    'level': a.level.value,
+                    'type': a.limit_type.value,
+                    'message': a.message,
+                    'action_required': a.action_required
+                }
+                for a in alerts
+            ],
+            'circuit_breaker_active': self.risk_manager.circuit_breaker_active,
+            'limits': self.risk_manager.get_limit_config()
+        }
+
     async def initialize_order_manager(self):
         """Initialize the limit order manager with position closure callback."""
         self.order_manager = LimitOrderManager(
@@ -2255,6 +2415,18 @@ class TreasuryTrader:
         Returns:
             Dict with success, tx_signature, error, and message
         """
+        # Check emergency stop FIRST (before any initialization)
+        if EMERGENCY_STOP_AVAILABLE:
+            emergency_manager = get_emergency_stop_manager()
+            allowed, reason = emergency_manager.is_trading_allowed(token_mint)
+            if not allowed:
+                logger.warning(f"Trade blocked by emergency stop: {reason}")
+                return {
+                    "success": False,
+                    "error": f"🚨 EMERGENCY STOP: {reason}",
+                    "tx_signature": "",
+                }
+
         # Initialize if needed
         initialized, init_msg = await self._ensure_initialized()
         if not initialized:

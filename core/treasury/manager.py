@@ -48,8 +48,20 @@ from core.treasury.distribution import (
     ProfitDistributor,
     DistributionConfig,
 )
+from core.feature_manager import is_enabled_default
+from core.security.emergency_shutdown import is_emergency_shutdown
 
 logger = logging.getLogger("jarvis.treasury")
+
+_KILL_SWITCH_VALUES = ("1", "true", "yes", "on")
+
+
+def _kill_switch_active() -> bool:
+    """Check if the global kill switch is active via environment flags."""
+    return (
+        os.getenv("LIFEOS_KILL_SWITCH", "").lower() in _KILL_SWITCH_VALUES
+        or os.getenv("KILL_SWITCH", "").lower() in _KILL_SWITCH_VALUES
+    )
 
 
 @dataclass
@@ -234,6 +246,30 @@ class TreasuryManager:
             Trade result
         """
         await self.initialize()
+
+        if _kill_switch_active():
+            logger.warning("Trade blocked: kill switch active")
+            return {
+                "success": False,
+                "error": "Kill switch active",
+                "kill_switch": True,
+            }
+
+        if is_emergency_shutdown():
+            logger.error("Trade blocked: emergency shutdown active")
+            return {
+                "success": False,
+                "error": "Emergency shutdown active",
+                "kill_switch": True,
+            }
+
+        if not is_enabled_default("LIVE_TRADING_ENABLED", default=True):
+            logger.warning("Trade blocked: LIVE_TRADING_ENABLED=false")
+            return {
+                "success": False,
+                "error": "Live trading disabled by feature flag",
+                "feature_flag": "LIVE_TRADING_ENABLED",
+            }
 
         # Get current balance
         current_balance = await self.get_trading_balance()
