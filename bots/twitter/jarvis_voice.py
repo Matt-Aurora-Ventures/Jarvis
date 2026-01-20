@@ -7,6 +7,9 @@ Grok is used for sentiment/data analysis, but Claude writes the actual content.
 
 import os
 import logging
+import asyncio
+import shutil
+import subprocess
 from typing import Optional, Dict, Any
 from pathlib import Path
 
@@ -35,7 +38,9 @@ class JarvisVoice:
     def __init__(self):
         self.api_key = os.getenv("ANTHROPIC_API_KEY", "")
         self._client = None
-    
+        self.cli_enabled = os.getenv("CLAUDE_CLI_ENABLED", "").lower() in ("1", "true", "yes", "on")
+        self.cli_path = os.getenv("CLAUDE_CLI_PATH", "claude")
+
     def _get_client(self):
         """Get Anthropic client."""
         if self._client is None:
@@ -46,6 +51,28 @@ class JarvisVoice:
                 logger.error("anthropic package not installed")
                 return None
         return self._client
+
+    def _cli_available(self) -> bool:
+        return bool(shutil.which(self.cli_path))
+
+    def _run_cli(self, prompt: str) -> Optional[str]:
+        if not self._cli_available():
+            return None
+        try:
+            completed = subprocess.run(
+                [self.cli_path, "--print", prompt],
+                capture_output=True,
+                text=True,
+                timeout=180,
+                check=False,
+            )
+            if completed.returncode != 0:
+                return None
+            output = (completed.stdout or "").strip()
+            return output if output else None
+        except Exception as exc:
+            logger.error(f"Claude CLI failed: {exc}")
+            return None
     
     async def generate_tweet(
         self,
@@ -66,12 +93,12 @@ class JarvisVoice:
         Returns:
             Tweet text in Jarvis voice, or None on failure
         """
-        if not self.api_key:
+        if not self.api_key and not self.cli_enabled:
             logger.error("ANTHROPIC_API_KEY not configured")
             return None
         
         client = self._get_client()
-        if not client:
+        if not client and not self.cli_enabled:
             return None
         
         try:
@@ -82,9 +109,42 @@ class JarvisVoice:
                 full_prompt = f"{prompt}\n\nData:\n{context_str}"
             
             full_prompt += "\n\nGenerate a single tweet. Can be up to 4,000 characters (Premium X). Lowercase. Do NOT end with 'nfa' every time - only occasionally."
+
+            if self.cli_enabled:
+                cli_prompt = f"{JARVIS_SYSTEM_PROMPT}\n\nUSER REQUEST:\n{full_prompt}\n\nReturn ONLY the tweet text."
+                loop = asyncio.get_event_loop()
+                cli_result = await loop.run_in_executor(None, self._run_cli, cli_prompt)
+                if cli_result:
+                    tweet = cli_result.strip()
+                    import re
+                    if tweet.startswith("{") and "}" in tweet:
+                        try:
+                            import json
+                            data = json.loads(tweet)
+                            if isinstance(data, dict):
+                                tweet = data.get("tweet", data.get("text", data.get("content", tweet)))
+                        except json.JSONDecodeError:
+                            match = re.search(r'"(?:tweet|text|content)"\s*:\s*"([^"]+)"', tweet)
+                            if match:
+                                tweet = match.group(1)
+                    tweet = re.sub(r'```[\w]*\n?', '', tweet)
+                    tweet = re.sub(r'```', '', tweet)
+                    tweet = tweet.strip('"\'')
+                    tweet = tweet.lower() if tweet and tweet[0].isupper() else tweet
+                    max_chars = 4000
+                    if len(tweet) > max_chars:
+                        truncated = tweet[:max_chars - 3]
+                        last_space = truncated.rfind(' ')
+                        if last_space > max_chars - 500:
+                            tweet = tweet[:last_space] + "..."
+                        else:
+                            tweet = truncated + "..."
+                    is_valid, issues = validate_jarvis_response(tweet)
+                    if not is_valid:
+                        logger.warning(f"Tweet validation issues: {issues}")
+                    return tweet
             
             # Use sync client in async context
-            import asyncio
             loop = asyncio.get_event_loop()
             
             message = await loop.run_in_executor(
