@@ -1258,5 +1258,11 @@ def get_claude_cli_handler() -> ClaudeCLIHandler:
     """Get the singleton ClaudeCLIHandler instance."""
     global _handler
     if _handler is None:
-        _handler = ClaudeCLIHandler()
+        admin_ids = []
+        try:
+            from tg_bot.config import get_config
+            admin_ids = list(get_config().admin_ids)
+        except Exception:
+            admin_ids = []
+        _handler = ClaudeCLIHandler(admin_user_ids=admin_ids)
     return _handler

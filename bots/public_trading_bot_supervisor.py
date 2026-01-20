@@ -87,7 +87,8 @@ class PublicTradingBotSupervisor:
 
             # Initialize bot integration
             self.bot = PublicTradingBotIntegration(
-                token=self.config.telegram_token,
+                bot_token=self.config.telegram_token,
+                trading_engine=None,
                 enable_live_trading=self.config.enable_live_trading,
             )
 

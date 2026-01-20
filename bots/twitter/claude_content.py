@@ -6,6 +6,9 @@ Uses Voice Bible for consistent personality, Grok for data/images only
 import os
 import json
 import logging
+import asyncio
+import shutil
+import subprocess
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from pathlib import Path
@@ -182,6 +185,58 @@ class ClaudeContentGenerator:
             self.client = anthropic.Anthropic(api_key=self.api_key)
 
         self.system_prompt = load_system_prompt()
+        self.cli_enabled = os.getenv("CLAUDE_CLI_ENABLED", "").lower() in ("1", "true", "yes", "on")
+        self.cli_path = os.getenv("CLAUDE_CLI_PATH", "claude")
+        self._cli_system_prompt = None
+        if self.cli_enabled:
+            try:
+                from core.jarvis_voice_bible import JARVIS_VOICE_BIBLE
+                self._cli_system_prompt = JARVIS_VOICE_BIBLE
+            except Exception:
+                self._cli_system_prompt = self.system_prompt
+
+    def _cli_available(self) -> bool:
+        return bool(shutil.which(self.cli_path))
+
+    def _clean_cli_output(self, text: str) -> str:
+        cleaned = text.strip()
+        if cleaned.startswith("{") and "}" in cleaned:
+            try:
+                data = json.loads(cleaned)
+                if isinstance(data, dict):
+                    cleaned = data.get("tweet", data.get("text", data.get("content", cleaned)))
+            except json.JSONDecodeError:
+                pass
+        cleaned = cleaned.replace("```", "").strip()
+        cleaned = cleaned.strip('"').strip("'")
+        return cleaned
+
+    def _run_cli(self, prompt: str) -> ClaudeResponse:
+        if not self._cli_available():
+            return ClaudeResponse(success=False, content="", error="Claude CLI not found")
+        try:
+            completed = subprocess.run(
+                [self.cli_path, "--print", prompt],
+                capture_output=True,
+                text=True,
+                timeout=180,
+                check=False,
+            )
+            if completed.returncode != 0:
+                err = (completed.stderr or "").strip()
+                return ClaudeResponse(
+                    success=False,
+                    content="",
+                    error=err or f"Claude CLI exited {completed.returncode}",
+                )
+            output = (completed.stdout or "").strip()
+            if not output:
+                return ClaudeResponse(success=False, content="", error="Claude CLI returned empty output")
+            return ClaudeResponse(success=True, content=self._clean_cli_output(output))
+        except subprocess.TimeoutExpired:
+            return ClaudeResponse(success=False, content="", error="Claude CLI timed out")
+        except Exception as exc:
+            return ClaudeResponse(success=False, content="", error=str(exc))
 
     async def generate_tweet(
         self,
@@ -190,7 +245,7 @@ class ClaudeContentGenerator:
         temperature: float = 0.85
     ) -> ClaudeResponse:
         """Generate tweet content using Claude"""
-        if not self.client:
+        if not self.client and not self.cli_enabled:
             return ClaudeResponse(
                 success=False,
                 content="",
@@ -206,6 +261,20 @@ class ClaudeContentGenerator:
 
             # Add formatting reminder
             user_message += "\n\nRemember: lowercase, up to 4,000 chars (Premium X), natural NFA, minimal emojis. Return ONLY the tweet text, nothing else."
+
+            if self.cli_enabled:
+                cli_prompt = (
+                    f"{self._cli_system_prompt or self.system_prompt}\n\n"
+                    f"USER REQUEST:\n{user_message}\n\n"
+                    "Return ONLY the tweet text."
+                )
+                loop = asyncio.get_event_loop()
+                cli_response = await loop.run_in_executor(None, self._run_cli, cli_prompt)
+                if cli_response.success:
+                    cleaned = self._clean_tweet(cli_response.content)
+                    return ClaudeResponse(success=True, content=cleaned)
+                if not self.client:
+                    return cli_response
 
             response = self.client.messages.create(
                 model="claude-sonnet-4-20250514",

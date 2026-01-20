@@ -38,78 +38,8 @@ from tg_bot.handlers.commands.watchlist_command import watch_command, unwatch_co
 from tg_bot.handlers.commands.commands_command import commands_command
 
 
-def main():
-    config = get_config()
-    from core.utils.instance_lock import acquire_instance_lock
-
-    lock = acquire_instance_lock(
-        config.telegram_token,
-        name="telegram_polling",
-        max_wait_seconds=30,
-    )
-    if not lock:
-        print("\n" + "=" * 50)
-        print("ERROR: Telegram polling lock is already held")
-        print("=" * 50)
-        print("\nAnother process is already polling with this token.")
-        print("Stop the other process or use a different token.")
-        sys.exit(1)
-
-    # Validate config
-    if not config.telegram_token:
-        print("\n" + "=" * 50)
-        print("ERROR: TELEGRAM_BOT_TOKEN not set!")
-        print("=" * 50)
-        print("\nSet it with:")
-        print("  export TELEGRAM_BOT_TOKEN='your-bot-token'")
-        print("\nGet a token from @BotFather on Telegram")
-        sys.exit(1)
-
-    if not config.admin_ids:
-        print("\n" + "=" * 50)
-        print("WARNING: No TELEGRAM_ADMIN_IDS set")
-        print("=" * 50)
-        print("\nAdmin commands (analyze, digest) will be disabled.")
-        print("\nTo enable, set your Telegram user ID:")
-        print("  export TELEGRAM_ADMIN_IDS='your-telegram-user-id'")
-        print("\nGet your ID by messaging @userinfobot on Telegram")
-
-    # Show config status (no secrets!)
-    print("\n" + "=" * 50)
-    print("JARVIS TELEGRAM BOT")
-    print("=" * 50)
-    print(f"Admin IDs configured: {len(config.admin_ids)}")
-    print(f"Grok API (XAI_API_KEY): {'Configured' if config.has_grok() else 'NOT SET'}")
-    print(f"Claude API: {'Configured' if config.has_claude() else 'NOT SET'}")
-    print(f"Birdeye API: {'Configured' if config.birdeye_api_key else 'NOT SET'}")
-    print(f"Daily cost limit: ${config.daily_cost_limit_usd:.2f}")
-    print(f"Sentiment interval: {config.sentiment_interval_seconds}s (1 hour)")
-    print(f"Digest hours (UTC): {config.digest_hours}")
-
-    # Check core modules
-    service = get_signal_service()
-    sources = service.get_available_sources()
-    print(f"Data sources: {', '.join(sources) if sources else 'None'}")
-
-    # Start metrics server (best-effort)
-    try:
-        from core.monitoring.metrics import start_metrics_server
-        start_metrics_server()
-    except Exception as exc:
-        logger.warning(f"Metrics server unavailable: {exc}")
-
-    # Build application
-    app = Application.builder().token(config.telegram_token).build()
-
-    # Set up graceful shutdown handling
-    try:
-        from tg_bot.shutdown_handler import setup_telegram_shutdown
-        setup_telegram_shutdown(app)
-        print("Graceful shutdown: ENABLED")
-    except ImportError as e:
-        print(f"Graceful shutdown: NOT AVAILABLE ({e})")
-
-    # Add handlers
+def register_handlers(app: Application, config) -> None:
+    """Register command, callback, and message handlers on the Telegram app."""
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("commands", commands_command))
@@ -259,6 +189,80 @@ def main():
 
     # Error handler
     app.add_error_handler(error_handler)
+
+
+def main():
+    config = get_config()
+    from core.utils.instance_lock import acquire_instance_lock
+
+    lock = acquire_instance_lock(
+        config.telegram_token,
+        name="telegram_polling",
+        max_wait_seconds=30,
+    )
+    if not lock:
+        print("\n" + "=" * 50)
+        print("ERROR: Telegram polling lock is already held")
+        print("=" * 50)
+        print("\nAnother process is already polling with this token.")
+        print("Stop the other process or use a different token.")
+        sys.exit(1)
+
+    # Validate config
+    if not config.telegram_token:
+        print("\n" + "=" * 50)
+        print("ERROR: TELEGRAM_BOT_TOKEN not set!")
+        print("=" * 50)
+        print("\nSet it with:")
+        print("  export TELEGRAM_BOT_TOKEN='your-bot-token'")
+        print("\nGet a token from @BotFather on Telegram")
+        sys.exit(1)
+
+    if not config.admin_ids:
+        print("\n" + "=" * 50)
+        print("WARNING: No TELEGRAM_ADMIN_IDS set")
+        print("=" * 50)
+        print("\nAdmin commands (analyze, digest) will be disabled.")
+        print("\nTo enable, set your Telegram user ID:")
+        print("  export TELEGRAM_ADMIN_IDS='your-telegram-user-id'")
+        print("\nGet your ID by messaging @userinfobot on Telegram")
+
+    # Show config status (no secrets!)
+    print("\n" + "=" * 50)
+    print("JARVIS TELEGRAM BOT")
+    print("=" * 50)
+    print(f"Admin IDs configured: {len(config.admin_ids)}")
+    print(f"Grok API (XAI_API_KEY): {'Configured' if config.has_grok() else 'NOT SET'}")
+    print(f"Claude API: {'Configured' if config.has_claude() else 'NOT SET'}")
+    print(f"Birdeye API: {'Configured' if config.birdeye_api_key else 'NOT SET'}")
+    print(f"Daily cost limit: ${config.daily_cost_limit_usd:.2f}")
+    print(f"Sentiment interval: {config.sentiment_interval_seconds}s (1 hour)")
+    print(f"Digest hours (UTC): {config.digest_hours}")
+
+    # Check core modules
+    service = get_signal_service()
+    sources = service.get_available_sources()
+    print(f"Data sources: {', '.join(sources) if sources else 'None'}")
+
+    # Start metrics server (best-effort)
+    try:
+        from core.monitoring.metrics import start_metrics_server
+        start_metrics_server()
+    except Exception as exc:
+        logger.warning(f"Metrics server unavailable: {exc}")
+
+    # Build application
+    app = Application.builder().token(config.telegram_token).build()
+
+    # Set up graceful shutdown handling
+    try:
+        from tg_bot.shutdown_handler import setup_telegram_shutdown
+        setup_telegram_shutdown(app)
+        print("Graceful shutdown: ENABLED")
+    except ImportError as e:
+        print(f"Graceful shutdown: NOT AVAILABLE ({e})")
+
+    register_handlers(app, config)
 
     # Schedule hourly digests
     job_queue = app.job_queue
