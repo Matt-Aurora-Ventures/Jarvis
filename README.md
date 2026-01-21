@@ -8,7 +8,7 @@
 </p>
 
 [![Status](https://img.shields.io/badge/Status-ONLINE-success)](https://github.com/Matt-Aurora-Ventures/Jarvis)
-[![Version](https://img.shields.io/badge/Version-4.6.4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.6.5-blue)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/Tests-1200%2B%20Passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 [![Solana](https://img.shields.io/badge/Solana-Mainnet-purple)](https://solana.com)
@@ -55,7 +55,46 @@
 
 ---
 
-## 🚀 Recent Updates (v4.6.4 - January 17, 2026)
+## 🚀 Recent Updates (v4.6.5 - January 21, 2026)
+
+### 🔧 V1 Stabilization & Critical Bug Fixes
+
+Major stability improvements addressing production issues:
+
+#### Critical Telegram Bot Fix
+| Issue | Root Cause | Fix |
+|-------|------------|-----|
+| Bot unresponsive | Duplicate lock acquisition caused infinite loop on Windows | Removed redundant `acquire_instance_lock()` call (was called twice) |
+| Polling conflict | Multiple bot instances fighting for Telegram API | Single lock pattern with proper cleanup |
+
+**Technical Detail**: Windows `msvcrt.locking` doesn't allow a process to lock the same file twice. The bot was attempting to acquire the same lock at lines 228 AND 330, causing the second attempt to loop forever.
+
+#### Sentiment State Persistence
+| Before | After |
+|--------|-------|
+| `record_sentiment_run()` called AFTER Telegram posting | Called BEFORE posting |
+| If posting failed, sentiment would re-run on restart | State saved even if downstream fails |
+
+#### Admin Check Fix
+- Fixed forward reference bug in `bot_core.py`
+- `DEFAULT_ADMIN_USER_ID` now defined at top of file (line 123)
+- Previously referenced at line 372, defined at line 2623 → caused runtime errors
+
+#### Error Tracking Integration
+| Component | Status |
+|-----------|--------|
+| `tg_bot/handlers/__init__.py` | ✅ Integrated with `@error_handler` decorator |
+| `bots/supervisor.py` | ✅ New `track_supervisor_error()` helper |
+| Coverage | ~20% of handlers → growing |
+
+#### New Features
+- **Bags.fm Trade Adapter**: Partner fee earning on trades
+- **Bags Intel Service**: bags.fm graduation monitoring
+- **Dexter Sentiment**: CLI interface for sentiment queries
+
+---
+
+## 🚀 Previous Updates (v4.6.4 - January 17, 2026)
 
 ### 🧠 Enterprise Memory & MCP Enhancement
 
