@@ -10,6 +10,14 @@ from tg_bot.config import get_config
 from tg_bot.services.cost_tracker import get_tracker
 from tg_bot.services import digest_formatter as fmt
 
+# Import error tracker for centralized error logging
+try:
+    from core.logging.error_tracker import error_tracker
+    ERROR_TRACKER_AVAILABLE = True
+except ImportError:
+    error_tracker = None
+    ERROR_TRACKER_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,6 +43,16 @@ def error_handler(func: Callable[..., Awaitable[Any]]):
                 return None
 
             logger.exception(f"Handler error in {func.__name__}")
+
+            # Track error for deduplication and persistence
+            if ERROR_TRACKER_AVAILABLE and error_tracker:
+                user_id = update.effective_user.id if update and update.effective_user else 0
+                error_tracker.track_error(
+                    exc,
+                    context=f"telegram_handler.{func.__name__}",
+                    component="telegram_bot",
+                    metadata={"user_id": user_id, "handler": func.__name__}
+                )
 
             # Send user-friendly message
             try:

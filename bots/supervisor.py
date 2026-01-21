@@ -43,6 +43,14 @@ except ImportError:
     get_shutdown_manager = None
     ShutdownPhase = None
 
+# Import error tracker for centralized error logging
+try:
+    from core.logging.error_tracker import error_tracker
+    ERROR_TRACKER_AVAILABLE = True
+except ImportError:
+    error_tracker = None
+    ERROR_TRACKER_AVAILABLE = False
+
 
 def systemd_notify(state: str) -> bool:
     """
@@ -83,6 +91,17 @@ project_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(project_root))
 
 logger = logging.getLogger("jarvis.supervisor")
+
+
+def track_supervisor_error(exc: Exception, component: str, context: str = "") -> None:
+    """Track an error in the supervisor using the centralized error tracker."""
+    if ERROR_TRACKER_AVAILABLE and error_tracker:
+        error_tracker.track_error(
+            exc,
+            context=context or f"supervisor.{component}",
+            component="supervisor",
+            metadata={"component_name": component}
+        )
 
 
 class ComponentStatus(Enum):

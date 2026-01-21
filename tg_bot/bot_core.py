@@ -120,6 +120,10 @@ _TREASURY_ENGINE = None
 _CHAT_RESPONDER = None
 _LAST_REPLY_AT: dict[int, float] = {}
 
+# Default admin user ID - used as fallback when TREASURY_ADMIN_IDS not set
+# CRITICAL: Must be defined here (not later) to avoid forward reference error
+DEFAULT_ADMIN_USER_ID = int(os.environ.get("JARVIS_ADMIN_USER_ID", "8527130908"))
+
 # Rate limiting constants for expand buttons
 EXPAND_MESSAGE_DELAY = 0.5  # 500ms between messages (was 200ms)
 EXPAND_RETRY_ATTEMPTS = 3  # Retry up to 3 times on rate limit
@@ -2619,8 +2623,7 @@ async def paper(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =============================================================================
 # Treasury Trading Commands
 # =============================================================================
-
-DEFAULT_ADMIN_USER_ID = int(os.environ.get("JARVIS_ADMIN_USER_ID", "8527130908"))  # Legacy fallback if env not set
+# NOTE: DEFAULT_ADMIN_USER_ID is now defined at the top of this file (line ~125)
 
 
 @admin_only

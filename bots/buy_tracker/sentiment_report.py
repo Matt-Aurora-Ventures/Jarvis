@@ -782,14 +782,16 @@ class SentimentReportGenerator:
             # Format report
             report = self._format_report(tokens, grok_summary, macro, markets, stock_picks, picks_changes, commodities, precious_metals)
 
-            # Post to Telegram with ape buttons for bullish tokens
-            await self._post_to_telegram(report, tokens=tokens)
-
+            # Record sentiment run BEFORE posting (so we don't repeat on restart if posting fails)
             try:
                 from core.context_engine import context
                 context.record_sentiment_run()
+                logger.info("Recorded sentiment run to context engine")
             except ImportError:
-                pass
+                logger.warning("Could not import context_engine to record sentiment run")
+
+            # Post to Telegram with ape buttons for bullish tokens
+            await self._post_to_telegram(report, tokens=tokens)
 
             logger.info(f"Posted sentiment report with {len(tokens)} tokens + stocks + commodities + metals")
             return True
