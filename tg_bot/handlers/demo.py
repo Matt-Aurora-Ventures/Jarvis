@@ -856,10 +856,11 @@ Use the buy buttons to enter a trade!
             # Add navigation
             keyboard.extend([
                 [
-                    InlineKeyboardButton("🔔 P&L Alerts", callback_data="demo:pnl_alerts"),
-                    InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:positions"),
+                    InlineKeyboardButton("🔔 Alerts", callback_data="demo:pnl_alerts"),
+                    InlineKeyboardButton("🛡️ Trailing SL", callback_data="demo:trailing_stops"),
                 ],
                 [
+                    InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:positions"),
                     InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
                 ],
             ])
@@ -1578,6 +1579,235 @@ _Cancel anytime from DCA menu_
         ]
 
         return text, InlineKeyboardMarkup(keyboard)
+
+    # ========== TRAILING STOP-LOSS ==========
+
+    @staticmethod
+    def trailing_stop_overview(
+        trailing_stops: List[Dict[str, Any]] = None,
+        positions: List[Dict[str, Any]] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Trailing Stop-Loss Overview - View and manage trailing stops.
+
+        Trailing stops automatically adjust upward as price rises,
+        locking in profits while protecting against drawdowns.
+        """
+        theme = JarvisTheme
+        trailing_stops = trailing_stops or []
+        positions = positions or []
+
+        active_stops = [s for s in trailing_stops if s.get("active", True)]
+
+        lines = [
+            f"🛡️ *TRAILING STOP-LOSS*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+        ]
+
+        if not trailing_stops:
+            lines.extend([
+                "_No trailing stops configured_",
+                "",
+                "*What is a Trailing Stop?*",
+                "A trailing stop moves UP as price rises,",
+                "locking in profits automatically.",
+                "",
+                "*Example:*",
+                "• Buy at $0.001, set 10% trail",
+                "• Price hits $0.002 → stop at $0.0018",
+                "• Price hits $0.003 → stop at $0.0027",
+                "• Price drops to $0.0025 → SOLD",
+                "",
+                "_Profit locked in automatically!_",
+            ])
+        else:
+            lines.extend([
+                f"🛡️ *Active Stops:* {len(active_stops)}",
+                f"💰 *Protected Value:* ${sum(s.get('protected_value', 0) for s in active_stops):.2f}",
+                "",
+            ])
+
+            for stop in active_stops[:5]:
+                symbol = stop.get("symbol", "???")
+                trail_pct = stop.get("trail_percent", 10)
+                current_stop = stop.get("current_stop_price", 0)
+                highest_price = stop.get("highest_price", 0)
+                protected_pnl = stop.get("protected_pnl", 0)
+
+                pnl_emoji = theme.PROFIT if protected_pnl >= 0 else "⚠️"
+
+                lines.extend([
+                    f"🛡️ *{symbol}*",
+                    f"├ Trail: {trail_pct}%",
+                    f"├ Stop Price: ${current_stop:.8f}",
+                    f"├ Peak: ${highest_price:.8f}",
+                    f"└ Protected P&L: {pnl_emoji} {'+' if protected_pnl >= 0 else ''}{protected_pnl:.1f}%",
+                    "",
+                ])
+
+        text = "\n".join(lines)
+
+        keyboard = []
+
+        # Show buttons for each active stop
+        for stop in active_stops[:4]:
+            stop_id = stop.get("id", "")
+            symbol = stop.get("symbol", "???")
+            keyboard.append([
+                InlineKeyboardButton(f"✏️ Edit {symbol}", callback_data=f"demo:tsl_edit:{stop_id}"),
+                InlineKeyboardButton(f"❌ Remove", callback_data=f"demo:tsl_delete:{stop_id}"),
+            ])
+
+        # Add new trailing stop (if positions available)
+        if positions:
+            keyboard.append([
+                InlineKeyboardButton("➕ Add Trailing Stop", callback_data="demo:tsl_new"),
+            ])
+
+        keyboard.extend([
+            [
+                InlineKeyboardButton(f"{theme.CHART} Positions", callback_data="demo:positions"),
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ])
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def trailing_stop_setup(
+        position: Dict[str, Any] = None,
+        positions: List[Dict[str, Any]] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Trailing Stop Setup - Configure a trailing stop for a position.
+
+        If no position provided, shows position selection.
+        If position provided, shows trail percentage options.
+        """
+        theme = JarvisTheme
+
+        if not position:
+            # Show position selection
+            positions = positions or []
+
+            lines = [
+                f"🛡️ *ADD TRAILING STOP*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                "*Select Position:*",
+                "",
+            ]
+
+            if not positions:
+                lines.append("_No open positions_")
+            else:
+                for pos in positions[:6]:
+                    symbol = pos.get("symbol", "???")
+                    pnl_pct = pos.get("pnl_pct", 0)
+                    pnl_emoji = theme.PROFIT if pnl_pct >= 0 else theme.LOSS
+                    lines.append(f"{pnl_emoji} {symbol} ({'+' if pnl_pct >= 0 else ''}{pnl_pct:.1f}%)")
+
+            text = "\n".join(lines)
+
+            keyboard = []
+            for pos in positions[:6]:
+                pos_id = pos.get("id", "")
+                symbol = pos.get("symbol", "???")
+                keyboard.append([
+                    InlineKeyboardButton(f"🛡️ {symbol}", callback_data=f"demo:tsl_select:{pos_id}")
+                ])
+
+            keyboard.append([
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:trailing_stops"),
+            ])
+
+        else:
+            # Show trail percentage options
+            symbol = position.get("symbol", "???")
+            entry = position.get("entry_price", 0)
+            current = position.get("current_price", 0)
+            pnl_pct = position.get("pnl_pct", 0)
+
+            lines = [
+                f"🛡️ *TRAILING STOP: {symbol}*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"*Entry:* ${entry:.8f}",
+                f"*Current:* ${current:.8f}",
+                f"*P&L:* {'+' if pnl_pct >= 0 else ''}{pnl_pct:.1f}%",
+                "",
+                "*Select Trail Distance:*",
+                "_How far below peak to trigger sell_",
+                "",
+                "• 5% - Tight (more frequent sells)",
+                "• 10% - Standard (recommended)",
+                "• 15% - Loose (ride bigger swings)",
+                "• 20% - Wide (max profit potential)",
+            ]
+
+            text = "\n".join(lines)
+            pos_id = position.get("id", "")
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("5%", callback_data=f"demo:tsl_create:{pos_id}:5"),
+                    InlineKeyboardButton("10% ⭐", callback_data=f"demo:tsl_create:{pos_id}:10"),
+                ],
+                [
+                    InlineKeyboardButton("15%", callback_data=f"demo:tsl_create:{pos_id}:15"),
+                    InlineKeyboardButton("20%", callback_data=f"demo:tsl_create:{pos_id}:20"),
+                ],
+                [
+                    InlineKeyboardButton("Custom %", callback_data=f"demo:tsl_custom:{pos_id}"),
+                ],
+                [
+                    InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:tsl_new"),
+                ],
+            ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def trailing_stop_created(
+        symbol: str,
+        trail_percent: float,
+        initial_stop: float,
+        current_price: float,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """Show success after creating trailing stop."""
+        theme = JarvisTheme
+
+        text = f"""
+{theme.SUCCESS} *TRAILING STOP CREATED*
+━━━━━━━━━━━━━━━━━━━━━
+
+🛡️ *{symbol}* - {trail_percent}% Trail
+
+*Current Price:* ${current_price:.8f}
+*Initial Stop:* ${initial_stop:.8f}
+
+The stop will automatically move UP
+as the price increases, locking in
+profits along the way.
+
+━━━━━━━━━━━━━━━━━━━━━
+_Stop updates every 30 seconds_
+"""
+
+        keyboard = [
+            [
+                InlineKeyboardButton("🛡️ View All Stops", callback_data="demo:trailing_stops"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.CHART} Positions", callback_data="demo:positions"),
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    # ========== END TRAILING STOP-LOSS ==========
 
     @staticmethod
     def buy_confirmation(
@@ -3370,6 +3600,141 @@ first, then create DCA plans from there.
             ])
 
         # ========== END DCA HANDLERS ==========
+
+        # ========== TRAILING STOP HANDLERS ==========
+
+        elif action == "trailing_stops":
+            # Show trailing stop overview
+            trailing_stops = context.user_data.get("trailing_stops", [])
+            positions = context.user_data.get("positions", [])
+            text, keyboard = DemoMenuBuilder.trailing_stop_overview(
+                trailing_stops=trailing_stops,
+                positions=positions,
+            )
+
+        elif action == "tsl_new":
+            # Show position selection for new trailing stop
+            positions = context.user_data.get("positions", [])
+            text, keyboard = DemoMenuBuilder.trailing_stop_setup(positions=positions)
+
+        elif action.startswith("tsl_select:"):
+            # Position selected, show trail percentage options
+            pos_id = action.split(":")[1]
+            positions = context.user_data.get("positions", [])
+            position = next((p for p in positions if p.get("id") == pos_id), None)
+
+            if position:
+                text, keyboard = DemoMenuBuilder.trailing_stop_setup(position=position)
+            else:
+                text = "❌ Position not found"
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:trailing_stops")]
+                ])
+
+        elif action.startswith("tsl_create:"):
+            # Create trailing stop with: pos_id:trail_percent
+            parts = action.split(":")
+            pos_id = parts[1]
+            trail_percent = float(parts[2])
+
+            positions = context.user_data.get("positions", [])
+            position = next((p for p in positions if p.get("id") == pos_id), None)
+
+            if position:
+                current_price = position.get("current_price", 0)
+                initial_stop = current_price * (1 - trail_percent / 100)
+
+                # Create trailing stop record
+                new_stop = {
+                    "id": f"tsl_{pos_id}_{datetime.now().strftime('%H%M%S')}",
+                    "position_id": pos_id,
+                    "symbol": position.get("symbol", "???"),
+                    "trail_percent": trail_percent,
+                    "current_stop_price": initial_stop,
+                    "highest_price": current_price,
+                    "protected_value": position.get("value_usd", 0),
+                    "protected_pnl": position.get("pnl_pct", 0),
+                    "active": True,
+                    "created_at": datetime.now().isoformat(),
+                }
+
+                # Store in user data
+                if "trailing_stops" not in context.user_data:
+                    context.user_data["trailing_stops"] = []
+                context.user_data["trailing_stops"].append(new_stop)
+
+                text, keyboard = DemoMenuBuilder.trailing_stop_created(
+                    symbol=position.get("symbol", "???"),
+                    trail_percent=trail_percent,
+                    initial_stop=initial_stop,
+                    current_price=current_price,
+                )
+            else:
+                text = "❌ Position not found"
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:trailing_stops")]
+                ])
+
+        elif action.startswith("tsl_edit:"):
+            # Edit a trailing stop
+            stop_id = action.split(":")[1]
+            trailing_stops = context.user_data.get("trailing_stops", [])
+            stop = next((s for s in trailing_stops if s.get("id") == stop_id), None)
+
+            if stop:
+                # Find the associated position
+                positions = context.user_data.get("positions", [])
+                position = next((p for p in positions if p.get("id") == stop.get("position_id")), None)
+
+                if position:
+                    text, keyboard = DemoMenuBuilder.trailing_stop_setup(position=position)
+                else:
+                    text = f"🛡️ *Edit Trailing Stop*\n\n{stop.get('symbol', '???')} - {stop.get('trail_percent', 10)}%\n\n_Position no longer exists_"
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("❌ Delete Stop", callback_data=f"demo:tsl_delete:{stop_id}")],
+                        [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:trailing_stops")]
+                    ])
+            else:
+                text = "❌ Trailing stop not found"
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:trailing_stops")]
+                ])
+
+        elif action.startswith("tsl_delete:"):
+            # Delete a trailing stop
+            stop_id = action.split(":")[1]
+            trailing_stops = context.user_data.get("trailing_stops", [])
+
+            # Remove the stop
+            context.user_data["trailing_stops"] = [
+                s for s in trailing_stops if s.get("id") != stop_id
+            ]
+
+            # Show updated overview
+            text, keyboard = DemoMenuBuilder.trailing_stop_overview(
+                trailing_stops=context.user_data.get("trailing_stops", []),
+                positions=context.user_data.get("positions", []),
+            )
+
+        elif action.startswith("tsl_custom:"):
+            # Custom trail percentage - placeholder
+            pos_id = action.split(":")[1]
+            text = f"""
+🛡️ *CUSTOM TRAIL %*
+━━━━━━━━━━━━━━━━━━━━━
+
+Enter a custom trailing percentage
+(e.g., 7 for 7% trail).
+
+_This feature coming soon!_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("5%", callback_data=f"demo:tsl_create:{pos_id}:5")],
+                [InlineKeyboardButton("10%", callback_data=f"demo:tsl_create:{pos_id}:10")],
+                [InlineKeyboardButton(f"{theme.BACK} Back", callback_data=f"demo:tsl_select:{pos_id}")],
+            ])
+
+        # ========== END TRAILING STOP HANDLERS ==========
 
         elif action == "token_input":
             text, keyboard = DemoMenuBuilder.token_input_prompt()
