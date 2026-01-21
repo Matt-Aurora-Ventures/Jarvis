@@ -678,6 +678,151 @@ class TestDemoMenuBuilder:
         assert "50.00" in text  # PnL shown
         assert "idle" in text.lower()
 
+    # ========== P&L ALERTS TESTS ==========
+
+    def test_pnl_alerts_overview_empty(self):
+        """Test P&L alerts overview with no alerts."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.pnl_alerts_overview(
+            alerts=[],
+            positions=[],
+        )
+
+        assert "P&L ALERTS" in text
+        assert "No active alerts" in text
+        assert keyboard is not None
+
+    def test_pnl_alerts_overview_with_alerts(self):
+        """Test P&L alerts overview with active alerts."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        alerts = [
+            {"symbol": "BONK", "type": "percent", "target": 50, "direction": "above", "triggered": False},
+            {"symbol": "WIF", "type": "percent", "target": -25, "direction": "below", "triggered": True},
+        ]
+
+        text, keyboard = DemoMenuBuilder.pnl_alerts_overview(
+            alerts=alerts,
+            positions=[],
+        )
+
+        assert "P&L ALERTS" in text
+        assert "Active Alerts:* 1" in text  # One not triggered (with markdown)
+        assert "Triggered:* 1" in text  # With markdown
+        assert "BONK" in text
+        assert "WIF" in text
+        assert "+50" in text
+
+    def test_pnl_alerts_overview_with_positions(self):
+        """Test P&L alerts overview shows add alert buttons for positions."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        positions = [
+            {"id": "1", "symbol": "BONK"},
+            {"id": "2", "symbol": "WIF"},
+        ]
+
+        text, keyboard = DemoMenuBuilder.pnl_alerts_overview(
+            alerts=[],
+            positions=positions,
+        )
+
+        assert keyboard is not None
+        # Check keyboard has add alert buttons
+        buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+        assert any("BONK" in btn for btn in buttons)
+        assert any("WIF" in btn for btn in buttons)
+
+    def test_position_alert_setup(self):
+        """Test position alert setup view."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        position = {
+            "id": "pos123",
+            "symbol": "BONK",
+            "pnl_pct": 15.5,
+            "pnl_usd": 25.0,
+            "entry_price": 0.0001,
+            "current_price": 0.000115,
+        }
+
+        text, keyboard = DemoMenuBuilder.position_alert_setup(
+            position=position,
+            existing_alerts=[],
+        )
+
+        assert "SET ALERT: BONK" in text
+        assert "Current Position" in text
+        assert "15.5" in text  # PnL %
+        assert "Quick Presets" in text
+        assert keyboard is not None
+
+        # Check preset buttons exist
+        buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+        assert any("+25%" in btn for btn in buttons)
+        assert any("+50%" in btn for btn in buttons)
+        assert any("-10%" in btn for btn in buttons)
+
+    def test_position_alert_setup_with_existing_alerts(self):
+        """Test position alert setup shows existing alerts."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        position = {
+            "id": "pos123",
+            "symbol": "BONK",
+            "pnl_pct": 15.5,
+            "pnl_usd": 25.0,
+            "entry_price": 0.0001,
+            "current_price": 0.000115,
+        }
+
+        existing_alerts = [
+            {"position_id": "pos123", "type": "percent", "target": 50, "direction": "above"},
+            {"position_id": "pos123", "type": "percent", "target": -25, "direction": "below"},
+        ]
+
+        text, keyboard = DemoMenuBuilder.position_alert_setup(
+            position=position,
+            existing_alerts=existing_alerts,
+        )
+
+        assert "Active Alerts:" in text
+        assert "+50" in text
+        assert "-25" in text
+
+    def test_alert_created_success(self):
+        """Test alert created success message."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.alert_created_success(
+            symbol="BONK",
+            alert_type="percent",
+            target=50.0,
+            direction="above",
+        )
+
+        assert "ALERT CREATED" in text
+        assert "BONK" in text
+        assert "+50" in text
+        assert "📈" in text  # Above direction
+        assert "notified" in text.lower()
+
+    def test_alert_created_success_loss_direction(self):
+        """Test alert created success for loss direction."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.alert_created_success(
+            symbol="WIF",
+            alert_type="percent",
+            target=-25.0,
+            direction="below",
+        )
+
+        assert "WIF" in text
+        assert "-25" in text
+        assert "📉" in text  # Below direction
+
 
 class TestSentimentIntegration:
     """Test sentiment engine integration."""
