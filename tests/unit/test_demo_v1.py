@@ -956,6 +956,118 @@ class TestDCAFeature:
         assert any("View" in btn or "DCA" in btn or "Back" in btn for btn in buttons)
 
 
+class TestTrailingStopFeature:
+    """Test Trailing Stop-Loss feature."""
+
+    def test_trailing_stop_overview_empty(self):
+        """Test trailing stop overview with no stops."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.trailing_stop_overview(trailing_stops=[])
+
+        assert "TRAILING" in text.upper() or "🛡️" in text
+        assert "No trailing stops" in text or "trailing stop" in text.lower()
+        assert keyboard is not None
+        # Should explain what trailing stops are
+        assert "profit" in text.lower() or "moves UP" in text
+
+    def test_trailing_stop_overview_with_stops(self):
+        """Test trailing stop overview with active stops."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        stops = [
+            {
+                "id": "tsl_test1",
+                "symbol": "BONK",
+                "trail_percent": 10,
+                "current_stop_price": 0.000018,
+                "highest_price": 0.00002,
+                "protected_value": 50.0,
+                "protected_pnl": 25.0,
+                "active": True,
+            },
+        ]
+        positions = [{"id": "pos1", "symbol": "BONK"}]
+
+        text, keyboard = DemoMenuBuilder.trailing_stop_overview(
+            trailing_stops=stops,
+            positions=positions,
+        )
+
+        assert "BONK" in text
+        assert "10%" in text
+        assert "Active" in text or "🛡️" in text
+        assert keyboard is not None
+        # Should have edit/delete buttons
+        buttons = [btn.callback_data for row in keyboard.inline_keyboard for btn in row if btn.callback_data]
+        assert any("tsl_edit" in btn for btn in buttons)
+        assert any("tsl_delete" in btn for btn in buttons)
+
+    def test_trailing_stop_setup_no_position(self):
+        """Test trailing stop setup showing position selection."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        positions = [
+            {"id": "pos1", "symbol": "BONK", "pnl_pct": 15.0},
+            {"id": "pos2", "symbol": "WIF", "pnl_pct": -5.0},
+        ]
+
+        text, keyboard = DemoMenuBuilder.trailing_stop_setup(positions=positions)
+
+        assert "TRAILING" in text.upper() or "🛡️" in text
+        assert "Select" in text or "Position" in text
+        assert keyboard is not None
+        # Should show position buttons
+        buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+        assert any("BONK" in btn for btn in buttons)
+        assert any("WIF" in btn for btn in buttons)
+
+    def test_trailing_stop_setup_with_position(self):
+        """Test trailing stop setup with position selected, showing trail % options."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        position = {
+            "id": "pos1",
+            "symbol": "BONK",
+            "entry_price": 0.00001,
+            "current_price": 0.00002,
+            "pnl_pct": 100.0,
+        }
+
+        text, keyboard = DemoMenuBuilder.trailing_stop_setup(position=position)
+
+        assert "BONK" in text
+        assert "Entry" in text or "entry" in text
+        assert "Current" in text or "current" in text
+        assert keyboard is not None
+        # Should have percentage buttons (5%, 10%, 15%, 20%)
+        buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+        assert any("5%" in btn for btn in buttons)
+        assert any("10%" in btn for btn in buttons)
+        assert any("15%" in btn for btn in buttons)
+        assert any("20%" in btn for btn in buttons)
+
+    def test_trailing_stop_created(self):
+        """Test trailing stop created success message."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.trailing_stop_created(
+            symbol="BONK",
+            trail_percent=10,
+            initial_stop=0.000018,
+            current_price=0.00002,
+        )
+
+        assert "BONK" in text
+        assert "10%" in text
+        assert "CREATED" in text.upper() or "✅" in text
+        assert "Stop" in text or "stop" in text
+        assert keyboard is not None
+        # Should have button to view all stops
+        buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+        assert any("Stop" in btn or "🛡️" in btn for btn in buttons)
+
+
 class TestSentimentIntegration:
     """Test sentiment engine integration."""
 
