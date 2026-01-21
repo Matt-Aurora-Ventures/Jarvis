@@ -240,6 +240,19 @@ class PublicUserManager:
             )
         """)
 
+        # Positions table (cost basis tracking)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS positions (
+                user_id INTEGER NOT NULL,
+                symbol TEXT NOT NULL,
+                quantity REAL DEFAULT 0.0,
+                cost_basis_usd REAL DEFAULT 0.0,
+                last_updated TEXT NOT NULL,
+                PRIMARY KEY (user_id, symbol),
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
+        """)
+
         # Rate limiting table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS rate_limits (
@@ -706,6 +719,107 @@ class PublicUserManager:
         except Exception as e:
             logger.error(f"Failed to record trade: {e}")
             return False
+
+    def get_position(self, user_id: int, symbol: str) -> Optional[Dict[str, Any]]:
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT quantity, cost_basis_usd FROM positions WHERE user_id = ? AND symbol = ?",
+                (user_id, symbol),
+            )
+            row = cursor.fetchone()
+            conn.close()
+            if not row:
+                return None
+            quantity, cost_basis_usd = row
+            return {
+                "quantity": float(quantity),
+                "cost_basis_usd": float(cost_basis_usd),
+            }
+        except Exception as e:
+            logger.error(f"Failed to get position: {e}")
+            return None
+
+    def update_position_on_buy(
+        self,
+        user_id: int,
+        symbol: str,
+        quantity: float,
+        cost_usd: float,
+    ) -> None:
+        if quantity <= 0 or cost_usd <= 0:
+            return
+        try:
+            position = self.get_position(user_id, symbol)
+            if position:
+                new_qty = position["quantity"] + quantity
+                new_cost = position["cost_basis_usd"] + cost_usd
+            else:
+                new_qty = quantity
+                new_cost = cost_usd
+
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO positions (user_id, symbol, quantity, cost_basis_usd, last_updated)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, symbol) DO UPDATE SET
+                    quantity = excluded.quantity,
+                    cost_basis_usd = excluded.cost_basis_usd,
+                    last_updated = excluded.last_updated
+                """,
+                (user_id, symbol, new_qty, new_cost, datetime.utcnow().isoformat()),
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to update position on buy: {e}")
+
+    def update_position_on_sell(
+        self,
+        user_id: int,
+        symbol: str,
+        quantity: float,
+        proceeds_usd: float,
+    ) -> float:
+        if quantity <= 0:
+            return 0.0
+        try:
+            position = self.get_position(user_id, symbol)
+            if not position or position["quantity"] <= 0:
+                return 0.0
+
+            avg_cost = position["cost_basis_usd"] / position["quantity"]
+            sell_cost_basis = avg_cost * quantity
+            pnl = proceeds_usd - sell_cost_basis
+
+            remaining_qty = max(0.0, position["quantity"] - quantity)
+            remaining_cost = max(0.0, position["cost_basis_usd"] - sell_cost_basis)
+
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            if remaining_qty <= 0:
+                cursor.execute(
+                    "DELETE FROM positions WHERE user_id = ? AND symbol = ?",
+                    (user_id, symbol),
+                )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE positions
+                    SET quantity = ?, cost_basis_usd = ?, last_updated = ?
+                    WHERE user_id = ? AND symbol = ?
+                    """,
+                    (remaining_qty, remaining_cost, datetime.utcnow().isoformat(), user_id, symbol),
+                )
+            conn.commit()
+            conn.close()
+            return pnl
+        except Exception as e:
+            logger.error(f"Failed to update position on sell: {e}")
+            return 0.0
 
     # ==================== RATE LIMITING ====================
 
