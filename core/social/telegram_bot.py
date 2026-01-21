@@ -435,6 +435,19 @@ class JarvisTelegramBot:
         self.running = True
         logger.info("Starting Jarvis Telegram Bot...")
 
+        # Avoid polling conflicts with other bots using same token
+        try:
+            from core.utils.instance_lock import acquire_instance_lock
+            self._polling_lock = acquire_instance_lock(self.token, name="telegram_polling", max_wait_seconds=0)
+        except Exception as exc:
+            logger.warning(f"Polling lock helper unavailable: {exc}")
+            self._polling_lock = None
+
+        if not self._polling_lock:
+            logger.warning("Telegram polling lock held by another process; skipping startup")
+            self.running = False
+            return
+
         # Start prediction scheduler
         asyncio.create_task(self._prediction_loop())
 
@@ -445,6 +458,11 @@ class JarvisTelegramBot:
         """Stop the bot"""
         self.running = False
         logger.info("Telegram bot stopping...")
+        if getattr(self, "_polling_lock", None):
+            try:
+                self._polling_lock.close()
+            except Exception:
+                pass
 
     async def _prediction_loop(self):
         """Post predictions every 30 minutes"""

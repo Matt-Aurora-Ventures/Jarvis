@@ -22,6 +22,7 @@ from bots.buy_tracker.ape_buttons import (
     RISK_PROFILE_CONFIG,
     get_risk_config,
 )
+from core.logging.error_tracker import error_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -308,11 +309,29 @@ class JarvisBuyBot:
     async def _handle_faq_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle FAQ expand/collapse button clicks."""
         query = update.callback_query
-        await query.answer()  # Acknowledge the callback
-
-        message_id = query.message.message_id
-        chat_id = query.message.chat_id
         action = query.data  # "show_faq" or "hide_faq"
+        message_id = query.message.message_id if query.message else None
+        chat_id = query.message.chat_id if query.message else None
+        user_id = query.from_user.id if query.from_user else 0
+
+        # ENTRY LOGGING
+        logger.info(f"[FAQ_CALLBACK] action='{action}' user={user_id} msg_id={message_id}")
+
+        # CRITICAL: Always answer callback first
+        try:
+            await query.answer()
+        except Exception as e:
+            logger.warning(f"[FAQ_CALLBACK] Could not answer callback: {e}")
+            error_tracker.track_error(
+                e,
+                context=f"faq_callback.answer:{action}",
+                component="buy_tracker_bot",
+                metadata={"user_id": user_id, "action": action}
+            )
+
+        if not message_id or not chat_id:
+            logger.warning(f"[FAQ_CALLBACK] Missing message context: msg_id={message_id} chat_id={chat_id}")
+            return
 
         try:
             if action == "show_faq":
@@ -336,6 +355,7 @@ class JarvisBuyBot:
                             disable_web_page_preview=True,
                             reply_markup=keyboard,
                         )
+                    logger.info(f"[FAQ_CALLBACK] FAQ expanded for msg_id={message_id}")
                 else:
                     # No cached message, just send FAQ as new message
                     await self.bot.send_message(
@@ -343,6 +363,7 @@ class JarvisBuyBot:
                         text=FAQ_CONTENT,
                         parse_mode=ParseMode.HTML,
                     )
+                    logger.info(f"[FAQ_CALLBACK] FAQ sent as new message (no cache) chat_id={chat_id}")
 
             elif action == "hide_faq":
                 # Collapse: restore original message
@@ -363,16 +384,43 @@ class JarvisBuyBot:
                             disable_web_page_preview=True,
                             reply_markup=keyboard,
                         )
+                    logger.info(f"[FAQ_CALLBACK] FAQ collapsed for msg_id={message_id}")
 
         except Exception as e:
-            logger.error(f"Failed to handle FAQ callback: {e}")
+            logger.error(f"[FAQ_CALLBACK] Failed to handle FAQ callback: {e}", exc_info=True)
+            error_tracker.track_error(
+                e,
+                context=f"faq_callback.handle:{action}",
+                component="buy_tracker_bot",
+                metadata={"user_id": user_id, "action": action, "message_id": message_id}
+            )
 
     async def _handle_ape_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle ape button clicks for treasury trading with TP/SL."""
         query = update.callback_query
         callback_data = query.data
-        chat_id = query.message.chat_id
-        user_id = query.from_user.id
+        chat_id = query.message.chat_id if query.message else None
+        user_id = query.from_user.id if query.from_user else 0
+        message_id = query.message.message_id if query.message else None
+
+        # ENTRY LOGGING
+        logger.info(f"[APE_CALLBACK] data='{callback_data}' user={user_id} msg_id={message_id}")
+
+        # CRITICAL: Always answer callback first to stop loading spinner
+        try:
+            await query.answer("Processing...", show_alert=False)
+        except Exception as e:
+            logger.warning(f"[APE_CALLBACK] Could not answer callback: {e}")
+            error_tracker.track_error(
+                e,
+                context=f"ape_callback.answer:{callback_data}",
+                component="buy_tracker_bot",
+                metadata={"user_id": user_id, "callback_data": callback_data}
+            )
+
+        if not chat_id:
+            logger.warning(f"[APE_CALLBACK] Missing chat_id for callback: {callback_data}")
+            return
 
         if not _is_admin(user_id):
             await self.bot.send_message(
@@ -380,16 +428,10 @@ class JarvisBuyBot:
                 text="Admin only. Trade request blocked.",
                 parse_mode=ParseMode.HTML,
             )
-            logger.warning(f"Unauthorized ape trade attempt by user {user_id}")
+            logger.warning(f"[APE_CALLBACK] Unauthorized ape trade attempt by user {user_id}")
             return
 
-        logger.info(f"APE CALLBACK RECEIVED: {callback_data}")
-
-        # Try to acknowledge callback (may fail if old)
-        try:
-            await query.answer("🦍 Processing...", show_alert=False)
-        except Exception:
-            logger.debug("Callback acknowledgment failed (may be stale)")
+        logger.info(f"[APE_CALLBACK] Processing trade: {callback_data}")
 
         try:
             # Parse the callback
@@ -436,11 +478,17 @@ class JarvisBuyBot:
             )
 
         except Exception as e:
-            logger.error(f"Ape callback error: {e}", exc_info=True)
+            logger.error(f"[APE_CALLBACK] Error: {e}", exc_info=True)
+            error_tracker.track_error(
+                e,
+                context=f"ape_callback.handle:{callback_data}",
+                component="buy_tracker_bot",
+                metadata={"user_id": user_id, "callback_data": callback_data, "chat_id": chat_id}
+            )
             try:
                 await self.bot.send_message(
                     chat_id=chat_id,
-                    text=f"❌ Error processing trade: {str(e)[:100]}",
+                    text=f"Error processing trade: {str(e)[:100]}",
                     parse_mode=ParseMode.HTML,
                 )
             except Exception:
@@ -450,16 +498,28 @@ class JarvisBuyBot:
         """Handle trade confirmation button clicks."""
         query = update.callback_query
         callback_data = query.data
-        chat_id = query.message.chat_id
-        user_id = query.from_user.id
+        chat_id = query.message.chat_id if query.message else None
+        user_id = query.from_user.id if query.from_user else 0
+        message_id = query.message.message_id if query.message else None
 
-        logger.info(f"CONFIRM CALLBACK: {callback_data}")
+        # ENTRY LOGGING
+        logger.info(f"[CONFIRM_CALLBACK] data='{callback_data}' user={user_id} msg_id={message_id}")
 
-        # Try to acknowledge
+        # CRITICAL: Always answer callback first to stop loading spinner
         try:
-            await query.answer("🚀 Executing...", show_alert=False)
-        except Exception:
-            pass
+            await query.answer("Executing...", show_alert=False)
+        except Exception as e:
+            logger.warning(f"[CONFIRM_CALLBACK] Could not answer callback: {e}")
+            error_tracker.track_error(
+                e,
+                context=f"confirm_callback.answer:{callback_data}",
+                component="buy_tracker_bot",
+                metadata={"user_id": user_id, "callback_data": callback_data}
+            )
+
+        if not chat_id:
+            logger.warning(f"[CONFIRM_CALLBACK] Missing chat_id for callback: {callback_data}")
+            return
 
         if callback_data == "cancel_trade":
             await self.bot.send_message(
@@ -549,10 +609,16 @@ class JarvisBuyBot:
                 )
 
             except Exception as trade_error:
-                logger.error(f"Trade execution error: {trade_error}")
+                logger.error(f"[CONFIRM_CALLBACK] Trade execution error: {trade_error}", exc_info=True)
+                error_tracker.track_error(
+                    trade_error,
+                    context=f"confirm_callback.execute:{callback_data}",
+                    component="buy_tracker_bot",
+                    metadata={"user_id": user_id, "callback_data": callback_data, "chat_id": chat_id}
+                )
                 await self.bot.send_message(
                     chat_id=chat_id,
-                    text=f"⚠️ Trade in simulation mode\n\nSymbol: {parsed['symbol']}\nAllocation: {parsed['allocation_percent']}%\n\n<i>Live trading coming soon!</i>",
+                    text=f"Trade in simulation mode\n\nSymbol: {parsed['symbol']}\nAllocation: {parsed['allocation_percent']}%\n\n<i>Live trading coming soon!</i>",
                     parse_mode=ParseMode.HTML,
                 )
 
@@ -560,6 +626,14 @@ class JarvisBuyBot:
         """Handle info button clicks."""
         query = update.callback_query
         callback_data = query.data
+        user_id = query.from_user.id if query.from_user else 0
+        message_id = query.message.message_id if query.message else None
+
+        # ENTRY LOGGING
+        logger.info(f"[INFO_CALLBACK] data='{callback_data}' user={user_id} msg_id={message_id}")
+
+        # CRITICAL: Always answer callback first (will be overwritten by info popup)
+        # Note: For info callbacks, the answer with info text IS the response
 
         try:
             # Parse info callback (format: info:{profile} or info:{type}:{symbol}:{contract})
@@ -583,15 +657,31 @@ class JarvisBuyBot:
                 await query.answer(info_text, show_alert=True)
 
         except Exception as e:
-            logger.error(f"Info callback error: {e}")
-            await query.answer("Info unavailable", show_alert=True)
+            logger.error(f"[INFO_CALLBACK] Error: {e}", exc_info=True)
+            error_tracker.track_error(
+                e,
+                context=f"info_callback.handle:{callback_data}",
+                component="buy_tracker_bot",
+                metadata={"user_id": user_id, "callback_data": callback_data}
+            )
+            try:
+                await query.answer("Info unavailable", show_alert=True)
+            except Exception:
+                pass  # Ignore if answer fails
 
     async def _handle_expand_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle expand section button clicks - show trading options for a section."""
         query = update.callback_query
         callback_data = query.data
-        chat_id = query.message.chat_id
+        chat_id = query.message.chat_id if query.message else None
+        user_id = query.from_user.id if query.from_user else 0
+        message_id = query.message.message_id if query.message else None
 
+        # ENTRY LOGGING
+        logger.info(f"[EXPAND_CALLBACK] data='{callback_data}' user={user_id} msg_id={message_id}")
+
+        # CRITICAL: Answer callback first to stop loading spinner
+        # Note: We answer with loading message, then do the actual work
         try:
             # Parse: expand:{section_type}
             # section_type: trending, stocks, indexes, top_picks
@@ -601,7 +691,11 @@ class JarvisBuyBot:
                 return
 
             section_type = parts[1]
-            await query.answer(f"Loading {section_type} trading options...")
+            await query.answer(f"Loading {section_type}...")
+
+            if not chat_id:
+                logger.warning(f"[EXPAND_CALLBACK] Missing chat_id for section: {section_type}")
+                return
 
             # Import here to avoid circular deps
             from core.enhanced_market_data import (
@@ -790,8 +884,17 @@ class JarvisBuyBot:
                 pass  # Message may not be editable
 
         except Exception as e:
-            logger.error(f"Expand callback error: {e}")
-            await query.answer(f"Error loading section: {e}", show_alert=True)
+            logger.error(f"[EXPAND_CALLBACK] Error: {e}", exc_info=True)
+            error_tracker.track_error(
+                e,
+                context=f"expand_callback.handle:{callback_data}",
+                component="buy_tracker_bot",
+                metadata={"user_id": user_id, "callback_data": callback_data, "chat_id": chat_id}
+            )
+            try:
+                await query.answer(f"Error loading section: {str(e)[:50]}", show_alert=True)
+            except Exception:
+                pass  # Ignore if answer fails
 
     def _format_buy_message(self, buy: BuyTransaction) -> str:
         """Format buy notification message like BobbyBuyBot style."""

@@ -247,6 +247,11 @@ class TestRiskManager:
     @pytest.fixture
     def risk_manager(self, tmp_path):
         """Create a RiskManager for testing with isolated database."""
+        # Clear the cooldown singleton state to ensure test isolation
+        from core.trading.cooldown import get_cooldown_manager
+        cooldown_mgr = get_cooldown_manager()
+        cooldown_mgr.clear_all_cooldowns()
+
         # Use temporary database for testing to avoid polluting shared state
         db_path = str(tmp_path / "test_treasury.db")
         return RiskManager(db_path=db_path)

@@ -48,8 +48,16 @@ class StatePaths:
 
     @property
     def positions(self) -> Path:
-        """Treasury positions state file."""
+        """Treasury positions state file (primary - ~/.lifeos/trading/)."""
         return self.trading_dir / "positions.json"
+
+    @property
+    def trader_positions(self) -> Path:
+        """Treasury positions state file (secondary - data/trader/)."""
+        # Secondary location in project data directory for backup/tooling access
+        trader_dir = Path(__file__).parent.parent / "data" / "trader"
+        trader_dir.mkdir(parents=True, exist_ok=True)
+        return trader_dir / "positions.json"
 
     @property
     def exit_intents(self) -> Path:

@@ -130,11 +130,25 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     config = get_config()
     chat_id = update.effective_chat.id
+    force = any(arg.lower() in ("force", "--force") for arg in (context.args or []))
 
     from tg_bot import bot_core as bot_module
 
     # Use full SentimentReportGenerator if available
     if bot_module.SENTIMENT_REPORT_AVAILABLE:
+        if not force:
+            try:
+                from core.context_engine import context as context_engine
+                min_interval_hours = config.sentiment_interval_seconds / 3600.0
+                if not context_engine.can_run_sentiment(min_interval_hours=min_interval_hours):
+                    await update.message.reply_text(
+                        "_recent report exists. try `/report force` to override._",
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    return
+            except ImportError:
+                pass
+
         await update.message.reply_text(
             "_generating full report... grok analysis, market data, trading buttons._",
             parse_mode=ParseMode.MARKDOWN,
@@ -170,7 +184,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             try:
                 # Generate and post the full report
-                await generator.generate_and_post_report()
+                await generator.generate_and_post_report(force=force)
             finally:
                 # Clean up session
                 await generator._session.close()

@@ -35,6 +35,7 @@ from core.memory.dedup_store import (
     get_memory_store
 )
 from bots.twitter.telegram_sync import sync_tweet_to_telegram
+from core.context_engine import context
 
 logger = logging.getLogger(__name__)
 
@@ -3715,6 +3716,13 @@ Reply type guidance:
         """Post a tweet, optionally with an image."""
         try:
             # =====================================================================
+            # CONTEXT ENGINE CHECK - Rate limiting and timing controls
+            # =====================================================================
+            if not context.can_tweet(min_interval_minutes=30):
+                logger.warning("SKIPPED: context_engine rate limit (30 min between tweets)")
+                return None
+
+            # =====================================================================
             # DUPLICATE DETECTION - Two-Layer System
             # Layer 1: Persistent fingerprints (survives restarts, 48h window)
             # Layer 2: In-memory similarity (session-based, 48h window)
@@ -3780,6 +3788,9 @@ Reply type guidance:
             )
             
             if result.success:
+                # Record tweet timestamp in context engine
+                context.record_tweet()
+
                 # Record tweet in memory
                 self.memory.record_tweet(result.tweet_id, content, draft.category, draft.cashtags)
 

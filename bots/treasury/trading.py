@@ -128,6 +128,62 @@ def _log_trading_event(event_type: str, message: str, data: dict = None):
         logger.info(f"[{event_type}] {message}")
 
 
+def _log_position_change(
+    action: str,
+    position_id: str,
+    symbol: str,
+    details: dict = None
+):
+    """
+    Log all position changes with consistent formatting.
+
+    Actions: OPEN, CLOSE, UPDATE, RECONCILE, ERROR
+    """
+    details = details or {}
+    timestamp = datetime.utcnow().isoformat()
+
+    # Build log message
+    log_data = {
+        "timestamp": timestamp,
+        "action": action,
+        "position_id": position_id,
+        "symbol": symbol,
+        **details
+    }
+
+    # Log to standard logger with consistent prefix
+    if action == "OPEN":
+        logger.info(
+            f"[POSITION:{action}] {position_id} {symbol} - "
+            f"amount=${details.get('amount_usd', 0):.2f}, "
+            f"entry=${details.get('entry_price', 0):.6f}, "
+            f"TP=${details.get('tp_price', 0):.6f}, SL=${details.get('sl_price', 0):.6f}"
+        )
+    elif action == "CLOSE":
+        logger.info(
+            f"[POSITION:{action}] {position_id} {symbol} - "
+            f"P&L=${details.get('pnl_usd', 0):+.2f} ({details.get('pnl_pct', 0):+.1f}%), "
+            f"exit=${details.get('exit_price', 0):.6f}, "
+            f"reason={details.get('reason', 'unknown')}"
+        )
+    elif action == "UPDATE":
+        logger.debug(
+            f"[POSITION:{action}] {position_id} {symbol} - "
+            f"price=${details.get('current_price', 0):.6f}, "
+            f"unrealized_pnl=${details.get('unrealized_pnl', 0):+.2f}"
+        )
+    elif action == "ERROR":
+        logger.error(
+            f"[POSITION:{action}] {position_id} {symbol} - "
+            f"error={details.get('error', 'unknown')}"
+        )
+    else:
+        logger.info(f"[POSITION:{action}] {position_id} {symbol} - {details}")
+
+    # Also send to trading event system
+    _log_trading_event(f"POSITION_{action}", f"{symbol} position {action.lower()}", log_data)
+
+
 class TradeDirection(Enum):
     LONG = "LONG"      # Buy token
     SHORT = "SHORT"    # Sell token (or skip)
@@ -297,6 +353,7 @@ class TradingEngine:
     # Migration: Old files in bots/treasury/ will be auto-migrated on first access
     from core.state_paths import STATE_PATHS
     POSITIONS_FILE = STATE_PATHS.positions
+    POSITIONS_FILE_SECONDARY = STATE_PATHS.trader_positions  # data/trader/positions.json
     HISTORY_FILE = STATE_PATHS.trading_dir / 'trade_history.json'
     AUDIT_LOG_FILE = STATE_PATHS.audit_log
     DAILY_VOLUME_FILE = STATE_PATHS.trading_dir / 'daily_volume.json'
@@ -417,6 +474,22 @@ class TradingEngine:
         "pump",     # pump.fun tokens - high risk, small positions only
     ]
 
+    # BLOCKED TOKENS - Never trade these (stablecoins only)
+    # These are not valid trading targets - we only trade volatile assets
+    # NOTE: SOL/WSOL is NOT blocked - it's our base trading currency
+    BLOCKED_TOKENS = {
+        # USD-pegged stablecoins
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
+        "BRjpCHtyQLNCo8gqRUr8jtdAj5AjPYQaoqbvcZiHok1k": "devUSDC",
+        # Other stablecoins
+        "USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX": "USDH",
+        "7kbnvuGBxxj8AG9qp8Scn56muWGaRaFqxg1FsRp3PaFT": "UXD",
+        "Dn4noZ5jgGfkntzcQSUZ8czkreiZ1ForXYoV2H8Dm7S1": "USDCet",  # Wormhole USDC
+    }
+
+    BLOCKED_SYMBOLS = {"USDC", "USDT", "USDH", "UXD", "BUSD", "DAI", "TUSD", "FRAX", "USDD", "devUSDC"}
+
     # MINIMUM REQUIREMENTS FOR HIGH-RISK TOKENS (pump.fun, new launches, etc.)
     MIN_LIQUIDITY_USD = 5000       # $5k minimum liquidity for any trade
     MIN_VOLUME_24H_USD = 2500      # $2.5k minimum daily volume
@@ -491,6 +564,20 @@ class TradingEngine:
     # ==========================================================================
     # TOKEN SAFETY METHODS - Protect against rug pulls and illiquid tokens
     # ==========================================================================
+
+    def is_blocked_token(self, token_mint: str, token_symbol: str = "") -> Tuple[bool, str]:
+        """
+        Check if token is blocked from trading (stablecoins, WSOL, etc.).
+
+        Returns:
+            Tuple of (is_blocked, reason)
+        """
+        if token_mint in self.BLOCKED_TOKENS:
+            name = self.BLOCKED_TOKENS[token_mint]
+            return True, f"{name} is a stablecoin/blocked token - not tradeable"
+        if token_symbol.upper() in self.BLOCKED_SYMBOLS:
+            return True, f"{token_symbol} is a stablecoin - not tradeable"
+        return False, ""
 
     def is_high_risk_token(self, token_mint: str) -> bool:
         """
@@ -576,7 +663,13 @@ class TradingEngine:
             return base_position_usd * self.MAX_UNVETTED_POSITION_PCT, risk_tier  # 25% size
 
     def _load_state(self):
-        """Load positions and history from disk with file locking."""
+        """Load positions and history from disk with file locking.
+
+        Attempts to load from primary location first, falls back to secondary.
+        Logs all position loading for debugging.
+        """
+        logger.info("Loading trading state...")
+
         # Use SafeState for race-condition-free access
         if SAFE_STATE_AVAILABLE:
             self._positions_state = SafeState(self.POSITIONS_FILE, default_value=[])
@@ -589,12 +682,21 @@ class TradingEngine:
                 for pos_data in data:
                     pos = Position.from_dict(pos_data)
                     self.positions[pos.id] = pos
+                    logger.info(f"[LOAD] Position {pos.id}: {pos.token_symbol} - status={pos.status.value}, amount=${pos.amount_usd:.2f}")
             except Exception as e:
-                logger.error(f"Failed to load positions: {e}")
+                logger.error(f"Failed to load positions from primary: {e}")
+                # Try secondary location
+                self._load_from_secondary()
+            else:
+                primary_missing = not self.POSITIONS_FILE.exists()
+                primary_empty = self.POSITIONS_FILE.exists() and self.POSITIONS_FILE.stat().st_size == 0
+                if (primary_missing or primary_empty) and self.POSITIONS_FILE_SECONDARY.exists() and not self.positions:
+                    self._load_from_secondary()
 
             try:
                 data = self._history_state.read()
                 self.trade_history = [Position.from_dict(p) for p in data]
+                logger.info(f"[LOAD] Trade history: {len(self.trade_history)} closed positions")
             except Exception as e:
                 logger.error(f"Failed to load history: {e}")
         else:
@@ -606,16 +708,239 @@ class TradingEngine:
                         for pos_data in data:
                             pos = Position.from_dict(pos_data)
                             self.positions[pos.id] = pos
+                            logger.info(f"[LOAD] Position {pos.id}: {pos.token_symbol} - status={pos.status.value}, amount=${pos.amount_usd:.2f}")
                 except Exception as e:
-                    logger.error(f"Failed to load positions: {e}")
+                    logger.error(f"Failed to load positions from primary: {e}")
+                    self._load_from_secondary()
+            elif self.POSITIONS_FILE_SECONDARY.exists():
+                # Primary doesn't exist, try secondary
+                self._load_from_secondary()
 
             if self.HISTORY_FILE.exists():
                 try:
                     with open(self.HISTORY_FILE) as f:
                         data = json.load(f)
                         self.trade_history = [Position.from_dict(p) for p in data]
+                        logger.info(f"[LOAD] Trade history: {len(self.trade_history)} closed positions")
                 except Exception as e:
                     logger.error(f"Failed to load history: {e}")
+
+        # Log summary
+        open_count = len([p for p in self.positions.values() if p.is_open])
+        total_value = sum(p.amount_usd for p in self.positions.values() if p.is_open)
+        logger.info(f"[LOAD] State loaded: {open_count} open positions, total value ${total_value:.2f}")
+
+    def _load_from_secondary(self):
+        """Load positions from secondary location (data/trader/positions.json)."""
+        if self.POSITIONS_FILE_SECONDARY.exists():
+            try:
+                with open(self.POSITIONS_FILE_SECONDARY) as f:
+                    data = json.load(f)
+                    for pos_data in data:
+                        pos = Position.from_dict(pos_data)
+                        if pos.id not in self.positions:  # Don't overwrite existing
+                            self.positions[pos.id] = pos
+                            logger.info(f"[LOAD-SECONDARY] Position {pos.id}: {pos.token_symbol}")
+                logger.info(f"[LOAD-SECONDARY] Recovered {len(data)} positions from secondary location")
+            except Exception as e:
+                logger.error(f"Failed to load positions from secondary: {e}")
+
+    async def reconcile_with_onchain(self) -> Dict[str, Any]:
+        """
+        Reconcile stored positions with actual on-chain token balances.
+
+        This method should be called on startup to detect discrepancies between
+        what we think we hold vs what's actually in the wallet.
+
+        Returns:
+            Dict with reconciliation report:
+            - matched: positions that match on-chain balances
+            - orphaned: positions with no on-chain balance (may have been sold)
+            - untracked: on-chain tokens not in our position list
+            - mismatched: positions with different amounts than on-chain
+        """
+        logger.info("[RECONCILE] Starting on-chain reconciliation...")
+
+        report = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "matched": [],
+            "orphaned": [],
+            "untracked": [],
+            "mismatched": [],
+            "errors": []
+        }
+
+        try:
+            # Get treasury address
+            treasury = self.wallet.get_treasury()
+            if not treasury:
+                report["errors"].append("No treasury wallet configured")
+                logger.error("[RECONCILE] No treasury wallet configured")
+                return report
+
+            # Get actual on-chain token balances
+            onchain_balances = await self.wallet.get_token_balances(treasury.address)
+            logger.info(f"[RECONCILE] Found {len(onchain_balances)} tokens on-chain")
+
+            # Track which on-chain tokens we've matched
+            matched_mints = set()
+
+            # Check each stored position against on-chain
+            for pos_id, position in list(self.positions.items()):
+                if not position.is_open:
+                    continue
+
+                mint = position.token_mint
+                onchain = onchain_balances.get(mint, {})
+                onchain_balance = onchain.get('balance', 0)
+
+                if onchain_balance <= 0:
+                    # Position exists in state but no on-chain balance
+                    report["orphaned"].append({
+                        "position_id": pos_id,
+                        "symbol": position.token_symbol,
+                        "mint": mint,
+                        "stored_amount": position.amount,
+                        "stored_usd": position.amount_usd,
+                        "reason": "No on-chain balance found"
+                    })
+                    logger.warning(f"[RECONCILE] ORPHANED: Position {pos_id} ({position.token_symbol}) has no on-chain balance")
+
+                elif abs(onchain_balance - position.amount) / max(position.amount, 0.0001) > 0.05:
+                    # Balance differs by more than 5%
+                    report["mismatched"].append({
+                        "position_id": pos_id,
+                        "symbol": position.token_symbol,
+                        "mint": mint,
+                        "stored_amount": position.amount,
+                        "onchain_amount": onchain_balance,
+                        "difference_pct": ((onchain_balance - position.amount) / position.amount) * 100
+                    })
+                    logger.warning(
+                        f"[RECONCILE] MISMATCH: Position {pos_id} ({position.token_symbol}) "
+                        f"stored={position.amount:.6f} vs onchain={onchain_balance:.6f}"
+                    )
+                else:
+                    # Position matches on-chain
+                    report["matched"].append({
+                        "position_id": pos_id,
+                        "symbol": position.token_symbol,
+                        "mint": mint,
+                        "amount": position.amount
+                    })
+                    logger.debug(f"[RECONCILE] MATCHED: Position {pos_id} ({position.token_symbol})")
+
+                matched_mints.add(mint)
+
+            # Check for untracked tokens (on-chain but not in our positions)
+            for mint, balance_info in onchain_balances.items():
+                if mint not in matched_mints and balance_info.get('balance', 0) > 0:
+                    # Skip SOL and stablecoins
+                    if mint in [
+                        "So11111111111111111111111111111111111111112",  # Wrapped SOL
+                        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC
+                        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  # USDT
+                    ]:
+                        continue
+
+                    report["untracked"].append({
+                        "mint": mint,
+                        "balance": balance_info.get('balance', 0),
+                        "decimals": balance_info.get('decimals', 0)
+                    })
+                    logger.warning(f"[RECONCILE] UNTRACKED: Token {mint} with balance {balance_info.get('balance', 0)}")
+
+            # Log summary
+            logger.info(
+                f"[RECONCILE] Complete: {len(report['matched'])} matched, "
+                f"{len(report['orphaned'])} orphaned, {len(report['untracked'])} untracked, "
+                f"{len(report['mismatched'])} mismatched"
+            )
+
+            # Save reconciliation report
+            try:
+                report_path = self.STATE_PATHS.reconcile_report
+                report_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(report_path, 'w') as f:
+                    json.dump(report, f, indent=2)
+                logger.info(f"[RECONCILE] Report saved to {report_path}")
+            except Exception as e:
+                logger.warning(f"[RECONCILE] Failed to save report: {e}")
+
+            return report
+
+        except Exception as e:
+            logger.error(f"[RECONCILE] Error during reconciliation: {e}")
+            report["errors"].append(str(e))
+            _log_trading_error(e, "reconcile_with_onchain", {})
+            return report
+
+    async def auto_reconcile_orphaned(self, report: Dict[str, Any] = None) -> int:
+        """
+        Automatically close orphaned positions (positions with no on-chain balance).
+
+        This happens when tokens are sold outside of Jarvis (e.g., manually via Phantom)
+        or when TP/SL orders execute without our knowledge.
+
+        Args:
+            report: Reconciliation report from reconcile_with_onchain(), or None to run reconciliation first
+
+        Returns:
+            Number of positions auto-closed
+        """
+        if report is None:
+            report = await self.reconcile_with_onchain()
+
+        closed_count = 0
+
+        for orphan in report.get("orphaned", []):
+            pos_id = orphan["position_id"]
+            if pos_id in self.positions:
+                position = self.positions[pos_id]
+
+                # Mark as closed with unknown exit price (use current price or 0)
+                try:
+                    current_price = await self.jupiter.get_token_price(position.token_mint)
+                except Exception:
+                    current_price = 0
+
+                position.status = TradeStatus.CLOSED
+                position.closed_at = datetime.utcnow().isoformat()
+                position.exit_price = current_price
+
+                # Calculate P&L if we have a price
+                if current_price > 0:
+                    position.pnl_pct = ((current_price - position.entry_price) / position.entry_price) * 100
+                    position.pnl_usd = position.amount_usd * (position.pnl_pct / 100)
+                else:
+                    # Assume total loss if no price available
+                    position.pnl_pct = -100
+                    position.pnl_usd = -position.amount_usd
+
+                # Move to history
+                self.trade_history.append(position)
+                del self.positions[pos_id]
+                closed_count += 1
+
+                logger.info(
+                    f"[RECONCILE] Auto-closed orphaned position {pos_id} ({position.token_symbol}): "
+                    f"P&L ${position.pnl_usd:+.2f} ({position.pnl_pct:+.1f}%)"
+                )
+
+                # Log audit event
+                self._log_audit("AUTO_CLOSE_ORPHANED", {
+                    "position_id": pos_id,
+                    "token": position.token_symbol,
+                    "pnl_usd": position.pnl_usd,
+                    "pnl_pct": position.pnl_pct,
+                    "reason": "No on-chain balance"
+                }, None, True)
+
+        if closed_count > 0:
+            self._save_state()
+            logger.info(f"[RECONCILE] Auto-closed {closed_count} orphaned positions")
+
+        return closed_count
 
     def _get_daily_volume(self) -> float:
         """Get total trading volume for today (UTC) with file locking."""
@@ -768,20 +1093,38 @@ class TradingEngine:
             logger.error(f"Failed to write audit log: {e}")
 
     def _save_state(self):
-        """Save positions and history to disk with file locking."""
+        """Save positions and history to disk with file locking.
+
+        Persists to both primary (~/.lifeos/trading/) and secondary (data/trader/) locations
+        for redundancy and tooling access.
+        """
+        positions_data = [p.to_dict() for p in self.positions.values()]
+        history_data = [p.to_dict() for p in self.trade_history]
+
         try:
             if SAFE_STATE_AVAILABLE and hasattr(self, '_positions_state'):
-                # Use SafeState for atomic writes with locking
-                self._positions_state.write([p.to_dict() for p in self.positions.values()])
-                self._history_state.write([p.to_dict() for p in self.trade_history])
+                # Use SafeState for atomic writes with locking (primary location)
+                self._positions_state.write(positions_data)
+                self._history_state.write(history_data)
             else:
-                # Fallback to original implementation
+                # Fallback to original implementation (primary location)
                 with open(self.POSITIONS_FILE, 'w') as f:
-                    json.dump([p.to_dict() for p in self.positions.values()], f, indent=2)
+                    json.dump(positions_data, f, indent=2)
                 with open(self.HISTORY_FILE, 'w') as f:
-                    json.dump([p.to_dict() for p in self.trade_history], f, indent=2)
+                    json.dump(history_data, f, indent=2)
+
+            # Always persist to secondary location (data/trader/positions.json)
+            try:
+                self.POSITIONS_FILE_SECONDARY.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.POSITIONS_FILE_SECONDARY, 'w') as f:
+                    json.dump(positions_data, f, indent=2)
+                logger.debug(f"Positions saved to secondary location: {self.POSITIONS_FILE_SECONDARY}")
+            except Exception as e2:
+                logger.warning(f"Failed to save to secondary positions file: {e2}")
+
         except Exception as e:
             logger.error(f"Failed to save state: {e}")
+            _log_trading_error(e, "save_state", {"positions_count": len(self.positions)})
 
     def is_admin(self, user_id: int) -> bool:
         """Check if user is authorized to trade. Admin only."""
@@ -1142,6 +1485,12 @@ class TradingEngine:
             logger.warning("Trade rejected: kill switch active")
             return False, "Kill switch active - trading disabled", None
 
+        # BLOCKED TOKEN CHECK - Reject stablecoins and non-tradeable tokens
+        is_blocked, block_reason = self.is_blocked_token(token_mint, token_symbol)
+        if is_blocked:
+            logger.warning(f"Trade rejected: {block_reason}")
+            return False, f"⛔ {block_reason}", None
+
         # MANDATORY ADMIN CHECK - Only authorized admins can execute trades
         if not user_id:
             logger.warning("Trade rejected: No user_id provided")
@@ -1414,6 +1763,18 @@ class TradingEngine:
             # Track daily volume even in dry run
             self._add_daily_volume(amount_usd)
 
+            # Log position change with consistent formatting
+            _log_position_change("OPEN", position_id, token_symbol, {
+                "amount_usd": amount_usd,
+                "entry_price": current_price,
+                "tp_price": tp_price,
+                "sl_price": sl_price,
+                "sentiment_grade": sentiment_grade,
+                "risk_tier": risk_tier,
+                "dry_run": True,
+                "user_id": user_id,
+            })
+
             # Audit log
             self._log_audit("OPEN_POSITION", {
                 "position_id": position_id,
@@ -1444,8 +1805,6 @@ class TradingEngine:
                     dry_run=True,
                     user_id=str(user_id) if user_id else None,
                 )
-            else:
-                logger.info(f"[DRY RUN] Opened position {position_id}: {token_symbol}")
             return True, f"[DRY RUN] Position opened", position
 
         # Execute real trade
@@ -1504,6 +1863,19 @@ class TradingEngine:
             # Track daily volume
             self._add_daily_volume(amount_usd)
 
+            # Log position change with consistent formatting
+            _log_position_change("OPEN", position_id, token_symbol, {
+                "amount_usd": amount_usd,
+                "entry_price": current_price,
+                "tp_price": tp_price,
+                "sl_price": sl_price,
+                "sentiment_grade": sentiment_grade,
+                "risk_tier": risk_tier,
+                "tx_signature": result.signature,
+                "dry_run": False,
+                "user_id": user_id,
+            })
+
             # Audit log
             self._log_audit("OPEN_POSITION", {
                 "position_id": position_id,
@@ -1536,8 +1908,6 @@ class TradingEngine:
                     dry_run=False,
                     user_id=str(user_id) if user_id else None,
                 )
-            else:
-                logger.info(f"Opened position {position_id}: {token_symbol} @ ${current_price}")
             
             # Track in scorekeeper for persistent P&L tracking
             try:
@@ -1639,6 +2009,17 @@ class TradingEngine:
                 del self.positions[position_id]
                 self._save_state()
 
+            # Log position change with consistent formatting
+            _log_position_change("CLOSE", position_id, position.token_symbol, {
+                "entry_price": position.entry_price,
+                "exit_price": current_price,
+                "pnl_usd": position.pnl_usd,
+                "pnl_pct": position.pnl_pct,
+                "reason": reason,
+                "dry_run": True,
+                "user_id": user_id,
+            })
+
             # Audit log for dry run close
             self._log_audit("CLOSE_POSITION", {
                 "position_id": position_id,
@@ -1666,8 +2047,6 @@ class TradingEngine:
                     dry_run=True,
                     user_id=str(user_id) if user_id else None,
                 )
-            else:
-                logger.info(f"[DRY RUN] Closed position {position_id}: P&L ${position.pnl_usd:+.2f}")
             return True, f"[DRY RUN] Closed with P&L: ${position.pnl_usd:+.2f} ({position.pnl_pct:+.1f}%)"
 
         # Execute real close
@@ -1686,9 +2065,23 @@ class TradingEngine:
             if token_balance <= 0:
                 position.status = TradeStatus.CLOSED
                 position.closed_at = datetime.utcnow().isoformat()
+                position.exit_price = current_price
+                position.pnl_pct = ((current_price - position.entry_price) / position.entry_price) * 100 if current_price > 0 else -100
+                position.pnl_usd = position.amount_usd * (position.pnl_pct / 100)
                 self.trade_history.append(position)
                 del self.positions[position_id]
                 self._save_state()
+
+                # Log position change with consistent formatting
+                _log_position_change("CLOSE", position_id, position.token_symbol, {
+                    "entry_price": position.entry_price,
+                    "exit_price": current_price,
+                    "pnl_usd": position.pnl_usd,
+                    "pnl_pct": position.pnl_pct,
+                    "reason": "no_balance",
+                    "dry_run": False,
+                    "user_id": user_id,
+                })
 
                 self._log_audit("CLOSE_POSITION", {
                     "position_id": position_id,
@@ -1740,6 +2133,18 @@ class TradingEngine:
             del self.positions[position_id]
             self._save_state()
 
+            # Log position change with consistent formatting
+            _log_position_change("CLOSE", position_id, position.token_symbol, {
+                "entry_price": position.entry_price,
+                "exit_price": current_price,
+                "pnl_usd": position.pnl_usd,
+                "pnl_pct": position.pnl_pct,
+                "reason": reason,
+                "tx_signature": result.signature,
+                "dry_run": False,
+                "user_id": user_id,
+            })
+
             # Audit log for successful close
             self._log_audit("CLOSE_POSITION", {
                 "position_id": position_id,
@@ -1770,8 +2175,6 @@ class TradingEngine:
                     dry_run=False,
                     user_id=str(user_id) if user_id else None,
                 )
-            else:
-                logger.info(f"Closed position {position_id}: P&L ${position.pnl_usd:+.2f}")
 
             # Track in scorekeeper
             try:

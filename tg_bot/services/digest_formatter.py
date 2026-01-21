@@ -70,6 +70,39 @@ SENTIMENT_EMOJI = {
 }
 
 
+def escape_markdown(text: str) -> str:
+    """
+    Escape special characters for Telegram Markdown.
+
+    Escapes: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    This prevents "can't find end of the entity" errors.
+    """
+    if not text:
+        return ""
+    # Characters that need escaping in Markdown
+    escape_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    result = str(text)
+    for char in escape_chars:
+        result = result.replace(char, f'\\{char}')
+    return result
+
+
+def escape_markdown_v1(text: str) -> str:
+    """
+    Escape special characters for Telegram Markdown V1 (simpler).
+
+    Only escapes: _ * ` [
+    Use this for ParseMode.MARKDOWN (not MARKDOWN_V2).
+    """
+    if not text:
+        return ""
+    result = str(text)
+    # For Markdown V1, only these need escaping
+    for char in ['_', '*', '`', '[']:
+        result = result.replace(char, f'\\{char}')
+    return result
+
+
 def format_price(value: float) -> str:
     """Format price for display."""
     if value >= 1000:
@@ -286,22 +319,26 @@ def format_cost_report() -> str:
 
 
 def format_error(message: str, suggestion: str = "") -> str:
-    """Format an error message."""
+    """Format an error message with safe escaping."""
+    # Escape dynamic content to prevent entity parsing errors
+    safe_message = escape_markdown_v1(message)
     lines = [
         "❌ *Error*",
         "",
-        message,
+        safe_message,
     ]
 
     if suggestion:
-        lines.extend(["", f"💡 _{suggestion}_"])
+        safe_suggestion = escape_markdown_v1(suggestion)
+        lines.extend(["", f"💡 {safe_suggestion}"])
 
     return "\n".join(lines)
 
 
 def format_rate_limit(reason: str) -> str:
-    """Format rate limit message."""
-    return f"⏳ *Rate Limited*\n\n{reason}\n\n_Sentiment checks are limited to preserve API costs._"
+    """Format rate limit message with safe escaping."""
+    safe_reason = escape_markdown_v1(reason)
+    return f"⏳ *Rate Limited*\n\n{safe_reason}\n\n_Sentiment checks are limited to preserve API costs._"
 
 
 def format_unauthorized() -> str:

@@ -8,6 +8,7 @@ from telegram.constants import ParseMode
 
 from tg_bot.config import get_config
 from tg_bot.services import digest_formatter as fmt
+from tg_bot.services.digest_formatter import escape_markdown_v1 as escape_md
 from tg_bot.handlers import error_handler, admin_only
 from tg_bot.handlers.admin import reload, config_cmd, logs, system
 from tg_bot.handlers.sentiment import digest
@@ -18,7 +19,65 @@ from tg_bot.handlers.interactive_ui import (
     route_interactive_callback,
 )
 
+# Error tracking integration
+from core.logging.error_tracker import error_tracker
+
 logger = logging.getLogger(__name__)
+
+# Rate limiting for button callbacks to prevent flood control
+import time as _time
+_CALLBACK_RATE_LIMIT: dict = {}  # user_id -> last_callback_time
+_CALLBACK_MIN_INTERVAL = 1.0  # Minimum seconds between callbacks per user
+
+
+def _is_rate_limited(user_id: int) -> bool:
+    """Check if user is rate limited for callbacks."""
+    now = _time.time()
+    last_time = _CALLBACK_RATE_LIMIT.get(user_id, 0)
+    if now - last_time < _CALLBACK_MIN_INTERVAL:
+        return True
+    _CALLBACK_RATE_LIMIT[user_id] = now
+    # Clean old entries periodically
+    if len(_CALLBACK_RATE_LIMIT) > 1000:
+        cutoff = now - 60
+        _CALLBACK_RATE_LIMIT.clear()
+    return False
+
+
+def _escape_markdown(text: str) -> str:
+    """Escape markdown special characters to prevent entity parsing errors."""
+    # Escape in order: \ first, then others
+    escape_chars = ['\\', '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in escape_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
+
+
+async def _safe_reply(message, text: str, parse_mode=None, **kwargs):
+    """Safely reply with markdown, falling back to plain text on parse errors."""
+    try:
+        return await message.reply_text(text, parse_mode=parse_mode, **kwargs)
+    except Exception as e:
+        if "can't parse entities" in str(e).lower():
+            # Markdown parsing failed, try plain text
+            logger.warning(f"Markdown parse failed, using plain text: {e}")
+            # Remove markdown formatting and try again
+            plain_text = text.replace('*', '').replace('_', '').replace('`', '')
+            return await message.reply_text(plain_text, **kwargs)
+        raise
+
+
+async def _safe_edit(message, text: str, parse_mode=None, **kwargs):
+    """Safely edit message with markdown, falling back to plain text on parse errors."""
+    try:
+        return await message.edit_text(text, parse_mode=parse_mode, **kwargs)
+    except Exception as e:
+        if "can't parse entities" in str(e).lower():
+            # Markdown parsing failed, try plain text
+            logger.warning(f"Markdown parse failed on edit, using plain text: {e}")
+            plain_text = text.replace('*', '').replace('_', '').replace('`', '')
+            return await message.edit_text(plain_text, **kwargs)
+        raise
 
 
 # Structured error logging integration
@@ -84,8 +143,9 @@ risk: {engine.risk_level.value}
 
     except Exception as e:
         logger.error(f"Balance check failed: {e}")
+        from tg_bot.bot_core import safe_error_text
         await update.message.reply_text(
-            f"*something broke*\n\ncouldn't pull balance: {str(e)[:100]}",
+            f"*something broke*\n\ncouldn't pull balance: {safe_error_text(e)}",
             parse_mode=ParseMode.MARKDOWN,
         )
 
@@ -120,8 +180,9 @@ async def positions(update: Update, context: ContextTypes.DEFAULT_TYPE):
             total_pnl += pnl_usd
 
             pnl_emoji = "\U0001f7e2" if pnl_pct >= 0 else "\U0001f534"
+            safe_symbol = escape_md(pos.token_symbol or "???")
 
-            lines.append(f"*{pos.token_symbol}* {pnl_emoji}")
+            lines.append(f"*{safe_symbol}* {pnl_emoji}")
             lines.append(f"   Entry: ${pos.entry_price:.8f}")
             lines.append(f"   Current: ${pos.current_price:.8f}")
             lines.append(f"   P&L: {pnl_pct:+.1f}% (${pnl_usd:+.2f})")
@@ -156,8 +217,9 @@ async def positions(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Positions check failed: {e}")
+        from tg_bot.bot_core import safe_error_text
         await update.message.reply_text(
-            f"*something broke*\n\ncouldn't pull positions: {str(e)[:100]}",
+            f"*something broke*\n\ncouldn't pull positions: {safe_error_text(e)}",
             parse_mode=ParseMode.MARKDOWN,
         )
 
@@ -189,7 +251,8 @@ async def wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     except Exception as e:
-        await update.message.reply_text(f"Wallet error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+        from tg_bot.bot_core import safe_error_text
+        await update.message.reply_text(f"Wallet error: {safe_error_text(e)}", parse_mode=ParseMode.MARKDOWN)
 
 
 @error_handler
@@ -321,9 +384,9 @@ async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Best/worst performers
     if best_pos and len(positions) > 1:
-        lines.append(f"top: *{best_pos.token_symbol}* {best_pnl:+.1f}%")
+        lines.append(f"top: *{escape_md(best_pos.token_symbol)}* {best_pnl:+.1f}%")
     if worst_pos and len(positions) > 1 and worst_pos != best_pos:
-        lines.append(f"bottom: *{worst_pos.token_symbol}* {worst_pnl:+.1f}%")
+        lines.append(f"bottom: *{escape_md(worst_pos.token_symbol)}* {worst_pnl:+.1f}%")
     if best_pos or worst_pos:
         lines.append("")
 
@@ -337,8 +400,9 @@ async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         pnl_emoji = "\U0001f7e2" if pnl_usd >= 0 else "\U0001f534"
         current_price = pos.current_price if pos.current_price > 0 else pos.entry_price
+        safe_symbol = escape_md(pos.token_symbol or "???")
 
-        lines.append(f"{pnl_emoji} *{pos.token_symbol}* {pnl_pct:+.1f}%")
+        lines.append(f"{pnl_emoji} *{safe_symbol}* {pnl_pct:+.1f}%")
         lines.append(f"   {fmt_price(pos.entry_price)} \u2192 {fmt_price(current_price)}")
 
     total_emoji = "\U0001f7e2" if total_unrealized >= 0 else "\U0001f534"
@@ -358,6 +422,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline keyboard button presses."""
     from telegram.error import BadRequest, TimedOut, NetworkError, RetryAfter
     import asyncio
+    import time
 
     from tg_bot import bot_core as bot_module
 
@@ -393,18 +458,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data if query else "None"
     user_id = update.effective_user.id if update.effective_user else 0
+    username = update.effective_user.username if update.effective_user else None
+    callback_start = time.time()
 
-    # Log all callbacks for debugging
-    logger.info(f"Callback received: '{data}' from user {user_id}")
+    # ENTRY LOGGING: Track all callback entries for debugging
+    logger.info(f"[CALLBACK_ENTRY] data='{data}' user={user_id} msg_id={query.message.message_id if query and query.message else 'N/A'}")
+
+    # RATE LIMITING: Prevent button hammering / flood control
+    if _is_rate_limited(user_id):
+        logger.debug(f"[RATE_LIMITED] user={user_id} data='{data}'")
+        try:
+            await query.answer("Too fast! Wait a moment.", show_alert=False)
+        except Exception:
+            pass
+        return
 
     # CRITICAL: Always answer callback first to stop loading spinner
+    answer_success = False
     try:
         await query.answer()
+        answer_success = True
     except BadRequest as e:
-        logger.warning(f"Could not answer callback (stale?): {e}")
+        logger.warning(f"[CALLBACK_ANSWER] Could not answer callback (stale?): {e}")
         # Continue processing even if answer fails
     except Exception as e:
-        logger.error(f"Error answering callback: {e}")
+        logger.error(f"[CALLBACK_ANSWER] Error answering callback: {e}")
+        error_tracker.track_error(
+            e,
+            context=f"button_callback.answer:{data}",
+            component="telegram_callback",
+            metadata={"user_id": user_id, "callback_data": data}
+        )
 
     # Check if query.message exists (can be None for inline mode)
     if not query.message:
@@ -433,7 +517,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Quick action callbacks (top of menu for admins)
     if data == "quick_dashboard":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -442,7 +526,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "quick_report":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         from tg_bot.handlers.sentiment import report
@@ -522,7 +606,7 @@ _admin only:_
 
     if data == "menu_back":
         # Edit current message to show main menu (not reply)
-        is_admin = config.is_admin(user_id)
+        is_admin = config.is_admin(user_id, username)
         keyboard = [
             [
                 InlineKeyboardButton("\U0001f4c8 Trending", callback_data="menu_trending"),
@@ -560,7 +644,7 @@ _admin only:_
 
     # Admin-only menu callbacks - use CallbackUpdate wrapper
     if data == "menu_signals":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -569,7 +653,7 @@ _admin only:_
         return
 
     if data == "menu_digest":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -578,7 +662,7 @@ _admin only:_
         return
 
     if data == "menu_brain":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -587,7 +671,7 @@ _admin only:_
         return
 
     if data == "menu_reload":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -596,7 +680,7 @@ _admin only:_
         return
 
     if data == "menu_health":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -605,7 +689,7 @@ _admin only:_
         return
 
     if data == "menu_flags":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -614,7 +698,7 @@ _admin only:_
         return
 
     if data == "menu_score":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -623,7 +707,7 @@ _admin only:_
         return
 
     if data == "menu_config":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -632,7 +716,7 @@ _admin only:_
         return
 
     if data == "menu_system":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -641,7 +725,7 @@ _admin only:_
         return
 
     if data == "menu_orders":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -650,7 +734,7 @@ _admin only:_
         return
 
     if data == "menu_wallet":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -659,7 +743,7 @@ _admin only:_
         return
 
     if data == "menu_logs":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -668,7 +752,7 @@ _admin only:_
         return
 
     if data == "menu_metrics":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -677,7 +761,7 @@ _admin only:_
         return
 
     if data == "menu_audit":
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         cb_update = CallbackUpdate(query)
@@ -705,7 +789,7 @@ _admin only:_
 
     # Token-specific callbacks
     if data.startswith("analyze_"):
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
 
@@ -784,7 +868,7 @@ _admin only:_
 
     # Dev/vibe coding callbacks (format: dev_refine:{id} or dev_copy:{id})
     if data.startswith("dev_refine:"):
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         result_id = data.replace("dev_refine:", "")
@@ -792,7 +876,7 @@ _admin only:_
         return
 
     if data.startswith("dev_copy:"):
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             await query.message.reply_text(fmt.format_unauthorized(), parse_mode=ParseMode.MARKDOWN)
             return
         result_id = data.replace("dev_copy:", "")
@@ -801,7 +885,7 @@ _admin only:_
 
     # Ape button callbacks from sentiment reports (format: ape:{alloc}:{profile}:{type}:{symbol}:{contract})
     if data.startswith("ape:"):
-        logger.info(f"Ape callback received: {data} from user {user_id}")
+        logger.info(f"[APE_CALLBACK] Ape callback received: {data} from user {user_id}")
 
         if not APE_BUTTONS_AVAILABLE:
             await _send_with_retry(
@@ -809,7 +893,7 @@ _admin only:_
                 "ape module offline. can't do that right now.",
                 parse_mode=ParseMode.MARKDOWN
             )
-            logger.error("APE_BUTTONS_AVAILABLE is False")
+            logger.error("[APE_CALLBACK] APE_BUTTONS_AVAILABLE is False")
             return
 
         if not _is_treasury_admin(config, user_id):
@@ -818,19 +902,31 @@ _admin only:_
                 f"*nope*\n\nuser {user_id} isn't on the list.",
                 parse_mode=ParseMode.MARKDOWN
             )
-            logger.warning(f"Unauthorized ape trade attempt by user {user_id}")
+            logger.warning(f"[APE_CALLBACK] Unauthorized ape trade attempt by user {user_id}")
             return
 
         try:
+            logger.info(f"[APE_CALLBACK] Executing ape trade for {data}")
             await _execute_ape_trade(query, data)
+            logger.info(f"[APE_CALLBACK] Ape trade completed for {data}")
         except Exception as e:
-            logger.error(f"APE trade failed: {e}")
+            logger.error(f"[APE_CALLBACK] APE trade failed: {e}", exc_info=True)
+            error_tracker.track_error(
+                e,
+                context=f"button_callback.ape_trade:{data}",
+                component="telegram_callback",
+                metadata={"user_id": user_id, "callback_data": data}
+            )
+            from tg_bot.bot_core import safe_error_text
             await _send_with_retry(
                 query,
-                f"*trade failed*\n\n{str(e)[:120]}",
+                f"*trade failed*\n\n{safe_error_text(e, max_len=120)}",
                 parse_mode=ParseMode.MARKDOWN
             )
         return
+
+    # Unhandled callback - log for debugging
+    logger.warning(f"[CALLBACK_UNHANDLED] No handler matched for callback: '{data}' from user {user_id}")
 
 
 @error_handler
@@ -879,7 +975,8 @@ async def calibrate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"📈 <b>Open Picks:</b> {len(open_picks)}")
         if open_picks:
             for pick in open_picks[:5]:
-                symbol = pick.get('symbol', '?')
+                # HTML needs different escaping - use basic text escape
+                symbol = str(pick.get('symbol', '?')).replace('<', '&lt;').replace('>', '&gt;')
                 conv = pick.get('conviction_score', 0)
                 days = pick.get('days_held', 0)
                 pnl = pick.get('pnl_pct', 0)
@@ -892,7 +989,8 @@ async def calibrate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Calibrate error: {e}")
+        from tg_bot.bot_core import safe_error_text
         await update.message.reply_text(
-            f"calibration error: {str(e)[:100]}",
+            f"calibration error: {safe_error_text(e)}",
             parse_mode=ParseMode.MARKDOWN
         )
