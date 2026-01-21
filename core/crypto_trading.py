@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core import config, learning_validator, notes_manager, providers, research_engine
+from core.decision_core import DECISION_CORE_DIRECTIVE
 
 ROOT = Path(__file__).resolve().parents[1]
 CRYPTO_PATH = ROOT / "data" / "crypto_trading"
@@ -164,7 +165,9 @@ class CryptoTrading:
     
     def evaluate_trading_strategy(self, strategy: Dict[str, Any]) -> Dict[str, Any]:
         """Evaluate a trading strategy for viability."""
-        evaluation_prompt = f"""Evaluate this crypto trading strategy:
+        evaluation_prompt = f"""{DECISION_CORE_DIRECTIVE}
+
+Evaluate this crypto trading strategy:
 
 Title: {strategy['title']}
 Description: {strategy['snippet']}
@@ -222,7 +225,9 @@ Provide:
         """Create trading bot code for a strategy."""
         cfg = config.load_config()
         dex_only = cfg.get("trading", {}).get("dex_only", True)
-        code_prompt = f"""Create Python code for an automated trading bot based on this strategy:
+        code_prompt = f"""{DECISION_CORE_DIRECTIVE}
+
+Create Python code for an automated trading bot based on this strategy:
 
 Strategy: {strategy['title']}
 Description: {strategy['snippet']}
@@ -359,7 +364,9 @@ Focus on practical, implementable code."""
         
         # Analyze sentiment
         if trend_analysis["trends"]:
-            sentiment_prompt = f"""Analyze market sentiment from these crypto news headlines:
+            sentiment_prompt = f"""{DECISION_CORE_DIRECTIVE}
+
+Analyze market sentiment from these crypto news headlines:
 
 {json.dumps([t['title'] + ': ' + t['snippet'] for t in trend_analysis['trends'][:5]], indent=2)}
 
