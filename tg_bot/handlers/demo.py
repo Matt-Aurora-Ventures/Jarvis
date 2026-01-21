@@ -1,14 +1,25 @@
 """
-Demo Handler - Beautiful Trojan-Style Trading UI for JARVIS V1
+JARVIS V1 - The Mona Lisa of AI Trading Bots
 
 Admin-only showcase of the full JARVIS trading experience.
+
+CORE PHILOSOPHY: Compression is Intelligence
+- The better the predictive compression, the better the understanding
+- Store intelligence as compact latent representations, not raw logs
+- Self-improving through trade outcome learning
+- Generative retrieval - reconstruct essence, not verbatim recall
+
 Features:
+- Beautiful Trojan-style Trading UI
 - Wallet generation and management
 - Portfolio overview with live P&L
 - Quick buy/sell with preset amounts
-- Token search and snipe
+- Token search and snipe with AI analysis
 - AI-POWERED SENTIMENT ENGINE (Grok + Multi-Source)
-- Beautiful inline keyboard UI
+- SELF-IMPROVING TRADE INTELLIGENCE
+- GENERATIVE COMPRESSION MEMORY
+- Bags.fm API Integration
+- Learning Dashboard
 
 Built on the data-driven sentiment engine (Jan 2026 overhaul):
 - Stricter entry timing (early entry = 67% TP rate)
@@ -16,6 +27,12 @@ Built on the data-driven sentiment engine (Jan 2026 overhaul):
 - Overconfidence penalty (high scores = 0% TP rate)
 - Momentum keyword detection
 - Multi-sighting bonuses
+
+Memory Hierarchy:
+- Tier 0: Ephemeral Context (seconds-minutes)
+- Tier 1: Short Latent Memory (hours-days)
+- Tier 2: Medium Latent Memory (weeks-months)
+- Tier 3: Long Latent Memory (months-years)
 """
 
 import logging
@@ -32,6 +49,30 @@ from tg_bot.config import get_config
 from tg_bot.handlers import error_handler, admin_only
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Trade Intelligence Integration
+# =============================================================================
+
+def get_trade_intelligence():
+    """Get trade intelligence engine for self-improvement."""
+    try:
+        from core.trade_intelligence import get_intelligence_engine
+        return get_intelligence_engine()
+    except ImportError:
+        logger.warning("Trade intelligence not available")
+        return None
+
+
+def get_bags_client():
+    """Get Bags.fm API client for trading."""
+    try:
+        from core.trading.bags_client import get_bags_client as _get_bags
+        return _get_bags()
+    except ImportError:
+        logger.warning("Bags client not available")
+        return None
 
 
 # =============================================================================
@@ -318,6 +359,10 @@ _Tap to trade with AI-powered signals_
             [
                 InlineKeyboardButton(f"{theme.FIRE} AI Trending", callback_data="demo:trending"),
                 InlineKeyboardButton(f"{theme.GEM} AI New Pairs", callback_data="demo:new_pairs"),
+            ],
+            # Self-Improving Intelligence (V1 Feature)
+            [
+                InlineKeyboardButton(f"🧠 Learning Dashboard", callback_data="demo:learning"),
             ],
             # Settings & Management
             [
@@ -960,6 +1005,173 @@ _Data-driven scoring (Jan 2026 tune)_
 
         return text, InlineKeyboardMarkup(keyboard)
 
+    @staticmethod
+    def learning_dashboard(
+        learning_stats: Dict[str, Any],
+        compression_stats: Dict[str, Any] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Beautiful Learning Dashboard - Shows what JARVIS has learned.
+
+        Displays:
+        - Trade patterns learned
+        - Signal effectiveness
+        - Regime correlations
+        - Compression statistics
+        - Self-improvement metrics
+        """
+        theme = JarvisTheme
+
+        # Extract stats
+        total_trades = learning_stats.get("total_trades_analyzed", 0)
+        pattern_memories = learning_stats.get("pattern_memories", 0)
+        stable_strategies = learning_stats.get("stable_strategies", 0)
+        signals = learning_stats.get("signals", {})
+        regimes = learning_stats.get("regimes", {})
+        optimal_hold = learning_stats.get("optimal_hold_time", 60)
+
+        # Compression stats
+        comp = compression_stats or {}
+        compression_ratio = comp.get("compression_ratio", 1.0)
+        learned_patterns = comp.get("learned_patterns", 0)
+
+        lines = [
+            f"{theme.AUTO} *JARVIS LEARNING DASHBOARD*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"🧠 *Memory Compression*",
+            f"├ Trades Analyzed: *{total_trades}*",
+            f"├ Pattern Memories: *{pattern_memories}*",
+            f"├ Learned Patterns: *{learned_patterns}*",
+            f"└ Compression: *{compression_ratio:.1f}x*",
+            "",
+        ]
+
+        # Signal effectiveness
+        if signals:
+            lines.append(f"📊 *Signal Effectiveness*")
+            for signal, stats in signals.items():
+                win_rate = stats.get("win_rate", "N/A")
+                avg_return = stats.get("avg_return", "0%")
+                trades = stats.get("trades", 0)
+                emoji = "🟢" if float(win_rate.replace("%", "")) > 55 else "🟡" if float(win_rate.replace("%", "")) > 45 else "🔴"
+                lines.append(f"├ {emoji} {signal}: {win_rate} ({trades} trades)")
+            lines.append("")
+
+        # Regime correlations
+        if regimes:
+            lines.append(f"📈 *Regime Performance*")
+            for regime, stats in regimes.items():
+                win_rate = stats.get("win_rate", "N/A")
+                avg_return = stats.get("avg_return", "0%")
+                emoji = {"BULL": "🟢", "BEAR": "🔴"}.get(regime, "🟡")
+                lines.append(f"├ {emoji} {regime}: {win_rate} | {avg_return}")
+            lines.append("")
+
+        # Optimal timing
+        lines.extend([
+            f"⏱️ *Optimal Timing*",
+            f"└ Hold Time: *{optimal_hold:.0f} min*",
+            "",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"_{theme.AUTO} Self-Improving AI_",
+            "_Every trade makes JARVIS smarter_",
+        ])
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"🔬 Full Analysis", callback_data="demo:learning_deep"),
+            ],
+            [
+                InlineKeyboardButton(f"📊 Signal Stats", callback_data="demo:signal_stats"),
+                InlineKeyboardButton(f"📈 Regime Stats", callback_data="demo:regime_stats"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:learning"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def recommendation_view(
+        recommendation: Dict[str, Any],
+        token_symbol: str = "TOKEN",
+        market_regime: str = "NEUTRAL",
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Show AI recommendation based on learned patterns.
+
+        This is GENERATIVE RETRIEVAL - reconstructing predictions
+        from compressed pattern memories.
+        """
+        theme = JarvisTheme
+
+        action = recommendation.get("action", "NEUTRAL")
+        confidence = recommendation.get("confidence", 0.5)
+        expected_return = recommendation.get("expected_return", 0)
+        hold_time = recommendation.get("suggested_hold_minutes", 60)
+        reasons = recommendation.get("reasons", [])
+        warnings = recommendation.get("warnings", [])
+
+        # Action emoji
+        action_emoji = {
+            "BUY": "🟢",
+            "AVOID": "🔴",
+            "NEUTRAL": "🟡",
+        }.get(action, "⚪")
+
+        # Confidence bar
+        conf_bars = int(confidence * 10)
+        conf_display = "█" * conf_bars + "░" * (10 - conf_bars)
+
+        lines = [
+            f"{theme.AUTO} *AI RECOMMENDATION*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"Token: *{token_symbol}*",
+            f"Market: *{market_regime}*",
+            "",
+            f"{action_emoji} *Verdict: {action}*",
+            f"Confidence: [{conf_display}] {confidence:.0%}",
+            f"Expected: *{expected_return:+.1f}%*",
+            f"Hold Time: *{hold_time:.0f} min*",
+            "",
+        ]
+
+        if reasons:
+            lines.append("✅ *Reasons:*")
+            for reason in reasons[:3]:
+                lines.append(f"   • {reason}")
+            lines.append("")
+
+        if warnings:
+            lines.append("⚠️ *Warnings:*")
+            for warning in warnings[:3]:
+                lines.append(f"   • {warning}")
+            lines.append("")
+
+        lines.extend([
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "_Based on learned trade patterns_",
+        ])
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"{theme.HOME} Main Menu", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
 
 # =============================================================================
 # Demo Command Handler
@@ -969,13 +1181,15 @@ _Data-driven scoring (Jan 2026 tune)_
 @admin_only
 async def demo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /demo - Launch the beautiful JARVIS AI trading demo (admin only).
+    /demo - Launch the beautiful JARVIS V1 AI trading demo (admin only).
 
-    This showcases the full AI-powered trading experience with:
+    The Mona Lisa of AI Trading Bots featuring:
     - Real-time market regime detection
     - Grok-powered sentiment analysis
     - Data-driven entry criteria (67% TP rate)
     - Multi-source signal aggregation
+    - Self-improving trade intelligence
+    - Generative compression memory
     """
     try:
         # Get wallet and balance info
@@ -1191,6 +1405,66 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text, keyboard = DemoMenuBuilder.ai_report_menu(
                 market_regime=market_regime,
             )
+
+        elif action == "learning":
+            # Self-Improving Learning Dashboard (V1 Feature)
+            intelligence = get_trade_intelligence()
+            if intelligence:
+                learning_stats = intelligence.get_learning_summary()
+                compression_stats = intelligence.get_compression_stats()
+            else:
+                learning_stats = {
+                    "total_trades_analyzed": 0,
+                    "pattern_memories": 0,
+                    "stable_strategies": 0,
+                    "signals": {},
+                    "regimes": {},
+                    "optimal_hold_time": 60,
+                }
+                compression_stats = {"compression_ratio": 1.0, "learned_patterns": 0}
+
+            text, keyboard = DemoMenuBuilder.learning_dashboard(
+                learning_stats=learning_stats,
+                compression_stats=compression_stats,
+            )
+
+        elif action == "learning_deep":
+            # Deep learning analysis view
+            intelligence = get_trade_intelligence()
+            theme = JarvisTheme
+
+            if intelligence:
+                stats = intelligence.get_learning_summary()
+                comp = intelligence.get_compression_stats()
+
+                lines = [
+                    f"{theme.AUTO} *DEEP LEARNING ANALYSIS*",
+                    "━━━━━━━━━━━━━━━━━━━━━",
+                    "",
+                    "*Memory Architecture:*",
+                    "┌ Tier 0: Ephemeral (real-time)",
+                    "├ Tier 1: Short-term (hours-days)",
+                    "├ Tier 2: Medium-term (weeks)",
+                    "└ Tier 3: Long-term (months+)",
+                    "",
+                    f"*Compression Efficiency:*",
+                    f"├ Tier 1 Trades: {comp.get('tier1_trades', 0)}",
+                    f"├ Tier 2 Patterns: {comp.get('tier2_patterns', 0)}",
+                    f"├ Compression Ratio: {comp.get('compression_ratio', 1):.1f}x",
+                    f"└ Raw → Latent: ~{comp.get('compression_ratio', 1) * 100:.0f}% savings",
+                    "",
+                    "*Core Principle:*",
+                    "_Compression is Intelligence_",
+                    "_The better we predict, the better we compress_",
+                    "_The better we compress, the better we understand_",
+                ]
+                text = "\n".join(lines)
+            else:
+                text = f"{theme.AUTO} *Learning engine initializing...*"
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:learning")],
+            ])
 
         elif action.startswith("analyze:"):
             # AI Token Analysis

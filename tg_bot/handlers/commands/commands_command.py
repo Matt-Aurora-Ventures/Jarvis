@@ -143,6 +143,14 @@ COMMAND_CATEGORIES = {
         ("/dev", "Developer tools"),
         ("/upgrades", "Available upgrades"),
     ],
+    "AI Trading Demo": [
+        ("/demo", "Launch AI Trading Interface"),
+        ("", "├── AI Market Regime Detection"),
+        ("", "├── Sentiment-Aware Trading"),
+        ("", "├── AI Token Analysis"),
+        ("", "├── Conviction Picks"),
+        ("", "└── Self-Improving Engine"),
+    ],
 }
 
 
