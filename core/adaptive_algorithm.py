@@ -154,6 +154,44 @@ class AdaptiveAlgorithm:
 
         self._load_metrics()
 
+    def _get_user_metrics(self, user_id: int) -> Dict[AlgorithmType, AlgorithmMetrics]:
+        if user_id not in self.user_metrics:
+            self.user_metrics[user_id] = {
+                algo_type: AlgorithmMetrics(algorithm_type=algo_type)
+                for algo_type in AlgorithmType
+            }
+        return self.user_metrics[user_id]
+
+    def _apply_outcome(self, metrics: AlgorithmMetrics, outcome: TradeOutcome) -> None:
+        metrics.total_signals += 1
+
+        if outcome.was_winning:
+            metrics.winning_signals += 1
+            metrics.total_pnl += outcome.pnl_usd
+            if outcome.pnl_usd > metrics.best_win:
+                metrics.best_win = outcome.pnl_usd
+            metrics.avg_win = metrics.total_pnl / metrics.winning_signals if metrics.winning_signals > 0 else 0
+        else:
+            metrics.losing_signals += 1
+            metrics.total_pnl += outcome.pnl_usd
+            if outcome.pnl_usd < metrics.worst_loss:
+                metrics.worst_loss = outcome.pnl_usd
+            metrics.avg_loss = abs(metrics.total_pnl) / metrics.losing_signals if metrics.losing_signals > 0 else 0
+
+        metrics.accuracy = (metrics.winning_signals / metrics.total_signals * 100) if metrics.total_signals > 0 else 0
+
+        win_rate = metrics.accuracy
+        if win_rate >= 60:
+            metrics.confidence_score = min(100, 50 + (win_rate - 50) * 1.0)
+        elif win_rate >= 45:
+            metrics.confidence_score = 50
+        else:
+            metrics.confidence_score = max(20, 50 - (50 - win_rate) * 1.0)
+
+        signal_quality_adjustment = (outcome.signal_strength / 100.0) * (1 if outcome.was_winning else -1)
+        metrics.confidence_score += signal_quality_adjustment * 5
+        metrics.last_updated = datetime.utcnow()
+
     def _load_metrics(self):
         """Load saved metrics from disk."""
         try:
@@ -362,39 +400,11 @@ class AdaptiveAlgorithm:
 
             # Update global metrics
             metrics = self.global_metrics[outcome.algorithm_type]
-            metrics.total_signals += 1
+            self._apply_outcome(metrics, outcome)
 
-            if outcome.was_winning:
-                metrics.winning_signals += 1
-                metrics.total_pnl += outcome.pnl_usd
-                if outcome.pnl_usd > metrics.best_win:
-                    metrics.best_win = outcome.pnl_usd
-                metrics.avg_win = metrics.total_pnl / metrics.winning_signals if metrics.winning_signals > 0 else 0
-            else:
-                metrics.losing_signals += 1
-                metrics.total_pnl += outcome.pnl_usd
-                if outcome.pnl_usd < metrics.worst_loss:
-                    metrics.worst_loss = outcome.pnl_usd
-                metrics.avg_loss = abs(metrics.total_pnl) / metrics.losing_signals if metrics.losing_signals > 0 else 0
-
-            # Calculate accuracy
-            metrics.accuracy = (metrics.winning_signals / metrics.total_signals * 100) if metrics.total_signals > 0 else 0
-
-            # Adaptive confidence scoring
-            # Base: Start at 50, adjust up with wins, down with losses
-            win_rate = metrics.accuracy
-            if win_rate >= 60:
-                metrics.confidence_score = min(100, 50 + (win_rate - 50) * 1.0)
-            elif win_rate >= 45:
-                metrics.confidence_score = 50  # Neutral
-            else:
-                metrics.confidence_score = max(20, 50 - (50 - win_rate) * 1.0)
-
-            # Signal strength weighting: Signals with high accuracy get more boost
-            signal_quality_adjustment = (outcome.signal_strength / 100.0) * (1 if outcome.was_winning else -1)
-            metrics.confidence_score += signal_quality_adjustment * 5
-
-            metrics.last_updated = datetime.utcnow()
+            # Update per-user metrics
+            user_metrics = self._get_user_metrics(outcome.user_id)
+            self._apply_outcome(user_metrics[outcome.algorithm_type], outcome)
 
             logger.info(
                 f"Recorded {outcome.algorithm_type.value} outcome: "
@@ -423,6 +433,19 @@ class AdaptiveAlgorithm:
             return 50.0
 
         return metrics.confidence_score
+
+    def get_user_algorithm_confidence(self, user_id: int, algorithm_type: AlgorithmType) -> float:
+        metrics = self._get_user_metrics(user_id).get(algorithm_type)
+        if not metrics:
+            return self.get_algorithm_confidence(algorithm_type)
+        if metrics.total_signals < 3:
+            return self.get_algorithm_confidence(algorithm_type)
+        return metrics.confidence_score
+
+    def get_effective_confidence(self, user_id: int, algorithm_type: AlgorithmType) -> float:
+        global_conf = self.get_algorithm_confidence(algorithm_type)
+        user_conf = self.get_user_algorithm_confidence(user_id, algorithm_type)
+        return (global_conf * 0.6) + (user_conf * 0.4)
 
     def should_use_algorithm(self, algorithm_type: AlgorithmType, min_confidence: float = 40.0) -> bool:
         """

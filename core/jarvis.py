@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core import config, guardian, memory, providers, safety
+from core.compression_directive import COMPRESSION_INTELLIGENCE_DIRECTIVE
 
 ROOT = Path(__file__).resolve().parents[1]
 JARVIS_STATE_PATH = ROOT / "data" / "jarvis_state.json"
@@ -555,4 +556,6 @@ INTERESTS:
 {chr(10).join('- ' + i for i in profile.interests)}
 
 SAFETY: Never harm LifeOS or the user's computer. Always act in the user's best interest.
+
+{COMPRESSION_INTELLIGENCE_DIRECTIVE}
 """
