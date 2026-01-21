@@ -427,6 +427,52 @@ class TestDemoMenuBuilder:
         assert keyboard is not None
         assert len(keyboard.inline_keyboard) > 0
 
+    def test_watchlist_menu_empty(self):
+        """Test watchlist menu with empty list."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.watchlist_menu([])
+
+        assert text is not None
+        assert "WATCHLIST" in text
+        assert "empty" in text.lower()
+        assert keyboard is not None
+        assert len(keyboard.inline_keyboard) >= 2  # Add + Back buttons
+
+    def test_watchlist_menu_with_tokens(self):
+        """Test watchlist menu with tokens."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        watchlist = [
+            {"symbol": "BONK", "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "price": 0.00002, "change_24h": 15.5},
+            {"symbol": "WIF", "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", "price": 1.25, "change_24h": -8.2},
+        ]
+
+        text, keyboard = DemoMenuBuilder.watchlist_menu(watchlist)
+
+        assert text is not None
+        assert "WATCHLIST" in text
+        assert "BONK" in text
+        assert "WIF" in text
+        assert "15.5" in text  # Change percentage
+        assert keyboard is not None
+        # 2 token rows + Add/Refresh + Back
+        assert len(keyboard.inline_keyboard) >= 4
+
+    def test_watchlist_menu_with_alert(self):
+        """Test watchlist menu with price alert."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        watchlist = [
+            {"symbol": "PEPE", "address": "addr123", "price": 0.001, "change_24h": 5.0, "alert": 0.002},
+        ]
+
+        text, keyboard = DemoMenuBuilder.watchlist_menu(watchlist)
+
+        assert "PEPE" in text
+        assert "Alert" in text
+        assert "0.002" in text
+
 
 class TestSentimentIntegration:
     """Test sentiment engine integration."""

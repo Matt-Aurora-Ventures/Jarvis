@@ -419,6 +419,11 @@ _Tap to trade with AI-powered signals_
                 InlineKeyboardButton(f"🧠 Learning", callback_data="demo:learning"),
                 InlineKeyboardButton(f"📊 Performance", callback_data="demo:performance"),
             ],
+            # Watchlist & AI Picks
+            [
+                InlineKeyboardButton(f"⭐ Watchlist", callback_data="demo:watchlist"),
+                InlineKeyboardButton(f"💎 AI Picks", callback_data="demo:ai_picks"),
+            ],
             # Settings & Management
             [
                 InlineKeyboardButton(f"{theme.SETTINGS} Settings", callback_data="demo:settings"),
@@ -1611,6 +1616,86 @@ immediately without confirmation!
 
         return text, InlineKeyboardMarkup(keyboard)
 
+    @staticmethod
+    def watchlist_menu(
+        watchlist: List[Dict[str, Any]],
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Token Watchlist - Track your favorite tokens.
+
+        Features:
+        - Live price updates
+        - Quick buy buttons
+        - Price alerts (V2)
+        """
+        theme = JarvisTheme
+
+        lines = [
+            f"⭐ *WATCHLIST*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+        ]
+
+        keyboard = []
+
+        if not watchlist:
+            lines.extend([
+                "_Your watchlist is empty_",
+                "",
+                "Add tokens to track their prices",
+                "and get quick access to trade!",
+                "",
+                "_Paste a token address to add_",
+            ])
+        else:
+            for i, token in enumerate(watchlist[:8]):
+                symbol = token.get("symbol", "???")
+                address = token.get("address", "")
+                price = token.get("price", 0)
+                change_24h = token.get("change_24h", 0)
+                alert = token.get("alert", None)
+
+                change_emoji = "🟢" if change_24h >= 0 else "🔴"
+                change_sign = "+" if change_24h >= 0 else ""
+
+                lines.append(f"{change_emoji} *{symbol}* ${price:.6f}")
+                lines.append(f"   {change_sign}{change_24h:.1f}% (24h)")
+
+                if alert:
+                    lines.append(f"   🔔 Alert: ${alert}")
+
+                lines.append("")
+
+                if address:
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"{theme.BUY} Buy {symbol}",
+                            callback_data=f"demo:quick_buy:{address}:0.1"
+                        ),
+                        InlineKeyboardButton(
+                            f"🗑️ Remove",
+                            callback_data=f"demo:watchlist_remove:{i}"
+                        ),
+                    ])
+
+        lines.extend([
+            "━━━━━━━━━━━━━━━━━━━━━",
+        ])
+
+        text = "\n".join(lines)
+
+        keyboard.extend([
+            [
+                InlineKeyboardButton(f"➕ Add Token", callback_data="demo:watchlist_add"),
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:watchlist"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
+            ],
+        ])
+
+        return text, InlineKeyboardMarkup(keyboard)
+
 
 # =============================================================================
 # Demo Command Handler
@@ -2153,6 +2238,66 @@ You are about to sell *{position_count} positions*
                 details="Token addresses will now show analysis instead of instant buy.",
             )
 
+        elif action == "watchlist":
+            # Show watchlist menu
+            watchlist = context.user_data.get("watchlist", [])
+
+            # Fetch live prices for watchlist tokens
+            if watchlist:
+                for token in watchlist:
+                    try:
+                        address = token.get("address", "")
+                        if address:
+                            sentiment = await get_ai_sentiment_for_token(address)
+                            token["price"] = sentiment.get("price", token.get("price", 0))
+                            token["change_24h"] = sentiment.get("change_24h", token.get("change_24h", 0))
+                    except Exception:
+                        pass  # Keep existing data
+
+            text, keyboard = DemoMenuBuilder.watchlist_menu(watchlist)
+
+        elif action == "watchlist_add":
+            # Prompt to add token
+            theme = JarvisTheme
+            text = f"""
+{theme.GEM} *ADD TO WATCHLIST*
+━━━━━━━━━━━━━━━━━━━━━
+
+Paste a Solana token address
+to add it to your watchlist.
+
+Example:
+`DezXAZ8z7PnrnRJjz3...`
+
+The token will be tracked with
+live price updates!
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"{theme.BACK} Cancel", callback_data="demo:watchlist")],
+            ])
+            context.user_data["awaiting_watchlist_token"] = True
+
+        elif action.startswith("watchlist_remove:"):
+            # Remove from watchlist
+            parts = data.split(":")
+            if len(parts) >= 3:
+                try:
+                    index = int(parts[2])
+                    watchlist = context.user_data.get("watchlist", [])
+                    if 0 <= index < len(watchlist):
+                        removed = watchlist.pop(index)
+                        context.user_data["watchlist"] = watchlist
+                        text, keyboard = DemoMenuBuilder.success_message(
+                            action="Token Removed",
+                            details=f"Removed {removed.get('symbol', 'token')} from watchlist",
+                        )
+                    else:
+                        text, keyboard = DemoMenuBuilder.error_message("Invalid watchlist index")
+                except Exception as e:
+                    text, keyboard = DemoMenuBuilder.error_message(f"Failed to remove: {e}")
+            else:
+                text, keyboard = DemoMenuBuilder.error_message("Invalid remove command")
+
         elif action.startswith("analyze:"):
             # AI Token Analysis
             parts = data.split(":")
@@ -2351,14 +2496,79 @@ Coming soon in V2!
 
 @error_handler
 async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle text messages when awaiting token input."""
+    """Handle text messages when awaiting token input or watchlist add."""
+    text = update.message.text.strip()
+
+    # Handle watchlist token addition
+    if context.user_data.get("awaiting_watchlist_token"):
+        context.user_data["awaiting_watchlist_token"] = False
+
+        # Validate Solana address (basic check)
+        if len(text) < 32 or len(text) > 44:
+            error_text, keyboard = DemoMenuBuilder.error_message(
+                "Invalid Solana address. Must be 32-44 characters."
+            )
+            await update.message.reply_text(
+                error_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard,
+            )
+            return
+
+        # Get token info
+        try:
+            sentiment = await get_ai_sentiment_for_token(text)
+            token_data = {
+                "symbol": sentiment.get("symbol", "TOKEN"),
+                "address": text,
+                "price": sentiment.get("price", 0),
+                "change_24h": sentiment.get("change_24h", 0),
+            }
+
+            # Add to watchlist
+            watchlist = context.user_data.get("watchlist", [])
+
+            # Check for duplicates
+            if any(t.get("address") == text for t in watchlist):
+                error_text, keyboard = DemoMenuBuilder.error_message(
+                    "Token already in watchlist"
+                )
+                await update.message.reply_text(
+                    error_text,
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=keyboard,
+                )
+                return
+
+            watchlist.append(token_data)
+            context.user_data["watchlist"] = watchlist
+
+            success_text, keyboard = DemoMenuBuilder.success_message(
+                action="Token Added",
+                details=f"Added {token_data['symbol']} to your watchlist!\n\nCurrent price: ${token_data['price']:.6f}",
+            )
+            await update.message.reply_text(
+                success_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard,
+            )
+        except Exception as e:
+            error_text, keyboard = DemoMenuBuilder.error_message(
+                f"Failed to add token: {str(e)[:50]}"
+            )
+            await update.message.reply_text(
+                error_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard,
+            )
+        return
+
+    # Handle buy token input
     if not context.user_data.get("awaiting_token"):
         return
 
     # Clear the flag
     context.user_data["awaiting_token"] = False
-
-    text = update.message.text.strip()
 
     # Validate Solana address (basic check)
     if len(text) < 32 or len(text) > 44:
