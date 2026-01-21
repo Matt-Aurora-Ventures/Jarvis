@@ -709,6 +709,17 @@ async def create_autonomous_manager():
         raise
 
 
+async def create_bags_intel():
+    """Create and run the Bags Intel service for bags.fm graduation monitoring."""
+    from bots.bags_intel import create_bags_intel_service
+
+    try:
+        await create_bags_intel_service()
+    except Exception as e:
+        logger.error(f"[bags_intel] Failed to start: {e}", exc_info=True)
+        raise
+
+
 def validate_startup() -> bool:
     """
     Validate critical configuration before starting.
@@ -925,6 +936,7 @@ async def main():
     supervisor.register("autonomous_x", create_autonomous_x_engine, min_backoff=30.0, max_backoff=300.0)
     supervisor.register("public_trading_bot", create_public_trading_bot, min_backoff=20.0, max_backoff=180.0)
     supervisor.register("autonomous_manager", create_autonomous_manager, min_backoff=15.0, max_backoff=120.0)
+    supervisor.register("bags_intel", create_bags_intel, min_backoff=30.0, max_backoff=300.0)
 
     print("Registered components:")
     for name in supervisor.components:

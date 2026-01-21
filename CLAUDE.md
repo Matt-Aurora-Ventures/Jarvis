@@ -67,6 +67,7 @@ python bots/supervisor.py
 # - twitter_poster: Grok sentiment tweets
 # - telegram_bot: Telegram interface
 # - autonomous_x: Autonomous X posting
+# - bags_intel: Bags.fm graduation monitoring & intel reports
 ```
 
 ## Key Features
@@ -76,8 +77,37 @@ python bots/supervisor.py
 4. **Telegram Integration**: Full admin interface via @Jarviskr8tivbot
 5. **CLI Commands**: Admin can execute code via X mentions
 
+## Bags Intel (bags.fm Intelligence Reports)
+
+Real-time monitoring of bags.fm token graduations with automated investment analysis.
+
+**Location**: `bots/bags_intel/`
+
+**New Environment Variable Required**:
+- `BITQUERY_API_KEY` - Get from https://bitquery.io (for real-time WebSocket monitoring)
+
+**Reuses Existing Keys**:
+- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_BUY_BOT_CHAT_ID` - For sending reports
+- `XAI_API_KEY` - For Grok AI analysis
+- `TWITTER_BEARER_TOKEN` - For social scanning (optional)
+- `HELIUS_API_KEY` - For holder data (optional)
+
+**Scoring Dimensions** (weighted 0-100):
+- Bonding Curve (25%): Duration, volume, buyer count, buy/sell ratio
+- Creator (20%): Twitter presence, account age, history
+- Social (15%): Linked socials, website
+- Market (25%): Liquidity, price stability
+- Distribution (15%): Holder count, concentration
+
+**Quality Tiers**:
+- Exceptional (80+), Strong (65-79), Average (50-64), Weak (35-49), Poor (<35)
+
 ## Recent Fixes (2026-01-15)
 1. X bot circuit breaker to prevent spam loops
 2. Max positions increased to 50
 3. Telegram bot context enhanced with capabilities
 4. Grok daily cost limit increased to $10
+
+## Recent Additions (2026-01-21)
+1. Bags Intel service for bags.fm graduation monitoring
+2. Intel reports sent to Telegram with scoring breakdown
