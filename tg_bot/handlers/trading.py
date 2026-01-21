@@ -459,11 +459,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "menu_costs":
         message = fmt.format_cost_report()
         keyboard = [[InlineKeyboardButton("\U0001f3e0 Back to Menu", callback_data="menu_back")]]
-        await query.message.reply_text(
-            message,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
+        try:
+            await query.message.edit_text(
+                message,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+        except Exception as e:
+            logger.warning(f"Failed to edit message for menu_costs: {e}")
+            await query.message.reply_text(
+                message,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
         return
 
     if data == "menu_help":
@@ -482,15 +490,23 @@ _admin only:_
 /brain - how my circuits are doing
 """
         keyboard = [[InlineKeyboardButton("back", callback_data="menu_back")]]
-        await query.message.reply_text(
-            help_text,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
+        try:
+            await query.message.edit_text(
+                help_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+        except Exception as e:
+            logger.warning(f"Failed to edit message for menu_help: {e}")
+            await query.message.reply_text(
+                help_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
         return
 
     if data == "menu_back":
-        # Re-send main menu
+        # Edit current message to show main menu (not reply)
         is_admin = config.is_admin(user_id)
         keyboard = [
             [
@@ -511,11 +527,20 @@ _admin only:_
                 InlineKeyboardButton("\U0001f9e0 Brain Stats", callback_data="menu_brain"),
                 InlineKeyboardButton("\U0001f504 Reload", callback_data="menu_reload"),
             ])
-        await query.message.reply_text(
-            "*jarvis*\n\n_pick something:_",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
+        try:
+            await query.message.edit_text(
+                "*jarvis*\n\n_pick something:_",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+        except Exception as e:
+            logger.warning(f"Failed to edit message for menu_back: {e}")
+            # Only fall back to reply if edit fails
+            await query.message.reply_text(
+                "*jarvis*\n\n_pick something:_",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
         return
 
     # Admin-only menu callbacks - use CallbackUpdate wrapper
