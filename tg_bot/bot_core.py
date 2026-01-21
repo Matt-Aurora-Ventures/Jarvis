@@ -4869,7 +4869,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             bridge.memory.add_message(user_id, username, "user", text, chat_id)
             
             # Check if this is a coding/dev request
-            # Expanded prefixes for more natural language
+            # Only trigger on explicit prefixes - avoid false positives on normal conversation
             explicit_prefixes = (
                 "code:",
                 "cli:",
@@ -4886,20 +4886,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "jarvis update",
                 "jarvis modify",
                 "jarvis refactor",
-                "fix this",
-                "fix the",
-                "add a",
-                "create a",
-                "implement",
+                "jarvis run",
+                "jarvis execute",
+                "jarvis pull",
+                "jarvis push",
                 "go to console",
                 "run in console",
-                "execute",
+                "run in cli",
             )
             text_lower = text.lower().strip()
-            # For admins: explicit prefixes OR any coding keywords (no "jarvis" required)
-            # This ensures admin requests like "pull github updates" trigger CLI
+            # Only trigger on explicit prefixes to avoid false positives
+            # Removed broad prefixes like "fix the", "add a" which triggered on normal conversation
             has_prefix = text_lower.startswith(explicit_prefixes)
-            has_coding_keywords = bridge.is_coding_request(text)
+            # Only use keyword detection if it looks like a technical request (has multiple signals)
+            has_coding_keywords = bridge.is_coding_request(text) and any(
+                tech_word in text_lower for tech_word in
+                ["github", "repo", "commit", "deploy", "server", "bug", "error", "script"]
+            )
             is_vibe_request = has_prefix or has_coding_keywords
 
             logger.info(f"Vibe detection: admin={is_admin}, prefix={has_prefix}, keywords={has_coding_keywords}, vibe={is_vibe_request}, text={text[:100]}...")
