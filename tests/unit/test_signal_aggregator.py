@@ -435,12 +435,12 @@ class TestSignalAggregator:
         assert result.consensus_type == ConsensusType.UNANIMOUS
         assert result.confidence > 0.7
 
-    def test_aggregate_conflicting_signals(self, aggregator, conflicting_signals):
+    def test_aggregate_conflicting_signals(self, lenient_aggregator, conflicting_signals):
         """Test aggregation with conflicting signals."""
         for strategy_name in ["TrendFollower", "MeanReversion", "BreakoutTrader"]:
-            aggregator.register_strategy(strategy_name)
+            lenient_aggregator.register_strategy(strategy_name)
 
-        result = aggregator.aggregate(conflicting_signals)
+        result = lenient_aggregator.aggregate(conflicting_signals)
 
         assert result is not None
         # Should not be unanimous with conflicting signals
@@ -448,11 +448,11 @@ class TestSignalAggregator:
         # Confidence should be lower due to disagreement
         assert result.confidence < 0.8
 
-    def test_aggregate_with_weighted_strategies(self, aggregator):
+    def test_aggregate_with_weighted_strategies(self, lenient_aggregator):
         """Test aggregation respects strategy weights."""
         # Register strategies with different weights
-        aggregator.register_strategy("HighWeight", base_weight=2.0)
-        aggregator.register_strategy("LowWeight", base_weight=0.5)
+        lenient_aggregator.register_strategy("HighWeight", base_weight=2.0)
+        lenient_aggregator.register_strategy("LowWeight", base_weight=0.5)
 
         # High weight says SELL, low weight says BUY
         signals = [
@@ -472,7 +472,7 @@ class TestSignalAggregator:
             ),
         ]
 
-        result = aggregator.aggregate(signals)
+        result = lenient_aggregator.aggregate(signals)
 
         # Should favor the high-weight strategy
         assert result is not None
@@ -577,10 +577,10 @@ class TestConsensusCalculation:
 
         assert result.consensus_type == ConsensusType.UNANIMOUS
 
-    def test_majority_consensus(self, aggregator):
+    def test_majority_consensus(self, lenient_aggregator):
         """Test detecting majority consensus."""
         for name in ["S1", "S2", "S3"]:
-            aggregator.register_strategy(name)
+            lenient_aggregator.register_strategy(name)
 
         signals = [
             StrategySignal(strategy_name="S1", symbol="SOL", action=SignalAction.BUY, confidence=0.8, price=100.0),
@@ -588,14 +588,15 @@ class TestConsensusCalculation:
             StrategySignal(strategy_name="S3", symbol="SOL", action=SignalAction.SELL, confidence=0.6, price=100.0),
         ]
 
-        result = aggregator.aggregate(signals)
+        result = lenient_aggregator.aggregate(signals)
 
+        assert result is not None
         assert result.consensus_type == ConsensusType.MAJORITY
 
-    def test_split_consensus(self, aggregator):
+    def test_split_consensus(self, lenient_aggregator):
         """Test handling split/no consensus."""
         for name in ["S1", "S2", "S3", "S4"]:
-            aggregator.register_strategy(name)
+            lenient_aggregator.register_strategy(name)
 
         signals = [
             StrategySignal(strategy_name="S1", symbol="SOL", action=SignalAction.BUY, confidence=0.8, price=100.0),
@@ -604,8 +605,9 @@ class TestConsensusCalculation:
             StrategySignal(strategy_name="S4", symbol="SOL", action=SignalAction.HOLD, confidence=0.8, price=100.0),
         ]
 
-        result = aggregator.aggregate(signals)
+        result = lenient_aggregator.aggregate(signals)
 
+        assert result is not None
         # With no clear majority, should be weighted consensus
         assert result.consensus_type in [ConsensusType.WEIGHTED, ConsensusType.SPLIT]
 
@@ -632,10 +634,10 @@ class TestConfidenceScoring:
         # High individual confidence + unanimous = high aggregate confidence
         assert result.confidence >= 0.85
 
-    def test_reduced_confidence_with_disagreement(self, aggregator):
+    def test_reduced_confidence_with_disagreement(self, lenient_aggregator):
         """Test confidence is reduced with disagreement."""
         for name in ["S1", "S2"]:
-            aggregator.register_strategy(name)
+            lenient_aggregator.register_strategy(name)
 
         conflicting = [
             StrategySignal(strategy_name="S1", symbol="SOL", action=SignalAction.BUY, confidence=0.9, price=100.0),
@@ -647,9 +649,11 @@ class TestConfidenceScoring:
             StrategySignal(strategy_name="S2", symbol="SOL", action=SignalAction.BUY, confidence=0.9, price=100.0),
         ]
 
-        conflicting_result = aggregator.aggregate(conflicting)
-        agreeing_result = aggregator.aggregate(agreeing)
+        conflicting_result = lenient_aggregator.aggregate(conflicting)
+        agreeing_result = lenient_aggregator.aggregate(agreeing)
 
+        assert conflicting_result is not None
+        assert agreeing_result is not None
         # Agreeing signals should have higher confidence
         assert agreeing_result.confidence > conflicting_result.confidence
 
@@ -838,17 +842,17 @@ class TestEdgeCases:
         assert result is not None
         assert len(result.contributing_strategies) == 2
 
-    def test_zero_confidence_signal(self, aggregator):
+    def test_zero_confidence_signal(self, lenient_aggregator):
         """Test handling signal with zero confidence."""
-        aggregator.register_strategy("S1")
-        aggregator.register_strategy("S2")
+        lenient_aggregator.register_strategy("S1")
+        lenient_aggregator.register_strategy("S2")
 
         signals = [
             StrategySignal(strategy_name="S1", symbol="SOL", action=SignalAction.BUY, confidence=0.0, price=100.0),
             StrategySignal(strategy_name="S2", symbol="SOL", action=SignalAction.BUY, confidence=0.8, price=100.0),
         ]
 
-        result = aggregator.aggregate(signals)
+        result = lenient_aggregator.aggregate(signals)
 
         # Zero confidence signal should have minimal impact
         assert result is not None

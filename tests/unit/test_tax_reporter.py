@@ -11,10 +11,57 @@ Tests the following components:
 import pytest
 import tempfile
 import json
+import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from decimal import Decimal
 from unittest.mock import patch, MagicMock
+
+
+@pytest.fixture(autouse=True)
+def isolate_tax_db(tmp_path, monkeypatch):
+    """Ensure each test uses an isolated database."""
+    unique_db = tmp_path / f"test_tax_{uuid.uuid4().hex[:8]}.db"
+    # Patch the default db path in TaxReporter.__init__
+    original_init = None
+
+    def patched_init(self, cost_basis_method=None, db_path=None):
+        from core.reporting.tax_reporter import CostBasisMethod, TaxReporterDB
+        if cost_basis_method is None:
+            cost_basis_method = CostBasisMethod.FIFO
+        self.cost_basis_method = cost_basis_method
+        db_path = db_path or unique_db
+        self.db = TaxReporterDB(db_path)
+
+    import core.reporting.tax_reporter as tax_module
+    monkeypatch.setattr(tax_module.TaxReporter, "__init__", patched_init)
+
+
+@pytest.fixture
+def temp_db_path(tmp_path):
+    """Provide a unique temporary database path for each test."""
+    return tmp_path / f"test_tax_{uuid.uuid4().hex[:8]}.db"
+
+
+@pytest.fixture
+def fifo_reporter(temp_db_path):
+    """Create a FIFO reporter with isolated database."""
+    from core.reporting.tax_reporter import TaxReporter, CostBasisMethod
+    return TaxReporter(cost_basis_method=CostBasisMethod.FIFO, db_path=temp_db_path)
+
+
+@pytest.fixture
+def lifo_reporter(temp_db_path):
+    """Create a LIFO reporter with isolated database."""
+    from core.reporting.tax_reporter import TaxReporter, CostBasisMethod
+    return TaxReporter(cost_basis_method=CostBasisMethod.LIFO, db_path=temp_db_path)
+
+
+@pytest.fixture
+def hifo_reporter(temp_db_path):
+    """Create a HIFO reporter with isolated database."""
+    from core.reporting.tax_reporter import TaxReporter, CostBasisMethod
+    return TaxReporter(cost_basis_method=CostBasisMethod.HIFO, db_path=temp_db_path)
 
 
 class TestCostBasisMethods:
