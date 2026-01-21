@@ -326,17 +326,8 @@ def main():
 
     app.post_init = startup_tasks
 
-    # Avoid getUpdates conflicts when multiple instances use the same token.
-    polling_lock = None
-    while polling_lock is None:
-        polling_lock = acquire_instance_lock(
-            config.telegram_token,
-            name="telegram_polling",
-            max_wait_seconds=10,
-        )
-        if polling_lock is None:
-            print("Polling lock held for token; retrying in 15s")
-            time.sleep(15)
+    # NOTE: Lock already acquired at line 228 (stored in `lock` variable)
+    # Do NOT acquire again here - Windows doesn't allow double-locking same file
 
     # Run with drop_pending_updates to clear any stale connections
     # This helps recover from Conflict errors caused by previous instances
@@ -362,7 +353,7 @@ def main():
         sys.exit(1)
     finally:
         try:
-            polling_lock.close()
+            lock.close()  # Use the lock from line 228
         except Exception:
             pass
 
