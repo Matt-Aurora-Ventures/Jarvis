@@ -209,42 +209,48 @@ class RiskManager:
             except Exception as e:
                 logger.error(f"Failed to load limits: {e}, using defaults")
 
-        # Default limits
+        # Default limits - ALL DISABLED per user request (no buying restrictions)
         return {
             LimitType.POSITION_SIZE: RiskLimit(
                 limit_type=LimitType.POSITION_SIZE,
-                hard_limit=100.0,  # $100 max single position
-                warning_threshold=0.8,  # Warn at 80%
+                hard_limit=100000.0,  # Effectively unlimited
+                warning_threshold=0.99,
+                enabled=False,  # DISABLED
                 description="Maximum USD value for single position"
             ),
             LimitType.DAILY_LOSS: RiskLimit(
                 limit_type=LimitType.DAILY_LOSS,
-                hard_limit=200.0,  # $200 max daily loss
-                warning_threshold=0.75,  # Warn at 75%
+                hard_limit=100000.0,  # Effectively unlimited
+                warning_threshold=0.99,
+                enabled=False,  # DISABLED
                 description="Maximum daily loss in USD"
             ),
             LimitType.CONCENTRATION: RiskLimit(
                 limit_type=LimitType.CONCENTRATION,
-                hard_limit=0.30,  # 30% max in single token
-                warning_threshold=0.8,  # Warn at 24%
+                hard_limit=1.0,  # 100% allowed
+                warning_threshold=0.99,
+                enabled=False,  # DISABLED
                 description="Maximum portfolio % in single token"
             ),
             LimitType.PORTFOLIO_ALLOCATION: RiskLimit(
                 limit_type=LimitType.PORTFOLIO_ALLOCATION,
-                hard_limit=0.50,  # Max 50% of portfolio deployed
-                warning_threshold=0.85,  # Warn at 42.5%
+                hard_limit=1.0,  # 100% of portfolio allowed
+                warning_threshold=0.99,
+                enabled=False,  # DISABLED
                 description="Maximum % of portfolio in active trades"
             ),
             LimitType.DRAWDOWN: RiskLimit(
                 limit_type=LimitType.DRAWDOWN,
-                hard_limit=0.25,  # 25% max drawdown from peak
-                warning_threshold=0.7,  # Warn at 17.5%
+                hard_limit=1.0,  # 100% drawdown allowed
+                warning_threshold=0.99,
+                enabled=False,  # DISABLED
                 description="Maximum drawdown from portfolio peak"
             ),
             LimitType.TRADE_FREQUENCY: RiskLimit(
                 limit_type=LimitType.TRADE_FREQUENCY,
-                hard_limit=20.0,  # Max 20 trades per day
-                warning_threshold=0.8,  # Warn at 16 trades
+                hard_limit=10000.0,  # Effectively unlimited
+                warning_threshold=0.99,
+                enabled=False,  # DISABLED
                 description="Maximum trades per day"
             )
         }

@@ -250,19 +250,17 @@ class ChatResponder:
     def __init__(
         self,
         xai_api_key: Optional[str] = None,
-        anthropic_api_key: Optional[str] = None,
         model: Optional[str] = None,
     ) -> None:
         self.xai_api_key = xai_api_key or os.getenv("XAI_API_KEY", "")
-        self.anthropic_api_key = anthropic_api_key or os.getenv("ANTHROPIC_API_KEY", "")
+        # NOTE: Anthropic API removed - CLI only (per user requirement)
         self.model = model or os.getenv("TG_REPLY_MODEL", "grok-3")
         self._session: Optional[aiohttp.ClientSession] = None
-        self._anthropic_client = None
         self._memory = None
         self._jarvis_admin = None
         self._last_mood = "neutral"
         self._session_learnings = []  # Things learned this session
-        self._cli_path = "claude"  # CLI path for CLI-first approach
+        self._cli_path = "claude"  # CLI path - CLI ONLY mode
 
     def _get_cli_path(self) -> Optional[str]:
         """Get the resolved CLI path that actually works."""
@@ -928,49 +926,48 @@ Respond briefly (under 200 words) in character as JARVIS:"""
         if self_reflection:
             context_hint += f"\n\n(Internal state: {self_reflection})"
 
-        # Always prefer Claude for chat replies (JARVIS voice)
-        if self.anthropic_api_key:
-            reply = await self._generate_with_claude(
-                text + context_hint, username, chat_title, is_private, is_admin,
-                engagement_topic=engagement_topic,
-                conversation_mood=conversation_mood,
-                active_participants=active_participants,
-                recent_context=recent_context,
-                moderation_context=moderation_ctx,
-            )
-            if reply:
-                # VOICE BIBLE VALIDATION: Ensure response adheres to Jarvis personality
-                is_valid, issues = validate_jarvis_response(reply)
-                if not is_valid:
-                    logger.warning(f"Response failed voice bible validation: {issues}")
-                    # Log issue for monitoring but still return response
-                    # (Jarvis should stay true to voice even if imperfect)
+        # Use Claude CLI for chat replies (JARVIS voice) - CLI ONLY, no API
+        reply = await self._generate_with_claude(
+            text + context_hint, username, chat_title, is_private, is_admin,
+            engagement_topic=engagement_topic,
+            conversation_mood=conversation_mood,
+            active_participants=active_participants,
+            recent_context=recent_context,
+            moderation_context=moderation_ctx,
+        )
+        if reply:
+            # VOICE BIBLE VALIDATION: Ensure response adheres to Jarvis personality
+            is_valid, issues = validate_jarvis_response(reply)
+            if not is_valid:
+                logger.warning(f"Response failed voice bible validation: {issues}")
+                # Log issue for monitoring but still return response
+                # (Jarvis should stay true to voice even if imperfect)
 
-                # Store JARVIS response in memory and conversation history
-                if memory:
-                    try:
-                        memory.add_message(user_id, "jarvis", "assistant", reply)
-                    except Exception:
-                        pass
-                if chat_id:
-                    self.track_message(chat_id, 0, "jarvis", reply)
+            # Store JARVIS response in memory and conversation history
+            if memory:
+                try:
+                    memory.add_message(user_id, "jarvis", "assistant", reply)
+                except Exception:
+                    pass
+            if chat_id:
+                self.track_message(chat_id, 0, "jarvis", reply)
 
-                    # Update persistent memory with response and topics
-                    try:
-                        pmem = get_persistent_memory()
-                        if pmem:
-                            pmem.save_jarvis_response(chat_id, reply)
-                            # Extract topics from conversation
-                            if engagement_topic:
-                                current_topics = pmem.get_chat_topics(chat_id)
-                                if engagement_topic not in current_topics:
-                                    current_topics.append(engagement_topic)
-                                    pmem.update_chat_topics(chat_id, current_topics)
-                    except Exception as e:
-                        logger.debug(f"Failed to update persistent memory: {e}")
-                return reply
+                # Update persistent memory with response and topics
+                try:
+                    pmem = get_persistent_memory()
+                    if pmem:
+                        pmem.save_jarvis_response(chat_id, reply)
+                        # Extract topics from conversation
+                        if engagement_topic:
+                            current_topics = pmem.get_chat_topics(chat_id)
+                            if engagement_topic not in current_topics:
+                                current_topics.append(engagement_topic)
+                                pmem.update_chat_topics(chat_id, current_topics)
+                except Exception as e:
+                    logger.debug(f"Failed to update persistent memory: {e}")
+            return reply
 
-        # Fallback to xAI only if Claude unavailable
+        # Fallback to xAI (Grok) if CLI unavailable
         if self.xai_api_key:
             reply = await self._generate_with_xai(text, username, chat_title, is_private, is_admin)
             if reply:
@@ -980,7 +977,7 @@ Respond briefly (under 200 words) in character as JARVIS:"""
                     logger.warning(f"xAI response failed voice bible validation: {issues}")
                 return reply
 
-        return "Running without AI keys. Ask an admin to configure ANTHROPIC_API_KEY."
+        return "Claude CLI unavailable. Check CLI installation on server."
 
     async def _generate_with_xai(
         self,
@@ -1039,9 +1036,9 @@ Respond briefly (under 200 words) in character as JARVIS:"""
         )
         user_prompt = self._user_prompt(text, username)
 
-        # Try CLI first (uses authenticated OAuth, no API credits)
+        # CLI ONLY - no API fallback (per user requirement)
         if self._cli_available():
-            logger.info("Trying Claude CLI first for chat response")
+            logger.info("Using Claude CLI for chat response (CLI-only mode)")
             loop = asyncio.get_event_loop()
             cli_result = await loop.run_in_executor(
                 None,
@@ -1050,31 +1047,11 @@ Respond briefly (under 200 words) in character as JARVIS:"""
             if cli_result:
                 logger.info("Chat response generated via Claude CLI")
                 return self._clean_reply(cli_result)
-            logger.warning("Claude CLI failed, falling back to API")
-
-        # Fall back to Anthropic API
-        try:
-            if self._anthropic_client is None:
-                import anthropic
-                self._anthropic_client = anthropic.Anthropic(api_key=self.anthropic_api_key)
-
-            logger.info("Using Anthropic API for chat response")
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self._anthropic_client.messages.create(
-                    model=os.getenv("TG_CLAUDE_MODEL", "claude-sonnet-4-20250514"),
-                    max_tokens=200,
-                    temperature=0.6,
-                    system=system_prompt,
-                    messages=[{"role": "user", "content": user_prompt}],
-                ),
-            )
-            content = response.content[0].text if response.content else ""
-            return self._clean_reply(content)
-        except Exception as exc:
-            logger.warning("Claude API reply error: %s", exc)
+            logger.error("Claude CLI failed - no API fallback available")
             return ""
+
+        logger.error("Claude CLI not available and API fallback disabled")
+        return ""
 
     def _clean_reply(self, content: str) -> str:
         """Clean LLM response - remove JSON artifacts, code blocks, etc."""

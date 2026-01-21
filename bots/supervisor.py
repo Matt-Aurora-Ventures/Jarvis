@@ -711,6 +711,15 @@ async def create_autonomous_manager():
 
 async def create_bags_intel():
     """Create and run the Bags Intel service for bags.fm graduation monitoring."""
+    # DISABLED: BitQuery API has 402 payment issues - needs alternative (Helius webhooks)
+    # To re-enable: Set BAGS_INTEL_ENABLED=true in environment
+    if not os.environ.get("BAGS_INTEL_ENABLED", "").lower() == "true":
+        logger.info("[bags_intel] DISABLED - set BAGS_INTEL_ENABLED=true to enable (needs Helius alternative)")
+        # Run forever but do nothing
+        while True:
+            await asyncio.sleep(3600)
+        return
+
     from bots.bags_intel import create_bags_intel_service
 
     try:
