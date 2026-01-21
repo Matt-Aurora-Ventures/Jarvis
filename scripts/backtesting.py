@@ -344,6 +344,154 @@ def strategy_data_driven_2026(pred: Prediction) -> Tuple[bool, str]:
     return False, "+".join(reasons) if reasons else "unknown"
 
 
+def strategy_data_driven_relaxed(pred: Prediction) -> Tuple[bool, str]:
+    """
+    RELAXED Data-Driven Rules - Less strict to catch more winners.
+    - Ratio >= 1.5x (instead of 2.0x)
+    - Pump threshold at 50% (instead of 40%)
+    - Still applies score penalties
+    """
+    if pred.verdict != 'BULLISH':
+        return False, "Not bullish"
+
+    score = pred.score
+    ratio = pred.buy_sell_ratio if pred.buy_sell_ratio is not None else 0
+    change_24h = pred.change_24h if pred.change_24h is not None else 0
+    has_momentum = pred.has_momentum_mention
+    has_pump = pred.has_pump_mention
+
+    chasing_pump = change_24h > 50  # Relaxed from 40%
+    adjusted_score = score
+
+    if adjusted_score >= 0.70:
+        overconfidence_penalty = (adjusted_score - 0.65) * 0.5
+        adjusted_score -= overconfidence_penalty
+
+    if has_momentum:
+        adjusted_score -= 0.10
+    if has_pump:
+        adjusted_score -= 0.08
+
+    if adjusted_score > 0.55 and ratio >= 1.5 and not chasing_pump:  # Relaxed ratio
+        return True, f"Accepted (relaxed: score={adjusted_score:.2f}, ratio={ratio:.1f}x)"
+
+    reasons = []
+    if adjusted_score <= 0.55:
+        reasons.append("score_penalized")
+    if ratio < 1.5:
+        reasons.append("ratio_below_1.5x")
+    if chasing_pump:
+        reasons.append("chasing_pump_50pct")
+
+    return False, "+".join(reasons) if reasons else "unknown"
+
+
+def strategy_data_driven_balanced(pred: Prediction) -> Tuple[bool, str]:
+    """
+    BALANCED Data-Driven Rules - Middle ground.
+    - Ratio >= 1.8x (between 1.5 and 2.0)
+    - Pump threshold at 45% (between 40 and 50)
+    - Still applies score penalties
+    """
+    if pred.verdict != 'BULLISH':
+        return False, "Not bullish"
+
+    score = pred.score
+    ratio = pred.buy_sell_ratio if pred.buy_sell_ratio is not None else 0
+    change_24h = pred.change_24h if pred.change_24h is not None else 0
+    has_momentum = pred.has_momentum_mention
+    has_pump = pred.has_pump_mention
+
+    chasing_pump = change_24h > 45
+    adjusted_score = score
+
+    if adjusted_score >= 0.70:
+        overconfidence_penalty = (adjusted_score - 0.65) * 0.5
+        adjusted_score -= overconfidence_penalty
+
+    if has_momentum:
+        adjusted_score -= 0.10
+    if has_pump:
+        adjusted_score -= 0.08
+
+    if adjusted_score > 0.55 and ratio >= 1.8 and not chasing_pump:
+        return True, f"Accepted (balanced: score={adjusted_score:.2f}, ratio={ratio:.1f}x)"
+
+    reasons = []
+    if adjusted_score <= 0.55:
+        reasons.append("score_penalized")
+    if ratio < 1.8:
+        reasons.append("ratio_below_1.8x")
+    if chasing_pump:
+        reasons.append("chasing_pump_45pct")
+
+    return False, "+".join(reasons) if reasons else "unknown"
+
+
+def strategy_pump_filter_only(pred: Prediction) -> Tuple[bool, str]:
+    """
+    PUMP FILTER ONLY - Test impact of pump threshold alone.
+    Only filters based on pump level, no ratio requirement.
+    """
+    if pred.verdict != 'BULLISH':
+        return False, "Not bullish"
+    if pred.score < 0.5:
+        return False, f"Score too low: {pred.score}"
+
+    change_24h = pred.change_24h if pred.change_24h is not None else 0
+
+    if change_24h > 40:
+        return False, f"Chasing pump: {change_24h:.0f}%"
+
+    return True, f"Accepted - early entry ({change_24h:.0f}% pump)"
+
+
+def strategy_ratio_filter_only(pred: Prediction) -> Tuple[bool, str]:
+    """
+    RATIO FILTER ONLY - Test impact of ratio requirement alone.
+    Only filters based on ratio, no pump threshold.
+    """
+    if pred.verdict != 'BULLISH':
+        return False, "Not bullish"
+    if pred.score < 0.5:
+        return False, f"Score too low: {pred.score}"
+
+    ratio = pred.buy_sell_ratio if pred.buy_sell_ratio is not None else 0
+
+    if ratio < 2.0:
+        return False, f"Weak ratio: {ratio:.1f}x"
+
+    return True, f"Accepted - strong ratio ({ratio:.1f}x)"
+
+
+def strategy_score_penalty_only(pred: Prediction) -> Tuple[bool, str]:
+    """
+    SCORE PENALTY ONLY - Test impact of score adjustments alone.
+    No ratio or pump filters, just score penalties.
+    """
+    if pred.verdict != 'BULLISH':
+        return False, "Not bullish"
+
+    score = pred.score
+    has_momentum = pred.has_momentum_mention
+    has_pump = pred.has_pump_mention
+    adjusted_score = score
+
+    if adjusted_score >= 0.70:
+        overconfidence_penalty = (adjusted_score - 0.65) * 0.5
+        adjusted_score -= overconfidence_penalty
+
+    if has_momentum:
+        adjusted_score -= 0.10
+    if has_pump:
+        adjusted_score -= 0.08
+
+    if adjusted_score <= 0.50:
+        return False, f"Score too low after penalties: {adjusted_score:.2f}"
+
+    return True, f"Accepted (adjusted score: {adjusted_score:.2f})"
+
+
 def strategy_no_pump_chasing(pred: Prediction) -> Tuple[bool, str]:
     """
     Strategy: Reject signals on tokens already pumped >50%.

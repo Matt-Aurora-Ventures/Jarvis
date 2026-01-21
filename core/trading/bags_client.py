@@ -360,6 +360,45 @@ class BagsAPIClient:
             logger.error(f"Failed to get trending tokens: {e}")
             return []
 
+    async def get_top_tokens_by_volume(self, limit: int = 15) -> List[TokenInfo]:
+        """Get top tokens sorted by 24h volume"""
+
+        if not self.client:
+            return []
+
+        await self._check_rate_limit()
+
+        try:
+            response = await self.client.get(
+                f"{self.BASE_URL}/tokens/top",
+                params={"limit": limit, "sort": "volume24h"},
+                headers=self._get_headers()
+            )
+
+            response.raise_for_status()
+            data = response.json()
+
+            tokens = []
+            for token_data in data.get("tokens", [])[:limit]:
+                tokens.append(TokenInfo(
+                    address=token_data.get("address", ""),
+                    symbol=token_data.get("symbol", ""),
+                    name=token_data.get("name", ""),
+                    decimals=int(token_data.get("decimals", 9)),
+                    price_usd=float(token_data.get("priceUsd", 0)),
+                    price_sol=float(token_data.get("priceSol", 0)),
+                    volume_24h=float(token_data.get("volume24h", 0)),
+                    liquidity=float(token_data.get("liquidity", 0)),
+                    holders=int(token_data.get("holders", 0)),
+                    market_cap=float(token_data.get("marketCap", 0))
+                ))
+
+            return tokens
+
+        except Exception as e:
+            logger.error(f"Failed to get top tokens by volume: {e}")
+            return []
+
     async def claim_partner_fees(self) -> Dict[str, Any]:
         """Claim accumulated partner fees"""
 
@@ -573,8 +612,128 @@ class BagsTradeRouter:
         }
 
 
-# Singleton instance
+class SuccessFeeManager:
+    """
+    Success Fee Manager - 0.5% fee on profitable trades
+
+    Integrates with Bags.fm for fee collection.
+    Only charges fee on winning trades (positive PnL).
+    """
+
+    SUCCESS_FEE_PERCENT = 0.5  # 0.5% fee on winning trades
+
+    def __init__(self, bags_client: Optional[BagsAPIClient] = None):
+        self.bags = bags_client
+        self.total_fees_collected = 0.0
+        self.fee_transactions: List[Dict[str, Any]] = []
+
+    def calculate_success_fee(
+        self,
+        entry_price: float,
+        exit_price: float,
+        amount_sol: float,
+        token_symbol: str,
+    ) -> Dict[str, Any]:
+        """
+        Calculate success fee for a closed trade.
+
+        Only charges fee if trade was profitable.
+        Returns fee details including amount and whether it applies.
+        """
+        # Calculate PnL
+        pnl_percent = ((exit_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0
+        pnl_usd = amount_sol * (exit_price - entry_price) * 225  # Approximate SOL price
+
+        # Only charge fee on profitable trades
+        if pnl_percent <= 0 or pnl_usd <= 0:
+            return {
+                "applies": False,
+                "reason": "Not a winning trade",
+                "pnl_percent": pnl_percent,
+                "pnl_usd": pnl_usd,
+                "fee_amount": 0.0,
+                "fee_percent": 0.0,
+            }
+
+        # Calculate fee (0.5% of profit)
+        fee_amount = pnl_usd * (self.SUCCESS_FEE_PERCENT / 100)
+
+        return {
+            "applies": True,
+            "token_symbol": token_symbol,
+            "entry_price": entry_price,
+            "exit_price": exit_price,
+            "amount_sol": amount_sol,
+            "pnl_percent": pnl_percent,
+            "pnl_usd": pnl_usd,
+            "fee_percent": self.SUCCESS_FEE_PERCENT,
+            "fee_amount": fee_amount,
+            "net_profit": pnl_usd - fee_amount,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    async def collect_fee(
+        self,
+        fee_details: Dict[str, Any],
+        wallet_address: str,
+    ) -> Dict[str, Any]:
+        """
+        Collect the success fee via Bags.fm API.
+
+        Returns collection result with transaction details.
+        """
+        if not fee_details.get("applies"):
+            return {"success": False, "reason": "Fee does not apply"}
+
+        fee_amount = fee_details.get("fee_amount", 0)
+        if fee_amount <= 0:
+            return {"success": False, "reason": "No fee to collect"}
+
+        try:
+            # Record fee collection
+            fee_record = {
+                "timestamp": datetime.now().isoformat(),
+                "wallet": wallet_address,
+                "token": fee_details.get("token_symbol"),
+                "pnl_usd": fee_details.get("pnl_usd"),
+                "fee_amount": fee_amount,
+                "fee_percent": self.SUCCESS_FEE_PERCENT,
+            }
+
+            self.fee_transactions.append(fee_record)
+            self.total_fees_collected += fee_amount
+
+            # In production, this would transfer the fee via Bags API
+            # For now, we track it locally
+            logger.info(
+                f"Success fee collected: ${fee_amount:.4f} on {fee_details.get('token_symbol')} "
+                f"(${fee_details.get('pnl_usd'):.2f} profit)"
+            )
+
+            return {
+                "success": True,
+                "fee_amount": fee_amount,
+                "total_collected": self.total_fees_collected,
+                "transaction_count": len(self.fee_transactions),
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to collect success fee: {e}")
+            return {"success": False, "error": str(e)}
+
+    def get_fee_stats(self) -> Dict[str, Any]:
+        """Get fee collection statistics."""
+        return {
+            "fee_percent": self.SUCCESS_FEE_PERCENT,
+            "total_collected": self.total_fees_collected,
+            "transaction_count": len(self.fee_transactions),
+            "recent_fees": self.fee_transactions[-10:],
+        }
+
+
+# Singleton instances
 _bags_client: Optional[BagsAPIClient] = None
+_fee_manager: Optional[SuccessFeeManager] = None
 
 
 def get_bags_client() -> BagsAPIClient:
@@ -585,6 +744,16 @@ def get_bags_client() -> BagsAPIClient:
         _bags_client = BagsAPIClient()
 
     return _bags_client
+
+
+def get_success_fee_manager() -> SuccessFeeManager:
+    """Get Success Fee Manager singleton"""
+    global _fee_manager
+
+    if _fee_manager is None:
+        _fee_manager = SuccessFeeManager(bags_client=get_bags_client())
+
+    return _fee_manager
 
 
 # Testing
