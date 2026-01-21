@@ -80,6 +80,7 @@ from core.tokenized_equities_universe import (
 )
 
 # Import enhanced market data for trending tokens and conviction picks
+from core.compression_directive import COMPRESSION_INTELLIGENCE_DIRECTIVE
 from core.enhanced_market_data import (
     fetch_trending_solana_tokens,
     fetch_high_liquidity_tokens,
@@ -2925,7 +2926,9 @@ IMPORTANT: Use the learnings above to calibrate your TP/SL recommendations.
             # TOP 10 PICKS PROMPT (UPGRADED 2026-01-21)
             # RESTORE HISTORY: Original prompt had no data-driven entry criteria
             # Now includes backtested patterns from 56 calls analysis
-            prompt = f"""Analyze these assets and provide your TOP 10 conviction picks.
+            prompt = f"""{COMPRESSION_INTELLIGENCE_DIRECTIVE}
+
+Analyze these assets and provide your TOP 10 conviction picks.
 
 === DATA-DRIVEN ENTRY CRITERIA (BACKTESTED ON 56 CALLS) ===
 These rules are based on actual performance data:
@@ -3000,7 +3003,14 @@ DO NOT use words like "momentum", "surge", or "pump" in reasoning - focus on rat
                 json={
                     "model": "grok-3",
                     "messages": [
-                        {"role": "system", "content": "You are an expert trading analyst providing conviction-based picks across crypto and tokenized equities."},
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are an expert trading analyst providing conviction-based picks across crypto "
+                                "and tokenized equities.\n\n"
+                                f"{COMPRESSION_INTELLIGENCE_DIRECTIVE}"
+                            ),
+                        },
                         {"role": "user", "content": prompt}
                     ],
                     "max_tokens": 1500,
