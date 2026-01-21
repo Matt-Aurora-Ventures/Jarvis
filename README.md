@@ -38,6 +38,7 @@
 - [Cross-Platform Support](#-cross-platform-support)
 - [Dashboard & Data Engine](#-dashboard--data-engine)
 - [Telegram Bot](#-telegram-bot)
+- [Standalone Wallet](#-standalone-wallet)
 - [Current Integrations](#-current-integrations)
 - [Future Platforms](#-future-platforms)
 - [API Reference](#-api-reference)
@@ -1719,6 +1720,24 @@ Returns top 10 trending Solana tokens with:
 
 ---
 
+## 👛 Standalone Wallet
+
+The wallet experience is designed to be **standalone** so people can safely try Jarvis without adopting the full OS.
+
+**What this includes today:**
+- User wallet creation/import/export
+- Funding/withdrawals and balances
+- Safe trading flows with confirmations
+- Demo mode with explicit risk warnings
+
+**Where it lives:**
+- Telegram public bot (`tg_bot/`)
+- Wallet services (`core/public_user_manager.py`, `core/wallet_service.py`)
+
+See **docs/BUILD_STREAMLINE.md** for how this stays decoupled while the OS evolves.
+
+---
+
 ## 🔌 Current Integrations
 
 JARVIS integrates with a comprehensive ecosystem of services:
@@ -2827,6 +2846,20 @@ secrets/           # API keys
 ## 📄 License
 
 MIT License - Use freely, modify freely. See [LICENSE](LICENSE) for details.
+
+---
+
+## Third-Party Credits
+
+This project integrates components inspired by and/or derived from:
+
+- **AI-Researcher** by HKUDS (Data Intelligence Lab @ HKU)
+  - Repository: https://github.com/HKUDS/AI-Researcher
+  - Paper: https://arxiv.org/abs/2505.18705
+  - License: MIT
+
+We are grateful to the authors and contributors for open-sourcing their work.
+Our integration adds a Jarvis-specific orchestration layer, artifact registry, and safety/compliance gates on top of the upstream research automation pipeline.
 
 ---
 
