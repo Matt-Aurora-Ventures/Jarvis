@@ -882,6 +882,150 @@ def print_csv_backtest_report(backtest: Dict, improvements: Dict, df: pd.DataFra
 
 
 # ============================================================================
+# THRESHOLD OPTIMIZER (2026-01-21)
+# ============================================================================
+
+def optimize_thresholds_csv(df: pd.DataFrame) -> Dict:
+    """
+    Test multiple threshold combinations to find the optimal strategy.
+    Returns the best configuration with metrics.
+    """
+    bullish_df = df[df['verdict'] == 'BULLISH'].copy()
+
+    if len(bullish_df) == 0:
+        return {'error': 'No bullish calls to analyze'}
+
+    # Threshold ranges to test
+    ratio_thresholds = [1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.5]
+    pump_thresholds = [30, 35, 40, 45, 50, 60, 70, 100]
+
+    results = []
+
+    for ratio_min in ratio_thresholds:
+        for pump_max in pump_thresholds:
+            # Test this combination
+            approved = []
+            for idx, row in bullish_df.iterrows():
+                score = row['initial_score'] if 'initial_score' in row else 0
+                ratio = row['buy_sell_ratio'] if pd.notna(row['buy_sell_ratio']) else 0
+                change_24h = row['change_24h'] if pd.notna(row['change_24h']) else 0
+                has_momentum = row['has_momentum_mention'] if 'has_momentum_mention' in row else False
+                has_pump = row['has_pump_mention'] if 'has_pump_mention' in row else False
+                hit_tp = row['hit_tp_25'] if 'hit_tp_25' in row else False
+                max_gain = row['max_gain_pct'] if 'max_gain_pct' in row else 0
+
+                # Apply score penalties (same as data_driven_2026)
+                adjusted_score = score
+                if adjusted_score >= 0.70:
+                    overconfidence_penalty = (adjusted_score - 0.65) * 0.5
+                    adjusted_score -= overconfidence_penalty
+                if has_momentum:
+                    adjusted_score -= 0.10
+                if has_pump:
+                    adjusted_score -= 0.08
+
+                # Check against thresholds
+                if adjusted_score > 0.55 and ratio >= ratio_min and change_24h <= pump_max:
+                    approved.append({
+                        'symbol': row['symbol'],
+                        'hit_tp': hit_tp,
+                        'max_gain': max_gain
+                    })
+
+            # Calculate metrics
+            n_approved = len(approved)
+            if n_approved == 0:
+                continue
+
+            n_hit_tp = sum(1 for a in approved if a['hit_tp'])
+            tp_rate = (n_hit_tp / n_approved) * 100
+            avg_max_gain = sum(a['max_gain'] for a in approved if a['max_gain']) / n_approved if n_approved > 0 else 0
+
+            # Calculate a combined score (balance TP rate, volume, and opportunity)
+            # We want: high TP rate, reasonable volume, good average gains
+            volume_score = min(n_approved / 5, 1.0)  # Cap at 5 trades = 1.0
+            opportunity_score = min(avg_max_gain / 50, 1.0)  # Cap at 50% avg gain = 1.0
+            combined_score = (tp_rate * 0.5) + (volume_score * 20) + (opportunity_score * 30)
+
+            results.append({
+                'ratio_min': ratio_min,
+                'pump_max': pump_max,
+                'n_approved': n_approved,
+                'n_hit_tp': n_hit_tp,
+                'tp_rate': tp_rate,
+                'avg_max_gain': avg_max_gain,
+                'combined_score': combined_score,
+                'approved_symbols': [a['symbol'] for a in approved]
+            })
+
+    # Sort by combined score
+    results.sort(key=lambda x: x['combined_score'], reverse=True)
+
+    return {
+        'best': results[0] if results else None,
+        'top_10': results[:10],
+        'all_results': results
+    }
+
+
+def print_optimization_report(opt_results: Dict, df: pd.DataFrame):
+    """Print the optimization results."""
+    print("=" * 80)
+    print("THRESHOLD OPTIMIZATION RESULTS")
+    print("=" * 80)
+
+    if 'error' in opt_results:
+        print(f"Error: {opt_results['error']}")
+        return
+
+    best = opt_results['best']
+    if not best:
+        print("No valid configurations found.")
+        return
+
+    print(f"\nBASELINE (all bullish calls):")
+    bullish_df = df[df['verdict'] == 'BULLISH']
+    baseline_tp = (bullish_df['hit_tp_25'].sum() / len(bullish_df) * 100) if len(bullish_df) > 0 else 0
+    print(f"  Calls: {len(bullish_df)}, TP Rate: {baseline_tp:.1f}%")
+
+    print(f"\nBEST CONFIGURATION:")
+    print(f"  Ratio >= {best['ratio_min']}x")
+    print(f"  Pump <= {best['pump_max']}%")
+    print(f"  Calls: {best['n_approved']} (filtered {len(bullish_df) - best['n_approved']})")
+    print(f"  Hit TP: {best['n_hit_tp']}")
+    print(f"  TP Rate: {best['tp_rate']:.1f}% (vs {baseline_tp:.1f}% baseline)")
+    print(f"  Avg Max Gain: {best['avg_max_gain']:.1f}%")
+    print(f"  Combined Score: {best['combined_score']:.1f}")
+    print(f"  Approved: {', '.join(best['approved_symbols'])}")
+
+    print(f"\nTOP 10 CONFIGURATIONS:")
+    print("-" * 80)
+    print(f"{'Ratio':>8} {'Pump':>8} {'Calls':>6} {'TP':>6} {'TP%':>8} {'AvgGain':>10} {'Score':>8}")
+    print("-" * 80)
+
+    for r in opt_results['top_10']:
+        print(f"{r['ratio_min']:>7}x {r['pump_max']:>7}% {r['n_approved']:>6} "
+              f"{r['n_hit_tp']:>6} {r['tp_rate']:>7.1f}% {r['avg_max_gain']:>9.1f}% "
+              f"{r['combined_score']:>7.1f}")
+
+    print("-" * 80)
+
+    # Recommendation
+    print(f"\nRECOMMENDATION:")
+    if best['tp_rate'] >= 50 and best['n_approved'] >= 2:
+        print(f"  [OK] Use ratio >= {best['ratio_min']}x, pump <= {best['pump_max']}%")
+        print(f"       Expected: {best['tp_rate']:.0f}% win rate on ~{best['n_approved']} trades")
+    elif best['tp_rate'] >= 40 and best['n_approved'] >= 3:
+        print(f"  [OK] Use ratio >= {best['ratio_min']}x, pump <= {best['pump_max']}%")
+        print(f"       Expected: {best['tp_rate']:.0f}% win rate on ~{best['n_approved']} trades")
+    else:
+        print(f"  [!!] Current data insufficient for confident recommendation")
+        print(f"       Best found: {best['tp_rate']:.0f}% on {best['n_approved']} trades")
+
+    print("\n")
+
+
+# ============================================================================
 # BACKTESTING ENGINE
 # ============================================================================
 
@@ -1030,7 +1174,35 @@ def main():
     parser = argparse.ArgumentParser(description='Backtest sentiment engine strategies')
     parser.add_argument('--csv', action='store_true', help='Run CSV-based comprehensive backtest')
     parser.add_argument('--compare', action='store_true', help='Run old vs new rules comparison')
+    parser.add_argument('--optimize', action='store_true', help='Run threshold optimization to find best parameters')
     args = parser.parse_args()
+
+    if args.optimize:
+        # Run threshold optimization
+        print("\nLoading CSV data for optimization...")
+        if not CSV_FILE.exists():
+            print(f"Error: CSV file not found at {CSV_FILE}")
+            print("Run scripts/unified_mega_analysis.py first to generate the data.")
+            return
+
+        df = pd.read_csv(CSV_FILE)
+        print(f"Loaded {len(df)} calls")
+
+        print("\nRunning threshold optimization...")
+        opt_results = optimize_thresholds_csv(df)
+
+        # Print optimization report
+        print_optimization_report(opt_results, df)
+
+        # Export results
+        results_file = DATA_DIR / "optimization_results.json"
+        with open(results_file, 'w') as f:
+            json.dump({
+                'best': opt_results['best'],
+                'top_10': opt_results['top_10']
+            }, f, indent=2, default=str)
+        print(f"Optimization results saved to: {results_file}")
+        return
 
     if args.csv or args.compare:
         # CSV-based backtest
@@ -1080,9 +1252,18 @@ def main():
 
         # Define strategies to test
         strategies = [
+            # Baseline strategies
             ("Current (baseline)", strategy_current),
             ("Old Rules (pre-2026-01-21)", strategy_old_rules),
-            ("Data-Driven 2026", strategy_data_driven_2026),
+            # Data-driven variations
+            ("Data-Driven 2026 (strict)", strategy_data_driven_2026),
+            ("Data-Driven Balanced", strategy_data_driven_balanced),
+            ("Data-Driven Relaxed", strategy_data_driven_relaxed),
+            # Single-factor strategies
+            ("Pump Filter Only (<40%)", strategy_pump_filter_only),
+            ("Ratio Filter Only (>=2x)", strategy_ratio_filter_only),
+            ("Score Penalty Only", strategy_score_penalty_only),
+            # Other strategies
             ("No Pump Chasing (>50%)", strategy_no_pump_chasing),
             ("Early Entry Only (<20%)", strategy_early_entry_only),
             ("High Ratio + Early", strategy_high_ratio_early),
