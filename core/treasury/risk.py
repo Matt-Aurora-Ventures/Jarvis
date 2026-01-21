@@ -62,39 +62,38 @@ class CircuitState(Enum):
 
 @dataclass
 class RiskLimits:
-    """Risk limit configuration."""
+    """Risk limit configuration - ALL LIMITS DISABLED per user request."""
 
-    # Position limits (as percentage of active wallet)
-    # Updated from video learnings: Never use 100% balance, max 25% per trade
-    max_position_size_pct: float = 0.25  # 25% per position (updated from 5%)
-    max_total_exposure_pct: float = 0.50  # 50% total exposure
-    max_single_token_pct: float = 0.25   # 25% in any single token (updated from 20%)
+    # Position limits - UNRESTRICTED
+    max_position_size_pct: float = 1.0   # 100% per position (no limit)
+    max_total_exposure_pct: float = 1.0  # 100% total exposure (no limit)
+    max_single_token_pct: float = 1.0    # 100% in any single token (no limit)
 
-    # Absolute position limits (prevents single large trade)
-    max_notional_usd: float = 10_000_000  # $10M cap per position
-    min_position_usd: float = 100         # Minimum $100 per trade
+    # Absolute position limits - UNRESTRICTED
+    max_notional_usd: float = 100_000_000  # $100M cap (effectively unlimited)
+    min_position_usd: float = 0.01          # Minimum $0.01 per trade
 
-    # Loss limits (as percentage of starting balance)
-    max_daily_loss_pct: float = 0.05     # 5% daily
-    max_weekly_loss_pct: float = 0.10    # 10% weekly
-    max_monthly_loss_pct: float = 0.20   # 20% monthly
+    # Loss limits - UNRESTRICTED
+    max_daily_loss_pct: float = 1.0      # 100% daily (no limit)
+    max_weekly_loss_pct: float = 1.0     # 100% weekly (no limit)
+    max_monthly_loss_pct: float = 1.0    # 100% monthly (no limit)
 
-    # Trade limits
-    max_trades_per_day: int = 50
-    max_trades_per_hour: int = 10
-    min_trade_interval_seconds: int = 30
+    # Trade limits - UNRESTRICTED
+    max_trades_per_day: int = 10000
+    max_trades_per_hour: int = 1000
+    min_trade_interval_seconds: int = 0
 
-    # Slippage and price impact
-    max_slippage_bps: int = 200  # 2%
-    max_price_impact_pct: float = 3.0
+    # Slippage and price impact - PERMISSIVE
+    max_slippage_bps: int = 5000  # 50%
+    max_price_impact_pct: float = 100.0
 
-    # Circuit breaker settings
-    max_consecutive_losses: int = 3
+    # Circuit breaker settings - DISABLED
+    max_consecutive_losses: int = 10000
 
-    # Cooldown settings (in minutes)
-    default_cooldown_minutes: int = 30
-    loss_cooldown_minutes: int = 60
-    consecutive_loss_cooldown_minutes: int = 120
+    # Cooldown settings - MINIMAL
+    default_cooldown_minutes: int = 0
+    loss_cooldown_minutes: int = 0
+    consecutive_loss_cooldown_minutes: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
