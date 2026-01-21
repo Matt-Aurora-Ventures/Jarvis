@@ -2257,24 +2257,106 @@ _Data-driven scoring (Jan 2026 tune)_
     @staticmethod
     def error_message(
         error: str,
+        error_code: str = None,
+        retry_action: str = "demo:main",
+        context_hint: str = None,
     ) -> Tuple[str, InlineKeyboardMarkup]:
-        """Show error message."""
+        """
+        Show user-friendly error message with recovery options.
+
+        Args:
+            error: Error message to display
+            error_code: Optional error code for categorization
+            retry_action: Callback to retry (default: main menu)
+            context_hint: Additional context for the error
+        """
+        theme = JarvisTheme
+
+        # Categorize error and provide helpful suggestions
+        error_lower = error.lower()
+
+        if "network" in error_lower or "timeout" in error_lower or "connection" in error_lower:
+            category = "🌐 Network Error"
+            suggestion = "Check your internet connection and try again."
+        elif "wallet" in error_lower or "balance" in error_lower:
+            category = "💳 Wallet Error"
+            suggestion = "Make sure your wallet is connected and funded."
+        elif "api" in error_lower or "rate limit" in error_lower:
+            category = "⚡ API Error"
+            suggestion = "Service temporarily unavailable. Wait a moment."
+        elif "permission" in error_lower or "unauthorized" in error_lower:
+            category = "🔐 Access Error"
+            suggestion = "Check your permissions and try again."
+        elif "not found" in error_lower:
+            category = "🔍 Not Found"
+            suggestion = "The requested item doesn't exist."
+        elif "invalid" in error_lower or "failed" in error_lower:
+            category = "❌ Operation Failed"
+            suggestion = "Something went wrong. Please try again."
+        else:
+            category = f"{theme.ERROR} Error"
+            suggestion = "An unexpected error occurred."
+
+        lines = [
+            f"{category}",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"_{error[:150]}{'...' if len(error) > 150 else ''}_",
+            "",
+        ]
+
+        if context_hint:
+            lines.append(f"*Context:* {context_hint}")
+            lines.append("")
+
+        lines.extend([
+            f"💡 *Suggestion:* {suggestion}",
+            "",
+            "━━━━━━━━━━━━━━━━━━━━━",
+        ])
+
+        if error_code:
+            lines.append(f"_Code: {error_code}_")
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"{theme.REFRESH} Try Again", callback_data=retry_action),
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def operation_failed(
+        operation: str,
+        reason: str = None,
+        retry_action: str = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """Show operation-specific failure message."""
         theme = JarvisTheme
 
         text = f"""
-{theme.ERROR} *ERROR*
+❌ *{operation.upper()} FAILED*
 ━━━━━━━━━━━━━━━━━━━━━
 
-{error}
+{reason or 'Operation could not be completed.'}
+
+Please try again or return to main menu.
 
 ━━━━━━━━━━━━━━━━━━━━━
 """
 
-        keyboard = [
-            [
-                InlineKeyboardButton(f"{theme.REFRESH} Try Again", callback_data="demo:main"),
-            ],
-        ]
+        keyboard = []
+        if retry_action:
+            keyboard.append([
+                InlineKeyboardButton(f"{theme.REFRESH} Retry {operation}", callback_data=retry_action),
+            ])
+        keyboard.append([
+            InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+        ])
 
         return text, InlineKeyboardMarkup(keyboard)
 
@@ -3440,70 +3522,92 @@ _Custom values & price alerts soon_
 
         elif action.startswith("dca_amount:"):
             # Amount selected for DCA: demo:dca_amount:{address}:{amount}
-            parts = data.split(":")
-            if len(parts) >= 4:
-                token_address = parts[2]
-                amount = float(parts[3])
+            try:
+                parts = data.split(":")
+                if len(parts) >= 4:
+                    token_address = parts[2]
+                    amount = float(parts[3])
 
-                # Find token symbol
-                watchlist = context.user_data.get("watchlist", [])
-                token_symbol = "TOKEN"
-                for token in watchlist:
-                    if token.get("address") == token_address:
-                        token_symbol = token.get("symbol", "TOKEN")
-                        break
+                    # Find token symbol
+                    watchlist = context.user_data.get("watchlist", [])
+                    token_symbol = "TOKEN"
+                    for token in watchlist:
+                        if token.get("address") == token_address:
+                            token_symbol = token.get("symbol", "TOKEN")
+                            break
 
-                text, keyboard = DemoMenuBuilder.dca_frequency_select(
-                    token_symbol=token_symbol,
-                    token_address=token_address,
-                    amount=amount,
+                    text, keyboard = DemoMenuBuilder.dca_frequency_select(
+                        token_symbol=token_symbol,
+                        token_address=token_address,
+                        amount=amount,
+                    )
+                else:
+                    text, keyboard = DemoMenuBuilder.error_message(
+                        "Invalid DCA configuration",
+                        retry_action="demo:dca_new",
+                        context_hint="Amount selection failed"
+                    )
+            except (ValueError, IndexError) as e:
+                logger.warning(f"DCA amount parse error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    f"Invalid amount: {str(e)[:50]}",
+                    retry_action="demo:dca_new"
                 )
-            else:
-                text, keyboard = DemoMenuBuilder.error_message("Invalid DCA amount")
 
         elif action.startswith("dca_create:"):
             # Create DCA plan: demo:dca_create:{address}:{amount}:{frequency}
-            parts = data.split(":")
-            if len(parts) >= 5:
-                token_address = parts[2]
-                amount = float(parts[3])
-                frequency = parts[4]
+            try:
+                parts = data.split(":")
+                if len(parts) >= 5:
+                    token_address = parts[2]
+                    amount = float(parts[3])
+                    frequency = parts[4]
 
-                # Find token symbol
-                watchlist = context.user_data.get("watchlist", [])
-                token_symbol = "TOKEN"
-                for token in watchlist:
-                    if token.get("address") == token_address:
-                        token_symbol = token.get("symbol", "TOKEN")
-                        break
+                    # Find token symbol
+                    watchlist = context.user_data.get("watchlist", [])
+                    token_symbol = "TOKEN"
+                    for token in watchlist:
+                        if token.get("address") == token_address:
+                            token_symbol = token.get("symbol", "TOKEN")
+                            break
 
-                # Create DCA plan
-                new_plan = {
-                    "id": f"dca_{token_address[:8]}_{datetime.now().strftime('%H%M%S')}",
-                    "symbol": token_symbol,
-                    "address": token_address,
-                    "amount": amount,
-                    "frequency": frequency,
-                    "active": True,
-                    "executions": 0,
-                    "total_invested": 0.0,
-                    "next_execution": "In 1 " + ("hour" if frequency == "hourly" else "day" if frequency == "daily" else "week"),
-                    "created_at": datetime.now().isoformat(),
-                }
+                    # Create DCA plan
+                    new_plan = {
+                        "id": f"dca_{token_address[:8]}_{datetime.now().strftime('%H%M%S')}",
+                        "symbol": token_symbol,
+                        "address": token_address,
+                        "amount": amount,
+                        "frequency": frequency,
+                        "active": True,
+                        "executions": 0,
+                        "total_invested": 0.0,
+                        "next_execution": "In 1 " + ("hour" if frequency == "hourly" else "day" if frequency == "daily" else "week"),
+                        "created_at": datetime.now().isoformat(),
+                    }
 
-                # Store plan
-                dca_plans = context.user_data.get("dca_plans", [])
-                dca_plans.append(new_plan)
-                context.user_data["dca_plans"] = dca_plans
+                    # Store plan
+                    dca_plans = context.user_data.get("dca_plans", [])
+                    dca_plans.append(new_plan)
+                    context.user_data["dca_plans"] = dca_plans
 
-                text, keyboard = DemoMenuBuilder.dca_plan_created(
-                    token_symbol=token_symbol,
-                    amount=amount,
-                    frequency=frequency,
-                    first_execution="Starting soon",
+                    text, keyboard = DemoMenuBuilder.dca_plan_created(
+                        token_symbol=token_symbol,
+                        amount=amount,
+                        frequency=frequency,
+                        first_execution="Starting soon",
+                    )
+                else:
+                    text, keyboard = DemoMenuBuilder.error_message(
+                        "Invalid DCA configuration",
+                        retry_action="demo:dca_new"
+                    )
+            except (ValueError, IndexError) as e:
+                logger.warning(f"DCA create error: {e}")
+                text, keyboard = DemoMenuBuilder.operation_failed(
+                    "DCA Plan Creation",
+                    f"Could not create plan: {str(e)[:50]}",
+                    retry_action="demo:dca_new"
                 )
-            else:
-                text, keyboard = DemoMenuBuilder.error_message("Invalid DCA configuration")
 
         elif action.startswith("dca_pause:"):
             # Pause/Resume DCA plan
@@ -3633,47 +3737,56 @@ first, then create DCA plans from there.
 
         elif action.startswith("tsl_create:"):
             # Create trailing stop with: pos_id:trail_percent
-            parts = action.split(":")
-            pos_id = parts[1]
-            trail_percent = float(parts[2])
+            try:
+                parts = action.split(":")
+                pos_id = parts[1]
+                trail_percent = float(parts[2])
 
-            positions = context.user_data.get("positions", [])
-            position = next((p for p in positions if p.get("id") == pos_id), None)
+                positions = context.user_data.get("positions", [])
+                position = next((p for p in positions if p.get("id") == pos_id), None)
 
-            if position:
-                current_price = position.get("current_price", 0)
-                initial_stop = current_price * (1 - trail_percent / 100)
+                if position:
+                    current_price = position.get("current_price", 0)
+                    initial_stop = current_price * (1 - trail_percent / 100)
 
-                # Create trailing stop record
-                new_stop = {
-                    "id": f"tsl_{pos_id}_{datetime.now().strftime('%H%M%S')}",
-                    "position_id": pos_id,
-                    "symbol": position.get("symbol", "???"),
-                    "trail_percent": trail_percent,
-                    "current_stop_price": initial_stop,
-                    "highest_price": current_price,
-                    "protected_value": position.get("value_usd", 0),
-                    "protected_pnl": position.get("pnl_pct", 0),
-                    "active": True,
-                    "created_at": datetime.now().isoformat(),
-                }
+                    # Create trailing stop record
+                    new_stop = {
+                        "id": f"tsl_{pos_id}_{datetime.now().strftime('%H%M%S')}",
+                        "position_id": pos_id,
+                        "symbol": position.get("symbol", "???"),
+                        "trail_percent": trail_percent,
+                        "current_stop_price": initial_stop,
+                        "highest_price": current_price,
+                        "protected_value": position.get("value_usd", 0),
+                        "protected_pnl": position.get("pnl_pct", 0),
+                        "active": True,
+                        "created_at": datetime.now().isoformat(),
+                    }
 
-                # Store in user data
-                if "trailing_stops" not in context.user_data:
-                    context.user_data["trailing_stops"] = []
-                context.user_data["trailing_stops"].append(new_stop)
+                    # Store in user data
+                    if "trailing_stops" not in context.user_data:
+                        context.user_data["trailing_stops"] = []
+                    context.user_data["trailing_stops"].append(new_stop)
 
-                text, keyboard = DemoMenuBuilder.trailing_stop_created(
-                    symbol=position.get("symbol", "???"),
-                    trail_percent=trail_percent,
-                    initial_stop=initial_stop,
-                    current_price=current_price,
+                    text, keyboard = DemoMenuBuilder.trailing_stop_created(
+                        symbol=position.get("symbol", "???"),
+                        trail_percent=trail_percent,
+                        initial_stop=initial_stop,
+                        current_price=current_price,
+                    )
+                else:
+                    text, keyboard = DemoMenuBuilder.error_message(
+                        "Position not found",
+                        retry_action="demo:trailing_stops",
+                        context_hint="Position may have been closed"
+                    )
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Trailing stop create error: {e}")
+                text, keyboard = DemoMenuBuilder.operation_failed(
+                    "Trailing Stop",
+                    f"Invalid configuration: {str(e)[:50]}",
+                    retry_action="demo:trailing_stops"
                 )
-            else:
-                text = "❌ Position not found"
-                keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:trailing_stops")]
-                ])
 
         elif action.startswith("tsl_edit:"):
             # Edit a trailing stop
