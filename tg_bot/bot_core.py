@@ -151,7 +151,7 @@ class CallbackUpdate:
         self.effective_chat = query.message.chat if query.message else None
 
 
-async def _send_with_retry(query, text: str, parse_mode=None, reply_markup=None, max_retries: int = EXPAND_RETRY_ATTEMPTS):
+async def _send_with_retry(query, text: str, parse_mode=None, reply_markup=None, max_retries: int = EXPAND_RETRY_ATTEMPTS, disable_web_page_preview: bool = False):
     """Send a message with exponential backoff retry logic for rate limiting."""
     from telegram.error import RetryAfter, TimedOut, NetworkError, BadRequest
     import random
@@ -164,7 +164,8 @@ async def _send_with_retry(query, text: str, parse_mode=None, reply_markup=None,
             await query.message.reply_text(
                 text,
                 parse_mode=parse_mode,
-                reply_markup=reply_markup
+                reply_markup=reply_markup,
+                disable_web_page_preview=disable_web_page_preview
             )
             return True
         except RetryAfter as e:
@@ -178,7 +179,8 @@ async def _send_with_retry(query, text: str, parse_mode=None, reply_markup=None,
                 try:
                     await query.message.reply_text(
                         text,
-                        reply_markup=reply_markup
+                        reply_markup=reply_markup,
+                        disable_web_page_preview=disable_web_page_preview
                     )
                     return True
                 except Exception as inner_exc:
