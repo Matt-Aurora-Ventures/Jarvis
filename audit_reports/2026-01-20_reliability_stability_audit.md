@@ -13,17 +13,17 @@ Legend: [DONE] implemented, [PARTIAL] present but not system-wide, [MISSING] not
 5) Graceful degradation for optional APIs
    - [PARTIAL] `core/resilience/degradation.py` (needs broader integration)
 6) Distributed lock mechanism for multi-instance scenarios
-   - [PARTIAL] `core/utils/instance_lock.py` (local lock used by Telegram)
+   - [DONE] `core/locks/distributed_lock.py` (file + Redis backends, TTL, heartbeat, auto-release)
 7) Automatic fallback chains (e.g., Grok → Claude → default)
    - [PARTIAL] `core/providers.py` (fallback logger + provider chain)
 8) Rate limit tracking and preemptive backoff
-   - [PARTIAL] `core/utils/rate_limiter.py`, `core/rate_limiter.py`, `core/providers.py` (per-client, not centralized)
+   - [DONE] `core/rate_limit/centralized_tracker.py` (central registry, preemptive backoff, per-service configs)
 9) Memory leak detection (object counts, cache sizes)
    - [DONE] `core/monitoring/memory_tracker.py` (RSS tracking, object counts, cache registry, growth alerts)
 10) Audit log for all trading decisions (immutable record)
    - [PARTIAL] `bots/treasury/trading.py`, `core/security/audit_logger.py` (treasury covered; other bots unclear)
 11) Dead letter queue for failed API calls
-   - [PARTIAL] `core/errors/recovery.py`, `core/event_bus/event_bus.py` (infrastructure present)
+   - [DONE] `core/errors/dead_letter_queue.py` (persistent DLQ, auto-retry, failure analytics)
 12) Request deduplication (prevent duplicate calls within 5 minutes)
    - [PARTIAL] `core/cache/api_cache.py`, `core/performance/request_dedup.py` (available, not enforced globally)
 13) Version pinning for dependencies
@@ -39,7 +39,7 @@ Legend: [DONE] implemented, [PARTIAL] present but not system-wide, [MISSING] not
 18) Structured error codes (REST API best practice)
    - [DONE] `core/errors/error_codes.py` (full catalog: SYS, VAL, AUTH, TRADE, CHAIN, WALLET codes)
 19) Error rate tracking and alerting
-   - [PARTIAL] `core/monitoring/alerter.py`, `core/monitoring/health.py` (no explicit error-rate metrics)
+   - [DONE] `core/monitoring/error_rate_tracker.py` (sliding windows, thresholds, alert callbacks)
 20) Chaos testing (randomly fail components)
    - [PARTIAL] `tests/chaos/` exists (not wired to CI)
 21) Configuration hot reload
@@ -67,3 +67,11 @@ Items previously [MISSING] now [DONE]:
 
 Also documented:
 - Anchor program ID status → `audit_reports/2026-01-20_anchor_program_id_status.md`
+
+## Fixes Applied (2026-01-20 Session 3)
+
+Items previously [PARTIAL] now [DONE]:
+- #6: Distributed locks → `core/locks/distributed_lock.py` (file + Redis backends)
+- #8: Rate limit tracking → `core/rate_limit/centralized_tracker.py` (central registry)
+- #11: Dead letter queue → `core/errors/dead_letter_queue.py` (persistent DLQ)
+- #19: Error rate tracking → `core/monitoring/error_rate_tracker.py` (sliding windows)
