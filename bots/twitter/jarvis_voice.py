@@ -60,15 +60,25 @@ class JarvisVoice:
         # Try the configured path first
         resolved = shutil.which(self.cli_path)
         if resolved:
+            logger.info(f"Found Claude CLI via PATH: {resolved}")
             return resolved
-        # Try common Windows locations
+        # Try common Windows and Linux locations
         common_paths = [
+            # Windows
             r"C:\Users\lucid\AppData\Roaming\npm\claude.cmd",
             r"C:\Users\lucid\AppData\Roaming\npm\claude",
+            # Linux VPS - common locations
+            "/usr/local/bin/claude",
+            "/home/ubuntu/.local/bin/claude",
+            "/home/jarvis/.local/bin/claude",
+            "/root/.npm-global/bin/claude",
+            "/root/.local/bin/claude",
         ]
         for path in common_paths:
             if os.path.exists(path):
+                logger.info(f"Found Claude CLI at: {path}")
                 return path
+        logger.warning("Claude CLI not found in any common location")
         return None
 
     def _run_cli(self, prompt: str) -> Optional[str]:
