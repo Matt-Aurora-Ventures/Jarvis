@@ -12,6 +12,8 @@ import base64
 from pathlib import Path
 from dotenv import load_dotenv
 
+from core.logging_utils import configure_component_logger
+
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -20,12 +22,12 @@ from bots.treasury.jupiter import JupiterClient
 from bots.treasury.trading import TradingEngine, RiskLevel, _SimpleWallet
 from bots.treasury.telegram_ui import TradingUI
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+configure_component_logger("bots.treasury", "treasury_bot")
 
 
 class TreasuryBot:
