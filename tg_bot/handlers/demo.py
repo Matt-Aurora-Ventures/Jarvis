@@ -5595,6 +5595,302 @@ first, then create DCA plans from there.
 
         # ========== END DCA HANDLERS ==========
 
+        # ========== BAGS.FM HANDLERS ==========
+
+        elif action == "bags_fm":
+            # Show Bags.fm Top 15 tokens by volume with sentiment
+            try:
+                # Fetch tokens with sentiment
+                bags_tokens = await get_bags_top_tokens_with_sentiment(limit=15)
+
+                # Get user's TP/SL settings
+                default_tp = context.user_data.get("bags_tp_percent", 15.0)
+                default_sl = context.user_data.get("bags_sl_percent", 15.0)
+
+                text, keyboard = DemoMenuBuilder.bags_fm_top_tokens(
+                    tokens=bags_tokens,
+                    market_regime=market_regime,
+                    default_tp_percent=default_tp,
+                    default_sl_percent=default_sl,
+                )
+            except Exception as e:
+                logger.error(f"Bags.fm error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:bags_fm",
+                    context_hint="bags_fm",
+                )
+
+        elif action.startswith("bags_info:"):
+            # Show detailed token info
+            address = action.split(":")[1]
+
+            # Find token from cached data or fetch
+            bags_tokens = await get_bags_top_tokens_with_sentiment(limit=15)
+            token = next((t for t in bags_tokens if t.get("address") == address), None)
+
+            if token:
+                default_tp = context.user_data.get("bags_tp_percent", 15.0)
+                default_sl = context.user_data.get("bags_sl_percent", 15.0)
+
+                text, keyboard = DemoMenuBuilder.bags_token_detail(
+                    token=token,
+                    market_regime=market_regime,
+                    default_tp_percent=default_tp,
+                    default_sl_percent=default_sl,
+                )
+            else:
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error="Token not found",
+                    retry_action="demo:bags_fm",
+                )
+
+        elif action.startswith("bags_buy:"):
+            # Show buy confirmation for a Bags token
+            parts = action.split(":")
+            address = parts[1]
+            tp_percent = float(parts[2]) if len(parts) > 2 else 15.0
+            sl_percent = float(parts[3]) if len(parts) > 3 else 15.0
+
+            # Find token
+            bags_tokens = await get_bags_top_tokens_with_sentiment(limit=15)
+            token = next((t for t in bags_tokens if t.get("address") == address), None)
+
+            if token:
+                text, keyboard = DemoMenuBuilder.bags_token_detail(
+                    token=token,
+                    market_regime=market_regime,
+                    default_tp_percent=tp_percent,
+                    default_sl_percent=sl_percent,
+                )
+            else:
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error="Token not found",
+                    retry_action="demo:bags_fm",
+                )
+
+        elif action.startswith("bags_exec:"):
+            # Execute buy via Bags.fm API
+            parts = action.split(":")
+            address = parts[1]
+            amount_sol = float(parts[2]) if len(parts) > 2 else 0.1
+            tp_percent = float(parts[3]) if len(parts) > 3 else 15.0
+            sl_percent = float(parts[4]) if len(parts) > 4 else 15.0
+
+            # Find token
+            bags_tokens = await get_bags_top_tokens_with_sentiment(limit=15)
+            token = next((t for t in bags_tokens if t.get("address") == address), None)
+
+            if token:
+                symbol = token.get("symbol", "???")
+                price = token.get("price_usd", 0)
+
+                # Execute trade via Bags API (or simulate)
+                try:
+                    bags_client = get_bags_client()
+                    if bags_client:
+                        # Real trade execution
+                        wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+                        result = await bags_client.swap(
+                            from_token="So11111111111111111111111111111111111111112",  # SOL
+                            to_token=address,
+                            amount=amount_sol,
+                            wallet_address=wallet_address,
+                        )
+
+                        if result.success:
+                            tokens_received = result.to_amount if result.to_amount else (amount_sol * 225 / price) if price > 0 else 0
+
+                            # Add position to portfolio
+                            positions = context.user_data.get("positions", [])
+                            new_position = {
+                                "id": f"bags_{len(positions) + 1}",
+                                "symbol": symbol,
+                                "address": address,
+                                "amount": tokens_received,
+                                "amount_sol": amount_sol,
+                                "entry_price": price,
+                                "tp_percent": tp_percent,
+                                "sl_percent": sl_percent,
+                                "source": "bags_fm",
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            }
+                            positions.append(new_position)
+                            context.user_data["positions"] = positions
+
+                            text, keyboard = DemoMenuBuilder.bags_buy_result(
+                                success=True,
+                                symbol=symbol,
+                                amount_sol=amount_sol,
+                                tokens_received=tokens_received,
+                                price=price,
+                                tp_percent=tp_percent,
+                                sl_percent=sl_percent,
+                                tx_hash=result.tx_hash,
+                            )
+                        else:
+                            text, keyboard = DemoMenuBuilder.bags_buy_result(
+                                success=False,
+                                symbol=symbol,
+                                amount_sol=amount_sol,
+                                error=result.error or "Trade execution failed",
+                            )
+                    else:
+                        # Demo mode - simulate trade
+                        tokens_received = (amount_sol * 225 / price) if price > 0 else 1000000
+
+                        # Add demo position
+                        positions = context.user_data.get("positions", [])
+                        new_position = {
+                            "id": f"bags_{len(positions) + 1}",
+                            "symbol": symbol,
+                            "address": address,
+                            "amount": tokens_received,
+                            "amount_sol": amount_sol,
+                            "entry_price": price,
+                            "tp_percent": tp_percent,
+                            "sl_percent": sl_percent,
+                            "source": "bags_fm_demo",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                        positions.append(new_position)
+                        context.user_data["positions"] = positions
+
+                        text, keyboard = DemoMenuBuilder.bags_buy_result(
+                            success=True,
+                            symbol=symbol,
+                            amount_sol=amount_sol,
+                            tokens_received=tokens_received,
+                            price=price,
+                            tp_percent=tp_percent,
+                            sl_percent=sl_percent,
+                            tx_hash="demo_tx_" + str(hash(address + str(amount_sol)))[:8],
+                        )
+                except Exception as e:
+                    logger.error(f"Bags buy error: {e}")
+                    text, keyboard = DemoMenuBuilder.bags_buy_result(
+                        success=False,
+                        symbol=symbol,
+                        amount_sol=amount_sol,
+                        error=str(e)[:50],
+                    )
+            else:
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error="Token not found",
+                    retry_action="demo:bags_fm",
+                )
+
+        elif action == "bags_settings":
+            # Show TP/SL settings for Bags trading
+            theme = JarvisTheme
+            default_tp = context.user_data.get("bags_tp_percent", 15.0)
+            default_sl = context.user_data.get("bags_sl_percent", 15.0)
+
+            text = f"""
+{theme.SETTINGS} *BAGS.FM TRADING SETTINGS*
+━━━━━━━━━━━━━━━━━━━━━
+
+*Current Settings:*
+🎯 Take Profit: +{default_tp:.0f}%
+🛑 Stop Loss: -{default_sl:.0f}%
+
+*Select new TP/SL presets:*
+
+━━━━━━━━━━━━━━━━━━━━━
+_Applied to all Bags.fm trades_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("TP +10%", callback_data="demo:bags_set_tp:10"),
+                    InlineKeyboardButton("TP +15%", callback_data="demo:bags_set_tp:15"),
+                    InlineKeyboardButton("TP +25%", callback_data="demo:bags_set_tp:25"),
+                ],
+                [
+                    InlineKeyboardButton("SL -5%", callback_data="demo:bags_set_sl:5"),
+                    InlineKeyboardButton("SL -10%", callback_data="demo:bags_set_sl:10"),
+                    InlineKeyboardButton("SL -15%", callback_data="demo:bags_set_sl:15"),
+                ],
+                [
+                    InlineKeyboardButton("🎒 Back to Bags", callback_data="demo:bags_fm"),
+                ],
+            ])
+
+        elif action.startswith("bags_set_tp:"):
+            tp_value = float(action.split(":")[1])
+            context.user_data["bags_tp_percent"] = tp_value
+            await query.answer(f"Take Profit set to +{tp_value:.0f}%")
+            # Redirect back to settings
+            theme = JarvisTheme
+            default_tp = tp_value
+            default_sl = context.user_data.get("bags_sl_percent", 15.0)
+            text = f"""
+{theme.SETTINGS} *BAGS.FM TRADING SETTINGS*
+━━━━━━━━━━━━━━━━━━━━━
+
+✅ *Settings Updated!*
+
+*Current Settings:*
+🎯 Take Profit: +{default_tp:.0f}%
+🛑 Stop Loss: -{default_sl:.0f}%
+
+━━━━━━━━━━━━━━━━━━━━━
+_Applied to all Bags.fm trades_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("TP +10%", callback_data="demo:bags_set_tp:10"),
+                    InlineKeyboardButton("TP +15%", callback_data="demo:bags_set_tp:15"),
+                    InlineKeyboardButton("TP +25%", callback_data="demo:bags_set_tp:25"),
+                ],
+                [
+                    InlineKeyboardButton("SL -5%", callback_data="demo:bags_set_sl:5"),
+                    InlineKeyboardButton("SL -10%", callback_data="demo:bags_set_sl:10"),
+                    InlineKeyboardButton("SL -15%", callback_data="demo:bags_set_sl:15"),
+                ],
+                [
+                    InlineKeyboardButton("🎒 Back to Bags", callback_data="demo:bags_fm"),
+                ],
+            ])
+
+        elif action.startswith("bags_set_sl:"):
+            sl_value = float(action.split(":")[1])
+            context.user_data["bags_sl_percent"] = sl_value
+            await query.answer(f"Stop Loss set to -{sl_value:.0f}%")
+            # Redirect back to settings
+            theme = JarvisTheme
+            default_tp = context.user_data.get("bags_tp_percent", 15.0)
+            default_sl = sl_value
+            text = f"""
+{theme.SETTINGS} *BAGS.FM TRADING SETTINGS*
+━━━━━━━━━━━━━━━━━━━━━
+
+✅ *Settings Updated!*
+
+*Current Settings:*
+🎯 Take Profit: +{default_tp:.0f}%
+🛑 Stop Loss: -{default_sl:.0f}%
+
+━━━━━━━━━━━━━━━━━━━━━
+_Applied to all Bags.fm trades_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("TP +10%", callback_data="demo:bags_set_tp:10"),
+                    InlineKeyboardButton("TP +15%", callback_data="demo:bags_set_tp:15"),
+                    InlineKeyboardButton("TP +25%", callback_data="demo:bags_set_tp:25"),
+                ],
+                [
+                    InlineKeyboardButton("SL -5%", callback_data="demo:bags_set_sl:5"),
+                    InlineKeyboardButton("SL -10%", callback_data="demo:bags_set_sl:10"),
+                    InlineKeyboardButton("SL -15%", callback_data="demo:bags_set_sl:15"),
+                ],
+                [
+                    InlineKeyboardButton("🎒 Back to Bags", callback_data="demo:bags_fm"),
+                ],
+            ])
+
+        # ========== END BAGS.FM HANDLERS ==========
+
         # ========== TRAILING STOP HANDLERS ==========
 
         elif action == "trailing_stops":

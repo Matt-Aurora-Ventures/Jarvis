@@ -1752,5 +1752,206 @@ class TestDemoIntegration:
         assert summary["total_trades_analyzed"] > 0
 
 
+class TestBagsFmFeature:
+    """Test the Bags.fm Top 15 tokens feature."""
+
+    def test_bags_fm_top_tokens_empty(self):
+        """Test Bags.fm menu with empty token list."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.bags_fm_top_tokens(
+            tokens=[],
+            market_regime={"regime": "NEUTRAL", "risk_level": "NORMAL"},
+        )
+
+        assert "BAGS.FM TOP 15" in text
+        assert "Volume Leaders" in text
+        assert keyboard is not None
+
+    def test_bags_fm_top_tokens_with_data(self):
+        """Test Bags.fm menu with token data."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        tokens = [
+            {
+                "symbol": "PUMP",
+                "name": "PumpFun Token",
+                "address": "PUMP111111111111111111111111111111111111111",
+                "price_usd": 0.0125,
+                "volume_24h": 8500000,
+                "liquidity": 450000,
+                "market_cap": 12500000,
+                "holders": 15420,
+                "sentiment": "bullish",
+                "sentiment_score": 0.78,
+                "signal": "BUY",
+            },
+            {
+                "symbol": "BAGS",
+                "name": "Bags.fm",
+                "address": "BAGS111111111111111111111111111111111111111",
+                "price_usd": 0.0085,
+                "volume_24h": 6200000,
+                "liquidity": 320000,
+                "market_cap": 8500000,
+                "holders": 12350,
+                "sentiment": "very_bullish",
+                "sentiment_score": 0.85,
+                "signal": "STRONG_BUY",
+            },
+        ]
+
+        text, keyboard = DemoMenuBuilder.bags_fm_top_tokens(
+            tokens=tokens,
+            market_regime={"regime": "BULL", "risk_level": "LOW"},
+        )
+
+        assert "BAGS.FM TOP 15" in text
+        assert "PUMP" in text
+        assert "BAGS" in text
+        assert "🥇" in text  # First place medal
+        assert "🥈" in text  # Second place medal
+        assert "bullish" in text.lower() or "▰" in text  # Sentiment indicator
+        assert keyboard is not None
+
+        # Check buy buttons exist
+        button_data = [b.callback_data for row in keyboard.inline_keyboard for b in row]
+        assert any("bags_buy" in d for d in button_data if d)
+
+    def test_bags_fm_sentiment_summary(self):
+        """Test sentiment summary calculation in Bags menu."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        tokens = [
+            {"symbol": "T1", "address": "A1", "price_usd": 0.01, "volume_24h": 1000000, "liquidity": 100000, "market_cap": 1000000, "holders": 1000, "sentiment": "bullish", "sentiment_score": 0.7, "signal": "BUY"},
+            {"symbol": "T2", "address": "A2", "price_usd": 0.02, "volume_24h": 800000, "liquidity": 80000, "market_cap": 800000, "holders": 800, "sentiment": "very_bullish", "sentiment_score": 0.85, "signal": "STRONG_BUY"},
+            {"symbol": "T3", "address": "A3", "price_usd": 0.03, "volume_24h": 600000, "liquidity": 60000, "market_cap": 600000, "holders": 600, "sentiment": "bearish", "sentiment_score": 0.35, "signal": "SELL"},
+        ]
+
+        text, keyboard = DemoMenuBuilder.bags_fm_top_tokens(tokens=tokens)
+
+        assert "Sentiment Summary" in text
+        assert "Bullish: 2" in text or "Bullish: 2" in text.replace(" ", "")
+        assert "Bearish: 1" in text or "Bearish: 1" in text.replace(" ", "")
+
+    def test_bags_token_detail(self):
+        """Test token detail view."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        token = {
+            "symbol": "PUMP",
+            "name": "PumpFun Token",
+            "address": "PUMP111111111111111111111111111111111111111",
+            "price_usd": 0.0125,
+            "volume_24h": 8500000,
+            "liquidity": 450000,
+            "market_cap": 12500000,
+            "holders": 15420,
+            "sentiment": "bullish",
+            "sentiment_score": 0.78,
+            "signal": "BUY",
+        }
+
+        text, keyboard = DemoMenuBuilder.bags_token_detail(
+            token=token,
+            default_tp_percent=20.0,
+            default_sl_percent=10.0,
+        )
+
+        assert "PUMP" in text
+        assert "PumpFun Token" in text
+        assert "Price:" in text
+        assert "Volume:" in text or "24h Volume:" in text
+        assert "Liquidity:" in text
+        assert "Holders:" in text
+        assert "TP (+20%)" in text
+        assert "SL (-10%)" in text
+        assert keyboard is not None
+
+        # Check buy amount buttons
+        button_labels = [b.text for row in keyboard.inline_keyboard for b in row]
+        assert any("0.1 SOL" in label for label in button_labels)
+        assert any("1 SOL" in label for label in button_labels)
+
+    def test_bags_buy_result_success(self):
+        """Test successful buy result display."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.bags_buy_result(
+            success=True,
+            symbol="PUMP",
+            amount_sol=0.5,
+            tokens_received=400000.0,
+            price=0.0125,
+            tp_percent=15,
+            sl_percent=15,
+            tx_hash="abc123def456",
+        )
+
+        assert "BUY SUCCESSFUL" in text
+        assert "PUMP" in text
+        assert "0.5 SOL" in text or "0.5" in text
+        assert "400,000" in text or "400000" in text
+        assert "TP" in text
+        assert "SL" in text
+        assert "solscan" in text.lower() or "abc123" in text
+        assert keyboard is not None
+
+    def test_bags_buy_result_failure(self):
+        """Test failed buy result display."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.bags_buy_result(
+            success=False,
+            symbol="PUMP",
+            amount_sol=0.5,
+            error="Insufficient liquidity",
+        )
+
+        assert "BUY FAILED" in text
+        assert "PUMP" in text
+        assert "Insufficient liquidity" in text
+        assert keyboard is not None
+
+    def test_bags_fm_tpsl_defaults(self):
+        """Test TP/SL default values are applied correctly."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        tokens = [
+            {"symbol": "T1", "address": "A1", "price_usd": 0.01, "volume_24h": 1000000, "liquidity": 100000, "market_cap": 1000000, "holders": 1000, "sentiment": "neutral", "sentiment_score": 0.5, "signal": "HOLD"},
+        ]
+
+        # Test with custom TP/SL
+        text, keyboard = DemoMenuBuilder.bags_fm_top_tokens(
+            tokens=tokens,
+            default_tp_percent=25.0,
+            default_sl_percent=10.0,
+        )
+
+        assert "TP: +25%" in text
+        assert "SL: -10%" in text
+
+
+class TestBagsApiClient:
+    """Test the Bags.fm API client methods."""
+
+    def test_get_top_tokens_by_volume_method_exists(self):
+        """Test that the get_top_tokens_by_volume method exists."""
+        from core.trading.bags_client import BagsAPIClient
+
+        client = BagsAPIClient()
+        assert hasattr(client, 'get_top_tokens_by_volume')
+
+    @pytest.mark.asyncio
+    async def test_get_top_tokens_returns_list(self):
+        """Test that get_top_tokens_by_volume returns a list."""
+        from core.trading.bags_client import BagsAPIClient
+
+        client = BagsAPIClient()
+        # Will return empty list since no real client is initialized
+        result = await client.get_top_tokens_by_volume(limit=5)
+        assert isinstance(result, list)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
