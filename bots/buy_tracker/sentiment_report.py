@@ -11,6 +11,48 @@ Architecture follows the 2026 Financial Sentiment Bot Guide:
 - EU AI Act compliant labeling
 
 See: docs/GROK_COMPLIANCE_REGULATORY_GUIDE.md
+
+=== CHANGELOG ===
+
+2026-01-21: DATA-DRIVEN SCORING OVERHAUL
+    Analysis of 56 calls (Jan 13-21) revealed which metrics predict success.
+    See docs/SENTIMENT_ENGINE_DATA_ANALYSIS.md for full report.
+
+    UPGRADES IMPLEMENTED:
+
+    1. STRICTER ENTRY TIMING (lines ~388-415)
+       - OLD: 50%+ pump = -0.20 penalty, 30%+ = -0.10 penalty
+       - NEW: 100%+ = -0.40, 50%+ = -0.30, 40%+ = -0.15, 30%+ = -0.08
+       - WHY: Early entry (<50% pump) had 67% TP rate vs late entry 29%
+
+    2. STRICTER RATIO REQUIREMENT (lines ~604-613)
+       - OLD: BULLISH required ratio >= 1.5x
+       - NEW: BULLISH requires ratio >= 2.0x (1.5-2.0x is SLIGHTLY BULLISH)
+       - WHY: Ratio >=2x had 67% TP rate vs ratio <2x had 25%
+
+    3. HIGH SCORE PENALTY (lines ~589-597)
+       - OLD: No cap on high scores
+       - NEW: Scores >=0.70 get penalty (overconfidence trap)
+       - WHY: High scores (>=0.7) had 0% TP rate, medium (0.5-0.7) had 50%
+
+    4. KEYWORD DETECTION (lines ~1087-1106)
+       - OLD: No keyword analysis
+       - NEW: Penalty for "momentum", "pump", "surge", "spike" in reasoning
+       - WHY: "momentum" mentions had 14% TP rate vs 43% without
+
+    5. MULTI-SIGHTING BONUS (lines ~539-552)
+       - OLD: No tracking of report frequency
+       - NEW: Bonus for >=5 reports, penalty for <3 reports
+       - WHY: >=5 reports had 36.4% TP rate vs <5 reports had 0%
+
+    6. TOP 10 PICKS PROMPT (lines ~2883-2949)
+       - OLD: Generic quality criteria only
+       - NEW: Data-driven entry criteria with backtested TP/SL by asset type
+       - WHY: Align Grok picks with patterns that actually win
+
+    EXPECTED IMPROVEMENT: TP rate from ~29% to estimated 45-55%
+
+=== END CHANGELOG ===
 """
 
 import asyncio
@@ -337,6 +379,11 @@ class TokenSentiment:
     chasing_pump: bool = False  # Flag if token already pumped 50%+
     token_risk: str = "MICRO"  # SHITCOIN, MICRO, MID, ESTABLISHED
 
+    # NEW (ADDED 2026-01-21): Data-driven tracking fields
+    report_count: int = 0  # Number of times we've seen this token (multi-sighting bonus)
+    has_momentum_mention: bool = False  # Grok used "momentum" in reasoning (penalty)
+    has_pump_mention: bool = False  # Grok used "pump" in reasoning (penalty)
+
     # Social metrics (from LunarCrush / CryptoPanic)
     galaxy_score: float = 0.0  # 0-100 overall social score
     social_volume: int = 0  # Number of social mentions
@@ -385,18 +432,33 @@ class TokenSentiment:
         # Store for reference
         self.token_risk = token_risk
 
-        # === CHASING PUMP DETECTION ===
-        # CRITICAL: Don't call bullish on tokens that already pumped 50%+
-        # These are profit-taking opportunities, not entries
-        if self.change_24h > 50:
+        # === CHASING PUMP DETECTION (UPGRADED 2026-01-21) ===
+        # DATA-DRIVEN: Analysis of 56 calls showed:
+        #   - Early entry (<50% pump) = 67% TP rate
+        #   - Late entry (>=50% pump) = 29% TP rate (2x worse)
+        # RESTORE HISTORY (old thresholds):
+        #   - Was: 50%+ = -0.20 penalty, 30%+ = -0.10 penalty
+        #   - Now: 100%+ = -0.40, 50%+ = -0.30, 40%+ = -0.15, 30%+ = -0.08
+        if self.change_24h > 100:
+            # Extreme pump - almost never works (data: near 0% TP rate)
             self.chasing_pump = True
-            # Penalize heavily - we learned this the hard way
-            score -= 0.20
-            confidence -= 0.2
+            score -= 0.40
+            confidence -= 0.3
+            logger.debug(f"{self.symbol}: Extreme pump penalty (-0.40) - {self.change_24h:.1f}% already pumped")
+        elif self.change_24h > 50:
+            self.chasing_pump = True
+            score -= 0.30  # Increased from 0.20
+            confidence -= 0.25
+            logger.debug(f"{self.symbol}: Heavy pump penalty (-0.30) - {self.change_24h:.1f}% already pumped")
+        elif self.change_24h > 40:
+            # NEW TIER: Catches more late entries before 50% threshold
+            self.chasing_pump = True
+            score -= 0.15
+            confidence -= 0.15
+            logger.debug(f"{self.symbol}: Moderate pump penalty (-0.15) - {self.change_24h:.1f}% already pumped")
         elif self.change_24h > 30:
-            # Moderate pump - be cautious
-            self.chasing_pump = True
-            score -= 0.10
+            # Caution zone - no longer sets chasing_pump but still penalized
+            score -= 0.08
             confidence -= 0.1
 
         # === PRICE MOMENTUM (weight: 20%, reduced from 25%) ===
@@ -516,6 +578,21 @@ class TokenSentiment:
             if (self.grok_score > 0 and score > 0) or (self.grok_score < 0 and score < 0):
                 confidence += 0.1
 
+        # === MULTI-SIGHTING BONUS (ADDED 2026-01-21) ===
+        # DATA-DRIVEN: Analysis showed:
+        #   - >=5 reports = 36.4% TP rate
+        #   - <5 reports = 0% TP rate
+        # Persistence is a real signal - tokens seen across multiple reports perform better
+        if self.report_count >= 5:
+            score += 0.08
+            confidence += 0.1
+            logger.debug(f"{self.symbol}: MULTI-SIGHTING BONUS (+0.08) - seen in {self.report_count} reports")
+        elif self.report_count < 3:
+            # First or second sighting - be cautious
+            score -= 0.05
+            confidence -= 0.1
+            logger.debug(f"{self.symbol}: First sighting penalty (-0.05) - only {self.report_count} reports")
+
         # === MARKET REGIME ADJUSTMENT ===
         # In bearish macro, bias toward neutral/bearish
         if market_regime:
@@ -571,11 +648,31 @@ class TokenSentiment:
         else:
             self.stop_loss_pct = base_stop * 0.6  # 40% tighter
 
-        # === GRADE ASSIGNMENT ===
-        # STRICTER thresholds - require higher scores for bullish calls
-        if self.sentiment_score > 0.55 and self.buy_sell_ratio >= 1.5 and not self.chasing_pump:
+        # === HIGH SCORE PENALTY (ADDED 2026-01-21) ===
+        # DATA-DRIVEN: Analysis showed High scores (>=0.7) had 0% TP rate
+        # Medium scores (0.5-0.7) had 50% TP rate - overconfidence is a trap
+        # The system gets overconfident on tokens that have already pumped
+        if self.sentiment_score >= 0.70:
+            overconfidence_penalty = (self.sentiment_score - 0.65) * 0.5
+            self.sentiment_score -= overconfidence_penalty
+            self.confidence -= 0.15
+            logger.info(f"{self.symbol}: OVERCONFIDENCE PENALTY applied (-{overconfidence_penalty:.2f}) - high scores historically fail")
+
+        # === GRADE ASSIGNMENT (UPGRADED 2026-01-21) ===
+        # DATA-DRIVEN: Analysis showed ratio >=2x = 67% TP rate vs ratio <2x = 25% TP rate
+        # RESTORE HISTORY (old thresholds):
+        #   - Was: BULLISH required ratio >= 1.5x
+        #   - Now: BULLISH requires ratio >= 2.0x, 1.5-2.0x is SLIGHTLY BULLISH
+        if self.sentiment_score > 0.55 and self.buy_sell_ratio >= 2.0 and not self.chasing_pump:
+            # Full BULLISH: High score + Strong ratio (>=2x) + Not chasing
             self.sentiment_label = "BULLISH"
             self.grade = "A" if self.sentiment_score > 0.65 else "A-"
+            logger.info(f"{self.symbol}: BULLISH - score {self.sentiment_score:.2f}, ratio {self.buy_sell_ratio:.2f}x")
+        elif self.sentiment_score > 0.55 and self.buy_sell_ratio >= 1.5 and not self.chasing_pump:
+            # NEW TIER: Good score but ratio only 1.5-2.0x - downgrade to SLIGHTLY BULLISH
+            self.sentiment_label = "SLIGHTLY BULLISH"
+            self.grade = "B+"
+            logger.info(f"{self.symbol}: SLIGHTLY BULLISH (ratio 1.5-2.0x) - score {self.sentiment_score:.2f}, ratio {self.buy_sell_ratio:.2f}x")
         elif self.sentiment_score > 0.35 and self.buy_sell_ratio >= 1.2:
             self.sentiment_label = "SLIGHTLY BULLISH"
             self.grade = "B+" if self.sentiment_score > 0.45 else "B"
@@ -1048,6 +1145,27 @@ Respond with ONLY the formatted lines, no other text."""
                                 token.grok_score = score / 100.0  # Normalize to -1 to 1
                                 token.grok_verdict = verdict
                                 token.grok_reasoning = reason
+
+                                # === KEYWORD DETECTION (ADDED 2026-01-21) ===
+                                # DATA-DRIVEN: Analysis showed hype words correlate with worse outcomes:
+                                #   - "momentum" mentions = 14% TP rate (vs 43% without)
+                                #   - "pump" mentions = 20% TP rate (vs 33% without)
+                                # Market front-runs hype - by the time Grok mentions it, move is done
+                                reason_lower = reason.lower()
+                                keyword_penalty = 0.0
+
+                                if "momentum" in reason_lower:
+                                    keyword_penalty += 0.10
+                                    token.has_momentum_mention = True
+                                if "pump" in reason_lower and "pump.fun" not in reason_lower:
+                                    keyword_penalty += 0.08
+                                    token.has_pump_mention = True
+                                if "surge" in reason_lower or "spike" in reason_lower:
+                                    keyword_penalty += 0.05
+
+                                if keyword_penalty > 0:
+                                    token.grok_score -= keyword_penalty
+                                    logger.info(f"{token.symbol}: HYPE KEYWORD PENALTY (-{keyword_penalty:.2f}) - detected in reasoning")
 
                                 # Parse price targets if bullish (now at indices 4-7)
                                 if len(parts) >= 8 and verdict == "BULLISH":
@@ -2804,42 +2922,73 @@ IMPORTANT: Use the learnings above to calibrate your TP/SL recommendations.
             for i in indexes[:5]:
                 asset_summary += f"- {i.symbol} ({i.underlying})\n"
 
+            # TOP 10 PICKS PROMPT (UPGRADED 2026-01-21)
+            # RESTORE HISTORY: Original prompt had no data-driven entry criteria
+            # Now includes backtested patterns from 56 calls analysis
             prompt = f"""Analyze these assets and provide your TOP 10 conviction picks.
 
-CRITICAL QUALITY REQUIREMENTS FOR TOKEN PICKS:
+=== DATA-DRIVEN ENTRY CRITERIA (BACKTESTED ON 56 CALLS) ===
+These rules are based on actual performance data:
+
+CRITICAL - ENTRY TIMING (67% vs 29% TP rate):
+- ONLY pick tokens NOT already pumped >40% in 24h (early entry wins)
+- Late entries (>50% pump) fail 71% of the time - AVOID THEM
+
+CRITICAL - BUY/SELL RATIO (67% vs 25% TP rate):
+- ONLY pick tokens with buy/sell ratio >= 2.0x (strong buying pressure)
+- Ratio 1.5-2.0x is marginal - use caution
+- Ratio <1.5x = no real buying pressure - REJECT
+
+CRITICAL - AVOID OVERCONFIDENCE (0% TP rate for high scores):
+- Conviction scores 60-80 perform BETTER than 90+
+- Extreme confidence often means the move already happened
+
+REJECT IMMEDIATELY IF:
+- Already pumped >50% in 24h (chasing)
+- Buy/sell ratio < 1.5x (no buying pressure)
+- Reasoning relies on "momentum" or "pump" language (hype signal)
+
+QUALITY REQUIREMENTS:
 - ONLY recommend tokens with $50K+ liquidity and $500K+ market cap
 - NEVER recommend pump.fun launches, honeypots, or tokens < 24h old
-- AVOID tokens that pumped >500% with no catalyst (likely manipulation)
+- AVOID tokens that pumped >500% with no catalyst (manipulation)
 - PREFER established tokens with real community and utility
-- Scams and rug pulls will destroy our portfolio - BE CAUTIOUS
 
 {asset_summary}
 {learnings_section}
+
+=== OPTIMAL TP/SL BY ASSET TYPE (BACKTESTED) ===
+- Meme tokens: TP +25%, SL -15% (high volatility)
+- Stock tokens: TP +10%, SL -4% (lower volatility)
+- Blue chips: TP +18%, SL -12% (medium volatility)
+- Wrapped tokens: TP +15%, SL -8% (more stable)
+
 For each pick, provide:
 1. SYMBOL - The asset symbol
 2. ASSET_CLASS - token/stock/index
-3. CONVICTION - Score from 1-100 (100 = highest conviction)
-4. REASONING - Brief 1-2 sentence explanation (mention liquidity/mcap for tokens)
-5. TARGET - Target price (approximate % gain)
-6. STOP - Stop loss (approximate % loss)
+3. CONVICTION - Score from 1-100 (AVOID 90+, optimal range is 60-80)
+4. REASONING - Brief explanation (mention ratio, pump level, NOT hype words)
+5. TARGET - Target price (use asset-appropriate % from above)
+6. STOP - Stop loss (use asset-appropriate % from above)
 7. TIMEFRAME - short (1-7 days), medium (1-4 weeks), long (1-3 months)
 
 Format EXACTLY as:
 PICK|SYMBOL|ASSET_CLASS|CONVICTION|REASONING|TARGET_PCT|STOP_PCT|TIMEFRAME
 
 Example:
-PICK|NVDAx|stock|85|Strong AI demand and upcoming earnings catalyst|+15%|-5%|medium
-PICK|BONK|token|65|$2M liquidity, $500M mcap, strong meme momentum|+40%|-15%|short
-PICK|WETH|token|70|$5M liquidity, ETH exposure on Solana, safer play|+20%|-8%|medium
+PICK|NVDAx|stock|75|Strong AI demand, ratio 2.5x, early entry <20% pump|+10%|-4%|medium
+PICK|BONK|token|68|$2M liquidity, ratio 2.1x, NOT chasing - only +15% today|+25%|-15%|short
+PICK|WETH|token|72|$5M liquidity, ETH exposure, stable ratio 1.8x|+15%|-8%|medium
 
-Provide your 10 best picks with conviction scores. Be selective - only include assets you have genuine conviction in.
+Provide your 10 best picks. Be selective - quality over quantity.
 
 ASSET CLASS BALANCE:
-- Include at least 2-3 wrapped/bridged tokens (WETH, WBTC, LINK, etc.) as safer alternatives
+- Include 2-3 wrapped/bridged tokens (WETH, WBTC, LINK) as safer alternatives
 - Mix of trending memes, wrapped majors, and stocks provides diversification
 - Wrapped tokens from ETH/BTC ecosystem often outperform during alt season
 
-DO NOT include any pump.fun garbage or low-liquidity scam tokens."""
+DO NOT include any pump.fun garbage or low-liquidity scam tokens.
+DO NOT use words like "momentum", "surge", or "pump" in reasoning - focus on ratios and entry timing."""
 
             # Call Grok API
             async with self._session.post(
