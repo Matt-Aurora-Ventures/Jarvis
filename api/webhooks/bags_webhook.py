@@ -34,6 +34,8 @@ class BagsEventType(str, Enum):
     POOL_CREATED = "pool.created"
     LIQUIDITY_ADDED = "liquidity.added"
     LIQUIDITY_REMOVED = "liquidity.removed"
+    # Intel reports from bags-intel service
+    INTEL_REPORT = "bags_intel_report"
 
 
 # =============================================================================
@@ -91,6 +93,19 @@ class PartnerStatsEvent(BaseModel):
     total_trades: int
     unique_users: int
     period: str  # "daily", "weekly", "monthly"
+
+
+class IntelReportEvent(BaseModel):
+    """Intelligence report from bags-intel service"""
+    report_id: str
+    timestamp: str
+    token: Dict[str, Any]  # mint, name, symbol, website, twitter
+    scores: Dict[str, Any]  # overall, quality, risk, bonding, creator, social, market, distribution
+    market: Dict[str, Any]  # mcap_usd, liquidity_usd, price_usd
+    bonding_curve: Dict[str, Any]  # duration_seconds, volume_sol, unique_buyers, buy_sell_ratio
+    creator: Dict[str, Any]  # wallet, twitter, previous_launches, rugged_launches, reputation_score
+    flags: Dict[str, Any]  # green, red, warnings
+    ai_analysis: Optional[Dict[str, Any]] = None  # summary, sentiment
 
 
 # =============================================================================
@@ -363,6 +378,101 @@ def create_webhook_routes(handler: BagsWebhookHandler) -> FastAPI:
         await handler.retry_dlq()
         return {"status": "ok"}
 
+    # =========================================================================
+    # INTEL REPORT ENDPOINTS
+    # =========================================================================
+
+    @router.post("/intel-report")
+    async def receive_intel_report(
+        request: Request,
+        background_tasks: BackgroundTasks
+    ):
+        """Receive intelligence report from bags-intel service"""
+        try:
+            data = await request.json()
+
+            # Validate it's an intel report
+            if data.get("type") != "bags_intel_report":
+                raise HTTPException(status_code=400, detail="Invalid report type")
+
+            # Create webhook event
+            event = WebhookEvent(
+                id=data.get("report_id", f"intel-{datetime.utcnow().timestamp()}"),
+                type=BagsEventType.INTEL_REPORT,
+                timestamp=int(datetime.utcnow().timestamp()),
+                data=data
+            )
+
+            # Process in background
+            background_tasks.add_task(handler.handle_event, event)
+
+            return {
+                "status": "accepted",
+                "report_id": event.id,
+                "token": data.get("token", {}).get("symbol", "unknown")
+            }
+
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/intel-reports")
+    async def get_intel_reports(
+        quality: Optional[str] = None,
+        min_score: Optional[float] = None,
+        limit: int = 50
+    ):
+        """Get stored intelligence reports"""
+        if quality:
+            # Filter by quality tier
+            reports = await handler._redis.lrange(
+                f"bags:intel:quality:{quality}", 0, limit - 1
+            )
+        else:
+            # All reports
+            reports = await handler._redis.lrange(
+                "bags:intel:reports", 0, limit - 1
+            )
+
+        parsed = [json.loads(r) for r in reports]
+
+        # Filter by min_score if specified
+        if min_score:
+            parsed = [
+                r for r in parsed
+                if r.get("scores", {}).get("overall", 0) >= min_score
+            ]
+
+        return {"reports": parsed, "count": len(parsed)}
+
+    @router.get("/intel-reports/summary")
+    async def get_intel_summary():
+        """Get summary statistics of intel reports"""
+        reports = await handler._redis.lrange("bags:intel:reports", 0, 499)
+        parsed = [json.loads(r) for r in reports]
+
+        if not parsed:
+            return {"total": 0, "by_quality": {}, "avg_score": 0}
+
+        # Count by quality
+        by_quality = {}
+        total_score = 0
+        for r in parsed:
+            q = r.get("scores", {}).get("quality", "unknown")
+            by_quality[q] = by_quality.get(q, 0) + 1
+            total_score += r.get("scores", {}).get("overall", 0)
+
+        return {
+            "total": len(parsed),
+            "by_quality": by_quality,
+            "avg_score": total_score / len(parsed) if parsed else 0,
+            "high_quality_count": sum(
+                1 for r in parsed
+                if r.get("scores", {}).get("overall", 0) >= 70
+            )
+        }
+
     return router
 
 
@@ -498,3 +608,38 @@ def register_default_handlers(handler: BagsWebhookHandler):
             f"pool: {data.pool_address}"
         )
         # Add to watchlist, notify users
+
+    @handler.on(BagsEventType.INTEL_REPORT)
+    async def on_intel_report(event: WebhookEvent):
+        """Handle bags-intel intelligence report"""
+        data = IntelReportEvent(**event.data)
+        logger.info(
+            f"Intel report received: {data.token.get('symbol')} "
+            f"Score: {data.scores.get('overall')}/100 "
+            f"Quality: {data.scores.get('quality')} "
+            f"Risk: {data.scores.get('risk')}"
+        )
+
+        # Store in Redis for dashboard access
+        if handler._redis:
+            await handler._redis.lpush(
+                "bags:intel:reports",
+                json.dumps(event.data)
+            )
+            await handler._redis.ltrim("bags:intel:reports", 0, 499)  # Keep last 500
+
+            # Store by quality tier for filtering
+            quality = data.scores.get("quality", "unknown")
+            await handler._redis.lpush(
+                f"bags:intel:quality:{quality}",
+                json.dumps(event.data)
+            )
+            await handler._redis.ltrim(f"bags:intel:quality:{quality}", 0, 99)
+
+        # Log high-quality opportunities
+        if data.scores.get("overall", 0) >= 70:
+            logger.info(
+                f"HIGH QUALITY LAUNCH: {data.token.get('symbol')} "
+                f"MCap: ${data.market.get('mcap_usd', 0):,.0f} "
+                f"Green flags: {data.flags.get('green', [])}"
+            )
