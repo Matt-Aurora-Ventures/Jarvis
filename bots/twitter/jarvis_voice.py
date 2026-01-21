@@ -98,6 +98,13 @@ class JarvisVoice:
 
             logger.info(f"Attempting Claude CLI at {cli_path}")
 
+            # Set up environment with proper HOME for credentials discovery
+            exec_env = os.environ.copy()
+            exec_env["CI"] = "true"  # Disable interactive prompts
+            exec_env["HOME"] = os.path.expanduser("~")
+            if "USERPROFILE" not in exec_env:
+                exec_env["USERPROFILE"] = os.path.expanduser("~")
+
             if platform.system() == "Windows":
                 # On Windows, run through cmd.exe for .cmd files
                 completed = subprocess.run(
@@ -106,7 +113,7 @@ class JarvisVoice:
                     text=True,
                     timeout=60,
                     check=False,
-                    env={**os.environ, "CI": "true"},  # Disable interactive prompts
+                    env=exec_env,
                 )
             else:
                 completed = subprocess.run(
@@ -115,11 +122,13 @@ class JarvisVoice:
                     text=True,
                     timeout=60,
                     check=False,
-                    env={**os.environ, "CI": "true"},
+                    env=exec_env,
                 )
 
             if completed.returncode != 0:
-                logger.warning(f"Claude CLI returned code {completed.returncode}: {completed.stderr[:200] if completed.stderr else 'no stderr'}")
+                stderr_preview = completed.stderr[:200] if completed.stderr else 'no stderr'
+                stdout_preview = completed.stdout[:200] if completed.stdout else 'no stdout'
+                logger.warning(f"Claude CLI returned code {completed.returncode}: stderr={stderr_preview}, stdout={stdout_preview}")
                 return None
             output = (completed.stdout or "").strip()
             return output if output else None
