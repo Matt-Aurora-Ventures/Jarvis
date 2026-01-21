@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
 
+from core.logging_utils import configure_component_logger
+
 # Add parent dir to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -107,6 +109,7 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+configure_component_logger("tg_bot", "telegram_bot")
 
 # Suppress noisy loggers
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -4974,6 +4977,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"⚠️ Coding request failed: {str(e)[:200]}",
                 parse_mode=ParseMode.HTML
             )
+            return
 
     # For admin non-vibe messages OR non-admin messages: check if directed at Jarvis
     if is_admin:
