@@ -25,7 +25,8 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 from core.public_trading_service import PublicTradingService, ResolvedToken
 from core.public_user_manager import PublicUserManager, UserProfile, UserRiskLevel, Wallet
-from core.adaptive_algorithm import AdaptiveAlgorithm, TradeOutcome
+from core.adaptive_algorithm import AdaptiveAlgorithm, AlgorithmType, TradeOutcome
+from core.demo_wallet_intelligence import DemoWalletIntelligence
 from core.token_analyzer import TokenAnalyzer
 from core.wallet_service import WalletService, get_wallet_service
 from core import x_sentiment
@@ -65,7 +66,11 @@ class PublicBotHandler:
         self.user_manager = PublicUserManager()
         self.algorithm = AdaptiveAlgorithm()
         self.token_analyzer = TokenAnalyzer()
+        self.demo_intelligence = DemoWalletIntelligence()
         self.default_slippage_bps = 100
+
+    def _demo_enabled(self, context: ContextTypes.DEFAULT_TYPE) -> bool:
+        return bool(context.user_data.get("demo_ack"))
 
     def _demo_disclaimer_text(self) -> str:
         return (
@@ -707,6 +712,14 @@ Use /settings to adjust risk level.
                 await update.message.reply_text("No picks available yet.")
                 return
 
+            user_id = update.effective_user.id
+            demo_enabled = self._demo_enabled(context)
+            user_confidence = self.algorithm.get_effective_confidence(
+                user_id,
+                AlgorithmType.COMPOSITE,
+            )
+            weight = 0.6 + (user_confidence / 100.0) * 0.4
+
             lines = [
                 "JARVIS PICKS",
                 "------------------------------",
@@ -714,27 +727,58 @@ Use /settings to adjust risk level.
                 "------------------------------",
                 "",
             ]
+            if demo_enabled:
+                lines.extend(
+                    [
+                        f"Personalized confidence: {user_confidence:.1f}/100",
+                        "Learns from your trades and adjusts conviction.",
+                        "",
+                    ]
+                )
 
             tradeable = []
             trading = await self._get_public_trading()
 
             for i, pick in enumerate(picks_data[:5]):
                 symbol = pick.get("symbol", "?")
-                conviction = pick.get("conviction", 0)
+                conviction_base = pick.get("conviction", 0)
+                conviction_adjusted = min(100, round(conviction_base * weight))
                 reasoning = (pick.get("reasoning") or "").strip()
-                lines.append(f"#{i+1} {symbol} | Conviction: {conviction}/100")
+                if demo_enabled:
+                    lines.append(
+                        f"#{i+1} {symbol} | Conviction: {conviction_adjusted}/100 (base {conviction_base})"
+                    )
+                else:
+                    lines.append(f"#{i+1} {symbol} | Conviction: {conviction_base}/100")
                 if reasoning:
                     lines.append(f"  {reasoning}")
                 lines.append("")
 
                 mint = pick.get("contract") or ""
                 if mint and trading.validate_address(mint):
-                    tradeable.append({"symbol": symbol, "mint": mint})
+                    tradeable.append(
+                        {
+                            "symbol": symbol,
+                            "mint": mint,
+                            "conviction": conviction_adjusted if demo_enabled else conviction_base,
+                            "conviction_base": conviction_base,
+                            "conviction_adjusted": conviction_adjusted,
+                            "asset_class": pick.get("asset_class"),
+                            "reasoning": reasoning,
+                        }
+                    )
 
             await update.message.reply_text("\n".join(lines))
 
             if tradeable:
                 context.user_data["picks_tokens"] = tradeable
+                if demo_enabled:
+                    self.demo_intelligence.record_picks_served(
+                        user_id,
+                        tradeable,
+                        confidence_score=user_confidence,
+                        mode="demo",
+                    )
                 for idx, pick in enumerate(tradeable[:3]):
                     buttons = [
                         [
@@ -1044,6 +1088,14 @@ Proceed?"""
             if not token:
                 await query.edit_message_text("Pick expired. Use /picks again.")
                 return
+            if self._demo_enabled(context):
+                self.demo_intelligence.record_pick_action(
+                    user_id=update.effective_user.id,
+                    symbol=token.get("symbol", ""),
+                    action="buy",
+                    amount_sol=token.get("amount", 0),
+                    conviction=token.get("conviction"),
+                )
             await self._show_buy_confirmation(
                 query.message.chat_id,
                 context,
@@ -1213,6 +1265,7 @@ Select amount to buy:"""
             "symbol": token["symbol"],
             "amount_sol": amount_sol,
             "slippage_bps": self.default_slippage_bps,
+            "signal_strength": token.get("conviction", 50),
         }
 
         message = f"""JARVIS QUICK BUY
@@ -1368,6 +1421,73 @@ Price Impact: {quote.price_impact_pct:.2%}
         context.user_data.pop("pending_trade", None)
 
         if result.success:
+            sol_price = 0.0
+            try:
+                sol_price = await trading.jupiter.get_token_price(trading.jupiter.SOL_MINT)
+            except Exception:
+                sol_price = 0.0
+
+            signal_strength = float(pending.get("signal_strength", 50))
+            amount_usd = 0.0
+            pnl_usd = 0.0
+
+            if pending["type"] == "buy":
+                amount_usd = (pending.get("amount_sol", 0.0) or 0.0) * (sol_price or 0.0)
+                quantity = quote.output_amount_ui
+                if amount_usd > 0 and quantity > 0:
+                    self.user_manager.update_position_on_buy(
+                        user_id=user_id,
+                        symbol=pending["symbol"],
+                        quantity=quantity,
+                        cost_usd=amount_usd,
+                    )
+                self.user_manager.record_trade(
+                    user_id=user_id,
+                    wallet_id=wallet.wallet_id,
+                    symbol=pending["symbol"],
+                    action="BUY",
+                    amount_usd=amount_usd,
+                    pnl_usd=0.0,
+                )
+            else:
+                amount_usd = quote.output_amount_ui * (sol_price or 0.0)
+                pnl_usd = self.user_manager.update_position_on_sell(
+                    user_id=user_id,
+                    symbol=pending["symbol"],
+                    quantity=pending["amount_tokens"],
+                    proceeds_usd=amount_usd,
+                )
+                self.user_manager.record_trade(
+                    user_id=user_id,
+                    wallet_id=wallet.wallet_id,
+                    symbol=pending["symbol"],
+                    action="SELL",
+                    amount_usd=amount_usd,
+                    pnl_usd=pnl_usd,
+                )
+
+                outcome = TradeOutcome(
+                    algorithm_type=AlgorithmType.COMPOSITE,
+                    signal_strength=signal_strength,
+                    user_id=user_id,
+                    symbol=pending["symbol"],
+                    entry_price=0.0,
+                    exit_price=0.0,
+                    pnl_usd=pnl_usd,
+                    hold_duration_hours=1.0,
+                )
+                self.algorithm.record_outcome(outcome)
+
+            if self._demo_enabled(context):
+                self.demo_intelligence.record_trade_execution(
+                    user_id=user_id,
+                    symbol=pending["symbol"],
+                    action=pending["type"],
+                    amount_usd=amount_usd,
+                    pnl_usd=pnl_usd,
+                    signal_strength=signal_strength,
+                )
+
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text=f"""TRADE EXECUTED
@@ -1589,4 +1709,9 @@ Confirm transfer?"""
         if idx < 0 or idx >= len(picks):
             return None
         token = picks[idx]
-        return {"mint": token["mint"], "symbol": token["symbol"], "amount": amount}
+        return {
+            "mint": token["mint"],
+            "symbol": token["symbol"],
+            "amount": amount,
+            "conviction": token.get("conviction"),
+        }
