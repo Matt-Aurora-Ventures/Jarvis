@@ -360,6 +360,11 @@ class ClaudeCLIHandler:
         )
         self.working_dir = os.environ.get("JARVIS_WORKING_DIR", default_dir)
         self._active_process: Optional[asyncio.subprocess.Process] = None
+        self._env_claude_path = (
+            os.environ.get("CLAUDE_CLI_PATH")
+            or os.environ.get("JARVIS_CLAUDE_PATH")
+            or os.environ.get("CLAUDE_PATH")
+        )
         self._claude_path = self._find_claude()
         self._conversation_context: List[Dict] = []
 
@@ -397,11 +402,26 @@ class ClaudeCLIHandler:
     def _find_claude(self) -> str:
         """Find the Claude CLI executable."""
         import shutil
+
+        if self._env_claude_path:
+            env_path = self._env_claude_path
+            if os.path.exists(env_path):
+                logger.info("Using CLAUDE_CLI_PATH=%s", env_path)
+                return env_path
+            resolved = shutil.which(env_path)
+            if resolved:
+                logger.info("Resolved CLAUDE_CLI_PATH via PATH to %s", resolved)
+                return resolved
+            logger.warning("CLAUDE_CLI_PATH=%s not found; falling back to known locations", env_path)
+
         for path in self.CLAUDE_PATHS:
             if os.path.exists(path):
+                logger.info("Found Claude CLI at %s", path)
                 return path
-        # Try shutil.which as last resort
+
         found = shutil.which("claude")
+        if found:
+            logger.info("Found Claude CLI via PATH: %s", found)
         return found or "claude"
 
     def _find_bash(self) -> Optional[str]:
