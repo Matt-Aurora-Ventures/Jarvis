@@ -824,9 +824,10 @@ Respond briefly (under 200 words) in character as JARVIS:"""
             return ""
 
         # Check if user is admin (only admin can give commands)
-        admin_ids_str = os.environ.get("TELEGRAM_ADMIN_IDS", "")
-        admin_ids = [int(x.strip()) for x in admin_ids_str.split(",") if x.strip().isdigit()]
-        is_admin = user_id in admin_ids
+        # Use config's is_admin which checks both ID and username
+        from tg_bot.config import get_config
+        config = get_config()
+        is_admin = config.is_admin(user_id, username)
 
         # MODERATION: Block harmful requests from anyone
         if self.is_harmful_request(text):

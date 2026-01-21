@@ -32,6 +32,7 @@ class CooldownType(Enum):
     CONSECUTIVE_LOSS = "consecutive_loss"
     CIRCUIT_BREAKER = "circuit_breaker"
     MANUAL = "manual"
+    STANDARD = "standard"  # Alias for general/default cooldown
 
 
 @dataclass
@@ -183,6 +184,11 @@ class CooldownManager:
 
         return True, None
 
+    # Alias for API compatibility with RiskManager
+    def can_trade(self, symbol: str) -> tuple[bool, Optional[str]]:
+        """Alias for can_enter_trade() - API compatibility."""
+        return self.can_enter_trade(symbol)
+
     def can_close_position(self, symbol: str) -> bool:
         """
         Check if a position can be closed.
@@ -268,6 +274,28 @@ class CooldownManager:
         )
 
         return event
+
+    # Alias for API compatibility with RiskManager
+    def record_closure(
+        self,
+        symbol: str,
+        cooldown_type_or_pnl=None,  # RiskManager passes CooldownType, legacy passes pnl
+        reason: str = "",
+        pnl_pct: float = 0.0,
+        **kwargs,
+    ) -> CooldownEvent:
+        """Alias for on_position_close() - API compatibility with RiskManager.
+
+        RiskManager calls: record_closure(symbol, CooldownType.X, pnl_pct=...)
+        We map pnl_pct to our pnl parameter.
+        """
+        # If cooldown_type_or_pnl is a number, treat it as pnl (legacy)
+        # If it's CooldownType or None, use pnl_pct instead
+        if isinstance(cooldown_type_or_pnl, (int, float)):
+            pnl = cooldown_type_or_pnl
+        else:
+            pnl = pnl_pct / 100.0 if pnl_pct else 0.0  # Convert percentage to decimal
+        return self.on_position_close(symbol, pnl, reason)
 
     def set_circuit_breaker_cooldown(self, reason: str = "Circuit breaker triggered") -> None:
         """Set a global circuit breaker cooldown."""

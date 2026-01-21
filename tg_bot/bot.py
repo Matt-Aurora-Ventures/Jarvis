@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 from datetime import datetime, timezone
 
 from telegram import Update
@@ -36,6 +37,7 @@ from tg_bot.handlers.commands.watchlist_command import watch_command, unwatch_co
 
 # Commands reference (v5.1.0)
 from tg_bot.handlers.commands.commands_command import commands_command
+from core.utils.instance_lock import acquire_instance_lock
 
 
 def register_handlers(app: Application, config) -> None:
@@ -191,7 +193,35 @@ def register_handlers(app: Application, config) -> None:
     app.add_error_handler(error_handler)
 
 
+def _load_env_files():
+    """Load environment variables from .env files - ensures treasury wallet password is available."""
+    from pathlib import Path
+    project_root = Path(__file__).resolve().parent.parent
+    env_files = [
+        project_root / "tg_bot" / ".env",
+        project_root / "bots" / "twitter" / ".env",
+        project_root / ".env",
+    ]
+    for env_path in env_files:
+        if env_path.exists():
+            try:
+                with open(env_path, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            key, value = line.split("=", 1)
+                            key = key.strip()
+                            value = value.strip().strip('"').strip("'")
+                            if key and key not in os.environ:
+                                os.environ[key] = value
+            except Exception as e:
+                print(f"Warning: Could not load {env_path}: {e}")
+
+
 def main():
+    # Load env vars FIRST - critical for treasury wallet password
+    _load_env_files()
+
     config = get_config()
     from core.utils.instance_lock import acquire_instance_lock
 
@@ -296,8 +326,45 @@ def main():
 
     app.post_init = startup_tasks
 
-    # Run
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Avoid getUpdates conflicts when multiple instances use the same token.
+    polling_lock = None
+    while polling_lock is None:
+        polling_lock = acquire_instance_lock(
+            config.telegram_token,
+            name="telegram_polling",
+            max_wait_seconds=10,
+        )
+        if polling_lock is None:
+            print("Polling lock held for token; retrying in 15s")
+            time.sleep(15)
+
+    # Run with drop_pending_updates to clear any stale connections
+    # This helps recover from Conflict errors caused by previous instances
+    try:
+        print("Starting Telegram polling...")
+        app.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+            read_timeout=30,
+            write_timeout=30,
+            connect_timeout=30,
+            pool_timeout=30,
+        )
+        # If run_polling returns normally (shouldn't happen), log it
+        print("WARNING: run_polling() returned unexpectedly - this should not happen")
+    except KeyboardInterrupt:
+        print("Bot stopped by user (Ctrl+C)")
+    except Exception as e:
+        print(f"ERROR: Polling stopped with exception: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        # Exit with code 1 so supervisor knows there was an error
+        sys.exit(1)
+    finally:
+        try:
+            polling_lock.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

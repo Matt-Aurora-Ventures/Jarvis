@@ -129,9 +129,35 @@ class BotConfig:
             missing.append("BIRDEYE_API_KEY (for token data)")
         return missing
 
-    def is_admin(self, user_id: int) -> bool:
-        """Check if user is an admin."""
-        return user_id in self.admin_ids
+    def is_admin(self, user_id: int, username: str = None) -> bool:
+        """Check if user is an admin by ID or username (case insensitive).
+
+        Args:
+            user_id: Telegram user ID
+            username: Telegram username (without @)
+
+        Returns:
+            True if user is admin, False otherwise
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Check by ID first
+        if user_id in self.admin_ids:
+            logger.debug(f"Admin check passed for user_id={user_id} (ID match)")
+            return True
+
+        # Check by username (case insensitive)
+        if username:
+            username_lower = username.lower().lstrip('@')
+            admin_usernames = _parse_admin_usernames()
+
+            if username_lower in admin_usernames:
+                logger.debug(f"Admin check passed for user_id={user_id}, username={username} (username match)")
+                return True
+
+        logger.warning(f"Admin check failed for user_id={user_id}, username={username}")
+        return False
 
     def mask_key(self, key: str) -> str:
         """Mask API key for safe logging."""
@@ -152,6 +178,20 @@ def _parse_admin_ids() -> Set[int]:
         if id_str.isdigit():
             ids.add(int(id_str))
     return ids
+
+
+def _parse_admin_usernames() -> Set[str]:
+    """Parse admin usernames from environment variable."""
+    names_str = os.getenv("TELEGRAM_ADMIN_USERNAMES", "")
+    if not names_str:
+        return {"matthaynes88"}
+
+    names = set()
+    for name in names_str.split(","):
+        cleaned = name.strip().lower().lstrip("@")
+        if cleaned:
+            names.add(cleaned)
+    return names
 
 
 def _parse_broadcast_chat_id() -> Optional[int]:

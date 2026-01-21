@@ -27,6 +27,7 @@ from core.logging.structured_logger import (
     start_cleanup_scheduler,
     stop_cleanup_scheduler,
 )
+from core.logging.error_tracker import ErrorTracker, error_tracker
 
 __all__ = [
     # Legacy
@@ -53,4 +54,7 @@ __all__ = [
     "get_rotating_file_handler",
     "start_cleanup_scheduler",
     "stop_cleanup_scheduler",
+    # Error tracking
+    "ErrorTracker",
+    "error_tracker",
 ]

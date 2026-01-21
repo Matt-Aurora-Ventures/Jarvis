@@ -16,10 +16,24 @@ import sqlite3
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Set
 from dataclasses import dataclass, asdict
 import threading
 import hashlib
+
+# Admin username allowlist from env (fallback to default)
+def _parse_admin_usernames() -> Set[str]:
+    """Parse admin usernames from environment variable."""
+    names_str = os.environ.get("TELEGRAM_ADMIN_USERNAMES", "")
+    if not names_str:
+        return {"matthaynes88"}
+
+    names = set()
+    for name in names_str.split(","):
+        cleaned = name.strip().lower().lstrip("@")
+        if cleaned:
+            names.add(cleaned)
+    return names
 
 # Paths
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -333,9 +347,35 @@ class JarvisAdmin:
             conn.commit()
             conn.close()
     
-    def is_admin(self, user_id: int) -> bool:
-        """Check if user is an admin."""
-        return user_id in self.admin_ids
+    def is_admin(self, user_id: int, username: str = None) -> bool:
+        """Check if user is an admin by ID or username (case insensitive).
+
+        Args:
+            user_id: Telegram user ID
+            username: Telegram username (without @)
+
+        Returns:
+            True if user is admin, False otherwise
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Check by ID first
+        if user_id in self.admin_ids:
+            logger.debug(f"[JarvisAdmin] Admin check passed for user_id={user_id} (ID match)")
+            return True
+
+        # Check by username (case insensitive)
+        if username:
+            username_lower = username.lower().lstrip('@')
+            admin_usernames = _parse_admin_usernames()
+
+            if username_lower in admin_usernames:
+                logger.debug(f"[JarvisAdmin] Admin check passed for user_id={user_id}, username={username} (username match)")
+                return True
+
+        logger.warning(f"[JarvisAdmin] Admin check failed for user_id={user_id}, username={username}")
+        return False
     
     def get_random_response(self, category: str, **kwargs) -> str:
         """Get a random response from a category, formatted with kwargs."""

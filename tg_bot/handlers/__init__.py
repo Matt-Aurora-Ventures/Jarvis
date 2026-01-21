@@ -4,6 +4,7 @@ import logging
 from typing import Callable, Awaitable, Any
 
 from telegram.constants import ParseMode
+from telegram.error import RetryAfter, BadRequest
 
 from tg_bot.config import get_config
 from tg_bot.services.cost_tracker import get_tracker
@@ -18,6 +19,21 @@ def error_handler(func: Callable[..., Awaitable[Any]]):
         try:
             return await func(update, context, *args, **kwargs)
         except Exception as exc:
+            if isinstance(exc, RetryAfter):
+                logger.warning(
+                    "Rate limited in %s, retry after %ss",
+                    func.__name__,
+                    exc.retry_after,
+                )
+                return None
+
+            if isinstance(exc, BadRequest) and "Can't parse entities" in str(exc):
+                logger.warning(
+                    "Parse error in %s; skipping reply to avoid retries",
+                    func.__name__,
+                )
+                return None
+
             logger.exception(f"Handler error in {func.__name__}")
 
             # Send user-friendly message
@@ -52,10 +68,15 @@ def error_handler(func: Callable[..., Awaitable[Any]]):
 def admin_only(func: Callable[..., Awaitable[Any]]):
     """Decorator to restrict command to admins only."""
     async def wrapper(update, context, *args, **kwargs):
+        import logging
+        logger = logging.getLogger(__name__)
+
         config = get_config()
         user_id = update.effective_user.id if update and update.effective_user else 0
+        username = update.effective_user.username if update and update.effective_user else None
 
-        if user_id not in config.admin_ids:
+        if not config.is_admin(user_id, username):
+            logger.warning(f"Unauthorized admin command attempt by user {user_id} (@{username})")
             await update.message.reply_text(
                 fmt.format_unauthorized(),
                 parse_mode=ParseMode.MARKDOWN,

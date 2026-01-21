@@ -34,6 +34,47 @@ from core.security.scrubber import get_scrubber
 
 logger = logging.getLogger(__name__)
 
+# Lazy import anthropic for API mode
+_anthropic_module = None
+
+
+def _get_anthropic():
+    """Lazily import anthropic module."""
+    global _anthropic_module
+    if _anthropic_module is None:
+        try:
+            import anthropic
+            _anthropic_module = anthropic
+        except ImportError:
+            logger.warning("anthropic package not installed - API mode unavailable")
+    return _anthropic_module
+
+
+# Coding system prompt for API mode
+CODING_SYSTEM_PROMPT = """You are JARVIS, an advanced AI coding assistant for the Jarvis trading system.
+
+You have access to the Jarvis codebase and can help with:
+- Writing and modifying Python code
+- Debugging issues
+- Explaining code architecture
+- Suggesting improvements
+- Running analysis
+
+When responding:
+- Be concise and actionable
+- Show code when relevant (use markdown code blocks)
+- Explain what changes you're making
+- Warn about potential issues
+- Follow Python best practices
+
+The codebase is a Solana trading bot with:
+- Telegram bot interface (tg_bot/)
+- Twitter/X bot (bots/twitter/)
+- Treasury trading engine (bots/treasury/)
+- Core modules (core/)
+
+Respond directly with the solution. No pleasantries needed."""
+
 # JARVIS voice templates (from brand bible)
 JARVIS_CONFIRMATIONS = [
     "on it. give me a sec...",
@@ -233,6 +274,11 @@ class ClaudeCLIHandler:
     CIRCUIT_BREAKER_COOLDOWN = 1800  # 30 minutes cooldown when tripped
     CIRCUIT_BREAKER_WINDOW = 300  # 5 minute window for counting errors
 
+    # API Mode configuration (fallback when CLI is unavailable)
+    USE_API_MODE = True  # Enable API as fallback when CLI fails
+    API_MODEL = "claude-sonnet-4-20250514"  # Model to use in API fallback
+    API_MAX_TOKENS = 4096  # Max tokens for API response
+
     # Auto-retry configuration
     MAX_RETRIES = 2
     RETRY_BASE_DELAY = 2  # seconds
@@ -397,7 +443,109 @@ class ClaudeCLIHandler:
         self._execution_lock = asyncio.Lock()
         self._queue_depth = 0
         self._max_queue_depth = 3  # Max commands waiting
+
+        # API mode client (lazy init)
+        self._anthropic_client = None
+        self._api_mode_available = False
+        self._init_api_client()
         self._pending_commands: List[Dict[str, Any]] = []  # Track pending commands
+
+    def _init_api_client(self):
+        """Initialize Anthropic API client for API mode."""
+        if not self.USE_API_MODE:
+            logger.info("API mode disabled - using CLI subprocess mode")
+            return
+
+        anthropic = _get_anthropic()
+        if anthropic is None:
+            logger.warning("anthropic package not available - falling back to CLI mode")
+            return
+
+        # Try to get API key from environment or secrets
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            try:
+                from core.secrets import get_anthropic_key
+                api_key = get_anthropic_key()
+            except ImportError:
+                pass
+
+        if not api_key:
+            logger.warning("ANTHROPIC_API_KEY not found - falling back to CLI mode")
+            return
+
+        try:
+            self._anthropic_client = anthropic.Anthropic(api_key=api_key)
+            self._api_mode_available = True
+            logger.info("API mode initialized - using Anthropic API directly (no CLI subprocess)")
+        except Exception as e:
+            logger.error(f"Failed to initialize Anthropic client: {e}")
+            self._api_mode_available = False
+
+    async def _execute_via_api(
+        self,
+        prompt: str,
+        user_id: int,
+        context: str = None,
+    ) -> Tuple[bool, str, str]:
+        """Execute coding request via Anthropic API instead of CLI subprocess.
+
+        This uses the same API that governs this Claude instance, providing
+        a unified experience without spawning separate processes.
+
+        Returns:
+            Tuple[success, jarvis_response, full_output]
+        """
+        if not self._api_mode_available or not self._anthropic_client:
+            raise RuntimeError("API mode not available")
+
+        start_time = time.time()
+
+        # Build the message with optional context
+        messages = []
+        if context:
+            messages.append({
+                "role": "user",
+                "content": f"## Context from conversation:\n{context}\n\n## Current request:\n{prompt}"
+            })
+        else:
+            messages.append({"role": "user", "content": prompt})
+
+        try:
+            # Run in thread pool since anthropic client is sync
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self._anthropic_client.messages.create(
+                    model=self.API_MODEL,
+                    max_tokens=self.API_MAX_TOKENS,
+                    system=CODING_SYSTEM_PROMPT,
+                    messages=messages,
+                )
+            )
+
+            # Extract response content
+            output = response.content[0].text if response.content else ""
+
+            # Sanitize output (same as CLI mode)
+            sanitized = self.sanitize_output(output, paranoid=True)
+            summary = self.summarize_action(sanitized)
+            formatted = self.format_for_telegram(sanitized)
+
+            # Record success
+            self.record_execution(True, time.time() - start_time, user_id)
+
+            jarvis_response = self.get_jarvis_response(True, summary)
+            return True, jarvis_response, formatted
+
+        except Exception as e:
+            logger.error(f"API execution error: {e}")
+            self.record_execution(False, time.time() - start_time, user_id)
+            self.record_error()
+
+            error_msg = str(e)[:200]
+            jarvis_error = self.get_jarvis_response(False, error_msg)
+            return False, jarvis_error, f"API error: {e}"
 
     def _find_claude(self) -> str:
         """Find the Claude CLI executable."""
@@ -1117,7 +1265,11 @@ class ClaudeCLIHandler:
                 # Build enhanced prompt with context (includes learnings & preferences)
                 scrubbed_prompt, redacted = self._scrub_prompt(prompt)
                 enhanced_prompt = scrubbed_prompt
-                logger.info(f"Executing Claude CLI for admin {user_id}: {scrubbed_prompt[:100]}...")
+                logger.info(f"Executing request for admin {user_id}: {scrubbed_prompt[:100]}...")
+
+                # ============ CLI MODE (PRIMARY) ============
+                # Uses the Claude CLI that governs this instance
+                logger.info(f"Using CLI mode at: {self._claude_path}")
 
                 if include_context and self._bridge:
                     context = self.get_conversation_context(user_id, current_request=prompt, limit=5)
@@ -1263,11 +1415,35 @@ Execute this request. Be concise in your response. Follow any standing instructi
 
             except FileNotFoundError:
                 logger.error(f"Claude CLI not found at: {self._claude_path}")
+                # ============ API FALLBACK ============
+                if self._api_mode_available and self.USE_API_MODE:
+                    logger.info("CLI not found, attempting API fallback...")
+                    try:
+                        context_str = None
+                        if include_context and self._bridge:
+                            context_str = self.get_conversation_context(user_id, current_request=prompt, limit=5)
+                            if context_str:
+                                context_str, _ = self._scrub_prompt(context_str)
+                        return await self._execute_via_api(scrubbed_prompt, user_id, context=context_str)
+                    except Exception as api_err:
+                        logger.error(f"API fallback also failed: {api_err}")
                 self.record_execution(False, time.time() - start_time, user_id)
                 self.record_error()  # Circuit breaker tracking
                 return False, "Claude CLI not found", f"Tried: {self._claude_path}. Install via: npm install -g @anthropic-ai/claude-code"
             except Exception as e:
                 logger.error(f"Claude CLI execution error: {e}")
+                # ============ API FALLBACK ============
+                if self._api_mode_available and self.USE_API_MODE:
+                    logger.info(f"CLI failed ({e}), attempting API fallback...")
+                    try:
+                        context_str = None
+                        if include_context and self._bridge:
+                            context_str = self.get_conversation_context(user_id, current_request=prompt, limit=5)
+                            if context_str:
+                                context_str, _ = self._scrub_prompt(context_str)
+                        return await self._execute_via_api(scrubbed_prompt, user_id, context=context_str)
+                    except Exception as api_err:
+                        logger.error(f"API fallback also failed: {api_err}")
                 self.record_execution(False, time.time() - start_time, user_id)
                 self.record_error()  # Circuit breaker tracking
                 return False, f"Error: {str(e)[:100]}", str(e)

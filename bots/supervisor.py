@@ -504,6 +504,25 @@ async def create_telegram_bot():
         logger.warning("No TELEGRAM_BOT_TOKEN set, skipping Telegram bot")
         return
 
+    # Avoid getUpdates conflicts by waiting for polling lock availability
+    try:
+        from core.utils.instance_lock import acquire_instance_lock
+    except Exception as exc:
+        logger.warning(f"Polling lock helper unavailable: {exc}")
+        acquire_instance_lock = None
+
+    if acquire_instance_lock:
+        while True:
+            probe = acquire_instance_lock(tg_token, name="telegram_polling", max_wait_seconds=0)
+            if probe:
+                try:
+                    probe.close()
+                except Exception:
+                    pass
+                break
+            logger.warning("Telegram polling lock held by another process; waiting to start...")
+            await asyncio.sleep(15)
+
     # Run as subprocess to isolate it
     env = os.environ.copy()
     env["PYTHONPATH"] = str(project_root) + os.pathsep + env.get("PYTHONPATH", "")
@@ -511,7 +530,15 @@ async def create_telegram_bot():
     # Kill any lingering telegram bot processes from previous runs
     try:
         if sys.platform == "win32":
-            os.system("taskkill /F /IM python.exe /FI \"CMDLINE *tg_bot*\" 2>nul")
+            # taskkill /FI doesn't support CMDLINE filter on Windows
+            # Use PowerShell to find and kill processes with tg_bot in command line
+            kill_cmd = (
+                'powershell -Command "'
+                "Get-CimInstance Win32_Process -Filter \\\"Name='python.exe'\\\" | "
+                "Where-Object { $_.CommandLine -like '*tg_bot*' } | "
+                'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"'
+            )
+            os.system(kill_cmd)
         else:
             os.system("pkill -f 'python.*tg_bot' 2>/dev/null || true")
         await asyncio.sleep(2)  # Wait for process to fully terminate
@@ -549,9 +576,9 @@ async def create_autonomous_x_engine():
     from bots.twitter.x_claude_cli_handler import get_x_claude_cli_handler
 
     # Check for required credentials
-    x_api_key = os.environ.get("X_API_KEY", "")
+    x_api_key = os.environ.get("X_API_KEY", "") or os.environ.get("TWITTER_API_KEY", "")
     if not x_api_key:
-        logger.warning("No X_API_KEY set, skipping autonomous X engine")
+        logger.warning("No X_API_KEY/TWITTER_API_KEY set, skipping autonomous X engine")
         return
 
     engine = get_autonomous_engine()
@@ -780,6 +807,25 @@ async def main():
     (project_root / "logs").mkdir(exist_ok=True)
 
     load_env()
+
+    # ==========================================================
+    # CONTEXT ENGINE: Track startups to prevent restart loops
+    # ==========================================================
+    try:
+        from core.context_engine import context as context_engine
+        context_engine.record_startup()
+        if context_engine.is_restart_loop():
+            print("=" * 60)
+            print("  WARNING: Restart loop detected!")
+            print(f"  {context_engine.state.get('startup_count_today', 0)} restarts today")
+            print("  Waiting 60s before continuing...")
+            print("=" * 60)
+            await asyncio.sleep(60)  # Cool down period
+        status = context_engine.get_status()
+        logger.info(f"Context engine status: restarts_today={status['restarts_today']}, "
+                    f"can_run_sentiment={status['can_run_sentiment']}")
+    except ImportError:
+        logger.warning("Context engine not available - startup tracking disabled")
 
     # Validate configuration before starting
     if not validate_startup():

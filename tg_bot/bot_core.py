@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import List
 
 from core.logging_utils import configure_component_logger
+from core.logging.error_tracker import error_tracker
 
 # Add parent dir to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -124,6 +125,19 @@ EXPAND_MESSAGE_DELAY = 0.5  # 500ms between messages (was 200ms)
 EXPAND_RETRY_ATTEMPTS = 3  # Retry up to 3 times on rate limit
 
 
+def safe_error_text(error: Exception, max_len: int = 100) -> str:
+    """
+    Safely format error text for Telegram Markdown.
+
+    Escapes special characters that cause "can't find end of entity" errors.
+    """
+    text = str(error)[:max_len]
+    # Escape Markdown V1 special characters: _ * ` [
+    for char in ['_', '*', '`', '[']:
+        text = text.replace(char, '\\' + char)
+    return text
+
+
 class CallbackUpdate:
     """Wrapper to make callback queries work with command handlers that expect update.message."""
     def __init__(self, query):
@@ -135,7 +149,7 @@ class CallbackUpdate:
 
 async def _send_with_retry(query, text: str, parse_mode=None, reply_markup=None, max_retries: int = EXPAND_RETRY_ATTEMPTS):
     """Send a message with exponential backoff retry logic for rate limiting."""
-    from telegram.error import RetryAfter, TimedOut, NetworkError
+    from telegram.error import RetryAfter, TimedOut, NetworkError, BadRequest
     import random
 
     base_delay = 1.0  # Start with 1 second
@@ -154,6 +168,20 @@ async def _send_with_retry(query, text: str, parse_mode=None, reply_markup=None,
             wait_time = e.retry_after + 1
             logger.warning(f"Rate limited, waiting {wait_time}s (attempt {attempt + 1}/{max_retries})")
             await asyncio.sleep(wait_time)
+        except BadRequest as e:
+            if "Can't parse entities" in str(e):
+                logger.warning("Parse error; retrying without Markdown")
+                try:
+                    await query.message.reply_text(
+                        text,
+                        reply_markup=reply_markup
+                    )
+                    return True
+                except Exception as inner_exc:
+                    logger.error(f"Failed to send fallback message: {inner_exc}")
+                    return False
+            logger.error(f"Failed to send message: {e}")
+            return False
         except TimedOut:
             # Exponential backoff with jitter for timeouts
             delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
@@ -170,6 +198,38 @@ async def _send_with_retry(query, text: str, parse_mode=None, reply_markup=None,
 
     logger.error(f"Failed to send message after {max_retries} attempts")
     return False
+
+
+async def _safe_reply_text(update, context, text: str, **kwargs):
+    """Reply when possible; fall back to send_message if reply target is missing."""
+    from telegram.error import BadRequest
+
+    if update and getattr(update, "message", None):
+        try:
+            return await update.message.reply_text(text, **kwargs)
+        except BadRequest as exc:
+            if "Message to be replied not found" not in str(exc):
+                logger.warning(f"Reply failed: {exc}")
+        except Exception as exc:
+            logger.warning(f"Reply failed: {exc}")
+
+    if update and getattr(update, "effective_chat", None):
+        try:
+            return await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=text,
+                **kwargs,
+            )
+        except Exception as exc:
+            logger.error(f"Fallback send failed: {exc}")
+
+    return None
+
+
+def _escape_md(text: str) -> str:
+    """Escape user-supplied values for Markdown v1 rendering."""
+    return fmt.escape_markdown_v1(text)
+
 
 
 def _cleanse_sensitive_info(text: str) -> str:
@@ -366,10 +426,11 @@ def admin_only(func):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
         config = get_config()
         user_id = update.effective_user.id
+        username = update.effective_user.username if update.effective_user else None
 
-        if not config.is_admin(user_id):
+        if not config.is_admin(user_id, username):
             # Log attempt but don't expose admin IDs
-            logger.warning(f"Unauthorized access attempt by user {user_id}")
+            logger.warning(f"Unauthorized access attempt by user {user_id} (@{username})")
             await update.message.reply_text(
                 fmt.format_unauthorized(),
                 parse_mode=ParseMode.MARKDOWN,
@@ -581,9 +642,12 @@ async def stocks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 contract=stock.mint_address,
             )
 
+            safe_symbol = _escape_md(stock.symbol)
+            safe_underlying = _escape_md(stock.underlying)
+            safe_name = _escape_md(stock.name)
             await update.message.reply_text(
-                f"📈 *{stock.symbol}* ({stock.underlying})\n"
-                f"_{stock.name}_\n\n"
+                f"📈 *{safe_symbol}* ({safe_underlying})\n"
+                f"_{safe_name}_\n\n"
                 f"💵 ${stock.price_usd:,.2f} {change_emoji} YTD: {change_sign}{stock.change_1y:.1f}%\n"
                 f"[View on Jupiter](https://jup.ag/swap/SOL-{stock.mint_address})",
                 parse_mode=ParseMode.MARKDOWN,
@@ -1817,7 +1881,9 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bridge.memory.add_message(user_id, username, "user", message, chat_id)
 
         # Send confirmation
-        confirm_msg = await update.message.reply_text(
+        confirm_msg = await _safe_reply_text(
+            update,
+            context,
             "🔄 <b>Processing coding request...</b>\n\n"
             f"<i>{message[:200]}{'...' if len(message) > 200 else ''}</i>",
             parse_mode=ParseMode.HTML
@@ -1825,6 +1891,8 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Execute via Claude CLI
         async def send_status(msg: str):
+            if not confirm_msg:
+                return
             try:
                 await confirm_msg.edit_text(msg, parse_mode=ParseMode.HTML)
             except Exception:  # noqa: BLE001 - intentional catch-all
@@ -1854,7 +1922,12 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bridge.memory.add_message(user_id, "jarvis", "assistant", summary, chat_id)
         
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Code error: {str(e)[:200]}", parse_mode=ParseMode.HTML)
+        await _safe_reply_text(
+            update,
+            context,
+            f"\u26a0\ufe0f Code error: {str(e)[:200]}",
+            parse_mode=ParseMode.HTML,
+        )
 
 
 @admin_only
@@ -2671,9 +2744,10 @@ def _build_full_trading_report(signals_list, portfolio_usd: float, mode: str) ->
     for i, sig in enumerate(signals_list[:10], 1):
         grade = _grade_for_signal(sig)
         grade_emoji = _get_grade_emoji(grade)
+        safe_symbol = _escape_md(sig.symbol or "???")
 
         # Token header with grade
-        lines.append(f"*{i}. {sig.symbol}* {grade_emoji} Grade: *{grade}*")
+        lines.append(f"*{i}. {safe_symbol}* {grade_emoji} Grade: *{grade}*")
 
         # Price and changes
         price_str = fmt.format_price(sig.price_usd) if sig.price_usd else "$0.00"
@@ -3258,6 +3332,7 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
             # Post buy buttons for each token with JARVIS insights
             for token in tokens[:5]:
                 contract_short = token["contract"][:10] if token["contract"] else ""
+                safe_symbol = _escape_md(token.get("symbol", ""))
                 keyboard = _create_ape_keyboard(
                     symbol=token["symbol"],
                     asset_type="token",
@@ -3270,6 +3345,7 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
 
                 # JARVIS quick insight for microcaps based on price action & verdict
                 verdict = token.get("verdict", "NEUTRAL")
+                safe_verdict = _escape_md(verdict)
                 if verdict == "BULLISH" and change > 20:
                     insight = "momentum strong. late entry risk but uptrend confirmed"
                 elif verdict == "BULLISH":
@@ -3288,13 +3364,14 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
                     insight = "small dip. might be entry. might be start of dump"
                 else:
                     insight = "major correction. either dead or opportunity. dyor"
+                safe_insight = _escape_md(insight)
 
                 await _send_with_retry(
                     query,
-                    f"🛒 *{token['symbol']}*\n"
+                    f"🛒 *{safe_symbol}*\n"
                     f"Price: {price_str} {change_emoji} {change:+.1f}%\n"
-                    f"Signal: {verdict}\n"
-                    f"💭 _{insight}_",
+                    f"Signal: {safe_verdict}\n"
+                    f"💭 _{safe_insight}_",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
                 )
@@ -3323,6 +3400,9 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
 
             # Post buy buttons for each stock
             for stock in stocks[:5]:
+                safe_symbol = _escape_md(stock.get("symbol", ""))
+                safe_underlying = _escape_md(stock.get("underlying", ""))
+                safe_name = _escape_md(stock.get("name", ""))
                 keyboard = _create_ape_keyboard(
                     symbol=stock["symbol"],
                     asset_type="stock",
@@ -3331,8 +3411,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
 
                 await _send_with_retry(
                     query,
-                    f"🛒 *{stock['symbol']}* ({stock['underlying']})\n"
-                    f"{stock['name']}",
+                    f"🛒 *{safe_symbol}* ({safe_underlying})\n"
+                    f"{safe_name}",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
                 )
@@ -3361,6 +3441,9 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
 
             # Post buy buttons for each index
             for index in indexes:
+                safe_symbol = _escape_md(index.get("symbol", ""))
+                safe_underlying = _escape_md(index.get("underlying", ""))
+                safe_name = _escape_md(index.get("name", ""))
                 keyboard = _create_ape_keyboard(
                     symbol=index["symbol"],
                     asset_type=index["type"],  # Use actual type: index, commodity, etc.
@@ -3371,8 +3454,8 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
 
                 await _send_with_retry(
                     query,
-                    f"🛒 {type_emoji} *{index['symbol']}* ({index['underlying']})\n"
-                    f"{index['name']}",
+                    f"🛒 {type_emoji} *{safe_symbol}* ({safe_underlying})\n"
+                    f"{safe_name}",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
                 )
@@ -3425,11 +3508,14 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
 
                 # Medal for top 3
                 medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"#{i+1}"
+                safe_symbol = _escape_md(pick.get("symbol", ""))
+                safe_asset_class = _escape_md(str(asset_class).upper())
+                safe_reason = _escape_md(pick.get("reasoning", ""))
 
                 await _send_with_retry(
                     query,
-                    f"{medal} *{pick['symbol']}* ({pick['asset_class'].upper()}) {conv_emoji} {pick['conviction']}/100\n"
-                    f"📝 {pick['reasoning'][:60]}...",
+                    f"{medal} *{safe_symbol}* ({safe_asset_class}) {conv_emoji} {pick['conviction']}/100\n"
+                    f"📝 {safe_reason[:60]}...",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
                 )
@@ -3478,6 +3564,7 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
                     mcap_str = f"${mcap / 1_000:.0f}K"
 
                 category = token.get("category", "Other")
+                safe_category = _escape_md(category)
                 cat_emoji = {"L1": "⚡", "DeFi": "💱", "Infrastructure": "🛠️", "Meme": "🐕"}.get(category, "📊")
 
                 # JARVIS quick insight based on price action
@@ -3493,13 +3580,14 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
                     insight = "pullback. dca territory if you're already in"
                 else:
                     insight = "significant drop. either opportunity or warning. dyor"
+                safe_insight = _escape_md(insight)
 
                 await _send_with_retry(
                     query,
-                    f"🛒 {cat_emoji} *{token['symbol']}* ({category})\n"
+                    f"🛒 {cat_emoji} *{safe_symbol}* ({safe_category})\n"
                     f"Price: {price_str} {change_emoji} {change:+.1f}%\n"
                     f"MCap: {mcap_str}\n"
-                    f"💭 _{insight}_",
+                    f"💭 _{safe_insight}_",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
                 )
@@ -3508,7 +3596,7 @@ async def _handle_expand_section(query, section: str, config, user_id: int):
         else:
             await _send_with_retry(
                 query,
-                f"Unknown section: {section}",
+                f"Unknown section: {_escape_md(section)}",
                 parse_mode=ParseMode.MARKDOWN
             )
 
@@ -3858,10 +3946,11 @@ async def _execute_trade_with_tp_sl(query, data: str):
 
         if success and position:
             mode = "🟢 LIVE" if not engine.dry_run else "🟡 PAPER"
+            safe_symbol = _escape_md(signal.symbol or "???")
             result_msg = f"""
 ✅ *TRADE EXECUTED*
 
-*Token:* {signal.symbol}
+*Token:* {safe_symbol}
 *Size:* {pct}% (~${amount_usd:.2f})
 *Entry:* ${position.entry_price:.8f}
 *Amount:* {position.amount:.4f} tokens
@@ -4052,7 +4141,8 @@ async def _show_positions_inline(query):
             total_pnl += pnl_usd
 
             pnl_emoji = "🟢" if pnl_pct >= 0 else "🔴"
-            lines.append(f"*{pos.token_symbol}* {pnl_emoji}")
+            safe_symbol = _escape_md(pos.token_symbol)
+            lines.append(f"*{safe_symbol}* {pnl_emoji}")
             lines.append(f"   P&L: {pnl_pct:+.1f}% (${pnl_usd:+.2f})")
             lines.append(f"   TP: ${pos.take_profit_price:.8f}")
             lines.append(f"   SL: ${pos.stop_loss_price:.8f}")
@@ -4097,7 +4187,8 @@ async def _toggle_live_mode(query):
 
 async def _handle_trending_inline(query):
     """Handle trending request from inline keyboard."""
-    await query.message.reply_text(
+    await _send_with_retry(
+        query,
         "_Fetching trending tokens..._",
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -4107,7 +4198,8 @@ async def _handle_trending_inline(query):
     signals_list = await service.get_trending_tokens(limit=5)
 
     if not signals_list:
-        await query.message.reply_text(
+        await _send_with_retry(
+            query,
             fmt.format_error("Could not fetch trending tokens.", "Check /status for availability."),
             parse_mode=ParseMode.MARKDOWN,
         )
@@ -4123,7 +4215,8 @@ async def _handle_trending_inline(query):
 
     for i, sig in enumerate(signals_list, 1):
         emoji = fmt.SIGNAL_EMOJI.get(sig.signal, "")
-        lines.append(f"*{i}. {sig.symbol}* {emoji}")
+        safe_symbol = _escape_md(sig.symbol)
+        lines.append(f"*{i}. {safe_symbol}* {emoji}")
         lines.append(f"   {fmt.format_price(sig.price_usd)} ({fmt.format_change(sig.price_change_1h)})")
         lines.append(f"   Vol: {fmt.format_volume(sig.volume_24h)} | Liq: {fmt.format_volume(sig.liquidity_usd)}")
         lines.append("")
@@ -4144,7 +4237,8 @@ async def _handle_trending_inline(query):
         InlineKeyboardButton("Menu", callback_data="menu_back"),
     ])
 
-    await query.message.reply_text(
+    await _send_with_retry(
+        query,
         "\n".join(lines),
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(keyboard),
@@ -4163,21 +4257,24 @@ async def _show_trade_ticket(query, token_address: str):
         )
     except Exception as e:
         logger.error(f"Trade ticket failed: {e}")
-        await query.message.reply_text(
+        await _send_with_retry(
+            query,
             fmt.format_error("Trade ticket failed", "Unable to load token data."),
             parse_mode=ParseMode.MARKDOWN,
         )
         return
 
     if signal.is_honeypot or signal.risk_level == "critical":
-        await query.message.reply_text(
+        await _send_with_retry(
+            query,
             fmt.format_error("Trade blocked", "Token flagged as high risk."),
             parse_mode=ParseMode.MARKDOWN,
         )
         return
 
     if signal.price_usd <= 0:
-        await query.message.reply_text(
+        await _send_with_retry(
+            query,
             fmt.format_error("Trade blocked", "Invalid token price."),
             parse_mode=ParseMode.MARKDOWN,
         )
@@ -4188,14 +4285,16 @@ async def _show_trade_ticket(query, token_address: str):
         _, portfolio_usd = await engine.get_portfolio_value()
     except Exception as e:
         logger.error(f"Treasury engine unavailable: {e}")
-        await query.message.reply_text(
+        await _send_with_retry(
+            query,
             fmt.format_error("Trading not configured", str(e)),
             parse_mode=ParseMode.MARKDOWN,
         )
         return
 
     if portfolio_usd <= 0:
-        await query.message.reply_text(
+        await _send_with_retry(
+            query,
             fmt.format_error("Trade blocked", "Treasury balance is zero."),
             parse_mode=ParseMode.MARKDOWN,
         )
@@ -4212,10 +4311,12 @@ async def _show_trade_ticket(query, token_address: str):
 
     mode = "DRY RUN" if engine.dry_run else "LIVE"
 
+    safe_symbol = _escape_md(signal.symbol)
+
     lines = [
         "*JUPITER TRADE TICKET*",
         "",
-        f"*{signal.symbol}*",
+        f"*{safe_symbol}*",
         f"`{signal.address}`",
         f"Price: {fmt.format_price(signal.price_usd)}",
         f"1h: {fmt.format_change(signal.price_change_1h)} | 24h: {fmt.format_change(signal.price_change_24h)}",
@@ -4243,7 +4344,8 @@ async def _show_trade_ticket(query, token_address: str):
         ],
     ])
 
-    await query.message.reply_text(
+    await _send_with_retry(
+        query,
         "\n".join(lines),
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=keyboard,
@@ -4287,7 +4389,8 @@ async def _execute_trade_percent(query, data: str):
         return
 
     if signal.is_honeypot or signal.risk_level == "critical":
-        await query.message.reply_text(
+        await _send_with_retry(
+            query,
             fmt.format_error("Trade blocked", "Token flagged as high risk."),
             parse_mode=ParseMode.MARKDOWN,
         )
@@ -4305,14 +4408,16 @@ async def _execute_trade_percent(query, data: str):
         _, portfolio_usd = await engine.get_portfolio_value()
     except Exception as e:
         logger.error(f"Treasury engine unavailable: {e}")
-        await query.message.reply_text(
+        await _send_with_retry(
+            query,
             fmt.format_error("Trading not configured", str(e)),
             parse_mode=ParseMode.MARKDOWN,
         )
         return
 
     if portfolio_usd <= 0:
-        await query.message.reply_text(
+        await _send_with_retry(
+            query,
             fmt.format_error("Trade blocked", "Treasury balance is zero."),
             parse_mode=ParseMode.MARKDOWN,
         )
@@ -4355,11 +4460,12 @@ async def _execute_trade_percent(query, data: str):
 
     entry_price = position.entry_price if position else signal.price_usd
     amount_line = f"Amount: {position.amount:.4f}" if position else "Amount: n/a"
+    safe_symbol = _escape_md(signal.symbol or "???")
 
     lines = [
         "*TRADE EXECUTED*",
         "",
-        f"Token: *{signal.symbol}*",
+        f"Token: *{safe_symbol}*",
         f"Size: {pct:.0f}% (~{fmt.format_price(amount_usd)})",
         f"Entry: {fmt.format_price(entry_price)}",
         amount_line,
@@ -4476,7 +4582,7 @@ async def scheduled_digest(context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log errors with full details for debugging."""
     import traceback
-    from telegram.error import RetryAfter, TimedOut, NetworkError, BadRequest
+    from telegram.error import RetryAfter, TimedOut, NetworkError, BadRequest, BadRequest, Conflict
 
     def sanitize_for_log(text: str) -> str:
         """Remove non-ASCII characters to avoid UnicodeEncodeError on Windows."""
@@ -4503,7 +4609,26 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tb_str = ''.join(traceback.format_exception(type(error), error, error.__traceback__))[-500:]
     logger.error(f"Traceback: {sanitize_for_log(tb_str)}")
 
+    # Track error for deduplication and reporting
+    try:
+        error_tracker.track_error(
+            error,
+            context="tg_bot.bot_core.error_handler",
+            component="TelegramBot",
+        )
+    except Exception as tracker_exc:
+        logger.warning(f"Error tracker failed: {tracker_exc}")
+
     # Handle specific error types
+    if isinstance(error, Conflict):
+        # Another instance is polling - this is a critical error that should stop the bot
+        logger.critical(
+            "CONFLICT ERROR: Another bot instance is polling. "
+            "Kill other instances or wait for them to stop. "
+            "Bot will continue retrying but may not receive updates."
+        )
+        return  # Let the retry loop handle it
+
     if isinstance(error, RetryAfter):
         logger.warning(f"Rate limited for {error.retry_after}s - will retry")
         return  # Don't send error message during rate limit
@@ -4515,8 +4640,10 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Try to notify user (with retry for rate limits)
     if update and update.effective_message:
         try:
-            await update.effective_message.reply_text(
-                f"⚠️ Error: {error_type}. Please try again.",
+            await _safe_reply_text(
+                update,
+                context,
+                f"\u26a0\ufe0f Error: {error_type}. Please try again.",
                 parse_mode=ParseMode.MARKDOWN,
             )
         except Exception as e:
@@ -4924,7 +5051,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
 
                 # Send confirmation
-                confirm_msg = await update.message.reply_text(
+                confirm_msg = await _safe_reply_text(
+                    update,
+                    context,
                     "🔄 <b>Processing coding request...</b>\n\n"
                     f"<i>{text[:200]}{'...' if len(text) > 200 else ''}</i>",
                     parse_mode=ParseMode.HTML
@@ -4932,6 +5061,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # Execute via Claude CLI
                 async def send_status(msg: str):
+                    if not confirm_msg:
+                        return
                     try:
                         await confirm_msg.edit_text(msg, parse_mode=ParseMode.HTML)
                     except Exception:  # noqa: BLE001 - intentional catch-all
@@ -4973,9 +5104,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
         except Exception as e:
             logger.error(f"Claude CLI error: {e}")
-            await update.message.reply_text(
-                f"⚠️ Coding request failed: {str(e)[:200]}",
-                parse_mode=ParseMode.HTML
+            await _safe_reply_text(
+                update,
+                context,
+                f"\u26a0\ufe0f Coding request failed: {str(e)[:200]}",
+                parse_mode=ParseMode.HTML,
             )
             return
 
@@ -5013,8 +5146,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if reply:
         # Cleanse sensitive info before sending to public chat
         safe_reply = _cleanse_sensitive_info(reply)
-        await update.message.reply_text(
+        await _safe_reply_text(
+            update,
+            context,
             safe_reply,
             disable_web_page_preview=True,
         )
-

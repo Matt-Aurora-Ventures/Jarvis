@@ -336,6 +336,16 @@ class SignalService:
         if not self._core_available.get("grok"):
             return
 
+        # Check context_engine timing (use configured interval)
+        try:
+            from core.context_engine import context
+            min_interval_hours = self.config.sentiment_interval_seconds / 3600.0
+            if not context.can_run_sentiment(min_interval_hours=min_interval_hours):
+                logger.info("Sentiment blocked by context_engine timing controls")
+                return
+        except ImportError:
+            logger.debug("context_engine not available, skipping timing check")
+
         # Check rate limit
         can_check, reason = self.tracker.can_make_sentiment_call()
         if not can_check:
@@ -349,6 +359,13 @@ class SignalService:
             result = x_sentiment.analyze_sentiment(text, focus="trading")
 
             self.tracker.record_call("grok", "sentiment", tokens_used=500)
+
+            # Record in context_engine to enforce 4-hour cache
+            try:
+                from core.context_engine import context
+                context.record_sentiment_run()
+            except ImportError:
+                pass
 
             if result:
                 signal.sentiment = result.sentiment

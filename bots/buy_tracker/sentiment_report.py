@@ -631,6 +631,16 @@ class SentimentReportGenerator:
             custom_cost=GROK_COST_PER_CALL,
         )
 
+    def _can_run_report(self) -> bool:
+        """Check timing controls to avoid repeated reports on restart."""
+        try:
+            from core.context_engine import context
+        except ImportError:
+            return True
+
+        min_interval_hours = self.interval_minutes / 60.0
+        return context.can_run_sentiment(min_interval_hours=min_interval_hours)
+
     async def start(self):
         """Start the sentiment report scheduler."""
         self._running = True
@@ -639,7 +649,10 @@ class SentimentReportGenerator:
         logger.info(f"Starting sentiment report generator (every {self.interval_minutes} min)")
 
         # Post initial report
-        await self.generate_and_post_report()
+        if self._can_run_report():
+            await self.generate_and_post_report()
+        else:
+            logger.info("Skipping initial sentiment report (recently generated)")
 
         # Schedule loop
         while self._running:
@@ -715,9 +728,13 @@ class SentimentReportGenerator:
 
         return regime
 
-    async def generate_and_post_report(self):
+    async def generate_and_post_report(self, force: bool = False) -> bool:
         """Generate sentiment report and post to Telegram."""
         try:
+            if not force and not self._can_run_report():
+                logger.info("Sentiment report blocked by timing controls")
+                return False
+
             # NEW: Get market regime first (BTC/SOL trends)
             market_regime = await self._get_market_regime()
 
@@ -768,10 +785,18 @@ class SentimentReportGenerator:
             # Post to Telegram with ape buttons for bullish tokens
             await self._post_to_telegram(report, tokens=tokens)
 
+            try:
+                from core.context_engine import context
+                context.record_sentiment_run()
+            except ImportError:
+                pass
+
             logger.info(f"Posted sentiment report with {len(tokens)} tokens + stocks + commodities + metals")
+            return True
 
         except Exception as e:
             logger.error(f"Failed to generate sentiment report: {e}")
+            return False
 
     async def _get_trending_tokens(self, limit: int = 10) -> List[TokenSentiment]:
         """Get HOT trending Solana tokens from DexScreener - no major caps."""
