@@ -22,6 +22,30 @@ from core.utils.circuit_breaker import APICircuitBreaker, CircuitOpenError
 
 logger = logging.getLogger(__name__)
 
+# Structured error logging integration
+def _log_twitter_error(error: Exception, context: str, metadata: dict = None):
+    """Log error with structured data and track in error rate system."""
+    try:
+        from core.monitoring.supervisor_health_bus import log_component_error
+        log_component_error(
+            component="twitter_client",
+            error=error,
+            context={"operation": context, **(metadata or {})},
+            severity="error"
+        )
+    except ImportError:
+        # Fallback to standard logging
+        logger.error(f"[{context}] {error}", exc_info=True)
+
+
+def _log_twitter_event(event_type: str, message: str, data: dict = None):
+    """Log twitter bot event with structured data."""
+    try:
+        from core.monitoring.supervisor_health_bus import log_bot_event
+        log_bot_event("twitter", event_type, message, data)
+    except ImportError:
+        logger.info(f"[{event_type}] {message}")
+
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 # OAuth2 token persistence file (same directory as .env)
@@ -259,6 +283,7 @@ class TwitterClient:
         self._xdk_client = None  # Official xdk client
         self._tweepy_api = None  # Tweepy for media uploads
         self._tweepy_client = None  # Tweepy v2 client (fallback)
+        self._bearer_client = None  # Tweepy v2 client with bearer token (for reading)
         self._username: Optional[str] = None
         self._user_id: Optional[str] = None
         self._use_oauth2 = False  # Whether to use OAuth 2.0 for posting
@@ -336,6 +361,16 @@ class TwitterClient:
                         tweepy_user_id = str(me.data.id)
                         self._username = tweepy_username
                         self._user_id = tweepy_user_id
+
+                        # Init bearer token client for reading (mentions, etc.)
+                        # OAuth 1.0a user tokens have limited read access on free tier
+                        if self.credentials.bearer_token:
+                            self._bearer_client = tweepy.Client(
+                                bearer_token=self.credentials.bearer_token,
+                                wait_on_rate_limit=True
+                            )
+                            logger.debug("Bearer token client initialized for reading")
+
                         logger.info(f"Connected to X as @{self._username} (OAuth 1.0a via tweepy)")
                         return True
                 except Exception as e:
@@ -570,7 +605,7 @@ class TwitterClient:
         except RetryablePostError:
             raise
         except Exception as e:
-            logger.error(f"Failed to post tweet: {e}")
+            _log_twitter_error(e, "post_tweet", {"text_length": len(text), "has_media": bool(media_ids)})
             return TweetResult(success=False, error=str(e))
 
     async def _sync_to_telegram(self, tweet_text: str, tweet_url: str) -> bool:
@@ -751,11 +786,12 @@ class TwitterClient:
                 except Exception as e:
                     logger.warning(f"xdk get_mentions failed: {e}, trying tweepy")
 
-            # Fallback to tweepy
-            if self._tweepy_client and self._user_id:
+            # Use bearer token client for reading (OAuth 1.0a has limited access on free tier)
+            read_client = self._bearer_client or self._tweepy_client
+            if read_client and self._user_id:
                 mentions = await loop.run_in_executor(
                     None,
-                    lambda: self._tweepy_client.get_users_mentions(
+                    lambda: read_client.get_users_mentions(
                         id=self._user_id,
                         since_id=since_id,
                         max_results=max_results,
@@ -780,7 +816,7 @@ class TwitterClient:
                         "author_id": tweet.author_id,
                         "author_username": users.get(tweet.author_id, "unknown"),
                         "created_at": tweet.created_at,
-                        "conversation_id": tweet.conversation_id
+                        "conversation_id": getattr(tweet, "conversation_id", None)
                     }
                     for tweet in mentions.data
                 ]

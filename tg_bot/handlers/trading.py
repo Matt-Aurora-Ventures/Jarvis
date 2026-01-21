@@ -21,6 +21,21 @@ from tg_bot.handlers.interactive_ui import (
 logger = logging.getLogger(__name__)
 
 
+# Structured error logging integration
+def _log_tg_error(error: Exception, context: str, metadata: dict = None):
+    """Log Telegram handler error with structured data."""
+    try:
+        from core.monitoring.supervisor_health_bus import log_component_error
+        log_component_error(
+            component="telegram_bot",
+            error=error,
+            context={"handler": context, **(metadata or {})},
+            severity="error"
+        )
+    except ImportError:
+        logger.error(f"[{context}] {error}", exc_info=True)
+
+
 @error_handler
 @admin_only
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):

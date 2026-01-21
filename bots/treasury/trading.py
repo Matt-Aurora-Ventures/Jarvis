@@ -104,6 +104,30 @@ else:
     logger = logging.getLogger(__name__)
 
 
+# Structured error logging integration for health bus
+def _log_trading_error(error: Exception, context: str, metadata: dict = None):
+    """Log error with structured data and track in error rate system."""
+    try:
+        from core.monitoring.supervisor_health_bus import log_component_error
+        log_component_error(
+            component="treasury_trading",
+            error=error,
+            context={"operation": context, **(metadata or {})},
+            severity="error"
+        )
+    except ImportError:
+        logger.error(f"[{context}] {error}", exc_info=True)
+
+
+def _log_trading_event(event_type: str, message: str, data: dict = None):
+    """Log trading event with structured data."""
+    try:
+        from core.monitoring.supervisor_health_bus import log_bot_event
+        log_bot_event("treasury", event_type, message, data)
+    except ImportError:
+        logger.info(f"[{event_type}] {message}")
+
+
 class TradeDirection(Enum):
     LONG = "LONG"      # Buy token
     SHORT = "SHORT"    # Sell token (or skip)
@@ -1902,7 +1926,11 @@ class TradingEngine:
                                 if result.success:
                                     logger.info(f"Sold {position.token_symbol} via {reason}: {result.signature}")
                     except Exception as sell_err:
-                        logger.error(f"Failed to sell {position.token_symbol}: {sell_err}")
+                        _log_trading_error(sell_err, "sell_position", {
+                            "symbol": position.token_symbol,
+                            "amount": str(amount),
+                            "reason": reason,
+                        })
 
                 # Move to history
                 self.trade_history.append(position)
@@ -1934,7 +1962,7 @@ class TradingEngine:
                 )
 
             except Exception as e:
-                logger.error(f"Failed to close position {pos_id}: {e}")
+                _log_trading_error(e, "close_position", {"position_id": pos_id})
 
         if closed_positions:
             self._save_state()
