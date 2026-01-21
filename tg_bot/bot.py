@@ -39,6 +39,9 @@ from tg_bot.handlers.commands.watchlist_command import watch_command, unwatch_co
 from tg_bot.handlers.commands.commands_command import commands_command
 from core.utils.instance_lock import acquire_instance_lock
 
+# Demo UI (v6.0.0 - Trojan-style trading interface)
+from tg_bot.handlers.demo import demo, demo_callback, demo_message_handler
+
 
 def register_handlers(app: Application, config) -> None:
     """Register command, callback, and message handlers on the Telegram app."""
@@ -100,6 +103,10 @@ def register_handlers(app: Application, config) -> None:
     app.add_handler(CommandHandler("upgrades", upgrades))
     app.add_handler(CommandHandler("xbot", xbot))
     app.add_handler(CommandHandler("paper", paper))
+
+    # Demo UI - Beautiful Trojan-style trading interface (v6.0.0)
+    app.add_handler(CommandHandler("demo", demo))
+    app.add_handler(CallbackQueryHandler(demo_callback, pattern=r"^demo:"))
 
     # Paper Trading Simulator (SOL-based, real prices)
     app.add_handler(CommandHandler("sim", sim))
