@@ -3716,45 +3716,103 @@ Reply type guidance:
         """Post a tweet, optionally with an image."""
         try:
             # =====================================================================
-            # CONTEXT ENGINE CHECK - Rate limiting and timing controls
+            # DECISION ENGINE - Institution-grade decision making
+            # Makes HOLD a first-class intelligent choice with full audit trail
             # =====================================================================
-            if not context.can_tweet(min_interval_minutes=30):
-                logger.warning("SKIPPED: context_engine rate limit (30 min between tweets)")
-                return None
+            try:
+                from bots.twitter.x_decision_engine import get_x_decision_engine, Decision
 
-            # =====================================================================
-            # DUPLICATE DETECTION - Two-Layer System
-            # Layer 1: Persistent fingerprints (survives restarts, 48h window)
-            # Layer 2: In-memory similarity (session-based, 48h window)
-            # =====================================================================
+                decision_engine = get_x_decision_engine()
 
-            # Layer 1: Check persistent fingerprints FIRST (most important)
-            is_dup_fp, dup_reason = await self.memory.is_duplicate_fingerprint(
-                draft.content,
-                hours=DUPLICATE_DETECTION_HOURS
-            )
-            if is_dup_fp:
-                logger.warning(f"SKIPPED DUPLICATE [FINGERPRINT]: {dup_reason}")
-                logger.info(f"Blocked: {draft.content[:80]}...")
-                return None
+                # Calculate novelty score based on content checks
+                novelty_score = 0.7  # Default
 
-            # Layer 2: Check in-memory similarity (catches soft duplicates)
-            # Lower threshold (0.4) catches more duplicates - 40% word overlap = likely same topic
-            is_similar, similar_content = self.memory.is_similar_to_recent(
-                draft.content,
-                hours=DUPLICATE_DETECTION_HOURS,
-                threshold=0.4
-            )
-            if is_similar:
-                logger.warning(f"SKIPPED DUPLICATE [SIMILARITY]: Tweet too similar to recent content")
-                logger.info(f"New: {draft.content[:60]}...")
-                logger.info(f"Old: {similar_content[:60] if similar_content else 'N/A'}...")
-                return None
+                # Layer 1: Check persistent fingerprints
+                is_dup_fp, dup_reason = await self.memory.is_duplicate_fingerprint(
+                    draft.content,
+                    hours=DUPLICATE_DETECTION_HOURS
+                )
+                if is_dup_fp:
+                    novelty_score = 0.1  # Very low novelty if duplicate
 
-            # Check content relevance - reject generic/low-quality content
-            if not is_content_relevant(draft.content, draft.category):
-                logger.warning(f"SKIPPED IRRELEVANT: Content failed quality check for {draft.category}")
-                return None
+                # Layer 2: Check in-memory similarity
+                is_similar, similar_content = self.memory.is_similar_to_recent(
+                    draft.content,
+                    hours=DUPLICATE_DETECTION_HOURS,
+                    threshold=_get_duplicate_similarity_threshold()
+                )
+                if is_similar:
+                    novelty_score = min(novelty_score, 0.2)
+
+                # Check content relevance
+                if not is_content_relevant(draft.content, draft.category):
+                    novelty_score = min(novelty_score, 0.15)
+
+                # Make the decision
+                image_cost = 0.02 if with_image and draft.image_prompt else 0.0
+                result = await decision_engine.should_post(
+                    content=draft.content,
+                    category=draft.category,
+                    confidence=getattr(draft, 'confidence', 0.7),
+                    novelty_score=novelty_score,
+                    cost=0.01 + image_cost,
+                    metadata={
+                        "cashtags": draft.cashtags,
+                        "has_image": with_image,
+                        "content_length": len(draft.content),
+                    },
+                )
+
+                # Handle decision result
+                if result.decision == Decision.HOLD:
+                    logger.info(f"DECISION: HOLD - {result.rationale}")
+                    logger.debug(f"What would change: {result.what_would_change_my_mind}")
+                    return None
+
+                if result.decision == Decision.ESCALATE:
+                    logger.warning(f"DECISION: ESCALATE - {result.rationale}")
+                    # Escalation notification handled by decision engine callback
+                    return None
+
+                # Decision is EXECUTE - proceed with posting
+                logger.info(f"DECISION: EXECUTE - {result.rationale} (confidence: {result.confidence:.0%})")
+
+            except ImportError:
+                # Fallback to legacy checks if decision engine not available
+                logger.debug("Decision engine not available, using legacy checks")
+
+                # =====================================================================
+                # LEGACY CHECKS (fallback)
+                # =====================================================================
+
+                # Context engine rate limit
+                if not context.can_tweet(min_interval_minutes=30):
+                    logger.warning("SKIPPED: context_engine rate limit (30 min between tweets)")
+                    return None
+
+                # Duplicate fingerprint check
+                is_dup_fp, dup_reason = await self.memory.is_duplicate_fingerprint(
+                    draft.content,
+                    hours=DUPLICATE_DETECTION_HOURS
+                )
+                if is_dup_fp:
+                    logger.warning(f"SKIPPED DUPLICATE [FINGERPRINT]: {dup_reason}")
+                    return None
+
+                # Similarity check
+                is_similar, similar_content = self.memory.is_similar_to_recent(
+                    draft.content,
+                    hours=DUPLICATE_DETECTION_HOURS,
+                    threshold=0.4
+                )
+                if is_similar:
+                    logger.warning(f"SKIPPED DUPLICATE [SIMILARITY]")
+                    return None
+
+                # Relevance check
+                if not is_content_relevant(draft.content, draft.category):
+                    logger.warning(f"SKIPPED IRRELEVANT: {draft.category}")
+                    return None
 
             twitter = await self._get_twitter()
 
@@ -3812,13 +3870,35 @@ Reply type guidance:
                     logger.debug(f"Telegram sync skipped: {e}")
 
                 logger.info(f"Posted tweet: {result.tweet_id}")
+
+                # Record success in decision engine (resets circuit breaker)
+                try:
+                    from bots.twitter.x_decision_engine import get_x_decision_engine
+                    get_x_decision_engine().record_success()
+                except Exception:
+                    pass
+
                 return result.tweet_id
             else:
                 logger.error(f"Tweet failed: {result.error}")
-                
+
+                # Record failure in decision engine (trips circuit breaker)
+                try:
+                    from bots.twitter.x_decision_engine import get_x_decision_engine
+                    get_x_decision_engine().record_failure(result.error or "Unknown error")
+                except Exception:
+                    pass
+
         except Exception as e:
             logger.error(f"Post tweet error: {e}")
-        
+
+            # Record failure in decision engine
+            try:
+                from bots.twitter.x_decision_engine import get_x_decision_engine
+                get_x_decision_engine().record_failure(str(e))
+            except Exception:
+                pass
+
         return None
     
     def _get_recommended_types(self, recommendations: Dict[str, Any]) -> List[str]:

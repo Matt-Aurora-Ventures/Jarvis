@@ -3189,6 +3189,320 @@ Reply with a Solana token address to buy.
         return text, InlineKeyboardMarkup(keyboard)
 
     @staticmethod
+    def bags_fm_top_tokens(
+        tokens: List[Dict[str, Any]],
+        market_regime: Dict[str, Any] = None,
+        default_tp_percent: float = 15.0,
+        default_sl_percent: float = 15.0,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Bags.fm Top 15 Tokens by Volume with AI Sentiment.
+
+        Features:
+        - Top 15 tokens ranked by 24h volume
+        - AI sentiment score per token
+        - Signal strength indicator
+        - Buy with auto TP/SL buttons
+        - Sell buttons for open positions
+        """
+        theme = JarvisTheme
+
+        regime = market_regime or {}
+        regime_name = regime.get("regime", "NEUTRAL")
+        risk_level = regime.get("risk_level", "NORMAL")
+        regime_emoji = {"BULL": "🟢", "BEAR": "🔴"}.get(regime_name, "🟡")
+
+        # Calculate total volume
+        total_volume = sum(t.get("volume_24h", 0) for t in tokens)
+
+        lines = [
+            f"🎒 *BAGS.FM TOP 15*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            f"Market: {regime_emoji} {regime_name} | 24h Vol: ${total_volume/1_000_000:.1f}M",
+            "",
+            "*Volume Leaders with AI Sentiment:*",
+            "",
+        ]
+
+        keyboard = []
+
+        for i, token in enumerate(tokens[:15], 1):
+            symbol = token.get("symbol", "???")
+            address = token.get("address", "")
+            price = token.get("price_usd", 0)
+            volume = token.get("volume_24h", 0)
+            liquidity = token.get("liquidity", 0)
+            mcap = token.get("market_cap", 0)
+            holders = token.get("holders", 0)
+
+            # Sentiment data
+            sentiment = token.get("sentiment", "neutral")
+            sentiment_score = token.get("sentiment_score", 0.5)
+            signal = token.get("signal", "NEUTRAL")
+
+            # Format price
+            if price < 0.0001:
+                price_str = f"${price:.8f}"
+            elif price < 1:
+                price_str = f"${price:.6f}"
+            else:
+                price_str = f"${price:.2f}"
+
+            # Volume formatting
+            if volume >= 1_000_000:
+                vol_str = f"${volume/1_000_000:.1f}M"
+            else:
+                vol_str = f"${volume/1_000:.0f}K"
+
+            # Sentiment emoji and signal
+            sent_emoji = {
+                "very_bullish": "🚀",
+                "bullish": "🟢",
+                "neutral": "🟡",
+                "bearish": "🟠",
+                "very_bearish": "🔴",
+            }.get(sentiment.lower() if isinstance(sentiment, str) else "neutral", "⚪")
+
+            signal_emoji = {
+                "STRONG_BUY": "🟢🟢",
+                "BUY": "🟢",
+                "HOLD": "🟡",
+                "SELL": "🟠",
+                "STRONG_SELL": "🔴🔴",
+            }.get(signal, "⚪")
+
+            # Score bar visualization
+            score_bars = int(sentiment_score * 5) if sentiment_score else 0
+            score_bar = "▰" * score_bars + "▱" * (5 - score_bars)
+
+            # Rank medal
+            if i == 1:
+                rank = "🥇"
+            elif i == 2:
+                rank = "🥈"
+            elif i == 3:
+                rank = "🥉"
+            else:
+                rank = f"#{i:02d}"
+
+            lines.append(f"{rank} *{symbol}* {price_str}")
+            lines.append(f"   Vol: {vol_str} | Liq: ${liquidity/1_000:.0f}K")
+            lines.append(f"   {sent_emoji} {score_bar} | {signal_emoji} {signal}")
+            lines.append("")
+
+            # Add buy/sell buttons for each token (groups of 3)
+            if address:
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"🟢 Buy {symbol}",
+                        callback_data=f"demo:bags_buy:{address}:{default_tp_percent}:{default_sl_percent}"
+                    ),
+                    InlineKeyboardButton(
+                        f"🔍 Info",
+                        callback_data=f"demo:bags_info:{address}"
+                    ),
+                ])
+
+        # Add summary stats
+        bullish_count = sum(1 for t in tokens if t.get("sentiment", "").lower() in ["bullish", "very_bullish"])
+        bearish_count = sum(1 for t in tokens if t.get("sentiment", "").lower() in ["bearish", "very_bearish"])
+
+        lines.extend([
+            "━━━━━━━━━━━━━━━━━━━━━",
+            f"📊 *Sentiment Summary*",
+            f"   🟢 Bullish: {bullish_count} | 🔴 Bearish: {bearish_count}",
+            "",
+            f"_Default TP: +{default_tp_percent:.0f}% | SL: -{default_sl_percent:.0f}%_",
+        ])
+
+        text = "\n".join(lines)
+
+        # Navigation buttons
+        keyboard.extend([
+            [
+                InlineKeyboardButton(f"⚙️ Set TP/SL", callback_data="demo:bags_settings"),
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:bags_fm"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ])
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def bags_token_detail(
+        token: Dict[str, Any],
+        market_regime: Dict[str, Any] = None,
+        default_tp_percent: float = 15.0,
+        default_sl_percent: float = 15.0,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Detailed view of a single Bags.fm token with buy/sell options.
+        """
+        theme = JarvisTheme
+
+        symbol = token.get("symbol", "???")
+        name = token.get("name", symbol)
+        address = token.get("address", "")
+        price = token.get("price_usd", 0)
+        volume = token.get("volume_24h", 0)
+        liquidity = token.get("liquidity", 0)
+        mcap = token.get("market_cap", 0)
+        holders = token.get("holders", 0)
+
+        sentiment = token.get("sentiment", "neutral")
+        sentiment_score = token.get("sentiment_score", 0.5)
+        signal = token.get("signal", "NEUTRAL")
+
+        # Format price
+        if price < 0.0001:
+            price_str = f"${price:.8f}"
+        elif price < 1:
+            price_str = f"${price:.6f}"
+        else:
+            price_str = f"${price:.2f}"
+
+        # TP/SL targets
+        tp_price = price * (1 + default_tp_percent / 100)
+        sl_price = price * (1 - default_sl_percent / 100)
+
+        tp_str = f"${tp_price:.8f}" if tp_price < 0.0001 else f"${tp_price:.6f}" if tp_price < 1 else f"${tp_price:.2f}"
+        sl_str = f"${sl_price:.8f}" if sl_price < 0.0001 else f"${sl_price:.6f}" if sl_price < 1 else f"${sl_price:.2f}"
+
+        # Sentiment display
+        sent_emoji = {
+            "very_bullish": "🚀",
+            "bullish": "🟢",
+            "neutral": "🟡",
+            "bearish": "🟠",
+            "very_bearish": "🔴",
+        }.get(sentiment.lower() if isinstance(sentiment, str) else "neutral", "⚪")
+
+        score_bars = int(sentiment_score * 5) if sentiment_score else 0
+        score_bar = "▰" * score_bars + "▱" * (5 - score_bars)
+
+        lines = [
+            f"🎒 *{symbol}*",
+            f"_{name}_",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"💰 *Price:* {price_str}",
+            f"📊 *24h Volume:* ${volume/1_000_000:.2f}M",
+            f"💧 *Liquidity:* ${liquidity/1_000:.0f}K",
+            f"📈 *Market Cap:* ${mcap/1_000_000:.2f}M",
+            f"👥 *Holders:* {holders:,}",
+            "",
+            f"{sent_emoji} *AI Sentiment:* {sentiment.upper()}",
+            f"   Score: {score_bar} ({sentiment_score:.0%})",
+            f"   Signal: *{signal}*",
+            "",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            f"*Trading Setup:*",
+            f"🎯 TP (+{default_tp_percent:.0f}%): {tp_str}",
+            f"🛑 SL (-{default_sl_percent:.0f}%): {sl_str}",
+            "",
+            f"📋 `{address[:20]}...`",
+        ]
+
+        text = "\n".join(lines)
+
+        # Buy buttons with different amounts
+        keyboard = [
+            [
+                InlineKeyboardButton(f"🟢 Buy 0.1 SOL", callback_data=f"demo:bags_exec:{address}:0.1:{default_tp_percent}:{default_sl_percent}"),
+                InlineKeyboardButton(f"🟢 Buy 0.25 SOL", callback_data=f"demo:bags_exec:{address}:0.25:{default_tp_percent}:{default_sl_percent}"),
+            ],
+            [
+                InlineKeyboardButton(f"🟢 Buy 0.5 SOL", callback_data=f"demo:bags_exec:{address}:0.5:{default_tp_percent}:{default_sl_percent}"),
+                InlineKeyboardButton(f"🟢 Buy 1 SOL", callback_data=f"demo:bags_exec:{address}:1:{default_tp_percent}:{default_sl_percent}"),
+            ],
+            [
+                InlineKeyboardButton(f"🟢 Buy 2 SOL", callback_data=f"demo:bags_exec:{address}:2:{default_tp_percent}:{default_sl_percent}"),
+                InlineKeyboardButton(f"🟢 Buy 5 SOL", callback_data=f"demo:bags_exec:{address}:5:{default_tp_percent}:{default_sl_percent}"),
+            ],
+            [
+                InlineKeyboardButton(f"✏️ Custom TP/SL", callback_data=f"demo:bags_custom_tpsl:{address}"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back to List", callback_data="demo:bags_fm"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def bags_buy_result(
+        success: bool,
+        symbol: str,
+        amount_sol: float,
+        tokens_received: float = 0,
+        price: float = 0,
+        tp_percent: float = 15,
+        sl_percent: float = 15,
+        tx_hash: str = None,
+        error: str = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Result of a Bags.fm buy operation.
+        """
+        theme = JarvisTheme
+
+        if success:
+            tp_price = price * (1 + tp_percent / 100)
+            sl_price = price * (1 - sl_percent / 100)
+
+            lines = [
+                f"✅ *BUY SUCCESSFUL*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"🪙 *Token:* {symbol}",
+                f"💰 *Spent:* {amount_sol} SOL",
+                f"📦 *Received:* {tokens_received:,.2f} {symbol}",
+                f"💵 *Entry Price:* ${price:.8f}" if price < 0.0001 else f"💵 *Entry Price:* ${price:.6f}" if price < 1 else f"💵 *Entry Price:* ${price:.2f}",
+                "",
+                f"*Auto Orders Set:*",
+                f"🎯 TP (+{tp_percent:.0f}%): ${tp_price:.8f}" if tp_price < 0.0001 else f"🎯 TP (+{tp_percent:.0f}%): ${tp_price:.6f}" if tp_price < 1 else f"🎯 TP (+{tp_percent:.0f}%): ${tp_price:.2f}",
+                f"🛑 SL (-{sl_percent:.0f}%): ${sl_price:.8f}" if sl_price < 0.0001 else f"🛑 SL (-{sl_percent:.0f}%): ${sl_price:.6f}" if sl_price < 1 else f"🛑 SL (-{sl_percent:.0f}%): ${sl_price:.2f}",
+                "",
+            ]
+
+            if tx_hash:
+                lines.append(f"🔗 [View on Solscan](https://solscan.io/tx/{tx_hash})")
+
+            lines.extend([
+                "",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "_Position added to portfolio_",
+            ])
+        else:
+            lines = [
+                f"❌ *BUY FAILED*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"🪙 *Token:* {symbol}",
+                f"💰 *Amount:* {amount_sol} SOL",
+                "",
+                f"*Error:* {error or 'Unknown error'}",
+                "",
+                "_Please try again or contact support_",
+            ]
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"{theme.CHART} Positions", callback_data="demo:positions"),
+                InlineKeyboardButton(f"🎒 Back to Bags", callback_data="demo:bags_fm"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
     def insta_snipe_menu(
         hottest_token: Dict[str, Any] = None,
         market_regime: Dict[str, Any] = None,
