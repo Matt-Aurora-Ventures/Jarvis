@@ -16,6 +16,9 @@ credentials*.json
 *_credentials.json
 oauth*.json
 token*.json
+# Twitter/X OAuth tokens (explicit)
+bots/twitter/.oauth2_tokens.json
+bots/twitter/*_tokens.json
 .env
 .env.*
 .env.local
