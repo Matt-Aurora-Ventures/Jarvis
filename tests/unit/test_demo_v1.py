@@ -265,6 +265,115 @@ class TestDemoMenuBuilder:
         assert "BONK" in text
         assert keyboard is not None
 
+    def test_performance_dashboard_build(self):
+        """Test performance dashboard can be built."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        performance_stats = {
+            "total_trades": 47,
+            "wins": 31,
+            "losses": 16,
+            "win_rate": 66.0,
+            "total_pnl": 1247.50,
+            "total_pnl_pct": 24.95,
+            "best_trade": {"symbol": "BONK", "pnl_pct": 142.5},
+            "worst_trade": {"symbol": "BOME", "pnl_pct": -35.2},
+            "current_streak": 3,
+            "avg_hold_time_minutes": 45,
+            "daily_pnl": 125.50,
+            "weekly_pnl": 487.25,
+            "monthly_pnl": 1247.50,
+            "avg_trades_per_day": 2.3,
+        }
+
+        text, keyboard = DemoMenuBuilder.performance_dashboard(performance_stats)
+
+        assert text is not None
+        assert "PERFORMANCE" in text
+        assert "Win Rate" in text
+        assert "66.0%" in text
+        assert "BONK" in text
+        assert keyboard is not None
+        assert len(keyboard.inline_keyboard) > 0
+
+    def test_performance_dashboard_negative_pnl(self):
+        """Test performance dashboard with negative PnL."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        performance_stats = {
+            "total_trades": 10,
+            "wins": 3,
+            "losses": 7,
+            "win_rate": 30.0,
+            "total_pnl": -250.00,
+            "total_pnl_pct": -5.0,
+            "current_streak": -3,
+            "avg_hold_time_minutes": 30,
+            "daily_pnl": -50.00,
+            "weekly_pnl": -150.00,
+            "monthly_pnl": -250.00,
+            "avg_trades_per_day": 1.0,
+        }
+
+        text, keyboard = DemoMenuBuilder.performance_dashboard(performance_stats)
+
+        assert text is not None
+        assert "250.00" in text  # Total PnL amount
+        assert "30.0%" in text  # Win rate
+        assert keyboard is not None
+
+    def test_trade_history_view_empty(self):
+        """Test trade history view with no trades."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.trade_history_view([])
+
+        assert text is not None
+        assert "No trades recorded" in text
+        assert keyboard is not None
+
+    def test_trade_history_view_with_trades(self):
+        """Test trade history view with trades."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        trades = [
+            {"symbol": "BONK", "pnl_pct": 42.5, "pnl_usd": 85.00},
+            {"symbol": "WIF", "pnl_pct": -12.3, "pnl_usd": -24.60},
+            {"symbol": "POPCAT", "pnl_pct": 28.7, "pnl_usd": 57.40},
+        ]
+
+        text, keyboard = DemoMenuBuilder.trade_history_view(trades)
+
+        assert text is not None
+        assert "BONK" in text
+        assert "WIF" in text
+        assert "POPCAT" in text
+        assert "42.5%" in text
+        assert keyboard is not None
+
+    def test_trade_history_pagination(self):
+        """Test trade history pagination."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        # Create 10 trades to test pagination
+        trades = [
+            {"symbol": f"TOKEN{i}", "pnl_pct": i * 10, "pnl_usd": i * 20}
+            for i in range(10)
+        ]
+
+        # Page 1
+        text, keyboard = DemoMenuBuilder.trade_history_view(trades, page=0, page_size=5)
+        assert "Page 1/2" in text
+        assert "TOKEN0" in text
+        assert "TOKEN4" in text
+        assert "TOKEN5" not in text
+
+        # Page 2
+        text, keyboard = DemoMenuBuilder.trade_history_view(trades, page=1, page_size=5)
+        assert "Page 2/2" in text
+        assert "TOKEN5" in text
+        assert "TOKEN0" not in text
+
 
 class TestSentimentIntegration:
     """Test sentiment engine integration."""
