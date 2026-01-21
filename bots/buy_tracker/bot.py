@@ -195,13 +195,14 @@ class JarvisBuyBot:
         # Send startup message
         await self._send_startup_message()
 
-        # Initialize transaction monitor
+        # Initialize transaction monitor with additional LP pairs
         self.monitor = TransactionMonitor(
             token_address=self.config.token_address,
             helius_api_key=self.config.helius_api_key,
             min_buy_usd=self.config.min_buy_usd,
             on_buy=self._on_buy_detected,
             pair_address=self.config.pair_address,
+            additional_pairs=self.config.additional_pairs,
         )
 
         self._running = True
@@ -228,15 +229,22 @@ class JarvisBuyBot:
         """Send startup notification to the chat."""
         pair_info = ""
         if self.config.pair_address:
-            pair_info = f"🔗 Pair: <code>{self.config.pair_address[:8]}...{self.config.pair_address[-4:]}</code>\n"
+            pair_info = f"🔗 Main Pair: <code>{self.config.pair_address[:8]}...{self.config.pair_address[-4:]}</code>\n"
+
+        # Show additional LP pairs count
+        additional_pairs_info = ""
+        if self.config.additional_pairs:
+            count = len(self.config.additional_pairs)
+            additional_pairs_info = f"📊 Tracking: {count} additional LP pairs\n"
 
         message = (
             f"🤖 <b>{self.config.bot_name}</b>\n\n"
             f"✅ Bot started successfully!\n\n"
             f"📊 Tracking: <b>${self.config.token_symbol}</b>\n"
             f"{pair_info}"
+            f"{additional_pairs_info}"
             f"💰 Min buy: <b>${self.config.min_buy_usd:.2f}</b>\n\n"
-            f"<i>Watching for buys on LP pair...</i>"
+            f"<i>Watching for buys on LP pairs...</i>"
         )
 
         try:
@@ -923,6 +931,10 @@ class JarvisBuyBot:
             f"<b>MCap:</b> {mcap_str}\n\n"
             f"<a href=\"{buy.tx_url}\">TX</a> | <a href=\"{buy.dex_url}\">Dex</a>\n"
         )
+
+        # Show LP pair at bottom if not the main pair
+        if buy.lp_pair_name and buy.lp_pair_name != "main":
+            message += f"\n🔗 <i>LP: {buy.lp_pair_name}</i>\n"
 
         # Add @FrankkkNL credit every 10th buy
         if self._buy_counter % 10 == 0:

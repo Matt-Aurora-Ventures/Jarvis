@@ -3,8 +3,26 @@ Configuration for Jarvis Buy Bot Tracker.
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Dict, List, Tuple
+
+
+# Additional LP pairs to monitor (name -> address)
+# These are tracked alongside the main KR8TIV pair
+# Format: "name": "pair_address"
+ADDITIONAL_LP_PAIRS: Dict[str, str] = {
+    "kr8tiv/Eliza Town": "5VU8r7BFQBxUuNXMWLVPzjEQS2Z7oUt1vex3YJa95fw3",
+    "kr8tiv/ralph": "EYGvaFsXk1baLN8sJycLgYgnmUk6R3Bb4UXBzKweqXS7",
+    "kr8tiv/ralph-tui": "EipU3y7ojVqadEQNGWSu26je8iHixs1Xf7BP7dWPheUS",
+    "kr8tiv/gas": "AAvjH1V16bua6Jyxbj8Tex8rpNZepzw71MmjL3FUQ117",
+    "kr8tiv/weth": "9vW5Byh6h3j7AKrL8WtXW6uwKP3E4hRSRCXSZmCCyJfx",
+    "kr8tiv/wbtc": "HSfu6s84FpqUDfZDbt8J4ii1K6FWsN7oJFPRfh2QsvuC",
+    "verdis/kr8tiv": "EAWrGR2pwn5wXUNSfeR66uZ7CG536qX4jXYiS2otxxR2",
+    "loom/kr8tiv": "7qXmDiVvVdNj3sYFcvE1vGE8hDtZMdDxWr2vMceY99nY",
+    "continuous/kr8tiv": "s3KFNeaTFmkFbuw4gJmXgUDTzFaFgGtLR1DzmtTQA8X",
+    "ATH/kr8tiv": "FsezrNYYXdTHY4PuffDkTGTpXLqu6tR3qEgd7vfjhPW2",
+}
 
 
 @dataclass
@@ -20,6 +38,10 @@ class BuyBotConfig:
     token_symbol: str = "KR8TIV"
     token_name: str = "Kr8Tiv"
     pair_address: str = ""  # The LP pair address where trades happen
+
+    # Additional LP pairs to monitor: list of (name, address) tuples
+    # Graceful: if empty or invalid, bot continues with main pair only
+    additional_pairs: List[Tuple[str, str]] = field(default_factory=list)
 
     # RPC settings
     helius_api_key: str = ""
@@ -71,6 +93,13 @@ def load_config() -> BuyBotConfig:
 
     buy_bot_token = os.environ.get("TELEGRAM_BUY_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
+    # Load additional LP pairs from config dict
+    # These are gracefully handled - if any are invalid, they're just skipped
+    additional_pairs: List[Tuple[str, str]] = []
+    for name, address in ADDITIONAL_LP_PAIRS.items():
+        if address and len(address) >= 32:  # Basic Solana address validation
+            additional_pairs.append((name, address))
+
     return BuyBotConfig(
         bot_token=buy_bot_token,
         chat_id=os.environ.get("TELEGRAM_BUY_BOT_CHAT_ID", ""),
@@ -78,6 +107,7 @@ def load_config() -> BuyBotConfig:
         token_symbol=os.environ.get("BUY_BOT_TOKEN_SYMBOL", "KR8TIV"),
         token_name=os.environ.get("BUY_BOT_TOKEN_NAME", "Kr8Tiv"),
         pair_address=pair_address,
+        additional_pairs=additional_pairs,
         helius_api_key=os.environ.get("HELIUS_API_KEY", ""),
         min_buy_usd=float(os.environ.get("BUY_BOT_MIN_USD", "5.0")),
         video_path=str(video_path) if video_path.exists() else "",
