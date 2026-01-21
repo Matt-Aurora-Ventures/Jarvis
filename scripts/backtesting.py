@@ -4,21 +4,40 @@ Backtesting Framework for Sentiment Engine Strategies.
 This framework allows testing different scoring strategies and entry rules
 against historical prediction/outcome data.
 
+CHANGELOG:
+=========
+2026-01-21: Integrated data-driven strategy (strategy_data_driven_2026)
+- Added: strategy_data_driven_2026 implementing all new rules
+- Added: CSV-based backtest for comprehensive analysis (run_csv_backtest)
+- Added: Keyword detection for momentum/pump mentions
+- Added: High score penalty logic
+- Added: Detailed comparison report generation
+- Integrated from: backtest_new_rules.py (now deprecated)
+
 Usage:
-    python scripts/backtesting.py
+    python scripts/backtesting.py              # Run JSON-based backtest
+    python scripts/backtesting.py --csv        # Run CSV-based backtest (comprehensive)
+    python scripts/backtesting.py --compare    # Run old vs new rules comparison
 """
 
 import json
 import re
+import sys
+import pandas as pd
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+# Fix unicode output on Windows
+sys.stdout.reconfigure(encoding='utf-8')
+
 # Paths
 ROOT = Path(__file__).resolve().parents[1]
 PREDICTIONS_FILE = ROOT / "bots" / "buy_tracker" / "predictions_history.json"
 TRADES_FILE = ROOT / "bots" / "treasury" / ".trade_history.json"
+DATA_DIR = ROOT / "data" / "analysis"
+CSV_FILE = DATA_DIR / "unified_calls_data.csv"
 
 
 @dataclass
@@ -37,6 +56,10 @@ class Prediction:
     buy_sell_ratio: Optional[float] = None
     volume: Optional[float] = None
     market_cap: Optional[float] = None
+    # New fields for data-driven analysis (2026-01-21)
+    has_momentum_mention: bool = False
+    has_pump_mention: bool = False
+    report_count: int = 1
 
 
 @dataclass
@@ -67,6 +90,21 @@ class BacktestResult:
     expected_value: float
     max_drawdown: float
     signals_detail: List[Dict] = field(default_factory=list)
+
+
+@dataclass
+class CSVBacktestResult:
+    """Result of applying a rule set to CSV historical data."""
+    rule_name: str
+    total_calls: int
+    bullish_calls: int
+    bullish_hit_tp25: int
+    bullish_hit_tp10: int
+    bullish_hit_sl15: int
+    bullish_avg_max_gain: float
+    bullish_avg_final: float
+    rejected_calls: int
+    rejected_that_hit_tp: int
 
 
 def extract_metrics(reasoning: str) -> Dict[str, Any]:
@@ -116,6 +154,11 @@ def extract_metrics(reasoning: str) -> Dict[str, Any]:
             except ValueError:
                 pass
 
+    # NEW: Detect hype keywords (2026-01-21)
+    reasoning_lower = reasoning.lower()
+    metrics['has_momentum_mention'] = 'momentum' in reasoning_lower
+    metrics['has_pump_mention'] = 'pump' in reasoning_lower and 'pump.fun' not in reasoning_lower
+
     return metrics
 
 
@@ -128,11 +171,16 @@ def load_predictions() -> List[Prediction]:
         history = json.load(f)
 
     predictions = []
+    symbol_counts = {}  # Track how many times each symbol appears
+
     for entry in history:
         timestamp = entry.get('timestamp', '')
         market_regime = entry.get('market_regime', 'UNKNOWN')
 
         for symbol, data in entry.get('token_predictions', {}).items():
+            # Track symbol frequency
+            symbol_counts[symbol] = symbol_counts.get(symbol, 0) + 1
+
             metrics = extract_metrics(data.get('reasoning', ''))
 
             pred = Prediction(
@@ -148,8 +196,14 @@ def load_predictions() -> List[Prediction]:
                 buy_sell_ratio=metrics.get('buy_sell_ratio'),
                 volume=metrics.get('volume'),
                 market_cap=metrics.get('market_cap'),
+                has_momentum_mention=metrics.get('has_momentum_mention', False),
+                has_pump_mention=metrics.get('has_pump_mention', False),
             )
             predictions.append(pred)
+
+    # Update report counts
+    for pred in predictions:
+        pred.report_count = symbol_counts.get(pred.symbol, 1)
 
     return predictions
 
@@ -196,6 +250,98 @@ def strategy_current(pred: Prediction) -> Tuple[bool, str]:
     if pred.score < 0.5:
         return False, f"Score too low: {pred.score}"
     return True, "Accepted"
+
+
+def strategy_old_rules(pred: Prediction) -> Tuple[bool, str]:
+    """
+    OLD Rules (before 2026-01-21):
+    - BULLISH if score > 0.55 and ratio >= 1.5 and NOT chasing (>50% pump)
+    """
+    if pred.verdict != 'BULLISH':
+        return False, "Not bullish"
+
+    score = pred.score
+    ratio = pred.buy_sell_ratio if pred.buy_sell_ratio is not None else 0
+    change_24h = pred.change_24h if pred.change_24h is not None else 0
+
+    # Old chasing threshold was 50%
+    chasing_pump = change_24h > 50
+
+    # Old BULLISH criteria
+    if score > 0.55 and ratio >= 1.5 and not chasing_pump:
+        return True, "Accepted (old rules)"
+
+    reasons = []
+    if score <= 0.55:
+        reasons.append("score_too_low")
+    if ratio < 1.5:
+        reasons.append("ratio_below_1.5x")
+    if chasing_pump:
+        reasons.append("chasing_pump_50pct")
+
+    return False, "+".join(reasons) if reasons else "unknown"
+
+
+def strategy_data_driven_2026(pred: Prediction) -> Tuple[bool, str]:
+    """
+    NEW Data-Driven Rules (2026-01-21):
+    Based on backtested analysis of 56 calls:
+    - Early Entry (<50% pump) = 67% TP rate
+    - High Ratio (>=2x) = 67% TP rate
+    - High Score (>=0.7) = 0% TP rate (penalize!)
+    - Momentum mentions = 14% TP rate (penalize!)
+    - Pump mentions = 20% TP rate (penalize!)
+    - Multi-sighting (>=5 reports) = 36% TP rate (bonus)
+
+    Returns: (would_approve, rejection_reason)
+    """
+    if pred.verdict != 'BULLISH':
+        return False, "Not bullish"
+
+    score = pred.score
+    ratio = pred.buy_sell_ratio if pred.buy_sell_ratio is not None else 0
+    change_24h = pred.change_24h if pred.change_24h is not None else 0
+    has_momentum = pred.has_momentum_mention
+    has_pump = pred.has_pump_mention
+    report_count = pred.report_count
+
+    # New chasing threshold is 40%
+    chasing_pump = change_24h > 40
+
+    # Apply score adjustments
+    adjusted_score = score
+
+    # High score penalty (data shows >=0.7 = 0% TP rate)
+    if adjusted_score >= 0.70:
+        overconfidence_penalty = (adjusted_score - 0.65) * 0.5
+        adjusted_score -= overconfidence_penalty
+
+    # Keyword penalties (data shows these correlate with worse outcomes)
+    if has_momentum:
+        adjusted_score -= 0.10
+    if has_pump:
+        adjusted_score -= 0.08
+
+    # Multi-sighting bonus (data shows >=5 reports = 36% TP vs <5 = 0%)
+    if report_count >= 5:
+        adjusted_score += 0.08
+    elif report_count < 3:
+        adjusted_score -= 0.05
+
+    # NEW BULLISH criteria: adjusted score > 0.55, ratio >= 2.0, not chasing
+    if adjusted_score > 0.55 and ratio >= 2.0 and not chasing_pump:
+        return True, f"Accepted (score={adjusted_score:.2f}, ratio={ratio:.1f}x, pump={change_24h:.0f}%)"
+
+    # Build rejection reason
+    reasons = []
+    if adjusted_score <= 0.55:
+        reasons.append(f"score_penalized({adjusted_score:.2f})")
+    if ratio < 2.0:
+        reasons.append(f"ratio_below_2x({ratio:.1f})")
+    if chasing_pump:
+        reasons.append(f"chasing_pump_40pct({change_24h:.0f}%)")
+
+    return False, "+".join(reasons) if reasons else "unknown"
 
 
 def strategy_no_pump_chasing(pred: Prediction) -> Tuple[bool, str]:
@@ -277,6 +423,9 @@ def strategy_conservative(pred: Prediction) -> Tuple[bool, str]:
     - High score (>0.7)
     - Early entry (<30% pump)
     - Good ratio (>1.5x)
+
+    NOTE: This strategy FAILS in backtesting because high scores
+    correlate with WORSE outcomes (0% TP rate for score >= 0.7)
     """
     if pred.verdict != 'BULLISH':
         return False, "Not bullish"
@@ -293,6 +442,295 @@ def strategy_conservative(pred: Prediction) -> Tuple[bool, str]:
         return False, f"Weak ratio: {pred.buy_sell_ratio}x"
 
     return True, "Accepted - conservative criteria met"
+
+
+# ============================================================================
+# CSV-BASED BACKTESTING (2026-01-21)
+# ============================================================================
+
+def would_old_rules_approve_csv(row: pd.Series) -> Tuple[bool, str]:
+    """
+    Check if OLD rules would have approved this as BULLISH.
+    For CSV data analysis.
+    """
+    score = row['initial_score']
+    ratio = row['buy_sell_ratio'] if pd.notna(row['buy_sell_ratio']) else 0
+    change_24h = row['change_24h'] if pd.notna(row['change_24h']) else 0
+
+    chasing_pump = change_24h > 50
+    would_approve = score > 0.55 and ratio >= 1.5 and not chasing_pump
+
+    reason = ""
+    if not would_approve:
+        if score <= 0.55:
+            reason = "score_too_low"
+        elif ratio < 1.5:
+            reason = "ratio_below_1.5x"
+        elif chasing_pump:
+            reason = "chasing_pump_50pct"
+
+    return would_approve, reason
+
+
+def would_new_rules_approve_csv(row: pd.Series) -> Tuple[bool, str]:
+    """
+    Check if NEW rules would approve this as BULLISH.
+    For CSV data analysis.
+    """
+    score = row['initial_score']
+    ratio = row['buy_sell_ratio'] if pd.notna(row['buy_sell_ratio']) else 0
+    change_24h = row['change_24h'] if pd.notna(row['change_24h']) else 0
+    has_momentum = row['has_momentum_mention'] if pd.notna(row['has_momentum_mention']) else False
+    has_pump = row['has_pump_mention'] if pd.notna(row['has_pump_mention']) else False
+
+    chasing_pump = change_24h > 40
+    adjusted_score = score
+
+    # High score penalty
+    if adjusted_score >= 0.70:
+        overconfidence_penalty = (adjusted_score - 0.65) * 0.5
+        adjusted_score -= overconfidence_penalty
+
+    # Keyword penalties
+    if has_momentum:
+        adjusted_score -= 0.10
+    if has_pump:
+        adjusted_score -= 0.08
+
+    would_approve = adjusted_score > 0.55 and ratio >= 2.0 and not chasing_pump
+
+    reason = ""
+    if not would_approve:
+        reasons = []
+        if adjusted_score <= 0.55:
+            reasons.append("score_penalized")
+        if ratio < 2.0:
+            reasons.append("ratio_below_2x")
+        if chasing_pump:
+            reasons.append("chasing_pump_40pct")
+        reason = "+".join(reasons) if reasons else "unknown"
+
+    return would_approve, reason
+
+
+def run_csv_backtest() -> Dict:
+    """
+    Run backtest using CSV data (unified_calls_data.csv).
+    Analyzes what WAS actually called bullish, then sees how new rules would filter them.
+    """
+    if not CSV_FILE.exists():
+        print(f"CSV file not found: {CSV_FILE}")
+        return {}
+
+    df = pd.read_csv(CSV_FILE)
+    actual_bullish = df[df['verdict'] == 'BULLISH'].copy()
+
+    results = {
+        'actual_bullish_count': len(actual_bullish),
+        'actual_bullish_hit_tp25': actual_bullish['hit_tp_25'].sum() if 'hit_tp_25' in actual_bullish.columns else 0,
+        'actual_bullish_hit_sl15': actual_bullish['hit_sl_15'].sum() if 'hit_sl_15' in actual_bullish.columns else 0,
+        'actual_tp_rate': 0,
+        'old_rules_would_approve': [],
+        'new_rules_would_approve': [],
+        'new_rules_would_reject': [],
+        'filtered_out_details': []
+    }
+
+    if len(actual_bullish) > 0 and 'hit_tp_25' in actual_bullish.columns:
+        results['actual_tp_rate'] = (actual_bullish['hit_tp_25'].sum() / len(actual_bullish)) * 100
+
+    for idx, row in actual_bullish.iterrows():
+        symbol = row['symbol']
+        hit_tp = row['hit_tp_25'] if 'hit_tp_25' in row else False
+        max_gain = row['max_gain_pct'] if 'max_gain_pct' in row else None
+        final_pct = row['final_pct'] if 'final_pct' in row else None
+
+        old_approve, old_reason = would_old_rules_approve_csv(row)
+        new_approve, new_reason = would_new_rules_approve_csv(row)
+
+        if old_approve:
+            results['old_rules_would_approve'].append(symbol)
+
+        if new_approve:
+            results['new_rules_would_approve'].append(symbol)
+        else:
+            results['new_rules_would_reject'].append(symbol)
+            results['filtered_out_details'].append({
+                'symbol': symbol,
+                'reason': new_reason,
+                'hit_tp': bool(hit_tp),
+                'max_gain': max_gain,
+                'final_pct': final_pct,
+                'ratio': row['buy_sell_ratio'] if 'buy_sell_ratio' in row else None,
+                'change_24h': row['change_24h'] if 'change_24h' in row else None,
+                'score': row['initial_score'] if 'initial_score' in row else None
+            })
+
+    return results
+
+
+def analyze_rule_improvements(df: pd.DataFrame) -> Dict:
+    """Analyze how each specific rule change would have helped."""
+    analysis = {
+        'ratio_upgrade': {'filtered_out': 0, 'filtered_out_lost': 0, 'filtered_out_won': 0},
+        'pump_threshold': {'filtered_out': 0, 'filtered_out_lost': 0, 'filtered_out_won': 0},
+        'high_score_penalty': {'affected': 0, 'would_have_lost': 0},
+        'keyword_penalty': {'affected': 0, 'would_have_lost': 0},
+    }
+
+    for idx, row in df.iterrows():
+        if row['verdict'] != 'BULLISH':
+            continue
+
+        ratio = row['buy_sell_ratio'] if pd.notna(row['buy_sell_ratio']) else 0
+        change_24h = row['change_24h'] if pd.notna(row['change_24h']) else 0
+        score = row['initial_score'] if 'initial_score' in row else 0
+        hit_tp = row['hit_tp_25'] if 'hit_tp_25' in row else False
+        has_momentum = row['has_momentum_mention'] if 'has_momentum_mention' in row else False
+        has_pump = row['has_pump_mention'] if 'has_pump_mention' in row else False
+
+        # Ratio upgrade: Would 1.5-2.0 ratio calls have been filtered?
+        if 1.5 <= ratio < 2.0:
+            analysis['ratio_upgrade']['filtered_out'] += 1
+            if hit_tp:
+                analysis['ratio_upgrade']['filtered_out_won'] += 1
+            else:
+                analysis['ratio_upgrade']['filtered_out_lost'] += 1
+
+        # Pump threshold: Would 40-50% pump calls have been filtered?
+        if 40 < change_24h <= 50:
+            analysis['pump_threshold']['filtered_out'] += 1
+            if hit_tp:
+                analysis['pump_threshold']['filtered_out_won'] += 1
+            else:
+                analysis['pump_threshold']['filtered_out_lost'] += 1
+
+        # High score penalty: How many had score >= 0.7?
+        if score >= 0.7:
+            analysis['high_score_penalty']['affected'] += 1
+            if not hit_tp:
+                analysis['high_score_penalty']['would_have_lost'] += 1
+
+        # Keyword penalty: How many had hype keywords?
+        if has_momentum or has_pump:
+            analysis['keyword_penalty']['affected'] += 1
+            if not hit_tp:
+                analysis['keyword_penalty']['would_have_lost'] += 1
+
+    return analysis
+
+
+def print_csv_backtest_report(backtest: Dict, improvements: Dict, df: pd.DataFrame):
+    """Print detailed CSV backtest report comparing old vs new rules."""
+
+    print("=" * 80)
+    print("SENTIMENT ENGINE BACKTEST: OLD RULES vs NEW RULES (2026-01-21)")
+    print("=" * 80)
+    print(f"\nData: {len(df)} total calls analyzed")
+    print(f"Original BULLISH calls: {backtest['actual_bullish_count']}")
+    print()
+
+    actual_tp_rate = backtest['actual_tp_rate']
+    new_approved = len(backtest['new_rules_would_approve'])
+    filtered_out = len(backtest['filtered_out_details'])
+
+    # Calculate new TP rate
+    new_approved_hit_tp = 0
+    actual_bullish = df[df['verdict'] == 'BULLISH']
+    for idx, row in actual_bullish.iterrows():
+        if row['symbol'] in backtest['new_rules_would_approve']:
+            if 'hit_tp_25' in row and row['hit_tp_25']:
+                new_approved_hit_tp += 1
+
+    new_tp_rate = (new_approved_hit_tp / new_approved * 100) if new_approved > 0 else 0
+
+    # Side-by-side comparison
+    print("-" * 80)
+    print(f"{'METRIC':<40} {'OLD RULES':<18} {'NEW RULES':<18}")
+    print("-" * 80)
+    print(f"{'Bullish Calls':<40} {backtest['actual_bullish_count']:<18} {new_approved:<18}")
+    print(f"{'Hit 25% TP':<40} {backtest['actual_bullish_hit_tp25']:<18} {new_approved_hit_tp:<18}")
+    print(f"{'TP Rate':<40} {actual_tp_rate:.1f}%{'':<13} {new_tp_rate:.1f}%{'':<13}")
+    print(f"{'Filtered Out':<40} {'0':<18} {filtered_out:<18}")
+    print("-" * 80)
+
+    # Improvement summary
+    tp_improvement = new_tp_rate - actual_tp_rate
+    print(f"\n{'IMPROVEMENT SUMMARY':^80}")
+    print("-" * 80)
+    print(f"TP Rate: {actual_tp_rate:.1f}% --> {new_tp_rate:.1f}% ({tp_improvement:+.1f}%)")
+    print(f"Calls: {backtest['actual_bullish_count']} --> {new_approved} (-{filtered_out} filtered)")
+
+    # Filtered out details
+    print(f"\n{'FILTERED OUT DETAILS':^80}")
+    print("-" * 80)
+    print(f"{'Symbol':<15} {'Reason':<30} {'Hit TP?':<10} {'Max Gain':<12} {'Final':<12}")
+    print("-" * 80)
+
+    filtered_won = 0
+    filtered_lost = 0
+    for d in backtest['filtered_out_details']:
+        hit_str = "YES" if d['hit_tp'] else "NO"
+        max_gain = f"{d['max_gain']:.1f}%" if d['max_gain'] is not None else "N/A"
+        final = f"{d['final_pct']:.1f}%" if d['final_pct'] is not None else "N/A"
+        print(f"{d['symbol']:<15} {d['reason']:<30} {hit_str:<10} {max_gain:<12} {final:<12}")
+        if d['hit_tp']:
+            filtered_won += 1
+        else:
+            filtered_lost += 1
+
+    print("-" * 80)
+    print(f"Filtered that would have WON: {filtered_won}")
+    print(f"Filtered that would have LOST: {filtered_lost}")
+    net_benefit = filtered_lost - filtered_won
+    print(f"Net benefit: {'+' if net_benefit >= 0 else ''}{net_benefit} avoided losses")
+
+    # Rule-by-rule breakdown
+    print(f"\n{'RULE-BY-RULE IMPACT':^80}")
+    print("-" * 80)
+
+    ratio = improvements['ratio_upgrade']
+    print(f"\n1. RATIO UPGRADE (1.5x --> 2.0x minimum):")
+    print(f"   Would filter: {ratio['filtered_out']} calls")
+    print(f"   - Would have LOST: {ratio['filtered_out_lost']}")
+    print(f"   - Would have WON: {ratio['filtered_out_won']}")
+    net = ratio['filtered_out_lost'] - ratio['filtered_out_won']
+    print(f"   Net benefit: {'+' if net >= 0 else ''}{net} avoided losses")
+
+    pump = improvements['pump_threshold']
+    print(f"\n2. PUMP THRESHOLD (50% --> 40%):")
+    print(f"   Would filter: {pump['filtered_out']} calls")
+    print(f"   - Would have LOST: {pump['filtered_out_lost']}")
+    print(f"   - Would have WON: {pump['filtered_out_won']}")
+    net = pump['filtered_out_lost'] - pump['filtered_out_won']
+    print(f"   Net benefit: {'+' if net >= 0 else ''}{net} avoided losses")
+
+    high_score = improvements['high_score_penalty']
+    print(f"\n3. HIGH SCORE PENALTY (>=0.7):")
+    print(f"   Affected: {high_score['affected']} calls")
+    print(f"   - Would have LOST: {high_score['would_have_lost']}")
+
+    keyword = improvements['keyword_penalty']
+    print(f"\n4. KEYWORD PENALTY (momentum/pump mentions):")
+    print(f"   Affected: {keyword['affected']} calls")
+    print(f"   - Would have LOST: {keyword['would_have_lost']}")
+
+    # Conclusion
+    print("\n" + "=" * 80)
+    print("CONCLUSION")
+    print("=" * 80)
+
+    if new_tp_rate > actual_tp_rate:
+        print(f"\n[OK] NEW RULES VALIDATED:")
+        print(f"    TP rate improved from {actual_tp_rate:.1f}% to {new_tp_rate:.1f}%")
+        print(f"    Trade quality over quantity: {new_approved} calls vs {backtest['actual_bullish_count']}")
+        print(f"    Net benefit: Avoided {net_benefit} losing trades")
+    elif new_tp_rate == actual_tp_rate:
+        print(f"\n[--] NEW RULES NEUTRAL: TP rate unchanged at {new_tp_rate:.1f}%")
+    else:
+        print(f"\n[!!] WARNING: TP rate decreased from {actual_tp_rate:.1f}% to {new_tp_rate:.1f}%")
+
+    print("\n")
 
 
 # ============================================================================
@@ -440,59 +878,102 @@ def print_backtest_results(results: List[BacktestResult]) -> None:
 
 def main():
     """Run backtesting framework."""
-    print("Loading data...")
-    predictions = load_predictions()
-    outcomes = load_trade_outcomes()
+    import argparse
+    parser = argparse.ArgumentParser(description='Backtest sentiment engine strategies')
+    parser.add_argument('--csv', action='store_true', help='Run CSV-based comprehensive backtest')
+    parser.add_argument('--compare', action='store_true', help='Run old vs new rules comparison')
+    args = parser.parse_args()
 
-    print(f"Loaded {len(predictions)} predictions")
-    print(f"Loaded {len(outcomes)} trade outcomes")
+    if args.csv or args.compare:
+        # CSV-based backtest
+        print("\nLoading CSV data...")
+        if not CSV_FILE.exists():
+            print(f"Error: CSV file not found at {CSV_FILE}")
+            print("Run scripts/unified_mega_analysis.py first to generate the data.")
+            return
 
-    # Only keep bullish predictions for comparison
-    bullish_preds = [p for p in predictions if p.verdict == 'BULLISH']
-    print(f"Bullish predictions: {len(bullish_preds)}")
+        df = pd.read_csv(CSV_FILE)
+        print(f"Loaded {len(df)} calls")
 
-    # Define strategies to test
-    strategies = [
-        ("Current (baseline)", strategy_current),
-        ("No Pump Chasing (>50%)", strategy_no_pump_chasing),
-        ("Early Entry Only (<20%)", strategy_early_entry_only),
-        ("High Ratio + Early", strategy_high_ratio_early),
-        ("Inverted Pump Scoring", strategy_inverted_pump_scoring),
-        ("Conservative", strategy_conservative),
-    ]
+        print("\nRunning backtest on actual bullish calls...")
+        backtest = run_csv_backtest()
 
-    # Run backtests
-    results = []
-    for name, filter_func in strategies:
-        print(f"Testing: {name}...")
-        result = run_backtest(name, filter_func, bullish_preds, outcomes)
-        results.append(result)
+        print("Analyzing rule improvements...")
+        improvements = analyze_rule_improvements(df)
 
-    # Print comparison
-    print_backtest_results(results)
+        # Print comparison report
+        print_csv_backtest_report(backtest, improvements, df)
 
-    # Detailed analysis of losses
-    print("\n" + "=" * 80)
-    print("LOSS ANALYSIS - What would each strategy have avoided?")
-    print("=" * 80)
+        # Export results
+        results_file = DATA_DIR / "backtest_results.json"
+        results = {
+            'actual_bullish_count': backtest['actual_bullish_count'],
+            'actual_tp_rate': backtest['actual_tp_rate'],
+            'new_rules_approved': len(backtest['new_rules_would_approve']),
+            'new_rules_rejected': len(backtest['new_rules_would_reject']),
+            'filtered_out_details': backtest['filtered_out_details'],
+            'improvements': improvements
+        }
+        with open(results_file, 'w') as f:
+            json.dump(results, f, indent=2, default=str)
+        print(f"\nDetailed results saved to: {results_file}")
+    else:
+        # JSON-based backtest (original behavior)
+        print("Loading data...")
+        predictions = load_predictions()
+        outcomes = load_trade_outcomes()
 
-    for name, filter_func in strategies:
-        print(f"\n{name}:")
-        avoided_losses = []
-        for pred in bullish_preds:
-            if pred.symbol in outcomes:
-                outcome = outcomes[pred.symbol]
-                if outcome.pnl_pct < -50:  # Major loss
-                    accept, reason = filter_func(pred)
-                    if not accept:
-                        avoided_losses.append((pred.symbol, outcome.pnl_pct, reason))
+        print(f"Loaded {len(predictions)} predictions")
+        print(f"Loaded {len(outcomes)} trade outcomes")
 
-        if avoided_losses:
-            print(f"  Would have avoided {len(avoided_losses)} catastrophic losses:")
-            for symbol, pnl, reason in avoided_losses:
-                print(f"    {symbol}: {pnl:.1f}% - Rejected: {reason}")
-        else:
-            print("  Would NOT have avoided any major losses")
+        # Only keep bullish predictions for comparison
+        bullish_preds = [p for p in predictions if p.verdict == 'BULLISH']
+        print(f"Bullish predictions: {len(bullish_preds)}")
+
+        # Define strategies to test
+        strategies = [
+            ("Current (baseline)", strategy_current),
+            ("Old Rules (pre-2026-01-21)", strategy_old_rules),
+            ("Data-Driven 2026", strategy_data_driven_2026),
+            ("No Pump Chasing (>50%)", strategy_no_pump_chasing),
+            ("Early Entry Only (<20%)", strategy_early_entry_only),
+            ("High Ratio + Early", strategy_high_ratio_early),
+            ("Inverted Pump Scoring", strategy_inverted_pump_scoring),
+            ("Conservative", strategy_conservative),
+        ]
+
+        # Run backtests
+        results = []
+        for name, filter_func in strategies:
+            print(f"Testing: {name}...")
+            result = run_backtest(name, filter_func, bullish_preds, outcomes)
+            results.append(result)
+
+        # Print comparison
+        print_backtest_results(results)
+
+        # Detailed analysis of losses
+        print("\n" + "=" * 80)
+        print("LOSS ANALYSIS - What would each strategy have avoided?")
+        print("=" * 80)
+
+        for name, filter_func in strategies:
+            print(f"\n{name}:")
+            avoided_losses = []
+            for pred in bullish_preds:
+                if pred.symbol in outcomes:
+                    outcome = outcomes[pred.symbol]
+                    if outcome.pnl_pct < -50:  # Major loss
+                        accept, reason = filter_func(pred)
+                        if not accept:
+                            avoided_losses.append((pred.symbol, outcome.pnl_pct, reason))
+
+            if avoided_losses:
+                print(f"  Would have avoided {len(avoided_losses)} catastrophic losses:")
+                for symbol, pnl, reason in avoided_losses:
+                    print(f"    {symbol}: {pnl:.1f}% - Rejected: {reason}")
+            else:
+                print("  Would NOT have avoided any major losses")
 
 
 if __name__ == "__main__":
