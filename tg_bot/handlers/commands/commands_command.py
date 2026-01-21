@@ -176,7 +176,9 @@ async def commands_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for category, commands in COMMAND_CATEGORIES.items():
             category_lines = [f"<b>{category}</b>"]
             for cmd, desc in commands:
-                category_lines.append(f"  <code>{cmd}</code> - {desc}")
+                category_lines.append(
+                    f"  <code>{html.escape(cmd)}</code> - {html.escape(desc)}"
+                )
             category_lines.append("")
 
             chunk_text = "\n".join(current_chunk + category_lines)

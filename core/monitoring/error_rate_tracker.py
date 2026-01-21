@@ -343,7 +343,7 @@ class ErrorRateTracker:
                     "exceeded": s.threshold_exceeded,
                 }
                 for cat, s in all_stats.items()
-                if s.count_1hr > 0
+                if s.count_1hour > 0
             },
         }
 
