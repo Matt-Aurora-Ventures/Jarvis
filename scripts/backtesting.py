@@ -885,19 +885,23 @@ def print_csv_backtest_report(backtest: Dict, improvements: Dict, df: pd.DataFra
 # THRESHOLD OPTIMIZER (2026-01-21)
 # ============================================================================
 
-def optimize_thresholds_csv(df: pd.DataFrame) -> Dict:
+def optimize_thresholds_csv(df: pd.DataFrame, mode: str = 'full') -> Dict:
     """
     Test multiple threshold combinations to find the optimal strategy.
     Returns the best configuration with metrics.
+
+    Args:
+        df: DataFrame with call data
+        mode: 'full' = with score penalties, 'simple' = just ratio + pump filters
     """
     bullish_df = df[df['verdict'] == 'BULLISH'].copy()
 
     if len(bullish_df) == 0:
         return {'error': 'No bullish calls to analyze'}
 
-    # Threshold ranges to test
-    ratio_thresholds = [1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.5]
-    pump_thresholds = [30, 35, 40, 45, 50, 60, 70, 100]
+    # Threshold ranges to test - extended for pump-heavy meme coins
+    ratio_thresholds = [1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
+    pump_thresholds = [20, 30, 40, 50, 75, 100, 200, 500]
 
     results = []
 
@@ -914,18 +918,24 @@ def optimize_thresholds_csv(df: pd.DataFrame) -> Dict:
                 hit_tp = row['hit_tp_25'] if 'hit_tp_25' in row else False
                 max_gain = row['max_gain_pct'] if 'max_gain_pct' in row else 0
 
-                # Apply score penalties (same as data_driven_2026)
-                adjusted_score = score
-                if adjusted_score >= 0.70:
-                    overconfidence_penalty = (adjusted_score - 0.65) * 0.5
-                    adjusted_score -= overconfidence_penalty
-                if has_momentum:
-                    adjusted_score -= 0.10
-                if has_pump:
-                    adjusted_score -= 0.08
+                if mode == 'full':
+                    # Apply score penalties (same as data_driven_2026)
+                    adjusted_score = score
+                    if adjusted_score >= 0.70:
+                        overconfidence_penalty = (adjusted_score - 0.65) * 0.5
+                        adjusted_score -= overconfidence_penalty
+                    if has_momentum:
+                        adjusted_score -= 0.10
+                    if has_pump:
+                        adjusted_score -= 0.08
 
-                # Check against thresholds
-                if adjusted_score > 0.55 and ratio >= ratio_min and change_24h <= pump_max:
+                    # Check against thresholds (with score requirement)
+                    passes = adjusted_score > 0.55 and ratio >= ratio_min and change_24h <= pump_max
+                else:
+                    # Simple mode - just ratio + pump, no score penalties
+                    passes = ratio >= ratio_min and change_24h <= pump_max
+
+                if passes:
                     approved.append({
                         'symbol': row['symbol'],
                         'hit_tp': hit_tp,
@@ -955,7 +965,8 @@ def optimize_thresholds_csv(df: pd.DataFrame) -> Dict:
                 'tp_rate': tp_rate,
                 'avg_max_gain': avg_max_gain,
                 'combined_score': combined_score,
-                'approved_symbols': [a['symbol'] for a in approved]
+                'approved_symbols': [a['symbol'] for a in approved],
+                'mode': mode
             })
 
     # Sort by combined score
@@ -964,7 +975,8 @@ def optimize_thresholds_csv(df: pd.DataFrame) -> Dict:
     return {
         'best': results[0] if results else None,
         'top_10': results[:10],
-        'all_results': results
+        'all_results': results,
+        'mode': mode
     }
 
 
@@ -1188,20 +1200,46 @@ def main():
         df = pd.read_csv(CSV_FILE)
         print(f"Loaded {len(df)} calls")
 
-        print("\nRunning threshold optimization...")
-        opt_results = optimize_thresholds_csv(df)
+        # Run both modes and compare
+        print("\n" + "=" * 80)
+        print("MODE 1: FULL (with score penalties)")
+        print("=" * 80)
+        opt_full = optimize_thresholds_csv(df, mode='full')
+        print_optimization_report(opt_full, df)
 
-        # Print optimization report
-        print_optimization_report(opt_results, df)
+        print("\n" + "=" * 80)
+        print("MODE 2: SIMPLE (just ratio + pump thresholds)")
+        print("=" * 80)
+        opt_simple = optimize_thresholds_csv(df, mode='simple')
+        print_optimization_report(opt_simple, df)
+
+        # Summary comparison
+        print("=" * 80)
+        print("OPTIMIZATION SUMMARY")
+        print("=" * 80)
+        if opt_full['best'] and opt_simple['best']:
+            print(f"\nFULL mode (with penalties):")
+            print(f"  Best: ratio >= {opt_full['best']['ratio_min']}x, pump <= {opt_full['best']['pump_max']}%")
+            print(f"  TP Rate: {opt_full['best']['tp_rate']:.1f}% on {opt_full['best']['n_approved']} trades")
+
+            print(f"\nSIMPLE mode (no penalties):")
+            print(f"  Best: ratio >= {opt_simple['best']['ratio_min']}x, pump <= {opt_simple['best']['pump_max']}%")
+            print(f"  TP Rate: {opt_simple['best']['tp_rate']:.1f}% on {opt_simple['best']['n_approved']} trades")
+
+            # Pick winner
+            if opt_full['best']['combined_score'] > opt_simple['best']['combined_score']:
+                print(f"\n[WINNER] FULL mode - score penalties help filter noise")
+            else:
+                print(f"\n[WINNER] SIMPLE mode - just ratio + pump is sufficient")
 
         # Export results
         results_file = DATA_DIR / "optimization_results.json"
         with open(results_file, 'w') as f:
             json.dump({
-                'best': opt_results['best'],
-                'top_10': opt_results['top_10']
+                'full_mode': {'best': opt_full['best'], 'top_10': opt_full['top_10']},
+                'simple_mode': {'best': opt_simple['best'], 'top_10': opt_simple['top_10']}
             }, f, indent=2, default=str)
-        print(f"Optimization results saved to: {results_file}")
+        print(f"\nOptimization results saved to: {results_file}")
         return
 
     if args.csv or args.compare:

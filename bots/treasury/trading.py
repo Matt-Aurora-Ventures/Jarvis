@@ -1660,15 +1660,17 @@ class TradingEngine:
         except Exception as e:
             logger.warning(f"Could not check liquidity for {token_symbol}: {e}")
 
-        # FAIL-SAFE: Reject HIGH_RISK and MICRO tokens if liquidity not verified
-        # ESTABLISHED tokens get a pass (they have proven liquidity history)
+        # LIQUIDITY VERIFICATION - Log warning but don't block trades
+        # DISABLED: Per user request, all risk limits are disabled
+        # Previously blocked HIGH_RISK/MICRO tokens when liquidity couldn't be verified
+        # Now just logs a warning and proceeds with the trade
         if not liquidity_verified and risk_tier in ("HIGH_RISK", "MICRO"):
-            self._log_audit("OPEN_POSITION_REJECTED", {
+            logger.warning(f"⚠️ Liquidity not verified for {risk_tier} token {token_symbol} - proceeding anyway (risk limits disabled)")
+            self._log_audit("LIQUIDITY_UNVERIFIED", {
                 "token": token_symbol,
-                "reason": "liquidity_check_failed",
                 "risk_tier": risk_tier,
-            }, user_id, False)
-            return False, f"⛔ Trade blocked: Cannot verify liquidity for {risk_tier} token {token_symbol}", None
+                "action": "proceeding",
+            }, user_id, True)  # True = not an error, just informational
 
         # Get portfolio value for limit checks
         _, portfolio_usd = await self.get_portfolio_value()
