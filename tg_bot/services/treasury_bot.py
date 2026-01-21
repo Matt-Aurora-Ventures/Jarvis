@@ -20,10 +20,10 @@ from enum import Enum
 
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    InputMediaPhoto, ChatAction
+    InputMediaPhoto
 )
 from telegram.ext import ContextTypes
-from telegram.constants import ParseMode
+from telegram.constants import ParseMode, ChatAction
 
 from bots.treasury.trading import TradingEngine, Position
 from .treasury_dashboard import TreasuryDashboard

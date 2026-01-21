@@ -22,6 +22,20 @@ logger = logging.getLogger(__name__)
 class MemoryImporter:
     """Automatically imports learnings from PostgreSQL to local SQLite."""
 
+    SQLITE_TABLE_SQL = """
+        CREATE TABLE IF NOT EXISTS memory_entries (
+            id TEXT PRIMARY KEY,
+            type TEXT,
+            content TEXT,
+            context TEXT,
+            tags TEXT,
+            confidence TEXT,
+            timestamp TEXT,
+            session_id TEXT,
+            imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+
     def __init__(self, sqlite_db: str = None, postgres_url: str = None):
         """
         Initialize memory importer.
@@ -66,11 +80,10 @@ class MemoryImporter:
 
             # Query archival_memory table for recent entries
             query = """
-                SELECT id, session_id, type, content, context, tags,
-                       confidence, created_at, updated_at
+                SELECT id, session_id, content, metadata, created_at
                 FROM archival_memory
-                WHERE updated_at > %s
-                ORDER BY confidence DESC, updated_at DESC
+                WHERE created_at > %s
+                ORDER BY created_at DESC
                 LIMIT 1000
             """
 
@@ -100,7 +113,35 @@ class MemoryImporter:
 
     def _import_single_learning(self, learning: dict, stats: dict) -> None:
         """Store a single learning in SQLite and JSONL."""
-        topic = learning.get("context", "general").split()[0]
+        metadata = learning.get("metadata") or {}
+        context = metadata.get("context") or metadata.get("topic")
+        context = context or learning.get("session_id") or "general"
+
+        topic = str(context).split()[0]
+
+        entry_type = (
+            metadata.get("type")
+            or metadata.get("category")
+            or metadata.get("memory_type")
+            or "general"
+        )
+
+        raw_tags = (
+            metadata.get("tags")
+            or metadata.get("labels")
+            or metadata.get("tag_list")
+            or []
+        )
+
+        if isinstance(raw_tags, str):
+            tags = [tag.strip() for tag in raw_tags.split(",") if tag.strip()]
+        elif isinstance(raw_tags, list):
+            tags = raw_tags
+        else:
+            tags = []
+
+        confidence = metadata.get("confidence") or "medium"
+        timestamp = learning.get("updated_at") or learning.get("created_at")
 
         # Track topic counts
         if topic not in stats["topics"]:
@@ -110,12 +151,12 @@ class MemoryImporter:
         # Store in JSONL for MCP memory server
         memory_entry = {
             "id": str(learning["id"]),
-            "type": learning["type"],
+            "type": entry_type,
             "content": learning["content"],
-            "context": learning["context"],
-            "tags": learning.get("tags", "").split(",") if learning.get("tags") else [],
-            "confidence": learning.get("confidence", "medium"),
-            "timestamp": learning["updated_at"].isoformat() if learning.get("updated_at") else None,
+            "context": context,
+            "tags": tags,
+            "confidence": confidence,
+            "timestamp": timestamp.isoformat() if timestamp else None,
             "session_id": learning.get("session_id"),
         }
 
@@ -129,26 +170,13 @@ class MemoryImporter:
         stats["imported"] += 1
 
     def _store_in_sqlite(self, entry: dict) -> None:
-        """Store memory entry in SQLite for indexed search."""
+        """Store memory entry in SQLite for indexed access."""
         try:
             conn = sqlite3.connect(self.sqlite_db)
             conn.execute("PRAGMA journal_mode=WAL")
             cur = conn.cursor()
 
-            # Create table if not exists
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS memory_entries (
-                    id TEXT PRIMARY KEY,
-                    type TEXT,
-                    content TEXT,
-                    context TEXT,
-                    tags TEXT,
-                    confidence TEXT,
-                    timestamp TEXT,
-                    session_id TEXT,
-                    imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+            cur.execute(self.SQLITE_TABLE_SQL)
 
             cur.execute("""
                 INSERT OR REPLACE INTO memory_entries
@@ -170,8 +198,20 @@ class MemoryImporter:
         except Exception as e:
             logger.error(f"SQLite storage failed: {e}")
 
+    def _ensure_sqlite_table(self):
+        """Ensure the SQLite table exists before reads."""
+        try:
+            conn = sqlite3.connect(self.sqlite_db)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute(self.SQLITE_TABLE_SQL)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to ensure SQLite table: {e}")
+
     def search_imported_memories(self, query: str, limit: int = 10) -> list:
         """Search imported memories from SQLite."""
+        self._ensure_sqlite_table()
         try:
             conn = sqlite3.connect(self.sqlite_db)
             conn.row_factory = sqlite3.Row
@@ -201,6 +241,7 @@ class MemoryImporter:
 
     def get_recent_by_type(self, memory_type: str, limit: int = 20) -> list:
         """Get recent learnings of a specific type."""
+        self._ensure_sqlite_table()
         try:
             conn = sqlite3.connect(self.sqlite_db)
             conn.row_factory = sqlite3.Row
@@ -222,6 +263,7 @@ class MemoryImporter:
 
     def get_memory_stats(self) -> dict:
         """Get statistics about imported memories."""
+        self._ensure_sqlite_table()
         try:
             conn = sqlite3.connect(self.sqlite_db)
             cur = conn.cursor()
