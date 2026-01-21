@@ -3770,7 +3770,13 @@ async def _execute_ape_trade(query, callback_data: str):
 
     try:
         engine = await _get_treasury_engine()
-        balance_sol, balance_usd = await engine.get_portfolio_value()
+        portfolio_result = await engine.get_portfolio_value()
+        # Defensive: Handle None returns
+        if portfolio_result is None:
+            logger.error("get_portfolio_value returned None")
+            balance_sol, balance_usd = 0.0, 0.0
+        else:
+            balance_sol, balance_usd = portfolio_result
 
         if balance_sol <= 0:
             await query.message.reply_text(

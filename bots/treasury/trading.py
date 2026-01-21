@@ -1149,7 +1149,13 @@ class TradingEngine:
         if not treasury:
             return 0.0, 0.0
 
-        sol_balance, usd_value = await self.wallet.get_balance(treasury.address)
+        balance_result = await self.wallet.get_balance(treasury.address)
+        # Defensive: Handle None returns from get_balance
+        if balance_result is None:
+            logger.warning("get_balance returned None, defaulting to (0.0, 0.0)")
+            sol_balance, usd_value = 0.0, 0.0
+        else:
+            sol_balance, usd_value = balance_result
 
         # Add token values
         token_balances = await self.wallet.get_token_balances(treasury.address)
@@ -2611,39 +2617,42 @@ class _SimpleWallet:
                     "params": [target]
                 }
                 async with session.post(rpc_url, json=payload) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        lamports = data.get("result", {}).get("value", 0)
-                        sol_balance = lamports / 1e9
+                    if resp.status != 200:
+                        logger.warning(f"RPC getBalance failed with status {resp.status}")
+                        return 0.0, 0.0
 
-                        # Get SOL price - CoinGecko primary (reliable), DexScreener backup
-                        sol_price = 0.0
+                    data = await resp.json()
+                    lamports = data.get("result", {}).get("value", 0)
+                    sol_balance = lamports / 1e9
+
+                    # Get SOL price - CoinGecko primary (reliable), DexScreener backup
+                    sol_price = 0.0
+                    try:
+                        cg_url = "https://api.coingecko.com/api/v3/simple/price"
+                        params = {"ids": "solana", "vs_currencies": "usd"}
+                        async with session.get(cg_url, params=params) as cg_resp:
+                            if cg_resp.status == 200:
+                                cg_data = await cg_resp.json()
+                                sol_price = float(cg_data.get("solana", {}).get("usd", 0) or 0)
+                    except Exception:
+                        pass  # Silent - will try fallback
+
+                    if sol_price <= 0:
                         try:
-                            cg_url = "https://api.coingecko.com/api/v3/simple/price"
-                            params = {"ids": "solana", "vs_currencies": "usd"}
-                            async with session.get(cg_url, params=params) as cg_resp:
-                                if cg_resp.status == 200:
-                                    cg_data = await cg_resp.json()
-                                    sol_price = float(cg_data.get("solana", {}).get("usd", 0) or 0)
+                            sol_mint = "So11111111111111111111111111111111111111112"
+                            ds_url = f"https://api.dexscreener.com/latest/dex/tokens/{sol_mint}"
+                            async with session.get(ds_url) as ds_resp:
+                                if ds_resp.status == 200:
+                                    ds_data = await ds_resp.json()
+                                    pairs = ds_data.get("pairs") or []
+                                    sol_pairs = [p for p in pairs if p.get("chainId") == "solana"]
+                                    if sol_pairs:
+                                        best = max(sol_pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
+                                        sol_price = float(best.get("priceUsd") or 0)
                         except Exception:
-                            pass  # Silent - will try fallback
+                            pass  # Silent fallback failure
 
-                        if sol_price <= 0:
-                            try:
-                                sol_mint = "So11111111111111111111111111111111111111112"
-                                ds_url = f"https://api.dexscreener.com/latest/dex/tokens/{sol_mint}"
-                                async with session.get(ds_url) as ds_resp:
-                                    if ds_resp.status == 200:
-                                        ds_data = await ds_resp.json()
-                                        pairs = ds_data.get("pairs") or []
-                                        sol_pairs = [p for p in pairs if p.get("chainId") == "solana"]
-                                        if sol_pairs:
-                                            best = max(sol_pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
-                                            sol_price = float(best.get("priceUsd") or 0)
-                            except Exception:
-                                pass  # Silent fallback failure
-
-                        return sol_balance, sol_balance * sol_price if sol_price > 0 else 0.0
+                    return sol_balance, sol_balance * sol_price if sol_price > 0 else 0.0
         except Exception as e:
             logger.error(f"Failed to get balance: {e}")
             return 0.0, 0.0
