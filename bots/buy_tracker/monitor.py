@@ -28,6 +28,8 @@ class BuyTransaction:
     timestamp: datetime
     tx_url: str
     dex_url: str
+    lp_pair_name: str = ""  # Name of the LP pair this transaction came from (if known)
+    lp_pair_address: str = ""  # Address of the LP pair
 
     @property
     def buyer_short(self) -> str:
@@ -61,12 +63,23 @@ class TransactionMonitor:
         min_buy_usd: float = 5.0,
         on_buy: Optional[Callable[[BuyTransaction], None]] = None,
         pair_address: str = "",
+        additional_pairs: Optional[List[tuple]] = None,
     ):
         self.token_address = token_address
         self.pair_address = pair_address  # LP pair address where trades happen
         self.helius_api_key = helius_api_key
         self.min_buy_usd = min_buy_usd
         self.on_buy = on_buy
+
+        # Build mapping of pair address -> name for all pairs we monitor
+        # This allows graceful handling: if pairs are removed, we just have fewer entries
+        self._pair_names: Dict[str, str] = {}
+        if pair_address:
+            self._pair_names[pair_address] = "main"  # Main KR8TIV pair
+        if additional_pairs:
+            for name, addr in additional_pairs:
+                if addr and len(addr) >= 32:  # Basic validation
+                    self._pair_names[addr] = name
 
         self.rpc_url = f"https://mainnet.helius-rpc.com/?api-key={helius_api_key}"
         self.ws_url = f"wss://mainnet.helius-rpc.com/?api-key={helius_api_key}"
@@ -103,9 +116,17 @@ class TransactionMonitor:
 
         # Log what we're monitoring
         if self.pair_address:
-            logger.info(f"Starting transaction monitor for pair {self.pair_address}")
+            logger.info(f"Starting transaction monitor for main pair {self.pair_address}")
         else:
             logger.info(f"Starting transaction monitor for token {self.token_address}")
+
+        # Log additional LP pairs being monitored
+        additional_count = len(self._pair_names) - (1 if self.pair_address else 0)
+        if additional_count > 0:
+            logger.info(f"Also monitoring {additional_count} additional LP pairs:")
+            for addr, name in self._pair_names.items():
+                if name != "main":
+                    logger.info(f"  - {name}: {addr[:12]}...")
 
         # Initial data fetch
         await self._update_prices()
@@ -162,56 +183,72 @@ class TransactionMonitor:
             logger.error(f"Failed to update prices: {e}")
 
     async def _transaction_poll_loop(self):
-        """Poll for recent transactions (fallback to WebSocket)."""
+        """Poll for recent transactions across all monitored pairs."""
         first_run = True
         poll_count = 0
 
+        # Get list of all addresses to monitor
+        addresses_to_monitor = list(self._pair_names.keys())
+        if not addresses_to_monitor and self.token_address:
+            # Fallback to token address if no pairs configured
+            addresses_to_monitor = [self.token_address]
+
         while self._running:
             try:
-                # Get recent signatures for the pair/token
-                signatures = await self._get_recent_signatures()
                 poll_count += 1
-                new_count = 0
+                total_new_count = 0
 
-                for sig_info in signatures:
-                    sig = sig_info.get("signature")
+                # Poll each pair address
+                for watch_address in addresses_to_monitor:
+                    pair_name = self._pair_names.get(watch_address, "unknown")
+                    signatures = await self._get_recent_signatures(watch_address)
+                    new_count = 0
 
-                    # Skip if already processed (prevents duplicates)
-                    if self._is_already_processed(sig):
-                        continue
+                    for sig_info in signatures:
+                        sig = sig_info.get("signature")
 
-                    new_count += 1
+                        # Skip if already processed (prevents duplicates)
+                        if self._is_already_processed(sig):
+                            continue
 
-                    # On first run, just mark existing signatures as processed
-                    if first_run:
-                        self._mark_as_processed(sig)
-                        continue
+                        new_count += 1
+                        total_new_count += 1
 
-                    # Parse transaction
-                    buy = await self._parse_transaction(sig)
-                    if buy:
-                        if buy.usd_amount >= self.min_buy_usd:
-                            logger.info(f"Buy detected: ${buy.usd_amount:.2f} by {buy.buyer_short} ({buy.sol_amount:.4f} SOL)")
+                        # On first run, just mark existing signatures as processed
+                        if first_run:
                             self._mark_as_processed(sig)
-                            if self.on_buy:
-                                await self._safe_callback(buy)
+                            continue
+
+                        # Parse transaction with LP pair info
+                        buy = await self._parse_transaction(sig, pair_name, watch_address)
+                        if buy:
+                            if buy.usd_amount >= self.min_buy_usd:
+                                lp_label = f" on {pair_name}" if pair_name and pair_name != "main" else ""
+                                logger.info(f"Buy detected: ${buy.usd_amount:.2f} by {buy.buyer_short}{lp_label} ({buy.sol_amount:.4f} SOL)")
+                                self._mark_as_processed(sig)
+                                if self.on_buy:
+                                    await self._safe_callback(buy)
+                            else:
+                                logger.debug(f"Buy below threshold: ${buy.usd_amount:.2f} < ${self.min_buy_usd} by {buy.buyer_short}")
+                                self._mark_as_processed(sig)
                         else:
-                            logger.info(f"Buy below threshold: ${buy.usd_amount:.2f} < ${self.min_buy_usd} by {buy.buyer_short}")
+                            # Mark non-buy transactions too (likely sells or other tx types)
+                            logger.debug(f"Non-buy transaction: {sig[:12]}...")
                             self._mark_as_processed(sig)
-                    else:
-                        # Mark non-buy transactions too (likely sells or other tx types)
-                        logger.debug(f"Non-buy transaction: {sig[:12]}...")
-                        self._mark_as_processed(sig)
+
+                    # Small delay between polling different pairs to avoid rate limits
+                    if len(addresses_to_monitor) > 1:
+                        await asyncio.sleep(0.2)
 
                 # Log status periodically
-                if first_run and new_count > 0:
-                    logger.info(f"Initialized with {new_count} existing transactions (skipped)")
+                if first_run and total_new_count > 0:
+                    logger.info(f"Initialized with {total_new_count} existing transactions across {len(addresses_to_monitor)} pairs (skipped)")
                 elif poll_count % 15 == 0:  # Every ~30 seconds
-                    logger.info(f"Poll #{poll_count}: {len(self._processed_signatures)} txns tracked, min=${self.min_buy_usd}")
+                    logger.info(f"Poll #{poll_count}: {len(self._processed_signatures)} txns tracked across {len(addresses_to_monitor)} pairs, min=${self.min_buy_usd}")
 
                 # Log new transactions found (for debugging)
-                if new_count > 0 and not first_run:
-                    logger.info(f"Found {new_count} new transaction(s) to process")
+                if total_new_count > 0 and not first_run:
+                    logger.info(f"Found {total_new_count} new transaction(s) to process")
 
                 first_run = False
                 await asyncio.sleep(2)  # Poll every 2 seconds
@@ -220,11 +257,21 @@ class TransactionMonitor:
                 logger.error(f"Transaction poll error: {e}")
                 await asyncio.sleep(5)
 
-    async def _get_recent_signatures(self) -> List[Dict]:
-        """Get recent transaction signatures for the pair/token."""
+    async def _get_recent_signatures(self, watch_address: str = "") -> List[Dict]:
+        """Get recent transaction signatures for a specific address.
+
+        Args:
+            watch_address: The address to get signatures for. If empty, uses
+                          pair_address or token_address as fallback.
+        """
         try:
-            # Use pair address if available, otherwise fall back to token address
-            watch_address = self.pair_address if self.pair_address else self.token_address
+            # Use provided address, or fall back to defaults
+            if not watch_address:
+                watch_address = self.pair_address if self.pair_address else self.token_address
+
+            if not watch_address:
+                logger.warning("No address to watch for signatures")
+                return []
 
             payload = {
                 "jsonrpc": "2.0",
@@ -242,12 +289,23 @@ class TransactionMonitor:
                     return data.get("result", [])
 
         except Exception as e:
-            logger.error(f"Failed to get signatures: {e}")
+            logger.error(f"Failed to get signatures for {watch_address[:12]}...: {e}")
 
         return []
 
-    async def _parse_transaction(self, signature: str) -> Optional[BuyTransaction]:
-        """Parse a transaction to detect if it's a buy."""
+    async def _parse_transaction(
+        self,
+        signature: str,
+        lp_pair_name: str = "",
+        lp_pair_address: str = "",
+    ) -> Optional[BuyTransaction]:
+        """Parse a transaction to detect if it's a buy.
+
+        Args:
+            signature: The transaction signature to parse.
+            lp_pair_name: Name of the LP pair (e.g., "kr8tiv/ralph").
+            lp_pair_address: Address of the LP pair.
+        """
         try:
             # Use Helius enhanced transaction API
             url = f"https://api.helius.xyz/v0/transactions/?api-key={self.helius_api_key}"
@@ -326,6 +384,8 @@ class TransactionMonitor:
                 timestamp=datetime.utcnow(),
                 tx_url=f"https://solscan.io/tx/{signature}",
                 dex_url=f"https://dexscreener.com/solana/{self.token_address}",
+                lp_pair_name=lp_pair_name,
+                lp_pair_address=lp_pair_address,
             )
 
         except Exception as e:
