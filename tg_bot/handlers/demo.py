@@ -433,6 +433,11 @@ _Tap to trade with AI-powered signals_
                 InlineKeyboardButton(f"⭐ Watchlist", callback_data="demo:watchlist"),
                 InlineKeyboardButton(f"💎 AI Picks", callback_data="demo:ai_picks"),
             ],
+            # DCA & Alerts
+            [
+                InlineKeyboardButton(f"📅 DCA", callback_data="demo:dca"),
+                InlineKeyboardButton(f"🔔 Alerts", callback_data="demo:pnl_alerts"),
+            ],
             # Settings & Management
             [
                 InlineKeyboardButton(f"{theme.SETTINGS} Settings", callback_data="demo:settings"),
@@ -1311,6 +1316,260 @@ position hits your target!
         keyboard = [
             [
                 InlineKeyboardButton("🔔 View All Alerts", callback_data="demo:pnl_alerts"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.CHART} Positions", callback_data="demo:positions"),
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def dca_overview(
+        dca_plans: List[Dict[str, Any]] = None,
+        total_invested: float = 0.0,
+        total_tokens_bought: int = 0,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        DCA Overview - View and manage Dollar Cost Averaging plans.
+
+        Shows:
+        - Active DCA plans with next execution time
+        - Total invested via DCA
+        - DCA execution history
+        """
+        theme = JarvisTheme
+        dca_plans = dca_plans or []
+
+        active_plans = [p for p in dca_plans if p.get("active", True)]
+        paused_plans = [p for p in dca_plans if not p.get("active", True)]
+
+        lines = [
+            f"📅 *DCA (DOLLAR COST AVERAGE)*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+        ]
+
+        if not dca_plans:
+            lines.extend([
+                "_No DCA plans configured_",
+                "",
+                "DCA automatically buys tokens at",
+                "regular intervals to average your",
+                "entry price over time.",
+                "",
+                "*Benefits:*",
+                "• Reduces timing risk",
+                "• Removes emotional decisions",
+                "• Builds positions gradually",
+            ])
+        else:
+            lines.extend([
+                f"💰 *Total Invested:* {total_invested:.2f} SOL",
+                f"📊 *Active Plans:* {len(active_plans)}",
+                f"⏸️ *Paused:* {len(paused_plans)}",
+                "",
+            ])
+
+            for plan in active_plans[:5]:  # Show max 5
+                symbol = plan.get("symbol", "???")
+                amount = plan.get("amount", 0)
+                frequency = plan.get("frequency", "daily")
+                executions = plan.get("executions", 0)
+                next_exec = plan.get("next_execution", "Soon")
+
+                freq_emoji = {"hourly": "⏰", "daily": "📅", "weekly": "📆"}.get(frequency, "📅")
+
+                lines.extend([
+                    f"{freq_emoji} *{symbol}*",
+                    f"├ Amount: {amount} SOL / {frequency}",
+                    f"├ Executions: {executions}",
+                    f"└ Next: {next_exec}",
+                    "",
+                ])
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton("➕ New DCA Plan", callback_data="demo:dca_new"),
+            ],
+        ]
+
+        # Add manage buttons for each plan
+        for plan in active_plans[:3]:  # Max 3
+            plan_id = plan.get("id", "0")
+            symbol = plan.get("symbol", "???")
+            keyboard.append([
+                InlineKeyboardButton(f"⏸️ Pause {symbol}", callback_data=f"demo:dca_pause:{plan_id}"),
+                InlineKeyboardButton(f"🗑️ Delete", callback_data=f"demo:dca_delete:{plan_id}"),
+            ])
+
+        keyboard.extend([
+            [
+                InlineKeyboardButton("📊 DCA History", callback_data="demo:dca_history"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
+            ],
+        ])
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def dca_setup(
+        token_symbol: str = None,
+        token_address: str = None,
+        watchlist: List[Dict[str, Any]] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        DCA Setup - Configure a new DCA plan.
+
+        If no token specified, shows watchlist to choose from.
+        If token specified, shows amount and frequency options.
+        """
+        theme = JarvisTheme
+        watchlist = watchlist or []
+
+        if not token_symbol:
+            # Show token selection
+            lines = [
+                f"📅 *NEW DCA PLAN*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                "*Select a token to DCA:*",
+                "",
+            ]
+
+            keyboard = []
+
+            if watchlist:
+                for token in watchlist[:6]:  # Max 6
+                    sym = token.get("symbol", "???")
+                    addr = token.get("address", "")
+                    keyboard.append([
+                        InlineKeyboardButton(f"📈 {sym}", callback_data=f"demo:dca_select:{addr}"),
+                    ])
+            else:
+                lines.append("_Add tokens to watchlist first!_")
+
+            keyboard.append([
+                InlineKeyboardButton("✏️ Enter Address", callback_data="demo:dca_input"),
+            ])
+            keyboard.append([
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:dca"),
+            ])
+
+            text = "\n".join(lines)
+
+        else:
+            # Show DCA configuration
+            short_addr = f"{token_address[:6]}...{token_address[-4:]}" if token_address else "N/A"
+
+            lines = [
+                f"📅 *CONFIGURE DCA: {token_symbol}*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"*Token:* {token_symbol}",
+                f"*Address:* `{short_addr}`",
+                "",
+                "*Select amount per buy:*",
+            ]
+
+            text = "\n".join(lines)
+
+            keyboard = [
+                # Amount options
+                [
+                    InlineKeyboardButton("0.1 SOL", callback_data=f"demo:dca_amount:{token_address}:0.1"),
+                    InlineKeyboardButton("0.25 SOL", callback_data=f"demo:dca_amount:{token_address}:0.25"),
+                    InlineKeyboardButton("0.5 SOL", callback_data=f"demo:dca_amount:{token_address}:0.5"),
+                ],
+                [
+                    InlineKeyboardButton("1 SOL", callback_data=f"demo:dca_amount:{token_address}:1"),
+                    InlineKeyboardButton("2 SOL", callback_data=f"demo:dca_amount:{token_address}:2"),
+                    InlineKeyboardButton("5 SOL", callback_data=f"demo:dca_amount:{token_address}:5"),
+                ],
+                [
+                    InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:dca_new"),
+                ],
+            ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def dca_frequency_select(
+        token_symbol: str,
+        token_address: str,
+        amount: float,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """Select DCA frequency."""
+        theme = JarvisTheme
+
+        short_addr = f"{token_address[:6]}...{token_address[-4:]}"
+
+        lines = [
+            f"📅 *DCA FREQUENCY*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"*Token:* {token_symbol}",
+            f"*Amount:* {amount} SOL per buy",
+            "",
+            "*How often should we buy?*",
+        ]
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton("⏰ Every Hour", callback_data=f"demo:dca_create:{token_address}:{amount}:hourly"),
+            ],
+            [
+                InlineKeyboardButton("📅 Daily (Recommended)", callback_data=f"demo:dca_create:{token_address}:{amount}:daily"),
+            ],
+            [
+                InlineKeyboardButton("📆 Weekly", callback_data=f"demo:dca_create:{token_address}:{amount}:weekly"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data=f"demo:dca_select:{token_address}"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def dca_plan_created(
+        token_symbol: str,
+        amount: float,
+        frequency: str,
+        first_execution: str = "Now",
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """Show success after creating DCA plan."""
+        theme = JarvisTheme
+
+        freq_emoji = {"hourly": "⏰", "daily": "📅", "weekly": "📆"}.get(frequency, "📅")
+
+        text = f"""
+{theme.SUCCESS} *DCA PLAN CREATED*
+━━━━━━━━━━━━━━━━━━━━━
+
+*{token_symbol}*
+{freq_emoji} Buy {amount} SOL {frequency}
+
+*First Execution:* {first_execution}
+
+Your DCA plan is now active!
+We'll automatically buy {token_symbol}
+at regular intervals.
+
+━━━━━━━━━━━━━━━━━━━━━
+_Cancel anytime from DCA menu_
+"""
+
+        keyboard = [
+            [
+                InlineKeyboardButton("📅 View DCA Plans", callback_data="demo:dca"),
             ],
             [
                 InlineKeyboardButton(f"{theme.CHART} Positions", callback_data="demo:positions"),
@@ -2912,6 +3171,205 @@ _Custom values & price alerts soon_
             ])
 
         # ========== END P&L ALERTS HANDLERS ==========
+
+        # ========== DCA HANDLERS ==========
+        elif action == "dca":
+            # DCA Overview
+            dca_plans = context.user_data.get("dca_plans", [])
+            total_invested = sum(p.get("total_invested", 0) for p in dca_plans)
+            text, keyboard = DemoMenuBuilder.dca_overview(
+                dca_plans=dca_plans,
+                total_invested=total_invested,
+            )
+
+        elif action == "dca_new":
+            # New DCA Plan - select token
+            watchlist = context.user_data.get("watchlist", [])
+            text, keyboard = DemoMenuBuilder.dca_setup(
+                watchlist=watchlist,
+            )
+
+        elif action.startswith("dca_select:"):
+            # Token selected for DCA
+            parts = data.split(":")
+            token_address = parts[2] if len(parts) >= 3 else ""
+
+            # Find token info from watchlist or trending
+            watchlist = context.user_data.get("watchlist", [])
+            token_symbol = "TOKEN"
+            for token in watchlist:
+                if token.get("address") == token_address:
+                    token_symbol = token.get("symbol", "TOKEN")
+                    break
+
+            text, keyboard = DemoMenuBuilder.dca_setup(
+                token_symbol=token_symbol,
+                token_address=token_address,
+                watchlist=watchlist,
+            )
+
+        elif action.startswith("dca_amount:"):
+            # Amount selected for DCA: demo:dca_amount:{address}:{amount}
+            parts = data.split(":")
+            if len(parts) >= 4:
+                token_address = parts[2]
+                amount = float(parts[3])
+
+                # Find token symbol
+                watchlist = context.user_data.get("watchlist", [])
+                token_symbol = "TOKEN"
+                for token in watchlist:
+                    if token.get("address") == token_address:
+                        token_symbol = token.get("symbol", "TOKEN")
+                        break
+
+                text, keyboard = DemoMenuBuilder.dca_frequency_select(
+                    token_symbol=token_symbol,
+                    token_address=token_address,
+                    amount=amount,
+                )
+            else:
+                text, keyboard = DemoMenuBuilder.error_message("Invalid DCA amount")
+
+        elif action.startswith("dca_create:"):
+            # Create DCA plan: demo:dca_create:{address}:{amount}:{frequency}
+            parts = data.split(":")
+            if len(parts) >= 5:
+                token_address = parts[2]
+                amount = float(parts[3])
+                frequency = parts[4]
+
+                # Find token symbol
+                watchlist = context.user_data.get("watchlist", [])
+                token_symbol = "TOKEN"
+                for token in watchlist:
+                    if token.get("address") == token_address:
+                        token_symbol = token.get("symbol", "TOKEN")
+                        break
+
+                # Create DCA plan
+                new_plan = {
+                    "id": f"dca_{token_address[:8]}_{datetime.now().strftime('%H%M%S')}",
+                    "symbol": token_symbol,
+                    "address": token_address,
+                    "amount": amount,
+                    "frequency": frequency,
+                    "active": True,
+                    "executions": 0,
+                    "total_invested": 0.0,
+                    "next_execution": "In 1 " + ("hour" if frequency == "hourly" else "day" if frequency == "daily" else "week"),
+                    "created_at": datetime.now().isoformat(),
+                }
+
+                # Store plan
+                dca_plans = context.user_data.get("dca_plans", [])
+                dca_plans.append(new_plan)
+                context.user_data["dca_plans"] = dca_plans
+
+                text, keyboard = DemoMenuBuilder.dca_plan_created(
+                    token_symbol=token_symbol,
+                    amount=amount,
+                    frequency=frequency,
+                    first_execution="Starting soon",
+                )
+            else:
+                text, keyboard = DemoMenuBuilder.error_message("Invalid DCA configuration")
+
+        elif action.startswith("dca_pause:"):
+            # Pause/Resume DCA plan
+            parts = data.split(":")
+            plan_id = parts[2] if len(parts) >= 3 else ""
+
+            dca_plans = context.user_data.get("dca_plans", [])
+            for plan in dca_plans:
+                if plan.get("id") == plan_id:
+                    plan["active"] = not plan.get("active", True)
+                    break
+            context.user_data["dca_plans"] = dca_plans
+
+            # Return to overview
+            total_invested = sum(p.get("total_invested", 0) for p in dca_plans)
+            text, keyboard = DemoMenuBuilder.dca_overview(
+                dca_plans=dca_plans,
+                total_invested=total_invested,
+            )
+
+        elif action.startswith("dca_delete:"):
+            # Delete DCA plan
+            parts = data.split(":")
+            plan_id = parts[2] if len(parts) >= 3 else ""
+
+            dca_plans = context.user_data.get("dca_plans", [])
+            dca_plans = [p for p in dca_plans if p.get("id") != plan_id]
+            context.user_data["dca_plans"] = dca_plans
+
+            theme = JarvisTheme
+            text = f"""
+{theme.SUCCESS} *DCA PLAN DELETED*
+━━━━━━━━━━━━━━━━━━━━━
+
+The DCA plan has been removed.
+No further automatic purchases
+will be made.
+
+━━━━━━━━━━━━━━━━━━━━━
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📅 View DCA Plans", callback_data="demo:dca")],
+                [InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main")],
+            ])
+
+        elif action == "dca_history":
+            # DCA execution history (placeholder)
+            theme = JarvisTheme
+            dca_plans = context.user_data.get("dca_plans", [])
+            total_executions = sum(p.get("executions", 0) for p in dca_plans)
+
+            text = f"""
+{theme.AUTO} *DCA EXECUTION HISTORY*
+━━━━━━━━━━━━━━━━━━━━━
+
+📊 *Total Executions:* {total_executions}
+
+_Detailed execution history coming in V2_
+
+Each DCA execution will be logged with:
+• Timestamp
+• Token purchased
+• Amount spent
+• Price at execution
+• Tokens received
+
+━━━━━━━━━━━━━━━━━━━━━
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📅 DCA Plans", callback_data="demo:dca")],
+                [InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main")],
+            ])
+
+        elif action == "dca_input":
+            # Manual token address input for DCA (placeholder)
+            theme = JarvisTheme
+            text = f"""
+{theme.AUTO} *ENTER TOKEN ADDRESS*
+━━━━━━━━━━━━━━━━━━━━━
+
+Paste a Solana token address to
+set up a DCA plan.
+
+_Manual address input coming in V2_
+
+For now, add tokens to your watchlist
+first, then create DCA plans from there.
+
+━━━━━━━━━━━━━━━━━━━━━
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⭐ Go to Watchlist", callback_data="demo:watchlist")],
+                [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:dca_new")],
+            ])
+
+        # ========== END DCA HANDLERS ==========
 
         elif action == "token_input":
             text, keyboard = DemoMenuBuilder.token_input_prompt()
