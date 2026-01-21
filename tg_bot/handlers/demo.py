@@ -444,8 +444,10 @@ _Tap to trade with AI-powered signals_
         sol_balance: float,
         usd_value: float,
         has_wallet: bool = True,
+        token_holdings: List[Dict[str, Any]] = None,
+        total_holdings_usd: float = 0.0,
     ) -> Tuple[str, InlineKeyboardMarkup]:
-        """Build wallet management menu."""
+        """Build wallet management menu with enhanced features."""
         theme = JarvisTheme
 
         if not has_wallet:
@@ -458,6 +460,7 @@ _Tap to trade with AI-powered signals_
 Create a new wallet or import an existing one.
 
 {theme.LOCK} All keys are encrypted with AES-256
+{theme.AUTO} Auto-backup to secure storage
 """
             keyboard = [
                 [
@@ -471,7 +474,7 @@ Create a new wallet or import an existing one.
                 ],
             ]
         else:
-            short_addr = f"{wallet_address[:6]}...{wallet_address[-4:]}"
+            total_value = usd_value + total_holdings_usd
 
             text = f"""
 {theme.WALLET} *WALLET MANAGEMENT*
@@ -480,29 +483,290 @@ Create a new wallet or import an existing one.
 {theme.KEY} *Address*
 `{wallet_address}`
 
-{theme.SOL} Balance: *{sol_balance:.4f} SOL*
-{theme.USD} Value: *${usd_value:,.2f}*
+{theme.SOL} *SOL Balance:* {sol_balance:.4f} SOL
+{theme.USD} *SOL Value:* ${usd_value:,.2f}
+"""
+            # Add token holdings summary
+            if token_holdings:
+                text += f"""
+💎 *Token Holdings:* ${total_holdings_usd:,.2f}
+"""
+                for token in token_holdings[:3]:
+                    symbol = token.get("symbol", "???")
+                    value = token.get("value_usd", 0)
+                    text += f"   └ {symbol}: ${value:,.2f}\n"
+                if len(token_holdings) > 3:
+                    text += f"   └ _+{len(token_holdings) - 3} more..._\n"
 
+            text += f"""
 ━━━━━━━━━━━━━━━━━━━━━
+💰 *Total Portfolio:* ${total_value:,.2f}
 {theme.LOCK} Private key stored encrypted
 """
             keyboard = [
+                # Row 1: Address & Balance
                 [
                     InlineKeyboardButton(f"{theme.COPY} Copy Address", callback_data="demo:copy_address"),
+                    InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:refresh_balance"),
                 ],
+                # Row 2: Holdings & Activity
                 [
-                    InlineKeyboardButton(f"{theme.REFRESH} Refresh Balance", callback_data="demo:refresh_balance"),
+                    InlineKeyboardButton(f"💎 Token Holdings", callback_data="demo:token_holdings"),
+                    InlineKeyboardButton(f"📜 Activity", callback_data="demo:wallet_activity"),
                 ],
+                # Row 3: Transfer & Receive
                 [
-                    InlineKeyboardButton(f"{theme.LOCK} Export Key", callback_data="demo:export_key"),
-                    InlineKeyboardButton(f"{theme.WARNING} Reset Wallet", callback_data="demo:wallet_reset"),
+                    InlineKeyboardButton(f"📤 Send SOL", callback_data="demo:send_sol"),
+                    InlineKeyboardButton(f"📥 Receive", callback_data="demo:receive_sol"),
                 ],
+                # Row 4: Security
+                [
+                    InlineKeyboardButton(f"{theme.LOCK} Export Key", callback_data="demo:export_key_confirm"),
+                    InlineKeyboardButton(f"{theme.WARNING} Reset", callback_data="demo:wallet_reset_confirm"),
+                ],
+                # Row 5: Back
                 [
                     InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
                 ],
             ]
 
         return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def token_holdings_view(
+        holdings: List[Dict[str, Any]],
+        total_value: float = 0.0,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Detailed token holdings view.
+
+        Shows all SPL tokens in the wallet with values.
+        """
+        theme = JarvisTheme
+
+        lines = [
+            f"💎 *TOKEN HOLDINGS*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+        ]
+
+        if not holdings:
+            lines.extend([
+                "_No tokens found_",
+                "",
+                "Your SOL tokens will appear here",
+                "once you make trades!",
+            ])
+        else:
+            for token in holdings[:10]:
+                symbol = token.get("symbol", "???")
+                amount = token.get("amount", 0)
+                value = token.get("value_usd", 0)
+                change = token.get("change_24h", 0)
+
+                change_emoji = "🟢" if change >= 0 else "🔴"
+                change_sign = "+" if change >= 0 else ""
+
+                lines.append(f"*{symbol}*")
+                lines.append(f"   Amount: {amount:,.2f}")
+                lines.append(f"   Value: ${value:,.2f}")
+                lines.append(f"   {change_emoji} {change_sign}{change:.1f}%")
+                lines.append("")
+
+            if len(holdings) > 10:
+                lines.append(f"_Showing 10 of {len(holdings)} tokens_")
+
+        lines.extend([
+            "━━━━━━━━━━━━━━━━━━━━━",
+            f"💰 *Total:* ${total_value:,.2f}",
+        ])
+
+        text = "\n".join(lines)
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:token_holdings"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:wallet_menu"),
+            ],
+        ])
+
+        return text, keyboard
+
+    @staticmethod
+    def wallet_activity_view(
+        transactions: List[Dict[str, Any]] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Wallet transaction history view.
+        """
+        theme = JarvisTheme
+
+        lines = [
+            f"📜 *WALLET ACTIVITY*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+        ]
+
+        if not transactions:
+            lines.extend([
+                "_No recent activity_",
+                "",
+                "Your transactions will appear here",
+                "once you start trading!",
+            ])
+        else:
+            for tx in transactions[:8]:
+                tx_type = tx.get("type", "unknown")
+                symbol = tx.get("symbol", "SOL")
+                amount = tx.get("amount", 0)
+                timestamp = tx.get("timestamp", "")
+                status = tx.get("status", "confirmed")
+
+                type_emoji = {
+                    "buy": "🟢",
+                    "sell": "🔴",
+                    "transfer_in": "📥",
+                    "transfer_out": "📤",
+                    "swap": "🔄",
+                }.get(tx_type, "⚪")
+
+                status_emoji = "✅" if status == "confirmed" else "⏳"
+
+                lines.append(f"{type_emoji} *{tx_type.upper()}* {symbol}")
+                lines.append(f"   Amount: {amount:,.4f}")
+                lines.append(f"   {status_emoji} {timestamp}")
+                lines.append("")
+
+        lines.extend([
+            "━━━━━━━━━━━━━━━━━━━━━",
+        ])
+
+        text = "\n".join(lines)
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:wallet_activity"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:wallet_menu"),
+            ],
+        ])
+
+        return text, keyboard
+
+    @staticmethod
+    def send_sol_view(
+        sol_balance: float = 0.0,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Send SOL interface.
+        """
+        theme = JarvisTheme
+
+        text = f"""
+📤 *SEND SOL*
+━━━━━━━━━━━━━━━━━━━━━
+
+*Available:* {sol_balance:.4f} SOL
+
+To send SOL:
+1. Paste the recipient address
+2. Enter the amount
+3. Confirm the transaction
+
+{theme.WARNING} _Always double-check addresses!_
+
+━━━━━━━━━━━━━━━━━━━━━
+_Feature coming in V2_
+
+For now, use your wallet app
+to send SOL directly.
+"""
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:wallet_menu"),
+            ],
+        ])
+
+        return text, keyboard
+
+    @staticmethod
+    def export_key_confirm() -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Export private key confirmation with warnings.
+        """
+        theme = JarvisTheme
+
+        text = f"""
+{theme.WARNING} *EXPORT PRIVATE KEY*
+━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ *SECURITY WARNING*
+
+Your private key gives FULL access
+to your wallet and ALL funds.
+
+*NEVER share your key with anyone!*
+
+{theme.WARNING} Scammers may pose as support
+{theme.WARNING} No one should ever ask for it
+{theme.WARNING} Store it securely offline
+
+━━━━━━━━━━━━━━━━━━━━━
+
+Are you sure you want to export?
+"""
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"⚠️ Yes, Show Key", callback_data="demo:export_key"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:wallet_menu"),
+            ],
+        ])
+
+        return text, keyboard
+
+    @staticmethod
+    def wallet_reset_confirm() -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Wallet reset confirmation with warnings.
+        """
+        theme = JarvisTheme
+
+        text = f"""
+{theme.WARNING} *RESET WALLET*
+━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ *THIS IS IRREVERSIBLE*
+
+Resetting will:
+• Delete your current wallet
+• Remove all encrypted keys
+• Clear all trading history
+
+{theme.WARNING} Make sure you have backed up
+   your private key first!
+
+━━━━━━━━━━━━━━━━━━━━━
+
+Type "RESET" to confirm.
+"""
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"🗑️ Confirm Reset", callback_data="demo:wallet_reset"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:wallet_menu"),
+            ],
+        ])
+
+        return text, keyboard
 
     @staticmethod
     def positions_menu(
@@ -1860,12 +2124,95 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         elif action == "wallet_menu":
+            # Fetch token holdings
+            token_holdings = []
+            total_holdings_usd = 0.0
+            try:
+                from tg_bot import bot_core as bot_module
+                engine = await bot_module._get_treasury_engine()
+                if engine and hasattr(engine, 'get_token_holdings'):
+                    holdings = await engine.get_token_holdings()
+                    if holdings:
+                        token_holdings = holdings
+                        total_holdings_usd = sum(h.get("value_usd", 0) for h in holdings)
+            except Exception:
+                pass
+
             text, keyboard = DemoMenuBuilder.wallet_menu(
                 wallet_address=wallet_address,
                 sol_balance=sol_balance,
                 usd_value=usd_value,
                 has_wallet=wallet_address != "Not configured",
+                token_holdings=token_holdings,
+                total_holdings_usd=total_holdings_usd,
             )
+
+        elif action == "token_holdings":
+            # Detailed token holdings view
+            token_holdings = []
+            total_holdings_usd = 0.0
+            try:
+                from tg_bot import bot_core as bot_module
+                engine = await bot_module._get_treasury_engine()
+                if engine and hasattr(engine, 'get_token_holdings'):
+                    holdings = await engine.get_token_holdings()
+                    if holdings:
+                        token_holdings = holdings
+                        total_holdings_usd = sum(h.get("value_usd", 0) for h in holdings)
+            except Exception:
+                pass
+
+            text, keyboard = DemoMenuBuilder.token_holdings_view(
+                holdings=token_holdings,
+                total_value=total_holdings_usd,
+            )
+
+        elif action == "wallet_activity":
+            # Wallet transaction history
+            transactions = []
+            try:
+                from tg_bot import bot_core as bot_module
+                engine = await bot_module._get_treasury_engine()
+                if engine and hasattr(engine, 'get_transaction_history'):
+                    transactions = await engine.get_transaction_history()
+            except Exception:
+                pass
+
+            text, keyboard = DemoMenuBuilder.wallet_activity_view(
+                transactions=transactions,
+            )
+
+        elif action == "send_sol":
+            text, keyboard = DemoMenuBuilder.send_sol_view(sol_balance=sol_balance)
+
+        elif action == "receive_sol":
+            # Show receive address with QR placeholder
+            theme = JarvisTheme
+            text = f"""
+📥 *RECEIVE SOL*
+━━━━━━━━━━━━━━━━━━━━━
+
+Your wallet address:
+`{wallet_address}`
+
+_Tap the address to copy_
+
+{theme.WARNING} Only send SOL and Solana
+   tokens to this address!
+
+━━━━━━━━━━━━━━━━━━━━━
+_QR code coming in V2_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"{theme.COPY} Copy Address", callback_data="demo:copy_address")],
+                [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:wallet_menu")],
+            ])
+
+        elif action == "export_key_confirm":
+            text, keyboard = DemoMenuBuilder.export_key_confirm()
+
+        elif action == "wallet_reset_confirm":
+            text, keyboard = DemoMenuBuilder.wallet_reset_confirm()
 
         elif action == "wallet_create":
             # Generate new wallet

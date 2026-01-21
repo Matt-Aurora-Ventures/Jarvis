@@ -473,6 +473,117 @@ class TestDemoMenuBuilder:
         assert "Alert" in text
         assert "0.002" in text
 
+    def test_wallet_menu_enhanced(self):
+        """Test enhanced wallet menu with token holdings."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        holdings = [
+            {"symbol": "BONK", "value_usd": 150.50},
+            {"symbol": "WIF", "value_usd": 75.25},
+        ]
+
+        text, keyboard = DemoMenuBuilder.wallet_menu(
+            wallet_address="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+            sol_balance=5.5,
+            usd_value=1100.0,
+            has_wallet=True,
+            token_holdings=holdings,
+            total_holdings_usd=225.75,
+        )
+
+        assert text is not None
+        assert "WALLET MANAGEMENT" in text
+        assert "5.5" in text  # SOL balance
+        assert "1,100" in text  # USD value
+        assert "BONK" in text
+        assert "Token Holdings" in text
+        assert keyboard is not None
+        assert len(keyboard.inline_keyboard) >= 5  # Enhanced buttons
+
+    def test_token_holdings_view_empty(self):
+        """Test token holdings view with no tokens."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.token_holdings_view([], 0.0)
+
+        assert "TOKEN HOLDINGS" in text
+        assert "No tokens found" in text
+        assert keyboard is not None
+
+    def test_token_holdings_view_with_tokens(self):
+        """Test token holdings view with tokens."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        holdings = [
+            {"symbol": "BONK", "amount": 1000000, "value_usd": 150.50, "change_24h": 15.5},
+            {"symbol": "WIF", "amount": 50, "value_usd": 75.25, "change_24h": -8.2},
+        ]
+
+        text, keyboard = DemoMenuBuilder.token_holdings_view(holdings, 225.75)
+
+        assert "BONK" in text
+        assert "WIF" in text
+        assert "150.50" in text
+        assert "225.75" in text
+        assert "15.5" in text
+
+    def test_wallet_activity_view_empty(self):
+        """Test wallet activity view with no transactions."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.wallet_activity_view([])
+
+        assert "WALLET ACTIVITY" in text
+        assert "No recent activity" in text
+
+    def test_wallet_activity_view_with_transactions(self):
+        """Test wallet activity view with transactions."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        transactions = [
+            {"type": "buy", "symbol": "BONK", "amount": 0.5, "timestamp": "10:30", "status": "confirmed"},
+            {"type": "sell", "symbol": "WIF", "amount": 1.0, "timestamp": "09:15", "status": "confirmed"},
+        ]
+
+        text, keyboard = DemoMenuBuilder.wallet_activity_view(transactions)
+
+        assert "BUY" in text
+        assert "SELL" in text
+        assert "BONK" in text
+        assert "WIF" in text
+
+    def test_send_sol_view(self):
+        """Test send SOL view."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.send_sol_view(sol_balance=5.5)
+
+        assert "SEND SOL" in text
+        assert "5.5" in text
+        assert "Available" in text
+
+    def test_export_key_confirm(self):
+        """Test export key confirmation dialog."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.export_key_confirm()
+
+        assert "EXPORT PRIVATE KEY" in text
+        assert "SECURITY WARNING" in text
+        assert "NEVER share" in text
+        assert keyboard is not None
+        assert len(keyboard.inline_keyboard) == 2
+
+    def test_wallet_reset_confirm(self):
+        """Test wallet reset confirmation dialog."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.wallet_reset_confirm()
+
+        assert "RESET WALLET" in text
+        assert "IRREVERSIBLE" in text
+        assert keyboard is not None
+
 
 class TestSentimentIntegration:
     """Test sentiment engine integration."""
