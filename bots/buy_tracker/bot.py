@@ -118,6 +118,8 @@ class JarvisBuyBot:
         self._message_cache: dict[int, str] = {}
         # Counter for emoji credit attribution
         self._buy_counter = 0
+        # KR8TIV sticker file_id cache (fetched on first use)
+        self._kr8tiv_sticker_id: Optional[str] = None
 
     async def start(self):
         """Start the buy bot."""
@@ -256,6 +258,39 @@ class JarvisBuyBot:
         except Exception as e:
             logger.error(f"Failed to send startup message: {e}")
 
+    async def _send_kr8tiv_sticker(self):
+        """Send KR8TIV robot sticker as decoration before buy notification.
+
+        Fetches sticker file_id from KR8TIV sticker set on first use and caches it.
+        Fails gracefully - if sticker can't be sent, buy notification still goes through.
+        """
+        KR8TIV_STICKER_SET = "KR8TIV"  # t.me/addemoji/KR8TIV
+
+        try:
+            # Fetch sticker file_id on first use
+            if not self._kr8tiv_sticker_id:
+                try:
+                    sticker_set = await self.bot.get_sticker_set(KR8TIV_STICKER_SET)
+                    if sticker_set.stickers:
+                        # Use the first sticker (the robot emoji)
+                        self._kr8tiv_sticker_id = sticker_set.stickers[0].file_id
+                        logger.info(f"Cached KR8TIV sticker file_id: {self._kr8tiv_sticker_id[:20]}...")
+                    else:
+                        logger.warning("KR8TIV sticker set is empty")
+                        return
+                except Exception as e:
+                    logger.warning(f"Could not fetch KR8TIV sticker set: {e}")
+                    return
+
+            # Send the sticker
+            await self.bot.send_sticker(
+                chat_id=self.config.chat_id,
+                sticker=self._kr8tiv_sticker_id,
+            )
+        except Exception as e:
+            # Don't fail the whole notification if sticker fails
+            logger.warning(f"Could not send KR8TIV sticker: {e}")
+
     async def _on_buy_detected(self, buy: BuyTransaction):
         """Handle detected buy transaction."""
         logger.info(f"Processing buy: ${buy.usd_amount:.2f} from {buy.buyer_short}")
@@ -270,6 +305,9 @@ class JarvisBuyBot:
 
         for attempt in range(max_retries):
             try:
+                # Send KR8TIV sticker first as decoration (if available)
+                await self._send_kr8tiv_sticker()
+
                 # Check if we have a video to send
                 video_path = Path(self.config.video_path) if self.config.video_path else None
 
@@ -938,15 +976,17 @@ class JarvisBuyBot:
 
         # Add @FrankkkNL credit every 10th buy
         if self._buy_counter % 10 == 0:
-            message += f"\n<i>🎨 Custom emojis by @FrankkkNL</i>\n"
+            message += f"\n<i>🤖 KR8TIV sticker by @FrankkkNL</i>\n"
 
         return message
 
     def _get_buy_circles(self, usd_amount: float) -> str:
-        """Get KR8TIV custom emoji circles based on buy amount."""
-        # Custom KR8TIV robot emoji (ID from t.me/addemoji/KR8TIV)
-        KR8TIV_ROBOT_ID = "5990286304724655084"
-        emoji = f'<tg-emoji emoji-id="{KR8TIV_ROBOT_ID}">🤖</tg-emoji>'
+        """Get green circle emojis based on buy amount.
+
+        Note: Custom emoji in text requires premium/Fragment username ($4000+).
+        Using standard emojis here, with KR8TIV sticker sent separately.
+        """
+        emoji = "🟢"  # Standard green circle
 
         if usd_amount >= 10000:
             return emoji * 10
