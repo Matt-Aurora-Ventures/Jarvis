@@ -663,13 +663,29 @@ Reply with a Solana token address to buy.
         return text, InlineKeyboardMarkup(keyboard)
 
     @staticmethod
-    def trending_tokens(tokens: list) -> Tuple[str, InlineKeyboardMarkup]:
-        """Show trending tokens with buy buttons."""
+    def trending_tokens(
+        tokens: list,
+        market_regime: Dict[str, Any] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Show trending tokens with AI sentiment overlay.
+
+        Enhanced with:
+        - AI sentiment score per token
+        - Signal strength indicator
+        - Risk-adjusted recommendations
+        """
         theme = JarvisTheme
 
+        # Market context
+        regime = market_regime or {}
+        regime_name = regime.get("regime", "NEUTRAL")
+        regime_emoji = {"BULL": "🟢", "BEAR": "🔴"}.get(regime_name, "🟡")
+
         lines = [
-            f"{theme.FIRE} *TRENDING TOKENS*",
+            f"{theme.FIRE} *AI TRENDING*",
             "━━━━━━━━━━━━━━━━━━━━━",
+            f"Market: {regime_emoji} {regime_name}",
             "",
         ]
 
@@ -679,12 +695,32 @@ Reply with a Solana token address to buy.
             symbol = token.get("symbol", "???")
             change_24h = token.get("change_24h", 0)
             volume = token.get("volume", 0)
+            liquidity = token.get("liquidity", 0)
             address = token.get("address", "")
+
+            # AI sentiment overlay
+            sentiment = token.get("sentiment", "neutral")
+            sentiment_score = token.get("sentiment_score", 0.5)
+            signal = token.get("signal", "NEUTRAL")
 
             change_emoji = theme.PROFIT if change_24h >= 0 else theme.LOSS
             sign = "+" if change_24h >= 0 else ""
 
-            lines.append(f"{change_emoji} *{symbol}* {sign}{change_24h:.1f}% | Vol: ${volume/1000:.0f}K")
+            # Sentiment indicator
+            sent_emoji = {
+                "bullish": "🟢",
+                "very_bullish": "🚀",
+                "bearish": "🔴",
+                "very_bearish": "💀",
+            }.get(sentiment.lower() if isinstance(sentiment, str) else "neutral", "🟡")
+
+            # Signal strength bar
+            score_bars = int(sentiment_score * 5) if sentiment_score else 0
+            score_bar = "▰" * score_bars + "▱" * (5 - score_bars)
+
+            lines.append(f"{change_emoji} *{symbol}* {sign}{change_24h:.1f}%")
+            lines.append(f"   {sent_emoji} AI: {score_bar} | Vol: ${volume/1000:.0f}K")
+            lines.append("")
 
             if address:
                 keyboard.append([
@@ -692,11 +728,18 @@ Reply with a Solana token address to buy.
                         f"{theme.BUY} Buy {symbol}",
                         callback_data=f"demo:quick_buy:{address}"
                     ),
+                    InlineKeyboardButton(
+                        f"{theme.CHART} Analyze",
+                        callback_data=f"demo:analyze:{address}"
+                    ),
                 ])
 
         text = "\n".join(lines)
 
         keyboard.extend([
+            [
+                InlineKeyboardButton(f"{theme.AUTO} AI Picks", callback_data="demo:ai_picks"),
+            ],
             [
                 InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:trending"),
             ],
@@ -1383,14 +1426,17 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Fetch real trending data from sentiment engine
             trending = await get_trending_with_sentiment()
             if not trending:
-                # Fallback mock data if API unavailable
+                # Fallback mock data if API unavailable (with AI sentiment)
                 trending = [
-                    {"symbol": "BONK", "change_24h": 15.2, "volume": 1500000, "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"},
-                    {"symbol": "WIF", "change_24h": -5.3, "volume": 2300000, "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"},
-                    {"symbol": "POPCAT", "change_24h": 42.1, "volume": 890000, "address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr"},
-                    {"symbol": "MEW", "change_24h": 8.7, "volume": 650000, "address": "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5"},
+                    {"symbol": "BONK", "change_24h": 15.2, "volume": 1500000, "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "sentiment": "bullish", "sentiment_score": 0.72, "signal": "BUY"},
+                    {"symbol": "WIF", "change_24h": -5.3, "volume": 2300000, "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", "sentiment": "neutral", "sentiment_score": 0.45, "signal": "NEUTRAL"},
+                    {"symbol": "POPCAT", "change_24h": 42.1, "volume": 890000, "address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr", "sentiment": "very_bullish", "sentiment_score": 0.85, "signal": "STRONG_BUY"},
+                    {"symbol": "MEW", "change_24h": 8.7, "volume": 650000, "address": "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5", "sentiment": "bullish", "sentiment_score": 0.61, "signal": "BUY"},
                 ]
-            text, keyboard = DemoMenuBuilder.trending_tokens(trending)
+            text, keyboard = DemoMenuBuilder.trending_tokens(
+                trending,
+                market_regime=market_regime,
+            )
 
         elif action == "ai_picks":
             # AI Conviction Picks - powered by Grok
