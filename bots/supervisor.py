@@ -821,6 +821,36 @@ async def main():
         reset_failure_after=300,
     )
 
+    # Initialize health bus for unified monitoring
+    health_bus = None
+    try:
+        from core.monitoring.supervisor_health_bus import (
+            initialize_health_bus,
+            get_health_bus,
+        )
+        from core.monitoring.bot_health import get_bot_health_checker
+        from core.monitoring.error_rate_tracker import get_error_rate_tracker
+
+        health_bus = await initialize_health_bus(
+            supervisor=supervisor,
+            bot_checker=get_bot_health_checker(),
+            error_tracker=get_error_rate_tracker(),
+        )
+        await health_bus.start()
+        print("Health bus: ENABLED (unified monitoring)")
+
+        # Register with shutdown manager
+        if SHUTDOWN_MANAGER_AVAILABLE:
+            shutdown_mgr = get_shutdown_manager()
+            shutdown_mgr.register_hook(
+                name="health_bus",
+                callback=health_bus.stop,
+                phase=ShutdownPhase.CLEANUP,
+                timeout=5.0,
+            )
+    except Exception as exc:
+        logger.warning(f"Health bus unavailable: {exc}")
+
     # Register components
     # Each component runs independently - if one crashes, others continue
     supervisor.register("buy_bot", create_buy_bot, min_backoff=5.0, max_backoff=60.0)

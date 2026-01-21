@@ -55,6 +55,9 @@ def get_shared_memory() -> 'XMemory':
 # Predictions file from sentiment_report.py
 PREDICTIONS_FILE = Path(__file__).parent.parent / "buy_tracker" / "predictions_history.json"
 
+# State file to persist last post time (survives restarts)
+SENTIMENT_STATE_FILE = Path(__file__).parent / ".sentiment_poster_state.json"
+
 
 class SentimentTwitterPoster:
     """
@@ -73,7 +76,28 @@ class SentimentTwitterPoster:
         self.grok = GrokClient()  # Fallback for Claude failures
         self.interval_minutes = interval_minutes
         self._running = False
-        self._last_post_time: Optional[datetime] = None
+        self._last_post_time: Optional[datetime] = self._load_last_post_time()
+
+    def _load_last_post_time(self) -> Optional[datetime]:
+        """Load last post time from state file."""
+        try:
+            if SENTIMENT_STATE_FILE.exists():
+                with open(SENTIMENT_STATE_FILE, 'r') as f:
+                    data = json.load(f)
+                    if 'last_post_time' in data:
+                        return datetime.fromisoformat(data['last_post_time'])
+        except Exception as e:
+            logger.warning(f"Failed to load sentiment state: {e}")
+        return None
+
+    def _save_last_post_time(self):
+        """Save last post time to state file."""
+        try:
+            data = {'last_post_time': self._last_post_time.isoformat() if self._last_post_time else None}
+            with open(SENTIMENT_STATE_FILE, 'w') as f:
+                json.dump(data, f)
+        except Exception as e:
+            logger.warning(f"Failed to save sentiment state: {e}")
 
     async def start(self):
         """Start the sentiment poster loop."""
@@ -86,8 +110,18 @@ class SentimentTwitterPoster:
             logger.error("Failed to connect to Twitter")
             return
 
-        # Initial post
-        await self._post_sentiment_report()
+        # Check if we should skip initial post (posted recently)
+        if self._last_post_time:
+            elapsed = (datetime.now(timezone.utc) - self._last_post_time).total_seconds()
+            if elapsed < self.interval_minutes * 60:
+                wait_time = self.interval_minutes * 60 - elapsed
+                logger.info(f"Recent post detected ({elapsed/60:.1f}m ago), waiting {wait_time/60:.1f}m before next")
+            else:
+                logger.info("No recent post, posting initial sentiment report")
+                await self._post_sentiment_report()
+        else:
+            logger.info("First run, posting initial sentiment report")
+            await self._post_sentiment_report()
 
         # Schedule loop
         while self._running:
@@ -310,6 +344,7 @@ Return ONLY a JSON object: {{"tweets": ["tweet1", "tweet2", "tweet3"]}}"""
                 await asyncio.sleep(1)  # Rate limit
 
             self._last_post_time = datetime.now(timezone.utc)
+            self._save_last_post_time()
 
             # Structured log event for sentiment post
             if STRUCTURED_LOGGING_AVAILABLE and hasattr(logger, 'log_event'):
