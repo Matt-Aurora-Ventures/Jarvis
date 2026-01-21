@@ -362,7 +362,8 @@ _Tap to trade with AI-powered signals_
             ],
             # Self-Improving Intelligence (V1 Feature)
             [
-                InlineKeyboardButton(f"🧠 Learning Dashboard", callback_data="demo:learning"),
+                InlineKeyboardButton(f"🧠 Learning", callback_data="demo:learning"),
+                InlineKeyboardButton(f"📊 Performance", callback_data="demo:performance"),
             ],
             # Settings & Management
             [
@@ -1215,6 +1216,199 @@ _Data-driven scoring (Jan 2026 tune)_
 
         return text, InlineKeyboardMarkup(keyboard)
 
+    @staticmethod
+    def performance_dashboard(
+        performance_stats: Dict[str, Any],
+        trade_history: List[Dict[str, Any]] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Beautiful Portfolio Performance Dashboard.
+
+        Shows:
+        - Win/loss ratio and streaks
+        - Total PnL tracking
+        - Best/worst performers
+        - Daily/weekly/monthly ROI
+        - Trade frequency metrics
+        """
+        theme = JarvisTheme
+
+        # Extract stats
+        total_trades = performance_stats.get("total_trades", 0)
+        wins = performance_stats.get("wins", 0)
+        losses = performance_stats.get("losses", 0)
+        win_rate = performance_stats.get("win_rate", 0)
+        total_pnl = performance_stats.get("total_pnl", 0)
+        total_pnl_pct = performance_stats.get("total_pnl_pct", 0)
+        best_trade = performance_stats.get("best_trade", {})
+        worst_trade = performance_stats.get("worst_trade", {})
+        current_streak = performance_stats.get("current_streak", 0)
+        avg_hold_time = performance_stats.get("avg_hold_time_minutes", 0)
+
+        # Time-based performance
+        daily_pnl = performance_stats.get("daily_pnl", 0)
+        weekly_pnl = performance_stats.get("weekly_pnl", 0)
+        monthly_pnl = performance_stats.get("monthly_pnl", 0)
+
+        # PnL formatting
+        pnl_emoji = theme.PROFIT if total_pnl >= 0 else theme.LOSS
+        pnl_sign = "+" if total_pnl >= 0 else ""
+
+        # Win rate bar
+        win_bars = int(win_rate / 10) if win_rate else 0
+        win_bar = "▰" * win_bars + "▱" * (10 - win_bars)
+
+        # Streak formatting
+        if current_streak > 0:
+            streak_emoji = "🔥"
+            streak_text = f"+{current_streak}W"
+        elif current_streak < 0:
+            streak_emoji = "❄️"
+            streak_text = f"{current_streak}L"
+        else:
+            streak_emoji = "➖"
+            streak_text = "0"
+
+        lines = [
+            f"📊 *PERFORMANCE DASHBOARD*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"💰 *Overall Performance*",
+            f"├ Total P&L: {pnl_emoji} *{pnl_sign}${abs(total_pnl):.2f}* ({pnl_sign}{total_pnl_pct:.1f}%)",
+            f"├ Trades: *{total_trades}* ({wins}W / {losses}L)",
+            f"├ Win Rate: [{win_bar}] *{win_rate:.1f}%*",
+            f"└ Streak: {streak_emoji} *{streak_text}*",
+            "",
+        ]
+
+        # Time-based metrics
+        daily_emoji = "🟢" if daily_pnl >= 0 else "🔴"
+        weekly_emoji = "🟢" if weekly_pnl >= 0 else "🔴"
+        monthly_emoji = "🟢" if monthly_pnl >= 0 else "🔴"
+
+        lines.extend([
+            f"📅 *Time Performance*",
+            f"├ {daily_emoji} Today: *{'+' if daily_pnl >= 0 else ''}${daily_pnl:.2f}*",
+            f"├ {weekly_emoji} This Week: *{'+' if weekly_pnl >= 0 else ''}${weekly_pnl:.2f}*",
+            f"└ {monthly_emoji} This Month: *{'+' if monthly_pnl >= 0 else ''}${monthly_pnl:.2f}*",
+            "",
+        ])
+
+        # Best/worst trades
+        if best_trade:
+            best_symbol = best_trade.get("symbol", "???")
+            best_pnl = best_trade.get("pnl_pct", 0)
+            lines.append(f"🏆 *Best Trade:* {best_symbol} (+{best_pnl:.1f}%)")
+
+        if worst_trade:
+            worst_symbol = worst_trade.get("symbol", "???")
+            worst_pnl = worst_trade.get("pnl_pct", 0)
+            lines.append(f"💀 *Worst Trade:* {worst_symbol} ({worst_pnl:.1f}%)")
+
+        if best_trade or worst_trade:
+            lines.append("")
+
+        # Trading metrics
+        lines.extend([
+            f"⏱️ *Trading Metrics*",
+            f"├ Avg Hold Time: *{avg_hold_time:.0f} min*",
+            f"└ Avg Trade/Day: *{performance_stats.get('avg_trades_per_day', 0):.1f}*",
+            "",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            f"_{theme.AUTO} AI-Powered Analytics_",
+        ])
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton("📜 Trade History", callback_data="demo:trade_history"),
+                InlineKeyboardButton("📈 PnL Chart", callback_data="demo:pnl_chart"),
+            ],
+            [
+                InlineKeyboardButton("🏆 Leaderboard", callback_data="demo:leaderboard"),
+                InlineKeyboardButton("🎯 Goals", callback_data="demo:goals"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:performance"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def trade_history_view(
+        trades: List[Dict[str, Any]],
+        page: int = 0,
+        page_size: int = 5,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Show recent trade history with pagination.
+        """
+        theme = JarvisTheme
+
+        if not trades:
+            text = f"""
+{theme.CHART} *TRADE HISTORY*
+━━━━━━━━━━━━━━━━━━━━━
+
+_No trades recorded yet_
+
+Start trading to build your history!
+"""
+            keyboard = [
+                [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:performance")],
+            ]
+            return text, InlineKeyboardMarkup(keyboard)
+
+        # Paginate
+        start_idx = page * page_size
+        end_idx = start_idx + page_size
+        page_trades = trades[start_idx:end_idx]
+        total_pages = (len(trades) + page_size - 1) // page_size
+
+        lines = [
+            f"📜 *TRADE HISTORY*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            f"Page {page + 1}/{total_pages} ({len(trades)} total)",
+            "",
+        ]
+
+        for trade in page_trades:
+            symbol = trade.get("symbol", "???")
+            pnl_pct = trade.get("pnl_pct", 0)
+            pnl_usd = trade.get("pnl_usd", 0)
+            outcome = trade.get("outcome", "")
+            timestamp = trade.get("timestamp", "")
+
+            emoji = "🟢" if pnl_pct >= 0 else "🔴"
+            pnl_sign = "+" if pnl_pct >= 0 else ""
+
+            lines.extend([
+                f"{emoji} *{symbol}* {pnl_sign}{pnl_pct:.1f}%",
+                f"   P&L: {pnl_sign}${abs(pnl_usd):.2f}",
+                "",
+            ])
+
+        text = "\n".join(lines)
+
+        # Pagination buttons
+        nav_buttons = []
+        if page > 0:
+            nav_buttons.append(InlineKeyboardButton("◀️ Prev", callback_data=f"demo:history_page:{page-1}"))
+        if end_idx < len(trades):
+            nav_buttons.append(InlineKeyboardButton("Next ▶️", callback_data=f"demo:history_page:{page+1}"))
+
+        keyboard = []
+        if nav_buttons:
+            keyboard.append(nav_buttons)
+        keyboard.append([InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:performance")])
+
+        return text, InlineKeyboardMarkup(keyboard)
+
 
 # =============================================================================
 # Demo Command Handler
@@ -1510,6 +1704,148 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:learning")],
+            ])
+
+        elif action == "performance":
+            # Portfolio Performance Dashboard (V1 Feature)
+            intelligence = get_trade_intelligence()
+            theme = JarvisTheme
+
+            if intelligence:
+                # Get performance stats from intelligence engine
+                summary = intelligence.get_learning_summary()
+                performance_stats = {
+                    "total_trades": summary.get("total_trades_analyzed", 0),
+                    "wins": summary.get("wins", 0),
+                    "losses": summary.get("losses", 0),
+                    "win_rate": summary.get("win_rate", 0),
+                    "total_pnl": summary.get("total_pnl", 0),
+                    "total_pnl_pct": summary.get("total_pnl_pct", 0),
+                    "best_trade": summary.get("best_trade", {}),
+                    "worst_trade": summary.get("worst_trade", {}),
+                    "current_streak": summary.get("current_streak", 0),
+                    "avg_hold_time_minutes": summary.get("optimal_hold_time", 60),
+                    "daily_pnl": summary.get("daily_pnl", 0),
+                    "weekly_pnl": summary.get("weekly_pnl", 0),
+                    "monthly_pnl": summary.get("monthly_pnl", 0),
+                    "avg_trades_per_day": summary.get("avg_trades_per_day", 0),
+                }
+            else:
+                # Mock performance data for demo
+                performance_stats = {
+                    "total_trades": 47,
+                    "wins": 31,
+                    "losses": 16,
+                    "win_rate": 66.0,
+                    "total_pnl": 1247.50,
+                    "total_pnl_pct": 24.95,
+                    "best_trade": {"symbol": "BONK", "pnl_pct": 142.5},
+                    "worst_trade": {"symbol": "BOME", "pnl_pct": -35.2},
+                    "current_streak": 3,
+                    "avg_hold_time_minutes": 45,
+                    "daily_pnl": 125.50,
+                    "weekly_pnl": 487.25,
+                    "monthly_pnl": 1247.50,
+                    "avg_trades_per_day": 2.3,
+                }
+
+            text, keyboard = DemoMenuBuilder.performance_dashboard(performance_stats)
+
+        elif action == "trade_history":
+            # Trade History View
+            intelligence = get_trade_intelligence()
+            theme = JarvisTheme
+
+            if intelligence:
+                # Get trade history from intelligence engine
+                summary = intelligence.get_learning_summary()
+                trades = summary.get("recent_trades", [])
+            else:
+                # Mock trade history for demo
+                trades = [
+                    {"symbol": "BONK", "pnl_pct": 42.5, "pnl_usd": 85.00},
+                    {"symbol": "WIF", "pnl_pct": -12.3, "pnl_usd": -24.60},
+                    {"symbol": "POPCAT", "pnl_pct": 28.7, "pnl_usd": 57.40},
+                    {"symbol": "PEPE", "pnl_pct": 15.2, "pnl_usd": 30.40},
+                    {"symbol": "MOODENG", "pnl_pct": -8.5, "pnl_usd": -17.00},
+                    {"symbol": "GOAT", "pnl_pct": 67.3, "pnl_usd": 134.60},
+                    {"symbol": "PNUT", "pnl_pct": 22.1, "pnl_usd": 44.20},
+                ]
+
+            text, keyboard = DemoMenuBuilder.trade_history_view(trades)
+
+        elif action.startswith("history_page:"):
+            # Paginated trade history
+            parts = data.split(":")
+            page = int(parts[2]) if len(parts) >= 3 else 0
+
+            intelligence = get_trade_intelligence()
+            if intelligence:
+                summary = intelligence.get_learning_summary()
+                trades = summary.get("recent_trades", [])
+            else:
+                trades = [
+                    {"symbol": "BONK", "pnl_pct": 42.5, "pnl_usd": 85.00},
+                    {"symbol": "WIF", "pnl_pct": -12.3, "pnl_usd": -24.60},
+                    {"symbol": "POPCAT", "pnl_pct": 28.7, "pnl_usd": 57.40},
+                    {"symbol": "PEPE", "pnl_pct": 15.2, "pnl_usd": 30.40},
+                    {"symbol": "MOODENG", "pnl_pct": -8.5, "pnl_usd": -17.00},
+                    {"symbol": "GOAT", "pnl_pct": 67.3, "pnl_usd": 134.60},
+                    {"symbol": "PNUT", "pnl_pct": 22.1, "pnl_usd": 44.20},
+                ]
+
+            text, keyboard = DemoMenuBuilder.trade_history_view(trades, page=page)
+
+        elif action == "pnl_chart":
+            text = """
+📈 *PnL CHART*
+━━━━━━━━━━━━━━━━━━━━━
+
+_Generating performance chart..._
+
+Visual PnL tracking with:
+• Daily equity curve
+• Win/loss distribution
+• Drawdown analysis
+
+Coming in V2!
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("◀️ Back", callback_data="demo:performance")],
+            ])
+
+        elif action == "leaderboard":
+            text = """
+🏆 *LEADERBOARD*
+━━━━━━━━━━━━━━━━━━━━━
+
+Compare your performance with
+other JARVIS traders!
+
+_Feature coming in V2_
+
+For now, focus on beating
+your own records 💪
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("◀️ Back", callback_data="demo:performance")],
+            ])
+
+        elif action == "goals":
+            text = """
+🎯 *TRADING GOALS*
+━━━━━━━━━━━━━━━━━━━━━
+
+Set and track your targets:
+
+📈 *Daily Goal:* $50
+📊 *Weekly Goal:* $250
+🏆 *Monthly Goal:* $1,000
+
+_Goal customization coming in V2!_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("◀️ Back", callback_data="demo:performance")],
             ])
 
         elif action.startswith("analyze:"):
