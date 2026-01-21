@@ -851,6 +851,7 @@ Use the buy buttons to enter a trade!
             # Add navigation
             keyboard.extend([
                 [
+                    InlineKeyboardButton("🔔 P&L Alerts", callback_data="demo:pnl_alerts"),
                     InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:positions"),
                 ],
                 [
@@ -1099,6 +1100,221 @@ Use the buy buttons to enter a trade!
             ],
             [
                 InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def pnl_alerts_overview(
+        alerts: List[Dict[str, Any]] = None,
+        positions: List[Dict[str, Any]] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        P&L Alerts Overview - View and manage all active price alerts.
+
+        Shows:
+        - Active alerts with their trigger conditions
+        - Triggered alerts history
+        - Quick add buttons for positions without alerts
+        """
+        theme = JarvisTheme
+        alerts = alerts or []
+        positions = positions or []
+
+        lines = [
+            f"🔔 *P&L ALERTS*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+        ]
+
+        if not alerts:
+            lines.extend([
+                "_No active alerts_",
+                "",
+                "Set alerts to get notified when",
+                "positions hit profit/loss targets!",
+            ])
+        else:
+            active_count = len([a for a in alerts if not a.get("triggered")])
+            triggered_count = len([a for a in alerts if a.get("triggered")])
+
+            lines.extend([
+                f"📊 *Active Alerts:* {active_count}",
+                f"✅ *Triggered:* {triggered_count}",
+                "",
+            ])
+
+            for alert in alerts[:5]:  # Show max 5
+                symbol = alert.get("symbol", "???")
+                alert_type = alert.get("type", "pnl")  # pnl, price, percent
+                target = alert.get("target", 0)
+                direction = alert.get("direction", "above")  # above, below
+                triggered = alert.get("triggered", False)
+
+                if triggered:
+                    status = "✅"
+                else:
+                    status = "🔔"
+
+                if alert_type == "pnl":
+                    direction_emoji = "📈" if direction == "above" else "📉"
+                    lines.append(f"{status} *{symbol}* - {direction_emoji} ${target:+.2f}")
+                elif alert_type == "percent":
+                    direction_emoji = "📈" if direction == "above" else "📉"
+                    lines.append(f"{status} *{symbol}* - {direction_emoji} {target:+.1f}%")
+                else:  # price
+                    lines.append(f"{status} *{symbol}* - Price ${target:.8f}")
+
+        text = "\n".join(lines)
+
+        keyboard = []
+
+        # Add alert buttons for positions
+        if positions:
+            for pos in positions[:4]:  # Max 4 position alert buttons
+                symbol = pos.get("symbol", "???")
+                pos_id = pos.get("id", "0")
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"🔔 Add Alert: {symbol}",
+                        callback_data=f"demo:alert_setup:{pos_id}"
+                    ),
+                ])
+
+        keyboard.extend([
+            [
+                InlineKeyboardButton("🗑️ Clear Triggered", callback_data="demo:clear_triggered_alerts"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.CHART} Positions", callback_data="demo:positions"),
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
+            ],
+        ])
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def position_alert_setup(
+        position: Dict[str, Any],
+        existing_alerts: List[Dict[str, Any]] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Set up P&L alerts for a specific position.
+
+        Shows:
+        - Current position info
+        - Quick alert presets (+25%, +50%, +100%, -10%, -25%)
+        - Existing alerts for this position
+        """
+        theme = JarvisTheme
+        existing_alerts = existing_alerts or []
+
+        symbol = position.get("symbol", "???")
+        pos_id = position.get("id", "0")
+        pnl_pct = position.get("pnl_pct", 0)
+        pnl_usd = position.get("pnl_usd", 0)
+        entry_price = position.get("entry_price", 0)
+        current_price = position.get("current_price", 0)
+
+        pnl_emoji = theme.PROFIT if pnl_pct >= 0 else theme.LOSS
+        pnl_sign = "+" if pnl_pct >= 0 else ""
+
+        lines = [
+            f"🔔 *SET ALERT: {symbol}*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"*Current Position*",
+            f"├ Entry: ${entry_price:.8f}",
+            f"├ Now: ${current_price:.8f}",
+            f"└ P&L: {pnl_emoji} {pnl_sign}{pnl_pct:.1f}% (${pnl_usd:+.2f})",
+            "",
+        ]
+
+        # Show existing alerts
+        pos_alerts = [a for a in existing_alerts if a.get("position_id") == pos_id]
+        if pos_alerts:
+            lines.append("*Active Alerts:*")
+            for alert in pos_alerts:
+                target = alert.get("target", 0)
+                alert_type = alert.get("type", "percent")
+                direction = alert.get("direction", "above")
+                dir_emoji = "📈" if direction == "above" else "📉"
+                if alert_type == "percent":
+                    lines.append(f"  {dir_emoji} {target:+.1f}%")
+                else:
+                    lines.append(f"  {dir_emoji} ${target:+.2f}")
+            lines.append("")
+
+        lines.extend([
+            "*Quick Presets*",
+            "_Select a trigger level:_",
+        ])
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            # Profit alerts
+            [
+                InlineKeyboardButton("📈 +25%", callback_data=f"demo:create_alert:{pos_id}:percent:25"),
+                InlineKeyboardButton("📈 +50%", callback_data=f"demo:create_alert:{pos_id}:percent:50"),
+                InlineKeyboardButton("📈 +100%", callback_data=f"demo:create_alert:{pos_id}:percent:100"),
+            ],
+            # Loss alerts
+            [
+                InlineKeyboardButton("📉 -10%", callback_data=f"demo:create_alert:{pos_id}:percent:-10"),
+                InlineKeyboardButton("📉 -25%", callback_data=f"demo:create_alert:{pos_id}:percent:-25"),
+                InlineKeyboardButton("📉 -50%", callback_data=f"demo:create_alert:{pos_id}:percent:-50"),
+            ],
+            # Custom alert
+            [
+                InlineKeyboardButton("✏️ Custom Alert", callback_data=f"demo:custom_alert:{pos_id}"),
+            ],
+            # Delete existing alerts for this position
+            [
+                InlineKeyboardButton("🗑️ Delete Alerts", callback_data=f"demo:delete_pos_alerts:{pos_id}"),
+            ],
+            [
+                InlineKeyboardButton("🔔 All Alerts", callback_data="demo:pnl_alerts"),
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:positions"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def alert_created_success(
+        symbol: str,
+        alert_type: str,
+        target: float,
+        direction: str,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """Show success message after creating an alert."""
+        theme = JarvisTheme
+
+        dir_emoji = "📈" if direction == "above" else "📉"
+        type_text = "%" if alert_type == "percent" else " USD"
+
+        text = f"""
+{theme.SUCCESS} *ALERT CREATED*
+━━━━━━━━━━━━━━━━━━━━━
+
+*{symbol}*
+{dir_emoji} Trigger: {target:+.1f}{type_text}
+
+You'll be notified when this
+position hits your target!
+
+━━━━━━━━━━━━━━━━━━━━━
+"""
+
+        keyboard = [
+            [
+                InlineKeyboardButton("🔔 View All Alerts", callback_data="demo:pnl_alerts"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.CHART} Positions", callback_data="demo:positions"),
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
             ],
         ]
 
@@ -2549,6 +2765,153 @@ _Feature tracking all AI trades coming in V2_
                 usd_value=usd_value,
                 has_wallet=True,
             )
+
+        # ========== P&L ALERTS HANDLERS ==========
+        elif action == "pnl_alerts":
+            # Show P&L Alerts Overview
+            alerts = context.user_data.get("pnl_alerts", [])
+            text, keyboard = DemoMenuBuilder.pnl_alerts_overview(
+                alerts=alerts,
+                positions=positions,
+            )
+
+        elif action.startswith("alert_setup:"):
+            # Set up alert for a specific position
+            parts = data.split(":")
+            pos_id = parts[2] if len(parts) >= 3 else "0"
+
+            # Find the position
+            target_pos = None
+            for pos in positions:
+                if str(pos.get("id", "")) == pos_id:
+                    target_pos = pos
+                    break
+
+            if target_pos:
+                alerts = context.user_data.get("pnl_alerts", [])
+                text, keyboard = DemoMenuBuilder.position_alert_setup(
+                    position=target_pos,
+                    existing_alerts=alerts,
+                )
+            else:
+                text, keyboard = DemoMenuBuilder.error_message("Position not found")
+
+        elif action.startswith("create_alert:"):
+            # Create a new alert: demo:create_alert:{pos_id}:{type}:{target}
+            parts = data.split(":")
+            if len(parts) >= 5:
+                pos_id = parts[2]
+                alert_type = parts[3]  # percent, pnl, price
+                target = float(parts[4])
+
+                # Find the position
+                target_pos = None
+                for pos in positions:
+                    if str(pos.get("id", "")) == pos_id:
+                        target_pos = pos
+                        break
+
+                if target_pos:
+                    symbol = target_pos.get("symbol", "???")
+                    direction = "above" if target > 0 else "below"
+
+                    # Create alert object
+                    new_alert = {
+                        "id": f"alert_{pos_id}_{target}",
+                        "position_id": pos_id,
+                        "symbol": symbol,
+                        "type": alert_type,
+                        "target": target,
+                        "direction": direction,
+                        "triggered": False,
+                        "created_at": datetime.now().isoformat(),
+                    }
+
+                    # Store alert
+                    alerts = context.user_data.get("pnl_alerts", [])
+                    alerts.append(new_alert)
+                    context.user_data["pnl_alerts"] = alerts
+
+                    text, keyboard = DemoMenuBuilder.alert_created_success(
+                        symbol=symbol,
+                        alert_type=alert_type,
+                        target=target,
+                        direction=direction,
+                    )
+                else:
+                    text, keyboard = DemoMenuBuilder.error_message("Position not found")
+            else:
+                text, keyboard = DemoMenuBuilder.error_message("Invalid alert data")
+
+        elif action.startswith("delete_pos_alerts:"):
+            # Delete all alerts for a position
+            parts = data.split(":")
+            pos_id = parts[2] if len(parts) >= 3 else "0"
+
+            alerts = context.user_data.get("pnl_alerts", [])
+            # Filter out alerts for this position
+            alerts = [a for a in alerts if a.get("position_id") != pos_id]
+            context.user_data["pnl_alerts"] = alerts
+
+            theme = JarvisTheme
+            text = f"""
+{theme.SUCCESS} *ALERTS DELETED*
+━━━━━━━━━━━━━━━━━━━━━
+
+All alerts for this position have been removed.
+
+━━━━━━━━━━━━━━━━━━━━━
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔔 All Alerts", callback_data="demo:pnl_alerts")],
+                [InlineKeyboardButton(f"{theme.CHART} Positions", callback_data="demo:positions")],
+            ])
+
+        elif action == "clear_triggered_alerts":
+            # Clear all triggered alerts
+            alerts = context.user_data.get("pnl_alerts", [])
+            # Keep only non-triggered alerts
+            alerts = [a for a in alerts if not a.get("triggered", False)]
+            context.user_data["pnl_alerts"] = alerts
+
+            theme = JarvisTheme
+            text = f"""
+{theme.SUCCESS} *TRIGGERED ALERTS CLEARED*
+━━━━━━━━━━━━━━━━━━━━━
+
+All triggered alerts have been removed.
+
+━━━━━━━━━━━━━━━━━━━━━
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔔 All Alerts", callback_data="demo:pnl_alerts")],
+                [InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main")],
+            ])
+
+        elif action.startswith("custom_alert:"):
+            # Custom alert entry (placeholder for V2)
+            parts = data.split(":")
+            pos_id = parts[2] if len(parts) >= 3 else "0"
+
+            theme = JarvisTheme
+            text = f"""
+{theme.AUTO} *CUSTOM ALERT*
+━━━━━━━━━━━━━━━━━━━━━
+
+Custom alert entry coming in V2!
+
+For now, use the quick presets:
+• +25%, +50%, +100% profit
+• -10%, -25%, -50% loss
+
+━━━━━━━━━━━━━━━━━━━━━
+_Custom values & price alerts soon_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"{theme.BACK} Back", callback_data=f"demo:alert_setup:{pos_id}")],
+            ])
+
+        # ========== END P&L ALERTS HANDLERS ==========
 
         elif action == "token_input":
             text, keyboard = DemoMenuBuilder.token_input_prompt()
