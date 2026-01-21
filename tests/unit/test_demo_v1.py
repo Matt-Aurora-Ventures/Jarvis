@@ -824,6 +824,138 @@ class TestDemoMenuBuilder:
         assert "📉" in text  # Below direction
 
 
+class TestDCAFeature:
+    """Test DCA (Dollar Cost Averaging) feature."""
+
+    def test_dca_overview_empty(self):
+        """Test DCA overview with no plans."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.dca_overview(dca_plans=[])
+
+        assert "DCA" in text
+        assert "No active DCA plans" in text or "📅" in text
+        assert keyboard is not None
+        # Should have "New Plan" button
+        buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+        assert any("New" in btn or "➕" in btn for btn in buttons)
+
+    def test_dca_overview_with_plans(self):
+        """Test DCA overview with active plans."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        plans = [
+            {
+                "id": "dca_test1",
+                "symbol": "BONK",
+                "amount": 0.5,
+                "frequency": "daily",
+                "active": True,
+                "executions": 5,
+                "total_invested": 2.5,
+            },
+            {
+                "id": "dca_test2",
+                "symbol": "WIF",
+                "amount": 1.0,
+                "frequency": "weekly",
+                "active": False,
+                "executions": 2,
+                "total_invested": 2.0,
+            },
+        ]
+
+        text, keyboard = DemoMenuBuilder.dca_overview(
+            dca_plans=plans,
+            total_invested=4.5,
+            total_tokens_bought=2,
+        )
+
+        assert "BONK" in text  # Active plan shown in detail
+        assert "daily" in text.lower() or "Daily" in text
+        assert "Paused:* 1" in text or "Paused: 1" in text  # Paused count shown
+        assert keyboard is not None
+        # Should have pause/delete buttons for each plan
+        buttons = [btn.callback_data for row in keyboard.inline_keyboard for btn in row if btn.callback_data]
+        assert any("dca_pause" in btn for btn in buttons)
+        assert any("dca_delete" in btn for btn in buttons)
+
+    def test_dca_setup_no_token(self):
+        """Test DCA setup showing token selection."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        watchlist = [
+            {"symbol": "BONK", "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"},
+            {"symbol": "WIF", "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"},
+        ]
+
+        text, keyboard = DemoMenuBuilder.dca_setup(watchlist=watchlist)
+
+        assert "DCA" in text
+        assert "token" in text.lower() or "select" in text.lower()
+        assert keyboard is not None
+        # Should show watchlist tokens
+        buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+        assert any("BONK" in btn for btn in buttons)
+        assert any("WIF" in btn for btn in buttons)
+
+    def test_dca_setup_with_token(self):
+        """Test DCA setup with token selected, showing amount options."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.dca_setup(
+            token_symbol="BONK",
+            token_address="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        )
+
+        assert "BONK" in text
+        assert "amount" in text.lower() or "SOL" in text
+        assert keyboard is not None
+        # Should have amount buttons
+        buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+        assert any("0.1" in btn or "0.5" in btn or "1" in btn for btn in buttons)
+
+    def test_dca_frequency_select(self):
+        """Test DCA frequency selection."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.dca_frequency_select(
+            token_symbol="BONK",
+            token_address="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+            amount=0.5,
+        )
+
+        assert "BONK" in text
+        assert "0.5" in text
+        assert "frequency" in text.lower() or "often" in text.lower() or "interval" in text.lower()
+        assert keyboard is not None
+        # Should have frequency buttons
+        buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+        assert any("hourly" in btn.lower() or "hour" in btn.lower() for btn in buttons)
+        assert any("daily" in btn.lower() or "day" in btn.lower() for btn in buttons)
+        assert any("weekly" in btn.lower() or "week" in btn.lower() for btn in buttons)
+
+    def test_dca_plan_created(self):
+        """Test DCA plan created success message."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.dca_plan_created(
+            token_symbol="BONK",
+            amount=0.5,
+            frequency="daily",
+            first_execution="Now",
+        )
+
+        assert "BONK" in text
+        assert "0.5" in text
+        assert "daily" in text.lower() or "Daily" in text
+        assert "created" in text.lower() or "✅" in text or "success" in text.lower()
+        assert keyboard is not None
+        # Should have button to view plans or go back
+        buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+        assert any("View" in btn or "DCA" in btn or "Back" in btn for btn in buttons)
+
+
 class TestSentimentIntegration:
     """Test sentiment engine integration."""
 
