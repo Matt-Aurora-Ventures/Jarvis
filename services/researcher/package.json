@@ -1,0 +1,16 @@
+{
+  "name": "jarvis-researcher-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "research:finance": "node --loader ts-node/esm ../jobs/run-finance-research.ts",
+    "research:aiml": "node --loader ts-node/esm ../jobs/run-aiml-scan.ts",
+    "research:deepdive": "node --loader ts-node/esm ../jobs/run-weekly-deepdive.ts"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "zod": "^3.23.8"
+  }
+}
