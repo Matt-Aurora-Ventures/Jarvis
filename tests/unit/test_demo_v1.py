@@ -374,6 +374,59 @@ class TestDemoMenuBuilder:
         assert "TOKEN5" in text
         assert "TOKEN0" not in text
 
+    def test_quick_trade_menu_build(self):
+        """Test quick trade menu can be built."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        trending = [
+            {"symbol": "BONK", "change_24h": 15.2, "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"},
+            {"symbol": "WIF", "change_24h": -5.3, "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"},
+        ]
+        positions = [
+            {"symbol": "PEPE", "pnl_pct": 25.0, "pnl_usd": 50.0, "id": "pos_001"},
+        ]
+
+        text, keyboard = DemoMenuBuilder.quick_trade_menu(
+            trending_tokens=trending,
+            positions=positions,
+            sol_balance=5.5,
+            market_regime="BULL",
+        )
+
+        assert text is not None
+        assert "QUICK TRADE" in text
+        assert "BONK" in text
+        assert "WIF" in text
+        assert "5.5" in text  # SOL balance
+        assert keyboard is not None
+
+    def test_quick_trade_menu_no_positions(self):
+        """Test quick trade menu with no positions."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.quick_trade_menu(
+            trending_tokens=[],
+            positions=[],
+            sol_balance=1.0,
+            market_regime="NEUTRAL",
+        )
+
+        assert text is not None
+        assert "QUICK TRADE" in text
+        assert "Positions: *0*" in text
+
+    def test_snipe_mode_view_build(self):
+        """Test snipe mode view can be built."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.snipe_mode_view()
+
+        assert text is not None
+        assert "SNIPE MODE" in text
+        assert "Paste a Solana token address" in text
+        assert keyboard is not None
+        assert len(keyboard.inline_keyboard) > 0
+
 
 class TestSentimentIntegration:
     """Test sentiment engine integration."""

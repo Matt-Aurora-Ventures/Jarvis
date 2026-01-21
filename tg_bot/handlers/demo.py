@@ -346,9 +346,10 @@ _Tap to trade with AI-powered signals_
                 InlineKeyboardButton(f"{theme.BUY} Buy 1 SOL", callback_data="demo:buy:1"),
                 InlineKeyboardButton(f"{theme.BUY} Buy 5 SOL", callback_data="demo:buy:5"),
             ],
-            # Token input with AI
+            # Quick Trade & Token Input
             [
-                InlineKeyboardButton(f"{theme.SNIPE} Analyze Token (AI)", callback_data="demo:token_input"),
+                InlineKeyboardButton(f"⚡ Quick Trade", callback_data="demo:quick_trade"),
+                InlineKeyboardButton(f"{theme.SNIPE} Analyze", callback_data="demo:token_input"),
             ],
             # Portfolio & Positions
             [
@@ -1409,6 +1410,139 @@ Start trading to build your history!
 
         return text, InlineKeyboardMarkup(keyboard)
 
+    @staticmethod
+    def quick_trade_menu(
+        trending_tokens: List[Dict[str, Any]] = None,
+        positions: List[Dict[str, Any]] = None,
+        sol_balance: float = 0.0,
+        market_regime: str = "NEUTRAL",
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Quick Trade Menu - One-tap trading actions.
+
+        Features:
+        - Quick buy trending tokens
+        - Sell all positions button
+        - Snipe mode toggle
+        - Pre-set amount buttons
+        """
+        theme = JarvisTheme
+
+        regime_emoji = {"BULL": "🟢", "BEAR": "🔴"}.get(market_regime, "🟡")
+        position_count = len(positions) if positions else 0
+
+        lines = [
+            f"⚡ *QUICK TRADE*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            f"Market: {regime_emoji} *{market_regime}*",
+            f"Balance: *{sol_balance:.4f} SOL*",
+            f"Positions: *{position_count}*",
+            "",
+        ]
+
+        keyboard = []
+
+        # Quick buy trending tokens (top 3)
+        if trending_tokens:
+            lines.append("🔥 *Hot Tokens:*")
+            for i, token in enumerate(trending_tokens[:3]):
+                symbol = token.get("symbol", "???")
+                change = token.get("change_24h", 0)
+                address = token.get("address", "")
+                emoji = "🟢" if change >= 0 else "🔴"
+                lines.append(f"  {emoji} {symbol} ({'+' if change >= 0 else ''}{change:.1f}%)")
+
+                if address:
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"{theme.BUY} Buy {symbol} (0.1 SOL)",
+                            callback_data=f"demo:quick_buy:{address}:0.1"
+                        ),
+                        InlineKeyboardButton(
+                            f"{theme.BUY} (0.5 SOL)",
+                            callback_data=f"demo:quick_buy:{address}:0.5"
+                        ),
+                    ])
+            lines.append("")
+
+        # Quick sell all button
+        if positions and position_count > 0:
+            lines.append(f"📦 *{position_count} Open Position(s)*")
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"💰 Sell All ({position_count} pos)",
+                    callback_data="demo:sell_all"
+                ),
+            ])
+            lines.append("")
+
+        # Snipe mode
+        keyboard.extend([
+            [
+                InlineKeyboardButton(f"🎯 Snipe Mode", callback_data="demo:snipe_mode"),
+                InlineKeyboardButton(f"🔍 Search Token", callback_data="demo:token_input"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.FIRE} AI Trending", callback_data="demo:trending"),
+                InlineKeyboardButton(f"{theme.AUTO} AI Picks", callback_data="demo:ai_picks"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
+            ],
+        ])
+
+        lines.extend([
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "_One-tap trading for speed_",
+        ])
+
+        text = "\n".join(lines)
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def snipe_mode_view() -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Snipe Mode - Instant buy on token address paste.
+        """
+        theme = JarvisTheme
+
+        text = f"""
+🎯 *SNIPE MODE ACTIVE*
+━━━━━━━━━━━━━━━━━━━━━
+
+Paste a Solana token address to
+instantly buy with your preset amount.
+
+*Current Settings:*
+├ Amount: *0.1 SOL*
+├ Slippage: *1%*
+└ Auto-TP: *+50%*
+
+━━━━━━━━━━━━━━━━━━━━━
+
+_Reply with a token address to snipe_
+_Example: 7GCihgDB8..._
+
+{theme.WARNING} *Caution:* Snipe mode executes
+immediately without confirmation!
+"""
+
+        keyboard = [
+            [
+                InlineKeyboardButton("💰 Amount: 0.1", callback_data="demo:snipe_amount:0.1"),
+                InlineKeyboardButton("0.5", callback_data="demo:snipe_amount:0.5"),
+                InlineKeyboardButton("1", callback_data="demo:snipe_amount:1"),
+            ],
+            [
+                InlineKeyboardButton(f"🔴 Disable Snipe", callback_data="demo:snipe_disable"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:quick_trade"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
 
 # =============================================================================
 # Demo Command Handler
@@ -1847,6 +1981,109 @@ _Goal customization coming in V2!_
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("◀️ Back", callback_data="demo:performance")],
             ])
+
+        elif action == "quick_trade":
+            # Quick Trade Menu
+            trending = await get_trending_with_sentiment()
+            if not trending:
+                trending = [
+                    {"symbol": "BONK", "change_24h": 15.2, "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"},
+                    {"symbol": "WIF", "change_24h": -5.3, "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"},
+                    {"symbol": "POPCAT", "change_24h": 42.1, "address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr"},
+                ]
+
+            text, keyboard = DemoMenuBuilder.quick_trade_menu(
+                trending_tokens=trending,
+                positions=positions,
+                sol_balance=sol_balance,
+                market_regime=market_regime.get("regime", "NEUTRAL"),
+            )
+
+        elif action == "sell_all":
+            # Sell all positions
+            theme = JarvisTheme
+            if positions:
+                position_count = len(positions)
+                total_value = sum(p.get("pnl_usd", 0) for p in positions)
+
+                text = f"""
+{theme.SELL} *CONFIRM SELL ALL*
+━━━━━━━━━━━━━━━━━━━━━
+
+You are about to sell *{position_count} positions*
+
+*Positions:*
+"""
+                for pos in positions[:5]:
+                    symbol = pos.get("symbol", "???")
+                    pnl = pos.get("pnl_pct", 0)
+                    emoji = "🟢" if pnl >= 0 else "🔴"
+                    text += f"\n{emoji} {symbol}: {'+' if pnl >= 0 else ''}{pnl:.1f}%"
+
+                if len(positions) > 5:
+                    text += f"\n_...and {len(positions) - 5} more_"
+
+                text += f"""
+
+━━━━━━━━━━━━━━━━━━━━━
+
+{theme.WARNING} This will close ALL positions!
+"""
+
+                keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(f"✅ Confirm Sell All", callback_data="demo:execute_sell_all"),
+                    ],
+                    [
+                        InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:quick_trade"),
+                    ],
+                ])
+            else:
+                text, keyboard = DemoMenuBuilder.error_message("No positions to sell")
+
+        elif action == "execute_sell_all":
+            # Execute sell all positions
+            theme = JarvisTheme
+            try:
+                from tg_bot import bot_core as bot_module
+                engine = await bot_module._get_treasury_engine()
+
+                closed_count = 0
+                for pos in positions:
+                    try:
+                        await engine.close_position(pos.get("id"))
+                        closed_count += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to close position {pos.get('id')}: {e}")
+
+                text, keyboard = DemoMenuBuilder.success_message(
+                    action="Sell All Executed",
+                    details=f"Closed {closed_count}/{len(positions)} positions\n\nOrders submitted to Jupiter.",
+                )
+            except Exception as e:
+                text, keyboard = DemoMenuBuilder.error_message(f"Sell all failed: {str(e)[:50]}")
+
+        elif action == "snipe_mode":
+            # Snipe mode view
+            text, keyboard = DemoMenuBuilder.snipe_mode_view()
+            context.user_data["snipe_mode"] = True
+            context.user_data["snipe_amount"] = 0.1
+
+        elif action.startswith("snipe_amount:"):
+            # Set snipe amount
+            parts = data.split(":")
+            amount = float(parts[2]) if len(parts) >= 3 else 0.1
+            context.user_data["snipe_amount"] = amount
+            text, keyboard = DemoMenuBuilder.snipe_mode_view()
+            # Update view with new amount - for now just refresh
+
+        elif action == "snipe_disable":
+            # Disable snipe mode
+            context.user_data["snipe_mode"] = False
+            text, keyboard = DemoMenuBuilder.success_message(
+                action="Snipe Mode Disabled",
+                details="Token addresses will now show analysis instead of instant buy.",
+            )
 
         elif action.startswith("analyze:"):
             # AI Token Analysis
