@@ -52,6 +52,34 @@ See: docs/GROK_COMPLIANCE_REGULATORY_GUIDE.md
 
     EXPECTED IMPROVEMENT: TP rate from ~29% to estimated 45-55%
 
+2026-01-21 (PM): OPTIMIZER-BASED RELAXATION
+    Backtesting optimizer revealed initial rules were over-filtering winners.
+    Key insight: HAMURA pumped 319% but achieved 239% max gain - was filtered.
+
+    CHANGES:
+
+    1. RELAXED PUMP THRESHOLD (lines ~451-475)
+       - OLD: 40%+ pump triggered chasing_pump flag
+       - NEW: 200%+ pump triggers flag (100%+ if ratio < 2.5x)
+       - WHY: Optimizer showed pump filter was HARMFUL for meme coins
+       - CASE: HAMURA passed at 319% pump → 239% gain achieved
+
+    2. MOMENTUM PLAY OVERRIDE (lines ~451-455)
+       - NEW: Ratio >= 3.0x overrides ALL pump concerns
+       - Added momentum_play field to TokenSentiment dataclass
+       - WHY: High ratio tokens (>=3x) often have multiple legs up
+
+    3. RELAXED BULLISH RATIO (lines ~689-702)
+       - OLD: BULLISH required ratio >= 2.0x
+       - NEW: BULLISH allows ratio >= 1.5x (momentum plays >= 3x always pass)
+       - WHY: Optimizer found ratio >= 1.2x with 80% TP on 5 trades vs 100% on 2
+       - BALANCE: More opportunities (5) vs perfect accuracy (2)
+
+    OPTIMIZATION RESULTS:
+    - FULL mode (strict): 100% TP on 2 trades (USOR, HAMURA)
+    - SIMPLE mode (relaxed): 80% TP on 5 trades (RETARD, USOR, Pussycoin, HAMURA, INMU)
+    - Winner: SIMPLE mode - better risk/reward with more opportunities
+
 === END CHANGELOG ===
 """
 
@@ -377,7 +405,8 @@ class TokenSentiment:
     confidence: float = 0.5  # How confident are we in this call?
     position_size_modifier: float = 1.0  # Multiply default position by this
     stop_loss_pct: float = -10.0  # Default -10% stop (tighter than before)
-    chasing_pump: bool = False  # Flag if token already pumped 50%+
+    chasing_pump: bool = False  # Flag if token already pumped significantly
+    momentum_play: bool = False  # Flag if high ratio (>=3x) overrides pump concerns
     token_risk: str = "MICRO"  # SHITCOIN, MICRO, MID, ESTABLISHED
 
     # NEW (ADDED 2026-01-21): Data-driven tracking fields
@@ -433,32 +462,45 @@ class TokenSentiment:
         # Store for reference
         self.token_risk = token_risk
 
-        # === CHASING PUMP DETECTION (UPGRADED 2026-01-21) ===
-        # DATA-DRIVEN: Analysis of 56 calls showed:
-        #   - Early entry (<50% pump) = 67% TP rate
-        #   - Late entry (>=50% pump) = 29% TP rate (2x worse)
-        # RESTORE HISTORY (old thresholds):
-        #   - Was: 50%+ = -0.20 penalty, 30%+ = -0.10 penalty
-        #   - Now: 100%+ = -0.40, 50%+ = -0.30, 40%+ = -0.15, 30%+ = -0.08
-        if self.change_24h > 100:
-            # Extreme pump - almost never works (data: near 0% TP rate)
-            self.chasing_pump = True
-            score -= 0.40
+        # === CHASING PUMP DETECTION (UPDATED 2026-01-21 v2) ===
+        # DATA-DRIVEN OPTIMIZATION RESULTS:
+        #   - Optimizer found pump threshold harmful: HAMURA pumped 319% but hit 239% gain!
+        #   - Simple mode (ratio only) = 80% TP rate on 5 trades
+        #   - Key insight: High ratio (>=3x) tokens can have multiple legs up
+        # RESTORE HISTORY:
+        #   - v1 (2026-01-21): 40%+ set chasing_pump = True, blocking BULLISH
+        #   - v2 (2026-01-21): Relaxed to 100%+ for chasing_pump, added high-ratio override
+        # NEW LOGIC:
+        #   - Score penalties still apply for pumped tokens
+        #   - But chasing_pump only blocks at extreme levels (200%+)
+        #   - High ratio (>=3x) overrides pump concerns ("momentum play")
+
+        # Check for momentum play override FIRST
+        self.momentum_play = self.buy_sell_ratio >= 3.0
+        if self.momentum_play:
+            logger.info(f"{self.symbol}: MOMENTUM PLAY - ratio {self.buy_sell_ratio:.2f}x overrides pump concerns")
+
+        if self.change_24h > 200:
+            # Extreme pump - block unless momentum play
+            if not self.momentum_play:
+                self.chasing_pump = True
+            score -= 0.35
             confidence -= 0.3
-            logger.debug(f"{self.symbol}: Extreme pump penalty (-0.40) - {self.change_24h:.1f}% already pumped")
+            logger.debug(f"{self.symbol}: Extreme pump penalty (-0.35) - {self.change_24h:.1f}% already pumped")
+        elif self.change_24h > 100:
+            # Heavy pump - penalize but allow if good ratio
+            if not self.momentum_play and self.buy_sell_ratio < 2.5:
+                self.chasing_pump = True
+            score -= 0.25
+            confidence -= 0.2
+            logger.debug(f"{self.symbol}: Heavy pump penalty (-0.25) - {self.change_24h:.1f}% already pumped")
         elif self.change_24h > 50:
-            self.chasing_pump = True
-            score -= 0.30  # Increased from 0.20
-            confidence -= 0.25
-            logger.debug(f"{self.symbol}: Heavy pump penalty (-0.30) - {self.change_24h:.1f}% already pumped")
-        elif self.change_24h > 40:
-            # NEW TIER: Catches more late entries before 50% threshold
-            self.chasing_pump = True
+            # Moderate pump - score penalty only, don't block
             score -= 0.15
             confidence -= 0.15
             logger.debug(f"{self.symbol}: Moderate pump penalty (-0.15) - {self.change_24h:.1f}% already pumped")
         elif self.change_24h > 30:
-            # Caution zone - no longer sets chasing_pump but still penalized
+            # Caution zone - light penalty
             score -= 0.08
             confidence -= 0.1
 
@@ -659,21 +701,33 @@ class TokenSentiment:
             self.confidence -= 0.15
             logger.info(f"{self.symbol}: OVERCONFIDENCE PENALTY applied (-{overconfidence_penalty:.2f}) - high scores historically fail")
 
-        # === GRADE ASSIGNMENT (UPGRADED 2026-01-21) ===
-        # DATA-DRIVEN: Analysis showed ratio >=2x = 67% TP rate vs ratio <2x = 25% TP rate
-        # RESTORE HISTORY (old thresholds):
-        #   - Was: BULLISH required ratio >= 1.5x
-        #   - Now: BULLISH requires ratio >= 2.0x, 1.5-2.0x is SLIGHTLY BULLISH
-        if self.sentiment_score > 0.55 and self.buy_sell_ratio >= 2.0 and not self.chasing_pump:
-            # Full BULLISH: High score + Strong ratio (>=2x) + Not chasing
+        # === GRADE ASSIGNMENT (UPDATED 2026-01-21 v2) ===
+        # OPTIMIZATION RESULTS:
+        #   - Optimizer found ratio >= 1.2x with no pump filter = 80% win rate on 5 trades
+        #   - Pump threshold was HARMFUL: filtered HAMURA (319% pump, 239% gain!)
+        #   - Key insight: High ratio (>=3x) tokens can have multiple legs up
+        # RESTORE HISTORY:
+        #   - v1 (2026-01-21): BULLISH required ratio >= 2.0x, 1.5-2.0x was SLIGHTLY BULLISH
+        #   - v2 (2026-01-21): BULLISH requires ratio >= 1.5x, momentum plays (>=3x) override pump
+        # NEW LOGIC:
+        #   - BULLISH: ratio >= 1.5x AND (not chasing OR momentum_play)
+        #   - MOMENTUM PLAY: ratio >= 3x overrides pump concerns entirely
+
+        # Momentum play gets BULLISH regardless of pump level
+        if self.momentum_play and self.sentiment_score > 0.40:
+            self.sentiment_label = "BULLISH"
+            self.grade = "A" if self.sentiment_score > 0.60 else "A-"
+            logger.info(f"{self.symbol}: BULLISH MOMENTUM PLAY - ratio {self.buy_sell_ratio:.2f}x overrides pump {self.change_24h:.0f}%")
+        elif self.sentiment_score > 0.55 and self.buy_sell_ratio >= 2.0 and not self.chasing_pump:
+            # Strong BULLISH: High score + Strong ratio (>=2x) + Not chasing
             self.sentiment_label = "BULLISH"
             self.grade = "A" if self.sentiment_score > 0.65 else "A-"
             logger.info(f"{self.symbol}: BULLISH - score {self.sentiment_score:.2f}, ratio {self.buy_sell_ratio:.2f}x")
         elif self.sentiment_score > 0.55 and self.buy_sell_ratio >= 1.5 and not self.chasing_pump:
-            # NEW TIER: Good score but ratio only 1.5-2.0x - downgrade to SLIGHTLY BULLISH
-            self.sentiment_label = "SLIGHTLY BULLISH"
-            self.grade = "B+"
-            logger.info(f"{self.symbol}: SLIGHTLY BULLISH (ratio 1.5-2.0x) - score {self.sentiment_score:.2f}, ratio {self.buy_sell_ratio:.2f}x")
+            # BULLISH: Good score + Decent ratio (>=1.5x) + Not chasing
+            self.sentiment_label = "BULLISH"
+            self.grade = "A-"
+            logger.info(f"{self.symbol}: BULLISH - score {self.sentiment_score:.2f}, ratio {self.buy_sell_ratio:.2f}x")
         elif self.sentiment_score > 0.35 and self.buy_sell_ratio >= 1.2:
             self.sentiment_label = "SLIGHTLY BULLISH"
             self.grade = "B+" if self.sentiment_score > 0.45 else "B"
@@ -687,10 +741,11 @@ class TokenSentiment:
             self.sentiment_label = "BEARISH"
             self.grade = "D" if self.sentiment_score > -0.55 else "F"
 
-        # Override: If chasing pump, max grade is B (not bullish)
-        if self.chasing_pump and self.sentiment_label == "BULLISH":
+        # Override: If chasing pump AND not momentum play, max grade is B
+        if self.chasing_pump and not self.momentum_play and self.sentiment_label == "BULLISH":
             self.sentiment_label = "SLIGHTLY BULLISH"
             self.grade = "B"
+            logger.debug(f"{self.symbol}: Downgraded from BULLISH due to pump chasing")
 
 
 class SentimentReportGenerator:

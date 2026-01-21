@@ -35,6 +35,7 @@ class AuditCategory(Enum):
     SYSTEM = "system"
     SECURITY = "security"
     USER_ACTION = "user_action"
+    DECISION = "decision"  # For decision framework audit trail
 
 
 class AuditSeverity(Enum):
@@ -300,7 +301,59 @@ class AuditLogger:
         return counts
 
 
-# Singleton accessor
+# Singleton instance
+_audit_logger_instance: Optional[AuditLogger] = None
+
+
 def get_audit_logger() -> AuditLogger:
     """Get the audit logger singleton."""
-    return AuditLogger()
+    global _audit_logger_instance
+    if _audit_logger_instance is None:
+        _audit_logger_instance = AuditLogger()
+    return _audit_logger_instance
+
+
+def audit_log(
+    event: str,
+    component: str,
+    data: Dict[str, Any],
+    success: bool = True,
+    user_id: str = None,
+) -> None:
+    """
+    Convenience function for logging audit events.
+
+    This is the primary interface for the decision framework to log decisions.
+
+    Args:
+        event: The event type (e.g., "decision", "trade", "post")
+        component: The component making the decision (e.g., "x_bot", "telegram_bot")
+        data: Additional data to log
+        success: Whether the action was successful
+        user_id: Optional user ID associated with the action
+    """
+    try:
+        logger = get_audit_logger()
+
+        # Map event type to category
+        category_map = {
+            "decision": AuditCategory.DECISION,
+            "trade": AuditCategory.TRADING,
+            "auth": AuditCategory.AUTHENTICATION,
+            "config": AuditCategory.CONFIGURATION,
+            "api": AuditCategory.API_ACCESS,
+            "security": AuditCategory.SECURITY,
+        }
+        category = category_map.get(event, AuditCategory.SYSTEM)
+
+        logger.log(
+            category=category,
+            action=f"{component}:{event}",
+            user_id=user_id,
+            details=data,
+            success=success,
+            severity=AuditSeverity.INFO if success else AuditSeverity.WARNING,
+        )
+    except Exception as e:
+        # Audit logging should never break the main flow
+        logging.getLogger(__name__).debug(f"Audit log error: {e}")
