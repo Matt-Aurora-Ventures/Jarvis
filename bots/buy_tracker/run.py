@@ -92,7 +92,8 @@ def main():
 
     # Check config
     if not check_config():
-        sys.exit(1)
+        print("\nBuy bot disabled until configuration is complete.")
+        return
 
     # Show config
     print(f"\n📊 Token: {os.environ.get('BUY_BOT_TOKEN_SYMBOL', 'KR8TIV')}")

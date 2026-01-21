@@ -5,6 +5,7 @@ This provides matthaynes88 with a complete list of all available commands
 organized by category for easy reference.
 """
 
+import html
 import logging
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -154,7 +155,9 @@ async def commands_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for category, commands in COMMAND_CATEGORIES.items():
         lines.append(f"<b>{category}</b>")
         for cmd, desc in commands:
-            lines.append(f"  <code>{cmd}</code> - {desc}")
+            lines.append(
+                f"  <code>{html.escape(cmd)}</code> - {html.escape(desc)}"
+            )
         lines.append("")
 
     # Add footer

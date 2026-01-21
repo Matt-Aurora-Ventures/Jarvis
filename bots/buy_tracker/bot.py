@@ -123,14 +123,22 @@ class JarvisBuyBot:
         logger.info("Starting Jarvis Buy Bot Tracker...")
 
         # Validate config
+        missing = []
         if not self.config.bot_token:
-            raise ValueError("TELEGRAM_BOT_TOKEN not set")
+            missing.append("TELEGRAM_BOT_TOKEN")
         if not self.config.chat_id:
-            raise ValueError("TELEGRAM_BUY_BOT_CHAT_ID not set")
+            missing.append("TELEGRAM_BUY_BOT_CHAT_ID")
         if not self.config.token_address:
-            raise ValueError("BUY_BOT_TOKEN_ADDRESS not set")
+            missing.append("BUY_BOT_TOKEN_ADDRESS")
         if not self.config.helius_api_key:
-            raise ValueError("HELIUS_API_KEY not set")
+            missing.append("HELIUS_API_KEY")
+
+        if missing:
+            logger.error(
+                "Jarvis Buy Bot disabled: missing configuration (%s)",
+                ", ".join(missing),
+            )
+            return
 
         # Initialize Telegram Application for callback handling
         self.app = Application.builder().token(self.config.bot_token).build()
