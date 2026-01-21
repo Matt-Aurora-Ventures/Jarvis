@@ -186,22 +186,22 @@ class TestAPICallbackProcessor:
         """Test successful API callback retry"""
         processor = APICallbackProcessor()
 
-        # Mock aiohttp response
+        # Mock aiohttp - session.request() returns an async context manager
         with patch("aiohttp.ClientSession") as mock_session:
-            mock_response = AsyncMock()
+            # Create mock response
+            mock_response = MagicMock()
             mock_response.status = 200
-            mock_response.__aenter__.return_value = mock_response
-            mock_response.__aexit__.return_value = None
 
-            mock_request = AsyncMock()
-            mock_request.return_value = mock_response
-            mock_request.__aenter__.return_value = mock_response
-            mock_request.__aexit__.return_value = None
+            # Create async context manager for request()
+            mock_request_cm = MagicMock()
+            mock_request_cm.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_request_cm.__aexit__ = AsyncMock(return_value=None)
 
-            mock_session_instance = AsyncMock()
-            mock_session_instance.request = mock_request
-            mock_session_instance.__aenter__.return_value = mock_session_instance
-            mock_session_instance.__aexit__.return_value = None
+            # Session instance - request() returns the async context manager
+            mock_session_instance = MagicMock()
+            mock_session_instance.request.return_value = mock_request_cm
+            mock_session_instance.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session_instance.__aexit__ = AsyncMock(return_value=None)
 
             mock_session.return_value = mock_session_instance
 
@@ -225,22 +225,23 @@ class TestAPICallbackProcessor:
         """Test failed API callback retry"""
         processor = APICallbackProcessor()
 
+        # Mock aiohttp - session.request() returns an async context manager
         with patch("aiohttp.ClientSession") as mock_session:
-            mock_response = AsyncMock()
+            # Create mock response
+            mock_response = MagicMock()
             mock_response.status = 500
             mock_response.text = AsyncMock(return_value="Internal Server Error")
-            mock_response.__aenter__.return_value = mock_response
-            mock_response.__aexit__.return_value = None
 
-            mock_request = AsyncMock()
-            mock_request.return_value = mock_response
-            mock_request.__aenter__.return_value = mock_response
-            mock_request.__aexit__.return_value = None
+            # Create async context manager for request()
+            mock_request_cm = MagicMock()
+            mock_request_cm.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_request_cm.__aexit__ = AsyncMock(return_value=None)
 
-            mock_session_instance = AsyncMock()
-            mock_session_instance.request = mock_request
-            mock_session_instance.__aenter__.return_value = mock_session_instance
-            mock_session_instance.__aexit__.return_value = None
+            # Session instance - request() returns the async context manager
+            mock_session_instance = MagicMock()
+            mock_session_instance.request.return_value = mock_request_cm
+            mock_session_instance.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session_instance.__aexit__ = AsyncMock(return_value=None)
 
             mock_session.return_value = mock_session_instance
 
@@ -364,21 +365,22 @@ class TestWebhookProcessor:
         """Test successful webhook retry"""
         processor = WebhookProcessor()
 
+        # Mock aiohttp - session.post() returns an async context manager
         with patch("aiohttp.ClientSession") as mock_session:
-            mock_response = AsyncMock()
+            # Create mock response
+            mock_response = MagicMock()
             mock_response.status = 200
-            mock_response.__aenter__.return_value = mock_response
-            mock_response.__aexit__.return_value = None
 
-            mock_post = AsyncMock()
-            mock_post.return_value = mock_response
-            mock_post.__aenter__.return_value = mock_response
-            mock_post.__aexit__.return_value = None
+            # Create async context manager for post()
+            mock_post_cm = MagicMock()
+            mock_post_cm.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_post_cm.__aexit__ = AsyncMock(return_value=None)
 
-            mock_session_instance = AsyncMock()
-            mock_session_instance.post = mock_post
-            mock_session_instance.__aenter__.return_value = mock_session_instance
-            mock_session_instance.__aexit__.return_value = None
+            # Session instance - post() returns the async context manager
+            mock_session_instance = MagicMock()
+            mock_session_instance.post.return_value = mock_post_cm
+            mock_session_instance.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session_instance.__aexit__ = AsyncMock(return_value=None)
 
             mock_session.return_value = mock_session_instance
 
@@ -401,14 +403,17 @@ class TestWebhookProcessor:
         """Test webhook retry with timeout"""
         processor = WebhookProcessor()
 
+        # Mock aiohttp - session.post() raises timeout on enter
         with patch("aiohttp.ClientSession") as mock_session:
-            mock_post = AsyncMock()
-            mock_post.side_effect = asyncio.TimeoutError()
+            # Create async context manager that raises timeout on __aenter__
+            mock_post_cm = MagicMock()
+            mock_post_cm.__aenter__ = AsyncMock(side_effect=asyncio.TimeoutError())
+            mock_post_cm.__aexit__ = AsyncMock(return_value=None)
 
-            mock_session_instance = AsyncMock()
-            mock_session_instance.post = mock_post
-            mock_session_instance.__aenter__.return_value = mock_session_instance
-            mock_session_instance.__aexit__.return_value = None
+            mock_session_instance = MagicMock()
+            mock_session_instance.post.return_value = mock_post_cm
+            mock_session_instance.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session_instance.__aexit__ = AsyncMock(return_value=None)
 
             mock_session.return_value = mock_session_instance
 

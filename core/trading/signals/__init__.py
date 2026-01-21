@@ -16,6 +16,13 @@ from .dca_strategy import DCASignal, DCAAnalyzer
 from .mean_reversion import MeanReversionSignal, MeanReversionAnalyzer
 from .breakout_strategy import BreakoutSignal, BreakoutAnalyzer
 from .volume_profile_strategy import VolumeProfileSignal, VolumeProfileAnalyzer
+from .take_profit import (
+    TakeProfitType,
+    TakeProfitLevel,
+    TakeProfitSignal,
+    TakeProfitAnalyzer,
+    calculate_fibonacci_levels,
+)
 
 __all__ = [
     # Original signals
@@ -39,4 +46,10 @@ __all__ = [
     'BreakoutAnalyzer',
     'VolumeProfileSignal',
     'VolumeProfileAnalyzer',
+    # Take-profit strategies
+    'TakeProfitType',
+    'TakeProfitLevel',
+    'TakeProfitSignal',
+    'TakeProfitAnalyzer',
+    'calculate_fibonacci_levels',
 ]

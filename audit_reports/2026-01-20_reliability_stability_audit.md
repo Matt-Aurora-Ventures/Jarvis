@@ -19,7 +19,7 @@ Legend: [DONE] implemented, [PARTIAL] present but not system-wide, [MISSING] not
 8) Rate limit tracking and preemptive backoff
    - [PARTIAL] `core/utils/rate_limiter.py`, `core/rate_limiter.py`, `core/providers.py` (per-client, not centralized)
 9) Memory leak detection (object counts, cache sizes)
-   - [MISSING] no system-wide leak tracker found
+   - [DONE] `core/monitoring/memory_tracker.py` (RSS tracking, object counts, cache registry, growth alerts)
 10) Audit log for all trading decisions (immutable record)
    - [PARTIAL] `bots/treasury/trading.py`, `core/security/audit_logger.py` (treasury covered; other bots unclear)
 11) Dead letter queue for failed API calls
@@ -33,11 +33,11 @@ Legend: [DONE] implemented, [PARTIAL] present but not system-wide, [MISSING] not
 15) Transaction logs for treasury operations
    - [PARTIAL] `bots/treasury/trading.py` audit + state logs (blockchain verification not explicit)
 16) Coordinator for multi-bot token conflicts
-   - [MISSING] no central coordinator found
+   - [DONE] `core/coordination/token_coordinator.py` (exclusive/shared locks, expiration, conflict tracking)
 17) Heartbeat monitoring (systemd integration for production)
    - [PARTIAL] `bots/supervisor.py` supports `HEALTHCHECKS_URL`; no systemd watchdog wiring
 18) Structured error codes (REST API best practice)
-   - [MISSING] no centralized error code catalog found
+   - [DONE] `core/errors/error_codes.py` (full catalog: SYS, VAL, AUTH, TRADE, CHAIN, WALLET codes)
 19) Error rate tracking and alerting
    - [PARTIAL] `core/monitoring/alerter.py`, `core/monitoring/health.py` (no explicit error-rate metrics)
 20) Chaos testing (randomly fail components)
@@ -47,7 +47,7 @@ Legend: [DONE] implemented, [PARTIAL] present but not system-wide, [MISSING] not
 22) Backup/restore mechanism for state files
    - [PARTIAL] `core/state_backup/state_backup.py`, `core/backup/disaster_recovery.py`
 23) Progress tracking for long-running operations
-   - [MISSING] no shared progress tracker found
+   - [DONE] `core/progress/tracker.py` (operation lifecycle, step updates, cancellation, persistence)
 24) Idempotent operations for transactions
    - [PARTIAL] `bots/buy_tracker/intent_tracker.py` (trade intents), not system-wide
 25) Request deduplication window (5 minutes)
@@ -56,3 +56,14 @@ Legend: [DONE] implemented, [PARTIAL] present but not system-wide, [MISSING] not
 Notes:
 - This audit covers Section 1 only and will be extended in subsequent loops.
 - Items marked [PARTIAL] usually need enforcement at call sites or in shared middleware.
+
+## Fixes Applied (2026-01-20 Session 2)
+
+Items previously [MISSING] now [DONE]:
+- #9: Memory leak detection → `core/monitoring/memory_tracker.py`
+- #16: Token conflict coordinator → `core/coordination/token_coordinator.py`
+- #18: Structured error codes → `core/errors/error_codes.py`
+- #23: Progress tracking → `core/progress/tracker.py`
+
+Also documented:
+- Anchor program ID status → `audit_reports/2026-01-20_anchor_program_id_status.md`

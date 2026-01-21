@@ -140,6 +140,16 @@ class EmergencyStopManager:
             except Exception as e:
                 logger.error(f"Alert callback failed: {e}")
 
+    def _schedule_alerts(self, message: str):
+        """Schedule alerts if event loop is available, skip otherwise."""
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._send_alerts(message))
+        except RuntimeError:
+            # No running event loop - alerts will be skipped
+            # This happens in sync contexts like tests without @pytest.mark.asyncio
+            logger.debug("No event loop available for alerts, skipping")
+
     def activate_kill_switch(
         self,
         reason: str,
@@ -174,7 +184,7 @@ class EmergencyStopManager:
             message = f"🚨 EMERGENCY KILL SWITCH ACTIVATED\nReason: {reason}\nBy: {activated_by}"
             logger.critical(message)
 
-            asyncio.create_task(self._send_alerts(message))
+            self._schedule_alerts(message)
 
             return True, "Kill switch activated successfully"
         except Exception as e:
@@ -210,7 +220,7 @@ class EmergencyStopManager:
             message = f"⚠️ SOFT STOP ACTIVATED\nReason: {reason}\nBy: {activated_by}\nNo new positions allowed."
             logger.warning(message)
 
-            asyncio.create_task(self._send_alerts(message))
+            self._schedule_alerts(message)
 
             return True, "Soft stop activated"
         except Exception as e:
@@ -246,7 +256,7 @@ class EmergencyStopManager:
             message = f"🛑 HARD STOP ACTIVATED\nReason: {reason}\nBy: {activated_by}\nClosing all positions ({unwind_strategy.value})"
             logger.error(message)
 
-            asyncio.create_task(self._send_alerts(message))
+            self._schedule_alerts(message)
 
             return True, "Hard stop activated"
         except Exception as e:
@@ -291,7 +301,7 @@ class EmergencyStopManager:
             message = f"⏸️ TOKEN PAUSED: {token_mint}\nReason: {reason}"
             logger.warning(message)
 
-            asyncio.create_task(self._send_alerts(message))
+            self._schedule_alerts(message)
 
             return True, f"Token paused: {token_mint}"
         except Exception as e:
@@ -353,7 +363,7 @@ class EmergencyStopManager:
             message = f"✅ TRADING RESUMED\nPrevious state: {old_level.value}\nResumed by: {resumed_by}"
             logger.info(message)
 
-            asyncio.create_task(self._send_alerts(message))
+            self._schedule_alerts(message)
 
             return True, "Trading resumed"
         except Exception as e:

@@ -205,18 +205,18 @@ class TestDeadLetterQueue:
         # Start DLQ
         await dlq.start()
 
-        # Enqueue message
+        # Enqueue message - use EXPONENTIAL strategy (1 sec delay) instead of FIXED (30 sec)
         message_id = await dlq.enqueue(
             message_type=MessageType.TRADE_EXECUTION,
             payload={"token": "SOL"},
             failure_reason=FailureReason.NETWORK_ERROR,
             error_message="Network error",
-            retry_strategy=RetryStrategy.FIXED,
+            retry_strategy=RetryStrategy.EXPONENTIAL,
             max_retries=3
         )
 
-        # Wait for retry
-        await asyncio.sleep(0.5)
+        # Wait for retry (EXPONENTIAL first retry is 2^0 = 1 second + processing time)
+        await asyncio.sleep(1.5)
 
         # Check processor was called
         assert message_id in processor.process_calls
@@ -239,18 +239,18 @@ class TestDeadLetterQueue:
 
         await dlq.start()
 
-        # Enqueue message with max 2 retries
+        # Enqueue message with max 2 retries - use EXPONENTIAL (1s, 2s delays)
         message_id = await dlq.enqueue(
             message_type=MessageType.TRADE_EXECUTION,
             payload={"token": "BTC"},
             failure_reason=FailureReason.TIMEOUT,
             error_message="Timeout",
-            retry_strategy=RetryStrategy.FIXED,
+            retry_strategy=RetryStrategy.EXPONENTIAL,
             max_retries=2
         )
 
-        # Wait for retries to exhaust
-        await asyncio.sleep(1.5)
+        # Wait for retries to exhaust (1s + 2s delays + processing + buffer)
+        await asyncio.sleep(5.0)
 
         # Should be in permanent failures
         assert len(dlq._permanent_failures) == 1
@@ -367,19 +367,19 @@ class TestDeadLetterQueue:
 
         await dlq.start()
 
-        # Enqueue and process some messages
+        # Enqueue and process some messages - use EXPONENTIAL (1 sec delay)
         for i in range(5):
             await dlq.enqueue(
                 message_type=MessageType.TRADE_EXECUTION,
                 payload={"id": i},
                 failure_reason=FailureReason.TIMEOUT,
                 error_message="Timeout",
-                retry_strategy=RetryStrategy.FIXED,
+                retry_strategy=RetryStrategy.EXPONENTIAL,
                 max_retries=2
             )
 
-        # Wait for processing
-        await asyncio.sleep(0.5)
+        # Wait for processing (EXPONENTIAL first retry is 1s + processing time)
+        await asyncio.sleep(2.0)
 
         metrics = dlq.get_metrics()
         assert metrics.total_failures == 5
@@ -427,18 +427,18 @@ class TestDeadLetterQueue:
         """Test behavior when no processor is registered"""
         await dlq.start()
 
-        # Enqueue message without processor
+        # Enqueue message without processor - use EXPONENTIAL (1s delay) for test speed
         await dlq.enqueue(
             message_type=MessageType.OTHER,
             payload={"test": True},
             failure_reason=FailureReason.UNKNOWN,
             error_message="Unknown error",
-            retry_strategy=RetryStrategy.FIXED,
+            retry_strategy=RetryStrategy.EXPONENTIAL,
             max_retries=1
         )
 
-        # Wait for retry attempt
-        await asyncio.sleep(0.5)
+        # Wait for retry attempt (1s delay + 2s for next attempt + processing)
+        await asyncio.sleep(4.0)
 
         # Should move to permanent failures
         assert len(dlq._permanent_failures) == 1

@@ -42,10 +42,13 @@ def test_setup_size_based_rotation():
             backup_count=5,
         )
 
-        assert handler is not None
-        assert os.path.exists(log_file)
-        assert handler.maxBytes == 1024
-        assert handler.backupCount == 5
+        try:
+            assert handler is not None
+            assert os.path.exists(log_file)
+            assert handler.maxBytes == 1024
+            assert handler.backupCount == 5
+        finally:
+            handler.close()
 
 
 def test_setup_timed_rotation():
@@ -61,9 +64,12 @@ def test_setup_timed_rotation():
             backup_count=7,
         )
 
-        assert handler is not None
-        assert os.path.exists(log_file)
-        assert handler.backupCount == 7
+        try:
+            assert handler is not None
+            assert os.path.exists(log_file)
+            assert handler.backupCount == 7
+        finally:
+            handler.close()
 
 
 def test_log_rotation_creates_backups():
@@ -82,16 +88,20 @@ def test_log_rotation_creates_backups():
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
 
-        # Write enough logs to trigger rotation
-        for i in range(20):
-            logger.info(f"Log message {i} with enough text to trigger rotation when combined")
+        try:
+            # Write enough logs to trigger rotation
+            for i in range(20):
+                logger.info(f"Log message {i} with enough text to trigger rotation when combined")
 
-        # Should have created backup files
-        log_dir = Path(tmpdir)
-        log_files = list(log_dir.glob("test.log*"))
+            # Should have created backup files
+            log_dir = Path(tmpdir)
+            log_files = list(log_dir.glob("test.log*"))
 
-        # Should have main log + at least 1 backup
-        assert len(log_files) > 1
+            # Should have main log + at least 1 backup
+            assert len(log_files) > 1
+        finally:
+            logger.removeHandler(handler)
+            handler.close()
 
 
 # =============================================================================
@@ -314,20 +324,26 @@ def test_setup_api_logging():
             backup_count=5,
         )
 
-        assert logger is not None
-        assert logger.level == logging.INFO
-        assert len(logger.handlers) > 0
+        try:
+            assert logger is not None
+            assert logger.level == logging.INFO
+            assert len(logger.handlers) > 0
 
-        # Test logging
-        logger.info("Test message")
+            # Test logging
+            logger.info("Test message")
 
-        # Log file should exist
-        log_file = Path(tmpdir) / "api_requests.log"
-        assert log_file.exists()
+            # Log file should exist
+            log_file = Path(tmpdir) / "api_requests.log"
+            assert log_file.exists()
 
-        # Should contain the message
-        content = log_file.read_text()
-        assert "Test message" in content
+            # Should contain the message
+            content = log_file.read_text()
+            assert "Test message" in content
+        finally:
+            # Close all handlers to release file locks
+            for handler in logger.handlers[:]:
+                handler.close()
+                logger.removeHandler(handler)
 
 
 # =============================================================================
@@ -351,33 +367,40 @@ def test_full_rotation_and_cleanup_workflow():
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
 
-        # Generate logs to trigger rotation
-        for i in range(100):
-            logger.info(f"Log entry {i} with some content to make it larger")
+        try:
+            # Generate logs to trigger rotation
+            for i in range(100):
+                logger.info(f"Log entry {i} with some content to make it larger")
 
-        # Wait for rotation to complete
-        handler.close()
+            # Close handler before file operations
+            logger.removeHandler(handler)
+            handler.close()
 
-        # Make backup logs appear old
-        log_dir = Path(tmpdir)
-        now = time.time()
-        for backup in log_dir.glob("api.log.*"):
-            os.utime(backup, (now - 10 * 86400, now - 10 * 86400))
+            # Make backup logs appear old
+            log_dir = Path(tmpdir)
+            now = time.time()
+            for backup in log_dir.glob("api.log.*"):
+                os.utime(backup, (now - 10 * 86400, now - 10 * 86400))
 
-        # Run cleanup
-        stats = cleanup_old_logs(
-            log_dir=str(log_dir),
-            max_age_days=30,
-            compress_age_days=7,
-            pattern="api.log*",
-        )
+            # Run cleanup
+            stats = cleanup_old_logs(
+                log_dir=str(log_dir),
+                max_age_days=30,
+                compress_age_days=7,
+                pattern="api.log*",
+            )
 
-        # Should have compressed some backups
-        assert stats["compressed"] > 0
+            # Should have compressed some backups
+            assert stats["compressed"] > 0
 
-        # Should have compressed files
-        compressed_files = list(log_dir.glob("*.gz"))
-        assert len(compressed_files) > 0
+            # Should have compressed files
+            compressed_files = list(log_dir.glob("*.gz"))
+            assert len(compressed_files) > 0
+        except Exception:
+            # Ensure handler is closed even on failure
+            logger.removeHandler(handler)
+            handler.close()
+            raise
 
 
 def test_pattern_filtering():

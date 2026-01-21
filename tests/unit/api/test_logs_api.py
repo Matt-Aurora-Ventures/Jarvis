@@ -16,8 +16,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from starlette.applications import Starlette
 
 from api.routes.logs import router
 
@@ -36,7 +36,11 @@ def test_log_dir():
         # Create test log files
         now = time.time()
 
-        # Recent log
+        # Recent log (main api log file that endpoints look for)
+        api_requests = log_dir / "api_requests.log"
+        api_requests.write_text("2024-01-01 10:00:00 - INFO - Test log 1\n" * 10)
+
+        # Another recent log for stats
         recent = log_dir / "api.log"
         recent.write_text("2024-01-01 10:00:00 - INFO - Test log 1\n" * 10)
 
@@ -58,7 +62,7 @@ def test_log_dir():
 @pytest.fixture
 def test_client(test_log_dir):
     """Create test client with logs router."""
-    app = Starlette()
+    app = FastAPI()
     app.include_router(router)
 
     # Mock the log directory
@@ -345,7 +349,7 @@ def test_get_recent_logs_not_found(test_log_dir):
     if log_file.exists():
         log_file.unlink()
 
-    app = Starlette()
+    app = FastAPI()
     app.include_router(router)
 
     with patch("api.routes.logs.get_log_directory", return_value=test_log_dir):
@@ -365,7 +369,7 @@ def test_nonexistent_log_directory():
     """Test endpoints when log directory doesn't exist."""
     fake_dir = Path("/tmp/nonexistent_logs_12345")
 
-    app = Starlette()
+    app = FastAPI()
     app.include_router(router)
 
     with patch("api.routes.logs.get_log_directory", return_value=fake_dir):
