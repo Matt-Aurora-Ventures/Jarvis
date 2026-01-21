@@ -1117,6 +1117,598 @@ class TestHelperFunctions:
         assert client is None or hasattr(client, "swap")
 
 
+class TestSentimentHubFeature:
+    """Test Sentiment Hub UI components."""
+
+    def test_sentiment_hub_main_no_wallet(self):
+        """Test main hub view without wallet connected."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.sentiment_hub_main(
+            market_regime={"regime": "BULL", "risk_level": "LOW"},
+            last_report_time=datetime.now(timezone.utc),
+            report_interval_minutes=15,
+            wallet_connected=False,
+        )
+
+        assert "SENTIMENT HUB" in text
+        assert "BULL" in text or "Bullish" in text.upper()
+        assert "Next Report" in text or "countdown" in text.lower()
+        assert keyboard is not None
+        # Should have buttons for different sections
+        assert any("bluechips" in str(btn.callback_data).lower() or "top10" in str(btn.callback_data).lower()
+                   for row in keyboard.inline_keyboard for btn in row)
+
+    def test_sentiment_hub_main_with_wallet(self):
+        """Test main hub view with wallet connected."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.sentiment_hub_main(
+            market_regime={"regime": "NEUTRAL", "risk_level": "NORMAL"},
+            last_report_time=datetime.now(timezone.utc) - timedelta(minutes=10),
+            report_interval_minutes=15,
+            wallet_connected=True,
+        )
+
+        assert "SENTIMENT HUB" in text
+        assert keyboard is not None
+
+    def test_sentiment_hub_section_bluechips(self):
+        """Test section view for blue chips."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        picks = [
+            {"symbol": "SOL", "address": "So111", "price": 225.0, "change_24h": 2.5,
+             "conviction": "HIGH", "tp_percent": 20, "sl_percent": 10, "score": 85},
+            {"symbol": "JUP", "address": "JUP111", "price": 1.25, "change_24h": 5.0,
+             "conviction": "MEDIUM", "tp_percent": 15, "sl_percent": 8, "score": 78},
+        ]
+
+        text, keyboard = DemoMenuBuilder.sentiment_hub_section(
+            section="bluechips",
+            picks=picks,
+            market_regime={"regime": "BULL"},
+        )
+
+        assert "SOL" in text
+        assert "JUP" in text
+        assert "225" in text or "$225" in text
+        assert keyboard is not None
+
+    def test_sentiment_hub_section_trending(self):
+        """Test section view for trending tokens."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        picks = [
+            {"symbol": "FARTCOIN", "address": "FART111", "price": 0.001, "change_24h": 145.0,
+             "conviction": "VERY HIGH", "tp_percent": 50, "sl_percent": 25, "score": 92},
+        ]
+
+        text, keyboard = DemoMenuBuilder.sentiment_hub_section(
+            section="trending",
+            picks=picks,
+            market_regime={"regime": "BULL"},
+        )
+
+        assert "FARTCOIN" in text
+        assert "145" in text  # Change percentage
+        assert keyboard is not None
+
+    def test_sentiment_hub_wallet_empty(self):
+        """Test wallet view with no wallet."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.sentiment_hub_wallet(
+            wallet_address="",
+            sol_balance=0.0,
+            usd_value=0.0,
+            has_private_key=False,
+        )
+
+        assert "Wallet" in text or "wallet" in text
+        assert keyboard is not None
+        # Should have create/import options
+        assert any("create" in str(btn.callback_data).lower() or "import" in str(btn.callback_data).lower()
+                   for row in keyboard.inline_keyboard for btn in row)
+
+    def test_sentiment_hub_wallet_connected(self):
+        """Test wallet view with connected wallet."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.sentiment_hub_wallet(
+            wallet_address="9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump",
+            sol_balance=5.5,
+            usd_value=1237.50,
+            has_private_key=True,
+        )
+
+        assert "9BB6" in text or "pump" in text  # Address shown
+        assert "5.5" in text or "5.50" in text  # Balance shown
+        assert keyboard is not None
+
+    def test_sentiment_hub_news(self):
+        """Test news view."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        news = [
+            {"title": "SOL breaks $225", "source": "CoinDesk", "time": "2h ago", "sentiment": "bullish"},
+            {"title": "Fed signals pause", "source": "Reuters", "time": "4h ago", "sentiment": "neutral"},
+        ]
+        macro = {"dxy_trend": "weakening", "fed_stance": "neutral", "risk_appetite": "high"}
+
+        text, keyboard = DemoMenuBuilder.sentiment_hub_news(
+            news_items=news,
+            macro_analysis=macro,
+        )
+
+        assert "SOL breaks" in text or "225" in text
+        assert "CoinDesk" in text
+        assert keyboard is not None
+
+    def test_sentiment_hub_traditional(self):
+        """Test traditional markets view."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        stocks = {"spy_change": 0.45, "qqq_change": 0.72, "outlook": "bullish"}
+        dxy = {"value": 103.25, "change": -0.15, "trend": "weakening"}
+        commodities = [{"symbol": "GOLD", "price": 2045.50, "change": 0.8}]
+
+        text, keyboard = DemoMenuBuilder.sentiment_hub_traditional(
+            stocks_outlook=stocks,
+            dxy_data=dxy,
+            commodities=commodities,
+        )
+
+        assert "103" in text  # DXY value
+        assert "GOLD" in text
+        assert keyboard is not None
+
+    def test_sentiment_hub_buy_confirm(self):
+        """Test buy confirmation view."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.sentiment_hub_buy_confirm(
+            symbol="BONK",
+            address="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+            price=0.0000325,
+            auto_sl_percent=15,
+        )
+
+        assert "BONK" in text
+        assert "15%" in text  # SL percentage
+        assert "Stop" in text or "SL" in text
+        assert keyboard is not None
+
+
+class TestInstaSnipeFeature:
+    """Test Insta Snipe UI components."""
+
+    def test_insta_snipe_with_token(self):
+        """Test insta snipe view with a hot token."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        hottest = {
+            "symbol": "FARTCOIN",
+            "address": "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump",
+            "price": 0.00125,
+            "change_24h": 145.5,
+            "volume_24h": 2500000,
+            "liquidity": 850000,
+            "market_cap": 125000000,
+            "conviction": "VERY HIGH",
+            "sentiment_score": 92,
+            "entry_timing": "GOOD",
+            "sightings": 3,
+        }
+
+        text, keyboard = DemoMenuBuilder.insta_snipe_menu(
+            hottest_token=hottest,
+            market_regime={"regime": "BULL"},
+            auto_sl_percent=15.0,
+            auto_tp_percent=15.0,
+        )
+
+        assert "INSTA SNIPE" in text
+        assert "FARTCOIN" in text
+        assert "92" in text  # Sentiment score
+        assert "VERY HIGH" in text or "🔥🔥🔥" in text  # Conviction
+        assert "15%" in text  # SL/TP
+        assert keyboard is not None
+        # Should have snipe buttons
+        assert any("snipe" in str(btn.callback_data).lower()
+                   for row in keyboard.inline_keyboard for btn in row)
+
+    def test_insta_snipe_no_token(self):
+        """Test insta snipe view without a qualifying token."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.insta_snipe_menu(
+            hottest_token=None,
+            market_regime={"regime": "NEUTRAL"},
+        )
+
+        assert "INSTA SNIPE" in text
+        assert "Scanning" in text or "No qualifying" in text
+        assert keyboard is not None
+        # Should have refresh option
+        assert any("refresh" in str(btn.callback_data).lower() or "insta_snipe" in str(btn.callback_data).lower()
+                   for row in keyboard.inline_keyboard for btn in row)
+
+    def test_snipe_confirm(self):
+        """Test snipe confirmation view."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.snipe_confirm(
+            symbol="FARTCOIN",
+            address="9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump",
+            amount=0.5,
+            price=0.00125,
+            sl_percent=15.0,
+            tp_percent=15.0,
+        )
+
+        assert "CONFIRM" in text
+        assert "FARTCOIN" in text
+        assert "0.5" in text  # Amount
+        assert "15%" in text  # SL/TP
+        assert keyboard is not None
+
+    def test_snipe_result_success(self):
+        """Test snipe success result."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.snipe_result(
+            success=True,
+            symbol="FARTCOIN",
+            amount=0.5,
+            tx_hash="5xYz1234567890abcdefABCDEF",
+            sl_set=True,
+            tp_set=True,
+        )
+
+        assert "SUCCESSFUL" in text or "SUCCESS" in text
+        assert "FARTCOIN" in text
+        assert "5xYz" in text  # TX hash
+        assert keyboard is not None
+
+    def test_snipe_result_failure(self):
+        """Test snipe failure result."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.snipe_result(
+            success=False,
+            symbol="FARTCOIN",
+            amount=0.5,
+            error="Insufficient balance",
+        )
+
+        assert "FAILED" in text
+        assert "Insufficient" in text
+        assert keyboard is not None
+
+
+class TestSuccessFeeFeature:
+    """Test the 0.5% success fee on winning trades."""
+
+    def test_fee_manager_initialization(self):
+        """Test fee manager can be initialized."""
+        from core.trading.bags_client import SuccessFeeManager
+
+        manager = SuccessFeeManager()
+        assert manager is not None
+        assert manager.SUCCESS_FEE_PERCENT == 0.5
+        assert manager.total_fees_collected == 0.0
+        assert manager.fee_transactions == []
+
+    def test_fee_calculation_winning_trade(self):
+        """Test fee is calculated on winning trades."""
+        from core.trading.bags_client import SuccessFeeManager
+
+        manager = SuccessFeeManager()
+
+        result = manager.calculate_success_fee(
+            entry_price=0.0001,
+            exit_price=0.00015,  # 50% gain
+            amount_sol=1.0,
+            token_symbol="DOGE",
+        )
+
+        assert result["applies"] is True
+        assert abs(result["pnl_percent"] - 50.0) < 0.01  # Allow floating point tolerance
+        assert result["fee_percent"] == 0.5
+        # Fee should be 0.5% of profit
+        assert result["fee_amount"] > 0
+        assert result["net_profit"] == result["pnl_usd"] - result["fee_amount"]
+
+    def test_fee_calculation_losing_trade(self):
+        """Test no fee on losing trades."""
+        from core.trading.bags_client import SuccessFeeManager
+
+        manager = SuccessFeeManager()
+
+        result = manager.calculate_success_fee(
+            entry_price=0.0001,
+            exit_price=0.00007,  # 30% loss
+            amount_sol=1.0,
+            token_symbol="RUG",
+        )
+
+        assert result["applies"] is False
+        assert result["fee_amount"] == 0.0
+        assert "Not a winning" in result["reason"]
+
+    def test_fee_calculation_breakeven_trade(self):
+        """Test no fee on breakeven trades."""
+        from core.trading.bags_client import SuccessFeeManager
+
+        manager = SuccessFeeManager()
+
+        result = manager.calculate_success_fee(
+            entry_price=0.0001,
+            exit_price=0.0001,  # No change
+            amount_sol=1.0,
+            token_symbol="FLAT",
+        )
+
+        assert result["applies"] is False
+        assert result["fee_amount"] == 0.0
+
+    def test_fee_stats(self):
+        """Test fee stats reporting."""
+        from core.trading.bags_client import SuccessFeeManager
+
+        manager = SuccessFeeManager()
+        stats = manager.get_fee_stats()
+
+        assert stats["fee_percent"] == 0.5
+        assert stats["total_collected"] == 0.0
+        assert stats["transaction_count"] == 0
+        assert "recent_fees" in stats
+
+    def test_get_success_fee_manager_singleton(self):
+        """Test fee manager singleton getter."""
+        from core.trading.bags_client import get_success_fee_manager
+
+        manager1 = get_success_fee_manager()
+        manager2 = get_success_fee_manager()
+
+        assert manager1 is not None
+        assert manager1 is manager2  # Same instance
+
+    def test_fee_stats_view_empty(self):
+        """Test fee stats view with no fees."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.fee_stats_view()
+
+        assert "SUCCESS FEE STATS" in text
+        assert "0.5%" in text
+        assert "Only on winning trades" in text
+        assert "No fees collected" in text
+        assert keyboard is not None
+
+    def test_fee_stats_view_with_fees(self):
+        """Test fee stats view with collected fees."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        recent_fees = [
+            {"token": "PEPE", "fee_amount": 0.05, "pnl_usd": 10.0},
+            {"token": "DOGE", "fee_amount": 0.10, "pnl_usd": 20.0},
+        ]
+
+        text, keyboard = DemoMenuBuilder.fee_stats_view(
+            fee_percent=0.5,
+            total_collected=0.15,
+            transaction_count=2,
+            recent_fees=recent_fees,
+        )
+
+        assert "SUCCESS FEE STATS" in text
+        assert "$0.15" in text or "0.1500" in text  # Total collected
+        assert "2 fee-bearing trades" in text
+        assert "PEPE" in text
+        assert "DOGE" in text
+        assert keyboard is not None
+
+
+class TestPnlReportView:
+    """Test the P&L report view UI."""
+
+    def test_pnl_report_empty(self):
+        """Test P&L report with no positions."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.pnl_report_view()
+
+        assert "P&L REPORT" in text
+        assert "Total P&L" in text
+        assert "Win Rate" in text
+        assert "No open positions" in text
+        assert keyboard is not None
+
+    def test_pnl_report_with_positions(self):
+        """Test P&L report with positions."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        positions = [
+            {"symbol": "PEPE", "pnl_pct": 25.5, "pnl_usd": 5.0},
+            {"symbol": "DOGE", "pnl_pct": -10.0, "pnl_usd": -2.0},
+            {"symbol": "WIF", "pnl_pct": 50.0, "pnl_usd": 10.0},
+        ]
+        best = {"symbol": "WIF", "pnl_pct": 50.0}
+        worst = {"symbol": "DOGE", "pnl_pct": -10.0}
+
+        text, keyboard = DemoMenuBuilder.pnl_report_view(
+            positions=positions,
+            total_pnl_usd=13.0,
+            total_pnl_percent=21.8,
+            winners=2,
+            losers=1,
+            best_trade=best,
+            worst_trade=worst,
+        )
+
+        assert "P&L REPORT" in text
+        assert "+$13.00" in text or "13.00" in text
+        assert "Winners: 🟢 2" in text
+        assert "Losers: 🔴 1" in text
+        assert "WIF" in text  # Best trade
+        assert "DOGE" in text  # Worst trade
+        assert keyboard is not None
+
+
+class TestClosePositionResult:
+    """Test the close position result UI with success fee."""
+
+    def test_close_position_winning_trade_with_fee(self):
+        """Test close result shows fee on winning trade."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.close_position_result(
+            success=True,
+            symbol="PEPE",
+            amount=0.5,
+            entry_price=0.0001,
+            exit_price=0.00015,
+            pnl_usd=11.25,  # $11.25 profit
+            pnl_percent=50.0,
+            success_fee=0.05625,  # 0.5% of $11.25
+            net_profit=11.19375,
+            tx_hash="5xYz1234567890abcdefABCDEF",
+        )
+
+        assert "POSITION CLOSED" in text
+        assert "PEPE" in text
+        assert "P&L" in text
+        assert "+$11.25" in text or "11.25" in text
+        assert "Success Fee" in text
+        assert "0.5%" in text
+        assert "Net Profit" in text
+        assert keyboard is not None
+
+    def test_close_position_losing_trade_no_fee(self):
+        """Test close result shows no fee on losing trade."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.close_position_result(
+            success=True,
+            symbol="RUG",
+            amount=0.5,
+            entry_price=0.0001,
+            exit_price=0.00007,
+            pnl_usd=-7.5,
+            pnl_percent=-30.0,
+            success_fee=0.0,
+            tx_hash="abc123xyz",
+        )
+
+        assert "POSITION CLOSED" in text
+        assert "RUG" in text
+        assert "No success fee" in text or "losing trade" in text
+        assert keyboard is not None
+
+    def test_close_position_failed(self):
+        """Test close position failure view."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.close_position_result(
+            success=False,
+            symbol="FAIL",
+            amount=0.5,
+            entry_price=0.0001,
+            exit_price=0.0001,
+            pnl_usd=0,
+            pnl_percent=0,
+            error="Slippage too high",
+        )
+
+        assert "FAILED" in text
+        assert "Slippage" in text
+        assert keyboard is not None
+
+
+class TestWalletImportExport:
+    """Test wallet import/export UI components."""
+
+    def test_wallet_import_prompt(self):
+        """Test wallet import prompt view."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.wallet_import_prompt()
+
+        assert "IMPORT WALLET" in text
+        assert "Private Key" in text
+        assert "Seed Phrase" in text
+        assert "Security Warning" in text
+        assert keyboard is not None
+        # Should have key and seed options
+        assert any("import_mode" in str(btn.callback_data)
+                   for row in keyboard.inline_keyboard for btn in row)
+
+    def test_wallet_import_input_key(self):
+        """Test wallet import input view for private key."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.wallet_import_input(import_type="key")
+
+        assert "PRIVATE KEY" in text
+        assert "Base58" in text
+        assert keyboard is not None
+
+    def test_wallet_import_input_seed(self):
+        """Test wallet import input view for seed phrase."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.wallet_import_input(import_type="seed")
+
+        assert "SEED PHRASE" in text
+        assert "12 or 24 word" in text
+        assert keyboard is not None
+
+    def test_wallet_import_result_success(self):
+        """Test wallet import success result."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.wallet_import_result(
+            success=True,
+            wallet_address="7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+        )
+
+        assert "WALLET IMPORTED" in text
+        assert "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" in text
+        assert "Delete the message" in text
+        assert keyboard is not None
+
+    def test_wallet_import_result_failure(self):
+        """Test wallet import failure result."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.wallet_import_result(
+            success=False,
+            error="Invalid private key format",
+        )
+
+        assert "IMPORT FAILED" in text
+        assert "Invalid private key" in text
+        assert keyboard is not None
+
+    def test_export_key_show(self):
+        """Test private key export display."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.export_key_show(
+            private_key="5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3",
+            wallet_address="7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+        )
+
+        assert "PRIVATE KEY" in text
+        assert "5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3" in text
+        assert "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" in text
+        assert "CRITICAL SECURITY" in text
+        assert "NEVER share" in text
+        assert keyboard is not None
+
+
 # Integration tests
 class TestDemoIntegration:
     """Integration tests for the demo system."""

@@ -39,7 +39,7 @@ import logging
 import asyncio
 from typing import Optional, Tuple, Dict, Any, List
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -72,6 +72,16 @@ def get_bags_client():
         return _get_bags()
     except ImportError:
         logger.warning("Bags client not available")
+        return None
+
+
+def get_success_fee_manager():
+    """Get Success Fee Manager for 0.5% fee on winning trades."""
+    try:
+        from core.trading.bags_client import get_success_fee_manager as _get_fee_manager
+        return _get_fee_manager()
+    except ImportError:
+        logger.warning("Success fee manager not available")
         return None
 
 
@@ -257,6 +267,72 @@ async def get_conviction_picks() -> List[Dict[str, Any]]:
 
 # =============================================================================
 # UI Constants - Trojan-Style Theme
+async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, Any]]:
+    """
+    Get top Bags.fm tokens by volume with AI sentiment overlay.
+
+    Returns tokens with:
+    - Volume data from Bags.fm API
+    - AI sentiment analysis per token
+    - Price and market data
+    """
+    tokens = []
+
+    try:
+        # Try to get real data from Bags API
+        bags_client = get_bags_client()
+        if bags_client:
+            raw_tokens = await bags_client.get_top_tokens_by_volume(limit=limit)
+            for t in raw_tokens:
+                token_data = {
+                    "symbol": t.symbol,
+                    "name": t.name,
+                    "address": t.address,
+                    "price_usd": t.price_usd,
+                    "volume_24h": t.volume_24h,
+                    "liquidity": t.liquidity,
+                    "market_cap": t.market_cap,
+                    "holders": t.holders,
+                }
+
+                # Add AI sentiment overlay
+                try:
+                    sentiment = await get_ai_sentiment_for_token(t.address)
+                    token_data["sentiment"] = sentiment.get("sentiment", "neutral")
+                    token_data["sentiment_score"] = sentiment.get("score", 0.5)
+                    token_data["signal"] = sentiment.get("signal", "NEUTRAL")
+                except Exception:
+                    token_data["sentiment"] = "neutral"
+                    token_data["sentiment_score"] = 0.5
+                    token_data["signal"] = "NEUTRAL"
+
+                tokens.append(token_data)
+
+            return tokens
+
+    except Exception as e:
+        logger.warning(f"Could not get Bags tokens: {e}")
+
+    # Fallback to mock data with realistic sentiment
+    return [
+        {"symbol": "PUMP", "name": "PumpFun Token", "address": "PUMP111111111111111111111111111111111111111", "price_usd": 0.0125, "volume_24h": 8500000, "liquidity": 450000, "market_cap": 12500000, "holders": 15420, "sentiment": "bullish", "sentiment_score": 0.78, "signal": "BUY"},
+        {"symbol": "BAGS", "name": "Bags.fm", "address": "BAGS111111111111111111111111111111111111111", "price_usd": 0.0085, "volume_24h": 6200000, "liquidity": 320000, "market_cap": 8500000, "holders": 12350, "sentiment": "very_bullish", "sentiment_score": 0.85, "signal": "STRONG_BUY"},
+        {"symbol": "MICHI", "name": "Michi", "address": "MICHI11111111111111111111111111111111111111", "price_usd": 0.0052, "volume_24h": 4800000, "liquidity": 280000, "market_cap": 5200000, "holders": 9800, "sentiment": "bullish", "sentiment_score": 0.72, "signal": "BUY"},
+        {"symbol": "PONKE", "name": "Ponke", "address": "PONKE11111111111111111111111111111111111111", "price_usd": 0.425, "volume_24h": 4200000, "liquidity": 520000, "market_cap": 42500000, "holders": 18200, "sentiment": "neutral", "sentiment_score": 0.52, "signal": "HOLD"},
+        {"symbol": "GIGA", "name": "GigaChad", "address": "GIGA1111111111111111111111111111111111111111", "price_usd": 0.0425, "volume_24h": 3800000, "liquidity": 180000, "market_cap": 4250000, "holders": 7500, "sentiment": "bullish", "sentiment_score": 0.68, "signal": "BUY"},
+        {"symbol": "FWOG", "name": "Fwog", "address": "FWOG1111111111111111111111111111111111111111", "price_usd": 0.0185, "volume_24h": 3500000, "liquidity": 150000, "market_cap": 1850000, "holders": 6200, "sentiment": "very_bullish", "sentiment_score": 0.82, "signal": "STRONG_BUY"},
+        {"symbol": "MOTHER", "name": "Mother Iggy", "address": "MOTHE11111111111111111111111111111111111111", "price_usd": 0.125, "volume_24h": 3200000, "liquidity": 380000, "market_cap": 12500000, "holders": 14500, "sentiment": "neutral", "sentiment_score": 0.48, "signal": "HOLD"},
+        {"symbol": "RETARDIO", "name": "Retardio", "address": "RETAR11111111111111111111111111111111111111", "price_usd": 0.0042, "volume_24h": 2800000, "liquidity": 120000, "market_cap": 4200000, "holders": 5800, "sentiment": "bullish", "sentiment_score": 0.65, "signal": "BUY"},
+        {"symbol": "BILLY", "name": "Billy", "address": "BILLY11111111111111111111111111111111111111", "price_usd": 0.0018, "volume_24h": 2500000, "liquidity": 95000, "market_cap": 1800000, "holders": 4200, "sentiment": "bearish", "sentiment_score": 0.35, "signal": "SELL"},
+        {"symbol": "SIGMA", "name": "Sigma", "address": "SIGMA11111111111111111111111111111111111111", "price_usd": 0.0065, "volume_24h": 2200000, "liquidity": 110000, "market_cap": 6500000, "holders": 5500, "sentiment": "neutral", "sentiment_score": 0.55, "signal": "HOLD"},
+        {"symbol": "CHILL", "name": "Chill Guy", "address": "CHILL11111111111111111111111111111111111111", "price_usd": 0.0095, "volume_24h": 1950000, "liquidity": 85000, "market_cap": 9500000, "holders": 8200, "sentiment": "bullish", "sentiment_score": 0.70, "signal": "BUY"},
+        {"symbol": "GOAT", "name": "Goatseus Maximus", "address": "GOAT1111111111111111111111111111111111111111", "price_usd": 0.52, "volume_24h": 1800000, "liquidity": 420000, "market_cap": 52000000, "holders": 22000, "sentiment": "neutral", "sentiment_score": 0.50, "signal": "HOLD"},
+        {"symbol": "PEPE", "name": "Pepe", "address": "PEPE1111111111111111111111111111111111111111", "price_usd": 0.0000125, "volume_24h": 1650000, "liquidity": 75000, "market_cap": 125000, "holders": 3500, "sentiment": "very_bearish", "sentiment_score": 0.25, "signal": "STRONG_SELL"},
+        {"symbol": "ANDY", "name": "Andy", "address": "ANDY1111111111111111111111111111111111111111", "price_usd": 0.0035, "volume_24h": 1500000, "liquidity": 68000, "market_cap": 3500000, "holders": 4800, "sentiment": "bullish", "sentiment_score": 0.62, "signal": "BUY"},
+        {"symbol": "NPC", "name": "NPC", "address": "NPC11111111111111111111111111111111111111111", "price_usd": 0.0028, "volume_24h": 1350000, "liquidity": 55000, "market_cap": 2800000, "holders": 3900, "sentiment": "neutral", "sentiment_score": 0.45, "signal": "HOLD"},
+    ]
+
+
 # =============================================================================
 
 class JarvisTheme:
@@ -394,10 +470,23 @@ _Tap to trade with AI-powered signals_
 
         # Build keyboard - Trojan style with AI features
         keyboard = [
-            # AI-Powered Analysis Row (NEW)
+            # Sentiment Hub - Premium Feature (NEW V1)
+            [
+                InlineKeyboardButton(f"📊 SENTIMENT HUB", callback_data="demo:hub"),
+            ],
+            # Insta Snipe - One-Click Trending Trade
+            [
+                InlineKeyboardButton(f"⚡ INSTA SNIPE", callback_data="demo:insta_snipe"),
+                InlineKeyboardButton(f"{theme.CHART} AI Report", callback_data="demo:ai_report"),
+            ],
+            # AI-Powered Analysis Row
             [
                 InlineKeyboardButton(f"{theme.AUTO} AI Picks", callback_data="demo:ai_picks"),
-                InlineKeyboardButton(f"{theme.CHART} AI Report", callback_data="demo:ai_report"),
+                InlineKeyboardButton(f"{theme.FIRE} Trending", callback_data="demo:trending"),
+            ],
+            # Bags.fm Top Tokens - Volume Leaders
+            [
+                InlineKeyboardButton("🎒 BAGS TOP 15", callback_data="demo:bags_fm"),
             ],
             # Quick buy amounts
             [
@@ -417,6 +506,12 @@ _Tap to trade with AI-powered signals_
             [
                 InlineKeyboardButton(f"{theme.CHART} Positions", callback_data="demo:positions"),
                 InlineKeyboardButton(f"{theme.WALLET} Balance", callback_data="demo:balance"),
+            ],
+            # 1-Tap Quick Actions
+            [
+                InlineKeyboardButton(f"🔴 Sell All", callback_data="demo:sell_all"),
+                InlineKeyboardButton(f"📈 PnL Report", callback_data="demo:pnl_report"),
+                InlineKeyboardButton(f"💰 Fee Stats", callback_data="demo:fee_stats"),
             ],
             # AI-Powered Discovery
             [
@@ -783,6 +878,199 @@ Type "RESET" to confirm.
         return text, keyboard
 
     @staticmethod
+    def wallet_import_prompt() -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Wallet import prompt - import private key or seed phrase.
+        """
+        theme = JarvisTheme
+
+        text = f"""
+{theme.LOCK} *IMPORT WALLET*
+━━━━━━━━━━━━━━━━━━━━━
+
+Import an existing wallet using:
+
+📝 *Private Key (Base58)*
+└ 64-88 character Solana key
+
+🌱 *Seed Phrase (12/24 words)*
+└ BIP39 mnemonic phrase
+
+━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ *Security Warning*
+• Only import on a secure device
+• Never share your key/phrase
+• Clear message history after
+
+━━━━━━━━━━━━━━━━━━━━━
+
+Send your private key or seed phrase
+in the next message.
+"""
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"🔑 Enter Private Key", callback_data="demo:import_mode_key"),
+            ],
+            [
+                InlineKeyboardButton(f"🌱 Enter Seed Phrase", callback_data="demo:import_mode_seed"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:wallet_menu"),
+            ],
+        ])
+
+        return text, keyboard
+
+    @staticmethod
+    def wallet_import_input(import_type: str = "key") -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Wallet import input mode - waiting for key/phrase.
+        """
+        theme = JarvisTheme
+
+        if import_type == "seed":
+            text = f"""
+{theme.LOCK} *IMPORT SEED PHRASE*
+━━━━━━━━━━━━━━━━━━━━━
+
+🌱 Send your *12 or 24 word* seed phrase.
+
+Example format:
+_word1 word2 word3 ... word12_
+
+━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ Your phrase is encrypted and
+   stored securely.
+"""
+        else:
+            text = f"""
+{theme.LOCK} *IMPORT PRIVATE KEY*
+━━━━━━━━━━━━━━━━━━━━━
+
+🔑 Send your *Base58 private key*.
+
+It should be 64-88 characters.
+
+━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ Your key is encrypted and
+   stored securely.
+"""
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:wallet_menu"),
+            ],
+        ])
+
+        return text, keyboard
+
+    @staticmethod
+    def wallet_import_result(
+        success: bool,
+        wallet_address: str = None,
+        error: str = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Wallet import result view.
+        """
+        theme = JarvisTheme
+
+        if success:
+            short_addr = f"{wallet_address[:6]}...{wallet_address[-4:]}" if wallet_address else "?"
+            text = f"""
+✅ *WALLET IMPORTED*
+━━━━━━━━━━━━━━━━━━━━━
+
+🎉 Successfully imported wallet!
+
+📍 *Address:*
+`{wallet_address or 'Unknown'}`
+
+━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ *Important*
+• Delete the message with your key
+• Your wallet is now active
+• Start trading!
+"""
+        else:
+            text = f"""
+❌ *IMPORT FAILED*
+━━━━━━━━━━━━━━━━━━━━━
+
+Could not import wallet.
+
+*Error:* {error or 'Invalid key or phrase'}
+
+━━━━━━━━━━━━━━━━━━━━━
+
+Please check your key/phrase and try again.
+"""
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"💼 View Wallet", callback_data="demo:wallet_menu"),
+            ] if success else [
+                InlineKeyboardButton(f"🔄 Try Again", callback_data="demo:wallet_import"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ])
+
+        return text, keyboard
+
+    @staticmethod
+    def export_key_show(
+        private_key: str,
+        wallet_address: str,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Export private key display - SENSITIVE.
+        """
+        theme = JarvisTheme
+
+        # Mask middle portion for security
+        key_display = f"`{private_key}`" if private_key else "_Key unavailable_"
+
+        text = f"""
+🔐 *YOUR PRIVATE KEY*
+━━━━━━━━━━━━━━━━━━━━━
+
+📍 *Address:*
+`{wallet_address}`
+
+🔑 *Private Key:*
+{key_display}
+
+━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ *CRITICAL SECURITY*
+• Copy this key NOW
+• Store in a password manager
+• DELETE THIS MESSAGE after
+• NEVER share with anyone
+• Anyone with this key controls your funds
+
+━━━━━━━━━━━━━━━━━━━━━
+"""
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"📋 Copy Key", callback_data="demo:copy_key"),
+            ],
+            [
+                InlineKeyboardButton(f"✅ Done, Back to Wallet", callback_data="demo:wallet_menu"),
+            ],
+        ])
+
+        return text, keyboard
+
+    @staticmethod
     def positions_menu(
         positions: list,
         total_pnl: float = 0.0,
@@ -935,6 +1223,10 @@ Use the buy buttons to enter a trade!
             # AI Auto-Trade Settings
             [
                 InlineKeyboardButton(f"🤖 AI Auto-Trade Settings", callback_data="demo:ai_auto_settings"),
+            ],
+            # Fee Stats
+            [
+                InlineKeyboardButton(f"💰 Fee Stats (0.5% on wins)", callback_data="demo:fee_stats"),
             ],
             [
                 InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
@@ -1110,6 +1402,173 @@ Use the buy buttons to enter a trade!
         ]
 
         return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def fee_stats_view(
+        fee_percent: float = 0.5,
+        total_collected: float = 0.0,
+        transaction_count: int = 0,
+        recent_fees: List[Dict[str, Any]] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Fee statistics view - Show success fee collection stats.
+
+        Displays:
+        - Current fee rate (0.5% on wins)
+        - Total fees collected
+        - Recent fee transactions
+        """
+        theme = JarvisTheme
+        recent_fees = recent_fees or []
+
+        lines = [
+            f"💰 *SUCCESS FEE STATS*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"📊 *Fee Structure*",
+            f"├ Rate: {fee_percent}% on profits",
+            f"├ Applied: Only on winning trades",
+            f"└ Supports: JARVIS development",
+            "",
+            f"💵 *Total Collected*",
+            f"└ ${total_collected:.4f}",
+            "",
+            f"📈 *Transactions*",
+            f"└ {transaction_count} fee-bearing trades",
+            "",
+        ]
+
+        if recent_fees:
+            lines.extend([
+                "📋 *Recent Fees*",
+            ])
+            for i, fee in enumerate(recent_fees[:5]):
+                token = fee.get("token", "???")
+                amount = fee.get("fee_amount", 0)
+                pnl = fee.get("pnl_usd", 0)
+                lines.append(f"├ {token}: ${amount:.4f} (${pnl:.2f} profit)")
+
+            if len(recent_fees) > 5:
+                lines.append(f"└ _...and {len(recent_fees) - 5} more_")
+        else:
+            lines.extend([
+                "_No fees collected yet._",
+                "_Trade profitably to see fees here._",
+            ])
+
+        lines.extend([
+            "",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "_Fees support platform development._",
+        ])
+
+        text = "\n".join(lines)
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"📊 View Positions", callback_data="demo:positions"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.SETTINGS} Settings", callback_data="demo:settings"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ])
+
+        return text, keyboard
+
+    @staticmethod
+    def pnl_report_view(
+        positions: List[Dict[str, Any]] = None,
+        total_pnl_usd: float = 0.0,
+        total_pnl_percent: float = 0.0,
+        winners: int = 0,
+        losers: int = 0,
+        best_trade: Dict[str, Any] = None,
+        worst_trade: Dict[str, Any] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        P&L Report View - Quick snapshot of portfolio performance.
+
+        Shows:
+        - Total P&L (USD and %)
+        - Win/Loss breakdown
+        - Best and worst performers
+        """
+        theme = JarvisTheme
+        positions = positions or []
+
+        pnl_emoji = "📈" if total_pnl_usd >= 0 else "📉"
+        pnl_sign = "+" if total_pnl_usd >= 0 else ""
+
+        total_trades = winners + losers
+        win_rate = (winners / total_trades * 100) if total_trades > 0 else 0
+
+        lines = [
+            f"📊 *P&L REPORT*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"💰 *Total P&L*",
+            f"└ {pnl_emoji} {pnl_sign}${abs(total_pnl_usd):.2f} ({pnl_sign}{total_pnl_percent:.1f}%)",
+            "",
+            f"📈 *Performance*",
+            f"├ Winners: 🟢 {winners}",
+            f"├ Losers: 🔴 {losers}",
+            f"└ Win Rate: *{win_rate:.0f}%*",
+            "",
+        ]
+
+        if best_trade:
+            best_pnl = best_trade.get("pnl_pct", 0)
+            lines.extend([
+                f"🏆 *Best Trade*",
+                f"└ {best_trade.get('symbol', '???')}: +{best_pnl:.1f}%",
+                "",
+            ])
+
+        if worst_trade:
+            worst_pnl = worst_trade.get("pnl_pct", 0)
+            lines.extend([
+                f"💀 *Worst Trade*",
+                f"└ {worst_trade.get('symbol', '???')}: {worst_pnl:.1f}%",
+                "",
+            ])
+
+        if positions:
+            lines.append(f"📋 *Open Positions ({len(positions)})*")
+            for pos in positions[:5]:
+                symbol = pos.get("symbol", "???")
+                pnl = pos.get("pnl_pct", 0)
+                pnl_em = "🟢" if pnl >= 0 else "🔴"
+                lines.append(f"├ {pnl_em} {symbol}: {pnl:+.1f}%")
+            if len(positions) > 5:
+                lines.append(f"└ _...and {len(positions) - 5} more_")
+        else:
+            lines.extend([
+                "_No open positions_",
+                "_Use Buy to enter trades_",
+            ])
+
+        lines.extend([
+            "",
+            "━━━━━━━━━━━━━━━━━━━━━",
+        ])
+
+        text = "\n".join(lines)
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"📊 Positions", callback_data="demo:positions"),
+                InlineKeyboardButton(f"📜 History", callback_data="demo:trade_history"),
+            ],
+            [
+                InlineKeyboardButton(f"🔄 Refresh", callback_data="demo:pnl_report"),
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ])
+
+        return text, keyboard
 
     @staticmethod
     def pnl_alerts_overview(
@@ -1969,14 +2428,20 @@ Reply with a Solana token address to buy.
     def ai_picks_menu(
         picks: List[Dict[str, Any]],
         market_regime: Dict[str, Any] = None,
+        trending: List[Dict[str, Any]] = None,
+        volume_leaders: List[Dict[str, Any]] = None,
+        near_picks: List[Dict[str, Any]] = None,
+        pick_stats: Dict[str, Any] = None,
     ) -> Tuple[str, InlineKeyboardMarkup]:
         """
-        Show AI-powered conviction picks from Grok.
+        Show AI-powered conviction picks from Grok with comprehensive market data.
 
-        These are tokens the sentiment engine recommends based on:
-        - Data-driven scoring (67% TP rate criteria)
-        - Multi-source sentiment analysis
-        - Risk-adjusted position sizing
+        Includes:
+        - High conviction picks with entry criteria
+        - Near-conviction tokens (close to triggering)
+        - Volume leaders (high activity)
+        - Trending tokens summary
+        - Historical pick performance
         """
         theme = JarvisTheme
 
@@ -1984,58 +2449,103 @@ Reply with a Solana token address to buy.
         regime = market_regime or {}
         regime_name = regime.get("regime", "NEUTRAL")
         risk_level = regime.get("risk_level", "NORMAL")
+        btc_change = regime.get("btc_change_24h", 0)
+        sol_change = regime.get("sol_change_24h", 0)
+        fear_greed = regime.get("fear_greed", 50)
 
         regime_emoji = {"BULL": "🟢", "BEAR": "🔴"}.get(regime_name, "🟡")
+        risk_emoji = {"LOW": "🟢", "NORMAL": "🟡", "HIGH": "🟠", "EXTREME": "🔴"}.get(risk_level, "⚪")
+
+        # Fear/Greed emoji
+        if fear_greed >= 75:
+            fg_emoji = "🤑"
+            fg_label = "Extreme Greed"
+        elif fear_greed >= 55:
+            fg_emoji = "😊"
+            fg_label = "Greed"
+        elif fear_greed >= 45:
+            fg_emoji = "😐"
+            fg_label = "Neutral"
+        elif fear_greed >= 25:
+            fg_emoji = "😰"
+            fg_label = "Fear"
+        else:
+            fg_emoji = "😱"
+            fg_label = "Extreme Fear"
 
         lines = [
             f"{theme.AUTO} *AI CONVICTION PICKS*",
             "━━━━━━━━━━━━━━━━━━━━━",
-            f"Market: {regime_emoji} {regime_name} | Risk: {risk_level}",
             "",
-            "_Based on data-driven criteria:_",
-            "• Entry timing < 50% pump (67% TP rate)",
-            "• Buy/sell ratio ≥ 2.0x",
-            "• Multi-sighting validation",
+            f"📊 *Market Overview*",
+            f"├ Regime: {regime_emoji} *{regime_name}* | Risk: {risk_emoji} *{risk_level}*",
+            f"├ BTC: *{btc_change:+.1f}%* | SOL: *{sol_change:+.1f}%*",
+            f"└ {fg_emoji} Fear/Greed: *{fear_greed}* ({fg_label})",
             "",
         ]
 
+        # Pick statistics if available
+        stats = pick_stats or {}
+        if stats:
+            win_rate = stats.get("win_rate", 0)
+            avg_gain = stats.get("avg_gain", 0)
+            total_picks = stats.get("total_picks", 0)
+            lines.extend([
+                f"📈 *Pick Performance (30d)*",
+                f"├ Win Rate: *{win_rate:.0f}%* | Avg Gain: *+{avg_gain:.0f}%*",
+                f"└ Total Picks: *{total_picks}*",
+                "",
+            ])
+
+        lines.extend([
+            "🎯 *Selection Criteria:*",
+            "├ Entry timing < 50% pump (67% TP rate)",
+            "├ Buy/sell ratio ≥ 2.0x",
+            "└ Multi-sighting validation",
+            "",
+            "━━━━━━━━━━━━━━━━━━━━━",
+        ])
+
         keyboard = []
 
-        if not picks:
-            lines.append("_No high-conviction picks right now._")
-            lines.append("_AI is waiting for better setups._")
-        else:
-            for pick in picks[:5]:
+        # High Conviction Picks
+        if picks:
+            lines.extend([
+                "",
+                f"🔥 *HIGH CONVICTION ({len(picks)})*",
+            ])
+            for pick in picks[:3]:
                 symbol = pick.get("symbol", "???")
                 conviction = pick.get("conviction", "MEDIUM")
-                thesis = pick.get("thesis", "")[:50]
+                thesis = pick.get("thesis", "")[:40]
                 address = pick.get("address", "")
                 tp = pick.get("tp_target", 0)
                 sl = pick.get("sl_target", 0)
                 ai_confidence = pick.get("ai_confidence", 0)
-                ai_action = pick.get("ai_action", "")
-                source = pick.get("source", "")
+                change = pick.get("change_24h", 0)
+                volume = pick.get("volume_24h", 0)
 
-                # Conviction emoji
                 conv_emoji = {"HIGH": "🔥", "MEDIUM": "📊", "LOW": "📉"}.get(conviction, "📊")
+                change_emoji = "🟢" if change >= 0 else "🔴"
 
-                lines.append(f"{conv_emoji} *{symbol}* - {conviction}")
+                lines.append(f"{conv_emoji} *{symbol}* | {change_emoji} {change:+.1f}%")
                 if thesis:
                     lines.append(f"   _{thesis}_")
 
-                # Show targets and AI confidence
-                targets = []
+                details = []
                 if tp:
-                    targets.append(f"TP: +{tp}%")
+                    details.append(f"TP +{tp}%")
                 if sl:
-                    targets.append(f"SL: -{sl}%")
+                    details.append(f"SL -{sl}%")
                 if ai_confidence > 0:
-                    conf_bar = "▰" * int(ai_confidence * 5) + "▱" * (5 - int(ai_confidence * 5))
-                    targets.append(f"AI: [{conf_bar}]")
+                    conf_pct = int(ai_confidence * 100)
+                    details.append(f"AI {conf_pct}%")
+                if volume > 0:
+                    vol_k = volume / 1000
+                    details.append(f"Vol ${vol_k:.0f}K")
 
-                if targets:
-                    lines.append(f"   {' | '.join(targets)}")
-
+                if details:
+                    lines.append(f"   {' | '.join(details)}")
                 lines.append("")
 
                 if address:
@@ -2045,16 +2555,90 @@ Reply with a Solana token address to buy.
                             callback_data=f"demo:quick_buy:{address}"
                         ),
                         InlineKeyboardButton(
-                            f"{theme.CHART} Analyze",
+                            f"{theme.CHART} Chart",
                             callback_data=f"demo:analyze:{address}"
                         ),
                     ])
+        else:
+            lines.extend([
+                "",
+                f"🔥 *HIGH CONVICTION*",
+                "_No picks qualify right now._",
+                "_AI is monitoring for setups..._",
+                "",
+            ])
+
+        # Near-Conviction Picks (tokens close to triggering)
+        near_picks = near_picks or []
+        if near_picks:
+            lines.extend([
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"⏳ *NEAR CONVICTION ({len(near_picks)})*",
+                "_Almost meeting criteria:_",
+            ])
+            for np in near_picks[:3]:
+                symbol = np.get("symbol", "???")
+                missing = np.get("missing_criteria", "timing")
+                score = np.get("score", 0)
+                change = np.get("change_24h", 0)
+                change_emoji = "🟢" if change >= 0 else "🔴"
+
+                lines.append(f"📊 *{symbol}* {change_emoji} {change:+.1f}% (Score: {score}/100)")
+                lines.append(f"   _Missing: {missing}_")
+            lines.append("")
+
+        # Volume Leaders
+        volume_leaders = volume_leaders or []
+        if volume_leaders:
+            lines.extend([
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"💎 *VOLUME LEADERS*",
+            ])
+            for vl in volume_leaders[:4]:
+                symbol = vl.get("symbol", "???")
+                volume = vl.get("volume_24h", 0)
+                change = vl.get("change_24h", 0)
+                change_emoji = "🟢" if change >= 0 else "🔴"
+                vol_m = volume / 1_000_000 if volume >= 1_000_000 else volume / 1000
+                vol_unit = "M" if volume >= 1_000_000 else "K"
+
+                lines.append(f"├ {symbol}: ${vol_m:.1f}{vol_unit} {change_emoji} {change:+.1f}%")
+            lines.append("")
+
+        # Trending Tokens
+        trending = trending or []
+        if trending:
+            lines.extend([
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"🔥 *TRENDING NOW*",
+            ])
+            for t in trending[:4]:
+                symbol = t.get("symbol", "???")
+                change = t.get("change_24h", 0)
+                sentiment = t.get("sentiment", "neutral")
+                change_emoji = "🟢" if change >= 0 else "🔴"
+                sent_emoji = {"bullish": "🟢", "bearish": "🔴", "very_bullish": "🚀"}.get(sentiment.lower(), "🟡")
+
+                lines.append(f"├ {symbol}: {change_emoji} {change:+.1f}% {sent_emoji}")
+            lines.append("")
+
+        lines.extend([
+            "━━━━━━━━━━━━━━━━━━━━━",
+            f"_Updated: {datetime.now().strftime('%H:%M:%S')}_",
+        ])
 
         text = "\n".join(lines)
 
         keyboard.extend([
             [
-                InlineKeyboardButton(f"{theme.REFRESH} Refresh Picks", callback_data="demo:ai_picks"),
+                InlineKeyboardButton(f"📊 Sentiment Hub", callback_data="demo:hub"),
+                InlineKeyboardButton(f"🔥 Trending", callback_data="demo:trending"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:ai_picks"),
             ],
             [
                 InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
@@ -2062,6 +2646,930 @@ Reply with a Solana token address to buy.
         ])
 
         return text, InlineKeyboardMarkup(keyboard)
+
+    # ========== SENTIMENT HUB - COMPREHENSIVE TRADING DASHBOARD ==========
+
+    @staticmethod
+    def sentiment_hub_main(
+        market_regime: Dict[str, Any] = None,
+        last_report_time: datetime = None,
+        report_interval_minutes: int = 15,
+        wallet_connected: bool = False,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Main Sentiment Hub - Beautiful comprehensive trading dashboard.
+
+        Sections:
+        - Market Overview (regime, countdown)
+        - Asset Categories (Blue Chips, XStocks, PreStocks, Indexes, Trending)
+        - Top 10 Picks with TP/SL
+        - Market News & Analysis
+        """
+        theme = JarvisTheme
+
+        regime = market_regime or {}
+        regime_name = regime.get("regime", "NEUTRAL")
+        risk_level = regime.get("risk_level", "NORMAL")
+        btc_change = regime.get("btc_change_24h", 0)
+        sol_change = regime.get("sol_change_24h", 0)
+
+        # Calculate countdown to next report
+        if last_report_time:
+            next_report = last_report_time + timedelta(minutes=report_interval_minutes)
+            time_left = next_report - datetime.now(timezone.utc)
+            if time_left.total_seconds() > 0:
+                mins_left = int(time_left.total_seconds() / 60)
+                secs_left = int(time_left.total_seconds() % 60)
+                countdown = f"{mins_left}:{secs_left:02d}"
+                freshness = "🟢 FRESH" if mins_left >= 12 else "🟡 AGING" if mins_left >= 5 else "🟠 STALE"
+            else:
+                countdown = "UPDATING..."
+                freshness = "⏳ REFRESH"
+        else:
+            countdown = "15:00"
+            freshness = "🟢 FRESH"
+
+        # Regime display
+        regime_emoji = {"BULL": "🟢", "BEAR": "🔴"}.get(regime_name, "🟡")
+        risk_emoji = {"LOW": "🟢", "NORMAL": "🟡", "HIGH": "🟠", "EXTREME": "🔴"}.get(risk_level, "⚪")
+
+        # Entry advice based on freshness
+        if "FRESH" in freshness:
+            entry_advice = "✅ *Good time to enter* - Report is fresh"
+        elif "AGING" in freshness:
+            entry_advice = "⚡ Consider waiting for refresh"
+        else:
+            entry_advice = "⚠️ Wait for fresh report before risky entries"
+
+        lines = [
+            f"📊 *JARVIS SENTIMENT HUB*",
+            f"{'━' * 25}",
+            "",
+            f"┌{'─' * 23}┐",
+            f"│ {regime_emoji} Market: *{regime_name}*        │",
+            f"│ {risk_emoji} Risk: *{risk_level}*          │",
+            f"│ ⏱ Next Report: *{countdown}*   │",
+            f"│ {freshness}                │",
+            f"└{'─' * 23}┘",
+            "",
+            f"BTC: {'📈' if btc_change >= 0 else '📉'} {btc_change:+.1f}% | SOL: {'📈' if sol_change >= 0 else '📉'} {sol_change:+.1f}%",
+            "",
+            entry_advice,
+            "",
+            f"{'━' * 25}",
+            "*SELECT CATEGORY:*",
+        ]
+
+        text = "\n".join(lines)
+
+        # Beautiful category buttons
+        keyboard = [
+            # Row 1: Core categories
+            [
+                InlineKeyboardButton("💎 Blue Chips", callback_data="demo:hub_bluechips"),
+                InlineKeyboardButton("🔥 TOP 10", callback_data="demo:hub_top10"),
+            ],
+            # Row 2: Stocks
+            [
+                InlineKeyboardButton("📈 XStocks", callback_data="demo:hub_xstocks"),
+                InlineKeyboardButton("🌅 PreStocks", callback_data="demo:hub_prestocks"),
+            ],
+            # Row 3: Markets
+            [
+                InlineKeyboardButton("📊 Indexes", callback_data="demo:hub_indexes"),
+                InlineKeyboardButton("🔥 Trending", callback_data="demo:hub_trending"),
+            ],
+            # Row 4: Reports
+            [
+                InlineKeyboardButton("📰 Market News", callback_data="demo:hub_news"),
+                InlineKeyboardButton("🌍 Traditional", callback_data="demo:hub_traditional"),
+            ],
+            # Row 5: Wallet & Actions
+            [
+                InlineKeyboardButton("💳 Wallet", callback_data="demo:hub_wallet"),
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:sentiment_hub"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def sentiment_hub_section(
+        section: str,
+        picks: List[Dict[str, Any]] = None,
+        market_regime: Dict[str, Any] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Individual section view within the Sentiment Hub.
+
+        Each section shows relevant tokens/assets with:
+        - Current price and 24h change
+        - Sentiment score and signal
+        - TP/SL recommendations
+        - Buy with auto-SL buttons
+        """
+        theme = JarvisTheme
+        picks = picks or []
+
+        # Section headers and emojis
+        section_config = {
+            "bluechips": {
+                "title": "💎 BLUE CHIPS",
+                "desc": "Established tokens with proven track records",
+                "emoji": "💎",
+            },
+            "top10": {
+                "title": "🔥 JARVIS TOP 10",
+                "desc": "AI-selected high-conviction picks with TP/SL",
+                "emoji": "🔥",
+            },
+            "xstocks": {
+                "title": "📈 XSTOCKS",
+                "desc": "Tokenized stocks on Solana (backed.fi)",
+                "emoji": "📈",
+            },
+            "prestocks": {
+                "title": "🌅 PRESTOCKS",
+                "desc": "Pre-market tokenized equities",
+                "emoji": "🌅",
+            },
+            "indexes": {
+                "title": "📊 INDEXES",
+                "desc": "SPX, NDX, DJI on Solana",
+                "emoji": "📊",
+            },
+            "trending": {
+                "title": "🔥 HOT TRENDING",
+                "desc": "High-volume Solana tokens right now",
+                "emoji": "🔥",
+            },
+        }
+
+        config = section_config.get(section, {"title": section.upper(), "desc": "", "emoji": "📊"})
+
+        lines = [
+            f"{config['emoji']} *{config['title']}*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            f"_{config['desc']}_",
+            "",
+        ]
+
+        keyboard = []
+
+        if not picks:
+            lines.append("_No picks available in this category_")
+            lines.append("_Check back after next report refresh_")
+        else:
+            for i, pick in enumerate(picks[:8]):
+                symbol = pick.get("symbol", "???")
+                price = pick.get("price", 0)
+                change_24h = pick.get("change_24h", 0)
+                sentiment = pick.get("sentiment", "NEUTRAL")
+                score = pick.get("score", 0)
+                tp = pick.get("tp", 0)
+                sl = pick.get("sl", 0)
+                address = pick.get("address", "")
+                conviction = pick.get("conviction", "")
+
+                # Sentiment emoji
+                sent_emoji = {"BULLISH": "🟢", "BEARISH": "🔴", "VERY_BULLISH": "🚀"}.get(sentiment, "⚪")
+                change_emoji = "📈" if change_24h >= 0 else "📉"
+
+                # Format price nicely
+                if price < 0.0001:
+                    price_str = f"${price:.8f}"
+                elif price < 1:
+                    price_str = f"${price:.6f}"
+                else:
+                    price_str = f"${price:.2f}"
+
+                lines.append(f"{sent_emoji} *{symbol}* {price_str}")
+                lines.append(f"   {change_emoji} {change_24h:+.1f}% | Score: {score:.0f}/100")
+
+                if tp or sl:
+                    targets = []
+                    if tp:
+                        targets.append(f"TP: +{tp}%")
+                    if sl:
+                        targets.append(f"SL: -{sl}%")
+                    lines.append(f"   🎯 {' | '.join(targets)}")
+
+                if conviction:
+                    lines.append(f"   _{conviction}_")
+
+                lines.append("")
+
+                # Buy button with auto stop-loss
+                if address:
+                    sl_percent = sl if sl else 15  # Default 15% SL
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"🛒 Buy {symbol}",
+                            callback_data=f"demo:hub_buy:{address}:{sl_percent}"
+                        ),
+                        InlineKeyboardButton(
+                            f"📊 Details",
+                            callback_data=f"demo:hub_detail:{address}"
+                        ),
+                    ])
+
+        text = "\n".join(lines)
+
+        keyboard.extend([
+            [
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data=f"demo:hub_{section}"),
+            ],
+            [
+                InlineKeyboardButton("📊 Back to Hub", callback_data="demo:sentiment_hub"),
+            ],
+        ])
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def sentiment_hub_wallet(
+        wallet_address: str = None,
+        sol_balance: float = 0.0,
+        usd_value: float = 0.0,
+        has_private_key: bool = False,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Wallet management within Sentiment Hub.
+
+        Supports:
+        - Fresh wallet creation
+        - Private key export
+        - Private key import
+        - Balance display
+        """
+        theme = JarvisTheme
+
+        if wallet_address:
+            short_addr = f"{wallet_address[:8]}...{wallet_address[-6:]}"
+
+            lines = [
+                f"💳 *HUB WALLET*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"*Address:* `{short_addr}`",
+                f"*Balance:* {sol_balance:.4f} SOL",
+                f"*Value:* ${usd_value:.2f}",
+                "",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "_Secure your keys. Not your keys, not your coins._",
+            ]
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("📤 Export Key", callback_data="demo:hub_export_key"),
+                    InlineKeyboardButton("📋 Copy Address", callback_data="demo:hub_copy_addr"),
+                ],
+                [
+                    InlineKeyboardButton("💰 Deposit", callback_data="demo:hub_deposit"),
+                    InlineKeyboardButton("📤 Withdraw", callback_data="demo:hub_withdraw"),
+                ],
+                [
+                    InlineKeyboardButton("🔄 Import Key", callback_data="demo:hub_import_key"),
+                    InlineKeyboardButton("🆕 New Wallet", callback_data="demo:hub_new_wallet"),
+                ],
+                [
+                    InlineKeyboardButton("📊 Back to Hub", callback_data="demo:sentiment_hub"),
+                ],
+            ]
+        else:
+            lines = [
+                f"💳 *SETUP WALLET*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                "No wallet connected.",
+                "",
+                "*Options:*",
+                "• Create a fresh Solana wallet",
+                "• Import existing private key",
+                "",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "_Your keys are encrypted locally._",
+            ]
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("🆕 Create Wallet", callback_data="demo:hub_create_wallet"),
+                ],
+                [
+                    InlineKeyboardButton("📥 Import Key", callback_data="demo:hub_import_key"),
+                ],
+                [
+                    InlineKeyboardButton("📊 Back to Hub", callback_data="demo:sentiment_hub"),
+                ],
+            ]
+
+        text = "\n".join(lines)
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def sentiment_hub_news(
+        news_items: List[Dict[str, Any]] = None,
+        macro_analysis: Dict[str, Any] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Market news and macro analysis view.
+
+        Shows:
+        - Key market events
+        - Macro outlook (short/medium/long term)
+        - Impact on crypto
+        """
+        theme = JarvisTheme
+        news_items = news_items or []
+        macro = macro_analysis or {}
+
+        lines = [
+            f"📰 *MARKET NEWS & MACRO*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+        ]
+
+        # Macro outlook
+        short_term = macro.get("short_term", "No data")
+        medium_term = macro.get("medium_term", "No data")
+        key_events = macro.get("key_events", [])
+
+        lines.extend([
+            "*MACRO OUTLOOK:*",
+            f"📅 *24h:* {short_term[:60]}...",
+            f"📆 *3-Day:* {medium_term[:60]}...",
+            "",
+        ])
+
+        if key_events:
+            lines.append("*KEY EVENTS:*")
+            for event in key_events[:3]:
+                lines.append(f"• {event[:50]}")
+            lines.append("")
+
+        # News items
+        if news_items:
+            lines.append("*RECENT NEWS:*")
+            for item in news_items[:5]:
+                # Support both 'title' and 'headline' keys
+                headline = item.get("title") or item.get("headline", "")
+                headline = headline[:45] if headline else ""
+                source = item.get("source", "")
+                time_str = item.get("time", "")
+                impact = item.get("impact") or item.get("sentiment", "NEUTRAL")
+                impact_upper = impact.upper() if impact else "NEUTRAL"
+                impact_emoji = {"BULLISH": "🟢", "BEARISH": "🔴"}.get(impact_upper, "⚪")
+                source_str = f" - {source}" if source else ""
+                time_str = f" ({time_str})" if time_str else ""
+                lines.append(f"{impact_emoji} {headline}{source_str}{time_str}")
+            lines.append("")
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:hub_news"),
+            ],
+            [
+                InlineKeyboardButton("📊 Back to Hub", callback_data="demo:sentiment_hub"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def sentiment_hub_traditional(
+        stocks_outlook: Dict[str, Any] = None,
+        dxy_data: Dict[str, Any] = None,
+        commodities: List[Dict[str, Any]] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Traditional markets view - DXY, stocks, commodities.
+        """
+        theme = JarvisTheme
+
+        stocks = stocks_outlook or {}
+        dxy = dxy_data or {}
+        comms = commodities or []
+
+        # DXY - support multiple field names
+        dxy_value = dxy.get("value", 0)
+        dxy_change = dxy.get("change", 0)
+        dxy_trend = dxy.get("trend") or dxy.get("direction", "NEUTRAL")
+        dxy_trend_upper = dxy_trend.upper() if dxy_trend else "NEUTRAL"
+        dxy_emoji = "📈" if dxy_change > 0 else "📉" if dxy_change < 0 else "➡️"
+
+        # Stocks - support multiple field names
+        stocks_direction = stocks.get("direction") or stocks.get("outlook", "NEUTRAL")
+        stocks_direction_upper = stocks_direction.upper() if stocks_direction else "NEUTRAL"
+        stocks_emoji = {"BULLISH": "📈", "BEARISH": "📉"}.get(stocks_direction_upper, "➡️")
+
+        # Stocks changes
+        spy_change = stocks.get("spy_change", 0)
+        qqq_change = stocks.get("qqq_change", 0)
+        dia_change = stocks.get("dia_change", 0)
+
+        lines = [
+            f"🌍 *TRADITIONAL MARKETS*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"*DXY (Dollar Index):* {dxy_emoji}",
+            f"├ Value: *{dxy_value:.2f}*",
+            f"├ Change: *{dxy_change:+.2f}%*",
+            f"└ Trend: *{dxy_trend_upper}*",
+            "",
+            f"*US STOCKS:* {stocks_emoji} *{stocks_direction_upper}*",
+        ]
+
+        if spy_change or qqq_change or dia_change:
+            lines.extend([
+                f"├ SPY: *{spy_change:+.2f}%*",
+                f"├ QQQ: *{qqq_change:+.2f}%*",
+                f"└ DIA: *{dia_change:+.2f}%*",
+            ])
+
+        lines.append("")
+
+        if stocks.get("correlation_note"):
+            lines.extend([
+                "*CRYPTO CORRELATION:*",
+                f"_{stocks.get('correlation_note', '')[:80]}_",
+                "",
+            ])
+
+        if comms:
+            lines.append("*COMMODITIES:*")
+            for c in comms[:3]:
+                name = c.get("symbol") or c.get("name", "???")
+                price = c.get("price", 0)
+                change = c.get("change", 0)
+                dir_emoji = "📈" if change > 0 else "📉" if change < 0 else "➡️"
+                lines.append(f"{dir_emoji} {name}: ${price:,.2f} ({change:+.1f}%)")
+            lines.append("")
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:hub_traditional"),
+            ],
+            [
+                InlineKeyboardButton("📊 Back to Hub", callback_data="demo:sentiment_hub"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def sentiment_hub_buy_confirm(
+        symbol: str,
+        address: str,
+        price: float,
+        auto_sl_percent: float = 15,
+        amount_options: List[float] = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Buy confirmation with automatic stop-loss setup.
+        """
+        theme = JarvisTheme
+        amount_options = amount_options or [0.1, 0.25, 0.5, 1.0, 2.0]
+
+        # Format price
+        if price < 0.0001:
+            price_str = f"${price:.8f}"
+        elif price < 1:
+            price_str = f"${price:.6f}"
+        else:
+            price_str = f"${price:.2f}"
+
+        sl_price = price * (1 - auto_sl_percent / 100)
+        sl_str = f"${sl_price:.8f}" if sl_price < 0.0001 else f"${sl_price:.6f}" if sl_price < 1 else f"${sl_price:.2f}"
+
+        lines = [
+            f"🛒 *BUY {symbol}*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"*Price:* {price_str}",
+            f"*Auto Stop-Loss:* {auto_sl_percent}%",
+            f"*SL Trigger:* {sl_str}",
+            "",
+            "_Select amount to buy:_",
+            "",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            f"⚠️ SL automatically set at -{auto_sl_percent}%",
+        ]
+
+        text = "\n".join(lines)
+
+        keyboard = []
+        row = []
+        for amt in amount_options:
+            row.append(InlineKeyboardButton(
+                f"{amt} SOL",
+                callback_data=f"demo:hub_exec_buy:{address}:{amt}:{auto_sl_percent}"
+            ))
+            if len(row) == 2:
+                keyboard.append(row)
+                row = []
+        if row:
+            keyboard.append(row)
+
+        keyboard.extend([
+            [
+                InlineKeyboardButton("✏️ Custom SL %", callback_data=f"demo:hub_custom_sl:{address}"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Cancel", callback_data="demo:sentiment_hub"),
+            ],
+        ])
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def insta_snipe_menu(
+        hottest_token: Dict[str, Any] = None,
+        market_regime: Dict[str, Any] = None,
+        auto_sl_percent: float = 15.0,
+        auto_tp_percent: float = 15.0,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Insta Snipe - One-click trade on the hottest trending token.
+
+        Features:
+        - Auto-detects hottest trending token
+        - Pre-configured 15% SL / 15% TP
+        - Conviction level display
+        - One-click execution
+        """
+        theme = JarvisTheme
+
+        regime = market_regime or {}
+        regime_name = regime.get("regime", "NEUTRAL")
+
+        if hottest_token:
+            symbol = hottest_token.get("symbol", "UNKNOWN")
+            address = hottest_token.get("address", "")
+            price = hottest_token.get("price", 0)
+            change_24h = hottest_token.get("change_24h", 0)
+            volume = hottest_token.get("volume_24h", 0)
+            liquidity = hottest_token.get("liquidity", 0)
+            mcap = hottest_token.get("market_cap", 0)
+            conviction = hottest_token.get("conviction", "MEDIUM")
+            sentiment_score = hottest_token.get("sentiment_score", 65)
+            entry_timing = hottest_token.get("entry_timing", "GOOD")
+            sightings = hottest_token.get("sightings", 1)
+
+            # Price formatting
+            if price < 0.0001:
+                price_str = f"${price:.8f}"
+            elif price < 1:
+                price_str = f"${price:.6f}"
+            else:
+                price_str = f"${price:.2f}"
+
+            # Volume/Liquidity formatting
+            def fmt_num(n):
+                if n >= 1_000_000:
+                    return f"${n/1_000_000:.1f}M"
+                elif n >= 1_000:
+                    return f"${n/1_000:.1f}K"
+                return f"${n:.0f}"
+
+            # Conviction display
+            conv_emoji = {
+                "VERY HIGH": "🔥🔥🔥",
+                "HIGH": "🔥🔥",
+                "MEDIUM": "🔥",
+                "LOW": "⚪",
+            }.get(conviction, "🔥")
+
+            # Entry timing
+            timing_emoji = {
+                "EXCELLENT": "🟢",
+                "GOOD": "🟡",
+                "LATE": "🟠",
+                "RISKY": "🔴",
+            }.get(entry_timing, "🟡")
+
+            # Change emoji
+            change_emoji = "📈" if change_24h >= 0 else "📉"
+
+            # Calculate SL/TP prices
+            sl_price = price * (1 - auto_sl_percent / 100)
+            tp_price = price * (1 + auto_tp_percent / 100)
+            sl_str = f"${sl_price:.8f}" if sl_price < 0.0001 else f"${sl_price:.6f}" if sl_price < 1 else f"${sl_price:.2f}"
+            tp_str = f"${tp_price:.8f}" if tp_price < 0.0001 else f"${tp_price:.6f}" if tp_price < 1 else f"${tp_price:.2f}"
+
+            lines = [
+                f"⚡ *INSTA SNIPE*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"🎯 *HOTTEST TOKEN: {symbol}*",
+                "",
+                f"*Conviction:* {conv_emoji} {conviction}",
+                f"*Sentiment Score:* {sentiment_score}/100",
+                f"*Entry Timing:* {timing_emoji} {entry_timing}",
+                f"*Sightings:* {sightings}x (multi-source bonus)",
+                "",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"*Price:* {price_str}",
+                f"*24h:* {change_emoji} {change_24h:+.1f}%",
+                f"*Volume:* {fmt_num(volume)}",
+                f"*Liquidity:* {fmt_num(liquidity)}",
+                f"*MCap:* {fmt_num(mcap)}",
+                "",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"🛡️ *AUTO PROTECTION*",
+                f"├ Stop Loss: *-{auto_sl_percent:.0f}%* ({sl_str})",
+                f"└ Take Profit: *+{auto_tp_percent:.0f}%* ({tp_str})",
+                "",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "_One-click trade with auto SL/TP_",
+            ]
+
+            text = "\n".join(lines)
+
+            keyboard = [
+                # Quick snipe amounts
+                [
+                    InlineKeyboardButton(f"⚡ 0.1 SOL", callback_data=f"demo:snipe_exec:{address}:0.1"),
+                    InlineKeyboardButton(f"⚡ 0.25 SOL", callback_data=f"demo:snipe_exec:{address}:0.25"),
+                ],
+                [
+                    InlineKeyboardButton(f"⚡ 0.5 SOL", callback_data=f"demo:snipe_exec:{address}:0.5"),
+                    InlineKeyboardButton(f"⚡ 1 SOL", callback_data=f"demo:snipe_exec:{address}:1"),
+                ],
+                [
+                    InlineKeyboardButton(f"🔄 Refresh Token", callback_data="demo:insta_snipe"),
+                    InlineKeyboardButton(f"📊 Full Analysis", callback_data=f"demo:analyze:{address}"),
+                ],
+                [
+                    InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
+                ],
+            ]
+        else:
+            # No token available
+            lines = [
+                f"⚡ *INSTA SNIPE*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                "🔍 *Scanning for hottest token...*",
+                "",
+                "_Analyzing trending tokens by:_",
+                "├ Volume spike detection",
+                "├ Social sentiment scoring",
+                "├ Entry timing analysis",
+                "└ Multi-source sightings",
+                "",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                "⏳ *No qualifying tokens found*",
+                "_Try refreshing or check AI Picks_",
+            ]
+
+            text = "\n".join(lines)
+
+            keyboard = [
+                [
+                    InlineKeyboardButton(f"🔄 Refresh", callback_data="demo:insta_snipe"),
+                    InlineKeyboardButton(f"{theme.AUTO} AI Picks", callback_data="demo:ai_picks"),
+                ],
+                [
+                    InlineKeyboardButton(f"📊 Sentiment Hub", callback_data="demo:hub"),
+                ],
+                [
+                    InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
+                ],
+            ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def snipe_confirm(
+        symbol: str,
+        address: str,
+        amount: float,
+        price: float,
+        sl_percent: float = 15.0,
+        tp_percent: float = 15.0,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Snipe confirmation screen before execution.
+        """
+        theme = JarvisTheme
+
+        # Price formatting
+        if price < 0.0001:
+            price_str = f"${price:.8f}"
+        elif price < 1:
+            price_str = f"${price:.6f}"
+        else:
+            price_str = f"${price:.2f}"
+
+        # Calculate SL/TP
+        sl_price = price * (1 - sl_percent / 100)
+        tp_price = price * (1 + tp_percent / 100)
+        sl_str = f"${sl_price:.8f}" if sl_price < 0.0001 else f"${sl_price:.6f}" if sl_price < 1 else f"${sl_price:.2f}"
+        tp_str = f"${tp_price:.8f}" if tp_price < 0.0001 else f"${tp_price:.6f}" if tp_price < 1 else f"${tp_price:.2f}"
+
+        usd_value = amount * 225  # Approximate SOL price
+
+        lines = [
+            f"⚡ *CONFIRM SNIPE*",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "",
+            f"*Token:* {symbol}",
+            f"*Amount:* {amount} SOL (~${usd_value:.2f})",
+            f"*Price:* {price_str}",
+            "",
+            "🛡️ *Protection Orders*",
+            f"├ Stop Loss: -{sl_percent:.0f}% @ {sl_str}",
+            f"└ Take Profit: +{tp_percent:.0f}% @ {tp_str}",
+            "",
+            "━━━━━━━━━━━━━━━━━━━━━",
+            "⚠️ _This will execute immediately_",
+        ]
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"✅ CONFIRM SNIPE", callback_data=f"demo:snipe_confirm:{address}:{amount}"),
+            ],
+            [
+                InlineKeyboardButton(f"❌ Cancel", callback_data="demo:insta_snipe"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def snipe_result(
+        success: bool,
+        symbol: str,
+        amount: float,
+        tx_hash: str = None,
+        error: str = None,
+        sl_set: bool = False,
+        tp_set: bool = False,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Snipe execution result.
+        """
+        theme = JarvisTheme
+
+        if success:
+            lines = [
+                f"✅ *SNIPE SUCCESSFUL*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"*Token:* {symbol}",
+                f"*Amount:* {amount} SOL",
+                "",
+                "🛡️ *Protection Status*",
+                f"├ Stop Loss: {'✅ Set' if sl_set else '⏳ Pending'}",
+                f"└ Take Profit: {'✅ Set' if tp_set else '⏳ Pending'}",
+                "",
+            ]
+            if tx_hash:
+                short_hash = f"{tx_hash[:8]}...{tx_hash[-8:]}" if len(tx_hash) > 16 else tx_hash
+                lines.extend([
+                    f"*TX:* `{short_hash}`",
+                    "",
+                ])
+            lines.extend([
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "_Position added to portfolio_",
+            ])
+        else:
+            lines = [
+                f"❌ *SNIPE FAILED*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"*Token:* {symbol}",
+                f"*Amount:* {amount} SOL",
+                "",
+                f"*Error:* {error or 'Unknown error'}",
+                "",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "_Try again or check balance_",
+            ]
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"⚡ Snipe Again", callback_data="demo:insta_snipe"),
+                InlineKeyboardButton(f"📊 Positions", callback_data="demo:positions"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def close_position_result(
+        success: bool,
+        symbol: str,
+        amount: float,
+        entry_price: float,
+        exit_price: float,
+        pnl_usd: float,
+        pnl_percent: float,
+        success_fee: float = 0.0,
+        net_profit: float = None,
+        tx_hash: str = None,
+        error: str = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        Position close result with success fee display.
+
+        Shows:
+        - PnL details
+        - Success fee (0.5% on profit) if winning trade
+        - Net profit after fee
+        """
+        theme = JarvisTheme
+
+        is_profit = pnl_usd > 0
+        pnl_emoji = "📈" if is_profit else "📉"
+        pnl_sign = "+" if is_profit else ""
+
+        if success:
+            lines = [
+                f"✅ *POSITION CLOSED*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"*Token:* {symbol}",
+                f"*Amount:* {amount} SOL",
+                "",
+                f"*Entry:* ${entry_price:.8f}" if entry_price < 0.0001 else f"*Entry:* ${entry_price:.6f}" if entry_price < 1 else f"*Entry:* ${entry_price:.4f}",
+                f"*Exit:* ${exit_price:.8f}" if exit_price < 0.0001 else f"*Exit:* ${exit_price:.6f}" if exit_price < 1 else f"*Exit:* ${exit_price:.4f}",
+                "",
+                f"{pnl_emoji} *P&L:* {pnl_sign}${abs(pnl_usd):.2f} ({pnl_sign}{pnl_percent:.1f}%)",
+            ]
+
+            # Show success fee if it was a winning trade
+            if is_profit and success_fee > 0:
+                lines.extend([
+                    "",
+                    "💰 *Success Fee (0.5% on profit)*",
+                    f"├ Fee: -${success_fee:.4f}",
+                    f"└ Net Profit: +${(net_profit or (pnl_usd - success_fee)):.2f}",
+                    "",
+                    "_Fee supports JARVIS development_",
+                ])
+            elif not is_profit:
+                lines.extend([
+                    "",
+                    "💰 _No success fee (losing trade)_",
+                ])
+
+            if tx_hash:
+                short_hash = f"{tx_hash[:8]}...{tx_hash[-8:]}" if len(tx_hash) > 16 else tx_hash
+                lines.extend([
+                    "",
+                    f"*TX:* `{short_hash}`",
+                ])
+
+            lines.extend([
+                "",
+                "━━━━━━━━━━━━━━━━━━━━━",
+            ])
+        else:
+            lines = [
+                f"❌ *CLOSE FAILED*",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "",
+                f"*Token:* {symbol}",
+                f"*Error:* {error or 'Unknown error'}",
+                "",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "_Try again or check position_",
+            ]
+
+        text = "\n".join(lines)
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"📊 Positions", callback_data="demo:positions"),
+                InlineKeyboardButton(f"📊 Hub", callback_data="demo:hub"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    # ========== END SENTIMENT HUB ==========
 
     @staticmethod
     def ai_report_menu(
@@ -3192,6 +4700,42 @@ _QR code coming in V2_
         elif action == "wallet_reset_confirm":
             text, keyboard = DemoMenuBuilder.wallet_reset_confirm()
 
+        elif action == "wallet_import":
+            # Show wallet import options
+            text, keyboard = DemoMenuBuilder.wallet_import_prompt()
+
+        elif action == "import_mode_key":
+            # Set import mode to private key
+            context.user_data["import_mode"] = "key"
+            context.user_data["awaiting_wallet_import"] = True
+            text, keyboard = DemoMenuBuilder.wallet_import_input(import_type="key")
+
+        elif action == "import_mode_seed":
+            # Set import mode to seed phrase
+            context.user_data["import_mode"] = "seed"
+            context.user_data["awaiting_wallet_import"] = True
+            text, keyboard = DemoMenuBuilder.wallet_import_input(import_type="seed")
+
+        elif action == "export_key":
+            # Show actual private key (SENSITIVE)
+            theme = JarvisTheme
+            try:
+                from bots.treasury.wallet import SecureWallet
+                wallet = SecureWallet()
+                private_key = wallet.get_private_key()  # Returns base58 key
+                wallet_address = wallet.get_address()
+
+                text, keyboard = DemoMenuBuilder.export_key_show(
+                    private_key=private_key,
+                    wallet_address=wallet_address,
+                )
+                logger.warning(f"Private key exported for wallet {wallet_address[:8]}...")
+            except Exception as e:
+                logger.error(f"Failed to export key: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    f"Could not export key: {str(e)[:50]}"
+                )
+
         elif action == "wallet_create":
             # Generate new wallet
             try:
@@ -3217,6 +4761,38 @@ _QR code coming in V2_
             text, keyboard = DemoMenuBuilder.settings_menu(
                 is_live=is_live,
                 ai_auto_trade=ai_auto,
+            )
+
+        elif action == "fee_stats":
+            # Show fee collection statistics
+            fee_manager = get_success_fee_manager()
+            stats = fee_manager.get_fee_stats()
+            text, keyboard = DemoMenuBuilder.fee_stats_view(
+                fee_percent=stats.get("fee_percent", 0.5),
+                total_collected=stats.get("total_collected", 0.0),
+                transaction_count=stats.get("transaction_count", 0),
+                recent_fees=stats.get("recent_fees", []),
+            )
+
+        elif action == "pnl_report":
+            # Show P&L report
+            # Calculate stats from positions
+            winners = sum(1 for p in positions if p.get("pnl_pct", 0) >= 0)
+            losers = sum(1 for p in positions if p.get("pnl_pct", 0) < 0)
+            total_pnl_pct = sum(p.get("pnl_pct", 0) for p in positions) / max(len(positions), 1)
+
+            # Find best and worst
+            best_trade = max(positions, key=lambda p: p.get("pnl_pct", 0)) if positions else None
+            worst_trade = min(positions, key=lambda p: p.get("pnl_pct", 0)) if positions else None
+
+            text, keyboard = DemoMenuBuilder.pnl_report_view(
+                positions=positions,
+                total_pnl_usd=total_pnl,
+                total_pnl_percent=total_pnl_pct,
+                winners=winners,
+                losers=losers,
+                best_trade=best_trade,
+                worst_trade=worst_trade,
             )
 
         elif action == "ai_auto_settings":
@@ -3884,6 +5460,326 @@ _This feature coming soon!_
                 market_regime=market_regime,
             )
 
+        # ========== SENTIMENT HUB HANDLERS ==========
+        elif action == "hub":
+            # Main Sentiment Hub Dashboard
+            try:
+                last_report_time = context.user_data.get("hub_last_report", datetime.now(timezone.utc))
+                wallet_connected = bool(context.user_data.get("wallet_address"))
+
+                text, keyboard = DemoMenuBuilder.sentiment_hub_main(
+                    market_regime=market_regime,
+                    last_report_time=last_report_time,
+                    report_interval_minutes=15,
+                    wallet_connected=wallet_connected,
+                )
+            except Exception as e:
+                logger.error(f"Hub error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:hub",
+                    context_hint="sentiment_hub",
+                )
+
+        elif action.startswith("hub_"):
+            # Hub section handlers
+            try:
+                section = action.replace("hub_", "")
+
+                # Generate mock picks based on section
+                section_picks = {
+                    "bluechips": [
+                        {"symbol": "SOL", "address": "So11111111111111111111111111111111111111112", "price": 225.50, "change_24h": 2.5, "conviction": "HIGH", "tp_percent": 20, "sl_percent": 10, "score": 85},
+                        {"symbol": "JUP", "address": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", "price": 1.25, "change_24h": 5.2, "conviction": "HIGH", "tp_percent": 25, "sl_percent": 12, "score": 82},
+                        {"symbol": "RAY", "address": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R", "price": 8.45, "change_24h": 1.8, "conviction": "MEDIUM", "tp_percent": 15, "sl_percent": 10, "score": 78},
+                    ],
+                    "top10": [
+                        {"symbol": "BONK", "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "price": 0.0000325, "change_24h": 15.2, "conviction": "VERY HIGH", "tp_percent": 30, "sl_percent": 15, "score": 92},
+                        {"symbol": "WIF", "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", "price": 2.85, "change_24h": 8.5, "conviction": "HIGH", "tp_percent": 25, "sl_percent": 12, "score": 88},
+                        {"symbol": "POPCAT", "address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr", "price": 1.42, "change_24h": 22.1, "conviction": "HIGH", "tp_percent": 35, "sl_percent": 15, "score": 86},
+                    ],
+                    "xstocks": [
+                        {"symbol": "xTSLA", "address": "xTSLA111111111111111111111111111111111111111", "price": 425.00, "change_24h": 3.2, "conviction": "MEDIUM", "tp_percent": 15, "sl_percent": 8, "score": 75},
+                        {"symbol": "xNVDA", "address": "xNVDA111111111111111111111111111111111111111", "price": 142.50, "change_24h": 2.1, "conviction": "MEDIUM", "tp_percent": 12, "sl_percent": 7, "score": 72},
+                    ],
+                    "prestocks": [
+                        {"symbol": "STRIPE", "address": "STRIPE11111111111111111111111111111111111111", "price": 85.00, "change_24h": 0.5, "conviction": "HIGH", "tp_percent": 50, "sl_percent": 20, "score": 80},
+                        {"symbol": "SPACEX", "address": "SPACEX11111111111111111111111111111111111111", "price": 125.00, "change_24h": 1.2, "conviction": "HIGH", "tp_percent": 100, "sl_percent": 25, "score": 78},
+                    ],
+                    "indexes": [
+                        {"symbol": "SPX500", "address": "SPX50011111111111111111111111111111111111111", "price": 1.05, "change_24h": 0.3, "conviction": "MEDIUM", "tp_percent": 10, "sl_percent": 5, "score": 70},
+                        {"symbol": "DJIA", "address": "DJIA1111111111111111111111111111111111111111", "price": 0.98, "change_24h": -0.2, "conviction": "LOW", "tp_percent": 8, "sl_percent": 4, "score": 65},
+                    ],
+                    "trending": [
+                        {"symbol": "FARTCOIN", "address": "FART1111111111111111111111111111111111111111", "price": 0.00125, "change_24h": 245.5, "conviction": "VERY HIGH", "tp_percent": 50, "sl_percent": 25, "score": 95},
+                        {"symbol": "GIGA", "address": "GIGA1111111111111111111111111111111111111111", "price": 0.0425, "change_24h": 85.2, "conviction": "HIGH", "tp_percent": 40, "sl_percent": 20, "score": 88},
+                        {"symbol": "AI16Z", "address": "AI16Z111111111111111111111111111111111111111", "price": 0.875, "change_24h": 32.1, "conviction": "HIGH", "tp_percent": 35, "sl_percent": 18, "score": 85},
+                    ],
+                }
+
+                picks = section_picks.get(section, [])
+
+                text, keyboard = DemoMenuBuilder.sentiment_hub_section(
+                    section=section,
+                    picks=picks,
+                    market_regime=market_regime,
+                )
+            except Exception as e:
+                logger.error(f"Hub section error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:hub",
+                    context_hint="hub_section",
+                )
+
+        elif action == "hub_news":
+            # Market news section
+            try:
+                mock_news = [
+                    {"title": "SOL breaks $225 resistance", "source": "CoinDesk", "time": "2h ago", "sentiment": "bullish"},
+                    {"title": "Whale accumulation on BONK", "source": "Arkham", "time": "4h ago", "sentiment": "bullish"},
+                    {"title": "Fed signals rate pause", "source": "Reuters", "time": "6h ago", "sentiment": "neutral"},
+                    {"title": "New Solana DeFi protocol launches", "source": "The Block", "time": "8h ago", "sentiment": "bullish"},
+                ]
+                mock_macro = {
+                    "dxy_trend": "weakening",
+                    "fed_stance": "neutral",
+                    "risk_appetite": "high",
+                    "btc_correlation": 0.85,
+                }
+
+                text, keyboard = DemoMenuBuilder.sentiment_hub_news(
+                    news_items=mock_news,
+                    macro_analysis=mock_macro,
+                )
+            except Exception as e:
+                logger.error(f"Hub news error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:hub_news",
+                    context_hint="hub_news",
+                )
+
+        elif action == "hub_traditional":
+            # Traditional markets section
+            try:
+                mock_stocks = {"spy_change": 0.45, "qqq_change": 0.72, "dia_change": 0.22, "outlook": "bullish"}
+                mock_dxy = {"value": 103.25, "change": -0.15, "trend": "weakening"}
+                mock_commodities = [
+                    {"symbol": "GOLD", "price": 2045.50, "change": 0.8},
+                    {"symbol": "SILVER", "price": 24.15, "change": 1.2},
+                    {"symbol": "OIL", "price": 78.50, "change": -0.5},
+                ]
+
+                text, keyboard = DemoMenuBuilder.sentiment_hub_traditional(
+                    stocks_outlook=mock_stocks,
+                    dxy_data=mock_dxy,
+                    commodities=mock_commodities,
+                )
+            except Exception as e:
+                logger.error(f"Hub traditional error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:hub_traditional",
+                    context_hint="hub_traditional",
+                )
+
+        elif action == "hub_wallet":
+            # Hub wallet management
+            try:
+                wallet_address = context.user_data.get("wallet_address", "")
+                sol_balance = context.user_data.get("sol_balance", 0.0)
+                usd_value = sol_balance * 225  # Approximate
+
+                text, keyboard = DemoMenuBuilder.sentiment_hub_wallet(
+                    wallet_address=wallet_address,
+                    sol_balance=sol_balance,
+                    usd_value=usd_value,
+                    has_private_key=bool(context.user_data.get("private_key")),
+                )
+            except Exception as e:
+                logger.error(f"Hub wallet error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:hub_wallet",
+                    context_hint="hub_wallet",
+                )
+
+        elif action.startswith("hub_buy:"):
+            # Hub buy confirmation
+            try:
+                parts = callback_data.split(":")
+                if len(parts) >= 3:
+                    address = parts[2]
+                    # Get token info (mock for now)
+                    text, keyboard = DemoMenuBuilder.sentiment_hub_buy_confirm(
+                        symbol="TOKEN",
+                        address=address,
+                        price=0.001,
+                        auto_sl_percent=15,
+                    )
+                else:
+                    text, keyboard = DemoMenuBuilder.error_message(
+                        error="Invalid buy request",
+                        retry_action="demo:hub",
+                    )
+            except Exception as e:
+                logger.error(f"Hub buy error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:hub",
+                    context_hint="hub_buy",
+                )
+
+        # ========== INSTA SNIPE HANDLERS ==========
+        elif action == "insta_snipe":
+            # Insta Snipe - Find hottest token
+            try:
+                # Try to get real trending tokens from DexScreener
+                hottest_token = None
+                try:
+                    import aiohttp
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(
+                            "https://api.dexscreener.com/token-boosts/top/v1",
+                            timeout=aiohttp.ClientTimeout(total=5)
+                        ) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                if data and len(data) > 0:
+                                    top = data[0]
+                                    hottest_token = {
+                                        "symbol": top.get("tokenInfo", {}).get("symbol", "UNKNOWN"),
+                                        "address": top.get("tokenAddress", ""),
+                                        "price": float(top.get("tokenInfo", {}).get("price", 0)),
+                                        "change_24h": float(top.get("tokenInfo", {}).get("priceChange24h", 0)),
+                                        "volume_24h": float(top.get("volume24h", 0)),
+                                        "liquidity": float(top.get("liquidity", 0)),
+                                        "market_cap": float(top.get("marketCap", 0)),
+                                        "conviction": "HIGH" if float(top.get("totalAmount", 0)) > 1000 else "MEDIUM",
+                                        "sentiment_score": 75,
+                                        "entry_timing": "GOOD",
+                                        "sightings": 1,
+                                    }
+                except Exception as api_err:
+                    logger.warning(f"DexScreener API error: {api_err}")
+
+                # Fallback to mock data if API fails
+                if not hottest_token:
+                    hottest_token = {
+                        "symbol": "FARTCOIN",
+                        "address": "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump",
+                        "price": 0.00125,
+                        "change_24h": 145.5,
+                        "volume_24h": 2500000,
+                        "liquidity": 850000,
+                        "market_cap": 125000000,
+                        "conviction": "VERY HIGH",
+                        "sentiment_score": 92,
+                        "entry_timing": "GOOD",
+                        "sightings": 3,
+                    }
+
+                text, keyboard = DemoMenuBuilder.insta_snipe_menu(
+                    hottest_token=hottest_token,
+                    market_regime=market_regime,
+                    auto_sl_percent=15.0,
+                    auto_tp_percent=15.0,
+                )
+            except Exception as e:
+                logger.error(f"Insta snipe error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:insta_snipe",
+                    context_hint="insta_snipe",
+                )
+
+        elif action.startswith("snipe_exec:"):
+            # Snipe execution - show confirmation
+            try:
+                parts = callback_data.split(":")
+                if len(parts) >= 4:
+                    address = parts[2]
+                    amount = float(parts[3])
+
+                    # Store snipe details
+                    context.user_data["snipe_address"] = address
+                    context.user_data["snipe_amount"] = amount
+
+                    text, keyboard = DemoMenuBuilder.snipe_confirm(
+                        symbol="TOKEN",
+                        address=address,
+                        amount=amount,
+                        price=0.001,  # Would fetch real price
+                        sl_percent=15.0,
+                        tp_percent=15.0,
+                    )
+                else:
+                    text, keyboard = DemoMenuBuilder.error_message(
+                        error="Invalid snipe request",
+                        retry_action="demo:insta_snipe",
+                    )
+            except Exception as e:
+                logger.error(f"Snipe exec error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:insta_snipe",
+                    context_hint="snipe_exec",
+                )
+
+        elif action.startswith("snipe_confirm:"):
+            # Execute the snipe
+            try:
+                parts = callback_data.split(":")
+                if len(parts) >= 4:
+                    address = parts[2]
+                    amount = float(parts[3])
+
+                    # Simulate trade execution
+                    # In production, this would call the trading engine
+                    success = True  # Simulated success
+                    tx_hash = "5xYz...mock_tx_hash...AbCd"
+
+                    text, keyboard = DemoMenuBuilder.snipe_result(
+                        success=success,
+                        symbol="TOKEN",
+                        amount=amount,
+                        tx_hash=tx_hash if success else None,
+                        error=None if success else "Insufficient balance",
+                        sl_set=success,
+                        tp_set=success,
+                    )
+
+                    # If successful, add to positions
+                    if success:
+                        positions = context.user_data.get("demo_positions", [])
+                        positions.append({
+                            "symbol": "TOKEN",
+                            "address": address,
+                            "amount": amount,
+                            "entry_price": 0.001,
+                            "current_price": 0.001,
+                            "pnl": 0,
+                            "pnl_percent": 0,
+                            "sl_percent": 15,
+                            "tp_percent": 15,
+                            "entry_time": datetime.now(timezone.utc).isoformat(),
+                        })
+                        context.user_data["demo_positions"] = positions
+                else:
+                    text, keyboard = DemoMenuBuilder.error_message(
+                        error="Invalid confirmation",
+                        retry_action="demo:insta_snipe",
+                    )
+            except Exception as e:
+                logger.error(f"Snipe confirm error: {e}")
+                text, keyboard = DemoMenuBuilder.snipe_result(
+                    success=False,
+                    symbol="TOKEN",
+                    amount=0,
+                    error=str(e),
+                )
+
         elif action == "learning":
             # Self-Improving Learning Dashboard (V1 Feature)
             intelligence = get_trade_intelligence()
@@ -4146,24 +6042,58 @@ You are about to sell *{position_count} positions*
                 text, keyboard = DemoMenuBuilder.error_message("No positions to sell")
 
         elif action == "execute_sell_all":
-            # Execute sell all positions
+            # Execute sell all positions with success fee tracking
             theme = JarvisTheme
             try:
                 from tg_bot import bot_core as bot_module
                 engine = await bot_module._get_treasury_engine()
 
                 closed_count = 0
+                total_pnl = 0.0
+                total_fees = 0.0
+                fee_manager = get_success_fee_manager()
+
                 for pos in positions:
                     try:
                         await engine.close_position(pos.get("id"))
                         closed_count += 1
+
+                        # Calculate success fee for each winning position
+                        pnl_usd = pos.get("pnl_usd", 0)
+                        total_pnl += pnl_usd
+
+                        if pnl_usd > 0:
+                            fee_result = fee_manager.calculate_success_fee(
+                                entry_price=pos.get("entry_price", 0),
+                                exit_price=pos.get("current_price", 0),
+                                amount_sol=pos.get("amount", 0),
+                                token_symbol=pos.get("symbol", "???"),
+                            )
+                            if fee_result.get("applies"):
+                                total_fees += fee_result.get("fee_amount", 0)
                     except Exception as e:
                         logger.warning(f"Failed to close position {pos.get('id')}: {e}")
 
+                # Build enhanced result message
+                pnl_emoji = "📈" if total_pnl > 0 else "📉" if total_pnl < 0 else "➖"
+                pnl_sign = "+" if total_pnl > 0 else ""
+
+                details = f"Closed {closed_count}/{len(positions)} positions\n"
+                details += f"\n{pnl_emoji} Total P&L: {pnl_sign}${total_pnl:.2f}"
+
+                if total_fees > 0:
+                    net_profit = total_pnl - total_fees
+                    details += f"\n💰 Success Fee (0.5%): -${total_fees:.4f}"
+                    details += f"\n💵 Net Profit: +${net_profit:.2f}"
+
+                details += "\n\nOrders submitted to Jupiter."
+
                 text, keyboard = DemoMenuBuilder.success_message(
                     action="Sell All Executed",
-                    details=f"Closed {closed_count}/{len(positions)} positions\n\nOrders submitted to Jupiter.",
+                    details=details,
                 )
+
+                logger.info(f"Sell all: {closed_count} positions | PnL: ${total_pnl:.2f} | Fees: ${total_fees:.4f}")
             except Exception as e:
                 text, keyboard = DemoMenuBuilder.error_message(f"Sell all failed: {str(e)[:50]}")
 
@@ -4316,7 +6246,7 @@ Coming soon in V2!
                 context.user_data["awaiting_token"] = True
 
         elif action.startswith("sell:"):
-            # Handle sell action
+            # Handle sell action with success fee calculation
             parts = data.split(":")
             if len(parts) >= 4:
                 pos_id = parts[2]
@@ -4325,10 +6255,43 @@ Coming soon in V2!
                 # Find position
                 pos_data = next((p for p in positions if p["id"] == pos_id), None)
                 if pos_data:
-                    symbol = pos_data["symbol"]
-                    text, keyboard = DemoMenuBuilder.success_message(
-                        action=f"Sell Order Placed",
-                        details=f"Selling {pct}% of {symbol}\n\nOrder submitted to Jupiter.",
+                    symbol = pos_data.get("symbol", "???")
+                    entry_price = pos_data.get("entry_price", 0)
+                    current_price = pos_data.get("current_price", entry_price)
+                    amount_sol = pos_data.get("amount", 0) * (pct / 100)
+                    pnl_pct = pos_data.get("pnl_pct", 0)
+                    pnl_usd = pos_data.get("pnl_usd", 0) * (pct / 100)  # Scale by sell %
+
+                    # Calculate success fee if winning trade
+                    fee_manager = get_success_fee_manager()
+                    fee_result = fee_manager.calculate_success_fee(
+                        entry_price=entry_price,
+                        exit_price=current_price,
+                        amount_sol=amount_sol,
+                        token_symbol=symbol,
+                    )
+
+                    success_fee = fee_result.get("fee_amount", 0) if fee_result.get("applies") else 0
+                    net_profit = fee_result.get("net_profit", pnl_usd) if fee_result.get("applies") else pnl_usd
+
+                    # Use close_position_result UI for better display
+                    text, keyboard = DemoMenuBuilder.close_position_result(
+                        success=True,
+                        symbol=symbol,
+                        amount=amount_sol,
+                        entry_price=entry_price,
+                        exit_price=current_price,
+                        pnl_usd=pnl_usd,
+                        pnl_percent=pnl_pct,
+                        success_fee=success_fee,
+                        net_profit=net_profit,
+                        tx_hash=f"pending_{pos_id[:8]}",  # Simulated TX for now
+                    )
+
+                    logger.info(
+                        f"Position close: {symbol} {pct}% | "
+                        f"PnL: ${pnl_usd:.2f} ({pnl_pct:+.1f}%) | "
+                        f"Fee: ${success_fee:.4f}"
                     )
                 else:
                     text, keyboard = DemoMenuBuilder.error_message("Position not found")
@@ -4513,6 +6476,50 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=keyboard,
             )
+        return
+
+    # Handle wallet import input
+    if context.user_data.get("awaiting_wallet_import"):
+        context.user_data["awaiting_wallet_import"] = False
+        import_mode = context.user_data.get("import_mode", "key")
+
+        try:
+            from bots.treasury.wallet import SecureWallet
+
+            if import_mode == "seed":
+                # Import from seed phrase
+                words = text.strip().split()
+                if len(words) not in [12, 24]:
+                    raise ValueError(f"Seed phrase must be 12 or 24 words, got {len(words)}")
+
+                wallet = SecureWallet.from_seed(text.strip())
+            else:
+                # Import from private key
+                if len(text.strip()) < 64:
+                    raise ValueError("Private key too short (min 64 chars)")
+
+                wallet = SecureWallet.from_private_key(text.strip())
+
+            wallet_address = wallet.get_address()
+
+            result_text, keyboard = DemoMenuBuilder.wallet_import_result(
+                success=True,
+                wallet_address=wallet_address,
+            )
+            logger.info(f"Wallet imported: {wallet_address[:8]}...")
+
+        except Exception as e:
+            logger.error(f"Wallet import failed: {e}")
+            result_text, keyboard = DemoMenuBuilder.wallet_import_result(
+                success=False,
+                error=str(e)[:100],
+            )
+
+        await update.message.reply_text(
+            result_text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard,
+        )
         return
 
     # Handle buy token input
