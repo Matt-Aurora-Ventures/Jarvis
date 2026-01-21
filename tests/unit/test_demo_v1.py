@@ -584,6 +584,86 @@ class TestDemoMenuBuilder:
         assert "IRREVERSIBLE" in text
         assert keyboard is not None
 
+    def test_settings_menu_with_ai_auto_trade(self):
+        """Test settings menu shows AI auto-trade status."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.settings_menu(
+            is_live=False,
+            ai_auto_trade=True,
+        )
+
+        assert "SETTINGS" in text
+        assert "AI Auto-Trade" in text
+        assert "ENABLED" in text
+        assert keyboard is not None
+        # Check for AI Auto-Trade Settings button
+        assert any("AI Auto-Trade" in str(btn) for row in keyboard.inline_keyboard for btn in row)
+
+    def test_ai_auto_trade_settings_view(self):
+        """Test AI auto-trade settings view."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.ai_auto_trade_settings(
+            enabled=True,
+            risk_level="AGGRESSIVE",
+            max_position_size=1.0,
+            min_confidence=0.8,
+        )
+
+        assert "AI AUTO-TRADE SETTINGS" in text
+        assert "ENABLED" in text
+        assert "AGGRESSIVE" in text
+        assert "1" in text  # Max position
+        assert "80%" in text  # Confidence
+        assert keyboard is not None
+        # Multiple rows for risk levels and settings
+        assert len(keyboard.inline_keyboard) >= 6
+
+    def test_ai_auto_trade_settings_disabled(self):
+        """Test AI auto-trade settings when disabled."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.ai_auto_trade_settings(
+            enabled=False,
+            risk_level="CONSERVATIVE",
+        )
+
+        assert "DISABLED" in text
+        assert "CONSERVATIVE" in text
+        assert "Enable AI Trading" in str(keyboard.inline_keyboard)
+
+    def test_ai_auto_trade_status_view(self):
+        """Test AI auto-trade status view."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.ai_auto_trade_status(
+            enabled=True,
+            trades_today=5,
+            pnl_today=125.50,
+            last_trade="BONK +42%",
+        )
+
+        assert "AI TRADING STATUS" in text
+        assert "ACTIVE" in text
+        assert "5" in text  # Trades
+        assert "125.50" in text  # PnL
+        assert "BONK" in text
+        assert keyboard is not None
+
+    def test_ai_auto_trade_status_paused(self):
+        """Test AI auto-trade status when paused."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.ai_auto_trade_status(
+            enabled=False,
+            pnl_today=-50.0,
+        )
+
+        assert "PAUSED" in text
+        assert "50.00" in text  # PnL shown
+        assert "idle" in text.lower()
+
 
 class TestSentimentIntegration:
     """Test sentiment engine integration."""
