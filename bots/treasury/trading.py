@@ -97,6 +97,14 @@ try:
 except ImportError:
     COINGLASS_AVAILABLE = False
 
+# Import Bags.fm trade adapter for partner fee earning
+try:
+    from core.trading.bags_adapter import BagsTradeAdapter
+    BAGS_AVAILABLE = True
+except ImportError:
+    BAGS_AVAILABLE = False
+    BagsTradeAdapter = None
+
 # Initialize structured logger if available, fallback to standard logger
 if STRUCTURED_LOGGING_AVAILABLE:
     logger = get_structured_logger("jarvis.trading", service="trading_engine")
@@ -506,6 +514,7 @@ class TradingEngine:
         max_positions: int = 50,
         dry_run: bool = True,  # Start in dry run mode
         enable_signals: bool = True,  # Enable advanced signal analysis
+        use_bags: bool = None,  # Use Bags.fm for trading (earns partner fees)
     ):
         """
         Initialize trading engine.
@@ -518,6 +527,7 @@ class TradingEngine:
             max_positions: Maximum concurrent positions
             dry_run: If True, simulate trades without execution
             enable_signals: Enable advanced signal analysis (liquidation, MA, etc.)
+            use_bags: Use Bags.fm as primary executor (env: USE_BAGS_TRADING)
         """
         self.wallet = wallet
         self.jupiter = jupiter
@@ -529,6 +539,25 @@ class TradingEngine:
         self.positions: Dict[str, Position] = {}
         self.trade_history: List[Position] = []
         self.order_manager: Optional[LimitOrderManager] = None
+
+        # Initialize Bags.fm adapter for partner fee earning
+        # Bags routes trades through bags.fm first, falls back to Jupiter
+        self.bags_adapter: Optional[BagsTradeAdapter] = None
+        if use_bags is None:
+            use_bags = os.environ.get("USE_BAGS_TRADING", "").lower() in ("1", "true", "yes")
+
+        if use_bags and BAGS_AVAILABLE:
+            try:
+                self.bags_adapter = BagsTradeAdapter(
+                    partner_code=os.environ.get("BAGS_PARTNER_CODE"),
+                    enable_fallback=True,  # Fall back to Jupiter on failure
+                    wallet_keypair=wallet.keypair if hasattr(wallet, 'keypair') else None,
+                )
+                logger.info("Bags.fm trade adapter initialized (earns partner fees)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Bags adapter: {e} - using Jupiter only")
+        elif use_bags and not BAGS_AVAILABLE:
+            logger.warning("USE_BAGS_TRADING enabled but Bags adapter not available")
 
         # Initialize advanced signal analyzers
         self._decision_matrix: Optional[DecisionMatrix] = None
@@ -560,6 +589,66 @@ class TradingEngine:
 
         # Load existing state
         self._load_state()
+
+    # ==========================================================================
+    # SWAP EXECUTION - Routes through Bags.fm (with Jupiter fallback) or Jupiter
+    # ==========================================================================
+
+    async def _execute_swap(
+        self,
+        quote: SwapQuote,
+        input_mint: str = None,
+        output_mint: str = None,
+    ) -> SwapResult:
+        """
+        Execute a swap, routing through Bags.fm if available (earns partner fees).
+
+        Falls back to Jupiter if Bags fails or isn't configured.
+
+        Args:
+            quote: SwapQuote from Jupiter (used for Jupiter execution or as fallback)
+            input_mint: Input token mint (optional, extracted from quote if not provided)
+            output_mint: Output token mint (optional, extracted from quote if not provided)
+
+        Returns:
+            SwapResult with success status and transaction details
+        """
+        # Extract mints from quote if not provided
+        if input_mint is None:
+            input_mint = quote.input_mint
+        if output_mint is None:
+            output_mint = quote.output_mint
+
+        # Try Bags.fm first if available (earns partner fees)
+        if self.bags_adapter is not None:
+            try:
+                logger.info(f"Executing swap via Bags.fm: {input_mint[:8]}... -> {output_mint[:8]}...")
+
+                signature, output_amount = await self.bags_adapter.execute_swap(
+                    input_mint=input_mint,
+                    output_mint=output_mint,
+                    amount=quote.in_amount,
+                    slippage=quote.slippage_bps / 100.0,  # Convert bps to percentage
+                )
+
+                # Build SwapResult compatible with existing code
+                return SwapResult(
+                    success=True,
+                    signature=signature,
+                    input_mint=input_mint,
+                    output_mint=output_mint,
+                    in_amount=quote.in_amount,
+                    out_amount=output_amount,
+                    price=quote.price if hasattr(quote, 'price') else 0.0,
+                    error=None,
+                )
+
+            except Exception as bags_error:
+                logger.warning(f"Bags.fm swap failed, falling back to Jupiter: {bags_error}")
+                # Fall through to Jupiter execution
+
+        # Execute via Jupiter (fallback or primary if Bags not configured)
+        return await self.jupiter.execute_swap(quote, self.wallet)
 
     # ==========================================================================
     # TOKEN SAFETY METHODS - Protect against rug pulls and illiquid tokens
@@ -1831,8 +1920,8 @@ class TradingEngine:
             if not quote:
                 return False, "Failed to get swap quote", None
 
-            # Execute swap
-            result = await self.jupiter.execute_swap(quote, self.wallet)
+            # Execute swap (routes through Bags.fm if available, falls back to Jupiter)
+            result = await self._execute_swap(quote)
 
             if not result.success:
                 return False, f"Swap failed: {result.error}", None
@@ -2118,7 +2207,8 @@ class TradingEngine:
                 }, user_id, False)
                 return False, "Failed to get close quote"
 
-            result = await self.jupiter.execute_swap(quote, self.wallet)
+            # Execute swap (routes through Bags.fm if available, falls back to Jupiter)
+            result = await self._execute_swap(quote)
 
             if not result.success:
                 self._log_audit("CLOSE_POSITION_FAILED", {
@@ -2331,7 +2421,8 @@ class TradingEngine:
                             )
 
                             if quote:
-                                result = await self.jupiter.execute_swap(quote, self.wallet)
+                                # Execute swap (routes through Bags.fm if available)
+                                result = await self._execute_swap(quote)
                                 if result.success:
                                     logger.info(f"Sold {position.token_symbol} via {reason}: {result.signature}")
                     except Exception as sell_err:
