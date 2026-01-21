@@ -201,10 +201,15 @@ class ClaudeCLIHandler:
     All output is triple-scrubbed before returning.
     """
 
-    # Known Claude CLI locations
+    # Known Claude CLI locations (Windows + Linux)
     CLAUDE_PATHS = [
+        # Windows paths
         r"C:\Users\lucid\AppData\Roaming\npm\claude.cmd",
         r"C:\Users\lucid\AppData\Roaming\npm\claude",
+        # Linux paths (VPS)
+        "/usr/local/bin/claude",
+        "/home/ubuntu/.local/bin/claude",
+        "/home/jarvis/.local/bin/claude",
         "claude",  # fallback to PATH
     ]
 
@@ -347,10 +352,13 @@ class ClaudeCLIHandler:
             # Allow additional admins only if explicitly passed
             self.admin_ids.update(admin_user_ids)
 
-        self.working_dir = os.environ.get(
-            "JARVIS_WORKING_DIR",
+        # Determine working directory (Windows or Linux)
+        default_dir = (
             r"c:\Users\lucid\OneDrive\Desktop\Projects\Jarvis"
+            if os.name == "nt"
+            else "/home/ubuntu/Jarvis"
         )
+        self.working_dir = os.environ.get("JARVIS_WORKING_DIR", default_dir)
         self._active_process: Optional[asyncio.subprocess.Process] = None
         self._claude_path = self._find_claude()
         self._conversation_context: List[Dict] = []
