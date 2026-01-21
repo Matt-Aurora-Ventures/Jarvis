@@ -858,12 +858,14 @@ Use the buy buttons to enter a trade!
         auto_sell: bool = True,
         take_profit: float = 50.0,
         stop_loss: float = 20.0,
+        ai_auto_trade: bool = False,
     ) -> Tuple[str, InlineKeyboardMarkup]:
-        """Build settings menu."""
+        """Build settings menu with AI auto-trade option."""
         theme = JarvisTheme
 
         mode = f"{theme.LIVE} LIVE" if is_live else f"{theme.PAPER} PAPER"
         auto_status = f"{theme.SUCCESS} ON" if auto_sell else f"{theme.ERROR} OFF"
+        ai_status = f"{theme.ROCKET} ENABLED" if ai_auto_trade else f"{theme.ERROR} DISABLED"
 
         text = f"""
 {theme.SETTINGS} *SETTINGS*
@@ -875,10 +877,13 @@ Use the buy buttons to enter a trade!
 *Slippage*
 └ {slippage}%
 
-*Auto-Sell*
+*Auto-Sell (TP/SL)*
 └ Status: {auto_status}
 ├ Take Profit: +{take_profit}%
 └ Stop Loss: -{stop_loss}%
+
+*🤖 AI Auto-Trade*
+└ Status: {ai_status}
 
 ━━━━━━━━━━━━━━━━━━━━━
 """
@@ -910,6 +915,178 @@ Use the buy buttons to enter a trade!
                 InlineKeyboardButton("SL: 10%", callback_data="demo:sl:10"),
                 InlineKeyboardButton("SL: 20%", callback_data="demo:sl:20"),
                 InlineKeyboardButton("SL: 50%", callback_data="demo:sl:50"),
+            ],
+            # AI Auto-Trade Settings
+            [
+                InlineKeyboardButton(f"🤖 AI Auto-Trade Settings", callback_data="demo:ai_auto_settings"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def ai_auto_trade_settings(
+        enabled: bool = False,
+        risk_level: str = "MEDIUM",
+        max_position_size: float = 0.5,
+        min_confidence: float = 0.7,
+        daily_limit: float = 2.0,
+        cooldown_minutes: int = 30,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        AI Auto-Trade Settings - Configure autonomous trading.
+
+        Features:
+        - Enable/disable autonomous trading
+        - Risk level (Conservative, Medium, Aggressive)
+        - Position sizing limits
+        - Confidence threshold for entries
+        - Daily trade limits
+        - Cooldown between trades
+        """
+        theme = JarvisTheme
+
+        status_emoji = f"{theme.ROCKET}" if enabled else "⚪"
+        status_text = "ENABLED" if enabled else "DISABLED"
+
+        risk_emojis = {
+            "CONSERVATIVE": "🐢",
+            "MEDIUM": "⚖️",
+            "AGGRESSIVE": "🔥",
+        }
+        risk_emoji = risk_emojis.get(risk_level, "⚖️")
+
+        text = f"""
+{theme.AUTO} *AI AUTO-TRADE SETTINGS*
+━━━━━━━━━━━━━━━━━━━━━
+
+{status_emoji} *Status:* {status_text}
+
+{risk_emoji} *Risk Level:* {risk_level}
+├ Conservative: Small positions, high confidence
+├ Medium: Balanced approach
+└ Aggressive: Larger positions, more trades
+
+📊 *Parameters*
+├ Max Position: {max_position_size} SOL
+├ Min Confidence: {min_confidence * 100:.0f}%
+├ Daily Limit: {daily_limit} SOL
+└ Cooldown: {cooldown_minutes} min
+
+━━━━━━━━━━━━━━━━━━━━━
+
+{theme.WARNING} AI trades based on:
+• Sentiment analysis (Grok AI)
+• Market regime detection
+• Technical indicators
+• Trade intelligence learnings
+
+"""
+
+        keyboard = [
+            # Toggle ON/OFF
+            [
+                InlineKeyboardButton(
+                    f"{'🔴 Disable AI Trading' if enabled else '🟢 Enable AI Trading'}",
+                    callback_data=f"demo:ai_auto_toggle:{not enabled}"
+                ),
+            ],
+            # Risk Level Selection
+            [
+                InlineKeyboardButton(
+                    "🐢 Conservative" + (" ✓" if risk_level == "CONSERVATIVE" else ""),
+                    callback_data="demo:ai_risk:CONSERVATIVE"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "⚖️ Medium" + (" ✓" if risk_level == "MEDIUM" else ""),
+                    callback_data="demo:ai_risk:MEDIUM"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔥 Aggressive" + (" ✓" if risk_level == "AGGRESSIVE" else ""),
+                    callback_data="demo:ai_risk:AGGRESSIVE"
+                ),
+            ],
+            # Max Position Size
+            [
+                InlineKeyboardButton("Max: 0.1 SOL", callback_data="demo:ai_max:0.1"),
+                InlineKeyboardButton("Max: 0.5 SOL", callback_data="demo:ai_max:0.5"),
+                InlineKeyboardButton("Max: 1 SOL", callback_data="demo:ai_max:1"),
+            ],
+            # Min Confidence
+            [
+                InlineKeyboardButton("Conf: 60%", callback_data="demo:ai_conf:0.6"),
+                InlineKeyboardButton("Conf: 70%", callback_data="demo:ai_conf:0.7"),
+                InlineKeyboardButton("Conf: 80%", callback_data="demo:ai_conf:0.8"),
+            ],
+            # Back
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back to Settings", callback_data="demo:settings"),
+            ],
+        ]
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def ai_auto_trade_status(
+        enabled: bool,
+        trades_today: int = 0,
+        pnl_today: float = 0.0,
+        last_trade: str = None,
+        next_opportunity: str = None,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """
+        AI Auto-Trade Status View - Show current AI trading activity.
+        """
+        theme = JarvisTheme
+
+        status_emoji = f"{theme.ROCKET}" if enabled else "⚪"
+        pnl_emoji = theme.PROFIT if pnl_today >= 0 else theme.LOSS
+        pnl_sign = "+" if pnl_today >= 0 else ""
+
+        text = f"""
+{theme.AUTO} *AI TRADING STATUS*
+━━━━━━━━━━━━━━━━━━━━━
+
+{status_emoji} *Auto-Trade:* {'ACTIVE' if enabled else 'PAUSED'}
+
+📈 *Today's Activity*
+├ Trades: {trades_today}
+├ {pnl_emoji} P&L: {pnl_sign}${abs(pnl_today):.2f}
+"""
+        if last_trade:
+            text += f"└ Last Trade: {last_trade}\n"
+
+        if next_opportunity:
+            text += f"""
+🎯 *Next Opportunity*
+└ {next_opportunity}
+"""
+
+        text += f"""
+━━━━━━━━━━━━━━━━━━━━━
+
+{theme.AUTO} JARVIS is {'monitoring markets' if enabled else 'idle'}
+"""
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    f"{'⏸️ Pause' if enabled else '▶️ Resume'}",
+                    callback_data=f"demo:ai_auto_toggle:{not enabled}"
+                ),
+            ],
+            [
+                InlineKeyboardButton("📊 View AI Trades", callback_data="demo:ai_trades_history"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.SETTINGS} AI Settings", callback_data="demo:ai_auto_settings"),
             ],
             [
                 InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
@@ -2235,7 +2412,121 @@ _QR code coming in V2_
             )
 
         elif action == "settings":
-            text, keyboard = DemoMenuBuilder.settings_menu(is_live=is_live)
+            ai_auto = context.user_data.get("ai_auto_trade", False)
+            text, keyboard = DemoMenuBuilder.settings_menu(
+                is_live=is_live,
+                ai_auto_trade=ai_auto,
+            )
+
+        elif action == "ai_auto_settings":
+            # AI Auto-Trade Settings
+            ai_settings = context.user_data.get("ai_settings", {})
+            text, keyboard = DemoMenuBuilder.ai_auto_trade_settings(
+                enabled=ai_settings.get("enabled", False),
+                risk_level=ai_settings.get("risk_level", "MEDIUM"),
+                max_position_size=ai_settings.get("max_position_size", 0.5),
+                min_confidence=ai_settings.get("min_confidence", 0.7),
+                daily_limit=ai_settings.get("daily_limit", 2.0),
+                cooldown_minutes=ai_settings.get("cooldown_minutes", 30),
+            )
+
+        elif action.startswith("ai_auto_toggle:"):
+            # Toggle AI auto-trade
+            parts = data.split(":")
+            new_state = parts[2].lower() == "true" if len(parts) >= 3 else False
+
+            # Update settings
+            ai_settings = context.user_data.get("ai_settings", {})
+            ai_settings["enabled"] = new_state
+            context.user_data["ai_settings"] = ai_settings
+            context.user_data["ai_auto_trade"] = new_state
+
+            action_text = "ENABLED" if new_state else "DISABLED"
+            text, keyboard = DemoMenuBuilder.success_message(
+                action=f"AI Auto-Trade {action_text}",
+                details=f"Autonomous trading is now {'active' if new_state else 'paused'}.\n\n{'JARVIS will monitor markets and execute trades based on your settings.' if new_state else 'JARVIS will not execute trades automatically.'}",
+            )
+
+        elif action.startswith("ai_risk:"):
+            # Set AI risk level
+            parts = data.split(":")
+            risk_level = parts[2] if len(parts) >= 3 else "MEDIUM"
+
+            ai_settings = context.user_data.get("ai_settings", {})
+            ai_settings["risk_level"] = risk_level
+            context.user_data["ai_settings"] = ai_settings
+
+            # Return to settings view
+            text, keyboard = DemoMenuBuilder.ai_auto_trade_settings(
+                enabled=ai_settings.get("enabled", False),
+                risk_level=risk_level,
+                max_position_size=ai_settings.get("max_position_size", 0.5),
+                min_confidence=ai_settings.get("min_confidence", 0.7),
+            )
+
+        elif action.startswith("ai_max:"):
+            # Set max position size
+            parts = data.split(":")
+            max_size = float(parts[2]) if len(parts) >= 3 else 0.5
+
+            ai_settings = context.user_data.get("ai_settings", {})
+            ai_settings["max_position_size"] = max_size
+            context.user_data["ai_settings"] = ai_settings
+
+            text, keyboard = DemoMenuBuilder.ai_auto_trade_settings(
+                enabled=ai_settings.get("enabled", False),
+                risk_level=ai_settings.get("risk_level", "MEDIUM"),
+                max_position_size=max_size,
+                min_confidence=ai_settings.get("min_confidence", 0.7),
+            )
+
+        elif action.startswith("ai_conf:"):
+            # Set min confidence threshold
+            parts = data.split(":")
+            min_conf = float(parts[2]) if len(parts) >= 3 else 0.7
+
+            ai_settings = context.user_data.get("ai_settings", {})
+            ai_settings["min_confidence"] = min_conf
+            context.user_data["ai_settings"] = ai_settings
+
+            text, keyboard = DemoMenuBuilder.ai_auto_trade_settings(
+                enabled=ai_settings.get("enabled", False),
+                risk_level=ai_settings.get("risk_level", "MEDIUM"),
+                max_position_size=ai_settings.get("max_position_size", 0.5),
+                min_confidence=min_conf,
+            )
+
+        elif action == "ai_auto_status":
+            # AI Auto-Trade Status View
+            ai_settings = context.user_data.get("ai_settings", {})
+            text, keyboard = DemoMenuBuilder.ai_auto_trade_status(
+                enabled=ai_settings.get("enabled", False),
+                trades_today=context.user_data.get("ai_trades_today", 0),
+                pnl_today=context.user_data.get("ai_pnl_today", 0.0),
+            )
+
+        elif action == "ai_trades_history":
+            # AI Trades History (placeholder)
+            theme = JarvisTheme
+            text = f"""
+{theme.AUTO} *AI TRADE HISTORY*
+━━━━━━━━━━━━━━━━━━━━━
+
+_No AI trades executed yet_
+
+When AI auto-trading is enabled,
+JARVIS will:
+• Analyze market conditions
+• Find high-confidence opportunities
+• Execute trades within your limits
+• Record all trades here
+
+━━━━━━━━━━━━━━━━━━━━━
+_Feature tracking all AI trades coming in V2_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:ai_auto_settings")],
+            ])
 
         elif action == "balance":
             text, keyboard = DemoMenuBuilder.wallet_menu(
