@@ -320,6 +320,7 @@ class DemoMenuBuilder:
         open_positions: int = 0,
         total_pnl: float = 0.0,
         market_regime: Dict[str, Any] = None,
+        ai_auto_enabled: bool = False,
     ) -> Tuple[str, InlineKeyboardMarkup]:
         """
         Build the main wallet/trading menu - Trojan style with AI Sentiment.
@@ -357,11 +358,19 @@ class DemoMenuBuilder:
         # Risk emoji
         risk_emoji = {"LOW": "🟢", "NORMAL": "🟡", "HIGH": "🟠", "EXTREME": "🔴"}.get(risk_level, "⚪")
 
+        # AI Auto-trade status
+        ai_status = f"{theme.ROCKET} AUTO-TRADE ACTIVE" if ai_auto_enabled else ""
+
         # Build message with beautiful formatting + AI sentiment
         text = f"""
 {theme.ROCKET} *JARVIS AI TRADING* {theme.ROCKET}
 ━━━━━━━━━━━━━━━━━━━━━
+"""
+        # Show AI auto-trade status if enabled
+        if ai_auto_enabled:
+            text += f"\n{ai_status}\n"
 
+        text += f"""
 {theme.AUTO} *AI Market Regime*
 ┌ Market: {regime_emoji} *{regime_display}*
 ├ Risk: {risk_emoji} *{risk_level}*
@@ -2199,6 +2208,7 @@ async def demo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning(f"Could not load treasury data: {e}")
 
         # Build and send the beautiful main menu with AI features
+        ai_auto_enabled = context.user_data.get("ai_auto_trade", False)
         text, keyboard = DemoMenuBuilder.main_menu(
             wallet_address=wallet_address,
             sol_balance=sol_balance,
@@ -2207,6 +2217,7 @@ async def demo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             open_positions=open_positions,
             total_pnl=total_pnl,
             market_regime=market_regime,
+            ai_auto_enabled=ai_auto_enabled,
         )
 
         await update.message.reply_text(
@@ -2289,6 +2300,8 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         market_regime = await get_market_regime()
 
         # Route to appropriate handler
+        ai_auto_enabled = context.user_data.get("ai_auto_trade", False)
+
         if action in ("main", "refresh"):
             text, keyboard = DemoMenuBuilder.main_menu(
                 wallet_address=wallet_address,
@@ -2298,6 +2311,7 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 open_positions=open_positions_count,
                 total_pnl=total_pnl,
                 market_regime=market_regime,
+                ai_auto_enabled=ai_auto_enabled,
             )
 
         elif action == "wallet_menu":
@@ -3106,6 +3120,7 @@ Coming soon in V2!
                 open_positions=open_positions_count,
                 total_pnl=total_pnl,
                 market_regime=market_regime,
+                ai_auto_enabled=ai_auto_enabled,
             )
 
         # Edit the message with new content

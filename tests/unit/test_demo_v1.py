@@ -174,6 +174,20 @@ class TestDemoMenuBuilder:
         assert keyboard is not None
         assert len(keyboard.inline_keyboard) > 0
 
+    def test_main_menu_with_ai_auto_enabled(self):
+        """Test main menu shows AI auto-trade status when enabled."""
+        from tg_bot.handlers.demo import DemoMenuBuilder
+
+        text, keyboard = DemoMenuBuilder.main_menu(
+            wallet_address="AbCdEfGhIjKlMnOpQrStUvWxYz123456789012345",
+            sol_balance=10.5,
+            usd_value=2100.0,
+            ai_auto_enabled=True,
+        )
+
+        assert "JARVIS" in text
+        assert "AUTO-TRADE ACTIVE" in text
+
     def test_learning_dashboard_build(self):
         """Test learning dashboard can be built."""
         from tg_bot.handlers.demo import DemoMenuBuilder
