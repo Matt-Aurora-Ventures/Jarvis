@@ -866,6 +866,43 @@ async def main():
     except ImportError:
         logger.warning("Context engine not available - startup tracking disabled")
 
+    # ==========================================================
+    # DURABLE RUNS: Check for incomplete runs from previous crash
+    # ==========================================================
+    try:
+        from core.durability import get_run_ledger
+
+        run_ledger = get_run_ledger()
+        incomplete_runs = await run_ledger.get_incomplete_runs()
+
+        if incomplete_runs:
+            print(f"\n  Found {len(incomplete_runs)} incomplete runs from previous session:")
+            for run in incomplete_runs:
+                current_step = run.steps[run.current_step_index].name if run.steps else "unknown"
+                print(f"    - {run.intent} (step: {current_step}, state: {run.state.value})")
+
+                # Mark for recovery (increments recovery_count)
+                await run_ledger.mark_for_recovery(run.id)
+
+                # If too many recovery attempts, abort
+                if run.recovery_count >= 3:
+                    logger.warning(f"Run {run.id} exceeded recovery limit, aborting")
+                    await run_ledger.abort_run(run.id, "Exceeded recovery limit")
+                else:
+                    logger.info(f"Run {run.id} marked for recovery (attempt #{run.recovery_count + 1})")
+
+            print()
+
+        # Log stats
+        stats = await run_ledger.get_stats()
+        logger.info(f"Run ledger stats: {stats.get('total_runs', 0)} total runs, "
+                    f"by_state={stats.get('by_state', {})}")
+
+    except ImportError:
+        logger.debug("Durable runs not available - crash recovery disabled")
+    except Exception as e:
+        logger.warning(f"Durable runs check failed: {e}")
+
     # Validate configuration before starting
     if not validate_startup():
         print("Fix configuration issues and restart.")
@@ -1000,6 +1037,27 @@ async def main():
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received")
     finally:
+        # ==========================================================
+        # DURABLE RUNS: Mark incomplete runs as paused on shutdown
+        # ==========================================================
+        try:
+            from core.durability import get_run_ledger, RunState
+
+            run_ledger = get_run_ledger()
+            incomplete_runs = await run_ledger.get_incomplete_runs()
+
+            for run in incomplete_runs:
+                # Don't abort - just log that we're shutting down cleanly
+                logger.info(f"Clean shutdown: run {run.id} ({run.intent}) will resume on restart")
+
+            # Cleanup old runs
+            deleted = await run_ledger.cleanup_old_runs(days=30)
+            if deleted > 0:
+                logger.info(f"Cleaned up {deleted} old runs")
+
+        except Exception as e:
+            logger.debug(f"Durable runs cleanup skipped: {e}")
+
         # Trigger shutdown via manager if available
         if SHUTDOWN_MANAGER_AVAILABLE:
             shutdown_mgr = get_shutdown_manager()
