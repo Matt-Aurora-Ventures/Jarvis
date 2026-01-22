@@ -732,28 +732,30 @@ class SuccessFeeManager:
 
 
 # Singleton instances
-_bags_client: Optional[BagsAPIClient] = None
-_fee_manager: Optional[SuccessFeeManager] = None
+_bags_clients: Dict[str, BagsAPIClient] = {}
+_fee_managers: Dict[str, SuccessFeeManager] = {}
 
 
-def get_bags_client() -> BagsAPIClient:
-    """Get Bags API client singleton"""
-    global _bags_client
+def get_bags_client(profile: Optional[str] = None) -> BagsAPIClient:
+    """Get Bags API client singleton (optionally per profile)."""
+    key = (profile or "default").strip().lower()
+    if key not in _bags_clients:
+        api_key = None
+        partner_key = None
+        if profile and key != "default":
+            prefix = f"{key.upper()}_"
+            api_key = os.environ.get(f"{prefix}BAGS_API_KEY") or os.environ.get("BAGS_API_KEY")
+            partner_key = os.environ.get(f"{prefix}BAGS_PARTNER_KEY") or os.environ.get("BAGS_PARTNER_KEY")
+        _bags_clients[key] = BagsAPIClient(api_key=api_key, partner_key=partner_key)
+    return _bags_clients[key]
 
-    if _bags_client is None:
-        _bags_client = BagsAPIClient()
 
-    return _bags_client
-
-
-def get_success_fee_manager() -> SuccessFeeManager:
-    """Get Success Fee Manager singleton"""
-    global _fee_manager
-
-    if _fee_manager is None:
-        _fee_manager = SuccessFeeManager(bags_client=get_bags_client())
-
-    return _fee_manager
+def get_success_fee_manager(profile: Optional[str] = None) -> SuccessFeeManager:
+    """Get Success Fee Manager singleton (optionally per profile)."""
+    key = (profile or "default").strip().lower()
+    if key not in _fee_managers:
+        _fee_managers[key] = SuccessFeeManager(bags_client=get_bags_client(profile=profile))
+    return _fee_managers[key]
 
 
 # Testing
