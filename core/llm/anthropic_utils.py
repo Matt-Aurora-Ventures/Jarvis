@@ -11,7 +11,9 @@ DEFAULT_ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 
 def get_anthropic_base_url() -> Optional[str]:
     """Return optional Anthropic base URL override."""
-    base_url = os.getenv("ANTHROPIC_BASE_URL", "").strip()
+    base_url = os.getenv("OLLAMA_ANTHROPIC_BASE_URL", "").strip()
+    if not base_url:
+        base_url = os.getenv("ANTHROPIC_BASE_URL", "").strip()
     return base_url or None
 
 

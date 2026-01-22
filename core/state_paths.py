@@ -60,6 +60,20 @@ class StatePaths:
         return trader_dir / "positions.json"
 
     @property
+    def trader_trade_history(self) -> Path:
+        """Treasury trade history (canonical - data/trader/)."""
+        trader_dir = Path(__file__).parent.parent / "data" / "trader"
+        trader_dir.mkdir(parents=True, exist_ok=True)
+        return trader_dir / "trade_history.json"
+
+    @property
+    def trader_daily_volume(self) -> Path:
+        """Treasury daily volume (canonical - data/trader/)."""
+        trader_dir = Path(__file__).parent.parent / "data" / "trader"
+        trader_dir.mkdir(parents=True, exist_ok=True)
+        return trader_dir / "daily_volume.json"
+
+    @property
     def exit_intents(self) -> Path:
         """Exit intent tracking for positions."""
         return self.trading_dir / "exit_intents.json"
@@ -178,6 +192,7 @@ class StatePaths:
         # Map of state types to their old locations
         legacy_map = {
             "positions": P(__file__).parent.parent / "bots" / "treasury" / ".positions.json",
+            "trade_history": P(__file__).parent.parent / "bots" / "treasury" / ".trade_history.json",
             "grok_state": P(__file__).parent.parent / "bots" / "twitter" / ".grok_state.json",
             "x_engine_state": P(__file__).parent.parent / "data" / ".x_engine_state.json",
             "circuit_breaker": P(__file__).parent.parent / "data" / ".circuit_breaker_state.json",

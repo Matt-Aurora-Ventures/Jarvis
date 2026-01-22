@@ -75,6 +75,7 @@ class TreasuryBotManager:
         # Telegram application
         self.app: Optional[Application] = None
         self.treasury_bot: Optional[TreasuryBot] = None
+        self._polling_lock = None
 
         # Monitoring tasks
         self._monitoring_task: Optional[asyncio.Task] = None
@@ -105,6 +106,13 @@ class TreasuryBotManager:
                 bot_token=self.bot_token,
             )
 
+            # Global error handler (admin-safe)
+            try:
+                from tg_bot.bot_core import error_handler as tg_error_handler
+                self.app.add_error_handler(tg_error_handler)
+            except Exception as e:
+                logger.warning(f"Error handler unavailable: {e}")
+
             # Initialize application
             await self.app.initialize()
             await self.app.start()
@@ -128,6 +136,22 @@ class TreasuryBotManager:
                 logger.error("Application not initialized")
                 return False
 
+            # Single-instance lock to avoid Telegram polling conflicts
+            try:
+                from core.utils.instance_lock import acquire_instance_lock
+                self._polling_lock = acquire_instance_lock(
+                    self.bot_token,
+                    name="telegram_polling",
+                    max_wait_seconds=0,
+                )
+            except Exception as exc:
+                logger.warning(f"Polling lock helper unavailable: {exc}")
+                self._polling_lock = None
+
+            if not self._polling_lock:
+                logger.warning("Telegram polling lock held by another process; skipping startup")
+                return False
+
             await self.app.updater.start_polling(drop_pending_updates=True)
             logger.info("Treasury Bot polling started")
 
@@ -138,6 +162,11 @@ class TreasuryBotManager:
 
         except Exception as e:
             logger.error(f"Failed to start polling: {e}")
+            if self._polling_lock:
+                try:
+                    self._polling_lock.close()
+                except Exception:
+                    pass
             return False
 
     # ==================== BACKGROUND MONITORING ====================
@@ -267,6 +296,12 @@ class TreasuryBotManager:
         if self.app:
             await self.app.stop()
             await self.app.shutdown()
+
+        if self._polling_lock:
+            try:
+                self._polling_lock.close()
+            except Exception:
+                pass
 
         logger.info("Treasury Bot shutdown complete")
 

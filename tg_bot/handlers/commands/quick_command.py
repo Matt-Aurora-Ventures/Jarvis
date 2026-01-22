@@ -16,6 +16,7 @@ from telegram.constants import ParseMode
 
 from tg_bot.handlers import error_handler
 from tg_bot.config import get_config
+from tg_bot.services import digest_formatter as fmt
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,10 @@ async def quick_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /quick or /q command - condensed menu of most-used actions."""
     config = get_config()
     user_id = update.effective_user.id
-    is_admin = config.is_admin(user_id)
+    try:
+        is_admin = config.is_admin(user_id, update.effective_user.username)
+    except TypeError:
+        is_admin = config.is_admin(user_id)
 
     # Quick intro - JARVIS voice
     if is_admin:
@@ -98,14 +102,38 @@ async def handle_quick_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     callback_data = query.data
 
+    config = get_config()
+    user_id = update.effective_user.id if update and update.effective_user else 0
+    username = update.effective_user.username if update and update.effective_user else None
+    try:
+        is_admin = config.is_admin(user_id, username)
+    except TypeError:
+        is_admin = config.is_admin(user_id)
+
+    admin_only_actions = {
+        "quick_alerts",
+        "quick_report",
+        "quick_health",
+        "quick_stats",
+        "quick_dashboard",
+        "quick_trending",
+    }
+
+    if callback_data in admin_only_actions and not is_admin:
+        await query.message.reply_text(
+            fmt.format_unauthorized(),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
     # Route to appropriate handler
     if callback_data == "quick_positions":
         # Call portfolio handler directly with query
-        await _handle_positions_quick(query)
+        await _handle_positions_quick(query, update, context)
 
     elif callback_data == "quick_balance":
         # Call balance handler directly with query
-        await _handle_balance_quick(query)
+        await _handle_balance_quick(query, update, context)
 
     elif callback_data == "quick_market":
         # Show market summary
@@ -113,7 +141,7 @@ async def handle_quick_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     elif callback_data == "quick_wallet":
         # Call wallet handler
-        await _handle_wallet_quick(query)
+        await _handle_wallet_quick(query, update, context)
 
     elif callback_data == "quick_alerts":
         # Show recent alerts
@@ -121,132 +149,157 @@ async def handle_quick_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     elif callback_data == "quick_report":
         # Call report handler
-        await _handle_report_quick(query)
+        await _handle_report_quick(query, update, context)
 
     elif callback_data == "quick_health":
         # Call health handler
-        await _handle_health_quick(query)
+        await _handle_health_quick(query, update, context)
 
     elif callback_data == "quick_stats":
         # Call stats handler
-        await _handle_stats_quick(query)
+        await _handle_stats_quick(query, update, context)
 
     elif callback_data == "quick_dashboard":
         # Call dashboard handler
-        await _handle_dashboard_quick(query)
+        await _handle_dashboard_quick(query, update, context)
 
     elif callback_data == "quick_trending":
         # Call trending handler
-        await _handle_trending_quick(query)
+        await _handle_trending_quick(query, update, context)
 
     elif callback_data == "quick_full_menu":
         # Return to main menu
-        await _handle_full_menu_quick(query)
+        await _handle_full_menu_quick(query, update, context)
 
 
-async def _handle_positions_quick(query):
+def _build_quick_update(update, query):
+    class QuickUpdate:
+        def __init__(self, update, query):
+            self.message = query.message
+            self.effective_user = update.effective_user
+            self.effective_chat = update.effective_chat
+
+    return QuickUpdate(update, query)
+
+
+async def _handle_positions_quick(query, update, context):
     """Handle quick positions callback."""
     try:
-        from tg_bot.handlers.treasury import TreasuryHandler
-        handler = TreasuryHandler()
-
-        # Create minimal update-like object
-        class QuickUpdate:
-            def __init__(self, query):
-                self.message = query.message
-                self.effective_user = None
-                self.effective_chat = None
-
-        class QuickContext:
-            pass
-
-        quick_update = QuickUpdate(query)
-        quick_context = QuickContext()
-
-        await handler.handle_portfolio(quick_update, quick_context)
+        from tg_bot.handlers.treasury import handle_portfolio
+        quick_update = _build_quick_update(update, query)
+        await handle_portfolio(quick_update, context)
     except Exception as e:
         logger.error(f"Quick positions error: {e}")
         await query.message.reply_text("❌ Failed to load positions", parse_mode=ParseMode.MARKDOWN)
 
 
-async def _handle_balance_quick(query):
+async def _handle_balance_quick(query, update, context):
     """Handle quick balance callback."""
     try:
-        from tg_bot.handlers.treasury import TreasuryHandler
-        handler = TreasuryHandler()
-
-        class QuickUpdate:
-            def __init__(self, query):
-                self.message = query.message
-                self.effective_user = None
-                self.effective_chat = None
-
-        class QuickContext:
-            pass
-
-        quick_update = QuickUpdate(query)
-        quick_context = QuickContext()
-
-        await handler.handle_balance(quick_update, quick_context)
+        from tg_bot.handlers.treasury import handle_balance
+        quick_update = _build_quick_update(update, query)
+        await handle_balance(quick_update, context)
     except Exception as e:
         logger.error(f"Quick balance error: {e}")
         await query.message.reply_text("❌ Failed to load balance", parse_mode=ParseMode.MARKDOWN)
 
 
-async def _handle_wallet_quick(query):
+async def _handle_wallet_quick(query, update, context):
     """Handle quick wallet callback."""
-    await query.message.reply_text(
-        "💵 *Wallet*\n\nUse /wallet for full wallet info.",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    try:
+        from tg_bot.handlers.trading import wallet
+        quick_update = _build_quick_update(update, query)
+        await wallet(quick_update, context)
+    except Exception as e:
+        logger.error(f"Quick wallet error: {e}")
+        await query.message.reply_text(
+            "❌ Wallet unavailable",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
-async def _handle_report_quick(query):
+async def _handle_report_quick(query, update, context):
     """Handle quick report callback."""
-    await query.message.reply_text(
-        "📑 *Report*\n\nGenerating report... Use /report for full details.",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    try:
+        from tg_bot.handlers.sentiment import report
+        quick_update = _build_quick_update(update, query)
+        await report(quick_update, context)
+    except Exception as e:
+        logger.error(f"Quick report error: {e}")
+        await query.message.reply_text(
+            "❌ Report unavailable",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
-async def _handle_health_quick(query):
+async def _handle_health_quick(query, update, context):
     """Handle quick health callback."""
-    await query.message.reply_text(
-        "💊 *Health*\n\nUse /health for full system health check.",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    try:
+        from tg_bot.handlers.system import health
+        quick_update = _build_quick_update(update, query)
+        await health(quick_update, context)
+    except Exception as e:
+        logger.error(f"Quick health error: {e}")
+        await query.message.reply_text(
+            "❌ Health unavailable",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
-async def _handle_stats_quick(query):
+async def _handle_stats_quick(query, update, context):
     """Handle quick stats callback."""
-    await query.message.reply_text(
-        "📊 *Stats*\n\nUse /stats for full CLI statistics.",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    try:
+        from tg_bot.handlers.analytics import stats_command
+        quick_update = _build_quick_update(update, query)
+        await stats_command(quick_update, context)
+    except Exception as e:
+        logger.error(f"Quick stats error: {e}")
+        await query.message.reply_text(
+            "❌ Stats unavailable",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
-async def _handle_dashboard_quick(query):
+async def _handle_dashboard_quick(query, update, context):
     """Handle quick dashboard callback."""
-    await query.message.reply_text(
-        "📈 *Dashboard*\n\nUse /dashboard for full trading dashboard.",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    try:
+        from tg_bot.handlers.trading import dashboard
+        quick_update = _build_quick_update(update, query)
+        await dashboard(quick_update, context)
+    except Exception as e:
+        logger.error(f"Quick dashboard error: {e}")
+        await query.message.reply_text(
+            "❌ Dashboard unavailable",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
-async def _handle_trending_quick(query):
+async def _handle_trending_quick(query, update, context):
     """Handle quick trending callback."""
-    await query.message.reply_text(
-        "🎯 *Trending*\n\nUse /trending for full trending tokens.",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    try:
+        from tg_bot.handlers.sentiment import trending
+        quick_update = _build_quick_update(update, query)
+        await trending(quick_update, context)
+    except Exception as e:
+        logger.error(f"Quick trending error: {e}")
+        await query.message.reply_text(
+            "❌ Trending unavailable",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
-async def _handle_full_menu_quick(query):
+async def _handle_full_menu_quick(query, update, context):
     """Handle quick full menu callback."""
-    await query.message.reply_text(
-        "📋 *Full Menu*\n\nUse /start for full bot menu.",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    try:
+        from tg_bot.handlers.commands_base import start
+        quick_update = _build_quick_update(update, query)
+        await start(quick_update, context)
+    except Exception as e:
+        logger.error(f"Quick full menu error: {e}")
+        await query.message.reply_text(
+            "❌ Menu unavailable",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
 async def _quick_market_summary(query, context):

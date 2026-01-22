@@ -19,7 +19,11 @@ from typing import Optional, Dict, Any, List
 
 # Fix Windows encoding
 if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except OSError:
+        pass
 
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -28,6 +32,7 @@ from bots.twitter.twitter_client import TwitterClient, TwitterCredentials
 from bots.twitter.claude_content import ClaudeContentGenerator
 from bots.twitter.grok_client import GrokClient
 from bots.twitter.autonomous_engine import XMemory
+from core.logging.error_tracker import error_tracker
 
 # Import structured logging for comprehensive JSON logs
 try:
@@ -35,6 +40,24 @@ try:
     STRUCTURED_LOGGING_AVAILABLE = True
 except ImportError:
     STRUCTURED_LOGGING_AVAILABLE = False
+
+# Import self-correcting AI system
+try:
+    from core.self_correcting import (
+        get_shared_memory,
+        get_message_bus,
+        get_ollama_router,
+        LearningType,
+        MessageType,
+        MessagePriority,
+        TaskType,
+    )
+    SELF_CORRECTING_AVAILABLE = True
+except ImportError:
+    SELF_CORRECTING_AVAILABLE = False
+    get_shared_memory = None
+    get_message_bus = None
+    get_ollama_router = None
 
 # Initialize structured logger if available, fallback to standard logger
 if STRUCTURED_LOGGING_AVAILABLE:
@@ -55,7 +78,7 @@ def get_shared_memory() -> 'XMemory':
 # Predictions file from sentiment_report.py
 PREDICTIONS_FILE = Path(__file__).parent.parent / "buy_tracker" / "predictions_history.json"
 
-# State file to persist last post time (survives restarts)
+# Legacy state file (read-only)
 SENTIMENT_STATE_FILE = Path(__file__).parent / ".sentiment_poster_state.json"
 
 
@@ -78,8 +101,41 @@ class SentimentTwitterPoster:
         self._running = False
         self._last_post_time: Optional[datetime] = self._load_last_post_time()
 
+        # Initialize self-correcting AI system
+        self.memory = None
+        self.bus = None
+        self.router = None
+        if SELF_CORRECTING_AVAILABLE:
+            try:
+                self.memory = get_shared_memory()
+                self.bus = get_message_bus()
+                self.router = get_ollama_router()
+
+                # Load past learnings about successful tweets
+                past_learnings = self.memory.search_learnings(
+                    component="sentiment_poster",
+                    learning_type=LearningType.SUCCESS_PATTERN,
+                    min_confidence=0.6
+                )
+                logger.info(f"Loaded {len(past_learnings)} past tweet patterns from memory")
+
+            except Exception as e:
+                logger.warning(f"Failed to initialize self-correcting AI: {e}")
+                self.memory = None
+                self.bus = None
+                self.router = None
+
     def _load_last_post_time(self) -> Optional[datetime]:
         """Load last post time from state file."""
+        # Prefer canonical context engine state
+        try:
+            from core.context_engine import context
+            last = context.state.get("last_tweet")
+            if last:
+                return datetime.fromisoformat(last)
+        except Exception:
+            pass
+
         try:
             if SENTIMENT_STATE_FILE.exists():
                 with open(SENTIMENT_STATE_FILE, 'r') as f:
@@ -87,17 +143,27 @@ class SentimentTwitterPoster:
                     if 'last_post_time' in data:
                         return datetime.fromisoformat(data['last_post_time'])
         except Exception as e:
+            error_tracker.track_error(
+                e,
+                context="SentimentTwitterPoster._load_last_post_time",
+                component="sentiment_poster",
+                metadata={"state_file": str(SENTIMENT_STATE_FILE)}
+            )
             logger.warning(f"Failed to load sentiment state: {e}")
         return None
 
     def _save_last_post_time(self):
-        """Save last post time to state file."""
+        """Persist last post time to canonical context state."""
         try:
-            data = {'last_post_time': self._last_post_time.isoformat() if self._last_post_time else None}
-            with open(SENTIMENT_STATE_FILE, 'w') as f:
-                json.dump(data, f)
+            from core.context_engine import context
+            context.record_tweet()
         except Exception as e:
-            logger.warning(f"Failed to save sentiment state: {e}")
+            error_tracker.track_error(
+                e,
+                context="SentimentTwitterPoster._save_last_post_time",
+                component="sentiment_poster"
+            )
+            logger.warning(f"Failed to record tweet in context state: {e}")
 
     async def start(self):
         """Start the sentiment poster loop."""
@@ -111,17 +177,26 @@ class SentimentTwitterPoster:
             return
 
         # Check if we should skip initial post (posted recently)
-        if self._last_post_time:
-            elapsed = (datetime.now(timezone.utc) - self._last_post_time).total_seconds()
-            if elapsed < self.interval_minutes * 60:
-                wait_time = self.interval_minutes * 60 - elapsed
-                logger.info(f"Recent post detected ({elapsed/60:.1f}m ago), waiting {wait_time/60:.1f}m before next")
+        try:
+            from core.context_engine import context
+            if not context.can_tweet(min_interval_minutes=self.interval_minutes):
+                logger.info("Recent tweet detected (context engine), skipping initial sentiment post")
             else:
-                logger.info("No recent post, posting initial sentiment report")
+                logger.info("No recent tweet, posting initial sentiment report")
                 await self._post_sentiment_report()
-        else:
-            logger.info("First run, posting initial sentiment report")
-            await self._post_sentiment_report()
+        except Exception:
+            # Fallback to local timestamp if context engine unavailable
+            if self._last_post_time:
+                elapsed = (datetime.now(timezone.utc) - self._last_post_time).total_seconds()
+                if elapsed < self.interval_minutes * 60:
+                    wait_time = self.interval_minutes * 60 - elapsed
+                    logger.info(f"Recent post detected ({elapsed/60:.1f}m ago), waiting {wait_time/60:.1f}m before next")
+                else:
+                    logger.info("No recent post, posting initial sentiment report")
+                    await self._post_sentiment_report()
+            else:
+                logger.info("First run, posting initial sentiment report")
+                await self._post_sentiment_report()
 
         # Schedule loop
         while self._running:
@@ -167,6 +242,12 @@ class SentimentTwitterPoster:
             return latest
 
         except Exception as e:
+            error_tracker.track_error(
+                e,
+                context="SentimentTwitterPoster._load_latest_predictions",
+                component="sentiment_poster",
+                metadata={"predictions_file": str(PREDICTIONS_FILE)}
+            )
             logger.error(f"Failed to load predictions: {e}")
             return None
 
@@ -194,6 +275,11 @@ Return ONLY the tweet text."""
                 logger.info(f"Grok fallback generated: {tweet[:80]}...")
                 return tweet
         except Exception as e:
+            error_tracker.track_error(
+                e,
+                context="SentimentTwitterPoster._generate_grok_fallback_tweet",
+                component="sentiment_poster"
+            )
             logger.warning(f"Grok fallback failed: {e}")
 
         # Ultimate fallback: static template
@@ -346,6 +432,27 @@ Return ONLY a JSON object: {{"tweets": ["tweet1", "tweet2", "tweet3"]}}"""
             self._last_post_time = datetime.now(timezone.utc)
             self._save_last_post_time()
 
+            # Broadcast sentiment changes to other bots
+            if SELF_CORRECTING_AVAILABLE and self.bus and bullish:
+                try:
+                    for symbol in bullish[:3]:  # Top 3 bullish tokens
+                        token_data_item = token_data.get(symbol, {})
+                        await self.bus.publish(
+                            sender="sentiment_poster",
+                            message_type=MessageType.SENTIMENT_CHANGED,
+                            data={
+                                "token": symbol,
+                                "sentiment": "bullish",
+                                "score": token_data_item.get("score", 0),
+                                "reason": token_data_item.get("reasoning", ""),
+                                "contract": token_data_item.get("contract", ""),
+                            },
+                            priority=MessagePriority.HIGH
+                        )
+                    logger.info(f"Broadcasted {len(bullish[:3])} bullish sentiments to other bots")
+                except Exception as e:
+                    logger.error(f"Failed to broadcast sentiments: {e}")
+
             # Structured log event for sentiment post
             if STRUCTURED_LOGGING_AVAILABLE and hasattr(logger, 'log_event'):
                 logger.log_event(
@@ -361,6 +468,11 @@ Return ONLY a JSON object: {{"tweets": ["tweet1", "tweet2", "tweet3"]}}"""
                 logger.info(f"Posted sentiment report thread ({len(tweets)} tweets)")
 
         except Exception as e:
+            error_tracker.track_error(
+                e,
+                context="SentimentTwitterPoster._post_sentiment_report",
+                component="sentiment_poster"
+            )
             logger.error(f"Failed to post sentiment report: {e}", exc_info=True)
 
     async def _post_tweet(
@@ -384,9 +496,19 @@ Return ONLY a JSON object: {{"tweets": ["tweet1", "tweet2", "tweet3"]}}"""
                 # Record to shared memory for cross-module deduplication
                 memory.record_tweet(result.tweet_id, text, "sentiment", [])
                 return result.tweet_id
+            error_tracker.track_error(
+                RuntimeError(result.error if result else "unknown error"),
+                context="SentimentTwitterPoster._post_tweet",
+                component="sentiment_poster"
+            )
             logger.error(f"Tweet failed: {result.error if result else 'unknown error'}")
             return None
         except Exception as e:
+            error_tracker.track_error(
+                e,
+                context="SentimentTwitterPoster._post_tweet",
+                component="sentiment_poster"
+            )
             logger.error(f"Tweet error: {e}")
             return None
 
@@ -417,13 +539,8 @@ async def run_sentiment_poster():
     # for posting as @Jarvis_lifeos instead of @aurora_ventures
     twitter = TwitterClient()  # Uses TwitterCredentials.from_env() internally
 
-    # Create Claude client
-    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not anthropic_key:
-        # Try to get from global env
-        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
-
-    claude = ClaudeContentGenerator(api_key=anthropic_key)
+    # Claude via Anthropic API (supports local Ollama via ANTHROPIC_BASE_URL)
+    claude = ClaudeContentGenerator(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
     # Create and run poster
     poster = SentimentTwitterPoster(

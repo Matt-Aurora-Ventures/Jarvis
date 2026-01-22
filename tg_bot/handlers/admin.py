@@ -54,6 +54,36 @@ async def logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @error_handler
 @admin_only
+async def errors(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /errors command - show deduplicated error summary (admin only)."""
+    try:
+        from core.logging.error_tracker import error_tracker
+
+        frequent = error_tracker.get_frequent_errors(min_count=1)
+        critical = error_tracker.get_critical_errors()
+
+        lines = ["<b>error summary</b>", ""]
+
+        if critical:
+            lines.append("<b>critical</b>")
+            for e in critical[:5]:
+                lines.append(f"- <code>{e['id']}</code> {e['component']} {e['type']} x{e['count']}")
+            lines.append("")
+
+        if frequent:
+            lines.append("<b>recent</b>")
+            for e in frequent[:10]:
+                lines.append(f"- <code>{e['id']}</code> {e['component']} {e['type']} x{e['count']}")
+        else:
+            lines.append("no errors recorded.")
+
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        logger.error(f"Errors command failed: {e}")
+        await update.message.reply_text(f"Errors error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+
+@error_handler
+@admin_only
 async def system(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /system command - comprehensive system status (admin only)."""
     try:

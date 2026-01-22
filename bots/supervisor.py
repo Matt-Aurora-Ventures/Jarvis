@@ -51,6 +51,22 @@ except ImportError:
     error_tracker = None
     ERROR_TRACKER_AVAILABLE = False
 
+# Import self-correcting AI system
+try:
+    from core.self_correcting import (
+        get_shared_memory,
+        get_message_bus,
+        get_ollama_router,
+        get_self_adjuster,
+    )
+    SELF_CORRECTING_AVAILABLE = True
+except ImportError:
+    get_shared_memory = None
+    get_message_bus = None
+    get_ollama_router = None
+    get_self_adjuster = None
+    SELF_CORRECTING_AVAILABLE = False
+
 
 def systemd_notify(state: str) -> bool:
     """
@@ -729,6 +745,20 @@ async def create_bags_intel():
         raise
 
 
+async def create_ai_supervisor():
+    """Create and run optional AI runtime supervisor (Ollama-backed)."""
+    try:
+        from core.ai_runtime.supervisor import AISupervisor
+    except Exception as exc:
+        logger.warning(f"AI runtime unavailable: {exc}")
+        # Run forever but idle to avoid restart churn
+        while True:
+            await asyncio.sleep(60)
+
+    supervisor = AISupervisor()
+    await supervisor.start()
+
+
 def validate_startup() -> bool:
     """
     Validate critical configuration before starting.
@@ -914,6 +944,67 @@ async def main():
     print("=" * 60)
     print()
 
+    # ==========================================================
+    # SELF-CORRECTING AI: Initialize shared learning system
+    # ==========================================================
+    ollama_router = None
+    self_adjuster = None
+    if SELF_CORRECTING_AVAILABLE:
+        try:
+            print("=" * 60)
+            print("  INITIALIZING SELF-CORRECTING AI SYSTEM")
+            print("=" * 60)
+
+            # Get singleton instances
+            shared_memory = get_shared_memory()
+            message_bus = get_message_bus()
+            ollama_router = get_ollama_router()
+            self_adjuster = get_self_adjuster()
+
+            # Start async services
+            await ollama_router.start()
+            await self_adjuster.start()
+
+            # Get stats
+            memory_stats = shared_memory.get_global_stats()
+            router_stats = ollama_router.get_stats()
+
+            print(f"  Shared Memory: {memory_stats.get('active_learnings', 0)} learnings")
+            print(f"  Message Bus: Ready for inter-bot communication")
+            print(f"  Ollama Router: {'AVAILABLE' if router_stats['ollama_available'] else 'Using Claude fallback'}")
+            print(f"  Self Adjuster: Ready for parameter optimization")
+            print("=" * 60)
+            print()
+
+            # Register shutdown hooks
+            if SHUTDOWN_MANAGER_AVAILABLE:
+                shutdown_mgr = get_shutdown_manager()
+                shutdown_mgr.register_hook(
+                    name="ollama_router",
+                    callback=ollama_router.stop,
+                    phase=ShutdownPhase.CLEANUP,
+                    timeout=5.0,
+                )
+                shutdown_mgr.register_hook(
+                    name="self_adjuster",
+                    callback=self_adjuster.stop,
+                    phase=ShutdownPhase.CLEANUP,
+                    timeout=5.0,
+                )
+
+            logger.info("Self-correcting AI system: ENABLED")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize self-correcting AI system: {e}", exc_info=True)
+            print("=" * 60)
+            print("  WARNING: Self-correcting AI system failed to initialize")
+            print(f"  Error: {e}")
+            print("  Bots will run without self-learning capabilities")
+            print("=" * 60)
+            print()
+    else:
+        logger.info("Self-correcting AI system: NOT AVAILABLE")
+
     # Start health endpoint (best-effort)
     health_runner = None
     try:
@@ -983,6 +1074,7 @@ async def main():
     supervisor.register("public_trading_bot", create_public_trading_bot, min_backoff=20.0, max_backoff=180.0)
     supervisor.register("autonomous_manager", create_autonomous_manager, min_backoff=15.0, max_backoff=120.0)
     supervisor.register("bags_intel", create_bags_intel, min_backoff=30.0, max_backoff=300.0)
+    supervisor.register("ai_supervisor", create_ai_supervisor, min_backoff=30.0, max_backoff=300.0)
 
     print("Registered components:")
     for name in supervisor.components:

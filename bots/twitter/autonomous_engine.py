@@ -37,6 +37,24 @@ from core.memory.dedup_store import (
 from bots.twitter.telegram_sync import sync_tweet_to_telegram
 from core.context_engine import context
 
+# Import self-correcting AI system for learning and optimization
+try:
+    from core.self_correcting import (
+        get_shared_memory,
+        get_message_bus,
+        get_ollama_router,
+        LearningType,
+        MessageType,
+        MessagePriority,
+        TaskType,
+    )
+    SELF_CORRECTING_AVAILABLE = True
+except ImportError:
+    SELF_CORRECTING_AVAILABLE = False
+    get_shared_memory = None
+    get_message_bus = None
+    get_ollama_router = None
+
 logger = logging.getLogger(__name__)
 
 # Paths - centralized state under ~/.lifeos/
@@ -1452,6 +1470,29 @@ class AutonomousEngine:
         
         # Load persistent state (prevents spam on restart)
         self._load_state()
+
+        # Self-correcting AI integration
+        self.ai_memory = None
+        self.bus = None
+        self.router = None
+        if SELF_CORRECTING_AVAILABLE:
+            try:
+                self.ai_memory = get_shared_memory()
+                self.bus = get_message_bus()
+                self.router = get_ollama_router()
+
+                # Load past learnings about tweet engagement
+                past_learnings = self.ai_memory.search_learnings(
+                    component="autonomous_x",
+                    learning_type=LearningType.SUCCESS_PATTERN,
+                    min_confidence=0.6
+                )
+                logger.info(f"X Bot: Loaded {len(past_learnings)} past engagement patterns from AI memory")
+            except Exception as e:
+                logger.warning(f"X Bot: Self-correcting AI initialization failed: {e}")
+                self.ai_memory = None
+                self.bus = None
+                self.router = None
 
         # Fingerprint cleanup is now handled by MemoryStore.cleanup_expired()
     
@@ -3907,6 +3948,19 @@ Reply type guidance:
 
                 logger.info(f"Posted tweet: {result.tweet_id}")
 
+                # Self-correcting AI: Record learning and broadcast
+                if SELF_CORRECTING_AVAILABLE and self.ai_memory and self.bus:
+                    try:
+                        await self._record_post_learning(
+                            tweet_id=result.tweet_id,
+                            content=content,
+                            category=draft.category,
+                            cashtags=draft.cashtags,
+                            with_image=with_image and media_id is not None
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to record tweet learning: {e}")
+
                 # Record success in decision engine (resets circuit breaker)
                 try:
                     from bots.twitter.x_decision_engine import get_x_decision_engine
@@ -3989,6 +4043,69 @@ Reply type guidance:
             return tweet_ids[0]
 
         return None
+
+    async def _record_post_learning(
+        self,
+        tweet_id: str,
+        content: str,
+        category: str,
+        cashtags: List[str],
+        with_image: bool
+    ):
+        """Record tweet posting as a learning for self-correcting AI system.
+
+        Stores tweet patterns to help optimize future content based on engagement.
+        Broadcasts tweet event to other bots for cross-system coordination.
+
+        Note: Engagement metrics (likes, retweets, replies) will be tracked later
+        via engagement tracker. This method records the initial post with metadata.
+        """
+        if not SELF_CORRECTING_AVAILABLE or not self.ai_memory:
+            return
+
+        try:
+            # Record tweet posting pattern
+            learning_content = f"Posted {category} tweet with {'image' if with_image else 'text only'}"
+            if cashtags:
+                learning_content += f" featuring {', '.join(cashtags[:3])}"
+
+            # Store learning with context
+            learning_id = self.ai_memory.add_learning(
+                component="autonomous_x",
+                learning_type=LearningType.SUCCESS_PATTERN,  # All posts are initial successes
+                content=learning_content,
+                context={
+                    "tweet_id": tweet_id,
+                    "category": category,
+                    "cashtags": cashtags,
+                    "with_image": with_image,
+                    "content_length": len(content),
+                    "posted_at": datetime.now(timezone.utc).isoformat(),
+                },
+                confidence=0.5  # Low initial confidence, will increase with engagement data
+            )
+
+            logger.info(f"Recorded tweet learning: {learning_id}")
+
+            # Broadcast tweet event to other bots
+            if self.bus:
+                await self.bus.publish(
+                    sender="autonomous_x",
+                    message_type=MessageType.NEW_LEARNING,
+                    data={
+                        "learning_id": learning_id,
+                        "component": "autonomous_x",
+                        "type": LearningType.SUCCESS_PATTERN.value,
+                        "content": learning_content,
+                        "tweet_id": tweet_id,
+                        "category": category,
+                    },
+                    priority=MessagePriority.NORMAL
+                )
+                logger.debug("Broadcasted tweet event to other bots")
+
+        except Exception as e:
+            logger.error(f"Failed to record post learning: {e}")
 
     # =========================================================================
     # Autonomous Loop

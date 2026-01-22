@@ -47,6 +47,16 @@ def error_handler(func: Callable[..., Awaitable[Any]]):
                     func.__name__,
                 )
                 return None
+            if isinstance(exc, BadRequest) and (
+                "Query is too old" in str(exc)
+                or "response timeout expired" in str(exc)
+                or "query id is invalid" in str(exc)
+            ):
+                logger.debug(
+                    "Callback expired in %s; skipping reply",
+                    func.__name__,
+                )
+                return None
 
             logger.exception(f"Handler error in {func.__name__}")
 
@@ -99,7 +109,13 @@ def admin_only(func: Callable[..., Awaitable[Any]]):
         user_id = update.effective_user.id if update and update.effective_user else 0
         username = update.effective_user.username if update and update.effective_user else None
 
-        if not config.is_admin(user_id, username):
+        try:
+            is_admin = config.is_admin(user_id, username)
+        except TypeError:
+            # Backward-compatible with older is_admin signatures
+            is_admin = config.is_admin(user_id)
+
+        if not is_admin:
             logger.warning(f"Unauthorized admin command attempt by user {user_id} (@{username})")
             await update.message.reply_text(
                 fmt.format_unauthorized(),

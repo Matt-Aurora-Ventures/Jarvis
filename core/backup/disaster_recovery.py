@@ -88,6 +88,7 @@ class DisasterRecoveryManager:
         "positions.json",
         ".positions.json",
         "trades.jsonl",
+        "trade_history.json",
         ".trade_history.json",
     ]
 

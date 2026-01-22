@@ -22,9 +22,11 @@ from tg_bot.config import get_config
 logger = logging.getLogger(__name__)
 
 
-# Paths to trading data
-POSITIONS_PATH = Path.home() / ".lifeos" / "trading" / "positions.json"
-TRADES_PATH = Path.home() / ".lifeos" / "trading" / "trades.json"
+# Paths to trading data (canonical first)
+ROOT = Path(__file__).resolve().parents[3]
+TRADER_DIR = ROOT / "data" / "trader"
+POSITIONS_PATH = TRADER_DIR / "positions.json"
+TRADES_PATH = TRADER_DIR / "trade_history.json"
 PNL_PATH = Path.home() / ".lifeos" / "trading" / "pnl_history.json"
 
 
@@ -42,7 +44,7 @@ async def get_trading_data() -> Dict[str, Any]:
         "exported_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # Load positions
+    # Load positions (canonical)
     if POSITIONS_PATH.exists():
         try:
             with open(POSITIONS_PATH, "r") as f:
@@ -50,13 +52,30 @@ async def get_trading_data() -> Dict[str, Any]:
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(f"Failed to load positions: {e}")
 
-    # Load trades
+    # Load trades (canonical)
     if TRADES_PATH.exists():
         try:
             with open(TRADES_PATH, "r") as f:
                 data["trades"] = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(f"Failed to load trades: {e}")
+
+    # Legacy fallback (read-only)
+    legacy_positions = Path.home() / ".lifeos" / "trading" / "positions.json"
+    if legacy_positions.exists() and not data["positions"]:
+        try:
+            with open(legacy_positions, "r") as f:
+                data["positions"] = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to load legacy positions: {e}")
+
+    legacy_trades = Path.home() / ".lifeos" / "trading" / "trade_history.json"
+    if legacy_trades.exists() and not data["trades"]:
+        try:
+            with open(legacy_trades, "r") as f:
+                data["trades"] = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to load legacy trades: {e}")
 
     # Load PnL history
     if PNL_PATH.exists():
@@ -66,9 +85,9 @@ async def get_trading_data() -> Dict[str, Any]:
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(f"Failed to load PnL: {e}")
 
-    # Also check treasury positions
-    treasury_pos_path = Path("bots/treasury/.positions.json")
-    if treasury_pos_path.exists():
+    # Also check legacy treasury positions if still present
+    treasury_pos_path = ROOT / "bots" / "treasury" / ".positions.json"
+    if treasury_pos_path.exists() and data["positions"]:
         try:
             with open(treasury_pos_path, "r") as f:
                 treasury_positions = json.load(f)
@@ -77,7 +96,7 @@ async def get_trading_data() -> Dict[str, Any]:
                 elif isinstance(treasury_positions, dict):
                     data["positions"].append(treasury_positions)
         except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"Failed to load treasury positions: {e}")
+            logger.warning(f"Failed to load legacy treasury positions: {e}")
 
     return data
 

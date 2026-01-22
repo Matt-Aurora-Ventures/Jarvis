@@ -274,8 +274,10 @@ class ClaudeCLIHandler:
     CIRCUIT_BREAKER_COOLDOWN = 1800  # 30 minutes cooldown when tripped
     CIRCUIT_BREAKER_WINDOW = 300  # 5 minute window for counting errors
 
-    # API mode disabled - CLI only
-    USE_API_MODE = False
+    # Prefer API mode when a local Anthropic-compatible endpoint is configured
+    USE_API_MODE = bool(os.getenv("OLLAMA_ANTHROPIC_BASE_URL")) or bool(os.getenv("ANTHROPIC_BASE_URL")) or (
+        os.getenv("CLAUDE_USE_API_MODE", "").lower() in ("1", "true", "yes", "on")
+    )
     API_MODEL = "claude-sonnet-4-20250514"
     API_MAX_TOKENS = 4096
 
