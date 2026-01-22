@@ -23,7 +23,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import List, Any
 
 from core.logging_utils import configure_component_logger
 from core.logging.error_tracker import error_tracker
@@ -116,7 +116,7 @@ configure_component_logger("tg_bot", "telegram_bot")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
 
-_TREASURY_ENGINE = None
+_TREASURY_ENGINES: dict[str, Any] = {}
 _CHAT_RESPONDER = None
 _LAST_REPLY_AT: dict[int, float] = {}
 
@@ -415,27 +415,26 @@ def _grade_for_signal(signal) -> str:
     return mapping.get(signal.signal, "B")
 
 
-async def _get_treasury_engine():
-    global _TREASURY_ENGINE
-    if _TREASURY_ENGINE:
-        return _TREASURY_ENGINE
+async def _get_treasury_engine(profile: str = "treasury"):
+    global _TREASURY_ENGINES
+    key = (profile or "treasury").strip().lower()
+    if key in _TREASURY_ENGINES:
+        return _TREASURY_ENGINES[key]
 
     from bots.treasury.trading import TreasuryTrader
 
     # Use TreasuryTrader which handles encrypted keypair loading
-    trader = TreasuryTrader()
+    trader = TreasuryTrader(profile=key)
     initialized, msg = await trader._ensure_initialized()
 
     if not initialized:
         raise RuntimeError(f"Treasury wallet not initialized: {msg}")
 
     # Check if live mode is enabled
-    live_mode = os.environ.get("TREASURY_LIVE_MODE", "false").lower() in ("1", "true", "yes", "on")
     if trader._engine:
-        trader._engine.dry_run = not live_mode
-
-    _TREASURY_ENGINE = trader._engine
-    return _TREASURY_ENGINE
+        _TREASURY_ENGINES[key] = trader._engine
+        return trader._engine
+    raise RuntimeError("Treasury engine unavailable after initialization")
 
 
 # =============================================================================

@@ -65,13 +65,16 @@ class SecureWallet:
     WALLET_DIR = Path(__file__).parent / '.wallets'
     SALT_FILE = '.salt'
 
-    def __init__(self, master_password: Optional[str] = None):
+    def __init__(self, master_password: Optional[str] = None, wallet_dir: Optional[Path] = None):
         """
         Initialize wallet manager.
 
         Args:
             master_password: Password for key encryption. If None, uses env var.
+            wallet_dir: Optional override for wallet storage directory.
         """
+        if wallet_dir:
+            self.WALLET_DIR = Path(wallet_dir)
         self._master_password = master_password or os.environ.get('JARVIS_WALLET_PASSWORD')
         if not self._master_password:
             raise SecureKeyError("Master password required - set JARVIS_WALLET_PASSWORD env var")
@@ -321,6 +324,27 @@ class SecureWallet:
             if wallet.is_treasury:
                 return wallet
         return None
+
+    def get_address(self) -> str:
+        """Get the active or treasury address."""
+        wallet = self.get_wallet() or self.get_treasury()
+        if not wallet:
+            raise SecureKeyError("No wallet configured")
+        return wallet.address
+
+    def get_private_key(self, address: str = None) -> str:
+        """Export private key for the requested wallet (base58)."""
+        wallet_info = self.get_wallet(address) or self.get_treasury()
+        if not wallet_info:
+            raise SecureKeyError("Wallet not found")
+        keypair = None
+        try:
+            keypair = self._load_keypair(wallet_info.address)
+            import base58
+            return base58.b58encode(bytes(keypair)).decode()
+        finally:
+            if keypair:
+                del keypair
 
     def list_wallets(self) -> list[WalletInfo]:
         """List all wallets (public info only)."""
