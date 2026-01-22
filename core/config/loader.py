@@ -197,6 +197,7 @@ class LLMConfig:
     """LLM provider configuration."""
     openai_api_key: str = ""
     anthropic_api_key: str = ""
+    anthropic_base_url: str = ""
     xai_api_key: str = ""
     xai_model: str = "grok-3-mini"
     groq_api_key: str = ""
@@ -211,6 +212,7 @@ class LLMConfig:
         return cls(
             openai_api_key=_get_env("OPENAI_API_KEY", ""),
             anthropic_api_key=_get_env("ANTHROPIC_API_KEY", ""),
+            anthropic_base_url=_get_env("ANTHROPIC_BASE_URL", ""),
             xai_api_key=_get_env("XAI_API_KEY", ""),
             xai_model=_get_env("XAI_MODEL", "grok-3-mini"),
             groq_api_key=_get_env("GROQ_API_KEY", ""),

@@ -182,8 +182,17 @@ class ConfigValidator:
         self.rules.append(ValidationRule(
             key="ANTHROPIC_API_KEY",
             description="Anthropic (Claude) API key",
-            validator=lambda v: self._validate_api_key(v, "anthropic"),
+            validator=self._validate_anthropic_key,
             level=ValidationLevel.WARNING,
+            required=False,
+            group="apis"
+        ))
+
+        self.rules.append(ValidationRule(
+            key="ANTHROPIC_BASE_URL",
+            description="Anthropic API base URL override (e.g., Ollama local gateway)",
+            validator=self._validate_url,
+            level=ValidationLevel.INFO,
             required=False,
             group="apis"
         ))
@@ -477,6 +486,20 @@ class ConfigValidator:
         pattern = self.API_KEY_PATTERNS.get(key_type, self.API_KEY_PATTERNS["generic"])
         if not pattern.match(value):
             return False, f"Invalid {key_type} API key format"
+
+        return True, None
+
+    def _validate_anthropic_key(self, value: str) -> Tuple[bool, Optional[str]]:
+        """Validate Anthropic key, allowing local gateways with custom tokens."""
+        if not value:
+            return True, None  # Optional
+
+        if os.getenv("ANTHROPIC_BASE_URL"):
+            return True, None
+
+        pattern = self.API_KEY_PATTERNS.get("anthropic")
+        if pattern and not pattern.match(value):
+            return False, "Invalid anthropic API key format"
 
         return True, None
 

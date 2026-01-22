@@ -18,6 +18,25 @@
 - [x] Recovery scripts prepared
 - [x] Documentation complete
 
+## Optional Local LLM Setup (Ollama + Claude Code)
+
+If you want Claude Code and JARVIS to run fully local on the VPS, install Ollama and wire the Anthropic-compatible base URL. Grok remains the sentiment provider.
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen3-coder
+sudo systemctl enable --now ollama
+npm install -g @anthropic-ai/claude-code
+```
+
+Environment variables (export or set in `/etc/default/jarvis-supervisor`):
+```bash
+ANTHROPIC_API_KEY=ollama
+ANTHROPIC_BASE_URL=http://localhost:11434/v1
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=qwen3-coder
+```
+
 ---
 
 ## When VPS Access Restored: Quick Start (5 minutes)
