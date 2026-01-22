@@ -6276,6 +6276,121 @@ _This feature coming soon!_
 
         # ========== END TRAILING STOP HANDLERS ==========
 
+        # ========== POSITION ADJUSTMENT HANDLERS ==========
+
+        elif action == "noop":
+            # No-op for label buttons - just acknowledge
+            await query.answer("This is a label")
+            return
+
+        elif action.startswith("pos_adjust:"):
+            # Show position adjustment menu (quick SL/TP)
+            pos_id = action.split(":")[1]
+            positions = context.user_data.get("positions", [])
+            position = next((p for p in positions if p.get("id") == pos_id), None)
+
+            if position:
+                text, keyboard = DemoMenuBuilder.position_adjust_menu(
+                    pos_id=pos_id,
+                    symbol=position.get("symbol", "???"),
+                    current_tp=position.get("take_profit", 50.0),
+                    current_sl=position.get("stop_loss", 20.0),
+                    pnl_pct=position.get("pnl_pct", 0.0),
+                )
+            else:
+                text = "❌ Position not found"
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:positions")]
+                ])
+
+        elif action.startswith("set_tp:"):
+            # Set take profit for a position
+            try:
+                parts = action.split(":")
+                pos_id = parts[1]
+                tp_value = float(parts[2])
+
+                positions = context.user_data.get("positions", [])
+                for p in positions:
+                    if p.get("id") == pos_id:
+                        p["take_profit"] = tp_value
+                        break
+
+                context.user_data["positions"] = positions
+
+                # Show success and return to adjust menu
+                position = next((p for p in positions if p.get("id") == pos_id), None)
+                if position:
+                    await query.answer(f"✅ Take Profit set to +{tp_value}%")
+                    text, keyboard = DemoMenuBuilder.position_adjust_menu(
+                        pos_id=pos_id,
+                        symbol=position.get("symbol", "???"),
+                        current_tp=tp_value,
+                        current_sl=position.get("stop_loss", 20.0),
+                        pnl_pct=position.get("pnl_pct", 0.0),
+                    )
+                else:
+                    text = "❌ Position not found"
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:positions")]
+                    ])
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Set TP error: {e}")
+                await query.answer("❌ Error setting TP")
+                return
+
+        elif action.startswith("set_sl:"):
+            # Set stop loss for a position
+            try:
+                parts = action.split(":")
+                pos_id = parts[1]
+                sl_value = float(parts[2])
+
+                positions = context.user_data.get("positions", [])
+                for p in positions:
+                    if p.get("id") == pos_id:
+                        p["stop_loss"] = sl_value
+                        break
+
+                context.user_data["positions"] = positions
+
+                # Show success and return to adjust menu
+                position = next((p for p in positions if p.get("id") == pos_id), None)
+                if position:
+                    await query.answer(f"✅ Stop Loss set to -{sl_value}%")
+                    text, keyboard = DemoMenuBuilder.position_adjust_menu(
+                        pos_id=pos_id,
+                        symbol=position.get("symbol", "???"),
+                        current_tp=position.get("take_profit", 50.0),
+                        current_sl=sl_value,
+                        pnl_pct=position.get("pnl_pct", 0.0),
+                    )
+                else:
+                    text = "❌ Position not found"
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:positions")]
+                    ])
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Set SL error: {e}")
+                await query.answer("❌ Error setting SL")
+                return
+
+        elif action.startswith("trailing_setup:"):
+            # Quick trailing stop setup from position adjust menu
+            pos_id = action.split(":")[1]
+            positions = context.user_data.get("positions", [])
+            position = next((p for p in positions if p.get("id") == pos_id), None)
+
+            if position:
+                text, keyboard = DemoMenuBuilder.trailing_stop_setup(position=position)
+            else:
+                text = "❌ Position not found"
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:positions")]
+                ])
+
+        # ========== END POSITION ADJUSTMENT HANDLERS ==========
+
         elif action == "token_input":
             text, keyboard = DemoMenuBuilder.token_input_prompt()
             # Store state for next message
