@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 import threading
 
 from core import config, providers, secrets, guardian
+from core.model_router import get_model_router, ModelProvider, ModelCapability
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE_REGISTRY_PATH = ROOT / "data" / "service_registry.json"
@@ -259,8 +260,24 @@ class ServiceDiscovery:
     
     def _add_provider(self, service_id: str, service: Dict[str, Any]):
         """Add service to providers module."""
-        # This would dynamically add the provider to providers.py
-        # For now, we'll just log it
+        router = get_model_router()
+        existing = router.get_provider(service_id)
+        if not existing:
+            router.add_provider(
+                ModelProvider(
+                    name=service_id,
+                    model_id=service_id,
+                    api_key_env=service["api_key_env"],
+                    capabilities=[
+                        ModelCapability.TEXT_GENERATION,
+                        ModelCapability.LOW_COST,
+                    ],
+                    priority=10,
+                    latency_ms=400,
+                    cost_per_1k_tokens=0.002,
+                )
+            )
+
         self._log_integration(service_id, "provider_added", {
             "endpoint": service["integration"]["endpoint"]
         })
