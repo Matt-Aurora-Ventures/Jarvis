@@ -1144,6 +1144,250 @@ class TwitterClient:
             logger.error(f"Failed to get quote tweets: {e}")
             return []
 
+    async def get_liking_users(self, tweet_id: str, max_results: int = 100) -> List[Dict[str, Any]]:
+        """
+        Get users who liked a specific tweet.
+        Uses Twitter API v2 GET /2/tweets/:id/liking_users
+
+        Args:
+            tweet_id: The tweet ID to check
+            max_results: Maximum users to retrieve (1-100)
+
+        Returns:
+            List of user dicts with id, username, name, verified
+        """
+        if not self.is_connected:
+            return []
+
+        if not self._read_allowed():
+            return []
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            if self._tweepy_client:
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self._tweepy_client.get_liking_users(
+                        id=tweet_id,
+                        max_results=min(max_results, 100),
+                        user_fields=["username", "verified", "public_metrics"]
+                    )
+                )
+
+                if response and response.data:
+                    return [
+                        {
+                            "id": str(user.id),
+                            "username": user.username,
+                            "name": getattr(user, "name", user.username),
+                            "verified": getattr(user, "verified", False),
+                        }
+                        for user in response.data
+                    ]
+
+            return []
+
+        except Exception as e:
+            status_code = None
+            if HAS_TWEEPY and isinstance(e, TweepyException):
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+            if status_code in (401, 403):
+                self._disable_reads(f"get_liking_users unauthorized ({status_code})")
+                return []
+            logger.error(f"Failed to get liking users for tweet {tweet_id}: {e}")
+            return []
+
+    async def get_retweeters(self, tweet_id: str, max_results: int = 100) -> List[Dict[str, Any]]:
+        """
+        Get users who retweeted a specific tweet.
+        Uses Twitter API v2 GET /2/tweets/:id/retweeted_by
+
+        Args:
+            tweet_id: The tweet ID to check
+            max_results: Maximum users to retrieve (1-100)
+
+        Returns:
+            List of user dicts with id, username, name, verified
+        """
+        if not self.is_connected:
+            return []
+
+        if not self._read_allowed():
+            return []
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            if self._tweepy_client:
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self._tweepy_client.get_retweeters(
+                        id=tweet_id,
+                        max_results=min(max_results, 100),
+                        user_fields=["username", "verified", "public_metrics"]
+                    )
+                )
+
+                if response and response.data:
+                    return [
+                        {
+                            "id": str(user.id),
+                            "username": user.username,
+                            "name": getattr(user, "name", user.username),
+                            "verified": getattr(user, "verified", False),
+                        }
+                        for user in response.data
+                    ]
+
+            return []
+
+        except Exception as e:
+            status_code = None
+            if HAS_TWEEPY and isinstance(e, TweepyException):
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+            if status_code in (401, 403):
+                self._disable_reads(f"get_retweeters unauthorized ({status_code})")
+                return []
+            logger.error(f"Failed to get retweeters for tweet {tweet_id}: {e}")
+            return []
+
+    async def get_tweet_replies(self, tweet_id: str, max_results: int = 100) -> List[Dict[str, Any]]:
+        """
+        Get replies to a specific tweet.
+        Uses Twitter API v2 search with conversation_id filter.
+
+        Args:
+            tweet_id: The tweet ID to get replies for
+            max_results: Maximum replies to retrieve
+
+        Returns:
+            List of reply dicts with id, text, author_username
+        """
+        if not self.is_connected:
+            return []
+
+        if not self._read_allowed():
+            return []
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            # Search for replies using conversation_id
+            query = f"conversation_id:{tweet_id} is:reply"
+
+            if self._tweepy_client:
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self._tweepy_client.search_recent_tweets(
+                        query=query,
+                        max_results=min(max_results, 100),
+                        tweet_fields=["author_id", "conversation_id", "created_at"],
+                        expansions=["author_id"],
+                        user_fields=["username", "verified"]
+                    )
+                )
+
+                if response and response.data:
+                    # Build user lookup
+                    users = {}
+                    if response.includes and "users" in response.includes:
+                        for user in response.includes["users"]:
+                            users[str(user.id)] = {
+                                "username": user.username,
+                                "verified": getattr(user, "verified", False),
+                            }
+
+                    return [
+                        {
+                            "id": str(tweet.id),
+                            "text": tweet.text,
+                            "author_id": str(tweet.author_id),
+                            "author_username": users.get(str(tweet.author_id), {}).get("username", ""),
+                            "author_verified": users.get(str(tweet.author_id), {}).get("verified", False),
+                        }
+                        for tweet in response.data
+                    ]
+
+            return []
+
+        except Exception as e:
+            status_code = None
+            if HAS_TWEEPY and isinstance(e, TweepyException):
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+            if status_code in (401, 403):
+                self._disable_reads(f"get_tweet_replies unauthorized ({status_code})")
+                return []
+            logger.error(f"Failed to get tweet replies for {tweet_id}: {e}")
+            return []
+
+    async def get_tweet(self, tweet_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a single tweet by ID.
+
+        Args:
+            tweet_id: The tweet ID to fetch
+
+        Returns:
+            Tweet dict with id, text, author_id, author_username, or None
+        """
+        if not self.is_connected:
+            return None
+
+        if not self._read_allowed():
+            return None
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            if self._tweepy_client:
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self._tweepy_client.get_tweet(
+                        id=tweet_id,
+                        tweet_fields=["author_id", "created_at", "text", "public_metrics"],
+                        expansions=["author_id"],
+                        user_fields=["username", "verified"]
+                    )
+                )
+
+                if response and response.data:
+                    tweet = response.data
+                    author_username = ""
+                    author_verified = False
+
+                    if response.includes and "users" in response.includes:
+                        for user in response.includes["users"]:
+                            if str(user.id) == str(tweet.author_id):
+                                author_username = user.username
+                                author_verified = getattr(user, "verified", False)
+                                break
+
+                    metrics = tweet.public_metrics or {}
+                    return {
+                        "id": str(tweet.id),
+                        "text": tweet.text,
+                        "author_id": str(tweet.author_id),
+                        "author_username": author_username,
+                        "author_verified": author_verified,
+                        "created_at": str(tweet.created_at) if tweet.created_at else None,
+                        "like_count": metrics.get("like_count", 0),
+                        "retweet_count": metrics.get("retweet_count", 0),
+                        "reply_count": metrics.get("reply_count", 0),
+                    }
+
+            return None
+
+        except Exception as e:
+            status_code = None
+            if HAS_TWEEPY and isinstance(e, TweepyException):
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+            if status_code in (401, 403):
+                self._disable_reads(f"get_tweet unauthorized ({status_code})")
+                return None
+            logger.error(f"Failed to get tweet {tweet_id}: {e}")
+            return None
+
     async def block_user(self, user_id: str) -> bool:
         """Block a user by ID."""
         if not self.is_connected or not self._user_id:

@@ -35,6 +35,7 @@ from .contract import (
     ToolContract,
     ToolCall,
     ToolResult,
+    ToolCategory,
 )
 from .registry import (
     ToolRegistry,
@@ -51,6 +52,7 @@ __all__ = [
     "ToolContract",
     "ToolCall",
     "ToolResult",
+    "ToolCategory",
     # Registry
     "ToolRegistry",
     "get_tool_registry",
