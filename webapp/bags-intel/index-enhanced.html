@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bags Intel | JARVIS LifeOS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles-enhanced.css">
+</head>
+<body>
+    <div class="scanlines"></div>
+
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-text">JARVIS</span>
+                    <span class="logo-divider">/</span>
+                    <span class="logo-sub">Bags Intel</span>
+                </div>
+                <nav class="nav-tabs">
+                    <a href="index-enhanced.html" class="nav-tab active">Feed</a>
+                    <a href="intelligence-report.html" class="nav-tab">Intelligence</a>
+                </nav>
+                <div class="header-stats">
+                    <div class="stat">
+                        <span class="stat-label">Live</span>
+                        <div class="pulse-dot"></div>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Tracked</span>
+                        <span class="stat-value" id="tracked-count">0</span>
+                    </div>
+                    <button class="header-action-btn" id="settings-btn" title="Settings">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M10 12.5C11.3807 12.5 12.5 11.3807 12.5 10C12.5 8.61929 11.3807 7.5 10 7.5C8.61929 7.5 7.5 8.61929 7.5 10C7.5 11.3807 8.61929 12.5 10 12.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M16.1667 12.5C16.0557 12.7513 16.0226 13.0302 16.0717 13.3006C16.1209 13.571 16.2501 13.8203 16.4417 14.0167L16.4917 14.0667C16.6461 14.221 16.7687 14.4048 16.8527 14.6071C16.9368 14.8094 16.9805 15.0262 16.9805 15.2453C16.9805 15.4643 16.9368 15.6812 16.8527 15.8834C16.7687 16.0857 16.6461 16.2695 16.4917 16.4238C16.3373 16.5782 16.1536 16.7008 15.9513 16.7848C15.749 16.8689 15.5322 16.9126 15.3131 16.9126C15.094 16.9126 14.8772 16.8689 14.6749 16.7848C14.4726 16.7008 14.2889 16.5782 14.1345 16.4238L14.0845 16.3738C13.8881 16.1822 13.6388 16.053 13.3684 16.0039C13.098 15.9547 12.8191 15.9878 12.5678 16.0988C12.3216 16.2054 12.1127 16.3808 11.9665 16.6043C11.8203 16.8278 11.7429 17.0897 11.7433 17.3573V17.5C11.7433 17.9421 11.5677 18.3659 11.2551 18.6785C10.9425 18.9911 10.5187 19.1667 10.0767 19.1667C9.63464 19.1667 9.21079 18.9911 8.89823 18.6785C8.58566 18.3659 8.41 17.9421 8.41 17.5V17.4167C8.40432 17.1414 8.31709 16.8742 8.15955 16.6489C8.00202 16.4236 7.78112 16.2501 7.52417 16.1508C7.27289 16.0399 6.99398 16.0067 6.72358 16.0559C6.45318 16.105 6.20389 16.2342 6.00751 16.4258L5.95751 16.4758C5.80314 16.6302 5.61939 16.7528 5.41709 16.8368C5.21479 16.9209 4.99799 16.9646 4.77893 16.9646C4.55987 16.9646 4.34307 16.9209 4.14077 16.8368C3.93847 16.7528 3.75472 16.6302 3.60035 16.4758C3.44594 16.3214 3.32332 16.1377 3.23928 15.9354C3.15524 15.7331 3.11152 15.5163 3.11152 15.2972C3.11152 15.0782 3.15524 14.8614 3.23928 14.6591C3.32332 14.4568 3.44594 14.273 3.60035 14.1187L3.65035 14.0687C3.84191 13.8723 3.97107 13.623 4.02024 13.3526C4.06941 13.0822 4.03626 12.8033 3.92525 12.552C3.81865 12.3058 3.64318 12.0969 3.41971 11.9507C3.19624 11.8045 2.93434 11.7271 2.66674 11.7275H2.50007C2.05804 11.7275 1.63419 11.5519 1.32163 11.2393C1.00907 10.9267 0.833405 10.5029 0.833405 10.0608C0.833405 9.61878 1.00907 9.19493 1.32163 8.88237C1.63419 8.56981 2.05804 8.39414 2.50007 8.39414H2.58341C2.85868 8.38847 3.12592 8.30124 3.35126 8.1437C3.57661 7.98616 3.75011 7.76527 3.84941 7.50831C3.96042 7.25703 3.99357 6.97812 3.9444 6.70772C3.89523 6.43732 3.76608 6.18803 3.57451 5.99165L3.52451 5.94165C3.3701 5.78728 3.24748 5.60353 3.16344 5.40123C3.0794 5.19893 3.03568 4.98213 3.03568 4.76307C3.03568 4.54401 3.0794 4.32721 3.16344 4.12491C3.24748 3.92261 3.3701 3.73886 3.52451 3.58449C3.67888 3.43008 3.86263 3.30746 4.06493 3.22342C4.26723 3.13938 4.48403 3.09566 4.70309 3.09566C4.92215 3.09566 5.13895 3.13938 5.34125 3.22342C5.54355 3.30746 5.7273 3.43008 5.88167 3.58449L5.93167 3.63449C6.12805 3.82605 6.37734 3.95521 6.64774 4.00438C6.91814 4.05355 7.19705 4.0204 7.44833 3.90939H7.50007C7.74625 3.80279 7.95513 3.62732 8.10133 3.40385C8.24754 3.18038 8.32496 2.91848 8.32451 2.65088V2.48421C8.32451 2.04218 8.50017 1.61833 8.81273 1.30577C9.1253 0.993209 9.54914 0.817543 9.99117 0.817543C10.4332 0.817543 10.8571 0.993209 11.1696 1.30577C11.4822 1.61833 11.6578 2.04218 11.6578 2.48421V2.56755C11.6582 2.83515 11.7356 3.09705 11.8818 3.32052C12.028 3.54399 12.2369 3.71946 12.4831 3.82606C12.7344 3.93707 13.0133 3.97022 13.2837 3.92105C13.5541 3.87188 13.8034 3.74272 13.9997 3.55116L14.0497 3.50116C14.2041 3.34675 14.3879 3.22413 14.5902 3.14009C14.7925 3.05605 15.0093 3.01233 15.2283 3.01233C15.4474 3.01233 15.6642 3.05605 15.8665 3.14009C16.0688 3.22413 16.2525 3.34675 16.4069 3.50116C16.5613 3.65553 16.6839 3.83928 16.768 4.04158C16.852 4.24388 16.8957 4.46068 16.8957 4.67974C16.8957 4.8988 16.852 5.1156 16.768 5.3179C16.6839 5.5202 16.5613 5.70395 16.4069 5.85832L16.3569 5.90832C16.1653 6.10471 16.0362 6.35399 15.987 6.62439C15.9379 6.89479 15.971 7.1737 16.082 7.42498V7.47672C16.1886 7.7229 16.3641 7.93178 16.5876 8.07799C16.811 8.22419 17.0729 8.30161 17.3405 8.30117H17.5072C17.9492 8.30117 18.3731 8.47683 18.6856 8.78939C18.9982 9.10196 19.1739 9.52581 19.1739 9.96784C19.1739 10.4099 18.9982 10.8337 18.6856 11.1463C18.3731 11.4588 17.9492 11.6345 17.5072 11.6345H17.4238C17.1562 11.6349 16.8943 11.7124 16.6708 11.8586C16.4474 12.0048 16.2719 12.2137 16.1653 12.4599V12.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <div class="feed-header">
+                <h1 class="feed-title">Bags.fm Graduations</h1>
+                <p class="feed-subtitle">Real-time intelligence on bonding curve completions</p>
+
+                <!-- Search Bar -->
+                <div class="search-container">
+                    <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M19 19L14.65 14.65" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <input
+                        type="text"
+                        class="search-input"
+                        id="search-input"
+                        placeholder="Search by token name or symbol..."
+                    />
+                    <button class="search-clear" id="search-clear" style="display: none;">×</button>
+                </div>
+
+                <!-- Filters & Sort -->
+                <div class="controls-container">
+                    <div class="filters">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="exceptional">🌟 Exceptional</button>
+                        <button class="filter-btn" data-filter="strong">✅ Strong</button>
+                        <button class="filter-btn" data-filter="average">➖ Average</button>
+                    </div>
+
+                    <div class="sort-container">
+                        <select class="sort-select" id="sort-select">
+                            <option value="time-desc">Newest First</option>
+                            <option value="time-asc">Oldest First</option>
+                            <option value="score-desc">Highest Score</option>
+                            <option value="score-asc">Lowest Score</option>
+                            <option value="mcap-desc">Highest MCap</option>
+                            <option value="mcap-asc">Lowest MCap</option>
+                        </select>
+                    </div>
+
+                    <button class="advanced-filter-btn" id="advanced-filter-btn">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <path d="M1 4H17M4 9H14M7 14H11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        Filters
+                    </button>
+                </div>
+
+                <!-- Advanced Filter Panel -->
+                <div class="advanced-filters" id="advanced-filters" style="display: none;">
+                    <div class="advanced-filter-grid">
+                        <div class="filter-group">
+                            <label>Score Range</label>
+                            <div class="range-inputs">
+                                <input type="number" id="score-min" placeholder="Min" min="0" max="100" />
+                                <span>—</span>
+                                <input type="number" id="score-max" placeholder="Max" min="0" max="100" />
+                            </div>
+                        </div>
+
+                        <div class="filter-group">
+                            <label>Risk Level</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" value="low" checked /> 🟢 Low
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" value="medium" checked /> 🟡 Medium
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" value="high" checked /> 🟠 High
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" value="extreme" checked /> 🔴 Extreme
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="filter-group">
+                            <label>Market Cap Range ($)</label>
+                            <div class="range-inputs">
+                                <input type="number" id="mcap-min" placeholder="Min" />
+                                <span>—</span>
+                                <input type="number" id="mcap-max" placeholder="Max" />
+                            </div>
+                        </div>
+
+                        <div class="filter-group">
+                            <label>Time Range</label>
+                            <select id="time-range">
+                                <option value="all">All Time</option>
+                                <option value="1h">Last Hour</option>
+                                <option value="6h">Last 6 Hours</option>
+                                <option value="24h">Last 24 Hours</option>
+                                <option value="7d">Last 7 Days</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="filter-actions">
+                        <button class="filter-action-btn secondary" id="reset-filters">Reset</button>
+                        <button class="filter-action-btn primary" id="apply-filters">Apply Filters</button>
+                    </div>
+                </div>
+
+                <!-- Stats Summary -->
+                <div class="stats-summary" id="stats-summary">
+                    <div class="stat-item">
+                        <span class="stat-item-label">Showing</span>
+                        <span class="stat-item-value" id="showing-count">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-item-label">Avg Score</span>
+                        <span class="stat-item-value" id="avg-score">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-item-label">Total MCap</span>
+                        <span class="stat-item-value" id="total-mcap">$0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="feed" id="feed">
+                <!-- Intel cards will be inserted here -->
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="loading-spinner"></div>
+                <p>Monitoring bags.fm...</p>
+            </div>
+
+            <div class="empty-state" id="empty-state" style="display: none;">
+                <div class="empty-icon">📡</div>
+                <h3>No graduations match your filters</h3>
+                <p>Try adjusting your search or filter criteria</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Token Detail Modal -->
+    <div class="modal" id="token-modal">
+        <div class="modal-overlay" id="modal-overlay"></div>
+        <div class="modal-content">
+            <button class="modal-close" id="modal-close">×</button>
+            <div class="modal-body" id="modal-body">
+                <!-- Token details will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal" id="settings-modal">
+        <div class="modal-overlay" id="settings-overlay"></div>
+        <div class="modal-content modal-small">
+            <button class="modal-close" id="settings-close">×</button>
+            <div class="modal-header">
+                <h2>Settings</h2>
+            </div>
+            <div class="modal-body">
+                <div class="settings-group">
+                    <h3>Notifications</h3>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="notify-exceptional" checked />
+                        <span>Notify on Exceptional (80+)</span>
+                    </label>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="notify-strong" />
+                        <span>Notify on Strong (65+)</span>
+                    </label>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="sound-enabled" />
+                        <span>Sound Notifications</span>
+                    </label>
+                </div>
+
+                <div class="settings-group">
+                    <h3>Display</h3>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="auto-refresh" checked />
+                        <span>Auto-refresh feed</span>
+                    </label>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="compact-mode" />
+                        <span>Compact card view</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <template id="intel-card-template">
+        <article class="intel-card" data-token-id="">
+            <!-- Header with Bags logo, Token info, and Action buttons -->
+            <div class="card-header">
+                <div class="token-info">
+                    <img src="https://bags.fm/logo.png" alt="Bags.fm" class="bags-logo" style="width: 32px; height: 32px; margin-right: 12px;" />
+                    <img class="token-avatar" src="" alt="" />
+                    <div class="token-identity">
+                        <div class="token-name-row">
+                            <span class="token-name"></span>
+                        </div>
+                        <div class="token-meta">
+                            <span class="token-symbol"></span>
+                            <span class="meta-separator">·</span>
+                            <span class="token-time"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button class="action-btn action-btn-swap swap-btn" title="Swap & Earn Fees">
+                        🔄 Swap
+                    </button>
+                    <a href="#" class="action-btn action-btn-dextools dextools-link" target="_blank" title="View on DEXTools">
+                        📊 DEXTools
+                    </a>
+                    <button class="action-btn share-btn" title="Share">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M12 5.5C13.1046 5.5 14 4.60457 14 3.5C14 2.39543 13.1046 1.5 12 1.5C10.8954 1.5 10 2.39543 10 3.5C10 4.60457 10.8954 5.5 12 5.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M4 10C5.10457 10 6 9.10457 6 8C6 6.89543 5.10457 6 4 6C2.89543 6 2 6.89543 2 8C2 9.10457 2.89543 10 4 10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M12 14.5C13.1046 14.5 14 13.6046 14 12.5C14 11.3954 13.1046 10.5 12 10.5C10.8954 10.5 10 11.3954 10 12.5C10 13.6046 10.8954 14.5 12 14.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M5.75 9L10.25 11.5M10.25 4.5L5.75 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Two-column body -->
+            <div class="card-body-comprehensive">
+                <!-- Left Column: Scores, Founder, PMF -->
+                <div class="comprehensive-left">
+                    <div class="score-banner">
+                        <div class="score-main">
+                            <span class="score-label">Intel Score</span>
+                            <span class="score-value"></span>
+                            <span class="quality-badge"></span>
+                        </div>
+                        <div class="risk-indicator">
+                            <span class="risk-label">Risk</span>
+                            <span class="risk-badge"></span>
+                        </div>
+                    </div>
+
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-icon">💰</div>
+                            <div class="metric-content">
+                                <span class="metric-label">Market Cap</span>
+                                <span class="metric-value mcap-value"></span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon">💧</div>
+                            <div class="metric-content">
+                                <span class="metric-label">Liquidity</span>
+                                <span class="metric-value liq-value"></span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon">⏱️</div>
+                            <div class="metric-content">
+                                <span class="metric-label">Duration</span>
+                                <span class="metric-value duration-value"></span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon">👥</div>
+                            <div class="metric-content">
+                                <span class="metric-label">Buyers</span>
+                                <span class="metric-value buyers-value"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="scores-breakdown">
+                        <div class="score-bar">
+                            <span class="score-bar-label">Bonding</span>
+                            <div class="score-bar-track">
+                                <div class="score-bar-fill bonding-score"></div>
+                            </div>
+                            <span class="score-bar-value bonding-score-value"></span>
+                        </div>
+                        <div class="score-bar">
+                            <span class="score-bar-label">Creator</span>
+                            <div class="score-bar-track">
+                                <div class="score-bar-fill creator-score"></div>
+                            </div>
+                            <span class="score-bar-value creator-score-value"></span>
+                        </div>
+                        <div class="score-bar">
+                            <span class="score-bar-label">Social</span>
+                            <div class="score-bar-track">
+                                <div class="score-bar-fill social-score"></div>
+                            </div>
+                            <span class="score-bar-value social-score-value"></span>
+                        </div>
+                        <div class="score-bar">
+                            <span class="score-bar-label">Market</span>
+                            <div class="score-bar-track">
+                                <div class="score-bar-fill market-score"></div>
+                            </div>
+                            <span class="score-bar-value market-score-value"></span>
+                        </div>
+                    </div>
+
+                    <!-- Founder Research Section -->
+                    <div class="founder-research-section" style="display: none;">
+                        <h4 class="section-title">👤 Founder Due Diligence</h4>
+                        <div class="founder-links">
+                            <a href="#" class="founder-link twitter-link" target="_blank" style="display: none;">🐦 Twitter</a>
+                            <a href="#" class="founder-link linkedin-link" target="_blank" style="display: none;">💼 LinkedIn</a>
+                            <a href="#" class="founder-link github-link" target="_blank" style="display: none;">💻 GitHub</a>
+                        </div>
+                        <div class="doxxed-status">
+                            <span class="doxxed-badge">❓ Unknown</span>
+                            <span class="doxxed-confidence"></span>
+                        </div>
+                        <div class="founder-flags">
+                            <div class="founder-green-flags"></div>
+                            <div class="founder-red-flags"></div>
+                        </div>
+                    </div>
+
+                    <!-- PMF Section -->
+                    <div class="pmf-section" style="display: none;">
+                        <h4 class="section-title">🎯 Product-Market Fit</h4>
+                        <div class="pmf-score-bar">
+                            <div class="score-bar-track">
+                                <div class="score-bar-fill pmf-score-fill"></div>
+                            </div>
+                            <span class="score-bar-value pmf-score-value"></span>
+                        </div>
+                        <div class="pmf-details">
+                            <p class="pmf-utility"></p>
+                            <p class="pmf-market"></p>
+                            <p class="pmf-competition"></p>
+                            <p class="pmf-community"></p>
+                        </div>
+                    </div>
+
+                    <div class="flags-section">
+                        <div class="flags-column green-flags">
+                            <h4 class="flags-title">✅ Green Flags</h4>
+                            <ul class="flags-list green-flags-list"></ul>
+                        </div>
+                        <div class="flags-column red-flags">
+                            <h4 class="flags-title">🚨 Red Flags</h4>
+                            <ul class="flags-list red-flags-list"></ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Chart, Activity, Holders, AI -->
+                <div class="comprehensive-right">
+                    <div class="ai-summary">
+                        <div class="ai-header">
+                            <span class="ai-icon">🤖</span>
+                            <span class="ai-label">Grok Analysis</span>
+                        </div>
+                        <p class="ai-text"></p>
+                    </div>
+
+                    <!-- Price Chart Placeholder -->
+                    <div class="chart-section">
+                        <h4 class="section-title">📈 Price Chart</h4>
+                        <div class="chart-placeholder">
+                            <canvas id="chart-canvas" width="400" height="200"></canvas>
+                            <p style="text-align: center; color: var(--text-grey); margin-top: 12px;">Real-time chart coming soon</p>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activity Placeholder -->
+                    <div class="activity-section">
+                        <h4 class="section-title">📊 Recent Activity</h4>
+                        <div class="activity-list">
+                            <p style="color: var(--text-grey);">Real-time buy/sell tracking coming soon</p>
+                        </div>
+                    </div>
+
+                    <!-- Notable Holders Placeholder -->
+                    <div class="holders-section">
+                        <h4 class="section-title">💎 Notable Holders</h4>
+                        <div class="holders-list">
+                            <p style="color: var(--text-grey);">Holder analysis coming soon</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-footer">
+                <div class="footer-stats">
+                    <button class="stat-btn view-detail-btn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M8 3C4.5 3 1.73 5.11 1 8C1.73 10.89 4.5 13 8 13C11.5 13 14.27 10.89 15 8C14.27 5.11 11.5 3 8 3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="stat-count">Full Details</span>
+                    </button>
+                </div>
+                <div class="footer-links">
+                    <a href="#" class="link-btn bags-link" target="_blank">Bags.fm</a>
+                    <a href="#" class="link-btn dex-link" target="_blank">DexScreener</a>
+                    <a href="#" class="link-btn copy-link">Copy CA</a>
+                </div>
+            </div>
+        </article>
+    </template>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="app-enhanced.js"></script>
+</body>
+</html>

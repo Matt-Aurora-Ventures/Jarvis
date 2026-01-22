@@ -1,0 +1,26 @@
+{
+  "text": "*dashboard*\n_mode: paper_\n\nportfolio: `10.0000` sol (~$2,000)\n\nstats:\n  win rate: 62.5%\n  streak: +3\n  realized: +1.2345 sol\n\n_nothing open. waiting for opportunities._",
+  "parse_mode": "Markdown",
+  "keyboard": [
+    [
+      {
+        "text": "refresh",
+        "callback_data": "refresh_dashboard"
+      },
+      {
+        "text": "positions",
+        "callback_data": "show_positions_detail"
+      }
+    ],
+    [
+      {
+        "text": "report",
+        "callback_data": "refresh_report"
+      },
+      {
+        "text": "balance",
+        "callback_data": "refresh_balance"
+      }
+    ]
+  ]
+}

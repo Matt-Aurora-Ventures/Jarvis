@@ -1,0 +1,57 @@
+# JARVIS Web Demo - Backend Dependencies
+
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
+python-multipart==0.0.6
+slowapi==0.1.9  # Rate limiting
+
+# Database
+sqlalchemy==2.0.25
+asyncpg==0.29.0  # PostgreSQL async driver
+alembic==1.13.1  # Migrations
+redis==5.0.1  # Cache and sessions
+
+# HTTP & Networking
+aiohttp==3.9.1
+httpx==0.26.0
+websockets==12.0
+
+# Solana & Trading
+solana==0.30.2
+solders==0.18.0  # Solana SDK
+base58==2.1.1
+
+# AI & Sentiment (supports both Grok and Ollama)
+openai==1.10.0  # For OpenAI-compatible APIs (Grok, Ollama)
+
+# Charts & Visualization
+matplotlib==3.8.2
+pillow==10.2.0
+
+# Utilities
+python-dotenv==1.0.0
+cryptography==42.0.0
+argon2-cffi==23.1.0
+tenacity==8.2.3  # Retry logic
+
+# Monitoring & Logging
+prometheus-client==0.19.0
+sentry-sdk[fastapi]==1.40.0
+
+# Development
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0
+httpx==0.26.0  # For testing API
+faker==22.5.0  # Test data generation
+black==23.12.1  # Code formatting
+ruff==0.1.11  # Linting
+mypy==1.8.0  # Type checking

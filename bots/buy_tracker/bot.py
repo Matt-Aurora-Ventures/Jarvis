@@ -24,6 +24,24 @@ from bots.buy_tracker.ape_buttons import (
 )
 from core.logging.error_tracker import error_tracker
 
+# Import self-correcting AI system
+try:
+    from core.self_correcting import (
+        get_shared_memory,
+        get_message_bus,
+        get_ollama_router,
+        LearningType,
+        MessageType,
+        MessagePriority,
+        TaskType,
+    )
+    SELF_CORRECTING_AVAILABLE = True
+except ImportError:
+    SELF_CORRECTING_AVAILABLE = False
+    get_shared_memory = None
+    get_message_bus = None
+    get_ollama_router = None
+
 logger = logging.getLogger(__name__)
 
 # FAQ content for expandable section
@@ -120,6 +138,30 @@ class JarvisBuyBot:
         self._buy_counter = 0
         # KR8TIV sticker file_id cache (fetched on first use)
         self._kr8tiv_sticker_id: Optional[str] = None
+
+        # Initialize self-correcting AI system
+        self.memory = None
+        self.bus = None
+        self.router = None
+        if SELF_CORRECTING_AVAILABLE:
+            try:
+                self.memory = get_shared_memory()
+                self.bus = get_message_bus()
+                self.router = get_ollama_router()
+
+                # Load past learnings about token buys
+                past_learnings = self.memory.search_learnings(
+                    component="buy_tracker",
+                    learning_type=LearningType.SUCCESS_PATTERN,
+                    min_confidence=0.6
+                )
+                logger.info(f"Loaded {len(past_learnings)} past buy patterns from memory")
+
+            except Exception as e:
+                logger.warning(f"Failed to initialize self-correcting AI: {e}")
+                self.memory = None
+                self.bus = None
+                self.router = None
 
     async def start(self):
         """Start the buy bot."""
@@ -342,6 +384,31 @@ class JarvisBuyBot:
                     del self._message_cache[oldest]
 
                 logger.info(f"Buy notification sent: ${buy.usd_amount:.2f}")
+
+                # Self-correcting AI: Record learning and broadcast signal
+                if SELF_CORRECTING_AVAILABLE and self.memory and self.bus:
+                    try:
+                        # Record learning about this buy
+                        await self._record_buy_learning(buy)
+
+                        # Broadcast buy signal to other bots
+                        await self.bus.publish(
+                            sender="buy_tracker",
+                            message_type=MessageType.BUY_SIGNAL,
+                            data={
+                                "token": buy.token_symbol,
+                                "contract": buy.token_mint,
+                                "usd_amount": buy.usd_amount,
+                                "buyer": buy.buyer_short,
+                                "timestamp": buy.timestamp,
+                                "tx_signature": buy.tx_signature,
+                            },
+                            priority=MessagePriority.HIGH
+                        )
+                        logger.info(f"Broadcasted buy signal to other bots")
+                    except Exception as e:
+                        logger.error(f"Failed to record learning or broadcast: {e}")
+
                 return  # Success, exit retry loop
 
             except Exception as e:
@@ -1024,6 +1091,69 @@ class JarvisBuyBot:
             return f"${mcap / 1_000:,.2f}K"
         else:
             return f"${mcap:,.2f}"
+
+    async def _record_buy_learning(self, buy: BuyTransaction):
+        """Record buy detection as a learning for self-correcting AI system.
+
+        Stores patterns about significant buys to help other bots make better decisions.
+        Only records buys >= $100 to focus on meaningful signals.
+        """
+        if not SELF_CORRECTING_AVAILABLE or not self.memory:
+            return
+
+        try:
+            # Only record significant buys (>= $100)
+            if buy.usd_amount < 100:
+                return
+
+            # Determine learning type based on buy size
+            if buy.usd_amount >= 1000:
+                learning_type = LearningType.SUCCESS_PATTERN
+                confidence = 0.8
+                content = f"Large buy detected on {buy.token_symbol}: ${buy.usd_amount:,.2f} - significant market interest"
+            elif buy.usd_amount >= 500:
+                learning_type = LearningType.SUCCESS_PATTERN
+                confidence = 0.7
+                content = f"Notable buy on {buy.token_symbol}: ${buy.usd_amount:,.2f} - growing interest"
+            else:  # >= 100
+                learning_type = LearningType.CONTEXT_ADAPTATION
+                confidence = 0.6
+                content = f"Buy activity on {buy.token_symbol}: ${buy.usd_amount:,.2f}"
+
+            # Store learning with context
+            learning_id = self.memory.add_learning(
+                component="buy_tracker",
+                learning_type=learning_type,
+                content=content,
+                context={
+                    "token": buy.token_symbol,
+                    "contract": buy.token_mint,
+                    "usd_amount": buy.usd_amount,
+                    "buyer": buy.buyer_short,
+                    "timestamp": buy.timestamp,
+                    "tx_signature": buy.tx_signature,
+                },
+                confidence=confidence
+            )
+
+            logger.info(f"Recorded buy learning: {learning_id} (${buy.usd_amount:,.2f})")
+
+            # Broadcast learning to other bots
+            if self.bus:
+                await self.bus.publish(
+                    sender="buy_tracker",
+                    message_type=MessageType.NEW_LEARNING,
+                    data={
+                        "learning_id": learning_id,
+                        "component": "buy_tracker",
+                        "type": learning_type.value,
+                        "content": content,
+                    },
+                    priority=MessagePriority.NORMAL
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to record buy learning: {e}")
 
 
 async def run_buy_bot():

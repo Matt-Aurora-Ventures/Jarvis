@@ -1,0 +1,5 @@
+{
+  "text": "*trade ticket* <ID>",
+  "parse_mode": "Markdown",
+  "keyboard": null
+}

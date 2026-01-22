@@ -16,6 +16,7 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from tg_bot.handlers import error_handler
+from core.state_paths import STATE_PATHS
 from bots.treasury.display import TreasuryDisplay
 
 logger = logging.getLogger(__name__)
@@ -28,24 +29,32 @@ class TreasuryHandler:
         """Initialize treasury handler."""
         if data_dir:
             self.data_dir = Path(data_dir)
+            self.positions_file = self.data_dir / "positions.json"
+            self.trades_file = self.data_dir / "trade_history.json"
         else:
-            # Use absolute path based on this file's location
-            self.data_dir = Path(__file__).resolve().parents[2] / "bots" / "treasury"
-
-        self.positions_file = self.data_dir / ".positions.json"
-        self.trades_file = self.data_dir / ".trade_history.json"
+            self.data_dir = STATE_PATHS.trader_positions.parent
+            self.positions_file = STATE_PATHS.trader_positions
+            self.trades_file = STATE_PATHS.trader_trade_history
+        self._legacy_positions_file = Path(__file__).resolve().parents[2] / "bots" / "treasury" / ".positions.json"
+        self._legacy_trades_file = Path(__file__).resolve().parents[2] / "bots" / "treasury" / ".trade_history.json"
 
         # Ensure data directory exists
         self.data_dir.mkdir(parents=True, exist_ok=True)
+
+    def _resolve_files(self) -> tuple[Path, Path]:
+        positions = self.positions_file if self.positions_file.exists() else self._legacy_positions_file
+        trades = self.trades_file if self.trades_file.exists() else self._legacy_trades_file
+        return positions, trades
 
     @error_handler
     async def handle_treasury(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /treasury command - Full display."""
         try:
             # Load treasury data
+            positions_path, trades_path = self._resolve_files()
             display = TreasuryDisplay.from_json_files(
-                str(self.positions_file),
-                str(self.trades_file),
+                str(positions_path),
+                str(trades_path),
             )
 
             # Generate display
@@ -75,9 +84,10 @@ class TreasuryHandler:
     async def handle_portfolio(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /portfolio or /p command - Quick overview."""
         try:
+            positions_path, trades_path = self._resolve_files()
             display = TreasuryDisplay.from_json_files(
-                str(self.positions_file),
-                str(self.trades_file),
+                str(positions_path),
+                str(trades_path),
             )
 
             # Generate portfolio section only
@@ -116,9 +126,10 @@ Closed Trades:        {len(display.closed_trades)}
     async def handle_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /balance or /b command - Balance summary."""
         try:
+            positions_path, trades_path = self._resolve_files()
             display = TreasuryDisplay.from_json_files(
-                str(self.positions_file),
-                str(self.trades_file),
+                str(positions_path),
+                str(trades_path),
             )
 
             # Generate balance summary

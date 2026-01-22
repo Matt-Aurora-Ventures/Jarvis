@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bags Intel | JARVIS LifeOS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="scanlines"></div>
+
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-text">JARVIS</span>
+                    <span class="logo-divider">/</span>
+                    <span class="logo-sub">Bags Intel</span>
+                </div>
+                <div class="header-stats">
+                    <div class="stat">
+                        <span class="stat-label">Live</span>
+                        <div class="pulse-dot"></div>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Tracked</span>
+                        <span class="stat-value" id="tracked-count">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <div class="feed-header">
+                <h1 class="feed-title">Bags.fm Graduations</h1>
+                <p class="feed-subtitle">Real-time intelligence on bonding curve completions</p>
+                <div class="filters">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="exceptional">🌟 Exceptional</button>
+                    <button class="filter-btn" data-filter="strong">✅ Strong</button>
+                    <button class="filter-btn" data-filter="average">➖ Average</button>
+                </div>
+            </div>
+
+            <div class="feed" id="feed">
+                <!-- Intel cards will be inserted here -->
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="loading-spinner"></div>
+                <p>Monitoring bags.fm...</p>
+            </div>
+
+            <div class="empty-state" id="empty-state" style="display: none;">
+                <div class="empty-icon">📡</div>
+                <h3>No graduations yet</h3>
+                <p>Waiting for tokens to complete bonding curve...</p>
+            </div>
+        </div>
+    </main>
+
+    <template id="intel-card-template">
+        <article class="intel-card">
+            <div class="card-header">
+                <div class="token-info">
+                    <img class="token-avatar" src="" alt="" />
+                    <div class="token-identity">
+                        <div class="token-name-row">
+                            <span class="token-name"></span>
+                            <span class="verified-badge">✓</span>
+                        </div>
+                        <div class="token-meta">
+                            <span class="token-symbol"></span>
+                            <span class="meta-separator">·</span>
+                            <span class="token-time"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button class="action-btn" title="Refresh">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M13 3L13 7L9 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M3 13L3 9L7 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M12.5 5.5C11.8 4.5 10.7 3.8 9.4 3.5C6.9 3 4.5 4.5 3.8 7C3.1 9.5 4.6 12 7.1 12.7C9 13.3 10.9 12.5 12 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <button class="action-btn" title="More">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <circle cx="8" cy="3" r="1" fill="currentColor"/>
+                            <circle cx="8" cy="8" r="1" fill="currentColor"/>
+                            <circle cx="8" cy="13" r="1" fill="currentColor"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="card-content">
+                <div class="score-banner">
+                    <div class="score-main">
+                        <span class="score-label">Intel Score</span>
+                        <span class="score-value"></span>
+                        <span class="quality-badge"></span>
+                    </div>
+                    <div class="risk-indicator">
+                        <span class="risk-label">Risk</span>
+                        <span class="risk-badge"></span>
+                    </div>
+                </div>
+
+                <div class="ai-summary">
+                    <div class="ai-header">
+                        <span class="ai-icon">🤖</span>
+                        <span class="ai-label">Grok Analysis</span>
+                    </div>
+                    <p class="ai-text"></p>
+                </div>
+
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-icon">💰</div>
+                        <div class="metric-content">
+                            <span class="metric-label">Market Cap</span>
+                            <span class="metric-value mcap-value"></span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon">💧</div>
+                        <div class="metric-content">
+                            <span class="metric-label">Liquidity</span>
+                            <span class="metric-value liq-value"></span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon">⏱️</div>
+                        <div class="metric-content">
+                            <span class="metric-label">Bond Duration</span>
+                            <span class="metric-value duration-value"></span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon">👥</div>
+                        <div class="metric-content">
+                            <span class="metric-label">Buyers</span>
+                            <span class="metric-value buyers-value"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="scores-breakdown">
+                    <div class="score-bar">
+                        <span class="score-bar-label">Bonding</span>
+                        <div class="score-bar-track">
+                            <div class="score-bar-fill bonding-score"></div>
+                        </div>
+                        <span class="score-bar-value bonding-score-value"></span>
+                    </div>
+                    <div class="score-bar">
+                        <span class="score-bar-label">Creator</span>
+                        <div class="score-bar-track">
+                            <div class="score-bar-fill creator-score"></div>
+                        </div>
+                        <span class="score-bar-value creator-score-value"></span>
+                    </div>
+                    <div class="score-bar">
+                        <span class="score-bar-label">Social</span>
+                        <div class="score-bar-track">
+                            <div class="score-bar-fill social-score"></div>
+                        </div>
+                        <span class="score-bar-value social-score-value"></span>
+                    </div>
+                    <div class="score-bar">
+                        <span class="score-bar-label">Market</span>
+                        <div class="score-bar-track">
+                            <div class="score-bar-fill market-score"></div>
+                        </div>
+                        <span class="score-bar-value market-score-value"></span>
+                    </div>
+                </div>
+
+                <div class="flags-section">
+                    <div class="flags-column green-flags">
+                        <h4 class="flags-title">✅ Green Flags</h4>
+                        <ul class="flags-list green-flags-list"></ul>
+                    </div>
+                    <div class="flags-column red-flags">
+                        <h4 class="flags-title">🚨 Red Flags</h4>
+                        <ul class="flags-list red-flags-list"></ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-footer">
+                <div class="footer-stats">
+                    <button class="stat-btn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M8 14C11.3137 14 14 11.3137 14 8C14 4.68629 11.3137 2 8 2C4.68629 2 2 4.68629 2 8C2 9.29 2.4 10.48 3.07 11.46L2.5 14L5.04 13.43C6.02 14 7.21 14 8 14Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="stat-count">2</span>
+                    </button>
+                    <button class="stat-btn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M4 7L7 10L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="stat-count">107</span>
+                    </button>
+                    <button class="stat-btn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M2 8H8M8 8V14M8 8V2M8 8H14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                        <span class="stat-count">8.2K</span>
+                    </button>
+                </div>
+                <div class="footer-links">
+                    <a href="#" class="link-btn bags-link" target="_blank">Bags.fm</a>
+                    <a href="#" class="link-btn dex-link" target="_blank">DexScreener</a>
+                    <a href="#" class="link-btn copy-link">Copy CA</a>
+                </div>
+            </div>
+        </article>
+    </template>
+
+    <script src="app.js"></script>
+</body>
+</html>

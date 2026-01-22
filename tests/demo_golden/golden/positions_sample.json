@@ -1,0 +1,18 @@
+{
+  "text": "*positions*\n\n*TEST* \ud83d\udfe2\n   Entry: $0.01000000\n   Current: $0.01200000\n   P&L: +23.4% ($+12.34)\n   \ud83c\udfaf TP: $0.01200000\n   \ud83d\uded1 SL: $0.00900000\n   ID: `pos_<ID>`\n\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n*Total P&L:* \ud83d\udfe2 $+12.34",
+  "parse_mode": "Markdown",
+  "keyboard": [
+    [
+      {
+        "text": "\ud83d\udd34 SELL TEST",
+        "callback_data": "sell_pos:pos_abc123"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udd04 Refresh",
+        "callback_data": "show_positions_detail"
+      }
+    ]
+  ]
+}

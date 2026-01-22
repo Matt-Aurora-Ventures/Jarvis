@@ -1,0 +1,613 @@
+<!-- Comprehensive Intelligence Feed Card Template -->
+<!-- Max width: 1200px, shows all data: founder, PMF, chart, DEXTools, swap, buys/sells, holders -->
+
+<style>
+.intel-card-comprehensive {
+    max-width: 1200px;
+    margin: 0 auto 24px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.intel-card-comprehensive:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(57, 255, 20, 0.15);
+}
+
+.intel-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--glass-border);
+    background: rgba(57, 255, 20, 0.05);
+}
+
+.intel-card-title-section {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.bags-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent-green);
+}
+
+.intel-card-title-info h3 {
+    font-family: var(--font-heading);
+    font-size: 1.5rem;
+    color: var(--pure-white);
+    margin-bottom: var(--spacing-xs);
+}
+
+.intel-card-title-info .symbol {
+    font-family: var(--font-mono);
+    color: var(--accent-green);
+    font-size: 0.875rem;
+}
+
+.intel-card-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.action-btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.action-btn-swap {
+    background: var(--accent-green);
+    color: var(--dark-bg);
+    border: none;
+}
+
+.action-btn-swap:hover {
+    background: #00ff88;
+    transform: scale(1.05);
+}
+
+.action-btn-dextools {
+    background: rgba(57, 255, 20, 0.1);
+    border: 1px solid var(--accent-green);
+    color: var(--accent-green);
+}
+
+.action-btn-dextools:hover {
+    background: rgba(57, 255, 20, 0.2);
+}
+
+.intel-card-body {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: var(--spacing-lg);
+    padding: var(--spacing-lg);
+}
+
+/* Left column: Scores, Founder, PMF */
+.intel-left-column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+/* Right column: Chart, Activity, Holders */
+.intel-right-column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.intel-section {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+}
+
+.intel-section-title {
+    font-family: var(--font-heading);
+    font-size: 1rem;
+    color: var(--accent-green);
+    margin-bottom: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+/* Overall Score Circle */
+.score-circle {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: conic-gradient(
+        var(--accent-green) calc(var(--score-percent) * 1%),
+        rgba(255, 255, 255, 0.1) 0
+    );
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--spacing-md);
+    position: relative;
+}
+
+.score-circle-inner {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: var(--dark-bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.score-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent-green);
+    font-family: var(--font-heading);
+}
+
+.score-label {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+}
+
+/* Component Scores Grid */
+.component-scores {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-sm);
+}
+
+.component-score-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-xs);
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+}
+
+.component-score-label {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.component-score-value {
+    color: var(--accent-green);
+    font-weight: 600;
+    font-family: var(--font-mono);
+}
+
+/* Founder Research */
+.founder-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.founder-profile-links {
+    display: flex;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+}
+
+.founder-link {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: rgba(57, 255, 20, 0.1);
+    border: 1px solid rgba(57, 255, 20, 0.3);
+    border-radius: var(--radius-sm);
+    color: var(--accent-green);
+    font-size: 0.75rem;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.founder-link:hover {
+    background: rgba(57, 255, 20, 0.2);
+}
+
+.founder-doxx-status {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs);
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+}
+
+.doxx-badge {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.doxx-badge.verified {
+    background: rgba(57, 255, 20, 0.2);
+    color: var(--accent-green);
+}
+
+.doxx-badge.anonymous {
+    background: rgba(255, 68, 68, 0.2);
+    color: #ff4444;
+}
+
+.founder-flags {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.7rem;
+}
+
+.flag-green {
+    color: #00ff88;
+}
+
+.flag-red {
+    color: #ff4444;
+}
+
+/* Product-Market Fit */
+.pmf-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.pmf-score-bar {
+    background: rgba(0, 0, 0, 0.3);
+    height: 24px;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+}
+
+.pmf-score-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-green), #00ff88);
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--dark-bg);
+}
+
+.pmf-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-xs);
+    font-size: 0.75rem;
+}
+
+.pmf-detail-item {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--spacing-xs);
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-sm);
+}
+
+/* Price Chart */
+.chart-container {
+    height: 200px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-sm);
+    position: relative;
+}
+
+.chart-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.875rem;
+}
+
+/* Activity Feed (Buys/Sells) */
+.activity-feed {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.activity-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-xs);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.75rem;
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-type {
+    font-weight: 600;
+}
+
+.activity-type.buy {
+    color: #00ff88;
+}
+
+.activity-type.sell {
+    color: #ff4444;
+}
+
+.activity-amount {
+    font-family: var(--font-mono);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.activity-time {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.7rem;
+}
+
+/* Notable Holders */
+.holders-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.holder-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-xs);
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+}
+
+.holder-address {
+    font-family: var(--font-mono);
+    color: var(--accent-green);
+}
+
+.holder-balance {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.holder-label {
+    padding: 2px 6px;
+    background: rgba(57, 255, 20, 0.2);
+    border-radius: 4px;
+    font-size: 0.7rem;
+    color: var(--accent-green);
+}
+
+@media (max-width: 1024px) {
+    .intel-card-body {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<!-- Card Template -->
+<div class="intel-card-comprehensive">
+    <!-- Header -->
+    <div class="intel-card-header">
+        <div class="intel-card-title-section">
+            <img src="https://bags.fm/logo.png" alt="Bags.fm" class="bags-logo" onerror="this.style.background='var(--accent-green)'">
+            <div class="intel-card-title-info">
+                <h3>{token_name}</h3>
+                <div class="symbol">${symbol} · {contract_short}</div>
+            </div>
+        </div>
+        <div class="intel-card-actions">
+            <button class="action-btn action-btn-swap" onclick="swapToken('{contract}')">
+                🔄 Swap (Earn Fees)
+            </button>
+            <a href="https://www.dextools.io/app/en/solana/pair-explorer/{contract}" target="_blank" class="action-btn action-btn-dextools">
+                📊 DEXTools
+            </a>
+        </div>
+    </div>
+
+    <!-- Body -->
+    <div class="intel-card-body">
+        <!-- Left Column -->
+        <div class="intel-left-column">
+            <!-- Overall Score -->
+            <div class="intel-section">
+                <div class="score-circle" style="--score-percent: {overall_score}">
+                    <div class="score-circle-inner">
+                        <div class="score-value">{overall_score}</div>
+                        <div class="score-label">Overall</div>
+                    </div>
+                </div>
+                <div class="component-scores">
+                    <div class="component-score-item">
+                        <span class="component-score-label">Bonding</span>
+                        <span class="component-score-value">{bonding_score}</span>
+                    </div>
+                    <div class="component-score-item">
+                        <span class="component-score-label">Creator</span>
+                        <span class="component-score-value">{creator_score}</span>
+                    </div>
+                    <div class="component-score-item">
+                        <span class="component-score-label">Social</span>
+                        <span class="component-score-value">{social_score}</span>
+                    </div>
+                    <div class="component-score-item">
+                        <span class="component-score-label">Market</span>
+                        <span class="component-score-value">{market_score}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Founder Research -->
+            <div class="intel-section">
+                <div class="intel-section-title">
+                    👤 Founder Due Diligence
+                </div>
+                <div class="founder-info">
+                    <div class="founder-profile-links">
+                        <a href="https://twitter.com/{twitter_handle}" target="_blank" class="founder-link">
+                            🐦 Twitter
+                        </a>
+                        <a href="{linkedin_url}" target="_blank" class="founder-link" style="display: {linkedin_display}">
+                            💼 LinkedIn
+                        </a>
+                        <a href="https://github.com/{github_username}" target="_blank" class="founder-link" style="display: {github_display}">
+                            🔧 GitHub
+                        </a>
+                    </div>
+                    <div class="founder-doxx-status">
+                        <span>Doxxed:</span>
+                        <span class="doxx-badge {doxx_class}">{doxx_status}</span>
+                        <span style="margin-left: auto; font-size: 0.7rem; color: rgba(255, 255, 255, 0.6);">
+                            {doxx_confidence}% confidence
+                        </span>
+                    </div>
+                    <div class="founder-flags">
+                        {green_flags}
+                        {red_flags}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Product-Market Fit -->
+            <div class="intel-section">
+                <div class="intel-section-title">
+                    🎯 Product-Market Fit
+                </div>
+                <div class="pmf-info">
+                    <div class="pmf-score-bar">
+                        <div class="pmf-score-fill" style="width: {pmf_score}%">
+                            {pmf_score}% PMF
+                        </div>
+                    </div>
+                    <div class="pmf-details">
+                        <div class="pmf-detail-item">
+                            <span>Utility:</span>
+                            <span>{token_utility}</span>
+                        </div>
+                        <div class="pmf-detail-item">
+                            <span>Market:</span>
+                            <span>{target_market}</span>
+                        </div>
+                        <div class="pmf-detail-item">
+                            <span>Competition:</span>
+                            <span>{competition_level}</span>
+                        </div>
+                        <div class="pmf-detail-item">
+                            <span>Community:</span>
+                            <span>{community_engagement}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="intel-right-column">
+            <!-- Price Chart -->
+            <div class="intel-section">
+                <div class="intel-section-title">
+                    📈 Price Chart (24H)
+                </div>
+                <div class="chart-container">
+                    <canvas id="price-chart-{contract}"></canvas>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="intel-section">
+                <div class="intel-section-title">
+                    ⚡ Recent Activity (Buys/Sells)
+                </div>
+                <div class="activity-feed">
+                    {activity_items}
+                </div>
+            </div>
+
+            <!-- Notable Holders -->
+            <div class="intel-section">
+                <div class="intel-section-title">
+                    🐋 Notable Holders
+                </div>
+                <div class="holders-list">
+                    {holder_items}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Swap integration with bags.fm API
+function swapToken(contract) {
+    // Open bags.fm swap with referral code to earn fees
+    const referralCode = 'jarvis-intel'; // Your referral code
+    const swapUrl = `https://bags.fm/swap?token=${contract}&ref=${referralCode}`;
+    window.open(swapUrl, '_blank');
+}
+
+// Initialize price chart
+function initPriceChart(contract) {
+    const ctx = document.getElementById(`price-chart-${contract}`);
+    if (!ctx) return;
+
+    // TODO: Fetch price data from DEX or bags.fm API
+    // For now, generate sample data
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['1h', '2h', '3h', '4h', '5h', '6h', '7h', '8h', '9h', '10h'],
+            datasets: [{
+                label: 'Price',
+                data: [0.05, 0.052, 0.048, 0.055, 0.06, 0.058, 0.062, 0.065, 0.063, 0.068],
+                borderColor: '#39FF14',
+                backgroundColor: 'rgba(57, 255, 20, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    ticks: { color: 'rgba(255, 255, 255, 0.6)' },
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                },
+                x: {
+                    ticks: { color: 'rgba(255, 255, 255, 0.6)' },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+}
+</script>

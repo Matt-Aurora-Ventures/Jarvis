@@ -93,6 +93,7 @@ class PublicTradingBotIntegration:
 
         # Telegram app
         self.app: Optional[Application] = None
+        self._polling_lock = None
 
         logger.info("Public Trading Bot Integration initialized")
 
@@ -124,6 +125,13 @@ class PublicTradingBotIntegration:
             # Create Telegram application
             logger.info("→ Setting up Telegram application...")
             self.app = Application.builder().token(self.bot_token).build()
+
+            # Global error handler (admin-safe)
+            try:
+                from tg_bot.bot_core import error_handler as tg_error_handler
+                self.app.add_error_handler(tg_error_handler)
+            except Exception as e:
+                logger.warning(f"Error handler unavailable: {e}")
 
             # Register handlers
             await self._register_handlers()
@@ -160,6 +168,22 @@ class PublicTradingBotIntegration:
                 logger.error("Application not initialized")
                 return False
 
+            # Single-instance lock to avoid Telegram polling conflicts
+            try:
+                from core.utils.instance_lock import acquire_instance_lock
+                self._polling_lock = acquire_instance_lock(
+                    self.bot_token,
+                    name="telegram_polling",
+                    max_wait_seconds=0,
+                )
+            except Exception as exc:
+                logger.warning(f"Polling lock helper unavailable: {exc}")
+                self._polling_lock = None
+
+            if not self._polling_lock:
+                logger.warning("Telegram polling lock held by another process; skipping startup")
+                return False
+
             logger.info("Starting Telegram polling...")
             await self.app.updater.start_polling(drop_pending_updates=True)
 
@@ -168,6 +192,11 @@ class PublicTradingBotIntegration:
 
         except Exception as e:
             logger.error(f"Failed to start polling: {e}")
+            if self._polling_lock:
+                try:
+                    self._polling_lock.close()
+                except Exception:
+                    pass
             return False
 
     # ==================== USER FLOW ORCHESTRATION ====================
@@ -437,6 +466,12 @@ class PublicTradingBotIntegration:
 
             if self.wallet_service:
                 await self.wallet_service.close()
+
+            if self._polling_lock:
+                try:
+                    self._polling_lock.close()
+                except Exception:
+                    pass
 
             logger.info("✅ Public Trading Bot shutdown complete")
 

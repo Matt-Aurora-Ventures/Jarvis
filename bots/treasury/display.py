@@ -19,10 +19,12 @@ from pathlib import Path
 import sys
 import os
 
-# Fix Windows encoding for emoji
-if sys.platform == "win32":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+# Fix Windows encoding for emoji (avoid interfering with pytest capture)
+if sys.platform == "win32" and not os.environ.get("PYTEST_CURRENT_TEST"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 # Add parent dir to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -597,8 +599,8 @@ __all__ = [
 if __name__ == "__main__":
     # Load from actual JSON files
     jarvis_path = Path(__file__).parent.parent.parent
-    positions_file = jarvis_path / "bots" / "treasury" / ".positions.json"
-    trades_file = jarvis_path / "bots" / "treasury" / ".trade_history.json"
+    positions_file = jarvis_path / "data" / "trader" / "positions.json"
+    trades_file = jarvis_path / "data" / "trader" / "trade_history.json"
 
     print(f"Loading positions from: {positions_file}")
     print(f"Loading trades from: {trades_file}")

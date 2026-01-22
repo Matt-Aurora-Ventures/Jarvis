@@ -26,6 +26,17 @@ logger = logging.getLogger(__name__)
 def _log_twitter_error(error: Exception, context: str, metadata: dict = None):
     """Log error with structured data and track in error rate system."""
     try:
+        from core.logging.error_tracker import error_tracker
+        error_tracker.track_error(
+            error,
+            context=context,
+            component="twitter_client",
+            metadata=metadata or {}
+        )
+    except Exception:
+        pass
+
+    try:
         from core.monitoring.supervisor_health_bus import log_component_error
         log_component_error(
             component="twitter_client",
@@ -33,7 +44,7 @@ def _log_twitter_error(error: Exception, context: str, metadata: dict = None):
             context={"operation": context, **(metadata or {})},
             severity="error"
         )
-    except ImportError:
+    except Exception:
         # Fallback to standard logging
         logger.error(f"[{context}] {error}", exc_info=True)
 
@@ -60,8 +71,8 @@ def _get_max_tweet_length() -> int:
             if 1 <= value <= 4000:
                 return value
         except ValueError:
-            logger.warning("Invalid X_MAX_TWEET_LENGTH, falling back to 280")
-    return 280
+            logger.warning("Invalid X_MAX_TWEET_LENGTH, falling back to 4000")
+    return 4000
 
 
 def _load_oauth2_tokens() -> Dict[str, str]:
@@ -101,7 +112,7 @@ def _save_oauth2_tokens(access_token: str, refresh_token: str) -> bool:
                 os.remove(tmp_path)
             raise
     except Exception as e:
-        logger.error(f"Failed to save OAuth2 tokens: {e}")
+        _log_twitter_error(e, "save_oauth2_tokens")
         return False
 
 # Telegram sync (lazy import to avoid circular deps)
@@ -192,7 +203,11 @@ def with_retry(max_attempts: int = 3, base_delay: float = 2.0):
                 except RetryablePostError as exc:
                     attempt += 1
                     if attempt >= max_attempts:
-                        logger.error(f"Post tweet failed after {attempt} attempts: {exc}")
+                        _log_twitter_error(
+                            exc,
+                            "post_tweet_retry_exhausted",
+                            {"attempts": attempt}
+                        )
                         return TweetResult(success=False, error=str(exc))
 
                     delay = base_delay * (2 ** (attempt - 1))
@@ -290,6 +305,17 @@ class TwitterClient:
         self._circuit_breaker = APICircuitBreaker("twitter_api")
         self._read_disabled_until: Optional[float] = None
         self._read_disabled_reason: Optional[str] = None
+        self._load_read_state()
+
+    def _load_read_state(self) -> None:
+        try:
+            from core.context_engine import context
+            disabled_until, reason = context.get_x_read_disable()
+            if disabled_until:
+                self._read_disabled_until = float(disabled_until)
+                self._read_disabled_reason = reason
+        except Exception:
+            pass
 
     def _read_allowed(self) -> bool:
         if not self._read_disabled_until:
@@ -297,13 +323,27 @@ class TwitterClient:
         if time.time() >= self._read_disabled_until:
             self._read_disabled_until = None
             self._read_disabled_reason = None
+            try:
+                from core.context_engine import context
+                context.clear_x_read_disable()
+            except Exception:
+                pass
             return True
         return False
 
     def _disable_reads(self, reason: str, cooldown_seconds: int = 900) -> None:
-        self._read_disabled_until = time.time() + cooldown_seconds
+        new_until = time.time() + cooldown_seconds
+        # Avoid log spam if already disabled with same reason
+        if self._read_disabled_until and self._read_disabled_reason == reason:
+            return
+        self._read_disabled_until = new_until
         self._read_disabled_reason = reason
         logger.warning(f"Disabling X read endpoints for {cooldown_seconds}s: {reason}")
+        try:
+            from core.context_engine import context
+            context.record_x_read_disable(self._read_disabled_until, reason)
+        except Exception:
+            pass
 
     def _get_expected_username(self) -> str:
         expected = (
@@ -327,6 +367,10 @@ class TwitterClient:
     def connect(self) -> bool:
         """Initialize the X API connection - Use OAuth 1.0a (tweepy) as primary"""
         if not self.credentials.is_valid():
+            _log_twitter_error(
+                RuntimeError("Invalid X credentials - check environment variables"),
+                "connect_invalid_credentials"
+            )
             logger.error("Invalid X credentials - check environment variables")
             return False
 
@@ -377,10 +421,14 @@ class TwitterClient:
                     logger.warning(f"OAuth 1.0a connection failed: {e}")
 
             logger.error("Failed to connect to X with available credentials")
+            _log_twitter_error(
+                RuntimeError("Failed to connect to X with available credentials"),
+                "connect_failed"
+            )
             return False
 
         except Exception as e:
-            logger.error(f"X connection error: {e}")
+            _log_twitter_error(e, "connect")
             return False
 
     def _refresh_oauth2_token(self) -> bool:
@@ -424,11 +472,16 @@ class TwitterClient:
                 logger.info("OAuth 2.0 token refreshed and persisted successfully")
                 return True
 
-            logger.error(f"Token refresh failed: {resp.text}")
+            _log_twitter_error(
+                RuntimeError("Token refresh failed"),
+                "refresh_oauth2_token_status",
+                {"status_code": resp.status_code}
+            )
+            logger.error(f"Token refresh failed (status {resp.status_code})")
             return False
 
         except Exception as e:
-            logger.error(f"Token refresh error: {e}")
+            _log_twitter_error(e, "refresh_oauth2_token")
             return False
 
     @property
@@ -551,10 +604,19 @@ class TwitterClient:
                     if self._refresh_oauth2_token():
                         return await self.post_tweet(text, media_ids, reply_to, quote_tweet_id)
                     else:
+                        _log_twitter_error(
+                            RuntimeError("Token refresh failed during post"),
+                            "post_tweet_refresh_failed"
+                        )
                         logger.error("Token refresh failed - cannot post (will not fallback to wrong account)")
                         return TweetResult(success=False, error="OAuth 2.0 token refresh failed")
                 else:
                     error_msg = f"OAuth 2.0 post failed ({status}): {resp_text}"
+                    _log_twitter_error(
+                        RuntimeError(f"OAuth 2.0 post failed ({status})"),
+                        "post_tweet_oauth2_error",
+                        {"status_code": status}
+                    )
                     logger.error(error_msg)
                     # Do NOT fallback to tweepy - return error instead
                     return TweetResult(success=False, error=error_msg)
@@ -638,6 +700,10 @@ class TwitterClient:
             Media ID string or None on failure
         """
         if not self._tweepy_api:
+            _log_twitter_error(
+                RuntimeError("Tweepy API not initialized for media upload"),
+                "upload_media_missing_client"
+            )
             logger.error("Tweepy API not initialized for media upload")
             return None
 
@@ -670,7 +736,7 @@ class TwitterClient:
             return str(media.media_id)
 
         except Exception as e:
-            logger.error(f"Failed to upload media: {e}")
+            _log_twitter_error(e, "upload_media", {"file_path": file_path})
             return None
 
     async def upload_media_from_bytes(
@@ -708,7 +774,7 @@ class TwitterClient:
             return media_id
 
         except Exception as e:
-            logger.error(f"Failed to upload media from bytes: {e}")
+            _log_twitter_error(e, "upload_media_from_bytes", {"filename": filename})
             return None
 
     async def reply_to_tweet(
@@ -830,7 +896,7 @@ class TwitterClient:
             if status_code in (401, 403):
                 self._disable_reads(f"mentions unauthorized ({status_code})")
                 return []
-            logger.error(f"Failed to get mentions: {e}")
+            _log_twitter_error(e, "get_mentions")
             return []
 
     async def like_tweet(self, tweet_id: str) -> bool:
@@ -868,7 +934,7 @@ class TwitterClient:
             return False
 
         except Exception as e:
-            logger.error(f"Failed to like tweet: {e}")
+            _log_twitter_error(e, "like_tweet", {"tweet_id": tweet_id})
             return False
 
     async def retweet(self, tweet_id: str) -> bool:
@@ -906,7 +972,7 @@ class TwitterClient:
             return False
 
         except Exception as e:
-            logger.error(f"Failed to retweet: {e}")
+            _log_twitter_error(e, "retweet", {"tweet_id": tweet_id})
             return False
 
     async def get_tweet(self, tweet_id: str) -> Optional[Dict[str, Any]]:
@@ -966,7 +1032,7 @@ class TwitterClient:
             if status_code in (401, 403):
                 self._disable_reads(f"get_tweet unauthorized ({status_code})")
                 return None
-            logger.error(f"Failed to get tweet: {e}")
+            _log_twitter_error(e, "get_tweet")
             return None
 
     async def search_recent(
@@ -1026,7 +1092,7 @@ class TwitterClient:
             if status_code in (401, 403):
                 self._disable_reads(f"search unauthorized ({status_code})")
                 return []
-            logger.error(f"Failed to search: {e}")
+            _log_twitter_error(e, "search_recent", {"query": query})
             return []
 
     async def get_user(self, username: str) -> Optional[Dict[str, Any]]:
@@ -1076,7 +1142,7 @@ class TwitterClient:
             if status_code in (401, 403):
                 self._disable_reads(f"get_user unauthorized ({status_code})")
                 return None
-            logger.error(f"Failed to get user {username}: {e}")
+            _log_twitter_error(e, "get_user", {"username": username})
             return None
 
     async def get_quote_tweets(self, tweet_id: str, max_results: int = 20) -> List[Dict[str, Any]]:
@@ -1141,7 +1207,7 @@ class TwitterClient:
             if status_code in (401, 403):
                 self._disable_reads(f"quote_tweets unauthorized ({status_code})")
                 return []
-            logger.error(f"Failed to get quote tweets: {e}")
+            _log_twitter_error(e, "get_quote_tweets", {"tweet_id": tweet_id})
             return []
 
     async def get_liking_users(self, tweet_id: str, max_results: int = 100) -> List[Dict[str, Any]]:
@@ -1195,7 +1261,7 @@ class TwitterClient:
             if status_code in (401, 403):
                 self._disable_reads(f"get_liking_users unauthorized ({status_code})")
                 return []
-            logger.error(f"Failed to get liking users for tweet {tweet_id}: {e}")
+            _log_twitter_error(e, "get_liking_users", {"tweet_id": tweet_id})
             return []
 
     async def get_retweeters(self, tweet_id: str, max_results: int = 100) -> List[Dict[str, Any]]:
@@ -1249,7 +1315,7 @@ class TwitterClient:
             if status_code in (401, 403):
                 self._disable_reads(f"get_retweeters unauthorized ({status_code})")
                 return []
-            logger.error(f"Failed to get retweeters for tweet {tweet_id}: {e}")
+            _log_twitter_error(e, "get_retweeters", {"tweet_id": tweet_id})
             return []
 
     async def get_tweet_replies(self, tweet_id: str, max_results: int = 100) -> List[Dict[str, Any]]:
@@ -1318,7 +1384,7 @@ class TwitterClient:
             if status_code in (401, 403):
                 self._disable_reads(f"get_tweet_replies unauthorized ({status_code})")
                 return []
-            logger.error(f"Failed to get tweet replies for {tweet_id}: {e}")
+            _log_twitter_error(e, "get_tweet_replies", {"tweet_id": tweet_id})
             return []
 
     async def get_tweet(self, tweet_id: str) -> Optional[Dict[str, Any]]:
@@ -1385,7 +1451,7 @@ class TwitterClient:
             if status_code in (401, 403):
                 self._disable_reads(f"get_tweet unauthorized ({status_code})")
                 return None
-            logger.error(f"Failed to get tweet {tweet_id}: {e}")
+            _log_twitter_error(e, "get_tweet_by_id", {"tweet_id": tweet_id})
             return None
 
     async def block_user(self, user_id: str) -> bool:
@@ -1407,7 +1473,7 @@ class TwitterClient:
             return False
 
         except Exception as e:
-            logger.error(f"Failed to block user {user_id}: {e}")
+            _log_twitter_error(e, "block_user", {"user_id": user_id})
             return False
 
     async def mute_user(self, user_id: str) -> bool:
@@ -1429,7 +1495,7 @@ class TwitterClient:
             return False
 
         except Exception as e:
-            logger.error(f"Failed to mute user {user_id}: {e}")
+            _log_twitter_error(e, "mute_user", {"user_id": user_id})
             return False
 
     def disconnect(self):

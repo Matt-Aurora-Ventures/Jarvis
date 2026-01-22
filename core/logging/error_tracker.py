@@ -11,6 +11,8 @@ import logging
 from functools import wraps
 import asyncio
 
+from core.security.scrubber import get_scrubber
+
 ERROR_DB_PATH = os.environ.get("JARVIS_ERROR_DB", "data/logs/error_database.json")
 ERROR_LOG_PATH = os.environ.get("JARVIS_ERROR_LOG", "logs/jarvis_errors.log")
 
@@ -65,12 +67,15 @@ class ErrorTracker:
             self.logger.error(f"Failed to save error database: {e}")
 
     def _get_error_hash(self, error: Exception, context: str = "") -> str:
+        scrubber = get_scrubber()
         try:
             tb = traceback.format_exception(type(error), error, error.__traceback__)
             tb_key = ''.join(tb[-3:]) if len(tb) >= 3 else ''.join(tb)
         except Exception:
             tb_key = ""
-        key = f"{type(error).__name__}:{str(error)[:100]}:{context}:{tb_key}"
+        safe_message, _ = scrubber.scrub(str(error)[:100])
+        safe_tb_key, _ = scrubber.scrub(tb_key)
+        key = f"{type(error).__name__}:{safe_message}:{context}:{safe_tb_key}"
         return hashlib.md5(key.encode()).hexdigest()[:12]
 
     def track_error(
@@ -80,8 +85,11 @@ class ErrorTracker:
         component: str = "unknown",
         metadata: Optional[Dict] = None
     ) -> str:
+        scrubber = get_scrubber()
         error_hash = self._get_error_hash(error, context)
         now = datetime.now().isoformat()
+        safe_message, _ = scrubber.scrub(str(error)[:500])
+        safe_traceback, _ = scrubber.scrub(traceback.format_exc()[:3000])
 
         if error_hash in self.errors:
             entry = self.errors[error_hash]
@@ -95,10 +103,10 @@ class ErrorTracker:
             self.errors[error_hash] = {
                 "id": error_hash,
                 "type": type(error).__name__,
-                "message": str(error)[:500],
+                "message": safe_message,
                 "component": component,
                 "context": context,
-                "traceback": traceback.format_exc()[:3000],
+                "traceback": safe_traceback,
                 "first_seen": now,
                 "last_seen": now,
                 "count": 1,
@@ -109,7 +117,7 @@ class ErrorTracker:
 
         self._save_database()
         count = self.errors[error_hash]["count"]
-        self.logger.error(f"[{error_hash}] {component} | {type(error).__name__}: {error} | Count: {count}")
+        self.logger.error(f"[{error_hash}] {component} | {type(error).__name__}: {safe_message} | Count: {count}")
         return error_hash
 
     def get_unresolved_errors(self) -> List[Dict]:
