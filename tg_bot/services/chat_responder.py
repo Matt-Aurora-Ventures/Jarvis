@@ -837,6 +837,43 @@ Respond briefly (under 200 words) in character as JARVIS:"""
             logger.info(f"Blocked command from non-admin {user_id}: {text[:50]}")
             return self.get_unauthorized_command_response()
 
+        # =====================================================================
+        # DECISION ENGINE - Institution-grade response decision making
+        # Makes HOLD a first-class intelligent choice with full audit trail
+        # =====================================================================
+        try:
+            from tg_bot.services.tg_decision_engine import get_tg_decision_engine, Decision
+
+            decision_engine = get_tg_decision_engine()
+            result = await decision_engine.should_respond(
+                message=text,
+                user_id=str(user_id),
+                chat_type="private" if is_private else chat_type or "group",
+                is_admin=is_admin,
+                metadata={
+                    "username": username,
+                    "chat_title": chat_title,
+                    "chat_id": chat_id,
+                },
+            )
+
+            if result.decision == Decision.HOLD:
+                logger.info(f"DECISION: HOLD chat response - {result.rationale}")
+                # Return empty string to not respond (intelligent silence)
+                return ""
+
+            if result.decision == Decision.ESCALATE:
+                logger.warning(f"DECISION: ESCALATE chat - {result.rationale}")
+                # Still respond but with caution
+                pass  # Continue to response generation
+
+            logger.debug(f"DECISION: EXECUTE chat response (confidence: {result.confidence:.0%})")
+
+        except ImportError:
+            logger.debug("TG decision engine not available, using default behavior")
+        except Exception as e:
+            logger.warning(f"TG decision engine error (continuing): {e}")
+
         # Detect engagement topic for context-aware responses
         engagement_topic = self.detect_engagement_topic(text)
 
