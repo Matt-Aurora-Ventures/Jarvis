@@ -1,9 +1,12 @@
 """Format Grok sentiment data into X thread with authentic Jarvis voice."""
+from pathlib import Path
+import json
 import os
 import sys
-import json
+
 import requests
-from pathlib import Path
+
+from core.llm.anthropic_utils import get_anthropic_messages_url
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
@@ -87,7 +90,7 @@ GROK'S RAW DATA:
 """
 
 response = requests.post(
-    'https://api.anthropic.com/v1/messages',
+    get_anthropic_messages_url(),
     headers={
         'x-api-key': anthropic_key,
         'anthropic-version': '2023-06-01',

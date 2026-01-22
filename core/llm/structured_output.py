@@ -211,7 +211,12 @@ def create_structured_client(api_key: str = None, provider: str = "openai") -> O
         if not key:
             logger.warning("No Anthropic API key found")
             return None
-        client = Anthropic(api_key=key)
+        from core.llm.anthropic_utils import get_anthropic_base_url
+
+        client = Anthropic(
+            api_key=key,
+            base_url=get_anthropic_base_url(),
+        )
         return StructuredLLM(client, provider="anthropic")
     
     return None
