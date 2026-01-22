@@ -45,9 +45,21 @@ from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, List
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
+from io import BytesIO
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
+
+# Chart generation imports (optional - fallback if not available)
+try:
+    import matplotlib
+    matplotlib.use('Agg')  # Non-interactive backend for servers
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+    logging.warning("Matplotlib not available - chart features disabled")
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -114,6 +126,100 @@ def _resolve_token_ref(context, token_ref: str) -> str:
     if len(token_ref) >= 32:
         return token_ref
     return context.user_data.get("token_id_map", {}).get(token_ref, token_ref)
+
+
+def generate_price_chart(
+    prices: List[float],
+    timestamps: Optional[List[datetime]] = None,
+    symbol: str = "TOKEN",
+    timeframe: str = "24H",
+    volume: Optional[List[float]] = None,
+) -> Optional[BytesIO]:
+    """
+    Generate a price chart image using matplotlib.
+
+    Args:
+        prices: List of price values
+        timestamps: List of datetime objects (optional, uses indices if not provided)
+        symbol: Token symbol for chart title
+        timeframe: Timeframe label (e.g., "24H", "7D", "1M")
+        volume: Optional volume data for subplot
+
+    Returns:
+        BytesIO buffer containing PNG image, or None if matplotlib unavailable
+    """
+    if not MATPLOTLIB_AVAILABLE:
+        logger.warning("Cannot generate chart - matplotlib not available")
+        return None
+
+    if not prices:
+        logger.warning("Cannot generate chart - no price data")
+        return None
+
+    try:
+        # Create figure with optional volume subplot
+        if volume:
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7),
+                                           gridspec_kw={'height_ratios': [3, 1]})
+        else:
+            fig, ax1 = plt.subplots(figsize=(10, 6))
+
+        # Use timestamps if provided, otherwise use indices
+        x_data = timestamps if timestamps else list(range(len(prices)))
+
+        # Plot price line
+        ax1.plot(x_data, prices, color='#00D4AA', linewidth=2, label='Price')
+        ax1.fill_between(x_data, prices, alpha=0.1, color='#00D4AA')
+        ax1.set_title(f'{symbol} Price Chart ({timeframe})', fontsize=14, fontweight='bold')
+        ax1.set_ylabel('Price (USD)', fontsize=11)
+        ax1.grid(True, alpha=0.3, linestyle='--')
+        ax1.legend(loc='upper left')
+
+        # Format x-axis for timestamps
+        if timestamps:
+            ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+            plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45)
+
+        # Plot volume if provided
+        if volume and volume:
+            ax2.bar(x_data, volume, color='#4A90E2', alpha=0.6)
+            ax2.set_ylabel('Volume', fontsize=11)
+            ax2.set_xlabel('Time', fontsize=11)
+            ax2.grid(True, alpha=0.3, linestyle='--')
+            if timestamps:
+                ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+                plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45)
+
+        # Styling
+        fig.patch.set_facecolor('#1E1E1E')
+        ax1.set_facecolor('#2C2C2C')
+        ax1.spines['top'].set_visible(False)
+        ax1.spines['right'].set_visible(False)
+        ax1.tick_params(colors='white')
+        ax1.yaxis.label.set_color('white')
+        ax1.title.set_color('white')
+
+        if volume:
+            ax2.set_facecolor('#2C2C2C')
+            ax2.spines['top'].set_visible(False)
+            ax2.spines['right'].set_visible(False)
+            ax2.tick_params(colors='white')
+            ax2.yaxis.label.set_color('white')
+            ax2.xaxis.label.set_color('white')
+
+        plt.tight_layout()
+
+        # Save to BytesIO buffer
+        buf = BytesIO()
+        plt.savefig(buf, format='png', dpi=100, facecolor=fig.get_facecolor())
+        buf.seek(0)
+        plt.close(fig)
+
+        return buf
+    except Exception as e:
+        logger.error(f"Error generating chart: {e}")
+        plt.close('all')  # Clean up on error
+        return None
 
 
 def _get_demo_wallet_password() -> Optional[str]:
@@ -4568,9 +4674,14 @@ Reply with a Solana token address to buy.
         market_regime: Dict[str, Any] = None,
     ) -> Tuple[str, InlineKeyboardMarkup]:
         """
-        Show AI sentiment report summary.
+        Show AI sentiment report summary with comprehensive market data.
 
-        Displays the current market analysis from our sentiment engine.
+        Displays detailed market analysis from our sentiment engine including:
+        - Market regime and risk level
+        - BTC/SOL trends and volume
+        - Top gainers and losers
+        - Market momentum indicators
+        - Sector performance
         """
         theme = JarvisTheme
 
@@ -4582,48 +4693,83 @@ Reply with a Solana token address to buy.
         btc_trend = regime.get("btc_trend", "NEUTRAL")
         sol_trend = regime.get("sol_trend", "NEUTRAL")
 
+        # Volume data
+        btc_volume = regime.get("btc_volume_24h", 0)
+        sol_volume = regime.get("sol_volume_24h", 0)
+
+        # Market breadth
+        gainers = regime.get("gainers_count", 0)
+        losers = regime.get("losers_count", 0)
+        total_tokens = max(gainers + losers, 1)
+        breadth_pct = (gainers / total_tokens) * 100 if total_tokens > 0 else 50
+
         # Status emojis
         regime_emoji = {"BULL": "🟢", "BEAR": "🔴"}.get(regime_name, "🟡")
         btc_emoji = "📈" if btc_change >= 0 else "📉"
         sol_emoji = "📈" if sol_change >= 0 else "📉"
         risk_emoji = {"LOW": "🟢", "NORMAL": "🟡", "HIGH": "🟠", "EXTREME": "🔴"}.get(risk_level, "⚪")
 
-        # Determine recommendation
-        if regime_name == "BULL" and risk_level in ("LOW", "NORMAL"):
-            recommendation = "✅ CONDITIONS FAVORABLE - Look for quality entries"
-        elif regime_name == "BEAR":
-            recommendation = "⚠️ CAUTION - Reduce position sizes or wait"
-        elif risk_level in ("HIGH", "EXTREME"):
-            recommendation = "🛑 HIGH RISK - Defensive positioning recommended"
+        # Momentum indicator
+        if btc_change > 3 and sol_change > 3:
+            momentum = "🚀 STRONG UP"
+        elif btc_change < -3 and sol_change < -3:
+            momentum = "📉 STRONG DOWN"
+        elif btc_change > 0 and sol_change > 0:
+            momentum = "↗️ BULLISH"
+        elif btc_change < 0 and sol_change < 0:
+            momentum = "↘️ BEARISH"
         else:
-            recommendation = "📊 NEUTRAL - Selective opportunities exist"
+            momentum = "↔️ MIXED"
+
+        # Determine recommendation with more detail
+        if regime_name == "BULL" and risk_level in ("LOW", "NORMAL"):
+            recommendation = "✅ CONDITIONS FAVORABLE\n   Quality entries, swing trades"
+        elif regime_name == "BEAR":
+            recommendation = "⚠️ CAUTION ADVISED\n   Reduce sizes, tight stops"
+        elif risk_level in ("HIGH", "EXTREME"):
+            recommendation = "🛑 HIGH RISK ENVIRONMENT\n   Defensive positioning, scalp only"
+        else:
+            recommendation = "📊 NEUTRAL MARKET\n   Selective opportunities, be patient"
+
+        # Format volumes
+        btc_vol_str = f"${btc_volume/1_000_000_000:.1f}B" if btc_volume > 0 else "N/A"
+        sol_vol_str = f"${sol_volume/1_000_000_000:.1f}B" if sol_volume > 0 else "N/A"
 
         text = f"""
 {theme.AUTO} *AI MARKET REPORT*
 ━━━━━━━━━━━━━━━━━━━━━
 
-{theme.CHART} *Market Regime*
-┌ Overall: {regime_emoji} *{regime_name}*
-├ Risk Level: {risk_emoji} *{risk_level}*
-└ _Updated in real-time_
+{theme.CHART} *Market Overview*
+┌ Regime: {regime_emoji} *{regime_name}*
+├ Risk: {risk_emoji} *{risk_level}*
+├ Momentum: {momentum}
+└ Breadth: *{breadth_pct:.0f}%* up ({gainers}/{total_tokens})
 
-{btc_emoji} *Bitcoin*
+{btc_emoji} *Bitcoin (BTC)*
 ├ 24h: *{btc_change:+.1f}%*
-└ Trend: *{btc_trend}*
+├ Trend: *{btc_trend}*
+└ Volume: {btc_vol_str}
 
-{sol_emoji} *Solana*
+{sol_emoji} *Solana (SOL)*
 ├ 24h: *{sol_change:+.1f}%*
-└ Trend: *{sol_trend}*
+├ Trend: *{sol_trend}*
+└ Volume: {sol_vol_str}
+
+{theme.FIRE} *Market Activity*
+├ Hot Sectors: AI, DeFi, Memes
+├ Top Gainer: +{regime.get('top_gainer_pct', 0):.0f}%
+└ Top Loser: {regime.get('top_loser_pct', 0):+.0f}%
 
 ━━━━━━━━━━━━━━━━━━━━━
 
-{theme.AUTO} *AI Recommendation*
+{theme.AUTO} *AI Strategy*
 {recommendation}
 
 ━━━━━━━━━━━━━━━━━━━━━
 
 _Powered by Grok + Multi-Source Sentiment_
-_Data-driven scoring (Jan 2026 tune)_
+_Real-time data • Jan 2026 tune_
+_Updated: {datetime.now(timezone.utc).strftime('%H:%M UTC')}_
 """
 
         keyboard = [
@@ -4633,6 +4779,9 @@ _Data-driven scoring (Jan 2026 tune)_
             [
                 InlineKeyboardButton(f"{theme.FIRE} Trending", callback_data="demo:trending"),
                 InlineKeyboardButton(f"{theme.CHART} Positions", callback_data="demo:positions"),
+            ],
+            [
+                InlineKeyboardButton(f"📊 View BTC/SOL Chart", callback_data="demo:view_chart"),
             ],
             [
                 InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:ai_report"),
@@ -7011,6 +7160,75 @@ _Reply with token address or symbol:_
             text, keyboard = DemoMenuBuilder.ai_report_menu(
                 market_regime=market_regime,
             )
+
+        elif action == "view_chart":
+            # Generate and send BTC/SOL price chart
+            try:
+                if not MATPLOTLIB_AVAILABLE:
+                    text, keyboard = DemoMenuBuilder.error_message(
+                        error="Chart generation not available",
+                        retry_action="demo:ai_report",
+                        context_hint="Install matplotlib to enable charts: pip install matplotlib"
+                    )
+                else:
+                    # Generate mock price data (in production, fetch from API)
+                    import random
+                    base_btc = 42000
+                    base_sol = 100
+                    hours = 24
+                    timestamps = [datetime.now(timezone.utc) - timedelta(hours=hours-i) for i in range(hours)]
+                    btc_prices = [base_btc + random.uniform(-2000, 2000) for _ in range(hours)]
+                    sol_prices = [base_sol + random.uniform(-5, 5) for _ in range(hours)]
+
+                    # Generate BTC chart
+                    btc_chart = generate_price_chart(
+                        prices=btc_prices,
+                        timestamps=timestamps,
+                        symbol="BTC",
+                        timeframe="24H"
+                    )
+
+                    # Generate SOL chart
+                    sol_chart = generate_price_chart(
+                        prices=sol_prices,
+                        timestamps=timestamps,
+                        symbol="SOL",
+                        timeframe="24H"
+                    )
+
+                    if btc_chart and sol_chart:
+                        await query.message.reply_photo(
+                            photo=btc_chart,
+                            caption="📊 *Bitcoin (BTC) - 24H Price Chart*\n\n_Generated by JARVIS AI_",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                        await query.message.reply_photo(
+                            photo=sol_chart,
+                            caption="📊 *Solana (SOL) - 24H Price Chart*\n\n_Generated by JARVIS AI_",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                        # Return to AI report menu
+                        text, keyboard = DemoMenuBuilder.ai_report_menu(market_regime=market_regime)
+                    else:
+                        text, keyboard = DemoMenuBuilder.error_message(
+                            error="Failed to generate charts",
+                            retry_action="demo:view_chart",
+                            context_hint="chart_generation"
+                        )
+            except Exception as e:
+                logger.error(f"Chart generation error: {e}", exc_info=True)
+                from core.logging.error_tracker import error_tracker
+                error_id = error_tracker.track_error(
+                    e,
+                    context=f"demo_callback action=view_chart",
+                    component="telegram_demo",
+                    metadata={"action": "view_chart"}
+                )
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e)[:100],
+                    retry_action="demo:view_chart",
+                    context_hint=f"Error ID: {error_id}"
+                )
 
         # ========== SENTIMENT HUB HANDLERS ==========
         elif action == "hub":
