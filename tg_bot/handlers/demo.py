@@ -998,6 +998,10 @@ _Tap to trade with AI-powered signals_
             [
                 InlineKeyboardButton("🎒 BAGS TOP 15", callback_data="demo:bags_fm"),
             ],
+            # Universal Token Search - Buy/Sell ANY Token
+            [
+                InlineKeyboardButton(f"🔍 SEARCH TOKEN", callback_data="demo:token_search"),
+            ],
             # Quick buy amounts
             [
                 InlineKeyboardButton(f"{theme.BUY} Buy 0.1 SOL", callback_data="demo:buy:0.1"),
@@ -6913,6 +6917,40 @@ _This feature coming soon!_
             text, keyboard = DemoMenuBuilder.token_input_prompt()
             # Store state for next message
             context.user_data["awaiting_token"] = True
+
+        elif action == "token_search":
+            # Universal Token Search - search and trade ANY token
+            theme = JarvisTheme
+            text = f"""
+🔍 *UNIVERSAL TOKEN SEARCH*
+━━━━━━━━━━━━━━━━━━━━━
+
+Trade ANY token by contract address or symbol.
+
+*How to use:*
+1. Enter token contract address or symbol
+2. View detailed token analysis
+3. Buy or sell with custom amounts
+
+*Examples:*
+• `So11111111111111111111111111111111111111112` (SOL)
+• `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` (USDC)
+• Or just type: `BONK`, `WIF`, `JUP`
+
+━━━━━━━━━━━━━━━━━━━━━
+_Reply with token address or symbol:_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(f"📚 Popular Tokens", callback_data="demo:trending"),
+                    InlineKeyboardButton(f"🎒 Bags Top 15", callback_data="demo:bags_fm"),
+                ],
+                [
+                    InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+                ],
+            ])
+            # Mark that we're awaiting token input
+            context.user_data["awaiting_token_search"] = True
 
         elif action == "trending":
             # Fetch real trending data from sentiment engine
