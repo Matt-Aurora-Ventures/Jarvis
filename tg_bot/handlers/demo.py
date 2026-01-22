@@ -37,6 +37,9 @@ Memory Hierarchy:
 
 import logging
 import asyncio
+import json
+import tempfile
+from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, List
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
@@ -172,23 +175,136 @@ async def get_trending_with_sentiment() -> List[Dict[str, Any]]:
         from tg_bot.services.signal_service import get_signal_service
         service = get_signal_service()
         signals = await service.get_trending_tokens(limit=6)
-        return [
-            {
-                "symbol": s.symbol,
-                "address": s.address,
-                "price_usd": s.price_usd,
-                "change_24h": s.price_change_24h,
-                "volume": s.volume_24h,
-                "liquidity": s.liquidity_usd,
-                "sentiment": s.sentiment,
-                "sentiment_score": s.sentiment_score,
-                "signal": s.signal,
-            }
-            for s in signals
-        ]
+        if signals:
+            return [
+                {
+                    "symbol": s.symbol,
+                    "address": s.address,
+                    "price_usd": s.price_usd,
+                    "change_24h": s.price_change_24h,
+                    "volume": s.volume_24h,
+                    "liquidity": s.liquidity_usd,
+                    "sentiment": s.sentiment,
+                    "sentiment_score": s.sentiment_score,
+                    "signal": s.signal,
+                }
+                for s in signals
+            ]
     except Exception as e:
         logger.warning(f"Could not get trending: {e}")
+
+    # Bags.fm fallback - ensures we always have tradable tokens
+    try:
+        bags_tokens = await get_bags_top_tokens_with_sentiment(limit=6)
+        if bags_tokens:
+            return [
+                {
+                    "symbol": t.get("symbol", "???"),
+                    "address": t.get("address", ""),
+                    "price_usd": t.get("price_usd", 0),
+                    "change_24h": t.get("change_24h", 0),
+                    "volume": t.get("volume_24h", 0),
+                    "liquidity": t.get("liquidity", 0),
+                    "sentiment": t.get("sentiment", "neutral"),
+                    "sentiment_score": t.get("sentiment_score", 0.5),
+                    "signal": t.get("signal", "NEUTRAL"),
+                }
+                for t in bags_tokens
+            ]
+    except Exception as e:
+        logger.warning(f"Could not get Bags trending fallback: {e}")
+    return []
+
+
+def _conviction_label(score: float) -> str:
+    if score >= 80:
+        return "HIGH"
+    if score >= 60:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _default_tp_sl(conviction: str) -> Tuple[int, int]:
+    if conviction == "HIGH":
+        return 30, 12
+    if conviction == "MEDIUM":
+        return 22, 12
+    return 15, 15
+
+
+def _pick_key(pick: Dict[str, Any]) -> str:
+    address = (pick.get("address") or "").lower().strip()
+    if address:
+        return address
+    return (pick.get("symbol") or "").lower().strip()
+
+
+def _load_treasury_top_picks(limit: int = 5) -> List[Dict[str, Any]]:
+    try:
+        picks_file = Path(tempfile.gettempdir()) / "jarvis_top_picks.json"
+        if not picks_file.exists():
+            return []
+        with open(picks_file, "r") as handle:
+            data = json.load(handle) or []
+        picks = []
+        for entry in data[:limit]:
+            symbol = entry.get("symbol", "???")
+            address = entry.get("contract") or ""
+            conviction_score = float(entry.get("conviction", 0) or 0)
+            conviction = _conviction_label(conviction_score)
+            entry_price = float(entry.get("entry_price", 0) or 0)
+            target_price = float(entry.get("target_price", 0) or 0)
+            stop_loss = float(entry.get("stop_loss", 0) or 0)
+            tp_pct = 0
+            sl_pct = 0
+            if entry_price > 0 and target_price > 0:
+                tp_pct = int(round(((target_price - entry_price) / entry_price) * 100))
+            if entry_price > 0 and stop_loss > 0:
+                sl_pct = int(round(((entry_price - stop_loss) / entry_price) * 100))
+            if not tp_pct or not sl_pct:
+                tp_pct, sl_pct = _default_tp_sl(conviction)
+            picks.append({
+                "symbol": symbol,
+                "address": address,
+                "conviction": conviction,
+                "thesis": entry.get("reasoning", ""),
+                "entry_price": entry_price,
+                "tp_target": tp_pct,
+                "sl_target": sl_pct,
+                "source": "treasury",
+                "conviction_score": conviction_score,
+            })
+        return picks
+    except Exception as e:
+        logger.warning(f"Could not load treasury top picks: {e}")
         return []
+
+
+def _get_pick_stats() -> Dict[str, Any]:
+    intelligence = get_trade_intelligence()
+    if not intelligence:
+        return {}
+    summary = intelligence.get_learning_summary()
+    total = summary.get("total_trades_analyzed", 0) or 0
+    if total == 0:
+        return {}
+
+    def _parse_percent(value: str) -> float:
+        try:
+            return float(str(value).replace("%", "").replace("+", "").strip())
+        except Exception:
+            return 0.0
+
+    signal_stats = summary.get("signals", {})
+    stats = signal_stats.get("STRONG_BUY") or signal_stats.get("BUY") or {}
+    win_rate = _parse_percent(stats.get("win_rate", 0))
+    avg_gain = _parse_percent(stats.get("avg_return", 0))
+
+    return {
+        "win_rate": win_rate,
+        "avg_gain": avg_gain,
+        "total_picks": total,
+    }
 
 
 async def get_conviction_picks() -> List[Dict[str, Any]]:
@@ -200,9 +316,38 @@ async def get_conviction_picks() -> List[Dict[str, Any]]:
     - Trade intelligence recommendations
     - Historical pattern matching
     """
-    picks = []
+    picks: List[Dict[str, Any]] = []
+    seen = set()
 
-    # Try Grok picks first
+    def add_pick(pick: Dict[str, Any]) -> None:
+        key = _pick_key(pick)
+        if not key or key in seen:
+            return
+        seen.add(key)
+        picks.append(pick)
+
+    # Always fetch Bags tokens (required data source)
+    bags_tokens = []
+    try:
+        bags_tokens = await get_bags_top_tokens_with_sentiment(limit=12)
+    except Exception as e:
+        logger.warning(f"Could not get Bags tokens for picks: {e}")
+
+    bags_lookup = {t.get("address", ""): t for t in bags_tokens if t.get("address")}
+
+    # 1) Treasury picks (if present) - align with treasury dashboard
+    for pick in _load_treasury_top_picks(limit=5):
+        bags_match = bags_lookup.get(pick.get("address", ""))
+        if bags_match:
+            pick["price_usd"] = bags_match.get("price_usd", pick.get("entry_price", 0))
+            pick["volume_24h"] = bags_match.get("volume_24h", 0)
+            pick["liquidity"] = bags_match.get("liquidity", 0)
+            pick["sentiment"] = bags_match.get("sentiment", "neutral")
+            pick["sentiment_score"] = bags_match.get("sentiment_score", 0.5)
+            pick["signal"] = bags_match.get("signal", "NEUTRAL")
+        add_pick(pick)
+
+    # 2) Grok picks (optional overlay)
     try:
         from core.enhanced_market_data import get_grok_conviction_picks
         grok_picks = await get_grok_conviction_picks()
@@ -217,24 +362,56 @@ async def get_conviction_picks() -> List[Dict[str, Any]]:
                 "sl_target": p.sl_target,
                 "source": "grok",
             }
-
-            # Enhance with trade intelligence recommendation
-            intelligence = get_trade_intelligence()
-            if intelligence:
-                rec = intelligence.get_trade_recommendation(
-                    signal_type="BUY",
-                    market_regime="BULL",
-                    sentiment_score=0.7,
-                )
-                pick["ai_confidence"] = rec.get("confidence", 0)
-                pick["ai_action"] = rec.get("action", "NEUTRAL")
-            picks.append(pick)
-
-        return picks
+            bags_match = bags_lookup.get(p.address)
+            if bags_match:
+                pick["price_usd"] = bags_match.get("price_usd", p.entry_price)
+                pick["volume_24h"] = bags_match.get("volume_24h", 0)
+                pick["liquidity"] = bags_match.get("liquidity", 0)
+                pick["sentiment"] = bags_match.get("sentiment", "neutral")
+                pick["sentiment_score"] = bags_match.get("sentiment_score", 0.5)
+                pick["signal"] = bags_match.get("signal", "NEUTRAL")
+            add_pick(pick)
     except Exception as e:
         logger.warning(f"Could not get Grok picks: {e}")
 
-    # Fallback to mock data if Grok unavailable
+    # 3) Fill with Bags volume leaders
+    for token in bags_tokens:
+        sentiment_score = token.get("sentiment_score", 0.5)
+        conviction_score = int(round(sentiment_score * 100)) if sentiment_score <= 1 else int(sentiment_score)
+        conviction = _conviction_label(conviction_score)
+        tp_target, sl_target = _default_tp_sl(conviction)
+        add_pick({
+            "symbol": token.get("symbol", "???"),
+            "address": token.get("address", ""),
+            "conviction": conviction,
+            "thesis": f"Volume leader with {token.get('sentiment', 'neutral')} sentiment",
+            "entry_price": token.get("price_usd", 0),
+            "tp_target": tp_target,
+            "sl_target": sl_target,
+            "source": "bags",
+            "volume_24h": token.get("volume_24h", 0),
+            "liquidity": token.get("liquidity", 0),
+            "sentiment": token.get("sentiment", "neutral"),
+            "sentiment_score": token.get("sentiment_score", 0.5),
+            "signal": token.get("signal", "NEUTRAL"),
+        })
+
+    # Enhance with trade intelligence recommendations
+    intelligence = get_trade_intelligence()
+    if intelligence:
+        for pick in picks:
+            rec = intelligence.get_trade_recommendation(
+                signal_type=pick.get("signal", "BUY"),
+                market_regime="BULL",
+                sentiment_score=pick.get("sentiment_score", 0.6),
+            )
+            pick["ai_confidence"] = rec.get("confidence", 0)
+            pick["ai_action"] = rec.get("action", "NEUTRAL")
+
+    if picks:
+        return picks[:5]
+
+    # Final safety net
     return [
         {
             "symbol": "BONK",
@@ -244,25 +421,7 @@ async def get_conviction_picks() -> List[Dict[str, Any]]:
             "tp_target": 25,
             "sl_target": 10,
             "source": "demo",
-        },
-        {
-            "symbol": "WIF",
-            "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
-            "conviction": "MEDIUM",
-            "thesis": "Consolidating, potential breakout setup",
-            "tp_target": 20,
-            "sl_target": 15,
-            "source": "demo",
-        },
-        {
-            "symbol": "POPCAT",
-            "address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
-            "conviction": "HIGH",
-            "thesis": "Viral momentum, social buzz increasing",
-            "tp_target": 30,
-            "sl_target": 12,
-            "source": "demo",
-        },
+        }
     ]
 
 # =============================================================================
@@ -6415,9 +6574,30 @@ _This feature coming soon!_
         elif action == "ai_picks":
             # AI Conviction Picks - powered by Grok
             picks = await get_conviction_picks()
+            trending = await get_trending_with_sentiment()
+            volume_leaders = await get_bags_top_tokens_with_sentiment(limit=6)
+            if not trending and volume_leaders:
+                trending = volume_leaders[:6]
+
+            near_picks = []
+            for token in volume_leaders[:6]:
+                score = float(token.get("sentiment_score", 0.5) or 0.5)
+                if 0.45 <= score < 0.6:
+                    near_picks.append({
+                        "symbol": token.get("symbol", "???"),
+                        "missing_criteria": "sentiment",
+                        "score": int(round(score * 100)),
+                        "change_24h": token.get("change_24h", 0),
+                    })
+
+            pick_stats = _get_pick_stats()
             text, keyboard = DemoMenuBuilder.ai_picks_menu(
                 picks=picks,
                 market_regime=market_regime,
+                trending=trending,
+                volume_leaders=volume_leaders,
+                near_picks=near_picks,
+                pick_stats=pick_stats,
             )
 
         elif action == "ai_report":
