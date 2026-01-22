@@ -1988,204 +1988,146 @@ async def remember(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /dev command - vibe coding via Claude API with sensitive data scrubbing.
-
-    This is the SAFE way to do vibe coding - all sensitive data is scrubbed
-    before being sent to Claude API.
-
-    Usage:
-        /dev <instruction>
-        /dev add rate limiting to the trading API
-        /dev fix the bug in sentiment analysis
-    """
+    """Handle /dev command - vibe coding via Claude CLI (no API fallback)."""
     try:
         if not context.args:
             await update.message.reply_text(
-                "💻 <b>/dev - Vibe Coding with Claude</b>\n\n"
-                "Generate code via Claude API with automatic sensitive data scrubbing.\n\n"
-                "<b>Usage:</b> /dev <instruction>\n\n"
-                "<b>Examples:</b>\n"
-                "• /dev add error handling to treasury trading\n"
-                "• /dev create a function to calculate RSI\n"
-                "• /dev fix the duplicate detection in twitter bot\n\n"
-                "🔒 <i>All API keys, passwords, and secrets are automatically scrubbed</i>",
+                "???? <b>/dev - Vibe Coding (CLI)</b>
+
+"
+                "Generate code via Claude CLI with automatic sensitive data scrubbing.
+
+"
+                "<b>Usage:</b> /dev <instruction>
+
+"
+                "<b>Examples:</b>
+"
+                "??? /dev add error handling to treasury trading
+"
+                "??? /dev create a function to calculate RSI
+"
+                "??? /dev fix the duplicate detection in twitter bot
+
+"
+                "???? <i>All secrets are automatically scrubbed</i>",
                 parse_mode=ParseMode.HTML
             )
             return
 
-        from core.ai.code_generator import get_code_generator
+        from tg_bot.services.claude_cli_handler import get_claude_cli_handler
 
-        generator = get_code_generator()
+        cli_handler = get_claude_cli_handler()
 
-        # Handle /dev refine {id} {instruction}
-        if context.args[0].lower() == "refine" and len(context.args) >= 3:
-            result_id = context.args[1]
-            refinement = " ".join(context.args[2:])
-
-            working_msg = await update.message.reply_text(
-                f"🔄 <b>Refining {result_id}...</b>\n\n"
-                f"<i>{refinement[:200]}{'...' if len(refinement) > 200 else ''}</i>",
-                parse_mode=ParseMode.HTML
-            )
-
-            result = await generator.refine(result_id, refinement)
-
-            try:
-                await working_msg.delete()
-            except Exception:  # noqa: BLE001 - intentional catch-all
-                pass
-
-            if not result.success:
-                await update.message.reply_text(
-                    f"❌ <b>Refinement Failed</b>\n\n{result.error}",
-                    parse_mode=ParseMode.HTML
-                )
-                return
-
-            # Format and send refined result (same as original)
-            response_lines = [f"🔄 <b>Refined Code</b> (ID: {result.id})"]
-            response_lines.append(f"\n📊 <i>Tokens: {result.tokens_used} | Model: {result.model}</i>")
-            response_lines.append(f"\n\n{result.code[:3500]}")
-
-            if len(result.code) > 3500:
-                response_lines.append("\n\n<i>... (truncated)</i>")
-
-            response = "\n".join(response_lines)
-
-            keyboard = [
-                [
-                    InlineKeyboardButton("🔄 Refine", callback_data=f"dev_refine:{result.id}"),
-                    InlineKeyboardButton("📋 Copy ID", callback_data=f"dev_copy:{result.id}"),
-                ]
-            ]
+        # Check if Claude CLI is available
+        if not cli_handler._claude_path or cli_handler._claude_path == "claude":
             await update.message.reply_text(
-                response,
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                "?????? <b>Claude CLI Not Available</b>
+
+"
+                "The /dev command requires Claude Code CLI to be installed.
+
+"
+                "<code>npm install -g @anthropic-ai/claude-code</code>",
+                parse_mode=ParseMode.HTML
             )
             return
 
+        user_id = update.effective_user.id if update.effective_user else 0
+        username = update.effective_user.username or "admin" if update.effective_user else "admin"
         instruction = " ".join(context.args)
 
-        # Send working message
         working_msg = await update.message.reply_text(
-            "🔧 <b>Generating code...</b>\n\n"
+            "???? <b>Generating code...</b>
+
+"
             f"<i>{instruction[:200]}{'...' if len(instruction) > 200 else ''}</i>",
             parse_mode=ParseMode.HTML
         )
 
-        # Detect relevant files
-        context_files = generator.detect_relevant_files(instruction)
+        async def send_status(msg: str):
+            if not working_msg:
+                return
+            try:
+                await working_msg.edit_text(msg, parse_mode=ParseMode.HTML)
+            except Exception:  # noqa: BLE001 - intentional catch-all
+                pass
 
-        # Generate code
-        result = await generator.generate(
-            instruction=instruction,
-            context_files=context_files,
-            max_tokens=4096,
+        success, summary, output = await cli_handler.execute(
+            instruction, user_id, username=username, send_update=send_status
         )
 
-        # Delete working message
         try:
             await working_msg.delete()
         except Exception:  # noqa: BLE001 - intentional catch-all
             pass
 
-        if not result.success:
+        if not success:
             await update.message.reply_text(
-                f"❌ <b>Generation Failed</b>\n\n{result.error}",
+                f"??? <b>Generation Failed</b>
+
+{summary}",
                 parse_mode=ParseMode.HTML
             )
             return
 
-        # Format response
-        response_lines = [f"🤖 <b>Code Generated</b> (ID: {result.id})"]
+        response = (
+            f"???? <b>CLI Result</b>
 
-        if result.redacted_items:
-            response_lines.append(f"\n🔒 <b>Scrubbed:</b> {', '.join(set(result.redacted_items))}")
+"
+            f"<b>Summary:</b>
+{summary}
 
-        response_lines.append(f"\n📊 <i>Tokens: {result.tokens_used} | Model: {result.model}</i>")
+"
+            f"<b>Details:</b>
+<pre>{output[:3000]}</pre>"
+        )
 
-        # Add context files info
-        if context_files:
-            response_lines.append(f"\n📁 <b>Context:</b> {', '.join(Path(f).name for f in context_files)}")
-
-        response_lines.append(f"\n\n{result.code[:3500]}")
-
-        if len(result.code) > 3500:
-            response_lines.append("\n\n<i>... (truncated)</i>")
-
-        response = "\n".join(response_lines)
-
-        # Send in chunks if needed
         if len(response) > 4000:
-            # Send first part
             await update.message.reply_text(response[:4000], parse_mode=ParseMode.HTML)
-            # Send rest
             await update.message.reply_text(response[4000:], parse_mode=ParseMode.HTML)
         else:
-            # Add action buttons
-            keyboard = [
-                [
-                    InlineKeyboardButton("🔄 Refine", callback_data=f"dev_refine:{result.id}"),
-                    InlineKeyboardButton("📋 Copy ID", callback_data=f"dev_copy:{result.id}"),
-                ]
-            ]
-            await update.message.reply_text(
-                response,
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+            await update.message.reply_text(response, parse_mode=ParseMode.HTML)
 
     except Exception as e:
         logger.error(f"Dev command error: {e}")
         await update.message.reply_text(
-            f"⚠️ Error: {str(e)[:200]}",
+            f"?????? Error: {str(e)[:200]}",
             parse_mode=ParseMode.HTML
         )
-
 
 async def _handle_dev_refine(query, result_id: str, context):
     """Handle the Refine button from /dev command."""
     try:
-        from core.ai.code_generator import get_code_generator
-
-        generator = get_code_generator()
-        cached = generator.get_cached_result(result_id)
-
-        if not cached:
-            await query.message.reply_text(
-                f"❌ Result {result_id} not found in cache.\n"
-                "Results are cached for a limited time. Please run /dev again.",
-                parse_mode=ParseMode.HTML
-            )
-            return
-
-        # Prompt for refinement instruction
         await query.message.reply_text(
-            f"🔄 <b>Refine Result {result_id}</b>\n\n"
-            f"<b>Original:</b> <i>{cached.instruction[:100]}...</i>\n\n"
-            "Reply with your refinement instruction.\n"
-            f"Example: <code>/dev refine {result_id} add error handling</code>",
+            "???? <b>CLI Mode Notice</b>
+
+"
+            "Refine is not available in CLI mode.
+"
+            "Please re-run <code>/dev</code> with your updated instruction.",
             parse_mode=ParseMode.HTML
         )
-
     except Exception as e:
         logger.error(f"Dev refine error: {e}")
-        await query.message.reply_text(f"⚠️ Error: {str(e)[:200]}", parse_mode=ParseMode.HTML)
+        await query.message.reply_text(f"?????? Error: {str(e)[:200]}", parse_mode=ParseMode.HTML)
 
 
 async def _handle_dev_copy(query, result_id: str):
     """Handle the Copy ID button from /dev command."""
     try:
         await query.message.reply_text(
-            f"📋 <b>Result ID:</b> <code>{result_id}</code>\n\n"
-            f"Use with: <code>/dev refine {result_id} [instruction]</code>",
+            "???? <b>CLI Mode Notice</b>
+
+"
+            "Result IDs are not used in CLI mode.
+"
+            "Please re-run <code>/dev</code> with a fresh instruction.",
             parse_mode=ParseMode.HTML
         )
     except Exception as e:
         logger.error(f"Dev copy error: {e}")
-        await query.message.reply_text(f"⚠️ Error: {str(e)[:200]}", parse_mode=ParseMode.HTML)
-
+        await query.message.reply_text(f"?????? Error: {str(e)[:200]}", parse_mode=ParseMode.HTML)
 
 @admin_only
 async def modstats(update: Update, context: ContextTypes.DEFAULT_TYPE):

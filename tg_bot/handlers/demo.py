@@ -242,7 +242,31 @@ async def get_ai_sentiment_for_token(address: str) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.warning(f"Could not get sentiment: {e}")
-        return {"sentiment": "unknown", "score": 0, "confidence": 0}
+
+    # Fallback to Bags token info if signal service is unavailable
+    try:
+        bags_client = get_bags_client()
+        if bags_client:
+            token = await bags_client.get_token_info(address)
+            if token:
+                return {
+                    "symbol": token.symbol or address[:6],
+                    "price": token.price_usd,
+                    "change_24h": token.price_change_24h,
+                    "volume": token.volume_24h,
+                    "liquidity": token.liquidity,
+                    "sentiment": "neutral",
+                    "score": 0.5,
+                    "confidence": 0.0,
+                    "summary": "Bags price data",
+                    "signal": "NEUTRAL",
+                    "signal_score": 0.5,
+                    "reasons": ["Bags fallback"],
+                }
+    except Exception as e:
+        logger.warning(f"Could not get Bags fallback sentiment: {e}")
+
+    return {"sentiment": "unknown", "score": 0, "confidence": 0}
 
 
 async def get_trending_with_sentiment() -> List[Dict[str, Any]]:
@@ -559,6 +583,7 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
                     "name": t.name,
                     "address": t.address,
                     "price_usd": t.price_usd,
+                    "change_24h": getattr(t, "price_change_24h", 0),
                     "volume_24h": t.volume_24h,
                     "liquidity": t.liquidity,
                     "market_cap": t.market_cap,
@@ -578,7 +603,8 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
 
                 tokens.append(token_data)
 
-            return tokens
+            if tokens:
+                return tokens
 
     except Exception as e:
         logger.warning(f"Could not get Bags tokens: {e}")
@@ -7103,6 +7129,36 @@ for this trade:
                 except Exception as api_err:
                     logger.warning(f"DexScreener API error: {api_err}")
 
+                # Validate the token payload - avoid UNKNOWN/zeroed data
+                if hottest_token:
+                    symbol_ok = bool(hottest_token.get("symbol")) and hottest_token.get("symbol") != "UNKNOWN"
+                    price_ok = float(hottest_token.get("price", 0) or 0) > 0
+                    if not (symbol_ok and price_ok):
+                        hottest_token = None
+
+                # Fallback to Bags.fm volume leaders (real tradable tokens)
+                if not hottest_token:
+                    bags_tokens = await get_bags_top_tokens_with_sentiment(limit=1)
+                    if bags_tokens:
+                        t = bags_tokens[0]
+                        score = float(t.get("sentiment_score", 0.5) or 0.5)
+                        conviction_score = int(round(score * 100)) if score <= 1 else int(score)
+                        conviction = _conviction_label(conviction_score)
+                        entry_timing = "GOOD" if score >= 0.55 else "LATE"
+                        hottest_token = {
+                            "symbol": t.get("symbol", "UNKNOWN"),
+                            "address": t.get("address", ""),
+                            "price": float(t.get("price_usd", 0) or 0),
+                            "change_24h": float(t.get("change_24h", 0) or 0),
+                            "volume_24h": float(t.get("volume_24h", 0) or 0),
+                            "liquidity": float(t.get("liquidity", 0) or 0),
+                            "market_cap": float(t.get("market_cap", 0) or 0),
+                            "conviction": conviction,
+                            "sentiment_score": int(round(score * 100)) if score <= 1 else int(score),
+                            "entry_timing": entry_timing,
+                            "sightings": 1,
+                        }
+
                 # Fallback to mock data if API fails
                 if not hottest_token:
                     hottest_token = {
@@ -7149,11 +7205,19 @@ for this trade:
                     context.user_data["snipe_token_ref"] = token_ref
                     context.user_data["snipe_amount"] = amount
 
+                    sentiment_data = await get_ai_sentiment_for_token(address)
+                    symbol = sentiment_data.get("symbol", "TOKEN")
+                    price = float(sentiment_data.get("price", 0) or 0)
+                    if price <= 0:
+                        price = 0.001
+                    context.user_data["snipe_symbol"] = symbol
+                    context.user_data["snipe_price"] = price
+
                     text, keyboard = DemoMenuBuilder.snipe_confirm(
-                        symbol="TOKEN",
+                        symbol=symbol,
                         address=address,
                         amount=amount,
-                        price=0.001,  # Would fetch real price
+                        price=price,
                         sl_percent=15.0,
                         tp_percent=15.0,
                         token_ref=token_ref,
@@ -7180,37 +7244,93 @@ for this trade:
                     address = _resolve_token_ref(context, token_ref)
                     amount = float(parts[3])
 
-                    # Simulate trade execution
-                    # In production, this would call the trading engine
-                    success = True  # Simulated success
-                    tx_hash = "5xYz...mock_tx_hash...AbCd"
+                    # Flow controller validation (same as quick buy)
+                    try:
+                        from tg_bot.services.flow_controller import get_flow_controller, FlowDecision
 
-                    text, keyboard = DemoMenuBuilder.snipe_result(
-                        success=success,
-                        symbol="TOKEN",
-                        amount=amount,
-                        tx_hash=tx_hash if success else None,
-                        error=None if success else "Insufficient balance",
-                        sl_set=success,
-                        tp_set=success,
-                    )
+                        flow = get_flow_controller()
+                        flow_result = await flow.process_command(
+                            command="buy",
+                            args=[address, str(amount)],
+                            user_id=user_id,
+                            chat_id=query.message.chat_id,
+                            is_admin=True,
+                            force_execute=True,
+                        )
 
-                    # If successful, add to positions
-                    if success:
-                        positions = context.user_data.get("demo_positions", [])
-                        positions.append({
-                            "symbol": "TOKEN",
-                            "address": address,
-                            "amount": amount,
-                            "entry_price": 0.001,
-                            "current_price": 0.001,
-                            "pnl": 0,
-                            "pnl_percent": 0,
-                            "sl_percent": 15,
-                            "tp_percent": 15,
-                            "entry_time": datetime.now(timezone.utc).isoformat(),
-                        })
-                        context.user_data["demo_positions"] = positions
+                        if flow_result.decision == FlowDecision.HOLD:
+                            text, keyboard = DemoMenuBuilder.error_message(
+                                f"Trade blocked: {flow_result.hold_reason}"
+                            )
+                            await query.message.edit_text(
+                                text,
+                                parse_mode=ParseMode.MARKDOWN,
+                                reply_markup=keyboard,
+                            )
+                            return
+                    except ImportError:
+                        logger.debug("Flow controller not available, proceeding")
+                    except Exception as e:
+                        logger.warning(f"Flow validation error (continuing): {e}")
+
+                    # Execute via treasury engine
+                    try:
+                        engine = await _get_demo_engine()
+                        portfolio = await engine.get_portfolio_value()
+                        if not portfolio:
+                            raise RuntimeError("Portfolio unavailable")
+                        balance_sol, balance_usd = portfolio
+                        if balance_sol <= 0:
+                            text, keyboard = DemoMenuBuilder.error_message("Treasury balance is zero.")
+                            return
+
+                        sol_usd = balance_usd / balance_sol if balance_sol > 0 else 0
+                        amount_usd = amount * sol_usd
+
+                        sentiment_data = await get_ai_sentiment_for_token(address)
+                        token_symbol = sentiment_data.get("symbol", "TOKEN")
+                        signal_name = sentiment_data.get("signal", "NEUTRAL")
+                        grade = _grade_for_signal_name(signal_name)
+                        sentiment_score = sentiment_data.get("score", 0) or 0
+
+                        from bots.treasury.trading import TradeDirection
+                        success, msg, position = await engine.open_position(
+                            token_mint=address,
+                            token_symbol=token_symbol,
+                            direction=TradeDirection.LONG,
+                            amount_usd=amount_usd,
+                            sentiment_grade=grade,
+                            sentiment_score=sentiment_score,
+                            custom_tp=15.0,
+                            custom_sl=15.0,
+                            user_id=user_id,
+                        )
+
+                        if success and position:
+                            text, keyboard = DemoMenuBuilder.snipe_result(
+                                success=True,
+                                symbol=token_symbol,
+                                amount=amount,
+                                tx_hash=f"pending_{position.id[:8]}",
+                                error=None,
+                                sl_set=True,
+                                tp_set=True,
+                            )
+                        else:
+                            text, keyboard = DemoMenuBuilder.snipe_result(
+                                success=False,
+                                symbol=token_symbol,
+                                amount=amount,
+                                error=msg or "Trade failed",
+                            )
+                    except Exception as e:
+                        logger.error(f"Snipe confirm error: {e}")
+                        text, keyboard = DemoMenuBuilder.snipe_result(
+                            success=False,
+                            symbol="TOKEN",
+                            amount=amount,
+                            error=str(e),
+                        )
                 else:
                     text, keyboard = DemoMenuBuilder.error_message(
                         error="Invalid confirmation",
