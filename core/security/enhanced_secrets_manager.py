@@ -336,19 +336,23 @@ class EnhancedSecretsManager:
         env = environment or self.default_environment
         secret_path = self._get_secret_path(name, env)
 
-        # Check cache first
+        # Check cache first (avoid calling _log_access while holding the lock)
         cache_key = f"{env}:{name}"
+        cached_value = None
         with self._lock:
             if cache_key in self._cache:
                 cached = self._cache[cache_key]
                 # Cache valid for 5 minutes
                 if (datetime.now(timezone.utc) - cached["cached_at"]).seconds < 300:
-                    self._log_access(name, "read", accessor or "system", True, metadata=metadata)
-                    return {
-                        "success": True,
-                        "value": cached["value"],
-                        "from_cache": True
-                    }
+                    cached_value = cached["value"]
+
+        if cached_value is not None:
+            self._log_access(name, "read", accessor or "system", True, metadata=metadata)
+            return {
+                "success": True,
+                "value": cached_value,
+                "from_cache": True
+            }
 
         if not secret_path.exists():
             self._log_access(name, "read", accessor or "system", False, metadata={"error": "not_found"})

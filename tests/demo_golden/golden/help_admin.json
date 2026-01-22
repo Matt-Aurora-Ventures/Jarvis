@@ -1,0 +1,106 @@
+{
+  "text": "hey. i'm jarvis. your ai trading partner.\n\n*status:* admin access confirmed. all systems available.\n\npick your poison:",
+  "parse_mode": "Markdown",
+  "keyboard": [
+    [
+      {
+        "text": "\ud83d\udcca Dashboard",
+        "callback_data": "quick_dashboard"
+      },
+      {
+        "text": "\ud83d\udcc8 Report",
+        "callback_data": "quick_report"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\ude80 SIGNALS",
+        "callback_data": "menu_signals"
+      },
+      {
+        "text": "\ud83d\udccb Digest",
+        "callback_data": "menu_digest"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udcc8 Trending",
+        "callback_data": "menu_trending"
+      },
+      {
+        "text": "\ud83d\udcca Status",
+        "callback_data": "menu_status"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udcb0 Costs",
+        "callback_data": "menu_costs"
+      },
+      {
+        "text": "\u2753 Help",
+        "callback_data": "menu_help"
+      }
+    ],
+    [
+      {
+        "text": "\ud83e\udde0 Brain",
+        "callback_data": "menu_brain"
+      },
+      {
+        "text": "\ud83d\udd04 Reload",
+        "callback_data": "menu_reload"
+      }
+    ],
+    [
+      {
+        "text": "\u2764\ufe0f Health",
+        "callback_data": "menu_health"
+      },
+      {
+        "text": "\ud83d\udef0\ufe0f Flags",
+        "callback_data": "menu_flags"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udcca Score",
+        "callback_data": "menu_score"
+      },
+      {
+        "text": "\u2699\ufe0f Config",
+        "callback_data": "menu_config"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udda5\ufe0f System",
+        "callback_data": "menu_system"
+      },
+      {
+        "text": "\ud83d\udccb Orders",
+        "callback_data": "menu_orders"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udcbc Wallet",
+        "callback_data": "menu_wallet"
+      },
+      {
+        "text": "\ud83d\udcdd Logs",
+        "callback_data": "menu_logs"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udcca Metrics",
+        "callback_data": "menu_metrics"
+      },
+      {
+        "text": "\ud83d\udccb Audit",
+        "callback_data": "menu_audit"
+      }
+    ]
+  ]
+}

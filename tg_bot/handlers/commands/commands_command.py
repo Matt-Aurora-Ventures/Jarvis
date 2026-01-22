@@ -102,6 +102,7 @@ COMMAND_CATEGORIES = {
         ("/reload", "Reload config"),
         ("/system", "System status"),
         ("/logs", "Recent logs"),
+        ("/errors", "Error summary"),
         ("/metrics", "System metrics"),
         ("/memory", "Memory usage"),
         ("/sysmem", "System memory"),

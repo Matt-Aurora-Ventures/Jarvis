@@ -1,0 +1,58 @@
+{
+  "text": "\ud83d\udcca *POSITIONS*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n\ud83d\udfe2 *Portfolio Health*\n\ud83d\udfe8\ud83d\udfe8\ud83d\udfe8\u2b1c\u2b1c\u2b1c\u2b1c\u2b1c\nTotal P&L: \ud83d\udcc8 *+$7.78*\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n\ud83d\udcaa *TEST* +23.4%\n\ud83d\udfe9\ud83d\udfe9\u2b1c\u2b1c\u2b1c\n\u251c Entry: `$0.01000000`\n\u251c Now: `$0.01200000`\n\u251c P&L: *+$12.34*\n\u251c \ud83c\udd95 Held: *0m*\n\u2514 TP: +50% | SL: -20%\n\n\ud83d\udfe0 *MOON* -10.0%\n\ud83d\udfe7\u2b1c\u2b1c\u2b1c\u2b1c\n\u251c Entry: `$0.02000000`\n\u251c Now: `$0.01800000`\n\u251c P&L: *$4.56*\n\u251c \ud83c\udd95 Held: *0m*\n\u2514 TP: +50% | SL: -20%",
+  "parse_mode": "Markdown",
+  "keyboard": [
+    [
+      {
+        "text": "\ud83d\udd34 Sell 25%",
+        "callback_data": "demo:sell:pos_abc123:25"
+      },
+      {
+        "text": "\ud83d\udd34 Sell All",
+        "callback_data": "demo:sell:pos_abc123:100"
+      },
+      {
+        "text": "\u2699\ufe0f SL/TP",
+        "callback_data": "demo:pos_adjust:pos_abc123"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udd34 Sell 25%",
+        "callback_data": "demo:sell:pos_def456:25"
+      },
+      {
+        "text": "\ud83d\udd34 Sell All",
+        "callback_data": "demo:sell:pos_def456:100"
+      },
+      {
+        "text": "\u2699\ufe0f SL/TP",
+        "callback_data": "demo:pos_adjust:pos_def456"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udd14 Alerts",
+        "callback_data": "demo:pnl_alerts"
+      },
+      {
+        "text": "\ud83d\udee1\ufe0f Trailing SL",
+        "callback_data": "demo:trailing_stops"
+      },
+      {
+        "text": "\ud83d\udcca P&L Report",
+        "callback_data": "demo:pnl_report"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udd04 Refresh",
+        "callback_data": "demo:positions"
+      },
+      {
+        "text": "\u25c0\ufe0f Back",
+        "callback_data": "demo:main"
+      }
+    ]
+  ]
+}

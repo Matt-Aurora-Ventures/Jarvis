@@ -1,0 +1,986 @@
+[
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-22T20:11:05.333846",
+    "token": {
+      "mint": "2awYK3DDeSTPbhVGrxFhNjxZ4fxmeqLtjBcUaq1XshvD",
+      "name": "GigaChad DAO",
+      "symbol": "GIGACHAD",
+      "description": "Maximum strength",
+      "twitter": "@gigachad",
+      "website": "https://gigachad.io"
+    },
+    "scores": {
+      "overall": 95,
+      "quality": "exceptional",
+      "risk": "medium",
+      "bonding": 92,
+      "creator": 93,
+      "social": 75,
+      "market": 88,
+      "distribution": 61
+    },
+    "market": {
+      "mcap_usd": 367248,
+      "liquidity_usd": 28480,
+      "price_usd": 0.0064438381990325954,
+      "volume_24h_usd": 148774
+    },
+    "bonding_curve": {
+      "duration_seconds": 3739,
+      "volume_sol": 209.79010204444515,
+      "unique_buyers": 368,
+      "buy_sell_ratio": 4.90680602736924
+    },
+    "creator": {
+      "wallet": "jxXA1PWFVR8hrgFM2V2abiZTgVR89Qgq5yyFn8keqgTg",
+      "twitter": "@creator_509"
+    },
+    "flags": {
+      "green": [
+        "Strong bonding curve metrics",
+        "Verified creator with history",
+        "Active social presence",
+        "Healthy initial liquidity"
+      ],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "GigaChad DAO shows exceptional fundamentals with medium risk level. The bonding curve completed in 37 minutes with 325 unique participants. Strong community engagement and transparent creator. Market conditions appear favorable."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-22T18:11:05.333846",
+    "token": {
+      "mint": "rBj3aLrFfY6nL4McppXwHHruguqjiPFZwuH81tBAddiD",
+      "name": "Frens United",
+      "symbol": "FREN",
+      "description": "Together strong",
+      "twitter": "@fren",
+      "website": "https://fren.io"
+    },
+    "scores": {
+      "overall": 97,
+      "quality": "exceptional",
+      "risk": "low",
+      "bonding": 96,
+      "creator": 87,
+      "social": 80,
+      "market": 94,
+      "distribution": 58
+    },
+    "market": {
+      "mcap_usd": 275337,
+      "liquidity_usd": 54825,
+      "price_usd": 0.009977706677827323,
+      "volume_24h_usd": 115045
+    },
+    "bonding_curve": {
+      "duration_seconds": 3836,
+      "volume_sol": 104.24557469146977,
+      "unique_buyers": 369,
+      "buy_sell_ratio": 3.7335801710927594
+    },
+    "creator": {
+      "wallet": "rFJ7VAJ7Y7fXDjimVJsB1uS93FhPh2MLjN7mYR1LGmHy",
+      "twitter": "@creator_446"
+    },
+    "flags": {
+      "green": [
+        "Strong bonding curve metrics",
+        "Verified creator with history",
+        "Active social presence",
+        "Healthy initial liquidity"
+      ],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "Frens United shows exceptional fundamentals with low risk level. The bonding curve completed in 42 minutes with 276 unique participants. Strong community engagement and transparent creator. Market conditions appear favorable."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-22T16:11:05.333846",
+    "token": {
+      "mint": "zN9sX1At7q1ssG6hxHX5Q4qM6G34V2JdwA9UA24S4H1z",
+      "name": "SafeAI Token",
+      "symbol": "SAFEAI",
+      "description": "AI-powered safety",
+      "twitter": "@safeai",
+      "website": "https://safeai.io"
+    },
+    "scores": {
+      "overall": 88,
+      "quality": "exceptional",
+      "risk": "high",
+      "bonding": 100,
+      "creator": 86,
+      "social": 79,
+      "market": 98,
+      "distribution": 64
+    },
+    "market": {
+      "mcap_usd": 454677,
+      "liquidity_usd": 38471,
+      "price_usd": 0.0063796627923814785,
+      "volume_24h_usd": 65934
+    },
+    "bonding_curve": {
+      "duration_seconds": 2566,
+      "volume_sol": 254.51742799601098,
+      "unique_buyers": 347,
+      "buy_sell_ratio": 2.4515351616876213
+    },
+    "creator": {
+      "wallet": "Qa88nKKTYQLjbZ2PUTQDzSVMGVKo9cWkQMuA1gWFvbyP",
+      "twitter": null
+    },
+    "flags": {
+      "green": [
+        "Strong bonding curve metrics",
+        "Verified creator with history",
+        "Active social presence",
+        "Healthy initial liquidity"
+      ],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "SafeAI Token shows exceptional fundamentals with high risk level. The bonding curve completed in 32 minutes with 380 unique participants. Strong community engagement and transparent creator. Market conditions appear favorable."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-22T14:11:05.333846",
+    "token": {
+      "mint": "7tdXVDm1xWER7FB7B7ZA71fTvTneHXFkxfRXuNPgqLDy",
+      "name": "Rocket Finance",
+      "symbol": "ROCKET",
+      "description": "To infinity",
+      "twitter": "@rocket",
+      "website": "https://rocket.io"
+    },
+    "scores": {
+      "overall": 90,
+      "quality": "exceptional",
+      "risk": "medium",
+      "bonding": 95,
+      "creator": 89,
+      "social": 90,
+      "market": 96,
+      "distribution": 60
+    },
+    "market": {
+      "mcap_usd": 120978,
+      "liquidity_usd": 90537,
+      "price_usd": 0.006451102432464954,
+      "volume_24h_usd": 49352
+    },
+    "bonding_curve": {
+      "duration_seconds": 2531,
+      "volume_sol": 252.41020311627395,
+      "unique_buyers": 139,
+      "buy_sell_ratio": 4.905591441555236
+    },
+    "creator": {
+      "wallet": "STnzGTn1s9Z73eRXZcx4UXooCt7QESbkTgZPDhAZy9qD",
+      "twitter": "@creator_143"
+    },
+    "flags": {
+      "green": [
+        "Strong bonding curve metrics",
+        "Verified creator with history",
+        "Active social presence",
+        "Healthy initial liquidity"
+      ],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "Rocket Finance shows exceptional fundamentals with medium risk level. The bonding curve completed in 28 minutes with 339 unique participants. Strong community engagement and transparent creator. Market conditions appear favorable."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-22T12:11:05.333846",
+    "token": {
+      "mint": "cV3qoZzsQDPJjrrPfSM6BsXfYajd6he3WaRtdYCX1Fv9",
+      "name": "Pepe Returns",
+      "symbol": "PEPE3",
+      "description": "The comeback",
+      "twitter": "@pepe3",
+      "website": "https://pepe3.io"
+    },
+    "scores": {
+      "overall": 73,
+      "quality": "strong",
+      "risk": "high",
+      "bonding": 72,
+      "creator": 65,
+      "social": 69,
+      "market": 83,
+      "distribution": 59
+    },
+    "market": {
+      "mcap_usd": 426347,
+      "liquidity_usd": 84014,
+      "price_usd": 0.0010123422114472075,
+      "volume_24h_usd": 64378
+    },
+    "bonding_curve": {
+      "duration_seconds": 4841,
+      "volume_sol": 353.65874851059374,
+      "unique_buyers": 293,
+      "buy_sell_ratio": 3.235558965689128
+    },
+    "creator": {
+      "wallet": "zSGzwkGhTZxkUZu77UavGMUUmJJrMEpjEMzmZUGbC236",
+      "twitter": "@creator_461"
+    },
+    "flags": {
+      "green": [
+        "Active social presence",
+        "Healthy initial liquidity"
+      ],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "Pepe Returns shows strong fundamentals with high risk level. The bonding curve completed in 38 minutes with 316 unique participants. Strong community engagement and transparent creator. Market conditions appear favorable."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-22T10:11:05.333846",
+    "token": {
+      "mint": "r849svH9vpu5fQ3iGp6m32phQVNvfBBXmyPN6TWBazmN",
+      "name": "Frens United",
+      "symbol": "FREN",
+      "description": "Together strong",
+      "twitter": "@fren",
+      "website": "https://fren.io"
+    },
+    "scores": {
+      "overall": 74,
+      "quality": "strong",
+      "risk": "medium",
+      "bonding": 85,
+      "creator": 78,
+      "social": 70,
+      "market": 71,
+      "distribution": 50
+    },
+    "market": {
+      "mcap_usd": 478531,
+      "liquidity_usd": 16312,
+      "price_usd": 0.0014861168785726836,
+      "volume_24h_usd": 212696
+    },
+    "bonding_curve": {
+      "duration_seconds": 3830,
+      "volume_sol": 368.3323630291857,
+      "unique_buyers": 282,
+      "buy_sell_ratio": 3.095385750385939
+    },
+    "creator": {
+      "wallet": "7CpHwnmigcvfCPUYLRx8jZDYfhThqiqn3xQuktsskVKq",
+      "twitter": null
+    },
+    "flags": {
+      "green": [
+        "Strong bonding curve metrics",
+        "Verified creator with history",
+        "Active social presence"
+      ],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "Frens United shows strong fundamentals with medium risk level. The bonding curve completed in 90 minutes with 303 unique participants. Strong community engagement and transparent creator. Market conditions appear favorable."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-22T08:11:05.333846",
+    "token": {
+      "mint": "2aAK2EcwYoex3kuPEta3JiMgfE3GaondqkoiQf1bxkz6",
+      "name": "SafeAI Token",
+      "symbol": "SAFEAI",
+      "description": "AI-powered safety",
+      "twitter": "@safeai",
+      "website": "https://safeai.io"
+    },
+    "scores": {
+      "overall": 77,
+      "quality": "strong",
+      "risk": "medium",
+      "bonding": 74,
+      "creator": 69,
+      "social": 71,
+      "market": 84,
+      "distribution": 54
+    },
+    "market": {
+      "mcap_usd": 426865,
+      "liquidity_usd": 40786,
+      "price_usd": 0.0031329156065641457,
+      "volume_24h_usd": 45605
+    },
+    "bonding_curve": {
+      "duration_seconds": 6047,
+      "volume_sol": 371.0528104455367,
+      "unique_buyers": 349,
+      "buy_sell_ratio": 3.564771138865977
+    },
+    "creator": {
+      "wallet": "Xn5DbTVKNjd66svtDYYZdhTnNTjeBkGL6K8tiGmxsKGi",
+      "twitter": "@creator_654"
+    },
+    "flags": {
+      "green": [
+        "Active social presence",
+        "Healthy initial liquidity"
+      ],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "SafeAI Token shows strong fundamentals with medium risk level. The bonding curve completed in 68 minutes with 96 unique participants. Strong community engagement and transparent creator. Market conditions appear favorable."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-22T06:11:05.333846",
+    "token": {
+      "mint": "Z25ReNRJeyuzyiK7EZiDhqENxuSNURJB2iPx3yfm6B4G",
+      "name": "SafeAI Token",
+      "symbol": "SAFEAI",
+      "description": "AI-powered safety",
+      "twitter": "@safeai",
+      "website": "https://safeai.io"
+    },
+    "scores": {
+      "overall": 77,
+      "quality": "strong",
+      "risk": "extreme",
+      "bonding": 82,
+      "creator": 70,
+      "social": 61,
+      "market": 75,
+      "distribution": 66
+    },
+    "market": {
+      "mcap_usd": 102025,
+      "liquidity_usd": 54090,
+      "price_usd": 0.0014975248980517233,
+      "volume_24h_usd": 108968
+    },
+    "bonding_curve": {
+      "duration_seconds": 4722,
+      "volume_sol": 292.1227177468111,
+      "unique_buyers": 155,
+      "buy_sell_ratio": 2.928741198621635
+    },
+    "creator": {
+      "wallet": "JtkWbgT5uht6UXwQf24em2s2jVCAaEd8CSAVK4SoqLfK",
+      "twitter": "@creator_967"
+    },
+    "flags": {
+      "green": [
+        "Strong bonding curve metrics"
+      ],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "SafeAI Token shows strong fundamentals with extreme risk level. The bonding curve completed in 41 minutes with 221 unique participants. Strong community engagement and transparent creator. Market conditions appear favorable."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-22T04:11:05.333846",
+    "token": {
+      "mint": "2uF3QEkWPD4BdMB4qmSGdbxZZQDZb2mH6nRef71RX9LW",
+      "name": "GigaChad DAO",
+      "symbol": "GIGACHAD",
+      "description": "Maximum strength",
+      "twitter": "@gigachad",
+      "website": "https://gigachad.io"
+    },
+    "scores": {
+      "overall": 56,
+      "quality": "average",
+      "risk": "extreme",
+      "bonding": 63,
+      "creator": 59,
+      "social": 48,
+      "market": 59,
+      "distribution": 55
+    },
+    "market": {
+      "mcap_usd": 465788,
+      "liquidity_usd": 69714,
+      "price_usd": 0.00987849020151292,
+      "volume_24h_usd": 135202
+    },
+    "bonding_curve": {
+      "duration_seconds": 4488,
+      "volume_sol": 216.27615030067963,
+      "unique_buyers": 327,
+      "buy_sell_ratio": 4.679740639411398
+    },
+    "creator": {
+      "wallet": "4yaY5i9P4viZLgyhpctGZVZvgocqgy95k298EPuokTcx",
+      "twitter": "@creator_814"
+    },
+    "flags": {
+      "green": [],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "GigaChad DAO shows average fundamentals with extreme risk level. The bonding curve completed in 70 minutes with 340 unique participants. Exercise caution and DYOR. Market conditions appear challenging."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-22T02:11:05.333846",
+    "token": {
+      "mint": "i9sZy7EMDnF2bSSs95BTQaNaa9fQ8sBp5FJmV2JENw3i",
+      "name": "Wojak Finance",
+      "symbol": "WOJAK",
+      "description": "For the culture",
+      "twitter": "@wojak",
+      "website": "https://wojak.io"
+    },
+    "scores": {
+      "overall": 60,
+      "quality": "average",
+      "risk": "low",
+      "bonding": 68,
+      "creator": 59,
+      "social": 51,
+      "market": 56,
+      "distribution": 77
+    },
+    "market": {
+      "mcap_usd": 299600,
+      "liquidity_usd": 18163,
+      "price_usd": 0.009286352295867288,
+      "volume_24h_usd": 22145
+    },
+    "bonding_curve": {
+      "duration_seconds": 2253,
+      "volume_sol": 89.49823409159548,
+      "unique_buyers": 166,
+      "buy_sell_ratio": 3.347742573755837
+    },
+    "creator": {
+      "wallet": "DFRHwqvL7FbYN4e2JZU4MjgdcxKxAj9bqbrEvWHEBCwR",
+      "twitter": "@creator_559"
+    },
+    "flags": {
+      "green": [],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "Wojak Finance shows average fundamentals with low risk level. The bonding curve completed in 35 minutes with 363 unique participants. Market conditions appear challenging."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-22T00:11:05.333846",
+    "token": {
+      "mint": "GavcCF7GjkArs9YuNwLNZzg5VnzbwvCwB1WPbiNJRtok",
+      "name": "Diamond Hands",
+      "symbol": "DIAMOND",
+      "description": "Never selling",
+      "twitter": "@diamond",
+      "website": "https://diamond.io"
+    },
+    "scores": {
+      "overall": 63,
+      "quality": "average",
+      "risk": "high",
+      "bonding": 69,
+      "creator": 59,
+      "social": 53,
+      "market": 65,
+      "distribution": 80
+    },
+    "market": {
+      "mcap_usd": 132675,
+      "liquidity_usd": 39915,
+      "price_usd": 0.004160836185443046,
+      "volume_24h_usd": 51858
+    },
+    "bonding_curve": {
+      "duration_seconds": 1386,
+      "volume_sol": 328.28993403093693,
+      "unique_buyers": 208,
+      "buy_sell_ratio": 1.386380061830526
+    },
+    "creator": {
+      "wallet": "ss8YFiKSorgsnt19ZR3XqTqRW23AqerEALp699jDYXKh",
+      "twitter": "@creator_443"
+    },
+    "flags": {
+      "green": [],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "Diamond Hands shows average fundamentals with high risk level. The bonding curve completed in 54 minutes with 93 unique participants. Market conditions appear challenging."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-21T22:11:05.333846",
+    "token": {
+      "mint": "jtd2i1HtPcWDYBSGYp1khVbdhA4WjVwNZmqtFvzua8dZ",
+      "name": "Frens United",
+      "symbol": "FREN",
+      "description": "Together strong",
+      "twitter": "@fren",
+      "website": "https://fren.io"
+    },
+    "scores": {
+      "overall": 63,
+      "quality": "average",
+      "risk": "extreme",
+      "bonding": 56,
+      "creator": 55,
+      "social": 59,
+      "market": 70,
+      "distribution": 64
+    },
+    "market": {
+      "mcap_usd": 318567,
+      "liquidity_usd": 83559,
+      "price_usd": 0.007784688720390626,
+      "volume_24h_usd": 57936
+    },
+    "bonding_curve": {
+      "duration_seconds": 3072,
+      "volume_sol": 122.61093613739402,
+      "unique_buyers": 146,
+      "buy_sell_ratio": 3.562967746959135
+    },
+    "creator": {
+      "wallet": "ZmDqDDcmeFPV9nr4haub7rALaqFBqoZdiMHarLM8psnh",
+      "twitter": "@creator_825"
+    },
+    "flags": {
+      "green": [],
+      "red": [],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "Frens United shows average fundamentals with extreme risk level. The bonding curve completed in 12 minutes with 349 unique participants. Market conditions appear challenging."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-21T20:11:05.333846",
+    "token": {
+      "mint": "GufzGQFHRU9zBhPgoF3D6Boqb185ZXnGj6XWxckTFYRr",
+      "name": "GigaChad DAO",
+      "symbol": "GIGACHAD",
+      "description": "Maximum strength",
+      "twitter": "@gigachad",
+      "website": "https://gigachad.io"
+    },
+    "scores": {
+      "overall": 48,
+      "quality": "weak",
+      "risk": "extreme",
+      "bonding": 43,
+      "creator": 38,
+      "social": 40,
+      "market": 49,
+      "distribution": 59
+    },
+    "market": {
+      "mcap_usd": 358902,
+      "liquidity_usd": 82711,
+      "price_usd": 0.0022878536636867365,
+      "volume_24h_usd": 191972
+    },
+    "bonding_curve": {
+      "duration_seconds": 3508,
+      "volume_sol": 385.80226400222875,
+      "unique_buyers": 452,
+      "buy_sell_ratio": 3.4979195881463596
+    },
+    "creator": {
+      "wallet": "yGC3sYb8uQC8crBdxagQGMGVPLgy92zpRk342MTL46W9",
+      "twitter": "@creator_841"
+    },
+    "flags": {
+      "green": [],
+      "red": [
+        "Weak bonding performance",
+        "Anonymous or suspicious creator",
+        "Low liquidity concerns"
+      ],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "GigaChad DAO shows weak fundamentals with extreme risk level. The bonding curve completed in 118 minutes with 302 unique participants. Exercise caution and DYOR. Market conditions appear challenging."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-21T18:11:05.334847",
+    "token": {
+      "mint": "yGtZh5qSpXdrV2tvnsW9gXZiZz5GRKAW3ocYABGmMmSA",
+      "name": "DogeRevolution",
+      "symbol": "DOGE2.0",
+      "description": "The meme lives on",
+      "twitter": "@doge2.0",
+      "website": "https://doge2.0.io"
+    },
+    "scores": {
+      "overall": 47,
+      "quality": "weak",
+      "risk": "low",
+      "bonding": 50,
+      "creator": 50,
+      "social": 36,
+      "market": 40,
+      "distribution": 68
+    },
+    "market": {
+      "mcap_usd": 344843,
+      "liquidity_usd": 5567,
+      "price_usd": 0.0028616576607021385,
+      "volume_24h_usd": 213351
+    },
+    "bonding_curve": {
+      "duration_seconds": 2808,
+      "volume_sol": 292.7215900565307,
+      "unique_buyers": 376,
+      "buy_sell_ratio": 3.5150357317590863
+    },
+    "creator": {
+      "wallet": "TE9d5NHETa4RiNpJuLt5WgZLXrM7nHPJubFPR14x4YMh",
+      "twitter": null
+    },
+    "flags": {
+      "green": [],
+      "red": [
+        "Low liquidity concerns"
+      ],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "DogeRevolution shows weak fundamentals with low risk level. The bonding curve completed in 15 minutes with 241 unique participants. Exercise caution and DYOR. Market conditions appear challenging."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-21T16:11:05.334847",
+    "token": {
+      "mint": "MeninGK6kPKpa2sifDqvopcBgLKCKGMAPTwp5wCU2kg1",
+      "name": "Rocket Finance",
+      "symbol": "ROCKET",
+      "description": "To infinity",
+      "twitter": "@rocket",
+      "website": "https://rocket.io"
+    },
+    "scores": {
+      "overall": 45,
+      "quality": "weak",
+      "risk": "extreme",
+      "bonding": 44,
+      "creator": 45,
+      "social": 37,
+      "market": 42,
+      "distribution": 73
+    },
+    "market": {
+      "mcap_usd": 435378,
+      "liquidity_usd": 54291,
+      "price_usd": 0.005238697686652634,
+      "volume_24h_usd": 39141
+    },
+    "bonding_curve": {
+      "duration_seconds": 4981,
+      "volume_sol": 82.98271231526257,
+      "unique_buyers": 474,
+      "buy_sell_ratio": 1.8883158349563764
+    },
+    "creator": {
+      "wallet": "tAEeDKgLi2V7DgcLJnJzbQq3XPC88dSWYLJUyTZgJMMn",
+      "twitter": "@creator_609"
+    },
+    "flags": {
+      "green": [],
+      "red": [
+        "Weak bonding performance",
+        "Low liquidity concerns"
+      ],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "Rocket Finance shows weak fundamentals with extreme risk level. The bonding curve completed in 61 minutes with 301 unique participants. Exercise caution and DYOR. Market conditions appear challenging."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-21T14:11:05.334847",
+    "token": {
+      "mint": "ZxgC9EE2Qvac2iDmoH4vw2nsDS76gHraPcc2A4nwSsQ7",
+      "name": "Pepe Returns",
+      "symbol": "PEPE3",
+      "description": "The comeback",
+      "twitter": "@pepe3",
+      "website": "https://pepe3.io"
+    },
+    "scores": {
+      "overall": 42,
+      "quality": "weak",
+      "risk": "medium",
+      "bonding": 41,
+      "creator": 49,
+      "social": 37,
+      "market": 43,
+      "distribution": 80
+    },
+    "market": {
+      "mcap_usd": 72672,
+      "liquidity_usd": 20226,
+      "price_usd": 0.00744610384130237,
+      "volume_24h_usd": 79106
+    },
+    "bonding_curve": {
+      "duration_seconds": 5584,
+      "volume_sol": 180.9709161606452,
+      "unique_buyers": 331,
+      "buy_sell_ratio": 2.325760842401906
+    },
+    "creator": {
+      "wallet": "EgEo8wLJtNe12G4Mpp1JriqhVJTRNxG5JqaDbdUmkLMW",
+      "twitter": "@creator_725"
+    },
+    "flags": {
+      "green": [],
+      "red": [
+        "Weak bonding performance",
+        "Low liquidity concerns"
+      ],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "Pepe Returns shows weak fundamentals with medium risk level. The bonding curve completed in 60 minutes with 419 unique participants. Exercise caution and DYOR. Market conditions appear challenging."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-21T12:11:05.334847",
+    "token": {
+      "mint": "VCW6qxTsE7sExngtdezp4Jd8oY5SXPr7sHUB1uH8BWVn",
+      "name": "Based Protocol",
+      "symbol": "BASED",
+      "description": "Based and coded",
+      "twitter": "@based",
+      "website": "https://based.io"
+    },
+    "scores": {
+      "overall": 29,
+      "quality": "poor",
+      "risk": "medium",
+      "bonding": 25,
+      "creator": 16,
+      "social": 10,
+      "market": 38,
+      "distribution": 74
+    },
+    "market": {
+      "mcap_usd": 113374,
+      "liquidity_usd": 35204,
+      "price_usd": 0.0010748626760488154,
+      "volume_24h_usd": 110308
+    },
+    "bonding_curve": {
+      "duration_seconds": 3300,
+      "volume_sol": 306.8408881239256,
+      "unique_buyers": 247,
+      "buy_sell_ratio": 2.9707381876935886
+    },
+    "creator": {
+      "wallet": "hQw9uhayzy1g2hwpnkMjdSVKZ5NEVnQGVzPThwWL18ys",
+      "twitter": "@creator_492"
+    },
+    "flags": {
+      "green": [],
+      "red": [
+        "Weak bonding performance",
+        "Anonymous or suspicious creator",
+        "Limited social presence",
+        "Low liquidity concerns"
+      ],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "Based Protocol shows poor fundamentals with medium risk level. The bonding curve completed in 55 minutes with 203 unique participants. Exercise caution and DYOR. Market conditions appear challenging."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-21T10:11:05.334847",
+    "token": {
+      "mint": "JhopKDYEvJDPt4K1xDkY3jadMkL7VkEdAnLewQiVU67g",
+      "name": "GigaChad DAO",
+      "symbol": "GIGACHAD",
+      "description": "Maximum strength",
+      "twitter": "@gigachad",
+      "website": "https://gigachad.io"
+    },
+    "scores": {
+      "overall": 22,
+      "quality": "poor",
+      "risk": "high",
+      "bonding": 35,
+      "creator": 15,
+      "social": 24,
+      "market": 27,
+      "distribution": 66
+    },
+    "market": {
+      "mcap_usd": 211293,
+      "liquidity_usd": 47939,
+      "price_usd": 0.007503786671318297,
+      "volume_24h_usd": 95166
+    },
+    "bonding_curve": {
+      "duration_seconds": 7127,
+      "volume_sol": 55.36741942338756,
+      "unique_buyers": 153,
+      "buy_sell_ratio": 2.9667640400953994
+    },
+    "creator": {
+      "wallet": "r6QrCcXU2HRxEUu3NdSW19kzvLVJSoBpB7YjjXHwRaz2",
+      "twitter": "@creator_391"
+    },
+    "flags": {
+      "green": [],
+      "red": [
+        "Weak bonding performance",
+        "Anonymous or suspicious creator",
+        "Limited social presence",
+        "Low liquidity concerns"
+      ],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "GigaChad DAO shows poor fundamentals with high risk level. The bonding curve completed in 76 minutes with 77 unique participants. Exercise caution and DYOR. Market conditions appear challenging."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-21T08:11:05.334847",
+    "token": {
+      "mint": "LKVgHdPoCj5K6fATYyZ1okqffihWUDjs8RZE61UknXC9",
+      "name": "DogeRevolution",
+      "symbol": "DOGE2.0",
+      "description": "The meme lives on",
+      "twitter": "@doge2.0",
+      "website": "https://doge2.0.io"
+    },
+    "scores": {
+      "overall": 38,
+      "quality": "poor",
+      "risk": "medium",
+      "bonding": 27,
+      "creator": 35,
+      "social": 19,
+      "market": 23,
+      "distribution": 52
+    },
+    "market": {
+      "mcap_usd": 385524,
+      "liquidity_usd": 62824,
+      "price_usd": 0.0021996235703604958,
+      "volume_24h_usd": 211289
+    },
+    "bonding_curve": {
+      "duration_seconds": 6183,
+      "volume_sol": 324.0910877839345,
+      "unique_buyers": 283,
+      "buy_sell_ratio": 1.3263322616081963
+    },
+    "creator": {
+      "wallet": "fFGSYRdvNdveKfQkVR1tbFfaN8EFK3pj2Z8P7uGB77Vc",
+      "twitter": "@creator_579"
+    },
+    "flags": {
+      "green": [],
+      "red": [
+        "Weak bonding performance",
+        "Anonymous or suspicious creator",
+        "Limited social presence",
+        "Low liquidity concerns"
+      ],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "DogeRevolution shows poor fundamentals with medium risk level. The bonding curve completed in 41 minutes with 111 unique participants. Exercise caution and DYOR. Market conditions appear challenging."
+    }
+  },
+  {
+    "type": "bags_intel_report",
+    "timestamp": "2026-01-21T06:11:05.334847",
+    "token": {
+      "mint": "JN7beKZUm4AR5VwgXcS3sKcmzVtfkYqkH7at9rcwCzKq",
+      "name": "Rocket Finance",
+      "symbol": "ROCKET",
+      "description": "To infinity",
+      "twitter": "@rocket",
+      "website": "https://rocket.io"
+    },
+    "scores": {
+      "overall": 22,
+      "quality": "poor",
+      "risk": "low",
+      "bonding": 36,
+      "creator": 30,
+      "social": 17,
+      "market": 36,
+      "distribution": 69
+    },
+    "market": {
+      "mcap_usd": 230100,
+      "liquidity_usd": 6929,
+      "price_usd": 0.004567159777453267,
+      "volume_24h_usd": 175906
+    },
+    "bonding_curve": {
+      "duration_seconds": 3759,
+      "volume_sol": 66.21184016452818,
+      "unique_buyers": 216,
+      "buy_sell_ratio": 2.122605615398795
+    },
+    "creator": {
+      "wallet": "s8wZUEQho68kUAojYCUiA6uerkXK997JRtWsTUuCV4yq",
+      "twitter": null
+    },
+    "flags": {
+      "green": [],
+      "red": [
+        "Weak bonding performance",
+        "Anonymous or suspicious creator",
+        "Limited social presence",
+        "Low liquidity concerns"
+      ],
+      "warnings": []
+    },
+    "ai_analysis": {
+      "summary": "Rocket Finance shows poor fundamentals with low risk level. The bonding curve completed in 72 minutes with 105 unique participants. Exercise caution and DYOR. Market conditions appear challenging."
+    }
+  }
+]

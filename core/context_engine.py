@@ -41,7 +41,9 @@ class ContextEngine:
             "last_full_report": None,
             "startup_count_today": 0,
             "last_startup_date": None,
-            "sentiment_cache_valid": False
+            "sentiment_cache_valid": False,
+            "x_read_disabled_until": None,
+            "x_read_disabled_reason": None,
         }
 
     def _save_state(self):
@@ -97,6 +99,23 @@ class ContextEngine:
         self.state["last_full_report"] = datetime.now().isoformat()
         self._save_state()
 
+    def record_x_read_disable(self, disabled_until: float, reason: str) -> None:
+        """Persist X read disable cooldown to avoid restart hammering."""
+        self.state["x_read_disabled_until"] = disabled_until
+        self.state["x_read_disabled_reason"] = reason
+        self._save_state()
+
+    def clear_x_read_disable(self) -> None:
+        self.state["x_read_disabled_until"] = None
+        self.state["x_read_disabled_reason"] = None
+        self._save_state()
+
+    def get_x_read_disable(self) -> tuple[Optional[float], Optional[str]]:
+        return (
+            self.state.get("x_read_disabled_until"),
+            self.state.get("x_read_disabled_reason"),
+        )
+
     def record_startup(self):
         today = datetime.now().date().isoformat()
         if self.state.get("last_startup_date") != today:
@@ -116,7 +135,8 @@ class ContextEngine:
             "last_tweet": self.state.get("last_tweet"),
             "restarts_today": self.state.get("startup_count_today", 0),
             "can_run_sentiment": self.can_run_sentiment(),
-            "can_tweet": self.can_tweet()
+            "can_tweet": self.can_tweet(),
+            "x_read_disabled_until": self.state.get("x_read_disabled_until"),
         }
 
 

@@ -1,0 +1,29 @@
+[Unit]
+Description=Jarvis AI Runtime Layer
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+User=jarvis
+Group=jarvis
+WorkingDirectory=/home/jarvis/Jarvis
+Environment="PATH=/home/jarvis/.local/bin:/usr/local/bin:/usr/bin"
+Environment="AI_RUNTIME_ENABLED=true"
+Environment="OLLAMA_BASE_URL=http://localhost:11434"
+Environment="OLLAMA_MODEL=qwen2.5-coder:7b"
+ExecStart=/usr/bin/python3 -m core.ai_runtime.main
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/home/jarvis/Jarvis/logs/ai_runtime.log
+StandardError=append:/home/jarvis/Jarvis/logs/ai_runtime.log
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/home/jarvis/Jarvis/data /home/jarvis/Jarvis/logs /tmp
+
+[Install]
+WantedBy=multi-user.target

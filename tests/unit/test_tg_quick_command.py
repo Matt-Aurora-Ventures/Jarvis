@@ -141,7 +141,7 @@ class TestQuickCallbacks:
         return update
 
     @pytest.mark.asyncio
-    async def test_handle_quick_positions_callback(self, mock_callback_update, mock_context):
+    async def test_handle_quick_positions_callback(self, mock_callback_update, mock_context, mock_config):
         """Test positions callback."""
         mock_callback_update.callback_query.data = "quick_positions"
 
@@ -157,7 +157,7 @@ class TestQuickCallbacks:
             mock_handler.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_handle_quick_balance_callback(self, mock_callback_update, mock_context):
+    async def test_handle_quick_balance_callback(self, mock_callback_update, mock_context, mock_config):
         """Test balance callback."""
         mock_callback_update.callback_query.data = "quick_balance"
 
@@ -170,7 +170,7 @@ class TestQuickCallbacks:
             mock_handler.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_handle_quick_wallet_callback(self, mock_callback_update, mock_context):
+    async def test_handle_quick_wallet_callback(self, mock_callback_update, mock_context, mock_config):
         """Test wallet callback."""
         mock_callback_update.callback_query.data = "quick_wallet"
 
@@ -183,7 +183,7 @@ class TestQuickCallbacks:
             mock_wallet.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_handle_quick_health_callback(self, mock_callback_update, mock_context):
+    async def test_handle_quick_health_callback(self, mock_callback_update, mock_context, mock_config):
         """Test health callback."""
         mock_callback_update.callback_query.data = "quick_health"
 
@@ -196,7 +196,7 @@ class TestQuickCallbacks:
             mock_health.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_handle_quick_full_menu_callback(self, mock_callback_update, mock_context):
+    async def test_handle_quick_full_menu_callback(self, mock_callback_update, mock_context, mock_config):
         """Test full menu callback."""
         mock_callback_update.callback_query.data = "quick_full_menu"
 

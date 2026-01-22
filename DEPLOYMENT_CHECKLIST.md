@@ -35,6 +35,7 @@ ANTHROPIC_API_KEY=ollama
 ANTHROPIC_BASE_URL=http://localhost:11434/v1
 OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=qwen3-coder
+CLAUDE_USE_API_MODE=true
 ```
 
 ---

@@ -105,6 +105,34 @@ except ImportError:
     BAGS_AVAILABLE = False
     BagsTradeAdapter = None
 
+# Import self-correcting AI system for learning and optimization
+try:
+    from core.self_correcting import (
+        get_shared_memory,
+        get_message_bus,
+        get_ollama_router,
+        get_self_adjuster,
+        LearningType,
+        MessageType,
+        MessagePriority,
+        TaskType,
+        Parameter,
+        MetricType,
+    )
+    SELF_CORRECTING_AVAILABLE = True
+except ImportError:
+    SELF_CORRECTING_AVAILABLE = False
+    get_shared_memory = None
+    get_message_bus = None
+    get_ollama_router = None
+    get_self_adjuster = None
+    LearningType = None
+    MessageType = None
+    MessagePriority = None
+    TaskType = None
+    Parameter = None
+    MetricType = None
+
 # Initialize structured logger if available, fallback to standard logger
 if STRUCTURED_LOGGING_AVAILABLE:
     logger = get_structured_logger("jarvis.trading", service="trading_engine")
@@ -279,17 +307,28 @@ class Position:
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'Position':
+        entry_price = float(data.get('entry_price', 0) or 0)
+        current_price = float(data.get('current_price', entry_price) or entry_price)
+        tp_price = data.get('take_profit_price', data.get('tp_price'))
+        sl_price = data.get('stop_loss_price', data.get('sl_price'))
+
+        # Remediation: ensure TP/SL present for legacy records
+        if (tp_price is None or tp_price == 0) and entry_price > 0:
+            tp_price = entry_price * 1.20
+        if (sl_price is None or sl_price == 0) and entry_price > 0:
+            sl_price = entry_price * 0.90
+
         return cls(
             id=data['id'],
             token_mint=data['token_mint'],
-            token_symbol=data['token_symbol'],
+            token_symbol=data.get('token_symbol', 'UNKNOWN'),
             direction=TradeDirection(data['direction']),
-            entry_price=data['entry_price'],
-            current_price=data.get('current_price', data['entry_price']),
+            entry_price=entry_price,
+            current_price=current_price,
             amount=data['amount'],
             amount_usd=data['amount_usd'],
-            take_profit_price=data['take_profit_price'],
-            stop_loss_price=data['stop_loss_price'],
+            take_profit_price=tp_price,
+            stop_loss_price=sl_price,
             status=TradeStatus(data['status']),
             opened_at=data['opened_at'],
             closed_at=data.get('closed_at'),
@@ -357,14 +396,19 @@ class TradingEngine:
     - Spending caps and audit logging (per guide)
     """
 
-    # State files - centralized under ~/.lifeos/trading/
-    # Migration: Old files in bots/treasury/ will be auto-migrated on first access
+    # State files - canonical under data/trader/
+    # Legacy: ~/.lifeos/trading/ and bots/treasury/.positions.json + .trade_history.json
     from core.state_paths import STATE_PATHS
-    POSITIONS_FILE = STATE_PATHS.positions
-    POSITIONS_FILE_SECONDARY = STATE_PATHS.trader_positions  # data/trader/positions.json
-    HISTORY_FILE = STATE_PATHS.trading_dir / 'trade_history.json'
+    _ROOT = Path(__file__).resolve().parents[2]
+    _TRADER_STATE_DIR = _ROOT / "data" / "trader"
+    POSITIONS_FILE = _TRADER_STATE_DIR / "positions.json"
+    HISTORY_FILE = _TRADER_STATE_DIR / "trade_history.json"
+    DAILY_VOLUME_FILE = _TRADER_STATE_DIR / "daily_volume.json"
     AUDIT_LOG_FILE = STATE_PATHS.audit_log
-    DAILY_VOLUME_FILE = STATE_PATHS.trading_dir / 'daily_volume.json'
+
+    # Legacy primary paths (read-only fallback)
+    LEGACY_POSITIONS_FILE = STATE_PATHS.positions
+    LEGACY_HISTORY_FILE = STATE_PATHS.trading_dir / "trade_history.json"
 
     # CRITICAL: Spending caps to protect treasury (per guide)
     MAX_TRADE_USD = 100.0      # Maximum single trade size
@@ -539,6 +583,14 @@ class TradingEngine:
 
         # Optional per-profile state isolation (demo vs treasury)
         self._state_profile = (state_profile or "").strip().lower()
+        self._legacy_positions_files: List[Path] = [
+            self.LEGACY_POSITIONS_FILE,
+            Path(__file__).resolve().parents[2] / "bots" / "treasury" / ".positions.json",
+        ]
+        self._legacy_history_files: List[Path] = [
+            self.LEGACY_HISTORY_FILE,
+            Path(__file__).resolve().parents[2] / "bots" / "treasury" / ".trade_history.json",
+        ]
         if self._state_profile and self._state_profile != "treasury":
             self._configure_state_paths(self._state_profile)
 
@@ -593,25 +645,254 @@ class TradingEngine:
         # Ensures only one trade executes at a time, protecting against position limit overruns
         self._trade_execution_lock = asyncio.Lock()
 
+        # Initialize self-correcting AI system
+        self.memory = None
+        self.bus = None
+        self.router = None
+        self.adjuster = None
+        if SELF_CORRECTING_AVAILABLE:
+            try:
+                self.memory = get_shared_memory()
+                self.bus = get_message_bus()
+                self.router = get_ollama_router()
+                self.adjuster = get_self_adjuster()
+
+                # Register tunable trading parameters
+                self.adjuster.register_component("treasury_bot", {
+                    "stop_loss_pct": Parameter(
+                        name="stop_loss_pct",
+                        current_value=15.0,  # Current 15% stop loss
+                        min_value=5.0,
+                        max_value=25.0,
+                        step=2.0,
+                        affects_metrics=[MetricType.SUCCESS_RATE, MetricType.COST]
+                    ),
+                    "take_profit_pct": Parameter(
+                        name="take_profit_pct",
+                        current_value=30.0,  # Current 30% take profit
+                        min_value=15.0,
+                        max_value=50.0,
+                        step=5.0,
+                        affects_metrics=[MetricType.SUCCESS_RATE]
+                    ),
+                })
+
+                # Subscribe to messages from other bots
+                self.bus.subscribe(
+                    subscriber="treasury_bot",
+                    message_types=[
+                        MessageType.SENTIMENT_CHANGED,
+                        MessageType.PRICE_ALERT,
+                        MessageType.NEW_LEARNING,
+                    ],
+                    callback=self._handle_bus_message,
+                )
+
+                # Load past learnings
+                past_learnings = self.memory.search_learnings(
+                    component="treasury_bot",
+                    learning_type=LearningType.SUCCESS_PATTERN,
+                    min_confidence=0.7
+                )
+                logger.info(f"Loaded {len(past_learnings)} past trading patterns from self-correcting memory")
+
+            except Exception as e:
+                logger.warning(f"Failed to initialize self-correcting AI: {e}")
+                self.memory = None
+                self.bus = None
+                self.router = None
+                self.adjuster = None
+
         # Load existing state
         self._load_state()
 
     def _configure_state_paths(self, profile: str) -> None:
         """Override state files for a non-treasury profile."""
-        base_dir = Path.home() / ".lifeos" / profile
-        trading_dir = base_dir / "trading"
-        logs_dir = base_dir / "logs"
-        trading_dir.mkdir(parents=True, exist_ok=True)
-        logs_dir.mkdir(parents=True, exist_ok=True)
+        profile_state_dir = Path(__file__).resolve().parents[2] / "data" / profile / "trader"
+        profile_state_dir.mkdir(parents=True, exist_ok=True)
 
-        self.POSITIONS_FILE = trading_dir / "positions.json"
-        self.HISTORY_FILE = trading_dir / "trade_history.json"
-        self.AUDIT_LOG_FILE = logs_dir / "audit.jsonl"
-        self.DAILY_VOLUME_FILE = trading_dir / "daily_volume.json"
+        self.POSITIONS_FILE = profile_state_dir / "positions.json"
+        self.HISTORY_FILE = profile_state_dir / "trade_history.json"
+        self.DAILY_VOLUME_FILE = profile_state_dir / "daily_volume.json"
 
-        secondary_dir = Path(__file__).resolve().parents[2] / "data" / profile / "trader"
-        secondary_dir.mkdir(parents=True, exist_ok=True)
-        self.POSITIONS_FILE_SECONDARY = secondary_dir / "positions.json"
+        legacy_trading_dir = Path.home() / ".lifeos" / profile / "trading"
+        legacy_trading_dir.mkdir(parents=True, exist_ok=True)
+        legacy_logs_dir = Path.home() / ".lifeos" / profile / "logs"
+        legacy_logs_dir.mkdir(parents=True, exist_ok=True)
+
+        self.AUDIT_LOG_FILE = legacy_logs_dir / "audit.jsonl"
+        self._legacy_positions_files = [
+            legacy_trading_dir / "positions.json",
+        ]
+        self._legacy_history_files = [
+            legacy_trading_dir / "trade_history.json",
+        ]
+
+    # ==========================================================================
+    # SELF-CORRECTING AI INTEGRATION
+    # ==========================================================================
+
+    def _handle_bus_message(self, message):
+        """Handle incoming messages from other bots via message bus."""
+        if not SELF_CORRECTING_AVAILABLE or not self.memory:
+            return
+
+        try:
+            if message.type == MessageType.SENTIMENT_CHANGED:
+                # Another bot detected sentiment change
+                token = message.data.get('token')
+                sentiment = message.data.get('sentiment')
+                score = message.data.get('score', 0)
+
+                logger.info(
+                    f"Received sentiment signal: {token} = {sentiment} ({score:.2f})"
+                )
+
+                # Search for learnings about this token
+                token_learnings = self.memory.search_learnings(
+                    query=f"{token} trading",
+                    min_confidence=0.6,
+                    limit=3
+                )
+
+                if token_learnings:
+                    logger.info(
+                        f"Found {len(token_learnings)} past learnings about {token}"
+                    )
+
+            elif message.type == MessageType.PRICE_ALERT:
+                # Price alert from monitoring bot
+                token = message.data.get('token')
+                alert_type = message.data.get('alert_type')
+                logger.info(f"Price alert: {token} - {alert_type}")
+
+            elif message.type == MessageType.NEW_LEARNING:
+                # Another bot shared a learning
+                learning_id = message.data.get('learning_id')
+                logger.info(f"New learning shared: {learning_id}")
+
+        except Exception as e:
+            logger.error(f"Error handling bus message: {e}", exc_info=True)
+
+    def _record_trade_learning(
+        self,
+        token: str,
+        action: str,
+        pnl: float,
+        pnl_pct: float,
+        sentiment_score: float = None,
+        context: Dict[str, Any] = None
+    ):
+        """Record a trade outcome as a learning for future reference."""
+        if not SELF_CORRECTING_AVAILABLE or not self.memory:
+            return
+
+        try:
+            # Determine learning type based on P&L
+            if pnl_pct > 0.1:  # 10%+ profit
+                learning_type = LearningType.SUCCESS_PATTERN
+                content = f"Successful {action} on {token}: {pnl_pct:.1%} profit"
+                confidence = min(0.9, 0.5 + (pnl_pct / 0.3))
+            elif pnl_pct < -0.05:  # 5%+ loss
+                learning_type = LearningType.FAILURE_PATTERN
+                content = f"Loss on {token}: {abs(pnl_pct):.1%} - avoid similar patterns"
+                confidence = 0.8
+            else:
+                # Small gain/loss - not significant enough to learn from
+                return
+
+            # Store learning
+            learning_context = {
+                "token": token,
+                "action": action,
+                "pnl": pnl,
+                "pnl_pct": pnl_pct,
+                **(context or {})
+            }
+
+            if sentiment_score is not None:
+                learning_context["sentiment_score"] = sentiment_score
+
+            learning_id = self.memory.add_learning(
+                component="treasury_bot",
+                learning_type=learning_type,
+                content=content,
+                context=learning_context,
+                confidence=confidence
+            )
+
+            logger.info(f"Stored learning {learning_id}: {content}")
+
+            # Broadcast to other bots
+            if self.bus:
+                asyncio.create_task(
+                    self.bus.publish(
+                        sender="treasury_bot",
+                        message_type=MessageType.NEW_LEARNING,
+                        data={
+                            "learning_id": learning_id,
+                            "content": content,
+                            "pnl_pct": pnl_pct,
+                            "token": token
+                        },
+                        priority=MessagePriority.NORMAL
+                    )
+                )
+
+            # Record metric for self-adjuster
+            if self.adjuster:
+                self.adjuster.record_metric(
+                    component="treasury_bot",
+                    metric_type=MetricType.SUCCESS_RATE,
+                    value=1.0 if pnl_pct > 0 else 0.0
+                )
+
+        except Exception as e:
+            logger.error(f"Error recording trade learning: {e}", exc_info=True)
+
+    async def _query_ai_for_trade_analysis(
+        self,
+        token: str,
+        sentiment: str,
+        score: float,
+        past_learnings: List = None
+    ) -> str:
+        """Use Ollama/Claude to analyze trade opportunity."""
+        if not SELF_CORRECTING_AVAILABLE or not self.router:
+            return ""
+
+        try:
+            learning_context = ""
+            if past_learnings:
+                learning_context = "\n\nPast learnings:\n" + "\n".join(
+                    f"- {l.content}" for l in past_learnings[:3]
+                )
+
+            prompt = f"""Analyze this trading opportunity:
+Token: {token}
+Sentiment: {sentiment} (score: {score:.2f})
+{learning_context}
+
+Should I trade this token? Consider:
+1. Sentiment score strength
+2. Past performance (from learnings)
+3. Risk/reward ratio
+
+Respond in 2-3 sentences."""
+
+            response = await self.router.query(
+                prompt=prompt,
+                task_type=TaskType.REASONING
+            )
+
+            logger.info(
+                f"AI analysis ({response.model_used}): {response.text[:100]}..."
+            )
+            return response.text
+
+        except Exception as e:
+            logger.error(f"Error querying AI: {e}", exc_info=True)
+            return ""
 
     # ==========================================================================
     # SWAP EXECUTION - Routes through Bags.fm (with Jupiter fallback) or Jupiter
@@ -830,7 +1111,15 @@ class TradingEngine:
         """
         logger.info("Loading trading state...")
 
+        # Ensure canonical directories exist
+        self.POSITIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        self.HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        self.DAILY_VOLUME_FILE.parent.mkdir(parents=True, exist_ok=True)
+
         # Use SafeState for race-condition-free access
+        legacy_positions_loaded = False
+        legacy_history_loaded = False
+
         if SAFE_STATE_AVAILABLE:
             self._positions_state = SafeState(self.POSITIONS_FILE, default_value=[])
             self._history_state = SafeState(self.HISTORY_FILE, default_value=[])
@@ -845,13 +1134,13 @@ class TradingEngine:
                     logger.info(f"[LOAD] Position {pos.id}: {pos.token_symbol} - status={pos.status.value}, amount=${pos.amount_usd:.2f}")
             except Exception as e:
                 logger.error(f"Failed to load positions from primary: {e}")
-                # Try secondary location
-                self._load_from_secondary()
+                # Try legacy locations
+                legacy_positions_loaded = self._load_from_secondary()
             else:
                 primary_missing = not self.POSITIONS_FILE.exists()
                 primary_empty = self.POSITIONS_FILE.exists() and self.POSITIONS_FILE.stat().st_size == 0
-                if (primary_missing or primary_empty) and self.POSITIONS_FILE_SECONDARY.exists() and not self.positions:
-                    self._load_from_secondary()
+                if (primary_missing or primary_empty) and not self.positions:
+                    legacy_positions_loaded = self._load_from_secondary()
 
             try:
                 data = self._history_state.read()
@@ -859,6 +1148,7 @@ class TradingEngine:
                 logger.info(f"[LOAD] Trade history: {len(self.trade_history)} closed positions")
             except Exception as e:
                 logger.error(f"Failed to load history: {e}")
+                legacy_history_loaded = self._load_history_from_legacy()
         else:
             # Fallback to original implementation
             if self.POSITIONS_FILE.exists():
@@ -871,10 +1161,10 @@ class TradingEngine:
                             logger.info(f"[LOAD] Position {pos.id}: {pos.token_symbol} - status={pos.status.value}, amount=${pos.amount_usd:.2f}")
                 except Exception as e:
                     logger.error(f"Failed to load positions from primary: {e}")
-                    self._load_from_secondary()
-            elif self.POSITIONS_FILE_SECONDARY.exists():
-                # Primary doesn't exist, try secondary
-                self._load_from_secondary()
+                    legacy_positions_loaded = self._load_from_secondary()
+            else:
+                # Primary doesn't exist, try legacy
+                legacy_positions_loaded = self._load_from_secondary()
 
             if self.HISTORY_FILE.exists():
                 try:
@@ -884,6 +1174,17 @@ class TradingEngine:
                         logger.info(f"[LOAD] Trade history: {len(self.trade_history)} closed positions")
                 except Exception as e:
                     logger.error(f"Failed to load history: {e}")
+                    legacy_history_loaded = self._load_history_from_legacy()
+            else:
+                legacy_history_loaded = self._load_history_from_legacy()
+
+        # Persist migrated legacy state into canonical store
+        if legacy_positions_loaded or legacy_history_loaded:
+            try:
+                self._save_state()
+                logger.info("[MIGRATE] Persisted legacy trading state into canonical files")
+            except Exception as e:
+                logger.warning(f"[MIGRATE] Failed to persist legacy state: {e}")
 
         # Log summary
         open_count = len([p for p in self.positions.values() if p.is_open])
@@ -891,19 +1192,38 @@ class TradingEngine:
         logger.info(f"[LOAD] State loaded: {open_count} open positions, total value ${total_value:.2f}")
 
     def _load_from_secondary(self):
-        """Load positions from secondary location (data/trader/positions.json)."""
-        if self.POSITIONS_FILE_SECONDARY.exists():
+        """Load positions from legacy locations (read-only fallback)."""
+        for legacy_path in self._legacy_positions_files:
+            if not legacy_path.exists():
+                continue
             try:
-                with open(self.POSITIONS_FILE_SECONDARY) as f:
+                with open(legacy_path) as f:
                     data = json.load(f)
                     for pos_data in data:
                         pos = Position.from_dict(pos_data)
-                        if pos.id not in self.positions:  # Don't overwrite existing
+                        if pos.id not in self.positions:
                             self.positions[pos.id] = pos
-                            logger.info(f"[LOAD-SECONDARY] Position {pos.id}: {pos.token_symbol}")
-                logger.info(f"[LOAD-SECONDARY] Recovered {len(data)} positions from secondary location")
+                            logger.info(f"[LOAD-LEGACY] Position {pos.id}: {pos.token_symbol}")
+                logger.info(f"[LOAD-LEGACY] Recovered {len(data)} positions from {legacy_path}")
+                return True
             except Exception as e:
-                logger.error(f"Failed to load positions from secondary: {e}")
+                logger.error(f"Failed to load positions from legacy {legacy_path}: {e}")
+        return False
+
+    def _load_history_from_legacy(self):
+        """Load trade history from legacy locations (read-only fallback)."""
+        for legacy_path in self._legacy_history_files:
+            if not legacy_path.exists():
+                continue
+            try:
+                with open(legacy_path) as f:
+                    data = json.load(f)
+                    self.trade_history = [Position.from_dict(p) for p in data]
+                logger.info(f"[LOAD-LEGACY] Trade history: {len(self.trade_history)} closed positions from {legacy_path}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to load history from legacy {legacy_path}: {e}")
+        return False
 
     async def reconcile_with_onchain(self) -> Dict[str, Any]:
         """
@@ -1272,15 +1592,6 @@ class TradingEngine:
                     json.dump(positions_data, f, indent=2)
                 with open(self.HISTORY_FILE, 'w') as f:
                     json.dump(history_data, f, indent=2)
-
-            # Always persist to secondary location (data/trader/positions.json)
-            try:
-                self.POSITIONS_FILE_SECONDARY.parent.mkdir(parents=True, exist_ok=True)
-                with open(self.POSITIONS_FILE_SECONDARY, 'w') as f:
-                    json.dump(positions_data, f, indent=2)
-                logger.debug(f"Positions saved to secondary location: {self.POSITIONS_FILE_SECONDARY}")
-            except Exception as e2:
-                logger.warning(f"Failed to save to secondary positions file: {e2}")
 
         except Exception as e:
             logger.error(f"Failed to save state: {e}")
@@ -2216,6 +2527,16 @@ class TradingEngine:
                     dry_run=True,
                     user_id=str(user_id) if user_id else None,
                 )
+
+            # Record trade learning for self-correcting AI
+            self._record_trade_learning(
+                token=position.token_symbol,
+                action="close",
+                pnl=position.pnl_usd,
+                pnl_pct=position.pnl_pct / 100,  # Convert to decimal
+                context={"reason": reason, "dry_run": True}
+            )
+
             return True, f"[DRY RUN] Closed with P&L: ${position.pnl_usd:+.2f} ({position.pnl_pct:+.1f}%)"
 
         # Execute real close
@@ -2345,6 +2666,19 @@ class TradingEngine:
                     dry_run=False,
                     user_id=str(user_id) if user_id else None,
                 )
+
+            # Record trade learning for self-correcting AI
+            self._record_trade_learning(
+                token=position.token_symbol,
+                action="close",
+                pnl=position.pnl_usd,
+                pnl_pct=position.pnl_pct / 100,  # Convert to decimal
+                context={
+                    "reason": reason,
+                    "dry_run": False,
+                    "tx_signature": result.signature
+                }
+            )
 
             # Track in scorekeeper
             try:
@@ -3118,6 +3452,28 @@ class TreasuryTrader:
                     "error": "Could not fetch current token price",
                     "tx_signature": "",
                 }
+
+            # Remediation: validate TP/SL inputs and fall back to defaults if invalid
+            try:
+                tp_val = float(take_profit_price)
+            except (TypeError, ValueError):
+                tp_val = 0.0
+            try:
+                sl_val = float(stop_loss_price)
+            except (TypeError, ValueError):
+                sl_val = 0.0
+
+            if tp_val <= 0 or sl_val <= 0 or tp_val <= current_price or sl_val >= current_price:
+                fallback_tp, fallback_sl = self.get_tp_sl_levels(current_price, sentiment_grade)
+                logger.warning(
+                    "Invalid TP/SL provided; falling back to defaults | "
+                    f"tp={take_profit_price} sl={stop_loss_price} entry={current_price:.6f}"
+                )
+                take_profit_price = fallback_tp
+                stop_loss_price = fallback_sl
+            else:
+                take_profit_price = tp_val
+                stop_loss_price = sl_val
 
             # Get SOL price for USD conversion
             sol_price = await self._engine.jupiter.get_token_price(JupiterClient.SOL_MINT)

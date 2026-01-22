@@ -198,6 +198,16 @@ class JarvisTwitterBot:
         """Post scheduled content"""
         logger.info(f"Generating scheduled content: {content_type}")
 
+        # Cross-module cooldown via context engine (prevents restart spam)
+        try:
+            from core.context_engine import context
+            min_minutes = max(1, int(self.config.min_time_between_tweets / 60))
+            if not context.can_tweet(min_interval_minutes=min_minutes):
+                logger.info("Skipped scheduled post (context_engine cooldown active)")
+                return
+        except Exception:
+            pass
+
         # Check rate limit
         if self.state.last_tweet_time:
             elapsed = (datetime.now() - self.state.last_tweet_time).seconds
@@ -264,6 +274,11 @@ class JarvisTwitterBot:
                 "url": result.url
             })
             self._save_state()
+            try:
+                from core.context_engine import context
+                context.record_tweet()
+            except Exception:
+                pass
             # Record to shared memory for cross-module deduplication
             memory.record_tweet(result.tweet_id, content.text, content.content_type, [])
             logger.info(f"Tweet posted: {result.url}")

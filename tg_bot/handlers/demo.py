@@ -5680,7 +5680,17 @@ async def demo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle all demo:* callbacks."""
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except BadRequest as exc:
+        if (
+            "Query is too old" in str(exc)
+            or "response timeout expired" in str(exc)
+            or "query id is invalid" in str(exc)
+        ):
+            logger.debug("Demo callback expired before answer.")
+            return
+        raise
 
     data = query.data
     callback_data = data  # Store for error logging

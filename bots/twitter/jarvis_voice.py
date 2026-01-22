@@ -10,6 +10,7 @@ import logging
 import asyncio
 import shutil
 import subprocess
+import anthropic
 from typing import Optional, Dict, Any
 from pathlib import Path
 
@@ -37,8 +38,22 @@ class JarvisVoice:
     
     def __init__(self):
         # CLI ONLY - No Anthropic API (per user requirement)
-        self.cli_enabled = True  # Always enabled - CLI is the only option
+        self.cli_enabled = True  # Fallback when API mode is unavailable
         self.cli_path = os.getenv("CLAUDE_CLI_PATH", "claude")
+        self.api_client = None
+        self.api_model = "claude-sonnet-4-20250514"
+        self.api_base_url = None
+        try:
+            from core.llm.anthropic_utils import get_anthropic_base_url
+            self.api_base_url = get_anthropic_base_url()
+            if self.api_base_url:
+                api_key = os.getenv("ANTHROPIC_API_KEY") or "ollama"
+                self.api_client = anthropic.Anthropic(
+                    api_key=api_key,
+                    base_url=self.api_base_url,
+                )
+        except Exception as exc:
+            logger.warning(f"Claude API client unavailable: {exc}")
 
     def _cli_available(self) -> bool:
         return bool(shutil.which(self.cli_path))
@@ -161,8 +176,8 @@ class JarvisVoice:
         Returns:
             Tweet text in Jarvis voice, or None on failure
         """
-        if not self._cli_available():
-            logger.error("Claude CLI not available - CLI is the only supported method")
+        if not self._cli_available() and not self.api_client:
+            logger.error("Claude not available - no local API or CLI configured")
             return None
 
         try:
@@ -174,17 +189,53 @@ class JarvisVoice:
 
             full_prompt += "\n\nGenerate a single tweet. Can be up to 4,000 characters (Premium X). Lowercase. Do NOT end with 'nfa' every time - only occasionally."
 
-            # TRY CLI FIRST (saves API credits)
-            if self._cli_available():
-                cli_prompt = f"""You are JARVIS, an AI trading assistant. Write a tweet in JARVIS voice.
+            # Prefer local Anthropic-compatible API when configured
+            if self.api_client:
+                try:
+                    response = self.api_client.messages.create(
+                        model=self.api_model,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        system=JARVIS_VOICE_BIBLE,
+                        messages=[{"role": "user", "content": full_prompt}],
+                    )
+                    api_text = response.content[0].text.strip()
+                    tweet = api_text
+                    import re
+                    if tweet.startswith("{") and "}" in tweet:
+                        try:
+                            import json
+                            data = json.loads(tweet)
+                            if isinstance(data, dict):
+                                tweet = data.get("tweet", data.get("text", data.get("content", tweet)))
+                        except json.JSONDecodeError:
+                            match = re.search(r'"(?:tweet|text|content)"\s*:\s*"([^"]+)"', tweet)
+                            if match:
+                                tweet = match.group(1)
+                    tweet = re.sub(r'```[\w]*\n?', '', tweet)
+                    tweet = re.sub(r'```', '', tweet)
+                    tweet = tweet.strip('"\'')
+                    tweet = tweet.lower() if tweet and tweet[0].isupper() else tweet
+                    max_chars = 4000
+                    if len(tweet) > max_chars:
+                        truncated = tweet[:max_chars - 3]
+                        last_space = truncated.rfind(' ')
+                        if last_space > max_chars - 500:
+                            tweet = tweet[:last_space] + "..."
+                        else:
+                            tweet = truncated + "..."
+                    is_valid, issues = validate_jarvis_response(tweet)
+                    if not is_valid:
+                        logger.warning(f"Tweet validation issues: {issues}")
+                    logger.info("Tweet generated via local Anthropic-compatible API")
+                    return tweet
+                except Exception as api_exc:
+                    logger.warning(f"Local API generation failed, falling back to CLI: {api_exc}")
 
-JARVIS VOICE RULES:
-- lowercase only (except $TICKERS)
-- concise, witty, genuine
-- no corporate speak
-- no emojis (rarely one if perfect)
-- max 280 chars for standard tweets, can go longer for detailed analysis
-- sound like a smart friend texting, not a marketing bot
+            # TRY CLI (fallback)
+            if self._cli_available():
+                # Use the FULL voice bible for brand consistency
+                cli_prompt = f"""{JARVIS_VOICE_BIBLE}
 
 TASK: {full_prompt}
 

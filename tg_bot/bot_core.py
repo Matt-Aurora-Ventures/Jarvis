@@ -1854,7 +1854,7 @@ async def orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /code command - execute coding request via Claude CLI (admin only).
+    """Handle /code command - execute coding request via Claude (admin only).
     
     Usage: /code <your request>
     Example: /code add a /holders command that shows token holder distribution
@@ -1862,12 +1862,15 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not context.args:
             await update.message.reply_text(
-                "<b>/code - Execute coding request via Claude CLI</b>\n\n"
+                "<b>/code - Execute coding request via Claude</b>\n\n"
                 "Usage: /code <your request>\n\n"
                 "Examples:\n"
                 "• /code add a /holders command\n"
                 "• /code fix the /trending command\n"
-                "• /code refactor the sentiment analysis",
+                "• /code refactor the sentiment analysis\n\n"
+                "<b>Setup:</b>\n"
+                "• Local model: set <code>ANTHROPIC_BASE_URL</code> and <code>ANTHROPIC_API_KEY</code>\n"
+                "• CLI fallback: <code>npm install -g @anthropic-ai/claude-code</code>",
                 parse_mode=ParseMode.HTML
             )
             return
@@ -1879,15 +1882,27 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cli_handler = get_claude_cli_handler()
         bridge = get_console_bridge()
 
-        # Check if Claude CLI is available
-        if not cli_handler._claude_path or cli_handler._claude_path == "claude":
+        use_api = bool(getattr(cli_handler, "USE_API_MODE", False))
+
+        if use_api and not getattr(cli_handler, "_api_mode_available", False):
+            await update.message.reply_text(
+                "⚠️ <b>Claude API not configured</b>\n\n"
+                "Set <code>ANTHROPIC_API_KEY</code> and, for local models, "
+                "<code>ANTHROPIC_BASE_URL</code> (e.g., http://localhost:11434/v1).\n\n"
+                "Optional CLI fallback:\n"
+                "<code>npm install -g @anthropic-ai/claude-code</code>",
+                parse_mode=ParseMode.HTML
+            )
+            return
+        if not use_api and (not cli_handler._claude_path or cli_handler._claude_path == "claude"):
             # Claude CLI not found - provide helpful message
             await update.message.reply_text(
-                "⚠️ <b>Claude CLI Not Available</b>\n\n"
-                "The /code command requires Claude Code CLI to be installed.\n\n"
-                "<b>Setup (local only):</b>\n"
-                "<code>npm install -g @anthropic-ai/claude-code</code>\n\n"
-                "Note: This feature is designed for local development, not VPS deployment.",
+                "⚠️ <b>Claude CLI not configured</b>\n\n"
+                "The /code command requires Claude Code CLI or a local Anthropic-compatible endpoint.\n\n"
+                "<b>Local model setup:</b>\n"
+                "Set <code>ANTHROPIC_BASE_URL</code> and <code>ANTHROPIC_API_KEY</code>.\n\n"
+                "<b>CLI setup (fallback):</b>\n"
+                "<code>npm install -g @anthropic-ai/claude-code</code>",
                 parse_mode=ParseMode.HTML
             )
             return
@@ -1909,7 +1924,7 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.HTML
         )
 
-        # Execute via Claude CLI
+        # Execute via Claude (API or CLI)
         async def send_status(msg: str):
             if not confirm_msg:
                 return
@@ -1988,14 +2003,14 @@ async def remember(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /dev command - vibe coding via Claude CLI (no API fallback)."""
+    """Handle /dev command - vibe coding via Claude (API or CLI)."""
     try:
         if not context.args:
             help_text = "\n".join(
                 [
-                    "<b>/dev - Vibe Coding (CLI)</b>",
+                    "<b>/dev - Vibe Coding</b>",
                     "",
-                    "Generate code via Claude CLI with automatic sensitive data scrubbing.",
+                    "Generate code via Claude with automatic sensitive data scrubbing.",
                     "",
                     "<b>Usage:</b> /dev <instruction>",
                     "",
@@ -2003,6 +2018,10 @@ async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "/dev add error handling to treasury trading",
                     "/dev create a function to calculate RSI",
                     "/dev fix the duplicate detection in twitter bot",
+                    "",
+                    "<b>Setup:</b>",
+                    "• Local model: set ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY",
+                    "• CLI fallback: npm install -g @anthropic-ai/claude-code",
                     "",
                     "<i>All secrets are automatically scrubbed</i>",
                 ]
@@ -2014,15 +2033,33 @@ async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         cli_handler = get_claude_cli_handler()
 
-        # Check if Claude CLI is available
-        if not cli_handler._claude_path or cli_handler._claude_path == "claude":
+        use_api = bool(getattr(cli_handler, "USE_API_MODE", False))
+
+        if use_api and not getattr(cli_handler, "_api_mode_available", False):
+            msg = "\n".join(
+                [
+                    "<b>Claude API Not Available</b>",
+                    "",
+                    "Set ANTHROPIC_API_KEY and (for local models) ANTHROPIC_BASE_URL.",
+                    "",
+                    "Optional CLI fallback:",
+                    "npm install -g @anthropic-ai/claude-code",
+                ]
+            )
+            await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+            return
+
+        # Check if Claude CLI is available (when API mode is disabled)
+        if not use_api and (not cli_handler._claude_path or cli_handler._claude_path == "claude"):
             msg = "\n".join(
                 [
                     "<b>Claude CLI Not Available</b>",
                     "",
-                    "The /dev command requires Claude Code CLI to be installed.",
+                    "The /dev command requires Claude Code CLI or a local Anthropic-compatible endpoint.",
                     "",
-                    "<code>npm install -g @anthropic-ai/claude-code</code>",
+                    "Local model: set ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY.",
+                    "",
+                    "CLI fallback: npm install -g @anthropic-ai/claude-code",
                 ]
             )
             await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
@@ -4547,12 +4584,14 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log errors with full details for debugging."""
     import traceback
     from telegram.error import RetryAfter, TimedOut, NetworkError, BadRequest, BadRequest, Conflict
+    from core.security.scrubber import get_scrubber
 
     def sanitize_for_log(text: str) -> str:
         """Remove non-ASCII characters to avoid UnicodeEncodeError on Windows."""
         if not text:
             return ""
-        return text.encode('ascii', 'replace').decode('ascii')
+        scrubbed, _ = get_scrubber().scrub(text)
+        return scrubbed.encode('ascii', 'replace').decode('ascii')
 
     error = context.error
     error_type = type(error).__name__
@@ -4991,17 +5030,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text_lower = text.lower().strip()
             # Only trigger on explicit prefixes to avoid false positives
             # Removed broad prefixes like "fix the", "add a" which triggered on normal conversation
-            has_prefix = text_lower.startswith(explicit_prefixes)
-            # Only use keyword detection if it looks like a technical request (has multiple signals)
-            has_coding_keywords = bridge.is_coding_request(text) and any(
-                tech_word in text_lower for tech_word in
-                ["github", "repo", "commit", "deploy", "server", "bug", "error", "script"]
-            )
-            is_vibe_request = has_prefix or has_coding_keywords
+            # VIBE CODING COMPLETELY DISABLED - per user request
+            # The bot should NOT execute coding tasks or use Claude CLI/API at all
+            is_vibe_request = False
 
-            logger.info(f"Vibe detection: admin={is_admin}, prefix={has_prefix}, keywords={has_coding_keywords}, vibe={is_vibe_request}, text={text[:100]}...")
+            logger.info(f"Vibe detection: DISABLED (admin={is_admin}, text={text[:100]}...)")
 
-            if is_vibe_request:
+            if False:  # Disabled - was: if is_vibe_request:
                 from tg_bot.services.claude_cli_handler import get_claude_cli_handler
                 cli_handler = get_claude_cli_handler()
 

@@ -51,6 +51,22 @@ def main():
         print("ERROR: No TELEGRAM_BOT_TOKEN in .env")
         return
 
+    # Single-instance lock to avoid Telegram polling conflicts
+    try:
+        import sys
+        from pathlib import Path as _Path
+        sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+        from core.utils.instance_lock import acquire_instance_lock
+        lock = acquire_instance_lock(TOKEN, name="telegram_polling", max_wait_seconds=0)
+    except Exception as exc:
+        print(f"WARNING: Polling lock helper unavailable ({exc})")
+        lock = None
+
+    if not lock:
+        print("ERROR: Telegram polling lock is already held by another process.")
+        print("Stop the other process or use a different token.")
+        return
+
     print("=" * 50)
     print("TELEGRAM ID CAPTURE")
     print("=" * 50)
@@ -64,7 +80,13 @@ def main():
     app.add_handler(MessageHandler(filters.ALL, capture_id))
     app.add_handler(CommandHandler("start", capture_id))
 
-    app.run_polling()
+    try:
+        app.run_polling()
+    finally:
+        try:
+            lock.close()
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     main()

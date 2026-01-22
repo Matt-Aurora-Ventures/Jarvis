@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bags Intel | Intelligence Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles-enhanced.css">
+    <link rel="stylesheet" href="intelligence-styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="scanlines"></div>
+
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-text">JARVIS</span>
+                    <span class="logo-divider">/</span>
+                    <span class="logo-sub">Intelligence</span>
+                </div>
+                <nav class="nav-tabs">
+                    <a href="index-enhanced.html" class="nav-tab">Feed</a>
+                    <a href="intelligence-report.html" class="nav-tab active">Intelligence</a>
+                    <a href="#" class="nav-tab" id="compare-tab">Compare</a>
+                    <a href="#" class="nav-tab" id="portfolio-tab">Portfolio</a>
+                    <a href="#" class="nav-tab" id="alerts-tab">Alerts</a>
+                </nav>
+                <div class="header-stats">
+                    <div class="stat">
+                        <span class="stat-label">Live</span>
+                        <div class="pulse-dot"></div>
+                    </div>
+                    <button class="header-action-btn" id="export-btn" title="Export Data">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M17 11V17H3V11M10 13V3M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main intelligence-main">
+        <div class="container">
+            <!-- Intelligence Overview -->
+            <div class="intelligence-header">
+                <h1 class="page-title">Intelligence Dashboard</h1>
+                <p class="page-subtitle">Deep analysis and insights on bags.fm token graduations</p>
+            </div>
+
+            <!-- Key Metrics -->
+            <div class="metrics-overview">
+                <div class="metric-box">
+                    <div class="metric-icon-large">🎯</div>
+                    <div class="metric-data">
+                        <span class="metric-value-large" id="total-analyzed">0</span>
+                        <span class="metric-label-large">Total Analyzed</span>
+                    </div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-icon-large">🌟</div>
+                    <div class="metric-data">
+                        <span class="metric-value-large" id="exceptional-count">0</span>
+                        <span class="metric-label-large">Exceptional</span>
+                        <span class="metric-trend positive" id="exceptional-trend">+12%</span>
+                    </div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-icon-large">📈</div>
+                    <div class="metric-data">
+                        <span class="metric-value-large" id="avg-score-display">0</span>
+                        <span class="metric-label-large">Avg Score</span>
+                        <span class="metric-trend positive" id="score-trend">+5.2</span>
+                    </div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-icon-large">💰</div>
+                    <div class="metric-data">
+                        <span class="metric-value-large" id="total-volume">$0</span>
+                        <span class="metric-label-large">Total Volume</span>
+                        <span class="metric-trend positive" id="volume-trend">+23%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timeline and Filter Controls -->
+            <div class="intelligence-controls">
+                <div class="timeline-selector">
+                    <button class="timeline-btn active" data-range="24h">24H</button>
+                    <button class="timeline-btn" data-range="7d">7D</button>
+                    <button class="timeline-btn" data-range="30d">30D</button>
+                    <button class="timeline-btn" data-range="all">All Time</button>
+                </div>
+                <div class="view-selector">
+                    <button class="view-btn active" data-view="overview">Overview</button>
+                    <button class="view-btn" data-view="detailed">Detailed Reports</button>
+                    <button class="view-btn" data-view="analytics">Analytics</button>
+                </div>
+            </div>
+
+            <!-- Main Intelligence Views -->
+            <div id="overview-view" class="intelligence-view active">
+                <!-- Score Distribution Chart -->
+                <div class="intelligence-section">
+                    <div class="section-header">
+                        <h2 class="section-title">Score Distribution</h2>
+                        <span class="section-info">Quality tier breakdown across all graduations</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="scoreDistributionChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Timeline Performance -->
+                <div class="intelligence-section">
+                    <div class="section-header">
+                        <h2 class="section-title">Performance Timeline</h2>
+                        <span class="section-info">Average scores and volume over time</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Top Performers -->
+                <div class="intelligence-section">
+                    <div class="section-header">
+                        <h2 class="section-title">Top Performers</h2>
+                        <span class="section-info">Highest rated tokens in the current period</span>
+                    </div>
+                    <div class="leaderboard-container" id="top-performers">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Creator Analytics -->
+                <div class="intelligence-section">
+                    <div class="section-header">
+                        <h2 class="section-title">Creator Analytics</h2>
+                        <span class="section-info">Most successful creators by track record</span>
+                    </div>
+                    <div class="creator-grid" id="creator-analytics">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Pattern Analysis -->
+                <div class="intelligence-section">
+                    <div class="section-header">
+                        <h2 class="section-title">Success Patterns</h2>
+                        <span class="section-info">Insights and trends from top performers</span>
+                    </div>
+                    <div class="patterns-grid" id="pattern-analysis">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Reports View -->
+            <div id="detailed-view" class="intelligence-view">
+                <div class="reports-container" id="detailed-reports">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Analytics View -->
+            <div id="analytics-view" class="intelligence-view">
+                <div class="analytics-grid">
+                    <!-- Risk Analysis -->
+                    <div class="analytics-card">
+                        <h3>Risk Distribution</h3>
+                        <canvas id="riskChart"></canvas>
+                    </div>
+
+                    <!-- Bonding Curve Analysis -->
+                    <div class="analytics-card">
+                        <h3>Bonding Duration Analysis</h3>
+                        <canvas id="bondingChart"></canvas>
+                    </div>
+
+                    <!-- Market Cap Distribution -->
+                    <div class="analytics-card">
+                        <h3>Market Cap Ranges</h3>
+                        <canvas id="mcapChart"></canvas>
+                    </div>
+
+                    <!-- Success Rate by Time -->
+                    <div class="analytics-card">
+                        <h3>Launch Time Analysis</h3>
+                        <canvas id="timeOfDayChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Watchlist Section -->
+            <div class="intelligence-section">
+                <div class="section-header">
+                    <h2 class="section-title">Your Watchlist</h2>
+                    <button class="btn-small" id="manage-watchlist">Manage</button>
+                </div>
+                <div class="watchlist-container" id="watchlist">
+                    <div class="empty-watchlist">
+                        <span class="empty-icon">👁️</span>
+                        <p>No tokens in watchlist</p>
+                        <p class="empty-hint">Click the star icon on any token to add it</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Deep Report Modal -->
+    <div class="modal" id="report-modal">
+        <div class="modal-overlay" id="report-overlay"></div>
+        <div class="modal-content modal-large">
+            <button class="modal-close" id="report-close">×</button>
+            <div class="modal-body" id="report-body">
+                <!-- Deep report content will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Comparison Modal -->
+    <div class="modal" id="compare-modal">
+        <div class="modal-overlay" id="compare-overlay"></div>
+        <div class="modal-content modal-xlarge">
+            <button class="modal-close" id="compare-close">×</button>
+            <div class="modal-header">
+                <h2 class="modal-title">Token Comparison</h2>
+                <p class="modal-subtitle">Select 2-4 tokens to compare side-by-side</p>
+            </div>
+            <div class="modal-body">
+                <!-- Token Selection -->
+                <div class="compare-selection">
+                    <h3>Select Tokens to Compare</h3>
+                    <div class="token-selector" id="token-selector">
+                        <!-- Will be populated with token chips -->
+                    </div>
+                    <div class="selected-tokens" id="selected-tokens">
+                        <div class="selected-tokens-label">Selected: <span id="selected-count">0</span>/4</div>
+                        <div class="selected-chips" id="selected-chips"></div>
+                    </div>
+                    <button class="btn-primary" id="compare-btn" disabled>Compare Selected</button>
+                </div>
+
+                <!-- Comparison Results -->
+                <div class="comparison-grid" id="comparison-grid" style="display: none;">
+                    <!-- Will be populated with comparison cards -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Portfolio Modal -->
+    <div class="modal" id="portfolio-modal">
+        <div class="modal-overlay" id="portfolio-overlay"></div>
+        <div class="modal-content modal-xlarge">
+            <button class="modal-close" id="portfolio-close">×</button>
+            <div class="modal-header">
+                <h2 class="modal-title">Your Portfolio</h2>
+                <p class="modal-subtitle">Track your investments and performance</p>
+            </div>
+            <div class="modal-body">
+                <!-- Portfolio Summary -->
+                <div class="portfolio-summary">
+                    <div class="portfolio-stat-card">
+                        <div class="portfolio-stat-label">Total Invested</div>
+                        <div class="portfolio-stat-value" id="portfolio-invested">$0.00</div>
+                    </div>
+                    <div class="portfolio-stat-card">
+                        <div class="portfolio-stat-label">Current Value</div>
+                        <div class="portfolio-stat-value" id="portfolio-value">$0.00</div>
+                    </div>
+                    <div class="portfolio-stat-card">
+                        <div class="portfolio-stat-label">Total P&L</div>
+                        <div class="portfolio-stat-value" id="portfolio-pnl">$0.00</div>
+                        <div class="portfolio-stat-percent" id="portfolio-pnl-percent">0%</div>
+                    </div>
+                    <div class="portfolio-stat-card">
+                        <div class="portfolio-stat-label">Holdings</div>
+                        <div class="portfolio-stat-value" id="portfolio-count">0</div>
+                    </div>
+                </div>
+
+                <!-- Add Position Form -->
+                <div class="portfolio-add-form">
+                    <h3>Add Position</h3>
+                    <div class="form-grid">
+                        <select id="portfolio-token-select" class="form-input">
+                            <option value="">Select Token</option>
+                        </select>
+                        <input type="number" id="portfolio-amount" class="form-input" placeholder="Amount (SOL)" step="0.01" min="0">
+                        <input type="number" id="portfolio-entry-price" class="form-input" placeholder="Entry Price" step="0.000001" min="0">
+                        <input type="number" id="portfolio-tokens" class="form-input" placeholder="Token Quantity" step="1" min="0">
+                        <button class="btn-primary" id="add-position-btn">Add Position</button>
+                    </div>
+                </div>
+
+                <!-- Portfolio Table -->
+                <div class="portfolio-table-container">
+                    <table class="portfolio-table">
+                        <thead>
+                            <tr>
+                                <th>Token</th>
+                                <th>Amount</th>
+                                <th>Entry Price</th>
+                                <th>Current Price</th>
+                                <th>Tokens</th>
+                                <th>Value</th>
+                                <th>P&L</th>
+                                <th>%</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="portfolio-table-body">
+                            <tr class="portfolio-empty">
+                                <td colspan="9">
+                                    <div class="empty-portfolio">
+                                        <span class="empty-icon">💼</span>
+                                        <p>No positions yet</p>
+                                        <p class="empty-hint">Add your first position above</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts Modal -->
+    <div class="modal" id="alerts-modal">
+        <div class="modal-overlay" id="alerts-overlay"></div>
+        <div class="modal-content modal-large">
+            <button class="modal-close" id="alerts-close">×</button>
+            <div class="modal-header">
+                <h2 class="modal-title">Custom Alerts</h2>
+                <p class="modal-subtitle">Set criteria to get notified about high-quality tokens</p>
+            </div>
+            <div class="modal-body">
+                <!-- Create Alert Form -->
+                <div class="alert-form-section">
+                    <h3>Create New Alert</h3>
+                    <div class="alert-form">
+                        <div class="form-row">
+                            <label>Alert Name</label>
+                            <input type="text" id="alert-name" class="form-input" placeholder="e.g., High Score Tokens">
+                        </div>
+                        <div class="form-row">
+                            <label>Minimum Overall Score</label>
+                            <input type="number" id="alert-min-score" class="form-input" placeholder="e.g., 80" min="0" max="100">
+                        </div>
+                        <div class="form-row">
+                            <label>Maximum Risk Level</label>
+                            <select id="alert-max-risk" class="form-input">
+                                <option value="extreme">Extreme</option>
+                                <option value="high">High</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label>Minimum Liquidity (SOL)</label>
+                            <input type="number" id="alert-min-liquidity" class="form-input" placeholder="e.g., 50" min="0">
+                        </div>
+                        <div class="form-row">
+                            <label>Notification Method</label>
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" id="alert-browser" checked> Browser Notification</label>
+                                <label><input type="checkbox" id="alert-sound"> Sound Alert</label>
+                            </div>
+                        </div>
+                        <button class="btn-primary" id="create-alert-btn">Create Alert</button>
+                    </div>
+                </div>
+
+                <!-- Active Alerts -->
+                <div class="alerts-list-section">
+                    <h3>Active Alerts (<span id="active-alerts-count">0</span>)</h3>
+                    <div class="alerts-list" id="alerts-list">
+                        <div class="empty-alerts">
+                            <span class="empty-icon">🔔</span>
+                            <p>No alerts configured</p>
+                            <p class="empty-hint">Create your first alert above</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Triggers -->
+                <div class="triggers-section">
+                    <h3>Recent Triggers</h3>
+                    <div class="triggers-list" id="triggers-list">
+                        <div class="empty-triggers">
+                            <p>No alerts triggered yet</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="intelligence-app.js"></script>
+</body>
+</html>

@@ -1816,7 +1816,7 @@ class TestBagsFmFeature:
 
         # Check buy buttons exist
         button_data = [b.callback_data for row in keyboard.inline_keyboard for b in row]
-        assert any("bags_buy" in d for d in button_data if d)
+        assert any(("bags_buy" in d or "bags_exec" in d) for d in button_data if d)
 
     def test_bags_fm_sentiment_summary(self):
         """Test sentiment summary calculation in Bags menu."""

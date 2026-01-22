@@ -19,7 +19,7 @@ import tg_bot.bot_core as bot_core
 from tg_bot.bot_core import *  # re-export non-underscore symbols for legacy imports
 from tg_bot.handlers.commands import start, help_command, status, subscribe, unsubscribe
 from tg_bot.handlers.sentiment import trending, digest, report, sentiment, picks
-from tg_bot.handlers.admin import reload, config_cmd, logs, system, away, back, awaystatus, memory, sysmem
+from tg_bot.handlers.admin import reload, config_cmd, logs, system, away, back, awaystatus, memory, sysmem, errors
 from tg_bot.handlers.trading import balance, positions, wallet, dashboard, button_callback, calibrate
 from tg_bot.handlers import treasury as treasury_handlers
 from tg_bot.handlers.sim_commands import sim, sim_buy, sim_sell, sim_pos
@@ -86,6 +86,7 @@ def register_handlers(app: Application, config) -> None:
     app.add_handler(CommandHandler("system", system))
     app.add_handler(CommandHandler("wallet", wallet))
     app.add_handler(CommandHandler("logs", logs))
+    app.add_handler(CommandHandler("errors", errors))
     app.add_handler(CommandHandler("away", away))
     app.add_handler(CommandHandler("back", back))
     app.add_handler(CommandHandler("awaystatus", awaystatus))
@@ -349,10 +350,6 @@ def main():
         app.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
-            read_timeout=30,
-            write_timeout=30,
-            connect_timeout=30,
-            pool_timeout=30,
         )
         # If run_polling returns normally (shouldn't happen), log it
         print("WARNING: run_polling() returned unexpectedly - this should not happen")

@@ -156,8 +156,8 @@ def test_treasury_display_from_json():
         from bots.treasury.display import TreasuryDisplay
         from pathlib import Path
 
-        positions_file = Path(__file__).parent.parent / "bots" / "treasury" / ".positions.json"
-        trades_file = Path(__file__).parent.parent / "bots" / "treasury" / ".trade_history.json"
+        positions_file = Path(__file__).parent.parent / "data" / "trader" / "positions.json"
+        trades_file = Path(__file__).parent.parent / "data" / "trader" / "trade_history.json"
 
         if positions_file.exists() and trades_file.exists():
             display = TreasuryDisplay.from_json_files(str(positions_file), str(trades_file))
@@ -291,10 +291,10 @@ def test_treasury_handler_initialization():
     """Test treasury handler initialization."""
     from tg_bot.handlers.treasury import TreasuryHandler
 
-    handler = TreasuryHandler("./bots/treasury")
+    handler = TreasuryHandler("./data/trader")
     assert handler is not None
-    assert handler.positions_file.name == ".positions.json"
-    assert handler.trades_file.name == ".trade_history.json"
+    assert handler.positions_file.name == "positions.json"
+    assert handler.trades_file.name == "trade_history.json"
 
 
 # Integration Tests

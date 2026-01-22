@@ -61,6 +61,7 @@ export ANTHROPIC_API_KEY=ollama
 export ANTHROPIC_BASE_URL=http://localhost:11434/v1
 export OLLAMA_URL=http://localhost:11434
 export OLLAMA_MODEL=qwen3-coder
+export CLAUDE_USE_API_MODE=true
 ```
 
 If you run Jarvis under `systemd`, add those variables to `/etc/default/jarvis-supervisor` (or the unit's `Environment=` block), then restart the service after edits.
