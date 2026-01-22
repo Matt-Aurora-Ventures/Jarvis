@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from core import config, memory, safety, providers
+from core.model_router import get_model_router, RoutingPriority
 from core.economics.costs import get_cost_tracker, Provider as CostProvider
 
 
@@ -209,35 +210,47 @@ class BaseAgent(ABC):
 
         full_prompt = f"{system_prompt}\n\n{prompt}"
 
-        # Determine provider chain
-        if self.provider_preference == ProviderPreference.AUTO:
-            chain = PROVIDER_CHAINS.get(priority, PROVIDER_CHAINS["balanced"])
-        elif self.provider_preference == ProviderPreference.SELF_SUFFICIENT:
-            chain = PROVIDER_CHAINS["self_sufficient"]
-        else:
-            # Start with preferred, then fall back through chain
-            preferred = self.provider_preference.value
-            chain = [preferred] + [p for p in PROVIDER_CHAINS["balanced"] if p != preferred]
-
-        # Try each provider in the chain
-        last_error = ""
+        response = ""
         used_provider = "none"
+        fallback_used = False
 
-        for provider_name in chain:
-            try:
-                response = self._call_provider(
-                    provider_name, full_prompt, temperature, max_tokens
-                )
-                if response and not response.startswith("Error:"):
-                    used_provider = provider_name
-                    break
-                last_error = response
-            except Exception as e:
-                last_error = str(e)
-                continue
+        router_result = self._route_with_model_router(
+            full_prompt=full_prompt,
+            priority=priority,
+            max_tokens=max_tokens,
+        )
+        if router_result:
+            response, used_provider, fallback_used = router_result
         else:
-            # All providers failed
-            response = f"All providers failed. Last error: {last_error}"
+            # Determine provider chain
+            if self.provider_preference == ProviderPreference.AUTO:
+                chain = PROVIDER_CHAINS.get(priority, PROVIDER_CHAINS["balanced"])
+            elif self.provider_preference == ProviderPreference.SELF_SUFFICIENT:
+                chain = PROVIDER_CHAINS["self_sufficient"]
+            else:
+                # Start with preferred, then fall back through chain
+                preferred = self.provider_preference.value
+                chain = [preferred] + [p for p in PROVIDER_CHAINS["balanced"] if p != preferred]
+
+            # Try each provider in the chain
+            last_error = ""
+
+            for provider_name in chain:
+                try:
+                    response = self._call_provider(
+                        provider_name, full_prompt, temperature, max_tokens
+                    )
+                    if response and not response.startswith("Error:"):
+                        used_provider = provider_name
+                        break
+                    last_error = response
+                except Exception as e:
+                    last_error = str(e)
+                    continue
+            else:
+                # All providers failed
+                response = f"All providers failed. Last error: {last_error}"
+            fallback_used = used_provider != chain[0] if chain else False
 
         # Estimate tokens (rough approximation)
         input_tokens = len(full_prompt.split()) * 1.3
@@ -267,10 +280,70 @@ class BaseAgent(ABC):
             "input_tokens": int(input_tokens),
             "output_tokens": int(output_tokens),
             "tokens": int(input_tokens + output_tokens),
-            "fallback_used": used_provider != chain[0] if chain else False,
+            "fallback_used": fallback_used,
         }
 
         return response, metadata
+
+    def _route_with_model_router(
+        self,
+        full_prompt: str,
+        priority: str,
+        max_tokens: int,
+    ) -> Optional[Tuple[str, str, bool]]:
+        """Route prompt through the centralized ModelRouter."""
+        if self.provider_preference not in (ProviderPreference.AUTO, ProviderPreference.SELF_SUFFICIENT):
+            return None
+
+        priority_map = {
+            "speed": RoutingPriority.SPEED,
+            "cost": RoutingPriority.COST,
+            "quality": RoutingPriority.ACCURACY,
+            "balanced": RoutingPriority.BALANCED,
+            "self_sufficient": RoutingPriority.COST,
+        }
+        routing_priority = priority_map.get(priority, RoutingPriority.BALANCED)
+        router = get_model_router()
+
+        try:
+            response_text, provider_name, fallback_used = self._run_router(
+                router=router,
+                prompt=full_prompt,
+                routing_priority=routing_priority,
+                max_tokens=max_tokens,
+            )
+        except RuntimeError:
+            return None
+
+        if not response_text:
+            return None
+        return response_text, provider_name, fallback_used
+
+    def _run_router(
+        self,
+        router,
+        prompt: str,
+        routing_priority: RoutingPriority,
+        max_tokens: int,
+    ) -> Tuple[str, str, bool]:
+        """Run the async router in a sync context."""
+        import asyncio
+
+        async def _route():
+            result = await router.route(
+                task=prompt,
+                priority=routing_priority,
+                max_tokens=max_tokens,
+            )
+            return result
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            result = asyncio.run(_route())
+            return result.response, result.provider.name, result.fallback_used
+
+        raise RuntimeError("Async loop running; fallback to legacy provider chain.")
 
     def _get_model_name(self, provider: str) -> str:
         """Get the model name for a provider."""
