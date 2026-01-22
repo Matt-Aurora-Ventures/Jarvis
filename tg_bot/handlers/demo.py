@@ -145,7 +145,18 @@ def _get_demo_wallet_dir() -> Path:
 async def _get_demo_engine():
     """Get demo trading engine (separate keys/state from treasury)."""
     from tg_bot import bot_core as bot_module
-    return await bot_module._get_treasury_engine(profile=DEMO_PROFILE)
+    try:
+        return await bot_module._get_treasury_engine(profile=DEMO_PROFILE)
+    except RuntimeError as exc:
+        fallback_profile = (os.environ.get("DEMO_FALLBACK_PROFILE", "treasury") or "treasury").strip().lower()
+        if fallback_profile and fallback_profile != DEMO_PROFILE:
+            logger.warning(
+                "Demo engine unavailable (%s). Falling back to '%s' profile.",
+                exc,
+                fallback_profile,
+            )
+            return await bot_module._get_treasury_engine(profile=fallback_profile)
+        raise
 
 
 # =============================================================================
