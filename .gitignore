@@ -191,6 +191,7 @@ already/
 exists/
 if/
 skip/
+temp/vibe-repo/
 
 # API Keys and Secrets
 secrets/
