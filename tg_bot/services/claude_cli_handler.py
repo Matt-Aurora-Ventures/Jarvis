@@ -274,10 +274,10 @@ class ClaudeCLIHandler:
     CIRCUIT_BREAKER_COOLDOWN = 1800  # 30 minutes cooldown when tripped
     CIRCUIT_BREAKER_WINDOW = 300  # 5 minute window for counting errors
 
-    # API Mode configuration (fallback when CLI is unavailable)
-    USE_API_MODE = True  # Enable API as fallback when CLI fails
-    API_MODEL = "claude-sonnet-4-20250514"  # Model to use in API fallback
-    API_MAX_TOKENS = 4096  # Max tokens for API response
+    # API mode disabled - CLI only
+    USE_API_MODE = False
+    API_MODEL = "claude-sonnet-4-20250514"
+    API_MAX_TOKENS = 4096
 
     # Auto-retry configuration
     MAX_RETRIES = 2
@@ -1415,35 +1415,11 @@ Execute this request. Be concise in your response. Follow any standing instructi
 
             except FileNotFoundError:
                 logger.error(f"Claude CLI not found at: {self._claude_path}")
-                # ============ API FALLBACK ============
-                if self._api_mode_available and self.USE_API_MODE:
-                    logger.info("CLI not found, attempting API fallback...")
-                    try:
-                        context_str = None
-                        if include_context and self._bridge:
-                            context_str = self.get_conversation_context(user_id, current_request=prompt, limit=5)
-                            if context_str:
-                                context_str, _ = self._scrub_prompt(context_str)
-                        return await self._execute_via_api(scrubbed_prompt, user_id, context=context_str)
-                    except Exception as api_err:
-                        logger.error(f"API fallback also failed: {api_err}")
                 self.record_execution(False, time.time() - start_time, user_id)
                 self.record_error()  # Circuit breaker tracking
                 return False, "Claude CLI not found", f"Tried: {self._claude_path}. Install via: npm install -g @anthropic-ai/claude-code"
             except Exception as e:
                 logger.error(f"Claude CLI execution error: {e}")
-                # ============ API FALLBACK ============
-                if self._api_mode_available and self.USE_API_MODE:
-                    logger.info(f"CLI failed ({e}), attempting API fallback...")
-                    try:
-                        context_str = None
-                        if include_context and self._bridge:
-                            context_str = self.get_conversation_context(user_id, current_request=prompt, limit=5)
-                            if context_str:
-                                context_str, _ = self._scrub_prompt(context_str)
-                        return await self._execute_via_api(scrubbed_prompt, user_id, context=context_str)
-                    except Exception as api_err:
-                        logger.error(f"API fallback also failed: {api_err}")
                 self.record_execution(False, time.time() - start_time, user_id)
                 self.record_error()  # Circuit breaker tracking
                 return False, f"Error: {str(e)[:100]}", str(e)

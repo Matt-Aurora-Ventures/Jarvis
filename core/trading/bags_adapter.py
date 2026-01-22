@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from core.feature_manager import is_enabled_default
 from core.security.emergency_shutdown import is_emergency_shutdown
+from core.secrets import get_key
 
 logger = logging.getLogger("jarvis.trading.bags_adapter")
 
@@ -118,6 +119,12 @@ class BagsTradeClient:
         referral_wallet: str = None,
     ):
         self.partner_code = partner_code or os.getenv("BAGS_PARTNER_CODE", "")
+        if not self.partner_code:
+            self.partner_code = (
+                get_key("bags_partner_key", "BAGS_PARTNER_KEY")
+                or get_key("bags_partner", "BAGS_PARTNER_KEY")
+                or ""
+            )
         self.api_url = api_url or os.getenv("BAGS_API_URL", "https://api.bags.fm")
         self.referral_wallet = referral_wallet or os.getenv("BAGS_REFERRAL_WALLET", "")
 

@@ -1718,7 +1718,7 @@ class TradingEngine:
             token_info = await self.jupiter.get_token_info(token_mint)
             if token_info and hasattr(token_info, 'daily_volume'):
                 daily_volume = getattr(token_info, 'daily_volume', 0) or 0
-                if daily_volume < self.MIN_LIQUIDITY_USD:  # Use configurable minimum
+                if daily_volume > 0 and daily_volume < self.MIN_LIQUIDITY_USD:  # Use configurable minimum
                     logger.warning(f"Trade rejected: {token_symbol} has insufficient liquidity (${daily_volume:.0f}/day)")
                     self._log_audit("OPEN_POSITION_REJECTED", {
                         "token": token_symbol,
@@ -1726,8 +1726,9 @@ class TradingEngine:
                         "daily_volume": daily_volume,
                     }, user_id, False)
                     return False, f"⛔ Trade blocked: {token_symbol} has insufficient liquidity (${daily_volume:.0f}/day)", None
-                liquidity_verified = True
-                logger.debug(f"Liquidity OK for {token_symbol}: ${daily_volume:.0f}/day")
+                if daily_volume >= self.MIN_LIQUIDITY_USD:
+                    liquidity_verified = True
+                    logger.debug(f"Liquidity OK for {token_symbol}: ${daily_volume:.0f}/day")
         except Exception as e:
             logger.warning(f"Could not check liquidity for {token_symbol}: {e}")
 
