@@ -205,6 +205,16 @@ async def get_market_regime() -> Dict[str, Any]:
                         }
 
         # Fallback to default
+        # Try cached regime from sentiment engine (if available)
+        try:
+            from core.caching.sentiment_cache import get_sentiment_cache
+            cache = get_sentiment_cache()
+            cached = await cache.get_market_regime()
+            if cached:
+                return cached
+        except Exception as e:
+            logger.warning(f"Could not load cached regime: {e}")
+
         return {
             "btc_trend": "NEUTRAL",
             "sol_trend": "NEUTRAL",
@@ -608,6 +618,56 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
 
     except Exception as e:
         logger.warning(f"Could not get Bags tokens: {e}")
+
+    # Fallback to real trending tokens (DexScreener or signal service) so we have tradable addresses.
+    try:
+        trending = await get_trending_with_sentiment()
+        if trending:
+            enriched: List[Dict[str, Any]] = []
+            for t in trending[:limit]:
+                address = t.get("address", "")
+                price_usd = float(t.get("price_usd", 0) or t.get("price", 0) or 0)
+                change_24h = float(t.get("change_24h", 0) or t.get("price_change_24h", 0) or 0)
+                volume_24h = float(t.get("volume_24h", 0) or t.get("volume", 0) or 0)
+                liquidity = float(t.get("liquidity", 0) or 0)
+                market_cap = float(t.get("market_cap", 0) or 0)
+                sentiment = t.get("sentiment", "neutral")
+                sentiment_score = t.get("sentiment_score", 0.5)
+                signal = t.get("signal", "NEUTRAL")
+
+                if address and price_usd <= 0:
+                    try:
+                        extra = await get_ai_sentiment_for_token(address)
+                        price_usd = float(extra.get("price", 0) or price_usd)
+                        change_24h = float(extra.get("change_24h", change_24h) or change_24h)
+                        volume_24h = float(extra.get("volume", volume_24h) or volume_24h)
+                        liquidity = float(extra.get("liquidity", liquidity) or liquidity)
+                        market_cap = float(extra.get("market_cap", market_cap) or market_cap)
+                        sentiment = extra.get("sentiment", sentiment)
+                        sentiment_score = extra.get("score", sentiment_score)
+                        signal = extra.get("signal", signal)
+                    except Exception:
+                        pass
+
+                enriched.append({
+                    "symbol": t.get("symbol", "???"),
+                    "name": t.get("name", t.get("symbol", "")),
+                    "address": address,
+                    "price_usd": price_usd,
+                    "change_24h": change_24h,
+                    "volume_24h": volume_24h,
+                    "liquidity": liquidity,
+                    "market_cap": market_cap,
+                    "holders": int(t.get("holders", 0) or 0),
+                    "sentiment": sentiment,
+                    "sentiment_score": sentiment_score,
+                    "signal": signal,
+                })
+
+            if enriched:
+                return enriched
+    except Exception as e:
+        logger.warning(f"Could not load trending fallback tokens: {e}")
 
     # Fallback to mock data with realistic sentiment
     return [

@@ -407,40 +407,70 @@ class BagsAPIClient:
 
         await self._check_rate_limit()
 
+        base_urls = [self.BASE_URL]
+        env_url = os.environ.get("BAGS_API_URL")
+        if env_url and env_url not in base_urls:
+            base_urls.insert(0, env_url)
+        for alt in (
+            "https://api.bags.fm/api/v1",
+            "https://public-api.bags.fm/api/v1",
+            "https://public-api-v2.bags.fm/api/v1",
+        ):
+            if alt not in base_urls:
+                base_urls.append(alt)
+
+        last_error = None
+        for base_url in base_urls:
+            try:
+                response = await self.client.get(
+                    f"{base_url}/tokens/top",
+                    params={"limit": limit, "sort": "volume24h"},
+                    headers=self._get_headers(),
+                )
+
+                response.raise_for_status()
+                data = response.json()
+
+                tokens = []
+                for token_data in data.get("tokens", [])[:limit]:
+                    tokens.append(TokenInfo(
+                        address=token_data.get("address", ""),
+                        symbol=token_data.get("symbol", ""),
+                        name=token_data.get("name", ""),
+                        decimals=int(token_data.get("decimals", 9)),
+                        price_usd=float(token_data.get("priceUsd", 0)),
+                        price_sol=float(token_data.get("priceSol", 0)),
+                        volume_24h=float(token_data.get("volume24h", 0)),
+                        liquidity=float(token_data.get("liquidity", 0)),
+                        holders=int(token_data.get("holders", 0)),
+                        market_cap=float(token_data.get("marketCap", 0))
+                    ))
+
+                if tokens:
+                    return tokens
+            except Exception as e:
+                last_error = e
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                if status == 404:
+                    logger.warning("Bags top tokens endpoint unavailable")
+                else:
+                    logger.error(f"Failed to get top tokens by volume: {e}")
+
+        # Fallback: reuse trending tokens when the top endpoint is unavailable.
         try:
-            response = await self.client.get(
-                f"{self.BASE_URL}/tokens/top",
-                params={"limit": limit, "sort": "volume24h"},
-                headers=self._get_headers()
-            )
-
-            response.raise_for_status()
-            data = response.json()
-
-            tokens = []
-            for token_data in data.get("tokens", [])[:limit]:
-                tokens.append(TokenInfo(
-                    address=token_data.get("address", ""),
-                    symbol=token_data.get("symbol", ""),
-                    name=token_data.get("name", ""),
-                    decimals=int(token_data.get("decimals", 9)),
-                    price_usd=float(token_data.get("priceUsd", 0)),
-                    price_sol=float(token_data.get("priceSol", 0)),
-                    volume_24h=float(token_data.get("volume24h", 0)),
-                    liquidity=float(token_data.get("liquidity", 0)),
-                    holders=int(token_data.get("holders", 0)),
-                    market_cap=float(token_data.get("marketCap", 0))
-                ))
-
-            return tokens
-
+            trending = await self.get_trending_tokens(limit=limit)
+            if trending:
+                return sorted(
+                    trending,
+                    key=lambda t: getattr(t, "volume_24h", 0) or 0,
+                    reverse=True,
+                )
         except Exception as e:
-            status = getattr(getattr(e, "response", None), "status_code", None)
-            if status == 404:
-                logger.warning("Bags top tokens endpoint unavailable")
-            else:
-                logger.error(f"Failed to get top tokens by volume: {e}")
-            return []
+            logger.warning(f"Top tokens fallback to trending failed: {e}")
+
+        if last_error:
+            logger.warning("Bags top tokens endpoint unavailable")
+        return []
 
     async def claim_partner_fees(self) -> Dict[str, Any]:
         """Claim accumulated partner fees"""
