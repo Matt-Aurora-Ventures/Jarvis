@@ -3814,6 +3814,42 @@ Reply type guidance:
                     logger.warning(f"SKIPPED IRRELEVANT: {draft.category}")
                     return None
 
+            # =====================================================================
+            # PRE-POST VALIDATOR - Final gate before posting
+            # Checks: quality, novelty, policy, factuality, safety
+            # =====================================================================
+            try:
+                from bots.twitter.pre_post_validator import get_pre_post_validator
+
+                validator = get_pre_post_validator()
+                validation_result = await validator.validate(
+                    content=draft.content,
+                    category=draft.category,
+                    metadata={
+                        "cashtags": draft.cashtags,
+                        "has_image": with_image,
+                        "source": getattr(draft, 'source', None),
+                    },
+                )
+
+                if not validation_result.approved:
+                    logger.warning(
+                        f"PRE-POST VALIDATION BLOCKED: {validation_result.reason} "
+                        f"(level={validation_result.level.value}, "
+                        f"failed_checks={validation_result.failed_checks})"
+                    )
+                    return None
+
+                logger.debug(
+                    f"Pre-post validation passed: "
+                    f"{len(validation_result.passed_checks)}/{len(validation_result.checks)} checks"
+                )
+
+            except ImportError:
+                logger.debug("Pre-post validator not available, skipping")
+            except Exception as e:
+                logger.warning(f"Pre-post validation error (continuing): {e}")
+
             twitter = await self._get_twitter()
 
             # Add cashtags and hashtags if not in content
