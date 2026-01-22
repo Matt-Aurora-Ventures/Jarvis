@@ -102,7 +102,12 @@ class ClaudeClient:
         """Lazily initialize the Anthropic client."""
         if self._client is None and self.api_key:
             anthropic_module = _get_anthropic()
-            self._client = anthropic_module.Anthropic(api_key=self.api_key)
+            from core.llm.anthropic_utils import get_anthropic_base_url
+
+            self._client = anthropic_module.Anthropic(
+                api_key=self.api_key,
+                base_url=get_anthropic_base_url(),
+            )
             self._healthy = True
 
     def is_healthy(self) -> bool:

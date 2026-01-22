@@ -182,7 +182,12 @@ class ClaudeContentGenerator:
             logger.warning("No Anthropic API key found")
             self.client = None
         else:
-            self.client = anthropic.Anthropic(api_key=self.api_key)
+            from core.llm.anthropic_utils import get_anthropic_base_url
+
+            self.client = anthropic.Anthropic(
+                api_key=self.api_key,
+                base_url=get_anthropic_base_url(),
+            )
 
         self.system_prompt = load_system_prompt()
         self.cli_enabled = os.getenv("CLAUDE_CLI_ENABLED", "").lower() in ("1", "true", "yes", "on")

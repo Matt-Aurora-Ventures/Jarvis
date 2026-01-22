@@ -30,6 +30,41 @@
 
 ## Deployment Steps
 
+### Step 0: (Optional) Install Ollama + Claude Code on VPS for Local LLM
+
+If you want Claude Code and JARVIS to run fully local, install Ollama and point Anthropic calls at it.
+Grok stays enabled for sentiment analysis (no changes required to Grok config).
+
+```bash
+# Install Ollama (creates /usr/local/bin/ollama and systemd service)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull a coding model
+ollama pull qwen3-coder
+
+# Ensure Ollama is running
+sudo systemctl enable --now ollama
+ollama list
+
+# Install Claude Code (global binary path varies by npm prefix)
+npm install -g @anthropic-ai/claude-code
+which claude
+```
+
+**Install paths to expect:**
+- `ollama` binary: `/usr/local/bin/ollama`
+- `claude` binary: `/usr/local/bin/claude` or `~/.npm-global/bin/claude` (depends on npm prefix)
+
+**Environment wiring (server-wide):**
+```bash
+export ANTHROPIC_API_KEY=ollama
+export ANTHROPIC_BASE_URL=http://localhost:11434/v1
+export OLLAMA_URL=http://localhost:11434
+export OLLAMA_MODEL=qwen3-coder
+```
+
+If you run Jarvis under `systemd`, add those variables to `/etc/default/jarvis-supervisor` (or the unit's `Environment=` block), then restart the service after edits.
+
 ### Step 1: Pull Latest Code to VPS
 
 ```bash

@@ -32,6 +32,7 @@ except ImportError:
     anthropic = None
 
 from core.security.scrubber import get_scrubber, SensitiveScrubber
+from core.llm.anthropic_utils import get_anthropic_base_url
 
 
 @dataclass
@@ -160,7 +161,10 @@ NEVER generate code that could harm the system or leak data."""
         user_message += f"INSTRUCTION:\n{scrubbed_instruction}"
 
         try:
-            client = anthropic.Anthropic(api_key=self.api_key)
+            client = anthropic.Anthropic(
+                api_key=self.api_key,
+                base_url=get_anthropic_base_url(),
+            )
 
             response = client.messages.create(
                 model=self.model,
