@@ -41,6 +41,12 @@ def error_handler(func: Callable[..., Awaitable[Any]]):
                     func.__name__,
                 )
                 return None
+            if isinstance(exc, BadRequest) and "Message is not modified" in str(exc):
+                logger.debug(
+                    "Message unchanged in %s; skipping edit",
+                    func.__name__,
+                )
+                return None
 
             logger.exception(f"Handler error in {func.__name__}")
 

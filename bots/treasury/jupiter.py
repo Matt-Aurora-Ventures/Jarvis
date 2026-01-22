@@ -160,6 +160,8 @@ class JupiterClient:
         self._session: Optional[aiohttp.ClientSession] = None
         self._token_cache: Dict[str, TokenInfo] = {}
         self._recent_priority_fees: List[int] = []  # Track recent fees for dynamic calculation
+        self._token_api_available: bool = True
+        self._token_api_failure_logged: bool = False
 
         # Initialize transaction confirmation service
         self._confirmation_service: Optional[TransactionConfirmationService] = None
@@ -247,21 +249,35 @@ class JupiterClient:
             return self._token_cache[mint]
 
         session = await self._get_session()
+        token = None
 
+        if self.JUPITER_TOKEN_API and self._token_api_available:
+            try:
+                async with session.get(
+                    f"{self.JUPITER_TOKEN_API}/strict",
+                    params={'mint': mint}
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data:
+                            token = TokenInfo.from_dict(data[0] if isinstance(data, list) else data)
+                            self._token_cache[mint] = token
+                            return token
+            except aiohttp.ClientConnectorError as e:
+                if not self._token_api_failure_logged:
+                    logger.warning(
+                        "Jupiter token API unreachable; skipping token list lookups (%s)",
+                        e,
+                    )
+                    self._token_api_failure_logged = True
+                self._token_api_available = False
+            except aiohttp.ClientError as e:
+                logger.warning(f"Jupiter token API error for {mint[:8]}...: {e}")
+            except Exception as e:
+                logger.warning(f"Jupiter token lookup failed for {mint[:8]}...: {e}")
+
+        # Fallback: get from price API
         try:
-            # Get token from Jupiter token list
-            async with session.get(
-                f"{self.JUPITER_TOKEN_API}/strict",
-                params={'mint': mint}
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if data:
-                        token = TokenInfo.from_dict(data[0] if isinstance(data, list) else data)
-                        self._token_cache[mint] = token
-                        return token
-
-            # Fallback: get from price API
             async with session.get(
                 f"{self.JUPITER_PRICE_API}/price",
                 params={'ids': mint}
@@ -279,9 +295,8 @@ class JupiterClient:
                         )
                         self._token_cache[mint] = token
                         return token
-
         except Exception as e:
-            logger.error(f"Failed to get token info for {mint[:8]}...: {e}")
+            logger.warning(f"Jupiter price API failed for {mint[:8]}...: {e}")
 
         # Fallback: Bags.fm token data
         try:
