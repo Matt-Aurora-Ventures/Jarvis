@@ -316,7 +316,9 @@ class TransactionConfirmationService:
                 'params': [signature, {'encoding': 'json'}]
             }) as resp:
                 data = await resp.json()
-                result = data.get('result', {})
+                result = data.get('result')
+                if not result:
+                    return None
                 return result.get('blockTime')
         except Exception as e:
             logger.warning(f"Failed to get block time: {e}")

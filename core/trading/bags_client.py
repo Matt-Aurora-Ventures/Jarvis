@@ -108,6 +108,7 @@ class BagsAPIClient:
                 pass
         self.client = None
         self._initialize_client()
+        self._warned_no_api_key = False
 
         # Rate limiting
         self.requests_per_minute = 60
@@ -157,6 +158,12 @@ class BagsAPIClient:
         if self.api_key:
             headers["x-api-key"] = self.api_key
         return headers
+
+    def _warn_missing_api_key(self, feature: str) -> None:
+        if self._warned_no_api_key:
+            return
+        logger.warning("Bags API key not configured; %s disabled", feature)
+        self._warned_no_api_key = True
 
     async def get_quote(
         self,
@@ -307,6 +314,9 @@ class BagsAPIClient:
 
         if not self.client:
             return None
+        if not self.api_key:
+            self._warn_missing_api_key("token info")
+            return None
 
         await self._check_rate_limit()
 
@@ -333,13 +343,20 @@ class BagsAPIClient:
             )
 
         except Exception as e:
-            logger.error(f"Failed to get token info: {e}")
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status == 404:
+                logger.warning("Bags token not found: %s", mint)
+            else:
+                logger.error(f"Failed to get token info: {e}")
             return None
 
     async def get_trending_tokens(self, limit: int = 10) -> List[TokenInfo]:
         """Get trending tokens"""
 
         if not self.client:
+            return []
+        if not self.api_key:
+            self._warn_missing_api_key("trending tokens")
             return []
 
         await self._check_rate_limit()
@@ -372,13 +389,20 @@ class BagsAPIClient:
             return tokens
 
         except Exception as e:
-            logger.error(f"Failed to get trending tokens: {e}")
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status == 404:
+                logger.warning("Bags trending endpoint unavailable")
+            else:
+                logger.error(f"Failed to get trending tokens: {e}")
             return []
 
     async def get_top_tokens_by_volume(self, limit: int = 15) -> List[TokenInfo]:
         """Get top tokens sorted by 24h volume"""
 
         if not self.client:
+            return []
+        if not self.api_key:
+            self._warn_missing_api_key("top tokens by volume")
             return []
 
         await self._check_rate_limit()
@@ -411,7 +435,11 @@ class BagsAPIClient:
             return tokens
 
         except Exception as e:
-            logger.error(f"Failed to get top tokens by volume: {e}")
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status == 404:
+                logger.warning("Bags top tokens endpoint unavailable")
+            else:
+                logger.error(f"Failed to get top tokens by volume: {e}")
             return []
 
     async def claim_partner_fees(self) -> Dict[str, Any]:
