@@ -302,12 +302,12 @@ async def get_ai_sentiment_for_token(address: str) -> Dict[str, Any]:
     return {"sentiment": "unknown", "score": 0, "confidence": 0}
 
 
-async def get_trending_with_sentiment() -> List[Dict[str, Any]]:
+async def get_trending_with_sentiment(limit: int = 15) -> List[Dict[str, Any]]:
     """Get trending tokens with AI sentiment overlay."""
     try:
         from tg_bot.services.signal_service import get_signal_service
         service = get_signal_service()
-        signals = await service.get_trending_tokens(limit=6)
+        signals = await service.get_trending_tokens(limit=limit)
         if signals:
             return [
                 {
@@ -328,7 +328,7 @@ async def get_trending_with_sentiment() -> List[Dict[str, Any]]:
 
     # Bags.fm fallback - ensures we always have tradable tokens
     try:
-        bags_tokens = await get_bags_top_tokens_with_sentiment(limit=6)
+        bags_tokens = await get_bags_top_tokens_with_sentiment(limit=limit)
         if bags_tokens:
             return [
                 {
@@ -2164,6 +2164,7 @@ _Adjust your exit strategy_
                 lines.append(f"├ {pnl_em} {symbol}: {pnl:+.1f}%")
             if len(positions) > 5:
                 lines.append(f"└ _...and {len(positions) - 5} more_")
+                lines.append(f"   _Tap 'View All Positions' below to expand_")
         else:
             lines.extend([
                 "_No open positions_",
@@ -2177,7 +2178,14 @@ _Adjust your exit strategy_
 
         text = "\n".join(lines)
 
-        keyboard = InlineKeyboardMarkup([
+        # Add "View All" button when more than 5 positions
+        keyboard_buttons = []
+        if len(positions) > 5:
+            keyboard_buttons.append([
+                InlineKeyboardButton(f"📋 View All {len(positions)} Positions", callback_data="demo:positions_all"),
+            ])
+
+        keyboard_buttons.extend([
             [
                 InlineKeyboardButton(f"📊 Positions", callback_data="demo:positions"),
                 InlineKeyboardButton(f"📜 History", callback_data="demo:trade_history"),
@@ -2187,6 +2195,8 @@ _Adjust your exit strategy_
                 InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
             ],
         ])
+
+        keyboard = InlineKeyboardMarkup(keyboard_buttons)
 
         return text, keyboard
 
@@ -3856,8 +3866,10 @@ Reply with a Solana token address to buy.
 
         for i, token in enumerate(tokens[:15], 1):
             symbol = token.get("symbol", "???")
-            token_ref = token.get("token_id") or token.get("address", "")
+            address = token.get("address", "")
+            token_ref = token.get("token_id") or address
             price = token.get("price_usd", 0)
+            change_24h = token.get("change_24h", 0)
             volume = token.get("volume_24h", 0)
             liquidity = token.get("liquidity", 0)
             mcap = token.get("market_cap", 0)
@@ -3876,13 +3888,17 @@ Reply with a Solana token address to buy.
             else:
                 price_str = f"${price:.2f}"
 
+            # Price change formatting
+            change_emoji = "🟢" if change_24h > 0 else "🔴" if change_24h < 0 else "⚪"
+            change_str = f"{change_emoji} {change_24h:+.1f}%"
+
             # Volume formatting
             if volume >= 1_000_000:
                 vol_str = f"${volume/1_000_000:.1f}M"
             else:
                 vol_str = f"${volume/1_000:.0f}K"
 
-            # Sentiment emoji and signal
+            # Sentiment emoji and signal with CLEARER BULLISH/BEARISH labels
             sent_emoji = {
                 "very_bullish": "🚀",
                 "bullish": "🟢",
@@ -3890,6 +3906,15 @@ Reply with a Solana token address to buy.
                 "bearish": "🟠",
                 "very_bearish": "🔴",
             }.get(sentiment.lower() if isinstance(sentiment, str) else "neutral", "⚪")
+
+            # Clearer sentiment label
+            sent_label = {
+                "very_bullish": "VERY BULLISH",
+                "bullish": "BULLISH",
+                "neutral": "NEUTRAL",
+                "bearish": "BEARISH",
+                "very_bearish": "VERY BEARISH",
+            }.get(sentiment.lower() if isinstance(sentiment, str) else "neutral", "NEUTRAL")
 
             signal_emoji = {
                 "STRONG_BUY": "🟢🟢",
@@ -3913,20 +3938,26 @@ Reply with a Solana token address to buy.
             else:
                 rank = f"#{i:02d}"
 
-            lines.append(f"{rank} *{symbol}* {price_str}")
+            # Contract address (shortened)
+            contract_short = f"`{address[:8]}...{address[-6:]}`" if address else "N/A"
+
+            lines.append(f"{rank} *{symbol}* {price_str} {change_str}")
             lines.append(f"   Vol: {vol_str} | Liq: ${liquidity/1_000:.0f}K")
-            lines.append(f"   {sent_emoji} {score_bar} | {signal_emoji} {signal}")
+            lines.append(f"   {sent_emoji} {sent_label} | {signal_emoji} {signal}")
+            lines.append(f"   📝 {contract_short}")
             lines.append("")
 
-            # Add buy/sell buttons for each token (groups of 3)
+            # Add buy/sell buttons for each token with CLEAR LABELS
             if token_ref:
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"🟢 Buy {symbol}",
-                        callback_data=f"demo:bags_buy:{token_ref}:{default_tp_percent}:{default_sl_percent}"
+                        f"💰 Buy 0.1 SOL of {symbol}",
+                        callback_data=f"demo:bags_exec:{token_ref}:0.1:{default_tp_percent}:{default_sl_percent}"
                     ),
+                ])
+                keyboard.append([
                     InlineKeyboardButton(
-                        f"🔍 Info",
+                        f"🔍 View {symbol} Details",
                         callback_data=f"demo:bags_info:{token_ref}"
                     ),
                 ])
@@ -4011,12 +4042,17 @@ Reply with a Solana token address to buy.
         score_bars = int(sentiment_score * 5) if sentiment_score else 0
         score_bar = "▰" * score_bars + "▱" * (5 - score_bars)
 
+        # Get 24h change if available
+        change_24h = token.get("change_24h", 0)
+        change_emoji = "🟢" if change_24h > 0 else "🔴" if change_24h < 0 else "⚪"
+        change_str = f"{change_emoji} {change_24h:+.1f}%" if change_24h else ""
+
         lines = [
             f"🎒 *{symbol}*",
             f"_{name}_",
             "━━━━━━━━━━━━━━━━━━━━━",
             "",
-            f"💰 *Price:* {price_str}",
+            f"💰 *Price:* {price_str} {change_str}",
             f"📊 *24h Volume:* ${volume/1_000_000:.2f}M",
             f"💧 *Liquidity:* ${liquidity/1_000:.0f}K",
             f"📈 *Market Cap:* ${mcap/1_000_000:.2f}M",
@@ -4031,7 +4067,13 @@ Reply with a Solana token address to buy.
             f"🎯 TP (+{default_tp_percent:.0f}%): {tp_str}",
             f"🛑 SL (-{default_sl_percent:.0f}%): {sl_str}",
             "",
-            f"📋 `{address[:20]}...`",
+            f"📋 *Contract:*",
+            f"`{address}`",
+            "",
+            f"🔗 *Links:*",
+            f"• [DexScreener](https://dexscreener.com/solana/{address})",
+            f"• [Solscan](https://solscan.io/token/{address})",
+            f"• [Birdeye](https://birdeye.so/token/{address})",
         ]
 
         text = "\n".join(lines)
@@ -5488,11 +5530,14 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     data = query.data
+    callback_data = data  # Store for error logging
 
     if not data.startswith("demo:"):
+        logger.warning(f"Non-demo callback received: {data}")
         return
 
     action = data.split(":")[1] if ":" in data else data
+    logger.info(f"Demo callback: action={action}, full_data={data}")
 
     try:
         # Get current state
@@ -5710,6 +5755,65 @@ _QR code coming in V2_
                 positions=positions,
                 total_pnl=total_pnl,
             )
+
+        elif action == "positions_all":
+            # Show ALL positions with detailed info
+            theme = JarvisTheme
+            if not positions:
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error="No open positions",
+                    retry_action="demo:main",
+                )
+            else:
+                lines = [
+                    f"📋 *ALL OPEN POSITIONS ({len(positions)})*",
+                    "━━━━━━━━━━━━━━━━━━━━━",
+                    "",
+                ]
+
+                for i, pos in enumerate(positions, 1):
+                    symbol = pos.get("symbol", "???")
+                    pnl_pct = pos.get("pnl_pct", 0)
+                    pnl_usd = pos.get("pnl_usd", 0)
+                    entry_price = pos.get("entry_price", 0)
+                    current_price = pos.get("current_price", 0)
+
+                    pnl_emoji = "🟢" if pnl_pct >= 0 else "🔴"
+                    pnl_sign = "+" if pnl_pct >= 0 else ""
+
+                    lines.extend([
+                        f"{i}. *{symbol}* {pnl_emoji}",
+                        f"   P&L: {pnl_sign}{pnl_pct:.1f}% (${pnl_usd:+.2f})",
+                        f"   Entry: ${entry_price:.8f}" if entry_price < 0.01 else f"   Entry: ${entry_price:.4f}",
+                        f"   Current: ${current_price:.8f}" if current_price < 0.01 else f"   Current: ${current_price:.4f}",
+                        "",
+                    ])
+
+                # Add summary
+                winners = sum(1 for p in positions if p.get("pnl_pct", 0) >= 0)
+                losers = len(positions) - winners
+                total_pnl_sum = sum(p.get("pnl_usd", 0) for p in positions)
+                total_pnl_sign = "+" if total_pnl_sum >= 0 else ""
+
+                lines.extend([
+                    "━━━━━━━━━━━━━━━━━━━━━",
+                    f"📊 *Summary*",
+                    f"├ Total P&L: ${total_pnl_sign}{abs(total_pnl_sum):.2f}",
+                    f"├ Winners: 🟢 {winners}",
+                    f"├ Losers: 🔴 {losers}",
+                    f"└ Win Rate: {(winners/len(positions)*100):.0f}%",
+                ])
+
+                text = "\n".join(lines)
+                keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(f"📊 P&L Report", callback_data="demo:pnl_report"),
+                        InlineKeyboardButton(f"📈 Positions", callback_data="demo:positions"),
+                    ],
+                    [
+                        InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),
+                    ],
+                ])
 
         elif action == "settings":
             ai_auto = context.user_data.get("ai_auto_trade", False)
@@ -8147,16 +8251,29 @@ Coming soon in V2!
                 raise
 
     except Exception as e:
-        logger.error(f"Demo callback error: {e}")
-        text, keyboard = DemoMenuBuilder.error_message(str(e)[:100])
+        # Track error for automatic fixing
+        from core.logging.error_tracker import error_tracker
+        error_id = error_tracker.track_error(
+            e,
+            context=f"demo_callback action={action}",
+            component="telegram_demo",
+            metadata={"action": action, "callback_data": data}
+        )
+        logger.error(f"Demo callback error [{error_id}]: action={action}, error={e}", exc_info=True)
+
+        text, keyboard = DemoMenuBuilder.error_message(
+            error=str(e)[:100],
+            retry_action=f"demo:{action}",
+            context_hint=f"Error ID: {error_id}"
+        )
         try:
             await query.message.edit_text(
                 text,
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=keyboard,
             )
-        except Exception:
-            pass
+        except Exception as edit_err:
+            logger.error(f"Failed to edit message after error: {edit_err}")
 
 
 # =============================================================================
