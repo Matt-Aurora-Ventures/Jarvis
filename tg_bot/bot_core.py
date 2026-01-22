@@ -1991,28 +1991,23 @@ async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /dev command - vibe coding via Claude CLI (no API fallback)."""
     try:
         if not context.args:
-            await update.message.reply_text(
-                "???? <b>/dev - Vibe Coding (CLI)</b>
-
-"
-                "Generate code via Claude CLI with automatic sensitive data scrubbing.
-
-"
-                "<b>Usage:</b> /dev <instruction>
-
-"
-                "<b>Examples:</b>
-"
-                "??? /dev add error handling to treasury trading
-"
-                "??? /dev create a function to calculate RSI
-"
-                "??? /dev fix the duplicate detection in twitter bot
-
-"
-                "???? <i>All secrets are automatically scrubbed</i>",
-                parse_mode=ParseMode.HTML
+            help_text = "\n".join(
+                [
+                    "<b>/dev - Vibe Coding (CLI)</b>",
+                    "",
+                    "Generate code via Claude CLI with automatic sensitive data scrubbing.",
+                    "",
+                    "<b>Usage:</b> /dev <instruction>",
+                    "",
+                    "<b>Examples:</b>",
+                    "/dev add error handling to treasury trading",
+                    "/dev create a function to calculate RSI",
+                    "/dev fix the duplicate detection in twitter bot",
+                    "",
+                    "<i>All secrets are automatically scrubbed</i>",
+                ]
             )
+            await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
             return
 
         from tg_bot.services.claude_cli_handler import get_claude_cli_handler
@@ -2021,28 +2016,31 @@ async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Check if Claude CLI is available
         if not cli_handler._claude_path or cli_handler._claude_path == "claude":
-            await update.message.reply_text(
-                "?????? <b>Claude CLI Not Available</b>
-
-"
-                "The /dev command requires Claude Code CLI to be installed.
-
-"
-                "<code>npm install -g @anthropic-ai/claude-code</code>",
-                parse_mode=ParseMode.HTML
+            msg = "\n".join(
+                [
+                    "<b>Claude CLI Not Available</b>",
+                    "",
+                    "The /dev command requires Claude Code CLI to be installed.",
+                    "",
+                    "<code>npm install -g @anthropic-ai/claude-code</code>",
+                ]
             )
+            await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
             return
 
         user_id = update.effective_user.id if update.effective_user else 0
         username = update.effective_user.username or "admin" if update.effective_user else "admin"
         instruction = " ".join(context.args)
 
+        working_text = "\n".join(
+            [
+                "<b>Generating code...</b>",
+                "",
+                f"<i>{instruction[:200]}{'...' if len(instruction) > 200 else ''}</i>",
+            ]
+        )
         working_msg = await update.message.reply_text(
-            "???? <b>Generating code...</b>
-
-"
-            f"<i>{instruction[:200]}{'...' if len(instruction) > 200 else ''}</i>",
-            parse_mode=ParseMode.HTML
+            working_text, parse_mode=ParseMode.HTML
         )
 
         async def send_status(msg: str):
@@ -2063,24 +2061,20 @@ async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
         if not success:
-            await update.message.reply_text(
-                f"??? <b>Generation Failed</b>
-
-{summary}",
-                parse_mode=ParseMode.HTML
-            )
+            fail_text = "\n".join(["<b>Generation Failed</b>", "", summary])
+            await update.message.reply_text(fail_text, parse_mode=ParseMode.HTML)
             return
 
-        response = (
-            f"???? <b>CLI Result</b>
-
-"
-            f"<b>Summary:</b>
-{summary}
-
-"
-            f"<b>Details:</b>
-<pre>{output[:3000]}</pre>"
+        response = "\n".join(
+            [
+                "<b>CLI Result</b>",
+                "",
+                "<b>Summary:</b>",
+                summary,
+                "",
+                "<b>Details:</b>",
+                f"<pre>{output[:3000]}</pre>",
+            ]
         )
 
         if len(response) > 4000:
@@ -2092,42 +2086,45 @@ async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Dev command error: {e}")
         await update.message.reply_text(
-            f"?????? Error: {str(e)[:200]}",
-            parse_mode=ParseMode.HTML
+            f"<b>Error:</b> {str(e)[:200]}", parse_mode=ParseMode.HTML
         )
 
 async def _handle_dev_refine(query, result_id: str, context):
     """Handle the Refine button from /dev command."""
     try:
-        await query.message.reply_text(
-            "???? <b>CLI Mode Notice</b>
-
-"
-            "Refine is not available in CLI mode.
-"
-            "Please re-run <code>/dev</code> with your updated instruction.",
-            parse_mode=ParseMode.HTML
+        msg = "\n".join(
+            [
+                "<b>CLI Mode Notice</b>",
+                "",
+                "Refine is not available in CLI mode.",
+                "Please re-run <code>/dev</code> with your updated instruction.",
+            ]
         )
+        await query.message.reply_text(msg, parse_mode=ParseMode.HTML)
     except Exception as e:
         logger.error(f"Dev refine error: {e}")
-        await query.message.reply_text(f"?????? Error: {str(e)[:200]}", parse_mode=ParseMode.HTML)
+        await query.message.reply_text(
+            f"<b>Error:</b> {str(e)[:200]}", parse_mode=ParseMode.HTML
+        )
 
 
 async def _handle_dev_copy(query, result_id: str):
     """Handle the Copy ID button from /dev command."""
     try:
-        await query.message.reply_text(
-            "???? <b>CLI Mode Notice</b>
-
-"
-            "Result IDs are not used in CLI mode.
-"
-            "Please re-run <code>/dev</code> with a fresh instruction.",
-            parse_mode=ParseMode.HTML
+        msg = "\n".join(
+            [
+                "<b>CLI Mode Notice</b>",
+                "",
+                "Result IDs are not used in CLI mode.",
+                "Please re-run <code>/dev</code> with a fresh instruction.",
+            ]
         )
+        await query.message.reply_text(msg, parse_mode=ParseMode.HTML)
     except Exception as e:
         logger.error(f"Dev copy error: {e}")
-        await query.message.reply_text(f"?????? Error: {str(e)[:200]}", parse_mode=ParseMode.HTML)
+        await query.message.reply_text(
+            f"<b>Error:</b> {str(e)[:200]}", parse_mode=ParseMode.HTML
+        )
 
 @admin_only
 async def modstats(update: Update, context: ContextTypes.DEFAULT_TYPE):
