@@ -91,6 +91,21 @@ class BagsAPIClient:
     ):
         self.api_key = api_key or os.environ.get("BAGS_API_KEY")
         self.partner_key = partner_key or os.environ.get("BAGS_PARTNER_KEY")
+        if not self.api_key or not self.partner_key:
+            try:
+                from core.secrets import get_key
+                if not self.api_key:
+                    self.api_key = (
+                        get_key("bags_api_key", "BAGS_API_KEY")
+                        or get_key("bags_key", "BAGS_API_KEY")
+                    )
+                if not self.partner_key:
+                    self.partner_key = (
+                        get_key("bags_partner_key", "BAGS_PARTNER_KEY")
+                        or get_key("bags_partner", "BAGS_PARTNER_KEY")
+                    )
+            except Exception:
+                pass
         self.client = None
         self._initialize_client()
 
@@ -746,6 +761,21 @@ def get_bags_client(profile: Optional[str] = None) -> BagsAPIClient:
             prefix = f"{key.upper()}_"
             api_key = os.environ.get(f"{prefix}BAGS_API_KEY") or os.environ.get("BAGS_API_KEY")
             partner_key = os.environ.get(f"{prefix}BAGS_PARTNER_KEY") or os.environ.get("BAGS_PARTNER_KEY")
+        if not api_key or not partner_key:
+            try:
+                from core.secrets import get_key
+                if not api_key:
+                    api_key = (
+                        get_key("bags_api_key", "BAGS_API_KEY")
+                        or get_key("bags_key", "BAGS_API_KEY")
+                    )
+                if not partner_key:
+                    partner_key = (
+                        get_key("bags_partner_key", "BAGS_PARTNER_KEY")
+                        or get_key("bags_partner", "BAGS_PARTNER_KEY")
+                    )
+            except Exception:
+                pass
         _bags_clients[key] = BagsAPIClient(api_key=api_key, partner_key=partner_key)
     return _bags_clients[key]
 
