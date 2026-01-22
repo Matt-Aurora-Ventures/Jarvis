@@ -513,7 +513,13 @@ class ModelRouter:
         import os
         try:
             import anthropic
-            client = anthropic.AsyncAnthropic(api_key=os.getenv(provider.api_key_env))
+            from core.llm.anthropic_utils import get_anthropic_base_url
+
+            base_url = get_anthropic_base_url()
+            client = anthropic.AsyncAnthropic(
+                api_key=os.getenv(provider.api_key_env),
+                base_url=base_url,
+            )
 
             messages = [{"role": "user", "content": task}]
 

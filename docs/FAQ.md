@@ -230,6 +230,24 @@ LLM_PROVIDER=anthropic
 LLM_FALLBACK_PROVIDERS=openai,groq
 ```
 
+### Q: Can I run Claude Code locally with Ollama?
+
+**A:** Yes. Ollama 0.14.0+ exposes an Anthropic-compatible Messages API, so Claude Code can run fully local (the API key can be a placeholder like `ollama`).
+
+```bash
+# Install a local coding model
+ollama pull qwen3-coder
+
+# Point Claude Code to Ollama
+export ANTHROPIC_API_KEY=ollama
+export ANTHROPIC_BASE_URL=http://localhost:11434/v1
+
+# Run Claude Code locally
+claude --model qwen3-coder
+```
+
+If you also want JARVIS to use the same local model, set `OLLAMA_URL=http://localhost:11434` and `OLLAMA_MODEL=qwen3-coder` in your `.env`. JARVIS also honors `ANTHROPIC_BASE_URL` to route Claude calls through Ollama.
+
 ### Q: How do I control LLM costs?
 
 **A:** Use the cost tracker:
