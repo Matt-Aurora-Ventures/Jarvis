@@ -379,6 +379,137 @@ class JarvisTheme:
     KEY = "🔑"
     COPY = "📋"
 
+    # =========================================================================
+    # BEAUTIFICATION V1.1 - Enhanced Visual Indicators
+    # =========================================================================
+
+    # Loading/Progress animations
+    LOADING_FRAMES = ["⏳", "⌛"]
+    PULSE_FRAMES = ["◉", "○"]
+    SPIN_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+    # Market mood spectrum (more nuanced than bull/bear)
+    MOOD_EUPHORIC = "🌟"      # Extreme greed - careful!
+    MOOD_BULLISH = "🚀"       # Strong uptrend
+    MOOD_OPTIMISTIC = "💚"    # Mild bullish
+    MOOD_NEUTRAL = "⚖️"       # Sideways
+    MOOD_CAUTIOUS = "🔶"      # Mild bearish
+    MOOD_FEARFUL = "😰"       # Strong downtrend
+    MOOD_PANIC = "🆘"         # Extreme fear - opportunities!
+
+    # Health indicators for positions
+    HEALTH_EXCELLENT = "💪"   # > +20% PnL, healthy time
+    HEALTH_GOOD = "🟢"        # +5% to +20% PnL
+    HEALTH_FAIR = "🟡"        # -5% to +5% PnL
+    HEALTH_WEAK = "🟠"        # -5% to -15% PnL
+    HEALTH_CRITICAL = "🔴"    # < -15% PnL
+
+    # AI confidence levels
+    CONFIDENCE_HIGH = "🎯"    # > 80% confidence
+    CONFIDENCE_MED = "📊"     # 60-80% confidence
+    CONFIDENCE_LOW = "⚠️"     # < 60% confidence
+
+    # Time indicators
+    TIME_FRESH = "🆕"         # < 1 hour
+    TIME_NORMAL = "⏰"        # 1-24 hours
+    TIME_AGING = "📅"         # 1-7 days
+    TIME_OLD = "🗓️"          # > 7 days
+
+    @classmethod
+    def get_health_indicator(cls, pnl_pct: float, hours_held: float = 0) -> str:
+        """Get position health indicator based on PnL and time."""
+        if pnl_pct >= 20:
+            return cls.HEALTH_EXCELLENT
+        elif pnl_pct >= 5:
+            return cls.HEALTH_GOOD
+        elif pnl_pct >= -5:
+            return cls.HEALTH_FAIR
+        elif pnl_pct >= -15:
+            return cls.HEALTH_WEAK
+        else:
+            return cls.HEALTH_CRITICAL
+
+    @classmethod
+    def get_health_bar(cls, pnl_pct: float, width: int = 5) -> str:
+        """Generate a visual health bar for position PnL."""
+        # Normalize PnL to 0-100 scale (capped at -50% to +100%)
+        normalized = min(100, max(0, (pnl_pct + 50) / 1.5))
+        filled = int(normalized / 100 * width)
+        empty = width - filled
+
+        if pnl_pct >= 20:
+            bar = "🟩" * filled + "⬜" * empty
+        elif pnl_pct >= 0:
+            bar = "🟨" * filled + "⬜" * empty
+        elif pnl_pct >= -15:
+            bar = "🟧" * filled + "⬜" * empty
+        else:
+            bar = "🟥" * filled + "⬜" * empty
+        return bar
+
+    @classmethod
+    def get_time_indicator(cls, hours_held: float) -> str:
+        """Get time held indicator."""
+        if hours_held < 1:
+            return cls.TIME_FRESH
+        elif hours_held < 24:
+            return cls.TIME_NORMAL
+        elif hours_held < 168:  # 7 days
+            return cls.TIME_AGING
+        else:
+            return cls.TIME_OLD
+
+    @classmethod
+    def get_market_mood(cls, fear_greed_score: float) -> Tuple[str, str]:
+        """Get market mood emoji and label based on fear/greed score (0-100)."""
+        if fear_greed_score >= 85:
+            return cls.MOOD_EUPHORIC, "EUPHORIC"
+        elif fear_greed_score >= 65:
+            return cls.MOOD_BULLISH, "BULLISH"
+        elif fear_greed_score >= 55:
+            return cls.MOOD_OPTIMISTIC, "OPTIMISTIC"
+        elif fear_greed_score >= 45:
+            return cls.MOOD_NEUTRAL, "NEUTRAL"
+        elif fear_greed_score >= 35:
+            return cls.MOOD_CAUTIOUS, "CAUTIOUS"
+        elif fear_greed_score >= 15:
+            return cls.MOOD_FEARFUL, "FEARFUL"
+        else:
+            return cls.MOOD_PANIC, "PANIC"
+
+    @classmethod
+    def get_confidence_bar(cls, confidence: float, width: int = 10) -> str:
+        """Generate an AI confidence bar (0.0 to 1.0)."""
+        filled = int(confidence * width)
+        empty = width - filled
+        bar_char = "▰" if confidence >= 0.6 else "▱"
+        return "▰" * filled + "▱" * empty
+
+    @classmethod
+    def get_confidence_indicator(cls, confidence: float) -> str:
+        """Get confidence level indicator."""
+        if confidence >= 0.8:
+            return cls.CONFIDENCE_HIGH
+        elif confidence >= 0.6:
+            return cls.CONFIDENCE_MED
+        else:
+            return cls.CONFIDENCE_LOW
+
+    @classmethod
+    def loading_text(cls, message: str = "Loading") -> str:
+        """Generate loading text with animation hint."""
+        return f"⏳ _{message}..._"
+
+    @classmethod
+    def format_pnl_styled(cls, pnl_pct: float, pnl_usd: float) -> str:
+        """Format PnL with beautiful styling."""
+        sign = "+" if pnl_pct >= 0 else ""
+        emoji = cls.PROFIT if pnl_pct >= 0 else cls.LOSS
+        health = cls.get_health_indicator(pnl_pct)
+        bar = cls.get_health_bar(pnl_pct)
+
+        return f"{emoji}{health} *{sign}{pnl_pct:.1f}%* ({sign}${abs(pnl_usd):.2f})\n{bar}"
+
 
 # =============================================================================
 # Menu Builders - Trojan Style
@@ -1075,7 +1206,7 @@ Please check your key/phrase and try again.
         positions: list,
         total_pnl: float = 0.0,
     ) -> Tuple[str, InlineKeyboardMarkup]:
-        """Build positions overview with sell buttons."""
+        """Build positions overview with health indicators, sell buttons, and quick SL/TP."""
         theme = JarvisTheme
 
         if not positions:
@@ -1085,11 +1216,16 @@ Please check your key/phrase and try again.
 
 _No open positions_
 
-Use the buy buttons to enter a trade!
+{theme.ROCKET} *Ready to trade?*
+Use AI-powered signals to find opportunities!
 """
             keyboard = [
                 [
                     InlineKeyboardButton(f"{theme.FIRE} Find Tokens", callback_data="demo:trending"),
+                    InlineKeyboardButton(f"📊 AI Picks", callback_data="demo:ai_picks"),
+                ],
+                [
+                    InlineKeyboardButton(f"🎒 BAGS TOP 15", callback_data="demo:bags_fm"),
                 ],
                 [
                     InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
@@ -1099,10 +1235,20 @@ Use the buy buttons to enter a trade!
             pnl_emoji = theme.PROFIT if total_pnl >= 0 else theme.LOSS
             pnl_sign = "+" if total_pnl >= 0 else ""
 
+            # Portfolio health score (average of all positions)
+            avg_pnl = sum(p.get("pnl_pct", 0) for p in positions) / len(positions)
+            portfolio_health = theme.get_health_indicator(avg_pnl)
+            portfolio_bar = theme.get_health_bar(avg_pnl, width=8)
+
             lines = [
                 f"{theme.CHART} *POSITIONS*",
                 "━━━━━━━━━━━━━━━━━━━━━",
+                f"",
+                f"{portfolio_health} *Portfolio Health*",
+                f"{portfolio_bar}",
                 f"Total P&L: {pnl_emoji} *{pnl_sign}${abs(total_pnl):.2f}*",
+                f"",
+                "━━━━━━━━━━━━━━━━━━━━━",
                 "",
             ]
 
@@ -1116,42 +1262,137 @@ Use the buy buttons to enter a trade!
                 current = pos.get("current_price", 0)
                 pos_id = pos.get("id", str(i))
 
-                pos_emoji = theme.PROFIT if pnl_pct >= 0 else theme.LOSS
+                # Calculate hours held (if available)
+                entry_time = pos.get("entry_time")
+                if entry_time:
+                    try:
+                        if isinstance(entry_time, str):
+                            entry_dt = datetime.fromisoformat(entry_time.replace('Z', '+00:00'))
+                        else:
+                            entry_dt = entry_time
+                        hours_held = (datetime.now(timezone.utc) - entry_dt).total_seconds() / 3600
+                    except Exception:
+                        hours_held = 0
+                else:
+                    hours_held = 0
+
+                # Get health and time indicators
+                health = theme.get_health_indicator(pnl_pct, hours_held)
+                health_bar = theme.get_health_bar(pnl_pct, width=5)
+                time_ind = theme.get_time_indicator(hours_held)
                 pnl_sign = "+" if pnl_pct >= 0 else ""
 
+                # Format time held
+                if hours_held < 1:
+                    time_str = f"{int(hours_held * 60)}m"
+                elif hours_held < 24:
+                    time_str = f"{int(hours_held)}h"
+                else:
+                    time_str = f"{int(hours_held / 24)}d"
+
+                # Get current TP/SL if set
+                tp = pos.get("take_profit", 50)
+                sl = pos.get("stop_loss", 20)
+
                 lines.extend([
-                    f"{pos_emoji} *{symbol}* {pnl_sign}{pnl_pct:.1f}%",
-                    f"   Entry: ${entry:.8f}",
-                    f"   Now: ${current:.8f}",
-                    f"   P&L: {pnl_sign}${abs(pnl_usd):.2f}",
+                    f"{health} *{symbol}* {pnl_sign}{pnl_pct:.1f}%",
+                    f"{health_bar}",
+                    f"├ Entry: `${entry:.8f}`",
+                    f"├ Now: `${current:.8f}`",
+                    f"├ P&L: *{pnl_sign}${abs(pnl_usd):.2f}*",
+                    f"├ {time_ind} Held: *{time_str}*",
+                    f"└ TP: +{tp}% | SL: -{sl}%",
                     "",
                 ])
 
-                # Add sell buttons for each position
+                # Add action buttons for each position (sell + quick SL/TP adjust)
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"{theme.SELL} Sell {symbol} (25%)",
+                        f"🔴 Sell 25%",
                         callback_data=f"demo:sell:{pos_id}:25"
                     ),
                     InlineKeyboardButton(
-                        f"{theme.SELL} Sell All",
+                        f"🔴 Sell All",
                         callback_data=f"demo:sell:{pos_id}:100"
+                    ),
+                    InlineKeyboardButton(
+                        f"⚙️ SL/TP",
+                        callback_data=f"demo:pos_adjust:{pos_id}"
                     ),
                 ])
 
             text = "\n".join(lines)
 
-            # Add navigation
+            # Add navigation with enhanced options
             keyboard.extend([
                 [
                     InlineKeyboardButton("🔔 Alerts", callback_data="demo:pnl_alerts"),
                     InlineKeyboardButton("🛡️ Trailing SL", callback_data="demo:trailing_stops"),
+                    InlineKeyboardButton("📊 P&L Report", callback_data="demo:pnl_report"),
                 ],
                 [
                     InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data="demo:positions"),
                     InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
                 ],
             ])
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def position_adjust_menu(
+        pos_id: str,
+        symbol: str,
+        current_tp: float = 50.0,
+        current_sl: float = 20.0,
+        pnl_pct: float = 0.0,
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        """Quick SL/TP adjustment menu for a position."""
+        theme = JarvisTheme
+        health = theme.get_health_indicator(pnl_pct)
+        health_bar = theme.get_health_bar(pnl_pct, width=8)
+        pnl_sign = "+" if pnl_pct >= 0 else ""
+
+        text = f"""
+{theme.SETTINGS} *ADJUST POSITION*
+━━━━━━━━━━━━━━━━━━━━━
+
+{health} *{symbol}* {pnl_sign}{pnl_pct:.1f}%
+{health_bar}
+
+*Current Settings:*
+├ 🎯 Take Profit: *+{current_tp}%*
+└ 🛡️ Stop Loss: *-{current_sl}%*
+
+━━━━━━━━━━━━━━━━━━━━━
+_Adjust your exit strategy_
+"""
+
+        keyboard = [
+            # TP adjustment row
+            [
+                InlineKeyboardButton("🎯 TP", callback_data="demo:noop"),
+                InlineKeyboardButton("25%", callback_data=f"demo:set_tp:{pos_id}:25"),
+                InlineKeyboardButton("50%", callback_data=f"demo:set_tp:{pos_id}:50"),
+                InlineKeyboardButton("100%", callback_data=f"demo:set_tp:{pos_id}:100"),
+                InlineKeyboardButton("200%", callback_data=f"demo:set_tp:{pos_id}:200"),
+            ],
+            # SL adjustment row
+            [
+                InlineKeyboardButton("🛡️ SL", callback_data="demo:noop"),
+                InlineKeyboardButton("10%", callback_data=f"demo:set_sl:{pos_id}:10"),
+                InlineKeyboardButton("20%", callback_data=f"demo:set_sl:{pos_id}:20"),
+                InlineKeyboardButton("30%", callback_data=f"demo:set_sl:{pos_id}:30"),
+                InlineKeyboardButton("50%", callback_data=f"demo:set_sl:{pos_id}:50"),
+            ],
+            # Quick actions
+            [
+                InlineKeyboardButton("🔴 Close Now", callback_data=f"demo:sell:{pos_id}:100"),
+                InlineKeyboardButton("🛡️ Trailing SL", callback_data=f"demo:trailing_setup:{pos_id}"),
+            ],
+            [
+                InlineKeyboardButton(f"{theme.BACK} Back to Positions", callback_data="demo:positions"),
+            ],
+        ]
 
         return text, InlineKeyboardMarkup(keyboard)
 
