@@ -515,6 +515,7 @@ class TradingEngine:
         dry_run: bool = True,  # Start in dry run mode
         enable_signals: bool = True,  # Enable advanced signal analysis
         use_bags: bool = None,  # Use Bags.fm for trading (earns partner fees)
+        state_profile: Optional[str] = None,  # Isolate state per profile (e.g., demo)
     ):
         """
         Initialize trading engine.
@@ -535,6 +536,11 @@ class TradingEngine:
         self.risk_level = risk_level
         self.max_positions = max_positions
         self.dry_run = dry_run
+
+        # Optional per-profile state isolation (demo vs treasury)
+        self._state_profile = (state_profile or "").strip().lower()
+        if self._state_profile and self._state_profile != "treasury":
+            self._configure_state_paths(self._state_profile)
 
         self.positions: Dict[str, Position] = {}
         self.trade_history: List[Position] = []
@@ -589,6 +595,23 @@ class TradingEngine:
 
         # Load existing state
         self._load_state()
+
+    def _configure_state_paths(self, profile: str) -> None:
+        """Override state files for a non-treasury profile."""
+        base_dir = Path.home() / ".lifeos" / profile
+        trading_dir = base_dir / "trading"
+        logs_dir = base_dir / "logs"
+        trading_dir.mkdir(parents=True, exist_ok=True)
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        self.POSITIONS_FILE = trading_dir / "positions.json"
+        self.HISTORY_FILE = trading_dir / "trade_history.json"
+        self.AUDIT_LOG_FILE = logs_dir / "audit.jsonl"
+        self.DAILY_VOLUME_FILE = trading_dir / "daily_volume.json"
+
+        secondary_dir = Path(__file__).resolve().parents[2] / "data" / profile / "trader"
+        secondary_dir.mkdir(parents=True, exist_ok=True)
+        self.POSITIONS_FILE_SECONDARY = secondary_dir / "positions.json"
 
     # ==========================================================================
     # SWAP EXECUTION - Routes through Bags.fm (with Jupiter fallback) or Jupiter
@@ -2848,15 +2871,57 @@ class TreasuryTrader:
     - Trade execution with TP/SL orders
     """
 
-    _instance: Optional['TreasuryTrader'] = None
-    _engine: Optional[TradingEngine] = None
-    _initialized: bool = False
+    _instances: Dict[str, "TreasuryTrader"] = {}
 
-    def __new__(cls):
-        """Singleton pattern for shared state."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+    def __new__(cls, profile: str = "treasury"):
+        """Singleton per profile (treasury, demo, etc.)."""
+        key = (profile or "treasury").strip().lower()
+        if key not in cls._instances:
+            inst = super().__new__(cls)
+            inst._profile = key
+            inst._env_prefix = "" if key == "treasury" else f"{key.upper()}_"
+            inst._engine = None
+            inst._initialized = False
+            inst._live_mode = False
+            cls._instances[key] = inst
+        return cls._instances[key]
+
+    def __init__(self, profile: str = "treasury"):
+        """No-op; profile config is handled in __new__."""
+        pass
+
+    def _get_env(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        """Read env var with profile prefix fallback."""
+        if self._env_prefix:
+            value = os.environ.get(f"{self._env_prefix}{key}")
+            if value not in (None, ""):
+                return value
+        return os.environ.get(key, default)
+
+    def _get_wallet_password(self) -> Optional[str]:
+        """Resolve wallet password with profile-aware env keys."""
+        for key in ("TREASURY_WALLET_PASSWORD", "JARVIS_WALLET_PASSWORD", "WALLET_PASSWORD"):
+            value = self._get_env(key)
+            if value:
+                return value
+        return None
+
+    def _get_wallet_dir(self) -> Path:
+        """Resolve wallet directory for this profile."""
+        custom_dir = self._get_env("WALLET_DIR", "")
+        if custom_dir:
+            return Path(custom_dir).expanduser()
+        if self._profile == "treasury":
+            return SecureWallet.WALLET_DIR
+        root = Path(__file__).resolve().parents[2]
+        return root / "bots" / "treasury" / f".wallets-{self._profile}"
+
+    def _default_keypair_path(self) -> Path:
+        """Default keypair path for the profile."""
+        root = Path(__file__).resolve().parents[2]
+        if self._profile == "treasury":
+            return root / "data" / "treasury_keypair.json"
+        return root / "data" / f"{self._profile}_treasury_keypair.json"
 
     async def _ensure_initialized(self) -> Tuple[bool, str]:
         """Initialize wallet and jupiter client if not already done."""
@@ -2864,25 +2929,26 @@ class TreasuryTrader:
             return True, "Already initialized"
 
         try:
-            # Use centralized KeyManager for robust key loading
-            try:
-                from core.security.key_manager import get_key_manager
-                key_manager = get_key_manager()
-                keypair = key_manager.load_treasury_keypair()
-                
-                if keypair:
-                    treasury_address = str(keypair.pubkey())
-                    wallet = _SimpleWallet(keypair, treasury_address)
-                    logger.info(f"Loaded treasury via KeyManager: {treasury_address[:8]}...")
-                else:
-                    wallet = None
-                    treasury_address = None
-            except ImportError:
-                # Fallback to legacy loading if KeyManager not available
-                logger.warning("KeyManager not available, using legacy loader")
-                wallet = None
-                treasury_address = None
-                
+            wallet = None
+            treasury_address = None
+            keypair = None
+
+            # Use centralized KeyManager for treasury profile only
+            if self._profile == "treasury":
+                try:
+                    from core.security.key_manager import get_key_manager
+                    key_manager = get_key_manager()
+                    keypair = key_manager.load_treasury_keypair()
+
+                    if keypair:
+                        treasury_address = str(keypair.pubkey())
+                        wallet = _SimpleWallet(keypair, treasury_address)
+                        logger.info(f"Loaded treasury via KeyManager: {treasury_address[:8]}...")
+                except ImportError:
+                    logger.warning("KeyManager not available, using legacy loader")
+
+            # Fallback to legacy loading if KeyManager not available or profile is non-treasury
+            if not wallet:
                 root = Path(__file__).resolve().parents[2]
                 env_paths = (root / "tg_bot" / ".env", root / ".env")
                 try:
@@ -2893,7 +2959,7 @@ class TreasuryTrader:
                 except Exception:
                     pass
 
-                if not os.environ.get("JARVIS_WALLET_PASSWORD"):
+                if not self._get_wallet_password():
                     for env_path in env_paths:
                         if not env_path.exists():
                             continue
@@ -2910,10 +2976,8 @@ class TreasuryTrader:
                         except Exception:
                             continue
 
-                # Try to load keypair from treasury_keypair.json first
-                default_path = Path(__file__).resolve().parents[2] / "data" / "treasury_keypair.json"
-                env_path_str = os.environ.get("TREASURY_WALLET_PATH", "").strip()
-                keypair_path = Path(env_path_str) if env_path_str else default_path
+                env_path_str = (self._get_env("TREASURY_KEYPAIR_PATH", "") or self._get_env("TREASURY_WALLET_PATH", "")).strip()
+                keypair_path = Path(env_path_str).expanduser() if env_path_str else self._default_keypair_path()
 
                 if keypair_path.exists():
                     try:
@@ -2927,13 +2991,16 @@ class TreasuryTrader:
 
             # Fallback to SecureWallet if direct load failed
             if not wallet:
-                wallet_password = os.environ.get('JARVIS_WALLET_PASSWORD')
+                wallet_password = self._get_wallet_password()
                 if not wallet_password:
-                    logger.warning("JARVIS_WALLET_PASSWORD not set - running in simulation mode")
-                    return False, "No wallet found - check treasury_keypair.json or JARVIS_WALLET_PASSWORD"
+                    logger.warning("Wallet password not set - running in simulation mode")
+                    return False, "No wallet found - check treasury_keypair.json or wallet password env var"
 
                 try:
-                    secure_wallet = SecureWallet()
+                    secure_wallet = SecureWallet(
+                        master_password=wallet_password,
+                        wallet_dir=self._get_wallet_dir(),
+                    )
                     treasury = secure_wallet.get_treasury()
                     if treasury:
                         wallet = secure_wallet
@@ -2944,22 +3011,28 @@ class TreasuryTrader:
             if not wallet:
                 return False, "No treasury wallet found - create data/treasury_keypair.json"
 
-            # Initialize Jupiter client
-            jupiter = JupiterClient()
+            # Initialize Jupiter client (allow profile-specific RPC)
+            rpc_url = self._get_env("SOLANA_RPC_URL", None)
+            jupiter = JupiterClient(rpc_url=rpc_url)
 
             admin_ids = []
-            admin_ids_str = os.environ.get("TREASURY_ADMIN_IDS") or os.environ.get("TELEGRAM_ADMIN_IDS", "")
+            admin_ids_str = self._get_env("TREASURY_ADMIN_IDS") or self._get_env("TELEGRAM_ADMIN_IDS", "")
             if admin_ids_str:
                 admin_ids = [int(x.strip()) for x in admin_ids_str.split(",") if x.strip().isdigit()]
 
             # Create trading engine (respect TREASURY_LIVE_MODE)
-            live_mode = os.environ.get("TREASURY_LIVE_MODE", "false").lower() in ("1", "true", "yes", "on")
+            live_mode = str(self._get_env("TREASURY_LIVE_MODE", "false")).lower() in ("1", "true", "yes", "on")
+            self._live_mode = live_mode
+            use_bags_env = str(self._get_env("USE_BAGS_TRADING", "")).lower() in ("1", "true", "yes", "on")
+            use_bags = True if (self._profile != "treasury") else use_bags_env
             self._engine = TradingEngine(
                 wallet=wallet,
                 jupiter=jupiter,
                 dry_run=not live_mode,
                 max_positions=50,  # Increased from 10 to support more concurrent positions
                 admin_user_ids=admin_ids,
+                use_bags=use_bags,
+                state_profile=self._profile if self._profile != "treasury" else None,
             )
             await self._engine.initialize_order_manager()
 

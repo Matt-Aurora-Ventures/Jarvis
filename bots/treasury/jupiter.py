@@ -283,6 +283,24 @@ class JupiterClient:
         except Exception as e:
             logger.error(f"Failed to get token info for {mint[:8]}...: {e}")
 
+        # Fallback: Bags.fm token data
+        try:
+            from core.trading.bags_client import get_bags_client
+            bags_client = get_bags_client()
+            bags_token = await bags_client.get_token_info(mint)
+            if bags_token:
+                token = TokenInfo(
+                    address=mint,
+                    symbol=bags_token.symbol,
+                    name=bags_token.name,
+                    decimals=bags_token.decimals or 9,
+                    price_usd=bags_token.price_usd,
+                )
+                self._token_cache[mint] = token
+                return token
+        except Exception as e:
+            logger.warning(f"Bags token info fallback failed for {mint[:8]}...: {e}")
+
         # Fallback: DexScreener token data
         pairs = await self._fetch_dexscreener_pairs(mint)
         best = self._pick_best_pair(pairs)
@@ -362,6 +380,18 @@ class JupiterClient:
             if price > 0:
                 self._price_cache[cache_key] = (price, datetime.utcnow())
                 return price
+
+        # FALLBACK: Bags.fm price
+        try:
+            from core.trading.bags_client import get_bags_client
+            bags_client = get_bags_client()
+            bags_token = await bags_client.get_token_info(mint)
+            if bags_token and bags_token.price_usd:
+                price = float(bags_token.price_usd)
+                self._price_cache[cache_key] = (price, datetime.utcnow())
+                return price
+        except Exception:
+            pass
 
         # FALLBACK: Jupiter price API (only if DexScreener fails)
         session = await self._get_session()

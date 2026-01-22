@@ -38,6 +38,7 @@ Memory Hierarchy:
 import logging
 import asyncio
 import json
+import os
 import tempfile
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, List
@@ -52,6 +53,8 @@ from tg_bot.config import get_config
 from tg_bot.handlers import error_handler, admin_only
 
 logger = logging.getLogger(__name__)
+
+DEMO_PROFILE = (os.environ.get("DEMO_TRADING_PROFILE", "demo") or "demo").strip().lower()
 
 
 # =============================================================================
@@ -72,7 +75,7 @@ def get_bags_client():
     """Get Bags.fm API client for trading."""
     try:
         from core.trading.bags_client import get_bags_client as _get_bags
-        return _get_bags()
+        return _get_bags(profile=DEMO_PROFILE)
     except ImportError:
         logger.warning("Bags client not available")
         return None
@@ -82,10 +85,42 @@ def get_success_fee_manager():
     """Get Success Fee Manager for 0.5% fee on winning trades."""
     try:
         from core.trading.bags_client import get_success_fee_manager as _get_fee_manager
-        return _get_fee_manager()
+        return _get_fee_manager(profile=DEMO_PROFILE)
     except ImportError:
         logger.warning("Success fee manager not available")
         return None
+
+
+def _get_demo_wallet_password() -> Optional[str]:
+    """Resolve demo wallet password with fallback to treasury envs."""
+    candidates = (
+        "DEMO_TREASURY_WALLET_PASSWORD",
+        "DEMO_WALLET_PASSWORD",
+        "DEMO_JARVIS_WALLET_PASSWORD",
+        "TREASURY_WALLET_PASSWORD",
+        "JARVIS_WALLET_PASSWORD",
+        "WALLET_PASSWORD",
+    )
+    for key in candidates:
+        value = os.environ.get(key)
+        if value:
+            return value
+    return None
+
+
+def _get_demo_wallet_dir() -> Path:
+    """Resolve wallet directory for demo profile."""
+    custom_dir = os.environ.get("DEMO_WALLET_DIR", "").strip()
+    if custom_dir:
+        return Path(custom_dir).expanduser()
+    root = Path(__file__).resolve().parents[2]
+    return root / "bots" / "treasury" / f".wallets-{DEMO_PROFILE}"
+
+
+async def _get_demo_engine():
+    """Get demo trading engine (separate keys/state from treasury)."""
+    from tg_bot import bot_core as bot_module
+    return await bot_module._get_treasury_engine(profile=DEMO_PROFILE)
 
 
 # =============================================================================
@@ -5191,8 +5226,7 @@ async def demo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning(f"Could not load market regime: {e}")
 
         try:
-            from tg_bot import bot_core as bot_module
-            engine = await bot_module._get_treasury_engine()
+            engine = await _get_demo_engine()
 
             # Get wallet address
             treasury = engine.wallet.get_treasury()
@@ -5273,8 +5307,7 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         positions = []
 
         try:
-            from tg_bot import bot_core as bot_module
-            engine = await bot_module._get_treasury_engine()
+            engine = await _get_demo_engine()
 
             treasury = engine.wallet.get_treasury()
             if treasury:
@@ -5328,8 +5361,7 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             token_holdings = []
             total_holdings_usd = 0.0
             try:
-                from tg_bot import bot_core as bot_module
-                engine = await bot_module._get_treasury_engine()
+                engine = await _get_demo_engine()
                 if engine and hasattr(engine, 'get_token_holdings'):
                     holdings = await engine.get_token_holdings()
                     if holdings:
@@ -5352,8 +5384,7 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             token_holdings = []
             total_holdings_usd = 0.0
             try:
-                from tg_bot import bot_core as bot_module
-                engine = await bot_module._get_treasury_engine()
+                engine = await _get_demo_engine()
                 if engine and hasattr(engine, 'get_token_holdings'):
                     holdings = await engine.get_token_holdings()
                     if holdings:
@@ -5371,8 +5402,7 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Wallet transaction history
             transactions = []
             try:
-                from tg_bot import bot_core as bot_module
-                engine = await bot_module._get_treasury_engine()
+                engine = await _get_demo_engine()
                 if engine and hasattr(engine, 'get_transaction_history'):
                     transactions = await engine.get_transaction_history()
             except Exception:
@@ -5435,7 +5465,13 @@ _QR code coming in V2_
             theme = JarvisTheme
             try:
                 from bots.treasury.wallet import SecureWallet
-                wallet = SecureWallet()
+                wallet_password = _get_demo_wallet_password()
+                if not wallet_password:
+                    raise ValueError("Demo wallet password not configured")
+                wallet = SecureWallet(
+                    master_password=wallet_password,
+                    wallet_dir=_get_demo_wallet_dir(),
+                )
                 private_key = wallet.get_private_key()  # Returns base58 key
                 wallet_address = wallet.get_address()
 
@@ -5454,12 +5490,19 @@ _QR code coming in V2_
             # Generate new wallet
             try:
                 from bots.treasury.wallet import SecureWallet
-                wallet = SecureWallet()
+                wallet_password = _get_demo_wallet_password()
+                if not wallet_password:
+                    raise ValueError("Demo wallet password not configured")
+                wallet = SecureWallet(
+                    master_password=wallet_password,
+                    wallet_dir=_get_demo_wallet_dir(),
+                )
+                wallet_info = wallet.create_wallet(label="Demo Treasury", is_treasury=True)
                 # Note: In production, this would require password setup
                 # For demo, show what would happen
                 text, keyboard = DemoMenuBuilder.success_message(
                     action="Wallet Generated",
-                    details="New Solana wallet created and encrypted.\n\nSend SOL to fund your trading!",
+                    details=f"New Solana wallet created and encrypted.\n\nAddress:\n`{wallet_info.address}`\n\nSend SOL to fund your trading!",
                 )
             except Exception as e:
                 text, keyboard = DemoMenuBuilder.error_message(f"Wallet creation failed: {e}")
@@ -7225,8 +7268,7 @@ You are about to sell *{position_count} positions*
                 logger.warning(f"Flow validation error (continuing): {e}")
 
             try:
-                from tg_bot import bot_core as bot_module
-                engine = await bot_module._get_treasury_engine()
+                engine = await _get_demo_engine()
 
                 closed_count = 0
                 total_pnl = 0.0
@@ -7401,8 +7443,7 @@ Coming soon in V2!
         elif action == "toggle_mode":
             # Toggle live/paper mode
             try:
-                from tg_bot import bot_core as bot_module
-                engine = await bot_module._get_treasury_engine()
+                engine = await _get_demo_engine()
                 engine.dry_run = not engine.dry_run
                 new_mode = "PAPER" if engine.dry_run else "LIVE"
                 text, keyboard = DemoMenuBuilder.success_message(
@@ -7572,8 +7613,7 @@ Coming soon in V2!
 
                 # Execute via treasury engine
                 try:
-                    from tg_bot import bot_core as bot_module
-                    engine = await bot_module._get_treasury_engine()
+                    engine = await _get_demo_engine()
 
                     # Place buy order
                     result = await engine.buy_token(token_addr, amount)
@@ -7701,22 +7741,41 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
         try:
             from bots.treasury.wallet import SecureWallet
+            from core.wallet_service import WalletService
+
+            wallet_password = _get_demo_wallet_password()
+            if not wallet_password:
+                raise ValueError("Demo wallet password not configured")
+
+            wallet_service = WalletService()
+            private_key = None
 
             if import_mode == "seed":
                 # Import from seed phrase
                 words = text.strip().split()
                 if len(words) not in [12, 24]:
                     raise ValueError(f"Seed phrase must be 12 or 24 words, got {len(words)}")
-
-                wallet = SecureWallet.from_seed(text.strip())
+                wallet_data, _ = await wallet_service.import_wallet(
+                    seed_phrase=text.strip(),
+                    user_password=wallet_password,
+                )
+                private_key = wallet_data.private_key
             else:
                 # Import from private key
                 if len(text.strip()) < 64:
                     raise ValueError("Private key too short (min 64 chars)")
+                wallet_data, _ = await wallet_service.import_from_private_key(
+                    private_key=text.strip(),
+                    user_password=wallet_password,
+                )
+                private_key = wallet_data.private_key
 
-                wallet = SecureWallet.from_private_key(text.strip())
-
-            wallet_address = wallet.get_address()
+            secure_wallet = SecureWallet(
+                master_password=wallet_password,
+                wallet_dir=_get_demo_wallet_dir(),
+            )
+            wallet_info = secure_wallet.import_wallet(private_key, label="Demo Imported")
+            wallet_address = wallet_info.address
 
             result_text, keyboard = DemoMenuBuilder.wallet_import_result(
                 success=True,
