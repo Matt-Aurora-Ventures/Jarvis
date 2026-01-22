@@ -199,6 +199,13 @@ class ModelRouter:
         """Add a new provider."""
         self.providers.append(provider)
 
+    def get_stats(self) -> Dict[str, Any]:
+        """Return provider health and usage stats."""
+        return {
+            "providers": [provider.to_dict() for provider in self.providers],
+            "cache_entries": len(self._cache),
+        }
+
     def remove_provider(self, name: str) -> bool:
         """Remove a provider by name."""
         for i, p in enumerate(self.providers):
@@ -223,6 +230,7 @@ class ModelRouter:
         image: Optional[bytes] = None,
         max_tokens: int = 2048,
         use_cache: bool = True,
+        fallback_used: bool = False,
     ) -> RoutingResult:
         """
         Route a task to the best available model.
@@ -275,6 +283,7 @@ class ModelRouter:
             fallback = self._get_fallback(selected, required_capabilities)
             if fallback:
                 selected = fallback
+                fallback_used = True
             else:
                 raise RuntimeError(f"Rate limit exceeded for {selected.name}")
 
@@ -294,6 +303,7 @@ class ModelRouter:
                 latency_ms=latency_ms,
                 tokens_used=len(response) // 4,  # Rough estimate
                 cost=len(response) / 4000 * selected.cost_per_1k_tokens,
+                fallback_used=fallback_used,
             )
 
             # Cache result
@@ -319,6 +329,7 @@ class ModelRouter:
                     image=image,
                     max_tokens=max_tokens,
                     use_cache=False,
+                    fallback_used=True,
                 )
 
             raise
