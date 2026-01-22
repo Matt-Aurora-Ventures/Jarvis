@@ -384,8 +384,31 @@ async def get_conviction_picks() -> List[Dict[str, Any]]:
 
     # 2) Grok picks (optional overlay)
     try:
-        from core.enhanced_market_data import get_grok_conviction_picks
-        grok_picks = await get_grok_conviction_picks()
+        from core.enhanced_market_data import (
+            fetch_trending_solana_tokens,
+            fetch_backed_stocks,
+            fetch_backed_indexes,
+            get_grok_conviction_picks,
+        )
+        from bots.twitter.grok_client import get_grok_client
+
+        grok_client = get_grok_client()
+        if not getattr(grok_client, "api_key", None):
+            raise RuntimeError("Grok API key not configured")
+
+        tokens, _ = await fetch_trending_solana_tokens(limit=12)
+        stocks, _ = await asyncio.to_thread(fetch_backed_stocks)
+        indexes, _ = await asyncio.to_thread(fetch_backed_indexes)
+
+        grok_picks, _warnings = await get_grok_conviction_picks(
+            tokens=tokens,
+            stocks=stocks,
+            indexes=indexes,
+            grok_client=grok_client,
+            top_n=5,
+            historical_learnings="",
+            save_picks=False,
+        )
         for p in grok_picks[:5]:
             pick = {
                 "symbol": p.symbol,
