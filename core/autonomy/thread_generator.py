@@ -91,7 +91,12 @@ Example thread closing:
                 import os
                 api_key = os.getenv("ANTHROPIC_API_KEY", "")
                 if api_key:
-                    self._anthropic_client = anthropic.Anthropic(api_key=api_key)
+                    from core.llm.anthropic_utils import get_anthropic_base_url
+
+                    self._anthropic_client = anthropic.Anthropic(
+                        api_key=api_key,
+                        base_url=get_anthropic_base_url(),
+                    )
             except Exception as e:
                 logger.error(f"Could not init Anthropic: {e}")
         return self._anthropic_client

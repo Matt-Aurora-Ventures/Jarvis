@@ -475,7 +475,12 @@ class ClaudeCLIHandler:
             return
 
         try:
-            self._anthropic_client = anthropic.Anthropic(api_key=api_key)
+            from core.llm.anthropic_utils import get_anthropic_base_url
+
+            self._anthropic_client = anthropic.Anthropic(
+                api_key=api_key,
+                base_url=get_anthropic_base_url(),
+            )
             self._api_mode_available = True
             logger.info("API mode initialized - using Anthropic API directly (no CLI subprocess)")
         except Exception as e:

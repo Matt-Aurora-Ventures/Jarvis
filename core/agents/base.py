@@ -382,6 +382,7 @@ class BaseAgent(ABC):
         """Call Groq API - fast and cheap."""
         try:
             from core import secrets
+            from core.llm.anthropic_utils import get_anthropic_messages_url
             import requests
 
             api_key = secrets.get_groq_key() if hasattr(secrets, 'get_groq_key') else None
@@ -421,7 +422,7 @@ class BaseAgent(ABC):
                 return "Error: No Anthropic API key"
 
             response = requests.post(
-                "https://api.anthropic.com/v1/messages",
+                get_anthropic_messages_url(),
                 headers={
                     "x-api-key": api_key,
                     "anthropic-version": "2023-06-01",

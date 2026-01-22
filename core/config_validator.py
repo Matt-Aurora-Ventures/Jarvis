@@ -176,6 +176,11 @@ class ConfigValidator:
 
         # Pattern validation
         pattern = field.pattern or self._get_default_pattern(field.config_type)
+        if (
+            name == "ANTHROPIC_API_KEY"
+            and os.getenv("ANTHROPIC_BASE_URL")
+        ):
+            pattern = None
         if pattern and isinstance(value, str):
             if not re.match(pattern, value):
                 return ValidationResult(
@@ -480,6 +485,14 @@ def get_jarvis_config_validator() -> ConfigValidator:
             env_var="ANTHROPIC_API_KEY",
             description="Anthropic API key for Claude",
             sensitive=True
+        ),
+        ConfigField(
+            name="ANTHROPIC_BASE_URL",
+            config_type=ConfigType.URL,
+            required=False,
+            env_var="ANTHROPIC_BASE_URL",
+            description="Anthropic API base URL override (e.g., Ollama local gateway)",
+            sensitive=False
         ),
     ])
 

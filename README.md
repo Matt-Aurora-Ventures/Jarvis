@@ -2805,6 +2805,30 @@ ruff check core/ --fix
 mypy core/ --ignore-missing-imports
 ```
 
+### Local Claude Code with Ollama (Free + Offline)
+
+JARVIS can be paired with Claude Code running against local Ollama models (no cloud API calls). This is ideal for coding workflows that must stay fully offline.
+
+1. Install Ollama (0.14.0+) and pull a coding model:
+   ```bash
+   ollama pull qwen3-coder
+   ```
+2. Start Ollama:
+   ```bash
+   ollama serve
+   ```
+3. Install Claude Code, then point it at Ollama's Anthropic-compatible endpoint:
+   ```bash
+   export ANTHROPIC_API_KEY=ollama
+   export ANTHROPIC_BASE_URL=http://localhost:11434/v1
+   ```
+4. Run Claude Code against the local model:
+   ```bash
+   claude --model qwen3-coder
+   ```
+
+**Tip:** If you also want JARVIS to use the same local model, set `OLLAMA_URL=http://localhost:11434` and `OLLAMA_MODEL=qwen3-coder` in your `.env`. JARVIS also honors `ANTHROPIC_BASE_URL` to route Claude calls (bots, tools, and codegen) through Ollama. Remove `ANTHROPIC_BASE_URL` to return Claude Code to the hosted Anthropic API.
+
 ---
 
 ## 🔐 Security
