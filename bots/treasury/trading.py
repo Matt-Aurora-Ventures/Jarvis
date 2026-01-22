@@ -605,6 +605,8 @@ class TradingEngine:
 
         Falls back to Jupiter if Bags fails or isn't configured.
 
+        Uses unified recovery engine for retries and circuit breaking.
+
         Args:
             quote: SwapQuote from Jupiter (used for Jupiter execution or as fallback)
             input_mint: Input token mint (optional, extracted from quote if not provided)
@@ -619,6 +621,34 @@ class TradingEngine:
         if output_mint is None:
             output_mint = quote.output_mint
 
+        # =====================================================================
+        # RECOVERY ADAPTER - Unified retry/circuit-breaker handling
+        # =====================================================================
+        try:
+            from core.recovery.adapters import TradingAdapter
+
+            adapter = TradingAdapter()
+
+            # Check if trading circuit is open (too many failures)
+            if not adapter.can_execute():
+                status = adapter.get_status()
+                logger.warning(
+                    f"Trading circuit breaker OPEN - "
+                    f"failures: {status.get('consecutive_failures', 0)}, "
+                    f"recovers_at: {status.get('circuit_open_until', 'unknown')}"
+                )
+                return SwapResult(
+                    success=False,
+                    error="Trading temporarily disabled (circuit breaker open)",
+                )
+
+        except ImportError:
+            adapter = None
+            logger.debug("Recovery adapter not available, using direct execution")
+        except Exception as e:
+            adapter = None
+            logger.warning(f"Recovery adapter error (continuing): {e}")
+
         # Try Bags.fm first if available (earns partner fees)
         if self.bags_adapter is not None:
             try:
@@ -632,7 +662,7 @@ class TradingEngine:
                 )
 
                 # Build SwapResult compatible with existing code
-                return SwapResult(
+                result = SwapResult(
                     success=True,
                     signature=signature,
                     input_mint=input_mint,
@@ -643,12 +673,30 @@ class TradingEngine:
                     error=None,
                 )
 
+                # Record success with recovery adapter
+                if adapter:
+                    adapter.record_success("execute_swap_bags")
+
+                return result
+
             except Exception as bags_error:
                 logger.warning(f"Bags.fm swap failed, falling back to Jupiter: {bags_error}")
+                # Record failure but don't trip circuit (fallback available)
+                if adapter:
+                    adapter.record_failure("execute_swap_bags", str(bags_error))
                 # Fall through to Jupiter execution
 
         # Execute via Jupiter (fallback or primary if Bags not configured)
-        return await self.jupiter.execute_swap(quote, self.wallet)
+        result = await self.jupiter.execute_swap(quote, self.wallet)
+
+        # Record result with recovery adapter
+        if adapter:
+            if result.success:
+                adapter.record_success("execute_swap_jupiter")
+            else:
+                adapter.record_failure("execute_swap_jupiter", result.error or "Unknown")
+
+        return result
 
     # ==========================================================================
     # TOKEN SAFETY METHODS - Protect against rug pulls and illiquid tokens

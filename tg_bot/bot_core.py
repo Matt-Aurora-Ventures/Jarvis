@@ -280,6 +280,20 @@ def _get_reply_mode() -> str:
     return mode
 
 
+def _looks_like_request(message: str) -> bool:
+    if "?" in message:
+        return True
+    request_verbs = (
+        "can", "could", "would", "should", "do", "does", "is", "are",
+        "what", "why", "how", "when", "where",
+        "help", "explain", "show", "give", "tell",
+        "analyze", "check", "run", "trade", "buy", "sell",
+        "price", "status", "balance", "positions", "report", "summarize",
+        "deploy", "restart", "pull", "push", "update",
+    )
+    return any(f"{verb} " in message or message.startswith(f"{verb} ") for verb in request_verbs)
+
+
 def _should_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     if not update.message or not update.message.text:
         return False
@@ -298,15 +312,16 @@ def _should_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     if mode == "all":
         return True
 
-    # Mentions or replies in group chats.
+    # Mentions or replies in group chats (only respond to direct requests).
     text = update.message.text or ""
+    text_lower = text.lower().strip()
     bot_username = getattr(context.bot, "username", "")
-    if bot_username and f"@{bot_username}" in text:
-        return True
+    if bot_username and f"@{bot_username.lower()}" in text_lower:
+        return _looks_like_request(text_lower)
 
     reply_to = update.message.reply_to_message
     if reply_to and reply_to.from_user and reply_to.from_user.id == context.bot.id:
-        return True
+        return _looks_like_request(text_lower)
 
     return False
 
@@ -332,16 +347,16 @@ def _is_message_for_jarvis(text: str, update: Update) -> bool:
     if update.effective_chat and update.effective_chat.type == "private":
         return True
 
-    # Reply to Jarvis's message - this IS continuing a conversation with Jarvis
+    # Reply to Jarvis's message - continue only if it's a request
     if update.message and update.message.reply_to_message:
         reply_to = update.message.reply_to_message
         if reply_to.from_user and reply_to.from_user.is_bot:
-            return True
+            return _looks_like_request(text_lower)
 
     # Bot was @mentioned explicitly
     bot_username = os.environ.get("TELEGRAM_BOT_USERNAME", "").lower()
     if bot_username and f"@{bot_username}" in text_lower:
-        return True
+        return _looks_like_request(text_lower)
 
     # Direct mentions of Jarvis by name (not just "j" which is too generic)
     # Must include "jarvis" explicitly somewhere in the message
@@ -353,7 +368,7 @@ def _is_message_for_jarvis(text: str, update: Update) -> bool:
     ]
     for pattern in jarvis_patterns:
         if pattern in text_lower:
-            return True
+            return _looks_like_request(text_lower)
 
     # Otherwise, DON'T respond - let humans talk without the bot chiming in
     return False

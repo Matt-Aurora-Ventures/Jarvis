@@ -42,6 +42,9 @@ from core.utils.instance_lock import acquire_instance_lock
 # Demo UI (v6.0.0 - Trojan-style trading interface)
 from tg_bot.handlers.demo import demo, demo_callback, demo_message_handler
 
+# Raid Bot (v6.1.0 - Twitter engagement campaigns)
+from tg_bot.handlers.raid import register_raid_handlers
+
 
 def register_handlers(app: Application, config) -> None:
     """Register command, callback, and message handlers on the Telegram app."""
@@ -107,6 +110,9 @@ def register_handlers(app: Application, config) -> None:
     # Demo UI - Beautiful Trojan-style trading interface (v6.0.0)
     app.add_handler(CommandHandler("demo", demo))
     app.add_handler(CallbackQueryHandler(demo_callback, pattern=r"^demo:"))
+
+    # Raid Bot - Twitter engagement campaigns (v6.1.0)
+    register_raid_handlers(app, app.job_queue)
 
     # Paper Trading Simulator (SOL-based, real prices)
     app.add_handler(CommandHandler("sim", sim))
