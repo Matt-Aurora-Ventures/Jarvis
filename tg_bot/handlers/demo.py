@@ -47,6 +47,7 @@ from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -7921,11 +7922,15 @@ Coming soon in V2!
             )
 
         # Edit the message with new content
-        await query.message.edit_text(
-            text,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=keyboard,
-        )
+        try:
+            await query.message.edit_text(
+                text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard,
+            )
+        except BadRequest as e:
+            if "Message is not modified" not in str(e):
+                raise
 
     except Exception as e:
         logger.error(f"Demo callback error: {e}")
