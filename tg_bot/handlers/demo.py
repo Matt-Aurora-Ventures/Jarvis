@@ -7010,6 +7010,40 @@ You are about to sell *{position_count} positions*
         elif action == "execute_sell_all":
             # Execute sell all positions with success fee tracking
             theme = JarvisTheme
+
+            # =====================================================================
+            # FLOW CONTROLLER - Validate sell all action
+            # =====================================================================
+            try:
+                from tg_bot.services.flow_controller import get_flow_controller, FlowDecision
+
+                flow = get_flow_controller()
+                flow_result = await flow.process_command(
+                    command="sell",
+                    args=["all"],
+                    user_id=user_id,
+                    chat_id=query.message.chat_id,
+                    is_admin=True,
+                    force_execute=True,  # User clicked confirm
+                )
+
+                if flow_result.decision == FlowDecision.HOLD:
+                    text, keyboard = DemoMenuBuilder.error_message(
+                        f"Sell blocked: {flow_result.hold_reason}"
+                    )
+                    await query.message.edit_text(
+                        text,
+                        parse_mode=ParseMode.MARKDOWN,
+                        reply_markup=keyboard,
+                    )
+                    return
+
+                logger.info(f"Flow approved sell all (checks: {flow_result.checks_performed})")
+            except ImportError:
+                pass
+            except Exception as e:
+                logger.warning(f"Flow validation error (continuing): {e}")
+
             try:
                 from tg_bot import bot_core as bot_module
                 engine = await bot_module._get_treasury_engine()
@@ -7319,6 +7353,42 @@ Coming soon in V2!
             if len(parts) >= 4:
                 token_addr = parts[2]
                 amount = float(parts[3])
+
+                # =====================================================================
+                # FLOW CONTROLLER - Validate action before execution
+                # =====================================================================
+                try:
+                    from tg_bot.services.flow_controller import get_flow_controller, FlowDecision
+
+                    flow = get_flow_controller()
+                    flow_result = await flow.process_command(
+                        command="buy",
+                        args=[token_addr, str(amount)],
+                        user_id=user_id,
+                        chat_id=query.message.chat_id,
+                        is_admin=True,  # Demo is admin-only
+                        force_execute=True,  # User already clicked confirm button
+                    )
+
+                    if flow_result.decision == FlowDecision.HOLD:
+                        text, keyboard = DemoMenuBuilder.error_message(
+                            f"Trade blocked: {flow_result.hold_reason}"
+                        )
+                        await query.message.edit_text(
+                            text,
+                            parse_mode=ParseMode.MARKDOWN,
+                            reply_markup=keyboard,
+                        )
+                        return
+
+                    logger.info(
+                        f"Flow approved buy: {token_addr[:8]}... for {amount} SOL "
+                        f"(checks: {flow_result.checks_performed})"
+                    )
+                except ImportError:
+                    logger.debug("Flow controller not available, proceeding")
+                except Exception as e:
+                    logger.warning(f"Flow validation error (continuing): {e}")
 
                 # Execute via treasury engine
                 try:
