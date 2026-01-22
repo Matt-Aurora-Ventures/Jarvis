@@ -641,6 +641,36 @@ class SignalService:
         except Exception as e:
             logger.warning(f"DexScreener momentum failed: {e}")
 
+        # Bags.fm fallback - ensure tradable tokens even if DexScreener is down
+        try:
+            from core.trading.bags_client import get_bags_client
+
+            bags_client = get_bags_client()
+            if bags_client:
+                bags_tokens = await bags_client.get_top_tokens_by_volume(limit=limit)
+                if bags_tokens:
+                    for token in bags_tokens[:limit]:
+                        sig = TokenSignal(
+                            address=token.address,
+                            symbol=token.symbol,
+                            name=token.name,
+                            price_usd=token.price_usd,
+                            volume_24h=token.volume_24h,
+                            liquidity_usd=token.liquidity,
+                            sentiment="neutral",
+                            sentiment_score=0.5,
+                        )
+                        sig.sources_used.append("bags")
+                        self._calculate_signal(sig)
+                        signals.append(sig)
+
+                    if signals:
+                        signals.sort(key=lambda s: s.signal_score, reverse=True)
+                        return signals[:limit]
+
+        except Exception as e:
+            logger.warning(f"Bags fallback failed: {e}")
+
         # Fallback: fetch known popular tokens individually
         known_tokens = [
             ("So11111111111111111111111111111111111111112", "SOL", "Wrapped SOL"),
