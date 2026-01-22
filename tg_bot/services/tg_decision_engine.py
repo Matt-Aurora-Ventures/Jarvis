@@ -293,6 +293,25 @@ class TelegramDecisionEngine:
 
         return await self.engine.decide(context)
 
+    async def should_respond(
+        self,
+        message: str,
+        user_id: str,
+        chat_type: str = "group",
+        is_admin: bool = False,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> DecisionResult:
+        """Backwards-compatible alias for should_respond_to_message."""
+        is_reply_to_bot = False
+        if metadata and isinstance(metadata, dict):
+            is_reply_to_bot = bool(metadata.get("is_reply_to_bot", False))
+        return await self.should_respond_to_message(
+            message_text=message,
+            user_id=int(user_id) if str(user_id).isdigit() else 0,
+            chat_type=chat_type or "group",
+            is_reply_to_bot=is_reply_to_bot,
+        )
+
     async def should_execute_trade(
         self,
         action: str,

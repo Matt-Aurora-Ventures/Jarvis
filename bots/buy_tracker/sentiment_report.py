@@ -2291,9 +2291,11 @@ Be specific about price targets and key levels to watch."""
             for chunk in chunks:
                 msg_num += 1
                 try:
+                    # Escape literal "<" before numbers/currency to avoid HTML parse errors
+                    safe_chunk = re.sub(r"<(?=[$0-9])", "&lt;", chunk)
                     payload = {
                         "chat_id": self.chat_id,
-                        "text": chunk,
+                        "text": safe_chunk,
                         "parse_mode": "HTML",
                         "disable_web_page_preview": "true",
                     }
