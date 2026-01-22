@@ -276,6 +276,29 @@ async def get_ai_sentiment_for_token(address: str) -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Could not get Bags fallback sentiment: {e}")
 
+    # Fallback to Jupiter/DexScreener token data for price + symbol
+    try:
+        from bots.treasury.jupiter import JupiterClient
+        jupiter = JupiterClient()
+        token = await jupiter.get_token_info(address)
+        if token:
+            return {
+                "symbol": token.symbol or address[:6],
+                "price": token.price_usd,
+                "change_24h": getattr(token, "price_change_24h", 0),
+                "volume": getattr(token, "volume_24h", 0),
+                "liquidity": getattr(token, "liquidity", 0),
+                "sentiment": "neutral",
+                "score": 0.5,
+                "confidence": 0.0,
+                "summary": "Jupiter/Dex fallback",
+                "signal": "NEUTRAL",
+                "signal_score": 0.5,
+                "reasons": ["Jupiter fallback"],
+            }
+    except Exception as e:
+        logger.warning(f"Could not get Jupiter fallback sentiment: {e}")
+
     return {"sentiment": "unknown", "score": 0, "confidence": 0}
 
 
