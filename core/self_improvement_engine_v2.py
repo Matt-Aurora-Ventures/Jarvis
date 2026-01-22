@@ -2,7 +2,7 @@
 Self-Improvement Engine with Mirror Test
 
 Daily dream cycle that:
-1. Replays logs using Minimax 2.1
+1. Replays logs using the centralized ModelRouter
 2. Scores own performance
 3. Refactors code/config
 4. Validates + auto-applies improvements
@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
-from core import config, life_os_router, providers
+from core import config, providers
+from core.model_router import get_model_router, RoutingPriority
 from core.evolution.gym import mirror_test, replay_sim, performance_scorer, refactor_agent
 
 
@@ -38,13 +39,13 @@ class MirrorTestResult:
 
 class SelfImprovementEngine:
     """
-    Nightly self-correction engine using Minimax 2.1.
+    Nightly self-correction engine using the centralized ModelRouter.
     
     The "Mirror Test": Jarvis watches itself and learns.
     """
     
     def __init__(self):
-        self.router = life_os_router.MiniMaxRouter()
+        self.router = get_model_router()
         self.mirror = mirror_test.MirrorTest()
         self.replay = replay_sim.ReplaySimulator()
         self.scorer = performance_scorer.PerformanceScorer()
@@ -74,7 +75,7 @@ class SelfImprovementEngine:
         print(f"📋 Ingested {len(logs)} log entries from last 24h")
         
         # [STEP 3] Replay decisions using current Minimax model
-        replay_results = self._replay_with_minimax(logs)
+        replay_results = self._replay_with_router(logs)
         print(f"🎬 Replayed {len(replay_results)} decisions")
         
         # [STEP 4] Score performance (latency, accuracy, satisfaction)
@@ -185,9 +186,9 @@ class SelfImprovementEngine:
         
         return logs
     
-    def _replay_with_minimax(self, logs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _replay_with_router(self, logs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Re-run each decision using current Minimax model.
+        Re-run each decision using the centralized ModelRouter.
         
         Compare:
         - What did we do? (original response)
@@ -206,13 +207,7 @@ class SelfImprovementEngine:
                 continue
             
             try:
-                # Use Minimax for reflection
-                new_response = self.router.query(
-                    prompt=prompt,
-                    max_tokens=2048,
-                    temperature=0.7,
-                    force_local=False,  # Use cloud Minimax for quality
-                )
+                new_response = self._route_reflection(prompt)
                 
                 replay_results.append({
                     "original": {
@@ -222,9 +217,9 @@ class SelfImprovementEngine:
                         "success": log.get("success", False),
                     },
                     "replay": {
-                        "output": new_response.text,
-                        "latency_ms": new_response.latency_ms,
-                        "model": new_response.model,
+                        "output": new_response["output"],
+                        "latency_ms": new_response["latency_ms"],
+                        "model": new_response["model"],
                     },
                     "timestamp": log.get("timestamp"),
                 })
@@ -233,6 +228,30 @@ class SelfImprovementEngine:
                 continue
         
         return replay_results
+
+    def _route_reflection(self, prompt: str) -> Dict[str, Any]:
+        """Route reflection prompt through the centralized ModelRouter."""
+        import asyncio
+
+        async def _route():
+            return await self.router.route(
+                task=prompt,
+                priority=RoutingPriority.ACCURACY,
+                max_tokens=2048,
+                use_cache=False,
+            )
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            result = asyncio.run(_route())
+            return {
+                "output": result.response,
+                "latency_ms": result.latency_ms,
+                "model": result.provider.model_id,
+            }
+
+        raise RuntimeError("Async loop running; reflection routing requires sync context.")
     
     def _score_performance(
         self, logs: List[Dict[str, Any]], replay_results: List[Dict[str, Any]]
