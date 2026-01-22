@@ -36,21 +36,9 @@ class JarvisVoice:
     """Generate content in Jarvis's authentic voice using Claude."""
     
     def __init__(self):
-        self.api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        self._client = None
-        self.cli_enabled = os.getenv("CLAUDE_CLI_ENABLED", "").lower() in ("1", "true", "yes", "on")
+        # CLI ONLY - No Anthropic API (per user requirement)
+        self.cli_enabled = True  # Always enabled - CLI is the only option
         self.cli_path = os.getenv("CLAUDE_CLI_PATH", "claude")
-
-    def _get_client(self):
-        """Get Anthropic client."""
-        if self._client is None:
-            try:
-                import anthropic
-                self._client = anthropic.Anthropic(api_key=self.api_key)
-            except ImportError:
-                logger.error("anthropic package not installed")
-                return None
-        return self._client
 
     def _cli_available(self) -> bool:
         return bool(shutil.which(self.cli_path))
@@ -117,10 +105,13 @@ class JarvisVoice:
 
             if platform.system() == "Windows":
                 # On Windows, run through cmd.exe for .cmd files
+                # CRITICAL: Explicitly use UTF-8 encoding to prevent corruption of special chars (em dashes, etc.)
                 completed = subprocess.run(
                     ["cmd", "/c"] + cmd_args,
                     capture_output=True,
                     text=True,
+                    encoding='utf-8',
+                    errors='replace',  # Replace invalid UTF-8 instead of crashing
                     timeout=60,
                     check=False,
                     env=exec_env,
@@ -130,6 +121,8 @@ class JarvisVoice:
                     cmd_args,
                     capture_output=True,
                     text=True,
+                    encoding='utf-8',
+                    errors='replace',
                     timeout=60,
                     check=False,
                     env=exec_env,
@@ -168,8 +161,8 @@ class JarvisVoice:
         Returns:
             Tweet text in Jarvis voice, or None on failure
         """
-        if not self.api_key and not self._cli_available():
-            logger.error("Neither ANTHROPIC_API_KEY nor Claude CLI available")
+        if not self._cli_available():
+            logger.error("Claude CLI not available - CLI is the only supported method")
             return None
 
         try:
@@ -226,91 +219,11 @@ Respond with ONLY the tweet text. No quotes, no explanation, no markdown. Just t
                     is_valid, issues = validate_jarvis_response(tweet)
                     if not is_valid:
                         logger.warning(f"Tweet validation issues: {issues}")
-                    logger.info("Tweet generated via Claude CLI (saving API credits)")
+                    logger.info("Tweet generated via Claude CLI")
                     return tweet
-                logger.warning("Claude CLI returned no output, falling back to API...")
-
-            # FALLBACK TO API if CLI unavailable or failed
-            client = self._get_client()
-            if not client:
-                logger.error("API client unavailable after CLI failed")
-                return None
-            
-            # Use sync client in async context
-            loop = asyncio.get_event_loop()
-            
-            message = await loop.run_in_executor(
-                None,
-                lambda: client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=max_tokens,
-                    system=JARVIS_SYSTEM_PROMPT,
-                    messages=[
-                        {"role": "user", "content": full_prompt}
-                    ]
-                )
-            )
-            
-            if message and message.content:
-                tweet = message.content[0].text.strip()
-
-                # Clean up JSON artifacts if LLM returned JSON
-                import re
-                if tweet.startswith("{") and "}" in tweet:
-                    try:
-                        import json
-                        data = json.loads(tweet)
-                        if isinstance(data, dict):
-                            tweet = data.get("tweet", data.get("text", data.get("content", "")))
-                    except json.JSONDecodeError:
-                        # Extract text from JSON-like pattern
-                        match = re.search(r'"(?:tweet|text|content)"\s*:\s*"([^"]+)"', tweet)
-                        if match:
-                            tweet = match.group(1)
-
-                # Remove markdown code blocks
-                tweet = re.sub(r'```[\w]*\n?', '', tweet)
-                tweet = re.sub(r'```', '', tweet)
-
-                # Clean up - remove quotes if wrapped
-                tweet = tweet.strip('"\'')
-
-                # Ensure lowercase
-                tweet = tweet.lower() if tweet[0].isupper() else tweet
-
-                # Ensure under 4,000 chars (X Premium limit) with word-boundary truncation
-                max_chars = 4000
-                if len(tweet) > max_chars:
-                    truncated = tweet[:max_chars - 3]
-                    last_space = truncated.rfind(' ')
-                    if last_space > max_chars - 500:
-                        tweet = tweet[:last_space] + "..."
-                    else:
-                        tweet = truncated + "..."
-                
-                # Remove nfa if it was added - we don't want it every tweet
-                # Only keep nfa ~20% of the time
-                import random
-                if tweet.endswith(' nfa') or tweet.endswith('. nfa'):
-                    if random.random() > 0.2:  # 80% chance to remove
-                        tweet = tweet.rsplit(' nfa', 1)[0]
-                        if not tweet.endswith('.'):
-                            tweet += '.'
-
-                # Validate against voice bible rules
-                is_valid, issues = validate_jarvis_response(tweet)
-                if not is_valid:
-                    logger.warning(f"Tweet validation issues: {issues}")
-                    # Auto-fix common issues
-                    for issue in issues:
-                        if "Should be lowercase" in issue:
-                            tweet = tweet[0].lower() + tweet[1:]
-                        if "Too long" in issue:
-                            tweet = tweet[:277] + "..."
-                        # For banned phrases/emojis - regenerate (in the future)
-                        # For now just log the warning
-
-                return tweet
+                else:
+                    logger.error("Claude CLI returned no output - unable to generate tweet")
+                    return None
                 
         except Exception as e:
             logger.error(f"Jarvis voice generation error: {e}")
