@@ -38,6 +38,7 @@ Memory Hierarchy:
 import logging
 import asyncio
 import json
+import hashlib
 import os
 import tempfile
 from pathlib import Path
@@ -89,6 +90,29 @@ def get_success_fee_manager():
     except ImportError:
         logger.warning("Success fee manager not available")
         return None
+
+
+def _register_token_id(context, token_address: str) -> str:
+    """Register a short callback-safe token id for a given address."""
+    if not token_address:
+        return ""
+    token_map = context.user_data.setdefault("token_id_map", {})
+    reverse_map = context.user_data.setdefault("token_id_reverse", {})
+    if token_address in reverse_map:
+        return reverse_map[token_address]
+    token_id = hashlib.sha1(token_address.encode("utf-8")).hexdigest()[:10]
+    token_map[token_id] = token_address
+    reverse_map[token_address] = token_id
+    return token_id
+
+
+def _resolve_token_ref(context, token_ref: str) -> str:
+    """Resolve short token id back to full address (fallback to ref)."""
+    if not token_ref:
+        return token_ref
+    if len(token_ref) >= 32:
+        return token_ref
+    return context.user_data.get("token_id_map", {}).get(token_ref, token_ref)
 
 
 def _get_demo_wallet_password() -> Optional[str]:
@@ -191,6 +215,11 @@ async def get_ai_sentiment_for_token(address: str) -> Dict[str, Any]:
             address, include_sentiment=True
         )
         return {
+            "symbol": signal.symbol,
+            "price": signal.price_usd,
+            "change_24h": signal.price_change_24h,
+            "volume": signal.volume_24h,
+            "liquidity": signal.liquidity_usd,
             "sentiment": signal.sentiment,
             "score": signal.sentiment_score,
             "confidence": signal.sentiment_confidence,
@@ -265,6 +294,18 @@ def _default_tp_sl(conviction: str) -> Tuple[int, int]:
     if conviction == "MEDIUM":
         return 22, 12
     return 15, 15
+
+
+def _grade_for_signal_name(signal_name: str) -> str:
+    mapping = {
+        "STRONG_BUY": "A",
+        "BUY": "B+",
+        "NEUTRAL": "C+",
+        "SELL": "C",
+        "STRONG_SELL": "C",
+        "AVOID": "C",
+    }
+    return mapping.get((signal_name or "").upper(), "B")
 
 
 def _pick_key(pick: Dict[str, Any]) -> str:
@@ -2339,6 +2380,7 @@ position hits your target!
     def dca_setup(
         token_symbol: str = None,
         token_address: str = None,
+        token_ref: str = None,
         watchlist: List[Dict[str, Any]] = None,
     ) -> Tuple[str, InlineKeyboardMarkup]:
         """
@@ -2365,9 +2407,9 @@ position hits your target!
             if watchlist:
                 for token in watchlist[:6]:  # Max 6
                     sym = token.get("symbol", "???")
-                    addr = token.get("address", "")
+                    token_id = token.get("token_id") or token.get("address", "")
                     keyboard.append([
-                        InlineKeyboardButton(f"📈 {sym}", callback_data=f"demo:dca_select:{addr}"),
+                        InlineKeyboardButton(f"📈 {sym}", callback_data=f"demo:dca_select:{token_id}"),
                     ])
             else:
                 lines.append("_Add tokens to watchlist first!_")
@@ -2384,6 +2426,7 @@ position hits your target!
         else:
             # Show DCA configuration
             short_addr = f"{token_address[:6]}...{token_address[-4:]}" if token_address else "N/A"
+            token_ref = token_ref or token_address
 
             lines = [
                 f"📅 *CONFIGURE DCA: {token_symbol}*",
@@ -2400,14 +2443,14 @@ position hits your target!
             keyboard = [
                 # Amount options
                 [
-                    InlineKeyboardButton("0.1 SOL", callback_data=f"demo:dca_amount:{token_address}:0.1"),
-                    InlineKeyboardButton("0.25 SOL", callback_data=f"demo:dca_amount:{token_address}:0.25"),
-                    InlineKeyboardButton("0.5 SOL", callback_data=f"demo:dca_amount:{token_address}:0.5"),
+                    InlineKeyboardButton("0.1 SOL", callback_data=f"demo:dca_amount:{token_ref}:0.1"),
+                    InlineKeyboardButton("0.25 SOL", callback_data=f"demo:dca_amount:{token_ref}:0.25"),
+                    InlineKeyboardButton("0.5 SOL", callback_data=f"demo:dca_amount:{token_ref}:0.5"),
                 ],
                 [
-                    InlineKeyboardButton("1 SOL", callback_data=f"demo:dca_amount:{token_address}:1"),
-                    InlineKeyboardButton("2 SOL", callback_data=f"demo:dca_amount:{token_address}:2"),
-                    InlineKeyboardButton("5 SOL", callback_data=f"demo:dca_amount:{token_address}:5"),
+                    InlineKeyboardButton("1 SOL", callback_data=f"demo:dca_amount:{token_ref}:1"),
+                    InlineKeyboardButton("2 SOL", callback_data=f"demo:dca_amount:{token_ref}:2"),
+                    InlineKeyboardButton("5 SOL", callback_data=f"demo:dca_amount:{token_ref}:5"),
                 ],
                 [
                     InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:dca_new"),
@@ -2421,11 +2464,13 @@ position hits your target!
         token_symbol: str,
         token_address: str,
         amount: float,
+        token_ref: Optional[str] = None,
     ) -> Tuple[str, InlineKeyboardMarkup]:
         """Select DCA frequency."""
         theme = JarvisTheme
 
         short_addr = f"{token_address[:6]}...{token_address[-4:]}"
+        token_ref = token_ref or token_address
 
         lines = [
             f"📅 *DCA FREQUENCY*",
@@ -2441,16 +2486,16 @@ position hits your target!
 
         keyboard = [
             [
-                InlineKeyboardButton("⏰ Every Hour", callback_data=f"demo:dca_create:{token_address}:{amount}:hourly"),
+                InlineKeyboardButton("⏰ Every Hour", callback_data=f"demo:dca_create:{token_ref}:{amount}:hourly"),
             ],
             [
-                InlineKeyboardButton("📅 Daily (Recommended)", callback_data=f"demo:dca_create:{token_address}:{amount}:daily"),
+                InlineKeyboardButton("📅 Daily (Recommended)", callback_data=f"demo:dca_create:{token_ref}:{amount}:daily"),
             ],
             [
-                InlineKeyboardButton("📆 Weekly", callback_data=f"demo:dca_create:{token_address}:{amount}:weekly"),
+                InlineKeyboardButton("📆 Weekly", callback_data=f"demo:dca_create:{token_ref}:{amount}:weekly"),
             ],
             [
-                InlineKeyboardButton(f"{theme.BACK} Back", callback_data=f"demo:dca_select:{token_address}"),
+                InlineKeyboardButton(f"{theme.BACK} Back", callback_data=f"demo:dca_select:{token_ref}"),
             ],
         ]
 
@@ -2733,9 +2778,11 @@ _Stop updates every 30 seconds_
         amount_sol: float,
         estimated_tokens: float,
         price_usd: float,
+        token_ref: Optional[str] = None,
     ) -> Tuple[str, InlineKeyboardMarkup]:
         """Build buy confirmation screen."""
         theme = JarvisTheme
+        token_ref = token_ref or token_address
 
         short_addr = f"{token_address[:6]}...{token_address[-4:]}"
 
@@ -2756,7 +2803,7 @@ _Stop updates every 30 seconds_
 
         keyboard = [
             [
-                InlineKeyboardButton(f"{theme.SUCCESS} Confirm Buy", callback_data=f"demo:confirm_buy:{token_address}:{amount_sol}"),
+                InlineKeyboardButton(f"{theme.SUCCESS} Confirm Buy", callback_data=f"demo:execute_buy:{token_ref}:{amount_sol}"),
             ],
             [
                 InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:main"),
@@ -2828,7 +2875,7 @@ Reply with a Solana token address to buy.
             change_24h = token.get("change_24h", 0)
             volume = token.get("volume", 0)
             liquidity = token.get("liquidity", 0)
-            address = token.get("address", "")
+            token_ref = token.get("token_id") or token.get("address", "")
 
             # AI sentiment overlay
             sentiment = token.get("sentiment", "neutral")
@@ -2854,15 +2901,15 @@ Reply with a Solana token address to buy.
             lines.append(f"   {sent_emoji} AI: {score_bar} | Vol: ${volume/1000:.0f}K")
             lines.append("")
 
-            if address:
+            if token_ref:
                 keyboard.append([
                     InlineKeyboardButton(
                         f"{theme.BUY} Buy {symbol}",
-                        callback_data=f"demo:quick_buy:{address}"
+                        callback_data=f"demo:quick_buy:{token_ref}"
                     ),
                     InlineKeyboardButton(
                         f"{theme.CHART} Analyze",
-                        callback_data=f"demo:analyze:{address}"
+                        callback_data=f"demo:analyze:{token_ref}"
                     ),
                 ])
 
@@ -2976,7 +3023,7 @@ Reply with a Solana token address to buy.
                 symbol = pick.get("symbol", "???")
                 conviction = pick.get("conviction", "MEDIUM")
                 thesis = pick.get("thesis", "")[:40]
-                address = pick.get("address", "")
+                token_ref = pick.get("token_id") or pick.get("address", "")
                 tp = pick.get("tp_target", 0)
                 sl = pick.get("sl_target", 0)
                 ai_confidence = pick.get("ai_confidence", 0)
@@ -3006,15 +3053,15 @@ Reply with a Solana token address to buy.
                     lines.append(f"   {' | '.join(details)}")
                 lines.append("")
 
-                if address:
+                if token_ref:
                     keyboard.append([
                         InlineKeyboardButton(
                             f"{theme.BUY} Buy {symbol}",
-                            callback_data=f"demo:quick_buy:{address}"
+                            callback_data=f"demo:quick_buy:{token_ref}"
                         ),
                         InlineKeyboardButton(
                             f"{theme.CHART} Chart",
-                            callback_data=f"demo:analyze:{address}"
+                            callback_data=f"demo:analyze:{token_ref}"
                         ),
                     ])
         else:
@@ -3289,7 +3336,7 @@ Reply with a Solana token address to buy.
                 score = pick.get("score", 0)
                 tp = pick.get("tp", 0)
                 sl = pick.get("sl", 0)
-                address = pick.get("address", "")
+                token_ref = pick.get("token_id") or pick.get("address", "")
                 conviction = pick.get("conviction", "")
 
                 # Sentiment emoji
@@ -3321,16 +3368,16 @@ Reply with a Solana token address to buy.
                 lines.append("")
 
                 # Buy button with auto stop-loss
-                if address:
+                if token_ref:
                     sl_percent = sl if sl else 15  # Default 15% SL
                     keyboard.append([
                         InlineKeyboardButton(
                             f"🛒 Buy {symbol}",
-                            callback_data=f"demo:hub_buy:{address}:{sl_percent}"
+                            callback_data=f"demo:hub_buy:{token_ref}:{sl_percent}"
                         ),
                         InlineKeyboardButton(
                             f"📊 Details",
-                            callback_data=f"demo:hub_detail:{address}"
+                            callback_data=f"demo:hub_detail:{token_ref}"
                         ),
                     ])
 
@@ -3587,12 +3634,14 @@ Reply with a Solana token address to buy.
         address: str,
         price: float,
         auto_sl_percent: float = 15,
+        token_ref: Optional[str] = None,
         amount_options: List[float] = None,
     ) -> Tuple[str, InlineKeyboardMarkup]:
         """
         Buy confirmation with automatic stop-loss setup.
         """
         theme = JarvisTheme
+        token_ref = token_ref or address
         amount_options = amount_options or [0.1, 0.25, 0.5, 1.0, 2.0]
 
         # Format price
@@ -3627,7 +3676,7 @@ Reply with a Solana token address to buy.
         for amt in amount_options:
             row.append(InlineKeyboardButton(
                 f"{amt} SOL",
-                callback_data=f"demo:hub_exec_buy:{address}:{amt}:{auto_sl_percent}"
+                callback_data=f"demo:hub_exec_buy:{token_ref}:{amt}:{auto_sl_percent}"
             ))
             if len(row) == 2:
                 keyboard.append(row)
@@ -3637,7 +3686,7 @@ Reply with a Solana token address to buy.
 
         keyboard.extend([
             [
-                InlineKeyboardButton("✏️ Custom SL %", callback_data=f"demo:hub_custom_sl:{address}"),
+                InlineKeyboardButton("✏️ Custom SL %", callback_data=f"demo:hub_custom_sl:{token_ref}"),
             ],
             [
                 InlineKeyboardButton(f"{theme.BACK} Cancel", callback_data="demo:sentiment_hub"),
@@ -3686,7 +3735,7 @@ Reply with a Solana token address to buy.
 
         for i, token in enumerate(tokens[:15], 1):
             symbol = token.get("symbol", "???")
-            address = token.get("address", "")
+            token_ref = token.get("token_id") or token.get("address", "")
             price = token.get("price_usd", 0)
             volume = token.get("volume_24h", 0)
             liquidity = token.get("liquidity", 0)
@@ -3749,15 +3798,15 @@ Reply with a Solana token address to buy.
             lines.append("")
 
             # Add buy/sell buttons for each token (groups of 3)
-            if address:
+            if token_ref:
                 keyboard.append([
                     InlineKeyboardButton(
                         f"🟢 Buy {symbol}",
-                        callback_data=f"demo:bags_buy:{address}:{default_tp_percent}:{default_sl_percent}"
+                        callback_data=f"demo:bags_buy:{token_ref}:{default_tp_percent}:{default_sl_percent}"
                     ),
                     InlineKeyboardButton(
                         f"🔍 Info",
-                        callback_data=f"demo:bags_info:{address}"
+                        callback_data=f"demo:bags_info:{token_ref}"
                     ),
                 ])
 
@@ -3812,6 +3861,7 @@ Reply with a Solana token address to buy.
         sentiment = token.get("sentiment", "neutral")
         sentiment_score = token.get("sentiment_score", 0.5)
         signal = token.get("signal", "NEUTRAL")
+        token_ref = token.get("token_id") or address
 
         # Format price
         if price < 0.0001:
@@ -3868,19 +3918,19 @@ Reply with a Solana token address to buy.
         # Buy buttons with different amounts
         keyboard = [
             [
-                InlineKeyboardButton(f"🟢 Buy 0.1 SOL", callback_data=f"demo:bags_exec:{address}:0.1:{default_tp_percent}:{default_sl_percent}"),
-                InlineKeyboardButton(f"🟢 Buy 0.25 SOL", callback_data=f"demo:bags_exec:{address}:0.25:{default_tp_percent}:{default_sl_percent}"),
+                InlineKeyboardButton(f"🟢 Buy 0.1 SOL", callback_data=f"demo:bags_exec:{token_ref}:0.1:{default_tp_percent}:{default_sl_percent}"),
+                InlineKeyboardButton(f"🟢 Buy 0.25 SOL", callback_data=f"demo:bags_exec:{token_ref}:0.25:{default_tp_percent}:{default_sl_percent}"),
             ],
             [
-                InlineKeyboardButton(f"🟢 Buy 0.5 SOL", callback_data=f"demo:bags_exec:{address}:0.5:{default_tp_percent}:{default_sl_percent}"),
-                InlineKeyboardButton(f"🟢 Buy 1 SOL", callback_data=f"demo:bags_exec:{address}:1:{default_tp_percent}:{default_sl_percent}"),
+                InlineKeyboardButton(f"🟢 Buy 0.5 SOL", callback_data=f"demo:bags_exec:{token_ref}:0.5:{default_tp_percent}:{default_sl_percent}"),
+                InlineKeyboardButton(f"🟢 Buy 1 SOL", callback_data=f"demo:bags_exec:{token_ref}:1:{default_tp_percent}:{default_sl_percent}"),
             ],
             [
-                InlineKeyboardButton(f"🟢 Buy 2 SOL", callback_data=f"demo:bags_exec:{address}:2:{default_tp_percent}:{default_sl_percent}"),
-                InlineKeyboardButton(f"🟢 Buy 5 SOL", callback_data=f"demo:bags_exec:{address}:5:{default_tp_percent}:{default_sl_percent}"),
+                InlineKeyboardButton(f"🟢 Buy 2 SOL", callback_data=f"demo:bags_exec:{token_ref}:2:{default_tp_percent}:{default_sl_percent}"),
+                InlineKeyboardButton(f"🟢 Buy 5 SOL", callback_data=f"demo:bags_exec:{token_ref}:5:{default_tp_percent}:{default_sl_percent}"),
             ],
             [
-                InlineKeyboardButton(f"✏️ Custom TP/SL", callback_data=f"demo:bags_custom_tpsl:{address}"),
+                InlineKeyboardButton(f"✏️ Custom TP/SL", callback_data=f"demo:bags_custom_tpsl:{token_ref}"),
             ],
             [
                 InlineKeyboardButton(f"{theme.BACK} Back to List", callback_data="demo:bags_fm"),
@@ -3984,6 +4034,7 @@ Reply with a Solana token address to buy.
         if hottest_token:
             symbol = hottest_token.get("symbol", "UNKNOWN")
             address = hottest_token.get("address", "")
+            token_ref = hottest_token.get("token_id") or address
             price = hottest_token.get("price", 0)
             change_24h = hottest_token.get("change_24h", 0)
             volume = hottest_token.get("volume_24h", 0)
@@ -4069,16 +4120,16 @@ Reply with a Solana token address to buy.
             keyboard = [
                 # Quick snipe amounts
                 [
-                    InlineKeyboardButton(f"⚡ 0.1 SOL", callback_data=f"demo:snipe_exec:{address}:0.1"),
-                    InlineKeyboardButton(f"⚡ 0.25 SOL", callback_data=f"demo:snipe_exec:{address}:0.25"),
+                    InlineKeyboardButton(f"⚡ 0.1 SOL", callback_data=f"demo:snipe_exec:{token_ref}:0.1"),
+                    InlineKeyboardButton(f"⚡ 0.25 SOL", callback_data=f"demo:snipe_exec:{token_ref}:0.25"),
                 ],
                 [
-                    InlineKeyboardButton(f"⚡ 0.5 SOL", callback_data=f"demo:snipe_exec:{address}:0.5"),
-                    InlineKeyboardButton(f"⚡ 1 SOL", callback_data=f"demo:snipe_exec:{address}:1"),
+                    InlineKeyboardButton(f"⚡ 0.5 SOL", callback_data=f"demo:snipe_exec:{token_ref}:0.5"),
+                    InlineKeyboardButton(f"⚡ 1 SOL", callback_data=f"demo:snipe_exec:{token_ref}:1"),
                 ],
                 [
                     InlineKeyboardButton(f"🔄 Refresh Token", callback_data="demo:insta_snipe"),
-                    InlineKeyboardButton(f"📊 Full Analysis", callback_data=f"demo:analyze:{address}"),
+                    InlineKeyboardButton(f"📊 Full Analysis", callback_data=f"demo:analyze:{token_ref}"),
                 ],
                 [
                     InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
@@ -4129,6 +4180,7 @@ Reply with a Solana token address to buy.
         price: float,
         sl_percent: float = 15.0,
         tp_percent: float = 15.0,
+        token_ref: Optional[str] = None,
     ) -> Tuple[str, InlineKeyboardMarkup]:
         """
         Snipe confirmation screen before execution.
@@ -4169,9 +4221,10 @@ Reply with a Solana token address to buy.
 
         text = "\n".join(lines)
 
+        token_ref = token_ref or address
         keyboard = [
             [
-                InlineKeyboardButton(f"✅ CONFIRM SNIPE", callback_data=f"demo:snipe_confirm:{address}:{amount}"),
+                InlineKeyboardButton(f"✅ CONFIRM SNIPE", callback_data=f"demo:snipe_confirm:{token_ref}:{amount}"),
             ],
             [
                 InlineKeyboardButton(f"❌ Cancel", callback_data="demo:insta_snipe"),
@@ -4455,6 +4508,7 @@ _Data-driven scoring (Jan 2026 tune)_
         # Signal emoji
         sig_emoji = {"STRONG_BUY": "🔥", "BUY": "🟢", "SELL": "🔴", "STRONG_SELL": "💀"}.get(signal, "🟡")
 
+        token_ref = token_data.get("token_id") or address
         short_addr = f"{address[:6]}...{address[-4:]}" if address else "N/A"
         change_emoji = "📈" if change_24h >= 0 else "📉"
 
@@ -4489,15 +4543,15 @@ _Data-driven scoring (Jan 2026 tune)_
 
         keyboard = [
             [
-                InlineKeyboardButton(f"{theme.BUY} Buy 0.1 SOL", callback_data=f"demo:quick_buy:{address}:0.1"),
-                InlineKeyboardButton(f"{theme.BUY} Buy 0.5 SOL", callback_data=f"demo:quick_buy:{address}:0.5"),
+                InlineKeyboardButton(f"{theme.BUY} Buy 0.1 SOL", callback_data=f"demo:quick_buy:{token_ref}:0.1"),
+                InlineKeyboardButton(f"{theme.BUY} Buy 0.5 SOL", callback_data=f"demo:quick_buy:{token_ref}:0.5"),
             ],
             [
-                InlineKeyboardButton(f"{theme.BUY} Buy 1 SOL", callback_data=f"demo:quick_buy:{address}:1"),
-                InlineKeyboardButton(f"{theme.BUY} Buy 5 SOL", callback_data=f"demo:quick_buy:{address}:5"),
+                InlineKeyboardButton(f"{theme.BUY} Buy 1 SOL", callback_data=f"demo:quick_buy:{token_ref}:1"),
+                InlineKeyboardButton(f"{theme.BUY} Buy 5 SOL", callback_data=f"demo:quick_buy:{token_ref}:5"),
             ],
             [
-                InlineKeyboardButton(f"{theme.REFRESH} Refresh Analysis", callback_data=f"demo:analyze:{address}"),
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh Analysis", callback_data=f"demo:analyze:{token_ref}"),
             ],
             [
                 InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
@@ -5038,19 +5092,19 @@ Start trading to build your history!
             for i, token in enumerate(trending_tokens[:3]):
                 symbol = token.get("symbol", "???")
                 change = token.get("change_24h", 0)
-                address = token.get("address", "")
+                token_ref = token.get("token_id") or token.get("address", "")
                 emoji = "🟢" if change >= 0 else "🔴"
                 lines.append(f"  {emoji} {symbol} ({'+' if change >= 0 else ''}{change:.1f}%)")
 
-                if address:
+                if token_ref:
                     keyboard.append([
                         InlineKeyboardButton(
                             f"{theme.BUY} Buy {symbol} (0.1 SOL)",
-                            callback_data=f"demo:quick_buy:{address}:0.1"
+                            callback_data=f"demo:quick_buy:{token_ref}:0.1"
                         ),
                         InlineKeyboardButton(
                             f"{theme.BUY} (0.5 SOL)",
-                            callback_data=f"demo:quick_buy:{address}:0.5"
+                            callback_data=f"demo:quick_buy:{token_ref}:0.5"
                         ),
                     ])
             lines.append("")
@@ -5167,7 +5221,7 @@ immediately without confirmation!
         else:
             for i, token in enumerate(watchlist[:8]):
                 symbol = token.get("symbol", "???")
-                address = token.get("address", "")
+                token_ref = token.get("token_id") or token.get("address", "")
                 price = token.get("price", 0)
                 change_24h = token.get("change_24h", 0)
                 alert = token.get("alert", None)
@@ -5183,11 +5237,11 @@ immediately without confirmation!
 
                 lines.append("")
 
-                if address:
+                if token_ref:
                     keyboard.append([
                         InlineKeyboardButton(
                             f"{theme.BUY} Buy {symbol}",
-                            callback_data=f"demo:quick_buy:{address}:0.1"
+                            callback_data=f"demo:quick_buy:{token_ref}:0.1"
                         ),
                         InlineKeyboardButton(
                             f"🗑️ Remove",
@@ -5853,6 +5907,8 @@ _Custom values & price alerts soon_
         elif action == "dca_new":
             # New DCA Plan - select token
             watchlist = context.user_data.get("watchlist", [])
+            for token in watchlist:
+                token["token_id"] = _register_token_id(context, token.get("address"))
             text, keyboard = DemoMenuBuilder.dca_setup(
                 watchlist=watchlist,
             )
@@ -5860,7 +5916,8 @@ _Custom values & price alerts soon_
         elif action.startswith("dca_select:"):
             # Token selected for DCA
             parts = data.split(":")
-            token_address = parts[2] if len(parts) >= 3 else ""
+            token_ref = parts[2] if len(parts) >= 3 else ""
+            token_address = _resolve_token_ref(context, token_ref)
 
             # Find token info from watchlist or trending
             watchlist = context.user_data.get("watchlist", [])
@@ -5873,6 +5930,7 @@ _Custom values & price alerts soon_
             text, keyboard = DemoMenuBuilder.dca_setup(
                 token_symbol=token_symbol,
                 token_address=token_address,
+                token_ref=token_ref,
                 watchlist=watchlist,
             )
 
@@ -5881,7 +5939,8 @@ _Custom values & price alerts soon_
             try:
                 parts = data.split(":")
                 if len(parts) >= 4:
-                    token_address = parts[2]
+                    token_ref = parts[2]
+                    token_address = _resolve_token_ref(context, token_ref)
                     amount = float(parts[3])
 
                     # Find token symbol
@@ -5895,6 +5954,7 @@ _Custom values & price alerts soon_
                     text, keyboard = DemoMenuBuilder.dca_frequency_select(
                         token_symbol=token_symbol,
                         token_address=token_address,
+                        token_ref=token_ref,
                         amount=amount,
                     )
                 else:
@@ -5915,7 +5975,8 @@ _Custom values & price alerts soon_
             try:
                 parts = data.split(":")
                 if len(parts) >= 5:
-                    token_address = parts[2]
+                    token_ref = parts[2]
+                    token_address = _resolve_token_ref(context, token_ref)
                     amount = float(parts[3])
                     frequency = parts[4]
 
@@ -6068,6 +6129,8 @@ first, then create DCA plans from there.
             try:
                 # Fetch tokens with sentiment
                 bags_tokens = await get_bags_top_tokens_with_sentiment(limit=15)
+                for token in bags_tokens:
+                    token["token_id"] = _register_token_id(context, token.get("address"))
 
                 # Get user's TP/SL settings
                 default_tp = context.user_data.get("bags_tp_percent", 15.0)
@@ -6089,13 +6152,15 @@ first, then create DCA plans from there.
 
         elif action.startswith("bags_info:"):
             # Show detailed token info
-            address = action.split(":")[1]
+            token_ref = action.split(":")[1]
+            address = _resolve_token_ref(context, token_ref)
 
             # Find token from cached data or fetch
             bags_tokens = await get_bags_top_tokens_with_sentiment(limit=15)
             token = next((t for t in bags_tokens if t.get("address") == address), None)
 
             if token:
+                token["token_id"] = token_ref
                 default_tp = context.user_data.get("bags_tp_percent", 15.0)
                 default_sl = context.user_data.get("bags_sl_percent", 15.0)
 
@@ -6114,7 +6179,8 @@ first, then create DCA plans from there.
         elif action.startswith("bags_buy:"):
             # Show buy confirmation for a Bags token
             parts = action.split(":")
-            address = parts[1]
+            token_ref = parts[1]
+            address = _resolve_token_ref(context, token_ref)
             tp_percent = float(parts[2]) if len(parts) > 2 else 15.0
             sl_percent = float(parts[3]) if len(parts) > 3 else 15.0
 
@@ -6123,6 +6189,7 @@ first, then create DCA plans from there.
             token = next((t for t in bags_tokens if t.get("address") == address), None)
 
             if token:
+                token["token_id"] = token_ref
                 text, keyboard = DemoMenuBuilder.bags_token_detail(
                     token=token,
                     market_regime=market_regime,
@@ -6138,7 +6205,8 @@ first, then create DCA plans from there.
         elif action.startswith("bags_exec:"):
             # Execute buy via Bags.fm API
             parts = action.split(":")
-            address = parts[1]
+            token_ref = parts[1]
+            address = _resolve_token_ref(context, token_ref)
             amount_sol = float(parts[2]) if len(parts) > 2 else 0.1
             tp_percent = float(parts[3]) if len(parts) > 3 else 15.0
             sl_percent = float(parts[4]) if len(parts) > 4 else 15.0
@@ -6632,6 +6700,8 @@ _This feature coming soon!_
                     {"symbol": "POPCAT", "change_24h": 42.1, "volume": 890000, "address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr", "sentiment": "very_bullish", "sentiment_score": 0.85, "signal": "STRONG_BUY"},
                     {"symbol": "MEW", "change_24h": 8.7, "volume": 650000, "address": "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5", "sentiment": "bullish", "sentiment_score": 0.61, "signal": "BUY"},
                 ]
+            for token in trending:
+                token["token_id"] = _register_token_id(context, token.get("address"))
             text, keyboard = DemoMenuBuilder.trending_tokens(
                 trending,
                 market_regime=market_regime,
@@ -6644,6 +6714,13 @@ _This feature coming soon!_
             volume_leaders = await get_bags_top_tokens_with_sentiment(limit=6)
             if not trending and volume_leaders:
                 trending = volume_leaders[:6]
+
+            for token in picks:
+                token["token_id"] = _register_token_id(context, token.get("address"))
+            for token in (trending or []):
+                token["token_id"] = _register_token_id(context, token.get("address"))
+            for token in volume_leaders:
+                token["token_id"] = _register_token_id(context, token.get("address"))
 
             near_picks = []
             for token in volume_leaders[:6]:
@@ -6730,6 +6807,8 @@ _This feature coming soon!_
                 }
 
                 picks = section_picks.get(section, [])
+                for pick in picks:
+                    pick["token_id"] = _register_token_id(context, pick.get("address"))
 
                 text, keyboard = DemoMenuBuilder.sentiment_hub_section(
                     section=section,
@@ -6822,13 +6901,16 @@ _This feature coming soon!_
             try:
                 parts = callback_data.split(":")
                 if len(parts) >= 3:
-                    address = parts[2]
+                    token_ref = parts[2]
+                    address = _resolve_token_ref(context, token_ref)
+                    auto_sl_percent = float(parts[3]) if len(parts) > 3 else 15.0
                     # Get token info (mock for now)
                     text, keyboard = DemoMenuBuilder.sentiment_hub_buy_confirm(
                         symbol="TOKEN",
                         address=address,
                         price=0.001,
-                        auto_sl_percent=15,
+                        auto_sl_percent=auto_sl_percent,
+                        token_ref=token_ref,
                     )
                 else:
                     text, keyboard = DemoMenuBuilder.error_message(
@@ -6841,6 +6923,139 @@ _This feature coming soon!_
                     error=str(e),
                     retry_action="demo:hub",
                     context_hint="hub_buy",
+                )
+
+        elif action.startswith("hub_detail:"):
+            # Hub token detail view
+            try:
+                parts = callback_data.split(":")
+                token_ref = parts[2] if len(parts) > 2 else ""
+                address = _resolve_token_ref(context, token_ref)
+                sentiment_data = await get_ai_sentiment_for_token(address)
+                token_data = {
+                    "symbol": sentiment_data.get("symbol", "TOKEN"),
+                    "address": address,
+                    "token_id": token_ref,
+                    "price_usd": sentiment_data.get("price", 0),
+                    "change_24h": sentiment_data.get("change_24h", 0),
+                    "volume": sentiment_data.get("volume", 0),
+                    "liquidity": sentiment_data.get("liquidity", 0),
+                    "sentiment": sentiment_data.get("sentiment", "neutral"),
+                    "score": sentiment_data.get("score", 0),
+                    "confidence": sentiment_data.get("confidence", 0),
+                    "signal": sentiment_data.get("signal", "NEUTRAL"),
+                    "reasons": sentiment_data.get("reasons", []),
+                }
+                text, keyboard = DemoMenuBuilder.token_analysis_menu(token_data)
+            except Exception as e:
+                logger.error(f"Hub detail error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:hub",
+                    context_hint="hub_detail",
+                )
+
+        elif action.startswith("hub_custom_sl:"):
+            # Custom stop loss presets
+            try:
+                parts = callback_data.split(":")
+                token_ref = parts[2] if len(parts) > 2 else ""
+                theme = JarvisTheme
+                text = f"""
+{theme.WARNING} *CUSTOM STOP LOSS*
+━━━━━━━━━━━━━━━━━━━━━━
+
+Select your stop-loss %
+for this trade:
+"""
+                keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("SL -5%", callback_data=f"demo:hub_buy:{token_ref}:5"),
+                        InlineKeyboardButton("SL -10%", callback_data=f"demo:hub_buy:{token_ref}:10"),
+                    ],
+                    [
+                        InlineKeyboardButton("SL -15%", callback_data=f"demo:hub_buy:{token_ref}:15"),
+                        InlineKeyboardButton("SL -20%", callback_data=f"demo:hub_buy:{token_ref}:20"),
+                    ],
+                    [
+                        InlineKeyboardButton("SL -30%", callback_data=f"demo:hub_buy:{token_ref}:30"),
+                    ],
+                    [
+                        InlineKeyboardButton(f"{theme.BACK} Back", callback_data=f"demo:hub_buy:{token_ref}:15"),
+                    ],
+                ])
+            except Exception as e:
+                logger.error(f"Hub custom SL error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:hub",
+                    context_hint="hub_custom_sl",
+                )
+
+        elif action.startswith("hub_exec_buy:"):
+            # Execute hub buy with TP/SL
+            try:
+                parts = callback_data.split(":")
+                token_ref = parts[2] if len(parts) > 2 else ""
+                address = _resolve_token_ref(context, token_ref)
+                amount_sol = float(parts[3]) if len(parts) > 3 else 0.1
+                sl_percent = float(parts[4]) if len(parts) > 4 else 15.0
+
+                engine = await _get_demo_engine()
+                portfolio = await engine.get_portfolio_value()
+                if not portfolio:
+                    raise RuntimeError("Portfolio unavailable")
+                balance_sol, balance_usd = portfolio
+                if balance_sol <= 0:
+                    text, keyboard = DemoMenuBuilder.error_message("Treasury balance is zero.")
+                    return
+
+                sol_usd = balance_usd / balance_sol if balance_sol > 0 else 0
+                amount_usd = amount_sol * sol_usd
+
+                sentiment_data = await get_ai_sentiment_for_token(address)
+                signal_name = sentiment_data.get("signal", "NEUTRAL")
+                grade = _grade_for_signal_name(signal_name)
+                sentiment_score = sentiment_data.get("score", 0) or 0
+                token_symbol = sentiment_data.get("symbol", "TOKEN")
+
+                tp_percent = context.user_data.get("hub_tp_percent", 25.0)
+                custom_tp = tp_percent / 100.0
+                custom_sl = sl_percent / 100.0
+
+                from bots.treasury.trading import TradeDirection
+                success, msg, position = await engine.open_position(
+                    token_mint=address,
+                    token_symbol=token_symbol,
+                    direction=TradeDirection.LONG,
+                    amount_usd=amount_usd,
+                    sentiment_grade=grade,
+                    sentiment_score=sentiment_score,
+                    custom_tp=custom_tp,
+                    custom_sl=custom_sl,
+                    user_id=user_id,
+                )
+
+                if success and position:
+                    text, keyboard = DemoMenuBuilder.success_message(
+                        action="Hub Trade Executed",
+                        details=(
+                            f"Bought {token_symbol} with {amount_sol:.2f} SOL\n"
+                            f"TP: +{tp_percent:.0f}% | SL: -{sl_percent:.0f}%\n"
+                            f"Position ID: {position.id}"
+                        ),
+                    )
+                else:
+                    text, keyboard = DemoMenuBuilder.error_message(
+                        error=msg or "Trade failed",
+                        retry_action="demo:hub",
+                    )
+            except Exception as e:
+                logger.error(f"Hub exec buy error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(
+                    error=str(e),
+                    retry_action="demo:hub",
+                    context_hint="hub_exec_buy",
                 )
 
         # ========== INSTA SNIPE HANDLERS ==========
@@ -6892,6 +7107,8 @@ _This feature coming soon!_
                         "sightings": 3,
                     }
 
+                hottest_token["token_id"] = _register_token_id(context, hottest_token.get("address"))
+
                 text, keyboard = DemoMenuBuilder.insta_snipe_menu(
                     hottest_token=hottest_token,
                     market_regime=market_regime,
@@ -6911,11 +7128,13 @@ _This feature coming soon!_
             try:
                 parts = callback_data.split(":")
                 if len(parts) >= 4:
-                    address = parts[2]
+                    token_ref = parts[2]
+                    address = _resolve_token_ref(context, token_ref)
                     amount = float(parts[3])
 
                     # Store snipe details
                     context.user_data["snipe_address"] = address
+                    context.user_data["snipe_token_ref"] = token_ref
                     context.user_data["snipe_amount"] = amount
 
                     text, keyboard = DemoMenuBuilder.snipe_confirm(
@@ -6925,6 +7144,7 @@ _This feature coming soon!_
                         price=0.001,  # Would fetch real price
                         sl_percent=15.0,
                         tp_percent=15.0,
+                        token_ref=token_ref,
                     )
                 else:
                     text, keyboard = DemoMenuBuilder.error_message(
@@ -6944,7 +7164,8 @@ _This feature coming soon!_
             try:
                 parts = callback_data.split(":")
                 if len(parts) >= 4:
-                    address = parts[2]
+                    token_ref = parts[2]
+                    address = _resolve_token_ref(context, token_ref)
                     amount = float(parts[3])
 
                     # Simulate trade execution
@@ -7377,6 +7598,7 @@ You are about to sell *{position_count} positions*
                             sentiment = await get_ai_sentiment_for_token(address)
                             token["price"] = sentiment.get("price", token.get("price", 0))
                             token["change_24h"] = sentiment.get("change_24h", token.get("change_24h", 0))
+                            token["token_id"] = _register_token_id(context, address)
                     except Exception:
                         pass  # Keep existing data
 
@@ -7428,11 +7650,13 @@ live price updates!
             # AI Token Analysis
             parts = data.split(":")
             if len(parts) >= 3:
-                token_address = parts[2]
+                token_ref = parts[2]
+                token_address = _resolve_token_ref(context, token_ref)
                 sentiment_data = await get_ai_sentiment_for_token(token_address)
                 token_data = {
                     "symbol": sentiment_data.get("symbol", "TOKEN"),
                     "address": token_address,
+                    "token_id": token_ref,
                     "price_usd": sentiment_data.get("price", 0),
                     "change_24h": sentiment_data.get("change_24h", 0),
                     "volume": sentiment_data.get("volume", 0),
@@ -7544,7 +7768,8 @@ Coming soon in V2!
             # Quick buy from trending - with AI sentiment check
             parts = data.split(":")
             if len(parts) >= 3:
-                token_addr = parts[2]
+                token_ref = parts[2]
+                token_addr = _resolve_token_ref(context, token_ref)
                 amount = float(parts[3]) if len(parts) >= 4 else context.user_data.get("buy_amount", 0.1)
 
                 # Get AI sentiment before showing buy confirmation
@@ -7581,10 +7806,10 @@ Coming soon in V2!
 
                 keyboard = InlineKeyboardMarkup([
                     [
-                        InlineKeyboardButton(f"{theme.SUCCESS} Confirm Buy", callback_data=f"demo:execute_buy:{token_addr}:{amount}"),
+                        InlineKeyboardButton(f"{theme.SUCCESS} Confirm Buy", callback_data=f"demo:execute_buy:{token_ref}:{amount}"),
                     ],
                     [
-                        InlineKeyboardButton(f"{theme.CHART} More Analysis", callback_data=f"demo:analyze:{token_addr}"),
+                        InlineKeyboardButton(f"{theme.CHART} More Analysis", callback_data=f"demo:analyze:{token_ref}"),
                     ],
                     [
                         InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:main"),
@@ -7595,7 +7820,8 @@ Coming soon in V2!
             # Actually execute the buy order
             parts = data.split(":")
             if len(parts) >= 4:
-                token_addr = parts[2]
+                token_ref = parts[2]
+                token_addr = _resolve_token_ref(context, token_ref)
                 amount = float(parts[3])
 
                 # =====================================================================
@@ -7637,17 +7863,47 @@ Coming soon in V2!
                 # Execute via treasury engine
                 try:
                     engine = await _get_demo_engine()
+                    portfolio = await engine.get_portfolio_value()
+                    if not portfolio:
+                        raise RuntimeError("Portfolio unavailable")
+                    balance_sol, balance_usd = portfolio
+                    if balance_sol <= 0:
+                        text, keyboard = DemoMenuBuilder.error_message("Treasury balance is zero.")
+                        return
 
-                    # Place buy order
-                    result = await engine.buy_token(token_addr, amount)
+                    sol_usd = balance_usd / balance_sol if balance_sol > 0 else 0
+                    amount_usd = amount * sol_usd
 
-                    if result:
+                    sentiment_data = await get_ai_sentiment_for_token(token_addr)
+                    token_symbol = sentiment_data.get("symbol", "TOKEN")
+                    signal_name = sentiment_data.get("signal", "NEUTRAL")
+                    grade = _grade_for_signal_name(signal_name)
+                    sentiment_score = sentiment_data.get("score", 0) or 0
+
+                    from bots.treasury.trading import TradeDirection
+                    success, msg, position = await engine.open_position(
+                        token_mint=token_addr,
+                        token_symbol=token_symbol,
+                        direction=TradeDirection.LONG,
+                        amount_usd=amount_usd,
+                        sentiment_grade=grade,
+                        sentiment_score=sentiment_score,
+                        user_id=user_id,
+                    )
+
+                    if success and position:
                         text, keyboard = DemoMenuBuilder.success_message(
                             action="Buy Order Executed",
-                            details=f"Bought token with {amount} SOL\n\nTransaction submitted to Jupiter.\n\nCheck /positions to monitor.",
+                            details=(
+                                f"Bought {token_symbol} with {amount:.2f} SOL\n"
+                                f"Entry: ${position.entry_price:.8f}\n"
+                                f"TP: ${position.take_profit_price:.8f} | "
+                                f"SL: ${position.stop_loss_price:.8f}\n\n"
+                                "Check /positions to monitor."
+                            ),
                         )
                     else:
-                        text, keyboard = DemoMenuBuilder.error_message("Buy order failed - check logs")
+                        text, keyboard = DemoMenuBuilder.error_message(msg or "Buy order failed - check logs")
                 except Exception as e:
                     text, keyboard = DemoMenuBuilder.error_message(f"Buy failed: {str(e)[:50]}")
 
@@ -7718,6 +7974,7 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 "price": sentiment.get("price", 0),
                 "change_24h": sentiment.get("change_24h", 0),
             }
+            token_data["token_id"] = _register_token_id(context, text)
 
             # Add to watchlist
             watchlist = context.user_data.get("watchlist", [])
@@ -7840,6 +8097,7 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     amount = context.user_data.get("buy_amount", 0.1)
+    token_ref = _register_token_id(context, text)
 
     # Show buy confirmation
     confirm_text, keyboard = DemoMenuBuilder.buy_confirmation(
@@ -7848,6 +8106,7 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         amount_sol=amount,
         estimated_tokens=1000000,  # Would be calculated from price
         price_usd=0.00001,  # Would be fetched from DEX
+        token_ref=token_ref,
     )
 
     await update.message.reply_text(
