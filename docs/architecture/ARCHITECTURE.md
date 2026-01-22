@@ -384,6 +384,25 @@ User Input
 
 ---
 
+## Unified Startup CLI
+
+Jarvis provides a unified CLI (`jarvis`) to streamline startup with profiles:
+
+- `jarvis up --profile voice|telegram|twitter|all`
+- `jarvis doctor` (safe autofix)
+- `jarvis validate` (startup report)
+- `jarvis deps` (install missing deps in venv)
+
+The voice profile is designed to always start:
+
+- If speech-to-text is unavailable, it falls back to typed input.
+- If text-to-speech is unavailable, it prints responses.
+- LLM providers use the existing fallback chain (local → cloud) during runtime.
+
+Diagnostics are written to `logs/startup_report.json`.
+
+---
+
 ## Version
 
 Generated: 2024-12-30
