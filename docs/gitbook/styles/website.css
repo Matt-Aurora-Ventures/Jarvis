@@ -1,0 +1,98 @@
+/* Jarvis LifeOS Documentation Styles */
+
+/* Improve readability */
+.markdown-section {
+  max-width: 900px;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+/* Better code blocks */
+.markdown-section pre {
+  background-color: #1e1e1e;
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.markdown-section code {
+  background-color: #f5f5f5;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+/* Table improvements */
+.markdown-section table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 20px 0;
+}
+
+.markdown-section table th {
+  background-color: #f8f8f8;
+  font-weight: 600;
+  padding: 12px;
+  border: 1px solid #ddd;
+}
+
+.markdown-section table td {
+  padding: 10px;
+  border: 1px solid #ddd;
+}
+
+.markdown-section table tr:nth-child(even) {
+  background-color: #fafafa;
+}
+
+/* Headings */
+.markdown-section h1 {
+  color: #2c3e50;
+  border-bottom: 2px solid #3498db;
+  padding-bottom: 10px;
+}
+
+.markdown-section h2 {
+  color: #34495e;
+  margin-top: 30px;
+}
+
+/* Links */
+.markdown-section a {
+  color: #3498db;
+  text-decoration: none;
+}
+
+.markdown-section a:hover {
+  text-decoration: underline;
+}
+
+/* Blockquotes */
+.markdown-section blockquote {
+  border-left: 4px solid #3498db;
+  background-color: #f8f9fa;
+  padding: 10px 20px;
+  margin: 20px 0;
+}
+
+/* Lists */
+.markdown-section ul, .markdown-section ol {
+  margin: 15px 0;
+  padding-left: 30px;
+}
+
+.markdown-section li {
+  margin: 8px 0;
+}
+
+/* Checkmarks and status indicators */
+.markdown-section p:contains("✅") {
+  color: #27ae60;
+}
+
+.markdown-section p:contains("⚠️") {
+  color: #f39c12;
+}
+
+.markdown-section p:contains("❌") {
+  color: #e74c3c;
+}
