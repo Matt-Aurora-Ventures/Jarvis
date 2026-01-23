@@ -100,13 +100,24 @@ class TreasuryBot:
         load_dotenv(env_path)
 
         # Get configuration
-        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        bot_token = os.environ.get('TREASURY_BOT_TOKEN') or os.environ.get('TREASURY_BOT_TELEGRAM_TOKEN')
+        token_source = "TREASURY_BOT_TOKEN"
+        if not bot_token:
+            bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+            token_source = "TELEGRAM_BOT_TOKEN"
+            if bot_token:
+                logger.warning(
+                    "TREASURY_BOT_TOKEN not set; falling back to TELEGRAM_BOT_TOKEN "
+                    "(may conflict with other bots)."
+                )
         admin_ids_str = os.environ.get('TREASURY_ADMIN_IDS', '')
         wallet_password = os.environ.get('JARVIS_WALLET_PASSWORD')
         rpc_url = os.environ.get('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com')
 
         if not bot_token:
-            raise ValueError("TELEGRAM_BOT_TOKEN not set")
+            raise ValueError("TREASURY_BOT_TOKEN not set")
+        else:
+            logger.info(f"Using treasury bot token from {token_source}")
 
         # Parse admin IDs
         admin_ids = []

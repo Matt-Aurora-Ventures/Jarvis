@@ -671,6 +671,70 @@ async def create_public_trading_bot():
         raise
 
 
+async def create_treasury_bot():
+    """Create and run the Treasury bot on its own Telegram token."""
+    import subprocess
+
+    treasury_token = (
+        os.environ.get("TREASURY_BOT_TOKEN", "")
+        or os.environ.get("TREASURY_BOT_TELEGRAM_TOKEN", "")
+    )
+    if not treasury_token:
+        logger.warning("No TREASURY_BOT_TOKEN set, skipping Treasury bot")
+        return
+
+    main_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    public_token = os.environ.get("PUBLIC_BOT_TELEGRAM_TOKEN", "")
+    if treasury_token in (main_token, public_token):
+        logger.warning(
+            "Treasury bot token matches another bot token; skipping to avoid polling conflict"
+        )
+        return
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(project_root) + os.pathsep + env.get("PYTHONPATH", "")
+    env["TREASURY_BOT_TOKEN"] = treasury_token
+    env["TREASURY_BOT_TELEGRAM_TOKEN"] = treasury_token
+
+    # Kill any lingering treasury bot processes from previous runs
+    try:
+        if sys.platform == "win32":
+            kill_cmd = (
+                'powershell -Command "'
+                "Get-CimInstance Win32_Process -Filter \\\"Name='python.exe'\\\" | "
+                "Where-Object { $_.CommandLine -like '*run_treasury.py*' } | "
+                'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"'
+            )
+            os.system(kill_cmd)
+        else:
+            os.system("pkill -f 'python.*run_treasury.py' 2>/dev/null || true")
+        await asyncio.sleep(2)
+    except Exception as e:
+        logger.warning(f"Failed to clean up treasury bot processes: {e}")
+
+    proc = subprocess.Popen(
+        [sys.executable, str(project_root / "bots" / "treasury" / "run_treasury.py")],
+        env=env,
+    )
+
+    try:
+        while True:
+            ret = proc.poll()
+            if ret is not None:
+                logger.error(f"Treasury bot exited with code {ret}")
+                await asyncio.sleep(15)
+                raise RuntimeError(f"Treasury bot exited with code {ret}")
+            await asyncio.sleep(5)
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                logger.warning("Treasury bot process killed (timeout on terminate)")
+
+
 async def create_autonomous_manager():
     """Create and run the autonomous manager (moderation, learning, vibe coding)."""
     from core.moderation.toxicity_detector import ToxicityDetector
@@ -1076,6 +1140,7 @@ async def main():
     supervisor.register("telegram_bot", create_telegram_bot, min_backoff=10.0, max_backoff=60.0)
     supervisor.register("autonomous_x", create_autonomous_x_engine, min_backoff=30.0, max_backoff=300.0)
     supervisor.register("public_trading_bot", create_public_trading_bot, min_backoff=20.0, max_backoff=180.0)
+    supervisor.register("treasury_bot", create_treasury_bot, min_backoff=20.0, max_backoff=180.0)
     supervisor.register("autonomous_manager", create_autonomous_manager, min_backoff=15.0, max_backoff=120.0)
     supervisor.register("bags_intel", create_bags_intel, min_backoff=30.0, max_backoff=300.0)
     supervisor.register("ai_supervisor", create_ai_supervisor, min_backoff=30.0, max_backoff=300.0)
