@@ -15,8 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 def _default_lock_dir() -> Path:
-    root = Path(__file__).resolve().parents[2]
-    return root / "data" / "locks"
+    override = os.environ.get("JARVIS_LOCK_DIR")
+    if override:
+        return Path(override).expanduser()
+
+    # Use a per-user global lock directory to prevent multi-clone conflicts
+    if os.name == "nt":
+        base = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
+        return base / "Jarvis" / "locks"
+
+    base = Path(os.environ.get("XDG_STATE_HOME") or (Path.home() / ".local" / "state"))
+    return base / "jarvis" / "locks"
 
 
 def _token_digest(token: str) -> str:

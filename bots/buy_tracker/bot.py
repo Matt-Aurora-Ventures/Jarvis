@@ -235,6 +235,19 @@ class JarvisBuyBot:
         elif enable_polling == "auto" and self.config.bot_token and self.config.bot_token != main_token:
             should_poll = True
 
+        # Hard safety: never poll if using the same token as the main Telegram bot
+        token_match = bool(self.config.bot_token and main_token and self.config.bot_token == main_token)
+        if token_match and should_poll:
+            logger.warning("Buy bot polling disabled: token matches main Telegram bot")
+            should_poll = False
+
+        logger.info(
+            "Buy bot polling decision: mode=%s should_poll=%s token_match=%s",
+            enable_polling,
+            should_poll,
+            token_match,
+        )
+
         if self.app.updater and should_poll:
             self._polling_lock = acquire_instance_lock(
                 self.config.bot_token,
