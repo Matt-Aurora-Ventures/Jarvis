@@ -65,6 +65,7 @@ from telegram.constants import ParseMode
 
 from tg_bot.config import get_config
 from tg_bot.handlers import error_handler, admin_only
+from tg_bot.services.digest_formatter import escape_markdown_v1 as escape_md
 
 logger = logging.getLogger(__name__)
 
@@ -5059,8 +5060,14 @@ Please try again or return to main menu.
                 win_rate = stats.get("win_rate", "N/A")
                 avg_return = stats.get("avg_return", "0%")
                 trades = stats.get("trades", 0)
-                emoji = "🟢" if float(win_rate.replace("%", "")) > 55 else "🟡" if float(win_rate.replace("%", "")) > 45 else "🔴"
-                lines.append(f"├ {emoji} {signal}: {win_rate} ({trades} trades)")
+                try:
+                    win_rate_val = float(str(win_rate).replace("%", ""))
+                except (ValueError, TypeError):
+                    win_rate_val = 0.0
+                emoji = "🟢" if win_rate_val > 55 else "🟡" if win_rate_val > 45 else "🔴"
+                safe_signal = escape_md(str(signal))
+                safe_win_rate = escape_md(str(win_rate))
+                lines.append(f"├ {emoji} {safe_signal}: {safe_win_rate} ({trades} trades)")
             lines.append("")
 
         # Regime correlations
@@ -5070,7 +5077,10 @@ Please try again or return to main menu.
                 win_rate = stats.get("win_rate", "N/A")
                 avg_return = stats.get("avg_return", "0%")
                 emoji = {"BULL": "🟢", "BEAR": "🔴"}.get(regime, "🟡")
-                lines.append(f"├ {emoji} {regime}: {win_rate} | {avg_return}")
+                safe_regime = escape_md(str(regime))
+                safe_win_rate = escape_md(str(win_rate))
+                safe_avg_return = escape_md(str(avg_return))
+                lines.append(f"├ {emoji} {safe_regime}: {safe_win_rate} | {safe_avg_return}")
             lines.append("")
 
         # Optimal timing

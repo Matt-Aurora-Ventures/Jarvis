@@ -23,6 +23,7 @@ CASES = [
     "demo_sell_all_confirm",
     "demo_sell_position",
     "demo_refresh",
+    "demo_learning",
 ]
 
 
