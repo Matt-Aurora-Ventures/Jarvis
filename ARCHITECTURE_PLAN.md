@@ -362,7 +362,7 @@ const streams = {
   // Critical trading signals - memory storage for speed
   TRADING_CRITICAL: {
     name: "TRADING_CRITICAL",
-    subjects: ["trading.*.urgent", "trading.*.critical"],
+    subjects: ["trading.*.*.urgent", "trading.*.*.critical"],
     retention: "limits",
     max_msgs: 100000,
     max_age: "5m",
@@ -374,7 +374,7 @@ const streams = {
   // Standard trading - file storage for durability
   TRADING_HIGH: {
     name: "TRADING_HIGH", 
-    subjects: ["trading.*.high", "trading.*.normal"],
+    subjects: ["trading.*.*.high", "trading.*.*.normal"],
     retention: "limits",
     max_msgs: 500000,
     max_age: "1h",
