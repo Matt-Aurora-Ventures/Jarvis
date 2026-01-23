@@ -20,6 +20,8 @@ CASES = [
     "demo_main",
     "demo_positions",
     "demo_buy_prompt",
+    "demo_bags_fm",
+    "demo_insta_snipe",
     "demo_buy_confirm",
     "demo_sell_all_confirm",
     "demo_sell_position",

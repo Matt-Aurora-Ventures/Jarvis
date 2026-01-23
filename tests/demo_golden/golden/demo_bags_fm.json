@@ -1,0 +1,46 @@
+{
+  "text": "\ud83c\udf92 *BAGS.FM TOP 15*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\nMarket: \ud83d\udfe2 BULL | 24h Vol: $2.2M\n\n*Volume Leaders with AI Sentiment:*\n\n\ud83e\udd47 *TEST* $0.012300 \ud83d\udfe2 +5.6%\n   Vol: $1.2M | Liq: $480K\n   \ud83d\udfe2 BULLISH | \ud83d\udfe2 BUY\n   \ud83d\udcdd `So111111...111112`\n\n\ud83e\udd48 *MOON* $0.004200 \ud83d\udd34 -3.4%\n   Vol: $980K | Liq: $210K\n   \ud83d\udfe1 NEUTRAL | \ud83d\udfe1 HOLD\n   \ud83d\udcdd `DezXAZ8z...pPB263`\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udcca *Sentiment Summary*\n   \ud83d\udfe2 Bullish: 1 | \ud83d\udd34 Bearish: 0\n\n_Default TP: +15% | SL: -15%_",
+  "parse_mode": "Markdown",
+  "keyboard": [
+    [
+      {
+        "text": "\ud83d\udcb0 Buy 0.1 SOL of TEST",
+        "callback_data": "demo:bags_exec:35f4d5cab4:0.1:15.0:15.0"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udd0d View TEST Details",
+        "callback_data": "demo:bags_info:35f4d5cab4"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udcb0 Buy 0.1 SOL of MOON",
+        "callback_data": "demo:bags_exec:d54bf9a14e:0.1:15.0:15.0"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udd0d View MOON Details",
+        "callback_data": "demo:bags_info:d54bf9a14e"
+      }
+    ],
+    [
+      {
+        "text": "\u2699\ufe0f Set TP/SL",
+        "callback_data": "demo:bags_settings"
+      },
+      {
+        "text": "\ud83d\udd04 Refresh",
+        "callback_data": "demo:bags_fm"
+      }
+    ],
+    [
+      {
+        "text": "\u25c0\ufe0f Main Menu",
+        "callback_data": "demo:main"
+      }
+    ]
+  ]
+}

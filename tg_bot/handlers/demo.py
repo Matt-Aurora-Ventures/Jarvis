@@ -3508,6 +3508,7 @@ Reply with a Solana token address to buy.
 
         for token in tokens[:6]:
             symbol = token.get("symbol", "???")
+            safe_symbol = escape_md(symbol)
             change_24h = token.get("change_24h", 0)
             volume = token.get("volume", 0)
             liquidity = token.get("liquidity", 0)
@@ -4381,6 +4382,7 @@ Reply with a Solana token address to buy.
 
         for i, token in enumerate(tokens[:15], 1):
             symbol = token.get("symbol", "???")
+            safe_symbol = escape_md(symbol)
             address = token.get("address", "")
             token_ref = token.get("token_id") or address
             price = token.get("price_usd", 0)
@@ -4456,7 +4458,7 @@ Reply with a Solana token address to buy.
             # Contract address (shortened)
             contract_short = f"`{address[:8]}...{address[-6:]}`" if address else "N/A"
 
-            lines.append(f"{rank} *{symbol}* {price_str} {change_str}")
+            lines.append(f"{rank} *{safe_symbol}* {price_str} {change_str}")
             lines.append(f"   Vol: {vol_str} | Liq: ${liquidity/1_000:.0f}K")
             lines.append(f"   {sent_emoji} {sent_label} | {signal_emoji} {signal}")
             lines.append(f"   📝 {contract_short}")
@@ -4518,6 +4520,8 @@ Reply with a Solana token address to buy.
 
         symbol = token.get("symbol", "???")
         name = token.get("name", symbol)
+        safe_symbol = escape_md(symbol)
+        safe_name = escape_md(name)
         address = token.get("address", "")
         price = token.get("price_usd", 0)
         volume = token.get("volume_24h", 0)
@@ -4563,8 +4567,8 @@ Reply with a Solana token address to buy.
         change_str = f"{change_emoji} {change_24h:+.1f}%" if change_24h else ""
 
         lines = [
-            f"🎒 *{symbol}*",
-            f"_{name}_",
+            f"🎒 *{safe_symbol}*",
+            f"_{safe_name}_",
             "━━━━━━━━━━━━━━━━━━━━━",
             "",
             f"💰 *Price:* {price_str} {change_str}",
@@ -4633,6 +4637,7 @@ Reply with a Solana token address to buy.
         Result of a Bags.fm buy operation.
         """
         theme = JarvisTheme
+        safe_symbol = escape_md(symbol)
 
         if success:
             tp_price = price * (1 + tp_percent / 100)
@@ -4642,9 +4647,9 @@ Reply with a Solana token address to buy.
                 f"✅ *BUY SUCCESSFUL*",
                 "━━━━━━━━━━━━━━━━━━━━━",
                 "",
-                f"🪙 *Token:* {symbol}",
+                f"🪙 *Token:* {safe_symbol}",
                 f"💰 *Spent:* {amount_sol} SOL",
-                f"📦 *Received:* {tokens_received:,.2f} {symbol}",
+                f"📦 *Received:* {tokens_received:,.2f} {safe_symbol}",
                 f"💵 *Entry Price:* ${price:.8f}" if price < 0.0001 else f"💵 *Entry Price:* ${price:.6f}" if price < 1 else f"💵 *Entry Price:* ${price:.2f}",
                 "",
                 f"*Auto Orders Set:*",
@@ -4666,7 +4671,7 @@ Reply with a Solana token address to buy.
                 f"❌ *BUY FAILED*",
                 "━━━━━━━━━━━━━━━━━━━━━",
                 "",
-                f"🪙 *Token:* {symbol}",
+                f"🪙 *Token:* {safe_symbol}",
                 f"💰 *Amount:* {amount_sol} SOL",
                 "",
                 f"*Error:* {error or 'Unknown error'}",
@@ -4711,6 +4716,7 @@ Reply with a Solana token address to buy.
 
         if hottest_token:
             symbol = hottest_token.get("symbol", "UNKNOWN")
+            safe_symbol = escape_md(symbol)
             address = hottest_token.get("address", "")
             token_ref = hottest_token.get("token_id") or address
             price = hottest_token.get("price", 0)
@@ -4768,7 +4774,7 @@ Reply with a Solana token address to buy.
                 f"⚡ *INSTA SNIPE*",
                 "━━━━━━━━━━━━━━━━━━━━━",
                 "",
-                f"🎯 *HOTTEST TOKEN: {symbol}*",
+                f"🎯 *HOTTEST TOKEN: {safe_symbol}*",
                 "",
                 f"*Conviction:* {conv_emoji} {conviction}",
                 f"*Sentiment Score:* {sentiment_score}/100",
@@ -4864,6 +4870,7 @@ Reply with a Solana token address to buy.
         Snipe confirmation screen before execution.
         """
         theme = JarvisTheme
+        safe_symbol = escape_md(symbol)
 
         # Price formatting
         if price < 0.0001:
@@ -4885,7 +4892,7 @@ Reply with a Solana token address to buy.
             f"⚡ *CONFIRM SNIPE*",
             "━━━━━━━━━━━━━━━━━━━━━",
             "",
-            f"*Token:* {symbol}",
+            f"*Token:* {safe_symbol}",
             f"*Amount:* {amount} SOL (~${usd_value:.2f})",
             f"*Price:* {price_str}",
             "",
@@ -6473,7 +6480,7 @@ _QR code coming in V2_
                 cooldown_minutes=ai_settings.get("cooldown_minutes", 30),
             )
 
-        elif action.startswith("ai_auto_toggle:"):
+        elif data.startswith("demo:ai_auto_toggle:"):
             # Toggle AI auto-trade
             parts = data.split(":")
             new_state = parts[2].lower() == "true" if len(parts) >= 3 else False
@@ -6490,7 +6497,7 @@ _QR code coming in V2_
                 details=f"Autonomous trading is now {'active' if new_state else 'paused'}.\n\n{'JARVIS will monitor markets and execute trades based on your settings.' if new_state else 'JARVIS will not execute trades automatically.'}",
             )
 
-        elif action.startswith("ai_risk:"):
+        elif data.startswith("demo:ai_risk:"):
             # Set AI risk level
             parts = data.split(":")
             risk_level = parts[2] if len(parts) >= 3 else "MEDIUM"
@@ -6507,7 +6514,7 @@ _QR code coming in V2_
                 min_confidence=ai_settings.get("min_confidence", 0.7),
             )
 
-        elif action.startswith("ai_max:"):
+        elif data.startswith("demo:ai_max:"):
             # Set max position size
             parts = data.split(":")
             max_size = float(parts[2]) if len(parts) >= 3 else 0.5
@@ -6523,7 +6530,7 @@ _QR code coming in V2_
                 min_confidence=ai_settings.get("min_confidence", 0.7),
             )
 
-        elif action.startswith("ai_conf:"):
+        elif data.startswith("demo:ai_conf:"):
             # Set min confidence threshold
             parts = data.split(":")
             min_conf = float(parts[2]) if len(parts) >= 3 else 0.7
@@ -6588,7 +6595,7 @@ _Feature tracking all AI trades coming in V2_
                 positions=positions,
             )
 
-        elif action.startswith("alert_setup:"):
+        elif data.startswith("demo:alert_setup:"):
             # Set up alert for a specific position
             parts = data.split(":")
             pos_id = parts[2] if len(parts) >= 3 else "0"
@@ -6609,7 +6616,7 @@ _Feature tracking all AI trades coming in V2_
             else:
                 text, keyboard = DemoMenuBuilder.error_message("Position not found")
 
-        elif action.startswith("create_alert:"):
+        elif data.startswith("demo:create_alert:"):
             # Create a new alert: demo:create_alert:{pos_id}:{type}:{target}
             parts = data.split(":")
             if len(parts) >= 5:
@@ -6656,7 +6663,7 @@ _Feature tracking all AI trades coming in V2_
             else:
                 text, keyboard = DemoMenuBuilder.error_message("Invalid alert data")
 
-        elif action.startswith("delete_pos_alerts:"):
+        elif data.startswith("demo:delete_pos_alerts:"):
             # Delete all alerts for a position
             parts = data.split(":")
             pos_id = parts[2] if len(parts) >= 3 else "0"
@@ -6701,7 +6708,7 @@ All triggered alerts have been removed.
                 [InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main")],
             ])
 
-        elif action.startswith("custom_alert:"):
+        elif data.startswith("demo:custom_alert:"):
             # Custom alert entry (placeholder for V2)
             parts = data.split(":")
             pos_id = parts[2] if len(parts) >= 3 else "0"
@@ -6745,7 +6752,7 @@ _Custom values & price alerts soon_
                 watchlist=watchlist,
             )
 
-        elif action.startswith("dca_select:"):
+        elif data.startswith("demo:dca_select:"):
             # Token selected for DCA
             parts = data.split(":")
             token_ref = parts[2] if len(parts) >= 3 else ""
@@ -6766,7 +6773,7 @@ _Custom values & price alerts soon_
                 watchlist=watchlist,
             )
 
-        elif action.startswith("dca_amount:"):
+        elif data.startswith("demo:dca_amount:"):
             # Amount selected for DCA: demo:dca_amount:{address}:{amount}
             try:
                 parts = data.split(":")
@@ -6802,7 +6809,7 @@ _Custom values & price alerts soon_
                     retry_action="demo:dca_new"
                 )
 
-        elif action.startswith("dca_create:"):
+        elif data.startswith("demo:dca_create:"):
             # Create DCA plan: demo:dca_create:{address}:{amount}:{frequency}
             try:
                 parts = data.split(":")
@@ -6858,7 +6865,7 @@ _Custom values & price alerts soon_
                     retry_action="demo:dca_new"
                 )
 
-        elif action.startswith("dca_pause:"):
+        elif data.startswith("demo:dca_pause:"):
             # Pause/Resume DCA plan
             parts = data.split(":")
             plan_id = parts[2] if len(parts) >= 3 else ""
@@ -6877,7 +6884,7 @@ _Custom values & price alerts soon_
                 total_invested=total_invested,
             )
 
-        elif action.startswith("dca_delete:"):
+        elif data.startswith("demo:dca_delete:"):
             # Delete DCA plan
             parts = data.split(":")
             plan_id = parts[2] if len(parts) >= 3 else ""
@@ -6982,7 +6989,7 @@ first, then create DCA plans from there.
                     context_hint="bags_fm",
                 )
 
-        elif action.startswith("bags_info:"):
+        elif data.startswith("demo:bags_info:"):
             # Show detailed token info
             token_ref = action.split(":")[1]
             address = _resolve_token_ref(context, token_ref)
@@ -7008,7 +7015,7 @@ first, then create DCA plans from there.
                     retry_action="demo:bags_fm",
                 )
 
-        elif action.startswith("bags_buy:"):
+        elif data.startswith("demo:bags_buy:"):
             # Show buy confirmation for a Bags token
             parts = action.split(":")
             token_ref = parts[1]
@@ -7034,7 +7041,7 @@ first, then create DCA plans from there.
                     retry_action="demo:bags_fm",
                 )
 
-        elif action.startswith("bags_exec:"):
+        elif data.startswith("demo:bags_exec:"):
             # Execute buy via Bags.fm API
             parts = action.split(":")
             token_ref = parts[1]
@@ -7151,7 +7158,7 @@ _Applied to all Bags.fm trades_
                 ],
             ])
 
-        elif action.startswith("bags_set_tp:"):
+        elif data.startswith("demo:bags_set_tp:"):
             tp_value = float(action.split(":")[1])
             context.user_data["bags_tp_percent"] = tp_value
             await query.answer(f"Take Profit set to +{tp_value:.0f}%")
@@ -7188,7 +7195,7 @@ _Applied to all Bags.fm trades_
                 ],
             ])
 
-        elif action.startswith("bags_set_sl:"):
+        elif data.startswith("demo:bags_set_sl:"):
             sl_value = float(action.split(":")[1])
             context.user_data["bags_sl_percent"] = sl_value
             await query.answer(f"Stop Loss set to -{sl_value:.0f}%")
@@ -7243,7 +7250,7 @@ _Applied to all Bags.fm trades_
             positions = context.user_data.get("positions", [])
             text, keyboard = DemoMenuBuilder.trailing_stop_setup(positions=positions)
 
-        elif action.startswith("tsl_select:"):
+        elif data.startswith("demo:tsl_select:"):
             # Position selected, show trail percentage options
             pos_id = action.split(":")[1]
             positions = context.user_data.get("positions", [])
@@ -7257,7 +7264,7 @@ _Applied to all Bags.fm trades_
                     [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:trailing_stops")]
                 ])
 
-        elif action.startswith("tsl_create:"):
+        elif data.startswith("demo:tsl_create:"):
             # Create trailing stop with: pos_id:trail_percent
             try:
                 parts = action.split(":")
@@ -7310,7 +7317,7 @@ _Applied to all Bags.fm trades_
                     retry_action="demo:trailing_stops"
                 )
 
-        elif action.startswith("tsl_edit:"):
+        elif data.startswith("demo:tsl_edit:"):
             # Edit a trailing stop
             stop_id = action.split(":")[1]
             trailing_stops = context.user_data.get("trailing_stops", [])
@@ -7335,7 +7342,7 @@ _Applied to all Bags.fm trades_
                     [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:trailing_stops")]
                 ])
 
-        elif action.startswith("tsl_delete:"):
+        elif data.startswith("demo:tsl_delete:"):
             # Delete a trailing stop
             stop_id = action.split(":")[1]
             trailing_stops = context.user_data.get("trailing_stops", [])
@@ -7351,7 +7358,7 @@ _Applied to all Bags.fm trades_
                 positions=context.user_data.get("positions", []),
             )
 
-        elif action.startswith("tsl_custom:"):
+        elif data.startswith("demo:tsl_custom:"):
             # Custom trail percentage - placeholder
             pos_id = action.split(":")[1]
             text = f"""
@@ -7378,7 +7385,7 @@ _This feature coming soon!_
             await query.answer("This is a label")
             return
 
-        elif action.startswith("pos_adjust:"):
+        elif data.startswith("demo:pos_adjust:"):
             # Show position adjustment menu (quick SL/TP)
             pos_id = action.split(":")[1]
             positions = context.user_data.get("positions", [])
@@ -7398,7 +7405,7 @@ _This feature coming soon!_
                     [InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:positions")]
                 ])
 
-        elif action.startswith("set_tp:"):
+        elif data.startswith("demo:set_tp:"):
             # Set take profit for a position
             try:
                 parts = action.split(":")
@@ -7434,7 +7441,7 @@ _This feature coming soon!_
                 await query.answer("❌ Error setting TP")
                 return
 
-        elif action.startswith("set_sl:"):
+        elif data.startswith("demo:set_sl:"):
             # Set stop loss for a position
             try:
                 parts = action.split(":")
@@ -7470,7 +7477,7 @@ _This feature coming soon!_
                 await query.answer("❌ Error setting SL")
                 return
 
-        elif action.startswith("trailing_setup:"):
+        elif data.startswith("demo:trailing_setup:"):
             # Quick trailing stop setup from position adjust menu
             pos_id = action.split(":")[1]
             positions = context.user_data.get("positions", [])
@@ -7675,7 +7682,7 @@ _Reply with token address or symbol:_
                     context_hint="sentiment_hub",
                 )
 
-        elif action.startswith("hub_"):
+        elif data.startswith("demo:hub_"):
             # Hub section handlers
             try:
                 section = action.replace("hub_", "")
@@ -7846,7 +7853,7 @@ _Reply with token address or symbol:_
                     context_hint="hub_wallet",
                 )
 
-        elif action.startswith("hub_buy:"):
+        elif data.startswith("demo:hub_buy:"):
             # Hub buy confirmation
             try:
                 parts = callback_data.split(":")
@@ -7875,7 +7882,7 @@ _Reply with token address or symbol:_
                     context_hint="hub_buy",
                 )
 
-        elif action.startswith("hub_detail:"):
+        elif data.startswith("demo:hub_detail:"):
             # Hub token detail view
             try:
                 parts = callback_data.split(":")
@@ -7905,7 +7912,7 @@ _Reply with token address or symbol:_
                     context_hint="hub_detail",
                 )
 
-        elif action.startswith("hub_custom_sl:"):
+        elif data.startswith("demo:hub_custom_sl:"):
             # Custom stop loss presets
             try:
                 parts = callback_data.split(":")
@@ -7942,7 +7949,7 @@ for this trade:
                     context_hint="hub_custom_sl",
                 )
 
-        elif action.startswith("hub_exec_buy:"):
+        elif data.startswith("demo:hub_exec_buy:"):
             # Execute hub buy with TP/SL
             try:
                 parts = callback_data.split(":")
@@ -8103,7 +8110,7 @@ for this trade:
                     context_hint="insta_snipe",
                 )
 
-        elif action.startswith("snipe_exec:"):
+        elif data.startswith("demo:snipe_exec:"):
             # Snipe execution - show confirmation
             try:
                 parts = callback_data.split(":")
@@ -8147,7 +8154,7 @@ for this trade:
                     context_hint="snipe_exec",
                 )
 
-        elif action.startswith("snipe_confirm:"):
+        elif data.startswith("demo:snipe_confirm:"):
             # Execute the snipe
             try:
                 parts = callback_data.split(":")
@@ -8385,7 +8392,7 @@ for this trade:
 
             text, keyboard = DemoMenuBuilder.trade_history_view(trades)
 
-        elif action.startswith("history_page:"):
+        elif data.startswith("demo:history_page:"):
             # Paginated trade history
             parts = data.split(":")
             page = int(parts[2]) if len(parts) >= 3 else 0
@@ -8639,7 +8646,7 @@ You are about to sell *{position_count} positions*
             context.user_data["snipe_mode"] = True
             context.user_data["snipe_amount"] = 0.1
 
-        elif action.startswith("snipe_amount:"):
+        elif data.startswith("demo:snipe_amount:"):
             # Set snipe amount
             parts = data.split(":")
             amount = float(parts[2]) if len(parts) >= 3 else 0.1
@@ -8695,7 +8702,7 @@ live price updates!
             ])
             context.user_data["awaiting_watchlist_token"] = True
 
-        elif action.startswith("watchlist_remove:"):
+        elif data.startswith("demo:watchlist_remove:"):
             # Remove from watchlist
             parts = data.split(":")
             if len(parts) >= 3:
@@ -8716,7 +8723,7 @@ live price updates!
             else:
                 text, keyboard = DemoMenuBuilder.error_message("Invalid remove command")
 
-        elif action.startswith("analyze:"):
+        elif data.startswith("demo:analyze:"):
             # AI Token Analysis
             parts = data.split(":")
             if len(parts) >= 3:
@@ -8774,7 +8781,7 @@ Coming soon in V2!
             await query.message.delete()
             return
 
-        elif action.startswith("buy:"):
+        elif data.startswith("demo:buy:"):
             # Handle buy amount selection
             parts = data.split(":")
             if len(parts) >= 3:
@@ -8783,7 +8790,7 @@ Coming soon in V2!
                 context.user_data["buy_amount"] = amount
                 context.user_data["awaiting_token"] = True
 
-        elif action.startswith("sell:"):
+        elif data.startswith("demo:sell:"):
             # Handle sell action via Bags API with success fee calculation
             parts = data.split(":")
             if len(parts) >= 4:
@@ -8863,7 +8870,7 @@ Coming soon in V2!
                 else:
                     text, keyboard = DemoMenuBuilder.error_message("Position not found")
 
-        elif action.startswith("quick_buy:"):
+        elif data.startswith("demo:quick_buy:"):
             # Quick buy from trending - with AI sentiment check
             parts = data.split(":")
             if len(parts) >= 3:
@@ -8915,7 +8922,7 @@ Coming soon in V2!
                     ],
                 ])
 
-        elif action.startswith("execute_buy:"):
+        elif data.startswith("demo:execute_buy:"):
             # Actually execute the buy order
             parts = data.split(":")
             if len(parts) >= 4:

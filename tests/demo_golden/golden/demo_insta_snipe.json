@@ -1,0 +1,42 @@
+{
+  "text": "\u26a1 *INSTA SNIPE*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n\ud83c\udfaf *HOTTEST TOKEN: TEST*\n\n*Conviction:* \ud83d\udd25 MEDIUM\n*Sentiment Score:* 72/100\n*Entry Timing:* \ud83d\udfe1 GOOD\n*Sightings:* 1x (multi-source bonus)\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n*Price:* $0.012300\n*24h:* \ud83d\udcc8 +5.6%\n*Volume:* $1.2M\n*Liquidity:* $480.0K\n*MCap:* $12.0M\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n\ud83d\udee1\ufe0f *AUTO PROTECTION*\n\u251c Stop Loss: *-15%* ($0.010455)\n\u2514 Take Profit: *+15%* ($0.014145)\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n_One-click trade with auto SL/TP_",
+  "parse_mode": "Markdown",
+  "keyboard": [
+    [
+      {
+        "text": "\u26a1 0.1 SOL",
+        "callback_data": "demo:snipe_exec:35f4d5cab4:0.1"
+      },
+      {
+        "text": "\u26a1 0.25 SOL",
+        "callback_data": "demo:snipe_exec:35f4d5cab4:0.25"
+      }
+    ],
+    [
+      {
+        "text": "\u26a1 0.5 SOL",
+        "callback_data": "demo:snipe_exec:35f4d5cab4:0.5"
+      },
+      {
+        "text": "\u26a1 1 SOL",
+        "callback_data": "demo:snipe_exec:35f4d5cab4:1"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udd04 Refresh Token",
+        "callback_data": "demo:insta_snipe"
+      },
+      {
+        "text": "\ud83d\udcca Full Analysis",
+        "callback_data": "demo:analyze:35f4d5cab4"
+      }
+    ],
+    [
+      {
+        "text": "\u25c0\ufe0f Back",
+        "callback_data": "demo:main"
+      }
+    ]
+  ]
+}
