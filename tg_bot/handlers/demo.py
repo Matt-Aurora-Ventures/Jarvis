@@ -7583,36 +7583,36 @@ for this trade:
 
         # ========== INSTA SNIPE HANDLERS ==========
         elif action == "insta_snipe":
-            # Insta Snipe - Find hottest token
+            # Insta Snipe - Find hottest token from DexScreener
             try:
-                # Try to get real trending tokens from DexScreener
+                # Use DexScreener boosted tokens (most trending)
                 hottest_token = None
                 try:
-                    import aiohttp
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(
-                            "https://api.dexscreener.com/token-boosts/top/v1",
-                            timeout=aiohttp.ClientTimeout(total=5)
-                        ) as resp:
-                            if resp.status == 200:
-                                data = await resp.json()
-                                if data and len(data) > 0:
-                                    top = data[0]
-                                    hottest_token = {
-                                        "symbol": top.get("tokenInfo", {}).get("symbol", "UNKNOWN"),
-                                        "address": top.get("tokenAddress", ""),
-                                        "price": float(top.get("tokenInfo", {}).get("price", 0)),
-                                        "change_24h": float(top.get("tokenInfo", {}).get("priceChange24h", 0)),
-                                        "volume_24h": float(top.get("volume24h", 0)),
-                                        "liquidity": float(top.get("liquidity", 0)),
-                                        "market_cap": float(top.get("marketCap", 0)),
-                                        "conviction": "HIGH" if float(top.get("totalAmount", 0)) > 1000 else "MEDIUM",
-                                        "sentiment_score": 75,
-                                        "entry_timing": "GOOD",
-                                        "sightings": 1,
-                                    }
+                    from core.dexscreener import get_boosted_tokens_with_data
+                    boosted = await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: get_boosted_tokens_with_data(chain="solana", limit=1, cache_ttl_seconds=60)
+                    )
+                    if boosted:
+                        top = boosted[0]
+                        # Calculate conviction from volume/liquidity ratio
+                        volume_ratio = top.volume_24h / top.liquidity_usd if top.liquidity_usd > 0 else 0
+                        conviction = "VERY HIGH" if volume_ratio > 5 else "HIGH" if volume_ratio > 2 else "MEDIUM"
+                        hottest_token = {
+                            "symbol": top.base_token_symbol,
+                            "address": top.base_token_address,
+                            "price": top.price_usd,
+                            "change_24h": top.price_change_24h,
+                            "volume_24h": top.volume_24h,
+                            "liquidity": top.liquidity_usd,
+                            "market_cap": 0,  # DexScreener doesn't provide this
+                            "conviction": conviction,
+                            "sentiment_score": 75,  # Neutral default
+                            "entry_timing": "GOOD" if abs(top.price_change_1h) < 10 else "LATE",
+                            "sightings": 1,
+                        }
                 except Exception as api_err:
-                    logger.warning(f"DexScreener API error: {api_err}")
+                    logger.warning(f"DexScreener boosted tokens error: {api_err}")
 
                 # Validate the token payload - avoid UNKNOWN/zeroed data
                 if hottest_token:
@@ -8129,55 +8129,81 @@ You are about to sell *{position_count} positions*
                 logger.warning(f"Flow validation error (continuing): {e}")
 
             try:
-                engine = await _get_demo_engine()
+                from core.trading.bags_client import get_bags_client
+
+                bags_client = get_bags_client()
+                wallet_address = context.user_data.get("wallet_address", "demo_wallet")
 
                 closed_count = 0
+                failed_count = 0
                 total_pnl = 0.0
                 total_fees = 0.0
                 fee_manager = get_success_fee_manager()
 
                 for pos in positions:
                     try:
-                        await engine.close_position(pos.get("id"))
-                        closed_count += 1
+                        token_address = pos.get("address")
+                        token_amount = pos.get("amount", 0)
+                        symbol = pos.get("symbol", "???")
 
-                        # Calculate success fee for each winning position
-                        pnl_usd = pos.get("pnl_usd", 0)
-                        total_pnl += pnl_usd
+                        # Sell via Bags API (Token -> SOL)
+                        result = await bags_client.swap(
+                            from_token=token_address,
+                            to_token="So11111111111111111111111111111111111111112",  # SOL
+                            amount=token_amount,
+                            wallet_address=wallet_address,
+                            slippage_bps=100,  # 1% slippage
+                        )
 
-                        if pnl_usd > 0:
-                            fee_result = fee_manager.calculate_success_fee(
-                                entry_price=pos.get("entry_price", 0),
-                                exit_price=pos.get("current_price", 0),
-                                amount_sol=pos.get("amount", 0),
-                                token_symbol=pos.get("symbol", "???"),
-                            )
-                            if fee_result.get("applies"):
-                                total_fees += fee_result.get("fee_amount", 0)
+                        if result.success:
+                            closed_count += 1
+                            logger.info(f"Sold {symbol} via Bags API: {result.tx_hash}")
+
+                            # Calculate success fee for winning positions
+                            pnl_usd = pos.get("pnl_usd", 0)
+                            total_pnl += pnl_usd
+
+                            if pnl_usd > 0:
+                                fee_result = fee_manager.calculate_success_fee(
+                                    entry_price=pos.get("entry_price", 0),
+                                    exit_price=pos.get("current_price", 0),
+                                    amount_sol=pos.get("amount_sol", 0),
+                                    token_symbol=symbol,
+                                )
+                                if fee_result.get("applies"):
+                                    total_fees += fee_result.get("fee_amount", 0)
+                        else:
+                            failed_count += 1
+                            logger.warning(f"Failed to sell {symbol} via Bags API: {result.error}")
                     except Exception as e:
-                        logger.warning(f"Failed to close position {pos.get('id')}: {e}")
+                        failed_count += 1
+                        logger.warning(f"Failed to sell position {pos.get('symbol')}: {e}")
 
-                # Build enhanced result message
+                # Clear positions after sell
+                context.user_data["positions"] = []
+
+                # Build result message
                 pnl_emoji = "📈" if total_pnl > 0 else "📉" if total_pnl < 0 else "➖"
                 pnl_sign = "+" if total_pnl > 0 else ""
 
-                details = f"Closed {closed_count}/{len(positions)} positions\n"
-                details += f"\n{pnl_emoji} Total P&L: {pnl_sign}${total_pnl:.2f}"
+                details = f"Sold {closed_count}/{len(positions)} positions via Bags.fm"
+                if failed_count > 0:
+                    details += f"\n⚠️ {failed_count} failed"
+                details += f"\n\n{pnl_emoji} Total P&L: {pnl_sign}${total_pnl:.2f}"
 
                 if total_fees > 0:
                     net_profit = total_pnl - total_fees
                     details += f"\n💰 Success Fee (0.5%): -${total_fees:.4f}"
                     details += f"\n💵 Net Profit: +${net_profit:.2f}"
 
-                details += "\n\nOrders submitted to Jupiter."
-
                 text, keyboard = DemoMenuBuilder.success_message(
                     action="Sell All Executed",
                     details=details,
                 )
 
-                logger.info(f"Sell all: {closed_count} positions | PnL: ${total_pnl:.2f} | Fees: ${total_fees:.4f}")
+                logger.info(f"Sell all: {closed_count} sold, {failed_count} failed | PnL: ${total_pnl:.2f} | Fees: ${total_fees:.4f}")
             except Exception as e:
+                logger.error(f"Sell all error: {e}")
                 text, keyboard = DemoMenuBuilder.error_message(f"Sell all failed: {str(e)[:50]}")
 
         elif action == "snipe_mode":
@@ -8331,7 +8357,7 @@ Coming soon in V2!
                 context.user_data["awaiting_token"] = True
 
         elif action.startswith("sell:"):
-            # Handle sell action with success fee calculation
+            # Handle sell action via Bags API with success fee calculation
             parts = data.split(":")
             if len(parts) >= 4:
                 pos_id = parts[2]
@@ -8340,44 +8366,76 @@ Coming soon in V2!
                 # Find position
                 pos_data = next((p for p in positions if p["id"] == pos_id), None)
                 if pos_data:
-                    symbol = pos_data.get("symbol", "???")
-                    entry_price = pos_data.get("entry_price", 0)
-                    current_price = pos_data.get("current_price", entry_price)
-                    amount_sol = pos_data.get("amount", 0) * (pct / 100)
-                    pnl_pct = pos_data.get("pnl_pct", 0)
-                    pnl_usd = pos_data.get("pnl_usd", 0) * (pct / 100)  # Scale by sell %
+                    try:
+                        from core.trading.bags_client import get_bags_client
 
-                    # Calculate success fee if winning trade
-                    fee_manager = get_success_fee_manager()
-                    fee_result = fee_manager.calculate_success_fee(
-                        entry_price=entry_price,
-                        exit_price=current_price,
-                        amount_sol=amount_sol,
-                        token_symbol=symbol,
-                    )
+                        symbol = pos_data.get("symbol", "???")
+                        token_address = pos_data.get("address")
+                        entry_price = pos_data.get("entry_price", 0)
+                        current_price = pos_data.get("current_price", entry_price)
+                        token_amount = pos_data.get("amount", 0) * (pct / 100)
+                        amount_sol = pos_data.get("amount_sol", 0) * (pct / 100)
+                        pnl_pct = pos_data.get("pnl_pct", 0)
+                        pnl_usd = pos_data.get("pnl_usd", 0) * (pct / 100)
 
-                    success_fee = fee_result.get("fee_amount", 0) if fee_result.get("applies") else 0
-                    net_profit = fee_result.get("net_profit", pnl_usd) if fee_result.get("applies") else pnl_usd
+                        # Execute sell via Bags API
+                        bags_client = get_bags_client()
+                        wallet_address = context.user_data.get("wallet_address", "demo_wallet")
 
-                    # Use close_position_result UI for better display
-                    text, keyboard = DemoMenuBuilder.close_position_result(
-                        success=True,
-                        symbol=symbol,
-                        amount=amount_sol,
-                        entry_price=entry_price,
-                        exit_price=current_price,
-                        pnl_usd=pnl_usd,
-                        pnl_percent=pnl_pct,
-                        success_fee=success_fee,
-                        net_profit=net_profit,
-                        tx_hash=f"pending_{pos_id[:8]}",  # Simulated TX for now
-                    )
+                        result = await bags_client.swap(
+                            from_token=token_address,
+                            to_token="So11111111111111111111111111111111111111112",  # SOL
+                            amount=token_amount,
+                            wallet_address=wallet_address,
+                            slippage_bps=100,
+                        )
 
-                    logger.info(
-                        f"Position close: {symbol} {pct}% | "
-                        f"PnL: ${pnl_usd:.2f} ({pnl_pct:+.1f}%) | "
-                        f"Fee: ${success_fee:.4f}"
-                    )
+                        if result.success:
+                            # Calculate success fee if winning trade
+                            fee_manager = get_success_fee_manager()
+                            fee_result = fee_manager.calculate_success_fee(
+                                entry_price=entry_price,
+                                exit_price=current_price,
+                                amount_sol=amount_sol,
+                                token_symbol=symbol,
+                            )
+
+                            success_fee = fee_result.get("fee_amount", 0) if fee_result.get("applies") else 0
+                            net_profit = fee_result.get("net_profit", pnl_usd) if fee_result.get("applies") else pnl_usd
+
+                            # Update position (reduce amount or remove if 100%)
+                            if pct >= 100:
+                                positions.remove(pos_data)
+                            else:
+                                pos_data["amount"] *= (1 - pct / 100)
+                                pos_data["amount_sol"] *= (1 - pct / 100)
+                            context.user_data["positions"] = positions
+
+                            text, keyboard = DemoMenuBuilder.close_position_result(
+                                success=True,
+                                symbol=symbol,
+                                amount=amount_sol,
+                                entry_price=entry_price,
+                                exit_price=current_price,
+                                pnl_usd=pnl_usd,
+                                pnl_percent=pnl_pct,
+                                success_fee=success_fee,
+                                net_profit=net_profit,
+                                tx_hash=result.tx_hash or "pending",
+                            )
+
+                            logger.info(
+                                f"Sold {pct}% of {symbol} via Bags API | "
+                                f"PnL: ${pnl_usd:.2f} ({pnl_pct:+.1f}%) | "
+                                f"Fee: ${success_fee:.4f} | TX: {result.tx_hash}"
+                            )
+                        else:
+                            text, keyboard = DemoMenuBuilder.error_message(
+                                f"Bags.fm sell failed: {result.error or 'Unknown error'}"
+                            )
+                    except Exception as e:
+                        logger.error(f"Sell position error: {e}")
+                        text, keyboard = DemoMenuBuilder.error_message(f"Sell failed: {str(e)[:50]}")
                 else:
                     text, keyboard = DemoMenuBuilder.error_message("Position not found")
 
