@@ -254,6 +254,36 @@ def run_case(case_name: str) -> GoldenResult:
     demo_engine = _FakeEngine(fake_positions)
     treasury_engine = _FakeEngine([fake_positions[0]])
     fake_intel = _FakeIntelligence()
+    fake_bags_tokens = [
+        {
+            "symbol": "TEST",
+            "name": "Test Token",
+            "address": "So11111111111111111111111111111111111111112",
+            "price_usd": 0.0123,
+            "change_24h": 5.6,
+            "volume_24h": 1_250_000,
+            "liquidity": 480_000,
+            "market_cap": 12_000_000,
+            "holders": 1234,
+            "sentiment": "bullish",
+            "sentiment_score": 0.72,
+            "signal": "BUY",
+        },
+        {
+            "symbol": "MOON",
+            "name": "Moon Token",
+            "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+            "price_usd": 0.0042,
+            "change_24h": -3.4,
+            "volume_24h": 980_000,
+            "liquidity": 210_000,
+            "market_cap": 4_200_000,
+            "holders": 842,
+            "sentiment": "neutral",
+            "sentiment_score": 0.51,
+            "signal": "HOLD",
+        },
+    ]
 
     async def _simple_report(update, _context):
         await update.message.reply_text(
@@ -285,6 +315,9 @@ def run_case(case_name: str) -> GoldenResult:
         patch("tg_bot.handlers.demo._get_demo_engine", new=AsyncMock(return_value=demo_engine)), \
         patch("tg_bot.handlers.demo.get_market_regime", new=AsyncMock(return_value={"regime": "BULL", "risk_level": "LOW", "btc_change_24h": 1.2, "sol_change_24h": -0.4})), \
         patch("tg_bot.handlers.demo.get_trending_with_sentiment", new=AsyncMock(return_value=None)), \
+        patch("tg_bot.handlers.demo.get_bags_top_tokens_with_sentiment", new=AsyncMock(return_value=fake_bags_tokens)), \
+        patch("core.dexscreener.get_boosted_tokens_with_data", return_value=[]), \
+        patch("tg_bot.handlers.demo._execute_swap_with_fallback", new=AsyncMock(return_value={"success": True, "amount_out": 12345, "tx_hash": "tx_demo", "source": "bags_fm"})), \
         patch("tg_bot.handlers.demo.get_success_fee_manager", return_value=_FakeFeeManager()), \
         patch("tg_bot.handlers.demo.get_trade_intelligence", return_value=fake_intel), \
         patch("bots.treasury.scorekeeper.get_scorekeeper", return_value=_FakeScorekeeper()), \
@@ -380,6 +413,22 @@ def run_case(case_name: str) -> GoldenResult:
             asyncio.run(demo_callback(cb_update, context))
             return _extract_last_edit(cb_update.callback_query.message)
 
+        if case_name == "demo_bags_fm":
+            from tg_bot.handlers.demo import demo_callback
+            cb_update = _build_callback_update("demo:bags_fm", base_update)
+            cb_update.callback_query.message.edit_text.reset_mock()
+            import asyncio
+            asyncio.run(demo_callback(cb_update, context))
+            return _extract_last_edit(cb_update.callback_query.message)
+
+        if case_name == "demo_insta_snipe":
+            from tg_bot.handlers.demo import demo_callback
+            cb_update = _build_callback_update("demo:insta_snipe", base_update)
+            cb_update.callback_query.message.edit_text.reset_mock()
+            import asyncio
+            asyncio.run(demo_callback(cb_update, context))
+            return _extract_last_edit(cb_update.callback_query.message)
+
         if case_name == "demo_buy_confirm":
             from tg_bot.handlers.demo import demo_message_handler
             context.user_data["awaiting_token"] = True
@@ -453,6 +502,8 @@ if __name__ == "__main__":
         "demo_main",
         "demo_positions",
         "demo_buy_prompt",
+        "demo_bags_fm",
+        "demo_insta_snipe",
         "demo_buy_confirm",
         "demo_sell_all_confirm",
         "demo_sell_position",
