@@ -2,7 +2,7 @@ import React from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
 // Layout
-import Layout from './components/Layout'
+import MainLayout from './components/MainLayout'
 
 // Common components
 import { ErrorBoundary } from '@/components/common'
@@ -29,7 +29,7 @@ function App() {
             <Route path="/trading" element={<Trading />} />
 
             {/* Other pages with Layout */}
-            <Route path="/" element={<Layout />}>
+            <Route path="/" element={<MainLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="chat" element={<Chat />} />
               <Route path="voice" element={<VoiceControl />} />

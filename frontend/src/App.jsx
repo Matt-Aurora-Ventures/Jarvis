@@ -2,7 +2,7 @@ import React from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
 // Layout
-import Layout from './components/Layout'
+import MainLayout from './components/MainLayout'
 
 // Pages - Using the advanced refactored versions
 import Dashboard from '@/pages/DashboardNew'
@@ -34,7 +34,7 @@ function App() {
         <Route path="/trading" element={<Trading />} />
 
         {/* Standard Layout Routes */}
-        <Route path="/" element={<Layout />}>
+        <Route path="/" element={<MainLayout />}>
           {/* Main Dashboard */}
           <Route index element={<Dashboard />} />
 

@@ -327,6 +327,32 @@ def main():
     else:
         print("Scheduled digests: DISABLED (no admin IDs)")
 
+    # Schedule 15-minute sentiment updates (US-008)
+    if job_queue:
+        from tg_bot.handlers.demo import _update_sentiment_cache
+        job_queue.run_repeating(
+            _update_sentiment_cache,
+            interval=timedelta(minutes=15),
+            first=10,  # Start 10 seconds after bot launch
+            name="sentiment_cache_updater",
+        )
+        print("Sentiment updater: ENABLED (15-minute cycle)")
+    else:
+        print("Sentiment updater: DISABLED (no job queue)")
+
+    # Schedule 5-minute TP/SL monitoring (US-006)
+    if job_queue:
+        from tg_bot.handlers.demo import _background_tp_sl_monitor
+        job_queue.run_repeating(
+            _background_tp_sl_monitor,
+            interval=timedelta(minutes=5),
+            first=30,  # Start 30 seconds after bot launch
+            name="tp_sl_monitor",
+        )
+        print("TP/SL monitor: ENABLED (5-minute cycle)")
+    else:
+        print("TP/SL monitor: DISABLED (no job queue)")
+
     print("=" * 50)
     print("Bot started! Press Ctrl+C to stop.")
     print("=" * 50 + "\n")

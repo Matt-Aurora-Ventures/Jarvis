@@ -207,11 +207,11 @@ def create_structured_client(api_key: str = None, provider: str = "openai") -> O
     
     elif provider == "anthropic":
         from anthropic import Anthropic
-        key = api_key or os.getenv("ANTHROPIC_API_KEY")
+        from core.llm.anthropic_utils import get_anthropic_base_url, get_anthropic_api_key
+        key = api_key or get_anthropic_api_key()
         if not key:
-            logger.warning("No Anthropic API key found")
+            logger.warning("No Anthropic-compatible API key found")
             return None
-        from core.llm.anthropic_utils import get_anthropic_base_url
 
         client = Anthropic(
             api_key=key,

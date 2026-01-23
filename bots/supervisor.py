@@ -19,11 +19,120 @@ import sys
 import signal
 import socket
 import time
+import tempfile
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Callable, Any
 from dataclasses import dataclass, field
 from enum import Enum
+
+
+# =============================================================================
+# Single Instance Enforcement (Bug Fix US-033)
+# =============================================================================
+
+class SingleInstanceLock:
+    """
+    Cross-platform single instance enforcement using file locking.
+
+    On Windows: Uses temp file with exclusive access
+    On Unix: Uses fcntl.flock
+    """
+
+    def __init__(self, name: str):
+        self.name = name
+        self.lock_file = Path(tempfile.gettempdir()) / f"{name}.lock"
+        self._lock_fd = None
+        self._is_windows = sys.platform == "win32"
+
+    def acquire(self) -> bool:
+        """
+        Acquire the single instance lock.
+
+        Returns:
+            True if lock acquired, False if another instance is running.
+
+        Raises:
+            RuntimeError: If another instance is already running.
+        """
+        try:
+            if self._is_windows:
+                # Windows: Use exclusive file creation
+                import msvcrt
+                self._lock_fd = open(self.lock_file, 'w')
+                msvcrt.locking(self._lock_fd.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                # Unix: Use fcntl
+                import fcntl
+                self._lock_fd = open(self.lock_file, 'w')
+                fcntl.flock(self._lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+            # Write PID to lock file for debugging
+            self._lock_fd.write(str(os.getpid()))
+            self._lock_fd.flush()
+            return True
+
+        except (IOError, OSError) as e:
+            if self._lock_fd:
+                self._lock_fd.close()
+                self._lock_fd = None
+            raise RuntimeError(
+                f"Another instance of {self.name} is already running. "
+                f"Lock file: {self.lock_file}"
+            ) from e
+
+    def release(self):
+        """Release the lock and clean up."""
+        if self._lock_fd:
+            try:
+                if self._is_windows:
+                    import msvcrt
+                    msvcrt.locking(self._lock_fd.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(self._lock_fd.fileno(), fcntl.LOCK_UN)
+                self._lock_fd.close()
+            except Exception:
+                pass
+            finally:
+                self._lock_fd = None
+                try:
+                    self.lock_file.unlink()
+                except Exception:
+                    pass
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release()
+        return False
+
+
+def ensure_single_instance(name: str) -> SingleInstanceLock:
+    """
+    Ensure only one instance of a named process is running.
+
+    Args:
+        name: Unique name for the process (e.g., "telegram_demo_bot")
+
+    Returns:
+        SingleInstanceLock that must be kept alive while the process runs.
+
+    Raises:
+        RuntimeError: If another instance is already running.
+
+    Usage:
+        lock = ensure_single_instance("telegram_demo_bot")
+        try:
+            # ... run your bot ...
+        finally:
+            lock.release()
+    """
+    lock = SingleInstanceLock(name)
+    lock.acquire()
+    return lock
 
 # Import safe task tracking
 try:
@@ -520,7 +629,12 @@ async def create_twitter_poster():
     # Use TwitterCredentials.from_env() which correctly prefers JARVIS_ACCESS_TOKEN
     # for posting as @Jarvis_lifeos instead of @aurora_ventures
     twitter_client = TwitterClient()  # Uses from_env() internally
-    claude_client = ClaudeContentGenerator(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    try:
+        from core.llm.anthropic_utils import get_anthropic_api_key
+        claude_key = get_anthropic_api_key()
+    except Exception:
+        claude_key = os.environ.get("ANTHROPIC_API_KEY")
+    claude_client = ClaudeContentGenerator(api_key=claude_key)
 
     poster = SentimentTwitterPoster(
         twitter_client=twitter_client,
@@ -944,6 +1058,18 @@ async def main():
     (project_root / "logs").mkdir(exist_ok=True)
 
     load_env()
+
+    # ==========================================================
+    # MCP SERVERS: Optional MCP toolchain for local agents
+    # ==========================================================
+    if os.getenv("MCP_AUTO_START", "").lower() in ("1", "true", "yes", "on"):
+        try:
+            os.environ.setdefault("JARVIS_ROOT", str(project_root))
+            from core.mcp_loader import start_mcp_servers
+            start_mcp_servers()
+            logger.info("MCP auto-start enabled")
+        except Exception as exc:
+            logger.warning(f"MCP auto-start failed: {exc}")
 
     # ==========================================================
     # CONTEXT ENGINE: Track startups to prevent restart loops

@@ -1869,7 +1869,7 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• /code fix the /trending command\n"
                 "• /code refactor the sentiment analysis\n\n"
                 "<b>Setup:</b>\n"
-                "• Local model: set <code>ANTHROPIC_BASE_URL</code> and <code>ANTHROPIC_API_KEY</code>\n"
+                "• Local model: set <code>ANTHROPIC_BASE_URL</code> and <code>ANTHROPIC_API_KEY</code> (or <code>ANTHROPIC_AUTH_TOKEN</code>)\n"
                 "• CLI fallback: <code>npm install -g @anthropic-ai/claude-code</code>",
                 parse_mode=ParseMode.HTML
             )
@@ -1900,7 +1900,7 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "⚠️ <b>Claude CLI not configured</b>\n\n"
                 "The /code command requires Claude Code CLI or a local Anthropic-compatible endpoint.\n\n"
                 "<b>Local model setup:</b>\n"
-                "Set <code>ANTHROPIC_BASE_URL</code> and <code>ANTHROPIC_API_KEY</code>.\n\n"
+                "Set <code>ANTHROPIC_BASE_URL</code> and <code>ANTHROPIC_API_KEY</code> (or <code>ANTHROPIC_AUTH_TOKEN</code>).\n\n"
                 "<b>CLI setup (fallback):</b>\n"
                 "<code>npm install -g @anthropic-ai/claude-code</code>",
                 parse_mode=ParseMode.HTML
@@ -2020,7 +2020,7 @@ async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "/dev fix the duplicate detection in twitter bot",
                     "",
                     "<b>Setup:</b>",
-                    "• Local model: set ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY",
+                    "• Local model: set ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN)",
                     "• CLI fallback: npm install -g @anthropic-ai/claude-code",
                     "",
                     "<i>All secrets are automatically scrubbed</i>",
@@ -2040,7 +2040,7 @@ async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [
                     "<b>Claude API Not Available</b>",
                     "",
-                    "Set ANTHROPIC_API_KEY and (for local models) ANTHROPIC_BASE_URL.",
+                    "Set ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN) and (for local models) ANTHROPIC_BASE_URL.",
                     "",
                     "Optional CLI fallback:",
                     "npm install -g @anthropic-ai/claude-code",
@@ -2057,7 +2057,7 @@ async def dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "",
                     "The /dev command requires Claude Code CLI or a local Anthropic-compatible endpoint.",
                     "",
-                    "Local model: set ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY.",
+                    "Local model: set ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN).",
                     "",
                     "CLI fallback: npm install -g @anthropic-ai/claude-code",
                 ]

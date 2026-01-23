@@ -15,6 +15,7 @@ Features:
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
@@ -96,6 +97,9 @@ class SharedMemory:
 
         self.learnings_file = self.storage_path / "learnings.json"
         self.metrics_file = self.storage_path / "metrics.json"
+        self.max_learnings = int(os.getenv("JARVIS_SHARED_MEMORY_MAX_LEARNINGS", "2000"))
+        self.max_content_chars = int(os.getenv("JARVIS_SHARED_MEMORY_MAX_CONTENT_CHARS", "2000"))
+        self.max_context_chars = int(os.getenv("JARVIS_SHARED_MEMORY_MAX_CONTEXT_CHARS", "5000"))
 
         self.learnings: Dict[str, Learning] = {}
         self.metrics: Dict[str, Any] = {
@@ -165,12 +169,24 @@ class SharedMemory:
             import uuid
             learning_id = str(uuid.uuid4())
 
+            trimmed_content = (content or "").strip()
+            if self.max_content_chars and len(trimmed_content) > self.max_content_chars:
+                trimmed_content = trimmed_content[: self.max_content_chars - 3] + "..."
+
+            trimmed_context = context or {}
+            try:
+                serialized = json.dumps(trimmed_context)
+                if self.max_context_chars and len(serialized) > self.max_context_chars:
+                    trimmed_context = {"note": "context truncated", "keys": list(trimmed_context.keys())[:25]}
+            except Exception:
+                trimmed_context = {"note": "context serialization failed"}
+
             learning = Learning(
                 id=learning_id,
                 type=learning_type,
                 component=component,
-                content=content,
-                context=context or {},
+                content=trimmed_content,
+                context=trimmed_context,
                 timestamp=datetime.now(),
                 confidence=confidence,
                 success_rate=0.5,  # Start neutral
@@ -188,7 +204,32 @@ class SharedMemory:
             self._save()
 
             logger.info(f"[{component}] Added {learning_type.value} learning: {content[:100]}")
+
+            # Enforce max memory size
+            if self.max_learnings and len(self.learnings) > self.max_learnings:
+                self._prune_to_limit()
             return learning_id
+
+    def _prune_to_limit(self):
+        """Prune oldest/lowest-value learnings to stay within max size."""
+        if self.max_learnings <= 0:
+            return
+        if len(self.learnings) <= self.max_learnings:
+            return
+
+        # Sort by confidence * success rate, then by age (oldest first)
+        def score(l: Learning) -> float:
+            age_days = (datetime.now() - l.timestamp).days
+            return (l.confidence * l.success_rate) - (age_days * 0.01)
+
+        candidates = sorted(self.learnings.values(), key=score)
+        to_remove = len(self.learnings) - self.max_learnings
+        for learning in candidates[:to_remove]:
+            self.learnings.pop(learning.id, None)
+
+        if to_remove > 0:
+            logger.info(f"Pruned {to_remove} learnings to enforce memory cap")
+            self._save()
 
     def search_learnings(
         self,
@@ -335,7 +376,9 @@ def get_shared_memory() -> SharedMemory:
     """Get the global shared memory instance."""
     global _shared_memory
     if _shared_memory is None:
-        from pathlib import Path
-        storage_path = Path.home() / ".lifeos" / "shared_memory"
+        root = Path(__file__).resolve().parents[2]
+        default_path = root / "data" / "ai_memory"
+        env_path = os.getenv("JARVIS_SHARED_MEMORY_DIR", "").strip()
+        storage_path = Path(env_path).expanduser() if env_path else default_path
         _shared_memory = SharedMemory(storage_path)
     return _shared_memory

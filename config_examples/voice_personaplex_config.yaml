@@ -1,0 +1,281 @@
+# PersonaPlex-7B Voice Configuration Examples
+# ==============================================
+# Full-duplex conversational AI configuration for Jarvis
+
+# Example 1: Basic PersonaPlex with Jarvis Persona
+# -------------------------------------------------
+voice:
+  enabled: true
+  tts_engine: personaplex  # Use PersonaPlex for TTS
+  speak_responses: true
+
+  # PersonaPlex-specific configuration
+  personaplex:
+    enabled: true
+    device: cuda  # NVIDIA GPU required (cuda, cuda:0, cuda:1, etc.)
+    persona: jarvis  # Pre-built persona: jarvis, morgan_freeman, custom
+
+    # Full-duplex settings
+    full_duplex: false  # Set to true for simultaneous listen/speak
+    barge_in_enabled: true  # Allow interruptions
+    barge_in_sensitivity: 0.5  # 0.0-1.0 (higher = more sensitive)
+
+  # Standard voice settings still apply
+  wake_word: jarvis
+  mode: wake-word
+  barge_in_enabled: true
+  barge_in_timeout_seconds: 3
+
+---
+
+# Example 2: Full-Duplex Mode (Revolutionary)
+# --------------------------------------------
+# This enables true simultaneous listening and speaking
+voice:
+  enabled: true
+  tts_engine: personaplex
+
+  personaplex:
+    enabled: true
+    device: cuda
+    persona: jarvis
+
+    # FULL-DUPLEX MODE - Listen and speak simultaneously!
+    full_duplex: true
+    barge_in_enabled: true
+    barge_in_sensitivity: 0.6  # More sensitive for full-duplex
+
+    # Performance tuning
+    max_tokens: 256  # Lower = faster response
+    temperature: 0.7  # 0.0-1.0 (higher = more creative)
+
+  # Wake word still used for session start
+  wake_word: jarvis
+  mode: wake-word
+
+---
+
+# Example 3: Custom Persona
+# --------------------------
+voice:
+  enabled: true
+  tts_engine: personaplex
+
+  personaplex:
+    enabled: true
+    device: cuda
+    persona: custom  # Use custom persona
+
+    # Define custom persona characteristics
+    custom_persona:
+      role_prompt: |
+        You are JARVIS, an advanced AI assistant created by KR8TIV.
+        You specialize in Solana blockchain development, trading, and crypto security.
+        You speak with authority and precision, providing technical yet accessible explanations.
+        You are proactive, anticipating user needs before they ask.
+        Your tone is professional but warm, like a trusted advisor.
+
+      temperature: 0.7
+      max_tokens: 512  # Longer responses
+      interrupt_threshold: 0.4  # Less sensitive (more patient)
+
+    full_duplex: true
+
+---
+
+# Example 4: Voice Cloning (Custom Voice)
+# ----------------------------------------
+voice:
+  enabled: true
+  tts_engine: personaplex
+
+  personaplex:
+    enabled: true
+    device: cuda
+    persona: jarvis
+
+    # Voice conditioning using reference audio
+    voice_prompt: data/voices/jarvis_reference.wav  # Must be 24kHz WAV
+
+    full_duplex: true
+    barge_in_enabled: true
+
+# To create voice reference:
+# 1. Record 5-10 seconds of clean speech
+# 2. Convert to 24kHz: ffmpeg -i input.wav -ar 24000 -ac 1 output_24k.wav
+# 3. Place in data/voices/ directory
+
+---
+
+# Example 5: Morgan Freeman Persona
+# ----------------------------------
+voice:
+  enabled: true
+  tts_engine: personaplex
+
+  personaplex:
+    enabled: true
+    device: cuda
+    persona: morgan_freeman  # Pre-built Morgan Freeman persona
+
+    # Voice conditioning (optional - add Morgan Freeman sample)
+    voice_prompt: data/voices/morgan_freeman_reference.wav
+
+    # Slower, more deliberate responses
+    temperature: 0.8  # More natural variation
+    max_tokens: 384
+    interrupt_threshold: 0.6  # More patient, less interruptible
+
+    full_duplex: false  # Morgan Freeman mode works better with turn-taking
+
+---
+
+# Example 6: Performance Optimized (Low Latency)
+# -----------------------------------------------
+voice:
+  enabled: true
+  tts_engine: personaplex
+
+  personaplex:
+    enabled: true
+    device: cuda
+    persona: jarvis
+
+    # Optimize for speed
+    full_duplex: true
+    max_tokens: 128  # Shorter = faster
+    temperature: 0.6  # Less variation = faster
+    interrupt_threshold: 0.3  # Very sensitive = instant interrupts
+
+    # GPU optimization
+    device: cuda:0  # Specific GPU if you have multiple
+
+---
+
+# Example 7: Multi-Language Support (Future)
+# -------------------------------------------
+# Note: PersonaPlex v1 is English-only, but configuration ready for future
+voice:
+  enabled: true
+  tts_engine: personaplex
+
+  personaplex:
+    enabled: true
+    device: cuda
+    persona: custom
+
+    custom_persona:
+      role_prompt: "You are JARVIS, a multilingual AI assistant."
+      language: en  # Future: es, fr, de, ja, zh, etc.
+      temperature: 0.7
+
+    full_duplex: true
+
+---
+
+# Example 8: Hybrid Mode (PersonaPlex + Fallback)
+# ------------------------------------------------
+# Use PersonaPlex when GPU available, fallback to Piper otherwise
+voice:
+  enabled: true
+  tts_engine: personaplex  # Primary engine
+
+  # Fallback configuration (auto-used if PersonaPlex fails)
+  fallback_tts_engine: piper  # or "say" for macOS
+
+  personaplex:
+    enabled: true
+    device: cuda
+    persona: jarvis
+    full_duplex: true
+
+  # Piper fallback settings
+  piper_model: en_US-lessac-medium.onnx
+
+---
+
+# Example 9: Security Expert Persona
+# -----------------------------------
+voice:
+  enabled: true
+  tts_engine: personaplex
+
+  personaplex:
+    enabled: true
+    device: cuda
+    persona: custom
+
+    custom_persona:
+      role_prompt: |
+        You are a Solana blockchain security expert.
+        You have deep knowledge of smart contract vulnerabilities, MEV, and DeFi exploits.
+        You speak technically but clearly, explaining complex security concepts accessibly.
+        You are cautious and thorough, always highlighting potential risks.
+
+      temperature: 0.6  # More focused, less creative
+      max_tokens: 512
+      interrupt_threshold: 0.5
+
+    full_duplex: true
+
+---
+
+# Example 10: Trading Bot Persona
+# --------------------------------
+voice:
+  enabled: true
+  tts_engine: personaplex
+
+  personaplex:
+    enabled: true
+    device: cuda
+    persona: custom
+
+    custom_persona:
+      role_prompt: |
+        You are JARVIS, a professional trading AI assistant.
+        You analyze market data, execute trades, and provide real-time market insights.
+        You speak with confidence and precision, using trading terminology naturally.
+        You are decisive but risk-aware, always considering position sizing and risk management.
+
+      temperature: 0.5  # Very focused for trading decisions
+      max_tokens: 256  # Quick, concise responses
+      interrupt_threshold: 0.3  # Fast interrupts for urgent market updates
+
+    full_duplex: true
+
+---
+
+# Configuration Tips:
+# ===================
+#
+# 1. **Device Selection**:
+#    - cuda: Auto-select first GPU
+#    - cuda:0, cuda:1: Specific GPU if you have multiple
+#    - Requires NVIDIA GPU with 16GB+ VRAM
+#
+# 2. **Temperature**:
+#    - 0.0-0.5: Focused, consistent (good for factual responses)
+#    - 0.6-0.8: Natural, varied (good for conversation)
+#    - 0.9-1.0: Creative, unpredictable (good for storytelling)
+#
+# 3. **Max Tokens**:
+#    - 128: Very fast, concise responses
+#    - 256: Standard, balanced
+#    - 512+: Detailed, longer explanations (slower)
+#
+# 4. **Interrupt Threshold**:
+#    - 0.0-0.3: Very sensitive (instant interrupts)
+#    - 0.4-0.6: Balanced (natural conversation)
+#    - 0.7-1.0: Patient (lets user finish sentences)
+#
+# 5. **Full-Duplex**:
+#    - true: Revolutionary simultaneous mode (requires practice)
+#    - false: Traditional turn-taking (more familiar)
+#
+# 6. **Voice Conditioning**:
+#    - Requires 24kHz WAV file
+#    - 5-10 seconds of clean speech
+#    - Convert with: ffmpeg -i input.wav -ar 24000 -ac 1 output.wav
+#
+# For complete setup guide, see: docs/personaplex_setup.md
