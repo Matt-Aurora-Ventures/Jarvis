@@ -12,6 +12,7 @@ from typing import Dict, List, Tuple
 # These are tracked alongside the main KR8TIV pair
 # Format: "name": "pair_address"
 ADDITIONAL_LP_PAIRS: Dict[str, str] = {
+    "kr8tiv/main-alt": "GNFeekyLr79S7jkBipPznLkiVm1UFqmPNbqS96mXmGqq",
     "kr8tiv/Eliza Town": "5VU8r7BFQBxUuNXMWLVPzjEQS2Z7oUt1vex3YJa95fw3",
     "kr8tiv/ralph": "EYGvaFsXk1baLN8sJycLgYgnmUk6R3Bb4UXBzKweqXS7",
     "kr8tiv/ralph-tui": "EipU3y7ojVqadEQNGWSu26je8iHixs1Xf7BP7dWPheUS",
