@@ -49,7 +49,12 @@ async def test_post():
     )
 
     twitter = TwitterClient(creds)
-    claude = ClaudeContentGenerator(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+    try:
+        from core.llm.anthropic_utils import get_anthropic_api_key
+        claude_key = get_anthropic_api_key()
+    except Exception:
+        claude_key = os.environ.get('ANTHROPIC_API_KEY')
+    claude = ClaudeContentGenerator(api_key=claude_key)
 
     # Connect Twitter
     connected = twitter.connect()

@@ -1,5 +1,20 @@
 # Jarvis Architecture
 
+This directory contains comprehensive architecture documentation for the Jarvis/LifeOS system.
+
+## Architecture Documents
+
+| Document | Description |
+|----------|-------------|
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Current system architecture - API layer, bot ecosystem, database schema, monitoring |
+| **[DISTRIBUTED_MULTI_AGENT_ARCHITECTURE.md](DISTRIBUTED_MULTI_AGENT_ARCHITECTURE.md)** | Production scaling architecture - multi-agent swarm, distributed deployment, scaling roadmap from 32GB VPS to multi-cloud |
+| **[BAGS_INTEGRATION_ARCHITECTURE.md](BAGS_INTEGRATION_ARCHITECTURE.md)** | bags.fm integration architecture |
+| **[DASHBOARD_ARCHITECTURE.md](DASHBOARD_ARCHITECTURE.md)** | Web dashboard and data engine architecture |
+| **[SYSTEM_AUDIT.md](SYSTEM_AUDIT.md)** | System audit and component analysis |
+| **[STRATEGY_LEARNINGS.md](STRATEGY_LEARNINGS.md)** | Trading strategy learnings and patterns |
+
+---
+
 ## System Overview
 
 ```

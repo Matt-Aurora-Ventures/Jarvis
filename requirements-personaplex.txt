@@ -1,0 +1,39 @@
+# PersonaPlex-7B Requirements
+# Full-duplex conversational AI engine
+# Requires NVIDIA GPU with CUDA support
+
+# Core PyTorch with CUDA 12.1 (adjust for your CUDA version)
+# For CUDA 11.8: --index-url https://download.pytorch.org/whl/cu118
+# For CUDA 12.8: --index-url https://download.pytorch.org/whl/cu128
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# HuggingFace & Transformers
+transformers>=4.35.0
+accelerate>=0.25.0
+huggingface-hub>=0.19.0
+
+# Audio processing
+librosa>=0.10.0
+soundfile>=0.12.1
+scipy>=1.11.0
+
+# Audio I/O for full-duplex
+pyaudio>=0.2.13  # Requires portaudio: brew install portaudio (mac) or apt-get install portaudio19-dev (linux)
+sounddevice>=0.4.6
+
+# Voice activity detection (optional but recommended)
+webrtcvad>=2.0.10
+
+# Moshi (PersonaPlex foundation)
+# Install manually from: https://github.com/NVIDIA/personaplex
+# pip install ./personaplex/moshi/
+
+# Additional utilities
+numpy>=1.24.0
+tqdm>=4.65.0
+
+# Note: After installing these requirements, follow the setup guide:
+# docs/personaplex_setup.md

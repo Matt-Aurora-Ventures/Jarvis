@@ -44,10 +44,18 @@ class JarvisVoice:
         self.api_model = "claude-sonnet-4-20250514"
         self.api_base_url = None
         try:
-            from core.llm.anthropic_utils import get_anthropic_base_url
+            from core.llm.anthropic_utils import (
+                get_anthropic_base_url,
+                get_anthropic_api_key,
+                is_local_anthropic,
+            )
             self.api_base_url = get_anthropic_base_url()
             if self.api_base_url:
-                api_key = os.getenv("ANTHROPIC_API_KEY") or "ollama"
+                api_key = get_anthropic_api_key() or "ollama"
+                if is_local_anthropic():
+                    self.api_model = os.getenv("OLLAMA_TWITTER_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen3-coder"
+                else:
+                    self.api_model = os.getenv("CLAUDE_TWITTER_MODEL", self.api_model)
                 self.api_client = anthropic.Anthropic(
                     api_key=api_key,
                     base_url=self.api_base_url,

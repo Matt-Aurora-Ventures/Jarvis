@@ -6,7 +6,7 @@ import sys
 
 import requests
 
-from core.llm.anthropic_utils import get_anthropic_messages_url
+from core.llm.anthropic_utils import get_anthropic_messages_url, get_anthropic_api_key
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
@@ -20,7 +20,10 @@ if env_path.exists():
                 key, value = line.split('=', 1)
                 os.environ.setdefault(key.strip(), value.strip())
 
-anthropic_key = os.environ.get('ANTHROPIC_API_KEY')
+anthropic_key = get_anthropic_api_key()
+anthropic_url = get_anthropic_messages_url()
+if not anthropic_url:
+    raise SystemExit("Anthropic-compatible endpoint not configured (set ANTHROPIC_BASE_URL)")
 
 # Load Grok data
 data_path = Path(__file__).parent / 'sentiment_report_data.json'
@@ -90,7 +93,7 @@ GROK'S RAW DATA:
 """
 
 response = requests.post(
-    get_anthropic_messages_url(),
+    anthropic_url,
     headers={
         'x-api-key': anthropic_key,
         'anthropic-version': '2023-06-01',

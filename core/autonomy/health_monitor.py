@@ -121,13 +121,15 @@ class AutonomyHealthMonitor:
         """Check Anthropic API health"""
         check = HealthCheck(name="anthropic_api", status="unknown")
         try:
-            api_key = os.getenv("ANTHROPIC_API_KEY", "")
-            if api_key:
+            from core.llm.anthropic_utils import get_anthropic_base_url, get_anthropic_api_key
+            base_url = get_anthropic_base_url()
+            api_key = get_anthropic_api_key()
+            if base_url and api_key:
                 check.status = "healthy"
-                check.message = "Anthropic API key configured"
+                check.message = "Local Anthropic-compatible endpoint configured"
             else:
-                check.status = "unhealthy"
-                check.message = "Anthropic API key missing"
+                check.status = "degraded"
+                check.message = "Anthropic-compatible endpoint not configured"
         except Exception as e:
             check.status = "unhealthy"
             check.message = str(e)

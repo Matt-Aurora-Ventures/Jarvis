@@ -75,6 +75,31 @@ DEMO_DEFAULT_SLIPPAGE_BPS = 100  # 1% default, override via env
 
 
 # =============================================================================
+# Symbol Sanitization (Bug Fix US-033)
+# =============================================================================
+
+def safe_symbol(symbol: str) -> str:
+    """
+    Sanitize token symbol for safe display in Telegram messages.
+
+    Removes special characters that could break Telegram Markdown formatting
+    or cause display issues. Only allows alphanumeric, hyphen, and underscore.
+
+    Args:
+        symbol: Raw token symbol (may contain special chars)
+
+    Returns:
+        Sanitized symbol, uppercase, max 10 chars. Returns "UNKNOWN" if empty.
+    """
+    if not symbol:
+        return "UNKNOWN"
+    # Keep only alphanumeric, hyphen, and underscore
+    sanitized = ''.join(c for c in str(symbol) if c.isalnum() or c in ['_', '-'])
+    # Truncate to 10 chars and uppercase
+    return sanitized[:10].upper() if sanitized else "UNKNOWN"
+
+
+# =============================================================================
 # Trade Intelligence Integration
 # =============================================================================
 
@@ -172,6 +197,160 @@ async def _from_base_units(mint: str, amount: int, jupiter) -> float:
     return float(amount) / (10 ** decimals)
 
 
+# =============================================================================
+# Sentiment Data Cache (US-008: 15-Minute Update Cycle)
+# =============================================================================
+
+_SENTIMENT_CACHE = {"tokens": [], "last_update": None, "macro": {}}
+_SENTIMENT_LOCK = asyncio.Lock()
+
+
+async def _update_sentiment_cache(context: Any = None) -> None:
+    """
+    Update sentiment data cache from sentiment_report_data.json.
+
+    US-008: This function is called every 15 minutes to refresh the cached
+    sentiment data displayed in the demo bot.
+
+    Data source: bots/twitter/sentiment_report_data.json (updated by sentiment_report.py)
+    """
+    async with _SENTIMENT_LOCK:
+        try:
+            sentiment_file = Path(__file__).resolve().parents[2] / "bots" / "twitter" / "sentiment_report_data.json"
+            if not sentiment_file.exists():
+                logger.debug("Sentiment report data not available yet")
+                return
+
+            with open(sentiment_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            _SENTIMENT_CACHE["tokens"] = data.get("tokens_raw", [])
+            _SENTIMENT_CACHE["last_update"] = datetime.now(timezone.utc)
+            _SENTIMENT_CACHE["macro"] = {
+                "stocks": data.get("stocks", ""),
+                "commodities": data.get("commodities", ""),
+                "metals": data.get("metals", ""),
+                "solana": data.get("solana", ""),
+            }
+
+            logger.info(f"Sentiment cache updated: {len(_SENTIMENT_CACHE['tokens'])} tokens")
+
+        except Exception as e:
+            logger.warning(f"Failed to update sentiment cache: {e}")
+
+
+def get_cached_sentiment_tokens() -> List[Dict[str, Any]]:
+    """Get cached sentiment tokens (updated every 15 min)."""
+    return _SENTIMENT_CACHE.get("tokens", [])
+
+
+def get_cached_macro_sentiment() -> Dict[str, str]:
+    """Get cached macro sentiment data."""
+    return _SENTIMENT_CACHE.get("macro", {})
+
+
+def get_sentiment_cache_age() -> Optional[timedelta]:
+    """Get age of sentiment cache."""
+    last_update = _SENTIMENT_CACHE.get("last_update")
+    if not last_update:
+        return None
+    return datetime.now(timezone.utc) - last_update
+
+
+# =============================================================================
+# TP/SL Background Monitoring (US-006)
+# =============================================================================
+
+async def _background_tp_sl_monitor(context: Any) -> None:
+    """
+    Background job to monitor TP/SL triggers for all users.
+
+    US-006: This runs every 5 minutes to check if any positions have hit
+    their take-profit or stop-loss levels and auto-executes exits.
+
+    Note: Individual callbacks also run exit checks for real-time responsiveness.
+    """
+    try:
+        # Note: context.application.user_data is a mapping of user_id -> user_data
+        # We need to iterate through all users' positions
+        if not context or not hasattr(context, 'application'):
+            return
+
+        user_data_dict = getattr(context.application, 'user_data', {})
+        if not user_data_dict:
+            return
+
+        checked_count = 0
+        triggered_count = 0
+
+        for user_id, user_data in user_data_dict.items():
+            positions = user_data.get("positions", [])
+            if not positions:
+                continue
+
+            checked_count += 1
+
+            try:
+                alerts = await asyncio.wait_for(
+                    _check_demo_exit_triggers(user_data, positions),
+                    timeout=2.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"TP/SL check timed out for user {user_id}")
+                continue
+
+            if not alerts:
+                continue
+
+            triggered_count += len(alerts)
+            closed_ids: List[str] = []
+
+            for alert in alerts:
+                try:
+                    executed = await asyncio.wait_for(
+                        _maybe_execute_exit(user_data, alert),
+                        timeout=5.0,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(f"TP/SL auto-exit timed out for user {user_id}")
+                    continue
+                except Exception as exc:
+                    logger.warning(f"TP/SL auto-exit failed for user {user_id}: {exc}")
+                    continue
+
+                position = alert.get("position", {})
+                if executed and position.get("id"):
+                    closed_ids.append(position.get("id"))
+
+                # Send alert to user
+                try:
+                    message = _format_exit_alert_message(alert, executed)
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=message,
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                except Exception as exc:
+                    logger.debug(f"Failed to send TP/SL alert to user {user_id}: {exc}")
+
+            # Update positions after exits
+            if closed_ids:
+                user_data["positions"] = [
+                    p for p in positions if p.get("id") not in closed_ids
+                ]
+                trailing_stops = user_data.get("trailing_stops", [])
+                if trailing_stops:
+                    user_data["trailing_stops"] = [
+                        s for s in trailing_stops if s.get("position_id") not in closed_ids
+                    ]
+
+        if checked_count > 0:
+            logger.info(f"TP/SL monitor: checked {checked_count} users, {triggered_count} triggers")
+
+    except Exception as exc:
+        logger.warning(f"Background TP/SL monitor failed: {exc}")
+
+
 async def _execute_swap_with_fallback(
     *,
     from_token: str,
@@ -242,6 +421,116 @@ async def _execute_swap_with_fallback(
         }
     except Exception as exc:
         return {"success": False, "error": last_error or str(exc)}
+
+
+async def execute_buy_with_tpsl(
+    token_address: str,
+    amount_sol: float,
+    wallet_address: str,
+    tp_percent: float = 50.0,
+    sl_percent: float = 20.0,
+    slippage_bps: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Execute a buy order with TP/SL via Bags.fm with Jupiter fallback.
+
+    US-005: Dual execution with default TP/SL values.
+
+    This function:
+    1. Tries Bags.fm first for partner fee collection
+    2. Falls back to Jupiter on Bags.fm failure
+    3. Creates a position with TP/SL metadata
+
+    Args:
+        token_address: Token mint address to buy
+        amount_sol: Amount of SOL to spend
+        wallet_address: User's wallet address
+        tp_percent: Take-profit percentage (default 50%)
+        sl_percent: Stop-loss percentage (default 20%)
+        slippage_bps: Slippage in basis points (default from env)
+
+    Returns:
+        Dict with:
+            - success: bool
+            - position: Position dict with TP/SL (on success)
+            - error: Error message (on failure)
+
+    Example:
+        result = await execute_buy_with_tpsl(
+            token_address="TokenMint...",
+            amount_sol=0.5,
+            wallet_address="WalletAddr...",
+            tp_percent=100.0,  # 2x
+            sl_percent=25.0,   # -25%
+        )
+        if result["success"]:
+            position = result["position"]
+            print(f"Bought {position['symbol']} with TP at {position['tp_price']}")
+    """
+    import uuid
+
+    if slippage_bps is None:
+        slippage_bps = _get_demo_slippage_bps()
+
+    # Get token info for the position
+    try:
+        sentiment_data = await get_ai_sentiment_for_token(token_address)
+        token_symbol = sentiment_data.get("symbol", "TOKEN")
+        token_price = float(sentiment_data.get("price", 0) or 0)
+    except Exception as e:
+        logger.warning(f"Failed to get token info: {e}")
+        token_symbol = "UNKNOWN"
+        token_price = 0.0
+
+    # Execute swap via Bags.fm with Jupiter fallback
+    swap = await _execute_swap_with_fallback(
+        from_token="So11111111111111111111111111111111111111112",  # SOL
+        to_token=token_address,
+        amount=amount_sol,
+        wallet_address=wallet_address,
+        slippage_bps=slippage_bps,
+    )
+
+    if not swap.get("success"):
+        return {
+            "success": False,
+            "error": swap.get("error", "Swap failed"),
+        }
+
+    # Calculate tokens received
+    tokens_received = swap.get("amount_out")
+    if not tokens_received and token_price > 0:
+        # Estimate based on SOL price (~$225) if not returned
+        tokens_received = (amount_sol * 225) / token_price
+
+    # Calculate TP/SL prices
+    tp_price = token_price * (1 + tp_percent / 100) if token_price > 0 else 0
+    sl_price = token_price * (1 - sl_percent / 100) if token_price > 0 else 0
+
+    # Create position with TP/SL
+    position = {
+        "id": f"buy_{uuid.uuid4().hex[:8]}",
+        "symbol": token_symbol,
+        "address": token_address,
+        "amount": tokens_received or 0,
+        "amount_sol": amount_sol,
+        "entry_price": token_price,
+        "current_price": token_price,
+        "tp_percent": tp_percent,
+        "sl_percent": sl_percent,
+        "tp_price": tp_price,
+        "sl_price": sl_price,
+        "source": swap.get("source", "bags_api"),
+        "tx_hash": swap.get("tx_hash"),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+    return {
+        "success": True,
+        "position": position,
+        "tx_hash": swap.get("tx_hash"),
+        "source": swap.get("source"),
+    }
 
 
 def _exit_checks_enabled() -> bool:
@@ -8529,6 +8818,16 @@ You are about to sell *{position_count} positions*
             # Execute sell all positions with success fee tracking
             theme = JarvisTheme
 
+            # Show loading state (US-032)
+            try:
+                position_count = len(positions)
+                await query.message.edit_text(
+                    JarvisTheme.loading_text(f"Processing Sell All ({position_count} positions)"),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception:
+                pass  # Continue even if loading message fails
+
             # =====================================================================
             # FLOW CONTROLLER - Validate sell all action
             # =====================================================================
@@ -8800,6 +9099,16 @@ Coming soon in V2!
                 # Find position
                 pos_data = next((p for p in positions if p["id"] == pos_id), None)
                 if pos_data:
+                    # Show loading state (US-032)
+                    try:
+                        symbol_preview = safe_symbol(pos_data.get("symbol", "TOKEN"))
+                        await query.message.edit_text(
+                            JarvisTheme.loading_text(f"Processing Sell Order for {pct}% of {symbol_preview}"),
+                            parse_mode=ParseMode.MARKDOWN,
+                        )
+                    except Exception:
+                        pass  # Continue even if loading message fails
+
                     try:
                         symbol = pos_data.get("symbol", "???")
                         token_address = pos_data.get("address")
@@ -8838,8 +9147,11 @@ Coming soon in V2!
                             if pct >= 100:
                                 positions.remove(pos_data)
                             else:
-                                pos_data["amount"] *= (1 - pct / 100)
-                                pos_data["amount_sol"] *= (1 - pct / 100)
+                                # Use .get() with fallback to avoid KeyError (Bug Fix US-033)
+                                current_amount = pos_data.get("amount", pos_data.get("amount_sol", 0))
+                                current_amount_sol = pos_data.get("amount_sol", pos_data.get("amount", 0))
+                                pos_data["amount"] = current_amount * (1 - pct / 100)
+                                pos_data["amount_sol"] = current_amount_sol * (1 - pct / 100)
                             context.user_data["positions"] = positions
 
                             text, keyboard = DemoMenuBuilder.close_position_result(
@@ -8930,6 +9242,15 @@ Coming soon in V2!
                 token_addr = _resolve_token_ref(context, token_ref)
                 amount = float(parts[3])
 
+                # Show loading state (US-032)
+                try:
+                    await query.message.edit_text(
+                        JarvisTheme.loading_text(f"Processing Buy Order for {amount:.2f} SOL"),
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                except Exception:
+                    pass  # Continue even if loading message fails
+
                 # =====================================================================
                 # FLOW CONTROLLER - Validate action before execution
                 # =====================================================================
@@ -8990,6 +9311,9 @@ Coming soon in V2!
 
                         # Add position to portfolio
                         positions = context.user_data.get("positions", [])
+                        # Default TP/SL values (US-005 requirement: 50% TP, 20% SL)
+                        default_tp_pct = 50.0
+                        default_sl_pct = 20.0
                         new_position = {
                             "id": f"buy_{len(positions) + 1}",
                             "symbol": token_symbol,
@@ -8997,6 +9321,11 @@ Coming soon in V2!
                             "amount": tokens_received,
                             "amount_sol": amount,
                             "entry_price": token_price,
+                            "current_price": token_price,
+                            "tp_percent": default_tp_pct,
+                            "sl_percent": default_sl_pct,
+                            "tp_price": token_price * (1 + default_tp_pct / 100),
+                            "sl_price": token_price * (1 - default_sl_pct / 100),
                             "source": swap.get("source", "bags_api"),
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                             "tx_hash": swap.get("tx_hash"),
@@ -9028,6 +9357,242 @@ Coming soon in V2!
                 except Exception as e:
                     logger.error(f"Bags API buy execution failed: {e}")
                     text, keyboard = DemoMenuBuilder.error_message(f"Buy failed: {str(e)[:50]}")
+
+        # =====================================================================
+        # TP/SL Adjustment Handlers (Bug Fix US-033)
+        # =====================================================================
+
+        elif data.startswith("demo:adj_tp:"):
+            # Adjust take-profit percentage: demo:adj_tp:pos_id:delta
+            parts = data.split(":")
+            if len(parts) >= 4:
+                pos_id = parts[2]
+                delta = float(parts[3])
+
+                positions = context.user_data.get("positions", [])
+                pos = next((p for p in positions if p.get("id") == pos_id), None)
+
+                if pos:
+                    current_tp = pos.get("tp_percent", 50.0)
+                    new_tp = max(5.0, min(200.0, current_tp + delta))  # Clamp 5-200%
+                    pos["tp_percent"] = new_tp
+
+                    entry_price = pos.get("entry_price", 0)
+                    if entry_price > 0:
+                        pos["tp_price"] = entry_price * (1 + new_tp / 100)
+
+                    context.user_data["positions"] = positions
+
+                    symbol = safe_symbol(pos.get("symbol", "TOKEN"))
+                    sl_pct = pos.get("sl_percent", 20.0)
+
+                    text = f"""
+{JarvisTheme.SETTINGS} *ADJUST TP/SL*
+{JarvisTheme.COIN} *{symbol}*
+-
+:
+{JarvisTheme.SNIPE} Take Profit: *+{new_tp:.0f}%*
+{JarvisTheme.ERROR} Stop Loss: *-{sl_pct:.0f}%*
+
+_Use buttons to adjust_
+"""
+                    keyboard = InlineKeyboardMarkup([
+                        [
+                            InlineKeyboardButton("-10%", callback_data=f"demo:adj_tp:{pos_id}:-10"),
+                            InlineKeyboardButton("-5%", callback_data=f"demo:adj_tp:{pos_id}:-5"),
+                            InlineKeyboardButton(f"TP +{new_tp:.0f}%", callback_data=f"demo:adj_tp:{pos_id}:0"),
+                            InlineKeyboardButton("+5%", callback_data=f"demo:adj_tp:{pos_id}:5"),
+                            InlineKeyboardButton("+10%", callback_data=f"demo:adj_tp:{pos_id}:10"),
+                        ],
+                        [
+                            InlineKeyboardButton("-10%", callback_data=f"demo:adj_sl:{pos_id}:-10"),
+                            InlineKeyboardButton("-5%", callback_data=f"demo:adj_sl:{pos_id}:-5"),
+                            InlineKeyboardButton(f"SL -{sl_pct:.0f}%", callback_data=f"demo:adj_sl:{pos_id}:0"),
+                            InlineKeyboardButton("+5%", callback_data=f"demo:adj_sl:{pos_id}:5"),
+                            InlineKeyboardButton("+10%", callback_data=f"demo:adj_sl:{pos_id}:10"),
+                        ],
+                        [
+                            InlineKeyboardButton(f"{JarvisTheme.SUCCESS} Save", callback_data=f"demo:adj_save:{pos_id}"),
+                            InlineKeyboardButton(f"{JarvisTheme.CLOSE} Cancel", callback_data="demo:adj_cancel"),
+                        ],
+                    ])
+                else:
+                    text, keyboard = DemoMenuBuilder.error_message("Position not found")
+
+        elif data.startswith("demo:adj_sl:"):
+            # Adjust stop-loss percentage: demo:adj_sl:pos_id:delta
+            parts = data.split(":")
+            if len(parts) >= 4:
+                pos_id = parts[2]
+                delta = float(parts[3])
+
+                positions = context.user_data.get("positions", [])
+                pos = next((p for p in positions if p.get("id") == pos_id), None)
+
+                if pos:
+                    current_sl = pos.get("sl_percent", 20.0)
+                    new_sl = max(5.0, min(100.0, current_sl + delta))  # Clamp 5-100%
+                    pos["sl_percent"] = new_sl
+
+                    entry_price = pos.get("entry_price", 0)
+                    if entry_price > 0:
+                        pos["sl_price"] = entry_price * (1 - new_sl / 100)
+
+                    context.user_data["positions"] = positions
+
+                    symbol = safe_symbol(pos.get("symbol", "TOKEN"))
+                    tp_pct = pos.get("tp_percent", 50.0)
+
+                    text = f"""
+{JarvisTheme.SETTINGS} *ADJUST TP/SL*
+{JarvisTheme.COIN} *{symbol}*
+-
+:
+{JarvisTheme.SNIPE} Take Profit: *+{tp_pct:.0f}%*
+{JarvisTheme.ERROR} Stop Loss: *-{new_sl:.0f}%*
+
+_Use buttons to adjust_
+"""
+                    keyboard = InlineKeyboardMarkup([
+                        [
+                            InlineKeyboardButton("-10%", callback_data=f"demo:adj_tp:{pos_id}:-10"),
+                            InlineKeyboardButton("-5%", callback_data=f"demo:adj_tp:{pos_id}:-5"),
+                            InlineKeyboardButton(f"TP +{tp_pct:.0f}%", callback_data=f"demo:adj_tp:{pos_id}:0"),
+                            InlineKeyboardButton("+5%", callback_data=f"demo:adj_tp:{pos_id}:5"),
+                            InlineKeyboardButton("+10%", callback_data=f"demo:adj_tp:{pos_id}:10"),
+                        ],
+                        [
+                            InlineKeyboardButton("-10%", callback_data=f"demo:adj_sl:{pos_id}:-10"),
+                            InlineKeyboardButton("-5%", callback_data=f"demo:adj_sl:{pos_id}:-5"),
+                            InlineKeyboardButton(f"SL -{new_sl:.0f}%", callback_data=f"demo:adj_sl:{pos_id}:0"),
+                            InlineKeyboardButton("+5%", callback_data=f"demo:adj_sl:{pos_id}:5"),
+                            InlineKeyboardButton("+10%", callback_data=f"demo:adj_sl:{pos_id}:10"),
+                        ],
+                        [
+                            InlineKeyboardButton(f"{JarvisTheme.SUCCESS} Save", callback_data=f"demo:adj_save:{pos_id}"),
+                            InlineKeyboardButton(f"{JarvisTheme.CLOSE} Cancel", callback_data="demo:adj_cancel"),
+                        ],
+                    ])
+                else:
+                    text, keyboard = DemoMenuBuilder.error_message("Position not found")
+
+        elif data.startswith("demo:adj_save:"):
+            # Save TP/SL adjustments: demo:adj_save:pos_id
+            parts = data.split(":")
+            pos_id = parts[2] if len(parts) > 2 else ""
+
+            positions = context.user_data.get("positions", [])
+            pos = next((p for p in positions if p.get("id") == pos_id), None)
+
+            if pos:
+                symbol = safe_symbol(pos.get("symbol", "TOKEN"))
+                tp_pct = pos.get("tp_percent", 50.0)
+                sl_pct = pos.get("sl_percent", 20.0)
+
+                text, keyboard = DemoMenuBuilder.success_message(
+                    action="TP/SL Updated",
+                    details=f"*{symbol}*\nTake Profit: +{tp_pct:.0f}%\nStop Loss: -{sl_pct:.0f}%",
+                )
+            else:
+                text, keyboard = DemoMenuBuilder.error_message("Position not found")
+
+        elif action == "adj_cancel":
+            # Cancel TP/SL adjustment - return to positions
+            text, keyboard = DemoMenuBuilder.positions_menu(
+                positions=context.user_data.get("positions", []),
+            )
+
+        # =====================================================================
+        # Chart Handler (US-007)
+        # =====================================================================
+
+        elif data.startswith("demo:chart:"):
+            # Generate and send chart: demo:chart:token_ref:interval
+            parts = data.split(":")
+            token_ref = parts[2] if len(parts) > 2 else ""
+            interval = parts[3] if len(parts) > 3 else "1h"
+
+            token_addr = _resolve_token_ref(context, token_ref)
+            sentiment_data = await get_ai_sentiment_for_token(token_addr)
+            token_symbol = sentiment_data.get("symbol", "TOKEN")
+
+            # Show loading state
+            try:
+                await query.message.edit_text(
+                    JarvisTheme.loading_text(f"Generating {token_symbol} chart"),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception:
+                pass
+
+            # Generate chart
+            try:
+                from tg_bot.handlers.demo_charts import handle_chart_callback
+
+                success, result = await handle_chart_callback(
+                    token_mint=token_addr,
+                    token_symbol=token_symbol,
+                    interval=interval,
+                )
+
+                if success:
+                    # Send chart as photo
+                    await context.bot.send_photo(
+                        chat_id=query.message.chat_id,
+                        photo=result,
+                        caption=f"{JarvisTheme.CHART} *{safe_symbol(token_symbol)}* Price Chart ({interval})",
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    text = f"{JarvisTheme.SUCCESS} Chart generated for *{safe_symbol(token_symbol)}*"
+                    keyboard = InlineKeyboardMarkup([
+                        [
+                            InlineKeyboardButton("1h", callback_data=f"demo:chart:{token_ref}:1h"),
+                            InlineKeyboardButton("4h", callback_data=f"demo:chart:{token_ref}:4h"),
+                            InlineKeyboardButton("1d", callback_data=f"demo:chart:{token_ref}:1d"),
+                        ],
+                        [
+                            InlineKeyboardButton(f"{JarvisTheme.BACK} Back", callback_data="demo:main"),
+                        ],
+                    ])
+                else:
+                    text, keyboard = DemoMenuBuilder.error_message(result)
+            except ImportError:
+                text, keyboard = DemoMenuBuilder.error_message(
+                    "Chart feature requires mplfinance. Install with: pip install mplfinance pandas"
+                )
+            except Exception as e:
+                logger.error(f"Chart generation error: {e}")
+                text, keyboard = DemoMenuBuilder.error_message(f"Chart failed: {str(e)[:50]}")
+
+        # =====================================================================
+        # Custom Buy Amount Handler (US-031)
+        # =====================================================================
+
+        elif data.startswith("demo:buy_custom:"):
+            # Show custom amount input prompt: demo:buy_custom:token_ref
+            parts = data.split(":")
+            token_ref = parts[2] if len(parts) > 2 else ""
+
+            # Store state for message handler
+            context.user_data["awaiting_custom_buy_amount"] = True
+            context.user_data["custom_buy_token_ref"] = token_ref
+
+            text = f"""
+{JarvisTheme.BUY} *CUSTOM BUY AMOUNT*
+
+Enter the amount of SOL you want to spend:
+
+*Limits:*
+- Minimum: 0.01 SOL
+- Maximum: 50 SOL
+
+_Send a number like "0.5" or "2.5"_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(f"{JarvisTheme.CLOSE} Cancel", callback_data="demo:main"),
+                ],
+            ])
 
         else:
             # Default: return to main menu
@@ -9083,6 +9648,23 @@ Coming soon in V2!
 # Message Handler for Token Input
 # =============================================================================
 
+def validate_buy_amount(amount: float) -> tuple:
+    """
+    Validate custom buy amount for US-031.
+
+    Args:
+        amount: SOL amount to validate
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if amount < 0.01:
+        return False, "Minimum buy amount is 0.01 SOL"
+    if amount > 50:
+        return False, "Maximum buy amount is 50 SOL"
+    return True, ""
+
+
 @error_handler
 @admin_only
 async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -9091,6 +9673,96 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # Run TP/SL/trailing stop checks for demo positions (throttled)
     await _process_demo_exit_checks(update, context)
+
+    # =========================================================================
+    # Handle Custom Buy Amount Input (US-031)
+    # =========================================================================
+    if context.user_data.get("awaiting_custom_buy_amount"):
+        context.user_data["awaiting_custom_buy_amount"] = False
+        token_ref = context.user_data.pop("custom_buy_token_ref", "")
+
+        try:
+            amount = float(text)
+            is_valid, error_msg = validate_buy_amount(amount)
+
+            if not is_valid:
+                error_text, keyboard = DemoMenuBuilder.error_message(error_msg)
+                await update.message.reply_text(
+                    error_text,
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=keyboard,
+                )
+                return
+
+            # Build buy confirmation
+            token_addr = _resolve_token_ref(context, token_ref)
+            sentiment_data = await get_ai_sentiment_for_token(token_addr)
+            token_symbol = sentiment_data.get("symbol", "TOKEN")
+            token_price = sentiment_data.get("price", 0) or 0
+            sentiment = sentiment_data.get("sentiment", "neutral")
+            score = sentiment_data.get("score", 0)
+            signal = sentiment_data.get("signal", "NEUTRAL")
+
+            theme = JarvisTheme
+            sent_emoji = {"bullish": "g", "bearish": "r", "very_bullish": "rkt"}.get(
+                sentiment.lower(), "y"
+            )
+            sig_emoji = {"STRONG_BUY": "fire", "BUY": "g", "SELL": "r"}.get(signal, "y")
+
+            confirm_text = f"""
+{theme.BUY} *CONFIRM CUSTOM BUY*
+
+*Token:* {safe_symbol(token_symbol)}
+*Amount:* {amount} SOL
+*Est. Price:* ${token_price:.8f}
+
+{theme.AUTO} *AI Analysis*
+- Sentiment: *{sentiment.upper()}*
+- Score: *{score:.2f}*
+- Signal: *{signal}*
+
+_Tap Confirm to execute_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        f"{theme.SUCCESS} Confirm Buy",
+                        callback_data=f"demo:execute_buy:{token_ref}:{amount}"
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        f"{theme.CLOSE} Cancel",
+                        callback_data="demo:main"
+                    ),
+                ],
+            ])
+
+            await update.message.reply_text(
+                confirm_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard,
+            )
+        except ValueError:
+            error_text, keyboard = DemoMenuBuilder.error_message(
+                "Invalid amount. Please enter a number like 0.5 or 2.5"
+            )
+            await update.message.reply_text(
+                error_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard,
+            )
+        except Exception as e:
+            logger.error(f"Custom buy amount error: {e}")
+            error_text, keyboard = DemoMenuBuilder.error_message(
+                f"Error: {str(e)[:50]}"
+            )
+            await update.message.reply_text(
+                error_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard,
+            )
+        return
 
     # Handle watchlist token addition
     if context.user_data.get("awaiting_watchlist_token"):

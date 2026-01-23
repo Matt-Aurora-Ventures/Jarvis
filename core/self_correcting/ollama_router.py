@@ -18,6 +18,7 @@ Recommended Ollama Models:
 import asyncio
 import logging
 import json
+import os
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 from enum import Enum
@@ -139,6 +140,7 @@ class OllamaRouter:
         self.ollama_base_url = ollama_base_url
         self.prefer_local = prefer_local
         self.auto_fallback = auto_fallback
+        self.allow_cloud = os.getenv("JARVIS_ALLOW_REMOTE_ANTHROPIC", "").lower() in ("1", "true", "yes", "on")
 
         self.ollama_available = False
         self._check_ollama_task = None
@@ -227,6 +229,10 @@ class OllamaRouter:
                 advanced = [m for m in local_models if m.tier == ModelTier.LOCAL_ADVANCED]
                 return advanced[0] if advanced else local_models[0]
 
+        if not self.allow_cloud:
+            local_only = [m for m in suitable_models if m.provider == "ollama"]
+            return local_only[0] if local_only else MODELS["qwen3-coder"]
+
         # Use Claude
         if prefer_tier:
             tier_models = [m for m in suitable_models if m.tier == prefer_tier]
@@ -294,8 +300,8 @@ class OllamaRouter:
             logger.error(f"Query failed: {e}")
             self.stats["errors"] += 1
 
-            # Try fallback to Claude if using Ollama
-            if model_config.provider == "ollama" and self.auto_fallback:
+            # Try fallback to Claude if using Ollama and cloud allowed
+            if model_config.provider == "ollama" and self.auto_fallback and self.allow_cloud:
                 logger.info("Falling back to Claude...")
                 fallback_model = MODELS["claude-sonnet-3.5"]
                 return await self._query_anthropic(
@@ -372,19 +378,22 @@ class OllamaRouter:
         max_tokens: int,
         temperature: float
     ) -> ModelResponse:
-        """Query Claude API."""
+        """Query Anthropic-compatible API."""
         # Import here to avoid dependency if not used
         try:
             from anthropic import AsyncAnthropic
         except ImportError:
             raise Exception("anthropic library not installed")
+        from core.llm.anthropic_utils import get_anthropic_api_key, get_anthropic_base_url
 
-        import os
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        api_key = get_anthropic_api_key()
         if not api_key:
-            raise Exception("ANTHROPIC_API_KEY not set")
+            raise Exception("Anthropic-compatible API disabled or not configured")
 
-        client = AsyncAnthropic(api_key=api_key)
+        client = AsyncAnthropic(
+            api_key=api_key,
+            base_url=get_anthropic_base_url(),
+        )
 
         response = await client.messages.create(
             model=model.name,

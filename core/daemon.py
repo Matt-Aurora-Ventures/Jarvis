@@ -16,7 +16,7 @@ from core import (
     observer,
     orchestrator,
     passive,
-    reporting,
+    reports,
     state,
     voice,
     mcp_loader,
@@ -171,6 +171,7 @@ def run() -> None:
         "mcp": {"ok": False, "error": None},
         "jarvis": {"ok": False, "error": None},
         "voice": {"ok": False, "error": None},
+        "personaplex": {"ok": False, "error": None},  # PersonaPlex full-duplex AI
         "hotkeys": {"ok": False, "error": None},
         "passive": {"ok": False, "error": None},
         "observer": {"ok": False, "error": None},
@@ -290,6 +291,44 @@ def run() -> None:
         component_status["voice"]["error"] = str(e)[:100]
         _log_message(log_path, f"Voice manager FAILED: {str(e)[:100]}")
 
+    # Initialize PersonaPlex if configured
+    personaplex_cfg = config.get("voice", {}).get("personaplex", {})
+    if personaplex_cfg.get("enabled", False):
+        try:
+            from core.personaplex_engine import get_engine, create_jarvis_persona
+
+            _log_message(log_path, "Initializing PersonaPlex full-duplex engine...")
+            engine = get_engine()
+
+            if engine and engine.is_initialized:
+                # Set default persona
+                persona_name = personaplex_cfg.get("persona", "jarvis")
+                if persona_name == "jarvis":
+                    persona = create_jarvis_persona()
+                    engine.set_persona(persona)
+
+                # Check health
+                health = engine.check_health()
+                if health.get("cuda_available"):
+                    component_status["personaplex"]["ok"] = True
+                    gpu_name = health.get("cuda_device", "Unknown GPU")
+                    _log_message(log_path, f"PersonaPlex ready on {gpu_name} (full-duplex mode available)")
+                else:
+                    component_status["personaplex"]["error"] = "CUDA GPU not available"
+                    _log_message(log_path, "PersonaPlex initialization FAILED: CUDA GPU required")
+            else:
+                component_status["personaplex"]["error"] = "Engine initialization failed"
+                _log_message(log_path, "PersonaPlex engine initialization FAILED")
+        except ImportError as e:
+            component_status["personaplex"]["error"] = f"PersonaPlex not installed: {str(e)[:50]}"
+            _log_message(log_path, f"PersonaPlex not available: {str(e)[:100]}")
+        except Exception as e:
+            component_status["personaplex"]["error"] = str(e)[:100]
+            _log_message(log_path, f"PersonaPlex startup FAILED: {str(e)[:100]}")
+    else:
+        component_status["personaplex"]["ok"] = True  # Disabled is OK
+        _log_message(log_path, "PersonaPlex disabled (voice.personaplex.enabled=false)")
+
     # Start hotkey manager
     try:
         hotkey_manager.start()
@@ -394,14 +433,14 @@ def run() -> None:
             last_report = state.read_state().get("last_report_dates", {})
 
             if _should_run_report("morning", schedule, now, last_report):
-                content = reporting.generate_report_text("morning", dry_run=False)
-                reporting.save_report("morning", content)
+                content = reports.generate_report_text("morning", dry_run=False)
+                reports.save_report("morning", content)
                 _log_message(log_path, "Scheduled morning report generated.")
                 _send_notification("LifeOS", "Morning report ready!")
 
             if _should_run_report("afternoon", schedule, now, last_report):
-                content = reporting.generate_report_text("afternoon", dry_run=False)
-                reporting.save_report("afternoon", content)
+                content = reports.generate_report_text("afternoon", dry_run=False)
+                reports.save_report("afternoon", content)
                 _log_message(log_path, "Scheduled afternoon report generated.")
                 _send_notification("LifeOS", "Afternoon report ready!")
 

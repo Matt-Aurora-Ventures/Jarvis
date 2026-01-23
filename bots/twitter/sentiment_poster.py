@@ -540,7 +540,12 @@ async def run_sentiment_poster():
     twitter = TwitterClient()  # Uses TwitterCredentials.from_env() internally
 
     # Claude via Anthropic API (supports local Ollama via ANTHROPIC_BASE_URL)
-    claude = ClaudeContentGenerator(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    try:
+        from core.llm.anthropic_utils import get_anthropic_api_key
+        claude_key = get_anthropic_api_key()
+    except Exception:
+        claude_key = os.environ.get("ANTHROPIC_API_KEY")
+    claude = ClaudeContentGenerator(api_key=claude_key)
 
     # Create and run poster
     poster = SentimentTwitterPoster(

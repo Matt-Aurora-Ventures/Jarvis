@@ -32,7 +32,7 @@ except ImportError:
     anthropic = None
 
 from core.security.scrubber import get_scrubber, SensitiveScrubber
-from core.llm.anthropic_utils import get_anthropic_base_url
+from core.llm.anthropic_utils import get_anthropic_base_url, get_anthropic_api_key, is_local_anthropic
 
 
 @dataclass
@@ -96,8 +96,11 @@ NEVER generate code that could harm the system or leak data."""
             api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env)
             model: Model to use (default: claude-sonnet-4-20250514)
         """
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-        self.model = model
+        self.api_key = api_key or get_anthropic_api_key()
+        if is_local_anthropic():
+            self.model = os.getenv("OLLAMA_CODE_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen3-coder"
+        else:
+            self.model = model
         self.scrubber = get_scrubber()
 
         # Cache recent results for apply/refine

@@ -5,6 +5,7 @@ Strategic quote tweeting for engagement and relationship building
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
@@ -86,15 +87,21 @@ BAD QUOTE EXAMPLES:
         if self._anthropic_client is None:
             try:
                 import anthropic
-                import os
-                api_key = os.getenv("ANTHROPIC_API_KEY", "")
+                from core.llm.anthropic_utils import (
+                    get_anthropic_api_key,
+                    get_anthropic_base_url,
+                    is_local_anthropic,
+                )
+                api_key = get_anthropic_api_key()
                 if api_key:
-                    from core.llm.anthropic_utils import get_anthropic_base_url
-
                     self._anthropic_client = anthropic.Anthropic(
                         api_key=api_key,
                         base_url=get_anthropic_base_url(),
                     )
+                    if is_local_anthropic():
+                        self._model = os.getenv("OLLAMA_QUOTE_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen3-coder"
+                    else:
+                        self._model = os.getenv("CLAUDE_QUOTE_MODEL", "claude-sonnet-4-20250514")
             except Exception:
                 pass
         return self._anthropic_client
@@ -185,7 +192,7 @@ Generate a quote tweet response. Under 200 characters. Jarvis voice. Lowercase."
             message = await loop.run_in_executor(
                 None,
                 lambda: client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model=getattr(self, "_model", "claude-sonnet-4-20250514"),
                     max_tokens=150,
                     system=JARVIS_VOICE_BIBLE,
                     messages=[{"role": "user", "content": prompt}]

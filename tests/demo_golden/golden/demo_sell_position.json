@@ -1,12 +1,18 @@
 {
-  "text": "\u274c Operation Failed\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n_Sell failed: 'amount'_\n\n\ud83d\udca1 *Suggestion:* Something went wrong. Please try again.\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
+  "text": "\u2705 *POSITION CLOSED*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n*Token:* TEST\n*Amount:* 0.0 SOL\n\n*Entry:* $0.010000\n*Exit:* $0.012000\n\n\ud83d\udcc8 *P&L:* +$6.17 (+23.4%)\n\n\ud83d\udcb0 *Success Fee (0.5% on profit)*\n\u251c Fee: -$0.1200\n\u2514 Net Profit: +$1.23\n\n_Fee supports JARVIS development_\n\n*TX:* `tx_<ID>`\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
   "parse_mode": "Markdown",
   "keyboard": [
     [
       {
-        "text": "\ud83d\udd04 Try Again",
-        "callback_data": "demo:main"
+        "text": "\ud83d\udcca Positions",
+        "callback_data": "demo:positions"
       },
+      {
+        "text": "\ud83d\udcca Hub",
+        "callback_data": "demo:hub"
+      }
+    ],
+    [
       {
         "text": "\u25c0\ufe0f Main Menu",
         "callback_data": "demo:main"

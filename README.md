@@ -1452,6 +1452,38 @@ POST /webhooks
    └─► Memory stored for future
 ```
 
+### Distributed Multi-Agent Architecture
+
+For production scaling beyond a single server, Jarvis includes a **distributed multi-agent architecture** designed to scale from a single 32GB VPS to multi-node clusters serving millions of users.
+
+**Key Features**:
+- **LangGraph supervisor** for agent orchestration with human-in-the-loop approval
+- **NATS JetStream** for sub-millisecond inter-agent messaging
+- **Ollama + LiteLLM** for local inference with cloud failover (Groq → OpenRouter)
+- **Hybrid storage**: Redis (hot state), Qdrant (vector memory), PostgreSQL (persistent data)
+- **Horizontal scaling**: Phase 1 (1 VPS, 9-30 agents) → Phase 4 (Multi-cloud, 100+ agents)
+- **Cost-efficient**: $70-100/month Phase 1 → $1,500/month at 1M users ($0.0015/user)
+
+**Scaling Phases**:
+
+| Phase | Timeline | Infrastructure | Users | Cost/Month |
+|-------|----------|---------------|-------|------------|
+| **1: Single VPS** | Now-6mo | 32GB/8vCPU Hostinger | 1K-10K | $70-100 |
+| **2: Dual VPS** | 6-12mo | 2× VPS + k3s + Redis Cluster | 10K-50K | $85-130 |
+| **3: Multi-Node** | 12-18mo | 3-5 VPS + Managed DB + Qdrant Cloud | 50K-200K | $150-300 |
+| **4: Cloud Hybrid** | 18mo+ | VPS + Cloud Burst + Serverless | 200K-1M+ | $300-1K |
+
+**Architecture Highlights**:
+- **30-60 LLM requests/min** locally with sub-second latency for critical trading
+- **80%+ cache hit rate** for common queries
+- **Exactly-once delivery** for trading signals via NATS JetStream
+- **Circuit breakers** and **retry policies** for fault tolerance
+- **Multi-tenant isolation** via PostgreSQL RLS and Redis key prefixing
+
+For complete details on the distributed architecture, including deployment configurations, resource allocation, failover strategies, and implementation timeline, see:
+
+📄 **[Distributed Multi-Agent Architecture](docs/architecture/DISTRIBUTED_MULTI_AGENT_ARCHITECTURE.md)**
+
 ---
 
 ## 🧠 MCP & Semantic Memory System

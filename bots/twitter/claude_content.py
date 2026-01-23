@@ -43,9 +43,13 @@ class ClaudeContentGenerator:
     """
 
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-        from core.llm.anthropic_utils import get_anthropic_base_url
+        from core.llm.anthropic_utils import (
+            get_anthropic_base_url,
+            get_anthropic_api_key,
+            is_local_anthropic,
+        )
         base_url = get_anthropic_base_url()
+        self.api_key = api_key or get_anthropic_api_key()
 
         if base_url and not self.api_key:
             # Allow local Anthropic-compatible endpoints (e.g., Ollama) without a real key.
@@ -62,7 +66,12 @@ class ClaudeContentGenerator:
 
         self.system_prompt = load_system_prompt()
         self.cli_enabled = os.getenv("CLAUDE_CLI_ENABLED", "").lower() in ("1", "true", "yes", "on")
+        self.cli_fallback = os.getenv("CLAUDE_CLI_FALLBACK", "1").lower() in ("1", "true", "yes", "on")
         self.cli_path = os.getenv("CLAUDE_CLI_PATH", "claude")
+        if is_local_anthropic():
+            self.api_model = os.getenv("OLLAMA_TWITTER_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen3-coder"
+        else:
+            self.api_model = os.getenv("CLAUDE_TWITTER_MODEL", "claude-sonnet-4-20250514")
         self._cli_system_prompt = None
         if self.cli_enabled:
             try:
@@ -121,7 +130,7 @@ class ClaudeContentGenerator:
         temperature: float = 0.85
     ) -> ClaudeResponse:
         """Generate tweet content using Claude"""
-        if not self.client and not self.cli_enabled:
+        if not self.client and not (self.cli_enabled or self.cli_fallback):
             return ClaudeResponse(
                 success=False,
                 content="",
@@ -138,7 +147,26 @@ class ClaudeContentGenerator:
             # Add formatting reminder
             user_message += "\n\nRemember: lowercase, up to 4,000 chars (Premium X), natural NFA, minimal emojis. Return ONLY the tweet text, nothing else."
 
-            if self.cli_enabled:
+            api_error = None
+            if self.client:
+                try:
+                    response = self.client.messages.create(
+                        model=self.api_model,
+                        max_tokens=800,
+                        temperature=temperature,
+                        system=self.system_prompt,
+                        messages=[
+                            {"role": "user", "content": user_message}
+                        ]
+                    )
+
+                    content = response.content[0].text.strip()
+                    content = self._clean_tweet(content)
+                    return ClaudeResponse(success=True, content=content)
+                except Exception as exc:
+                    api_error = exc
+
+            if self.cli_enabled or self.cli_fallback:
                 cli_prompt = (
                     f"{self._cli_system_prompt or self.system_prompt}\n\n"
                     f"USER REQUEST:\n{user_message}\n\n"
@@ -149,28 +177,10 @@ class ClaudeContentGenerator:
                 if cli_response.success:
                     cleaned = self._clean_tweet(cli_response.content)
                     return ClaudeResponse(success=True, content=cleaned)
-                if not self.client:
-                    return cli_response
+                return cli_response
 
-            response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=800,
-                temperature=temperature,
-                system=self.system_prompt,
-                messages=[
-                    {"role": "user", "content": user_message}
-                ]
-            )
-
-            content = response.content[0].text.strip()
-
-            # Clean up the response
-            content = self._clean_tweet(content)
-
-            return ClaudeResponse(
-                success=True,
-                content=content
-            )
+            if api_error:
+                raise api_error
 
         except Exception as e:
             logger.error(f"Claude API error: {e}")
