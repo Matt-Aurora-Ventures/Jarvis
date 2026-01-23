@@ -1,0 +1,18 @@
+{
+  "text": "\ud83d\udfe2 *CONFIRM BUY*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n*Token:* TOKEN\n*Address:* `So1111...1112`\n\n*Amount:* 0.1 SOL\n*Est. Tokens:* 1,000,000\n*Price:* $0.00001000\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u26a0\ufe0f _Review before confirming_",
+  "parse_mode": "Markdown",
+  "keyboard": [
+    [
+      {
+        "text": "\u2705 Confirm Buy",
+        "callback_data": "demo:execute_buy:35f4d5cab4:0.1"
+      }
+    ],
+    [
+      {
+        "text": "\u2716\ufe0f Cancel",
+        "callback_data": "demo:main"
+      }
+    ]
+  ]
+}

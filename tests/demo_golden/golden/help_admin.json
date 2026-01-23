@@ -14,6 +14,12 @@
     ],
     [
       {
+        "text": "\ud83d\ude80 Launch /demo",
+        "callback_data": "demo:main"
+      }
+    ],
+    [
+      {
         "text": "\ud83d\ude80 SIGNALS",
         "callback_data": "menu_signals"
       },
