@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import Dict, Optional
 
+from jarvis_cli.actions import register_actions_subparser
 from core import (
     action_feedback,
     commands,
@@ -2556,6 +2557,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     strategy_scores_parser.add_argument("--asc", action="store_true", help="Sort ascending")
     strategy_scores_parser.add_argument("--json", action="store_true", help="Output JSON")
+
+    # Register actions subcommands from jarvis_cli
+    register_actions_subparser(subparsers)
 
     return parser
 
