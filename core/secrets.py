@@ -64,6 +64,13 @@ def get_grok_key() -> str:
 
 
 def get_anthropic_key() -> str:
+    try:
+        from core.llm.anthropic_utils import get_anthropic_api_key
+        key = get_anthropic_api_key()
+        if key:
+            return key
+    except Exception:
+        pass
     return get_key("anthropic_api_key", "ANTHROPIC_API_KEY")
 
 

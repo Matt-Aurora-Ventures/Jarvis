@@ -390,6 +390,7 @@ class XClaudeCLIHandler:
 
     SANDBOX_ENV_ALLOWLIST = {
         "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
         "CLAUDE_API_KEY",
         "CLAUDE_CODE_API_KEY",
     }

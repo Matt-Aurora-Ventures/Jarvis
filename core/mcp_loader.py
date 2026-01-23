@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 ROOT = Path(__file__).resolve().parents[1]
-MCP_CONFIG_PATH = ROOT / "lifeos" / "config" / "mcp.config.json"
+DEFAULT_MCP_CONFIG_PATH = ROOT / "lifeos" / "config" / "mcp.config.json"
+MCP_CONFIG_PATH = Path(os.getenv("JARVIS_MCP_CONFIG", str(DEFAULT_MCP_CONFIG_PATH))).expanduser()
 
 
 def _expand_config(value):

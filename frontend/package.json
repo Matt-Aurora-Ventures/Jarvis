@@ -1,6 +1,7 @@
 {
   "name": "jarvis-frontend",
   "version": "0.5.0",
+  "type": "module",
   "description": "Always-on front-end for Jarvis AI Assistant",
   "main": "electron/main.js",
   "scripts": {

@@ -1,0 +1,342 @@
+{
+  "name": "Telegram /demo Bot - Production-Ready AI Trading Assistant",
+  "description": "Transform the Telegram /demo bot into an AI-powered trading assistant with real-time sentiment analysis, bags.fm API trading, treasury signals, self-learning AI, and advanced order management.",
+  "branchName": "feature/demo-bot-fixes",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Register Message Handler for Token Input",
+      "description": "Register Message Handler for Token Input",
+      "acceptanceCriteria": [],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-002",
+      "title": "Sentiment Hub - Main Dashboard",
+      "description": "Sentiment Hub - Main Dashboard",
+      "acceptanceCriteria": [],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-003",
+      "title": "AI Learning & Observation System",
+      "description": "AI Learning & Observation System",
+      "acceptanceCriteria": [],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-004",
+      "title": "Treasury Activation Integration",
+      "description": "Treasury Activation Integration",
+      "acceptanceCriteria": [],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-005",
+      "title": "bags.fm Buy/Sell Integration",
+      "description": "bags.fm Buy/Sell Integration",
+      "acceptanceCriteria": [],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-006",
+      "title": "Advanced Order Types (Stop-Loss, Take-Profit, Limit)",
+      "description": "Advanced Order Types (Stop-Loss, Take-Profit, Limit)",
+      "acceptanceCriteria": [],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-007",
+      "title": "Charts Integration",
+      "description": "Charts Integration",
+      "acceptanceCriteria": [],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-008",
+      "title": "15-Minute Update Cycle",
+      "description": "15-Minute Update Cycle",
+      "acceptanceCriteria": [],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-009",
+      "title": "Wallet Initialization",
+      "description": "Wallet Initialization",
+      "acceptanceCriteria": [],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-010",
+      "title": "Beautiful Menu UI",
+      "description": "Beautiful Menu UI",
+      "acceptanceCriteria": [],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-011",
+      "title": "Insta Snipe",
+      "description": "Insta Snipe",
+      "acceptanceCriteria": [],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-012",
+      "title": "AI Picks",
+      "description": "AI Picks",
+      "acceptanceCriteria": [],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-013",
+      "title": "Trending Tokens",
+      "description": "Trending Tokens",
+      "acceptanceCriteria": [],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-014",
+      "title": "Bags Top 15",
+      "description": "Bags Top 15",
+      "acceptanceCriteria": [],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-015",
+      "title": "Search Token",
+      "description": "Search Token",
+      "acceptanceCriteria": [],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-016",
+      "title": "Quick Trade",
+      "description": "Quick Trade",
+      "acceptanceCriteria": [],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-017",
+      "title": "Analyze Token",
+      "description": "Analyze Token",
+      "acceptanceCriteria": [],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-018",
+      "title": "Positions Dashboard",
+      "description": "Positions Dashboard",
+      "acceptanceCriteria": [],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-019",
+      "title": "Balance View",
+      "description": "Balance View",
+      "acceptanceCriteria": [],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-020",
+      "title": "Sell All",
+      "description": "Sell All",
+      "acceptanceCriteria": [],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-021",
+      "title": "PnL Report",
+      "description": "PnL Report",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-022",
+      "title": "Fee Stats",
+      "description": "Fee Stats",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-023",
+      "title": "AI Trending",
+      "description": "AI Trending",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-024",
+      "title": "AI New Pairs",
+      "description": "AI New Pairs",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-025",
+      "title": "Learning Dashboard",
+      "description": "Learning Dashboard",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-026",
+      "title": "Performance Analytics",
+      "description": "Performance Analytics",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-027",
+      "title": "Watchlist",
+      "description": "Watchlist",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-028",
+      "title": "DCA (Dollar Cost Average)",
+      "description": "DCA (Dollar Cost Average)",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-029",
+      "title": "Alerts System",
+      "description": "Alerts System",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-030",
+      "title": "Settings",
+      "description": "Settings",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-031",
+      "title": "Custom Buy Amount Input",
+      "description": "Custom Buy Amount Input",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-032",
+      "title": "Loading States & Clean Menu Transitions",
+      "description": "Loading States & Clean Menu Transitions",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-033",
+      "title": "Critical Bug Fixes",
+      "description": "Critical Bug Fixes",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    }
+  ],
+  "metadata": {
+    "createdAt": "2026-01-23T07:51:56.526084+00:00",
+    "version": "1.0.0",
+    "sourcePrd": "prd-demo-bot-enhancement.md"
+  }
+}

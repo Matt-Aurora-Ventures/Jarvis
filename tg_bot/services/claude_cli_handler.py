@@ -364,6 +364,7 @@ class ClaudeCLIHandler:
 
     SANDBOX_ENV_ALLOWLIST = {
         "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
         "CLAUDE_API_KEY",
         "CLAUDE_CODE_API_KEY",
     }
@@ -463,25 +464,37 @@ class ClaudeCLIHandler:
             logger.warning("anthropic package not available - falling back to CLI mode")
             return
 
-        # Try to get API key from environment or secrets
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            try:
-                from core.secrets import get_anthropic_key
-                api_key = get_anthropic_key()
-            except ImportError:
-                pass
+        try:
+            from core.llm.anthropic_utils import (
+                get_anthropic_base_url,
+                get_anthropic_api_key,
+                is_local_anthropic,
+            )
+        except Exception:
+            get_anthropic_base_url = None
+            get_anthropic_api_key = None
+            is_local_anthropic = None
 
-        if not api_key:
-            logger.warning("ANTHROPIC_API_KEY not found - falling back to CLI mode")
+        base_url = get_anthropic_base_url() if get_anthropic_base_url else None
+        if not base_url:
+            logger.info("Anthropic base URL not configured (or remote blocked) - using CLI subprocess mode")
             return
 
-        try:
-            from core.llm.anthropic_utils import get_anthropic_base_url
+        # Local Anthropic-compatible API key (Ollama uses placeholder)
+        api_key = get_anthropic_api_key() if get_anthropic_api_key else os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            api_key = "ollama"
 
+        # Prefer local Ollama model names when running locally.
+        if is_local_anthropic and is_local_anthropic():
+            self.API_MODEL = os.getenv("OLLAMA_TG_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen3-coder"
+        else:
+            self.API_MODEL = os.getenv("TG_CLAUDE_MODEL", self.API_MODEL)
+
+        try:
             self._anthropic_client = anthropic.Anthropic(
                 api_key=api_key,
-                base_url=get_anthropic_base_url(),
+                base_url=base_url,
             )
             self._api_mode_available = True
             logger.info("API mode initialized - using Anthropic API directly (no CLI subprocess)")

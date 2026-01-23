@@ -1,0 +1,72 @@
+{
+  "name": "Telegram /demo Bot Enhancement",
+  "description": "**As a** user **I want to** enter a token address after selecting a buy amount **So that** I can proceed with purchasing tokens",
+  "branchName": "feature/demo-bot-fixes",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Register Message Handler for Token Input",
+      "description": "As a user I want to enter a token address after selecting a buy amount So that I can proceed with purchasing tokens",
+      "acceptanceCriteria": [],
+      "priority": 1,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-005",
+      "title": "bags.fm Buy/Sell Integration with Jupiter Backup and TP/SL",
+      "description": "As a user I want to execute buys and sells via bags.fm API with automatic Jupiter fallback So that trades actually work with TP/SL protection",
+      "acceptanceCriteria": [],
+      "priority": 2,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-007",
+      "title": "Charts Integration with mplfinance",
+      "description": "As a user I want to view professional price charts for tokens So that I can analyze trends before buying",
+      "acceptanceCriteria": [],
+      "priority": 3,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-031",
+      "title": "Custom Buy Amount Input",
+      "description": "As a user I want to enter a custom SOL amount for buying So that I'm not limited to preset buttons",
+      "acceptanceCriteria": [],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-032",
+      "title": "Loading States & Clean Menu Transitions",
+      "description": "As a user I want to see clear loading indicators and smooth menu navigation So that I know the bot is working",
+      "acceptanceCriteria": [],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    },
+    {
+      "id": "US-033",
+      "title": "Critical Bug Fixes",
+      "description": "As a user I want all existing bugs fixed So that the demo bot actually works for public launch",
+      "acceptanceCriteria": [],
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
+    }
+  ],
+  "metadata": {
+    "createdAt": "2026-01-23T07:47:35.568Z",
+    "version": "1.0.0",
+    "sourcePrd": "prd-demo-bot-simple.md"
+  }
+}

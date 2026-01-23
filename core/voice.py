@@ -30,6 +30,17 @@ from core import (
     system_profiler,
 )
 
+# PersonaPlex full-duplex conversational AI integration
+try:
+    from core.voice_personaplex_integration import (
+        _personaplex_configured,
+        _speak_with_personaplex,
+        _start_personaplex_process,
+    )
+    PERSONAPLEX_AVAILABLE = True
+except ImportError:
+    PERSONAPLEX_AVAILABLE = False
+
 VOICES_DIR = Path(__file__).resolve().parents[1] / "data" / "voices"
 DEFAULT_PIPER_MODEL = "en_US-lessac-medium.onnx"
 DEFAULT_PIPER_URL = (
@@ -912,14 +923,21 @@ def _speak(text: str) -> None:
     engine = str(voice_cfg.get("tts_engine", "piper")).lower()
     clone_engine = engine in ("voice_clone", "xtts", "clone")
     spoke = False
-    
+
+    # Try PersonaPlex first if configured (revolutionary full-duplex!)
+    if PERSONAPLEX_AVAILABLE and _personaplex_configured(voice_cfg):
+        spoke = _speak_with_personaplex(text, voice_cfg)
+        if spoke:
+            _remember_spoken(text)
+            return
+
     # Try OpenAI TTS first if configured
     if engine == "openai_tts":
         spoke = _speak_with_openai_tts(text, voice_cfg)
         if spoke:
             _remember_spoken(text)
             return
-    
+
     # Try voice clone
     if _voice_clone_configured(voice_cfg):
         spoke = _speak_with_voice_clone(text, voice_cfg)
@@ -928,7 +946,7 @@ def _speak(text: str) -> None:
             return
         if clone_engine:
             engine = "say"
-    
+
     # Fallback engines
     if engine == "piper":
         spoke = _speak_with_piper(text, voice_cfg)
@@ -953,13 +971,19 @@ def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
     engine = str(voice_cfg.get("tts_engine", "piper")).lower()
     clone_engine = engine in ("voice_clone", "xtts", "clone")
     proc: Optional[subprocess.Popen] = None
-    
+
+    # Try PersonaPlex first if configured (revolutionary full-duplex with barge-in!)
+    if PERSONAPLEX_AVAILABLE and _personaplex_configured(voice_cfg):
+        proc = _start_personaplex_process(text, voice_cfg)
+        if proc:
+            _remember_spoken(text)
+
     # Try OpenAI TTS first if configured
-    if engine == "openai_tts":
+    if not proc and engine == "openai_tts":
         proc = _start_openai_tts_process(text, voice_cfg)
         if proc:
             _remember_spoken(text)
-    
+
     # Try voice clone
     if not proc and _voice_clone_configured(voice_cfg):
         proc = _start_voice_clone_process(text, voice_cfg)
@@ -967,7 +991,7 @@ def _speak_with_barge_in(text: str, voice_cfg: dict) -> Optional[str]:
             _remember_spoken(text)
         elif clone_engine:
             engine = "say"
-    
+
     # Fallback engines
     if not proc and engine == "piper":
         proc = _start_piper_process(text, voice_cfg)

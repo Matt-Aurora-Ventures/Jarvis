@@ -19,7 +19,7 @@ export { StatsGrid, PositionCard, TokenScanner } from './trading'
 export { FloatingChat } from './chat'
 
 // Standalone Components
-export { default as Layout } from './Layout'
+export { default as MainLayout } from './MainLayout'
 export { default as ErrorBoundary } from './ErrorBoundary'
 export { default as VoiceOrb } from './VoiceOrb'
 export { default as TradingChart } from './TradingChart'

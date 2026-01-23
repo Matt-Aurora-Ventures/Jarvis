@@ -32,6 +32,15 @@ if _env_path.exists():
                         os.environ[key] = value
 
 
+# Resolve Anthropic key (local Ollama uses placeholder).
+def _get_anthropic_key() -> str:
+    try:
+        from core.llm.anthropic_utils import get_anthropic_api_key
+        return get_anthropic_api_key()
+    except Exception:
+        return os.getenv("ANTHROPIC_API_KEY", "")
+
+
 # Cost per API call (USD estimates)
 API_COSTS = {
     "grok": 0.002,  # ~$2 per 1000 calls
@@ -51,7 +60,7 @@ class BotConfig:
 
     # === API KEYS (from environment only) ===
     grok_api_key: str = field(default_factory=lambda: os.getenv("XAI_API_KEY", ""))
-    anthropic_api_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
+    anthropic_api_key: str = field(default_factory=lambda: _get_anthropic_key())
     birdeye_api_key: str = field(default_factory=lambda: os.getenv("BIRDEYE_API_KEY", ""))
 
     # === ADMIN SECURITY ===
@@ -124,7 +133,7 @@ class BotConfig:
         if not self.grok_api_key:
             missing.append("XAI_API_KEY (for Grok sentiment)")
         if not self.anthropic_api_key:
-            missing.append("ANTHROPIC_API_KEY (for Claude fallback)")
+            missing.append("ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN (for local Claude-compatible)")
         if not self.birdeye_api_key:
             missing.append("BIRDEYE_API_KEY (for token data)")
         return missing

@@ -99,7 +99,12 @@ async def main():
         oauth2_refresh_token=os.environ.get("X_OAUTH2_REFRESH_TOKEN", ""),
     )
     twitter_client = TwitterClient(twitter_creds)
-    claude_client = ClaudeContentGenerator(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    try:
+        from core.llm.anthropic_utils import get_anthropic_api_key
+        claude_key = get_anthropic_api_key()
+    except Exception:
+        claude_key = os.environ.get("ANTHROPIC_API_KEY")
+    claude_client = ClaudeContentGenerator(api_key=claude_key)
 
     twitter_poster = SentimentTwitterPoster(
         twitter_client=twitter_client,
