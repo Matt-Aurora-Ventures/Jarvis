@@ -12,7 +12,6 @@ import subprocess
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from pathlib import Path
-import anthropic
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +54,20 @@ class ClaudeContentGenerator:
             # Allow local Anthropic-compatible endpoints (e.g., Ollama) without a real key.
             self.api_key = "ollama"
 
-        if not self.api_key:
-            logger.warning("No Anthropic API key found")
+        anthropic_module = None
+        try:
+            import anthropic as anthropic_module
+        except Exception:
+            anthropic_module = None
+
+        if not self.api_key or anthropic_module is None:
+            if self.api_key and anthropic_module is None:
+                logger.warning("anthropic package not available; API disabled")
+            elif not self.api_key:
+                logger.warning("No Anthropic API key found")
             self.client = None
         else:
-            self.client = anthropic.Anthropic(
+            self.client = anthropic_module.Anthropic(
                 api_key=self.api_key,
                 base_url=base_url,
             )
@@ -134,7 +142,7 @@ class ClaudeContentGenerator:
             return ClaudeResponse(
                 success=False,
                 content="",
-                error="No Anthropic API key configured"
+                error="Claude CLI not configured"
             )
 
         try:
@@ -183,7 +191,7 @@ class ClaudeContentGenerator:
                 raise api_error
 
         except Exception as e:
-            logger.error(f"Claude API error: {e}")
+            logger.error(f"Claude CLI error: {e}")
             return ClaudeResponse(
                 success=False,
                 content="",

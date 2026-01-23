@@ -82,6 +82,18 @@ class TestBotConfig:
 class TestClaudeClient:
     """Test Claude sentiment client (uses tg_bot.services.claude_client)."""
 
+    def test_client_creation(self):
+        """Client should create without API key."""
+        from tg_bot.services.claude_client import ClaudeClient
+        client = ClaudeClient()
+        assert isinstance(client.is_healthy(), bool)
+
+    def test_client_with_key(self):
+        """Client should ignore API key (CLI only)."""
+        from tg_bot.services.claude_client import ClaudeClient
+        client = ClaudeClient(api_key="test-key")
+        assert client.api_key is None
+
     def test_sentiment_result_dataclass(self):
         """SentimentResult should be a valid dataclass."""
         from tg_bot.services.claude_client import SentimentResult

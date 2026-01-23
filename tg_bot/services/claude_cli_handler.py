@@ -34,46 +34,6 @@ from core.security.scrubber import get_scrubber
 
 logger = logging.getLogger(__name__)
 
-# Lazy import anthropic for API mode
-_anthropic_module = None
-
-
-def _get_anthropic():
-    """Lazily import anthropic module."""
-    global _anthropic_module
-    if _anthropic_module is None:
-        try:
-            import anthropic
-            _anthropic_module = anthropic
-        except ImportError:
-            logger.warning("anthropic package not installed - API mode unavailable")
-    return _anthropic_module
-
-
-# Coding system prompt for API mode
-CODING_SYSTEM_PROMPT = """You are JARVIS, an advanced AI coding assistant for the Jarvis trading system.
-
-You have access to the Jarvis codebase and can help with:
-- Writing and modifying Python code
-- Debugging issues
-- Explaining code architecture
-- Suggesting improvements
-- Running analysis
-
-When responding:
-- Be concise and actionable
-- Show code when relevant (use markdown code blocks)
-- Explain what changes you're making
-- Warn about potential issues
-- Follow Python best practices
-
-The codebase is a Solana trading bot with:
-- Telegram bot interface (tg_bot/)
-- Twitter/X bot (bots/twitter/)
-- Treasury trading engine (bots/treasury/)
-- Core modules (core/)
-
-Respond directly with the solution. No pleasantries needed."""
 
 # JARVIS voice templates (from brand bible)
 JARVIS_CONFIRMATIONS = [
@@ -273,14 +233,6 @@ class ClaudeCLIHandler:
     CIRCUIT_BREAKER_ERROR_THRESHOLD = 3  # errors before tripping
     CIRCUIT_BREAKER_COOLDOWN = 1800  # 30 minutes cooldown when tripped
     CIRCUIT_BREAKER_WINDOW = 300  # 5 minute window for counting errors
-
-    # Prefer API mode when a local Anthropic-compatible endpoint is configured
-    USE_API_MODE = bool(os.getenv("OLLAMA_ANTHROPIC_BASE_URL")) or bool(os.getenv("ANTHROPIC_BASE_URL")) or (
-        os.getenv("CLAUDE_USE_API_MODE", "").lower() in ("1", "true", "yes", "on")
-    )
-    API_MODEL = "claude-sonnet-4-20250514"
-    API_MAX_TOKENS = 4096
-
     # Auto-retry configuration
     MAX_RETRIES = 2
     RETRY_BASE_DELAY = 2  # seconds
@@ -447,126 +399,7 @@ class ClaudeCLIHandler:
         self._queue_depth = 0
         self._max_queue_depth = 3  # Max commands waiting
 
-        # API mode client (lazy init)
-        self._anthropic_client = None
-        self._api_mode_available = False
-        self._init_api_client()
         self._pending_commands: List[Dict[str, Any]] = []  # Track pending commands
-
-    def _init_api_client(self):
-        """Initialize Anthropic API client for API mode."""
-        if not self.USE_API_MODE:
-            logger.info("API mode disabled - using CLI subprocess mode")
-            return
-
-        anthropic = _get_anthropic()
-        if anthropic is None:
-            logger.warning("anthropic package not available - falling back to CLI mode")
-            return
-
-        try:
-            from core.llm.anthropic_utils import (
-                get_anthropic_base_url,
-                get_anthropic_api_key,
-                is_local_anthropic,
-            )
-        except Exception:
-            get_anthropic_base_url = None
-            get_anthropic_api_key = None
-            is_local_anthropic = None
-
-        base_url = get_anthropic_base_url() if get_anthropic_base_url else None
-        if not base_url:
-            logger.info("Anthropic base URL not configured (or remote blocked) - using CLI subprocess mode")
-            return
-
-        # Local Anthropic-compatible API key (Ollama uses placeholder)
-        api_key = get_anthropic_api_key() if get_anthropic_api_key else os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            api_key = "ollama"
-
-        # Prefer local Ollama model names when running locally.
-        if is_local_anthropic and is_local_anthropic():
-            self.API_MODEL = os.getenv("OLLAMA_TG_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen3-coder"
-        else:
-            self.API_MODEL = os.getenv("TG_CLAUDE_MODEL", self.API_MODEL)
-
-        try:
-            self._anthropic_client = anthropic.Anthropic(
-                api_key=api_key,
-                base_url=base_url,
-            )
-            self._api_mode_available = True
-            logger.info("API mode initialized - using Anthropic API directly (no CLI subprocess)")
-        except Exception as e:
-            logger.error(f"Failed to initialize Anthropic client: {e}")
-            self._api_mode_available = False
-
-    async def _execute_via_api(
-        self,
-        prompt: str,
-        user_id: int,
-        context: str = None,
-    ) -> Tuple[bool, str, str]:
-        """Execute coding request via Anthropic API instead of CLI subprocess.
-
-        This uses the same API that governs this Claude instance, providing
-        a unified experience without spawning separate processes.
-
-        Returns:
-            Tuple[success, jarvis_response, full_output]
-        """
-        if not self._api_mode_available or not self._anthropic_client:
-            raise RuntimeError("API mode not available")
-
-        start_time = time.time()
-
-        # Build the message with optional context
-        messages = []
-        if context:
-            messages.append({
-                "role": "user",
-                "content": f"## Context from conversation:\n{context}\n\n## Current request:\n{prompt}"
-            })
-        else:
-            messages.append({"role": "user", "content": prompt})
-
-        try:
-            # Run in thread pool since anthropic client is sync
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self._anthropic_client.messages.create(
-                    model=self.API_MODEL,
-                    max_tokens=self.API_MAX_TOKENS,
-                    system=CODING_SYSTEM_PROMPT,
-                    messages=messages,
-                )
-            )
-
-            # Extract response content
-            output = response.content[0].text if response.content else ""
-
-            # Sanitize output (same as CLI mode)
-            sanitized = self.sanitize_output(output, paranoid=True)
-            summary = self.summarize_action(sanitized)
-            formatted = self.format_for_telegram(sanitized)
-
-            # Record success
-            self.record_execution(True, time.time() - start_time, user_id)
-
-            jarvis_response = self.get_jarvis_response(True, summary)
-            return True, jarvis_response, formatted
-
-        except Exception as e:
-            logger.error(f"API execution error: {e}")
-            self.record_execution(False, time.time() - start_time, user_id)
-            self.record_error()
-
-            error_msg = str(e)[:200]
-            jarvis_error = self.get_jarvis_response(False, error_msg)
-            return False, jarvis_error, f"API error: {e}"
-
     def _find_claude(self) -> str:
         """Find the Claude CLI executable."""
         import shutil

@@ -1898,11 +1898,15 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Claude CLI not found - provide helpful message
             await update.message.reply_text(
                 "⚠️ <b>Claude CLI not configured</b>\n\n"
-                "The /code command requires Claude Code CLI or a local Anthropic-compatible endpoint.\n\n"
-                "<b>Local model setup:</b>\n"
-                "Set <code>ANTHROPIC_BASE_URL</code> and <code>ANTHROPIC_API_KEY</code> (or <code>ANTHROPIC_AUTH_TOKEN</code>).\n\n"
-                "<b>CLI setup (fallback):</b>\n"
-                "<code>npm install -g @anthropic-ai/claude-code</code>",
+                "The /code command requires Claude Code CLI to be installed.
+
+"
+                "<b>Setup (local only):</b>
+"
+                "<code>npm install -g @anthropic-ai/claude-code</code>
+
+"
+                "Note: This feature is designed for local development, not VPS deployment.",
                 parse_mode=ParseMode.HTML
             )
             return

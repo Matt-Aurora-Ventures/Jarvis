@@ -1,0 +1,62 @@
+{
+  "title": "Jarvis LifeOS Documentation",
+  "description": "Complete documentation for Jarvis LifeOS - The AI system that starts with crypto trading and expands into a universal personal operating system",
+  "author": "Matt Haynes & Jarvis Team",
+  "language": "en",
+  "root": ".",
+  "structure": {
+    "readme": "README.md",
+    "summary": "SUMMARY.md"
+  },
+  "plugins": [
+    "theme-default",
+    "search",
+    "github",
+    "page-toc",
+    "back-to-top-button",
+    "copy-code-button",
+    "anchor-navigation-ex",
+    "expandable-chapters"
+  ],
+  "pluginsConfig": {
+    "github": {
+      "url": "https://github.com/Matt-Aurora-Ventures/Jarvis"
+    },
+    "page-toc": {
+      "selector": ".markdown-section h1, .markdown-section h2, .markdown-section h3",
+      "position": "before-first",
+      "showByDefault": true
+    },
+    "anchor-navigation-ex": {
+      "showLevel": false,
+      "associatedWithSummary": true,
+      "printLog": false,
+      "multipleH1": true,
+      "mode": "float",
+      "showGoTop": true,
+      "float": {
+        "showLevelIcon": false,
+        "level1Icon": "fa fa-hand-o-right",
+        "level2Icon": "fa fa-hand-o-right",
+        "level3Icon": "fa fa-hand-o-right"
+      },
+      "pageTop": {
+        "showLevelIcon": false,
+        "level1Icon": "fa fa-hand-o-right",
+        "level2Icon": "fa fa-hand-o-right",
+        "level3Icon": "fa fa-hand-o-right"
+      }
+    }
+  },
+  "links": {
+    "sidebar": {
+      "GitHub": "https://github.com/Matt-Aurora-Ventures/Jarvis",
+      "Website": "https://jarvislife.io",
+      "Twitter": "https://twitter.com/Jarvis_lifeos",
+      "Telegram": "https://t.me/Jarviskr8tivbot"
+    }
+  },
+  "styles": {
+    "website": "styles/website.css"
+  }
+}

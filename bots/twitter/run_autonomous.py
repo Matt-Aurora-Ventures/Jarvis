@@ -172,7 +172,7 @@ async def run_continuously():
     print("\nChecking API keys...")
     print_key_status()
 
-    success, missing = validate_required_keys(["anthropic", "grok", "twitter"])
+    success, missing = validate_required_keys(["grok", "twitter"])
     if not success:
         print(f"\nWARNING: Missing required API keys: {', '.join(missing)}")
         print("Some features may be limited.")
