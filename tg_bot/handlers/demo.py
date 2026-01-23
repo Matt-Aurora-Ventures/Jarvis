@@ -41,6 +41,7 @@ import json
 import hashlib
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, List
 from decimal import Decimal
@@ -70,6 +71,7 @@ from tg_bot.services.digest_formatter import escape_markdown_v1 as escape_md
 logger = logging.getLogger(__name__)
 
 DEMO_PROFILE = (os.environ.get("DEMO_TRADING_PROFILE", "demo") or "demo").strip().lower()
+DEMO_DEFAULT_SLIPPAGE_BPS = 100  # 1% default, override via env
 
 
 # =============================================================================
@@ -95,6 +97,382 @@ def get_bags_client():
         logger.warning("Bags client not available")
         return None
 
+
+_JUPITER_CLIENT = None
+
+
+def _get_demo_slippage_bps() -> int:
+    """Resolve slippage for demo swaps (basis points)."""
+    raw_bps = os.environ.get("DEMO_SWAP_SLIPPAGE_BPS")
+    if raw_bps:
+        try:
+            return max(1, int(float(raw_bps)))
+        except ValueError:
+            pass
+    raw_pct = os.environ.get("DEMO_SWAP_SLIPPAGE_PCT")
+    if raw_pct:
+        try:
+            return max(1, int(float(raw_pct) * 100))
+        except ValueError:
+            pass
+    return DEMO_DEFAULT_SLIPPAGE_BPS
+
+
+def _get_jupiter_client():
+    """Lazy Jupiter client init for fallback swaps."""
+    global _JUPITER_CLIENT
+    if _JUPITER_CLIENT is None:
+        from bots.treasury.jupiter import JupiterClient
+        _JUPITER_CLIENT = JupiterClient()
+    return _JUPITER_CLIENT
+
+
+def _load_demo_wallet(wallet_address: Optional[str] = None):
+    """Load secure wallet for demo trading (required for Jupiter fallback)."""
+    try:
+        from bots.treasury.wallet import SecureWallet
+        wallet_password = _get_demo_wallet_password()
+        if not wallet_password:
+            return None
+        wallet = SecureWallet(
+            master_password=wallet_password,
+            wallet_dir=_get_demo_wallet_dir(),
+        )
+        if wallet_address:
+            try:
+                wallet.set_active(wallet_address)
+            except Exception:
+                # Ignore if address isn't registered; treasury wallet may still exist
+                pass
+        return wallet
+    except Exception as exc:
+        logger.warning(f"Demo wallet unavailable: {exc}")
+        return None
+
+
+async def _get_token_decimals(mint: str, jupiter) -> int:
+    if mint == "So11111111111111111111111111111111111111112":
+        return 9
+    try:
+        info = await jupiter.get_token_info(mint)
+        if info and getattr(info, "decimals", None) is not None:
+            return int(info.decimals)
+    except Exception:
+        pass
+    return 6
+
+
+async def _to_base_units(mint: str, amount: float, jupiter) -> int:
+    decimals = await _get_token_decimals(mint, jupiter)
+    return int(float(amount) * (10 ** decimals))
+
+
+async def _from_base_units(mint: str, amount: int, jupiter) -> float:
+    decimals = await _get_token_decimals(mint, jupiter)
+    return float(amount) / (10 ** decimals)
+
+
+async def _execute_swap_with_fallback(
+    *,
+    from_token: str,
+    to_token: str,
+    amount: float,
+    wallet_address: str,
+    slippage_bps: int,
+) -> Dict[str, Any]:
+    """Execute swap via Bags.fm with Jupiter fallback."""
+    last_error = None
+
+    bags_client = get_bags_client()
+    if bags_client and getattr(bags_client, "api_key", None) and getattr(bags_client, "partner_key", None):
+        try:
+            bags_result = await bags_client.swap(
+                from_token=from_token,
+                to_token=to_token,
+                amount=amount,
+                wallet_address=wallet_address,
+                slippage_bps=slippage_bps,
+            )
+            if bags_result and bags_result.success:
+                return {
+                    "success": True,
+                    "source": "bags_fm",
+                    "tx_hash": bags_result.tx_hash,
+                    "amount_out": bags_result.to_amount,
+                }
+            last_error = getattr(bags_result, "error", None) or "Bags.fm swap failed"
+        except Exception as exc:
+            last_error = str(exc)
+
+    # Jupiter fallback
+    try:
+        jupiter = _get_jupiter_client()
+        wallet = _load_demo_wallet(wallet_address)
+        if not wallet:
+            return {
+                "success": False,
+                "error": last_error or "Wallet not configured for Jupiter fallback",
+            }
+
+        amount_base = await _to_base_units(from_token, amount, jupiter)
+        quote = await jupiter.get_quote(
+            input_mint=from_token,
+            output_mint=to_token,
+            amount=amount_base,
+            slippage_bps=slippage_bps,
+        )
+        if not quote:
+            return {"success": False, "error": last_error or "Jupiter quote failed"}
+        jup_result = await jupiter.execute_swap(quote, wallet)
+        if jup_result and getattr(jup_result, "success", False):
+            amount_out_ui = await _from_base_units(
+                to_token,
+                getattr(jup_result, "output_amount", 0),
+                jupiter,
+            )
+            return {
+                "success": True,
+                "source": "jupiter",
+                "tx_hash": getattr(jup_result, "signature", None),
+                "amount_out": amount_out_ui,
+            }
+        return {
+            "success": False,
+            "error": getattr(jup_result, "error", None) or last_error or "Jupiter swap failed",
+        }
+    except Exception as exc:
+        return {"success": False, "error": last_error or str(exc)}
+
+
+def _exit_checks_enabled() -> bool:
+    return os.environ.get("DEMO_EXIT_CHECKS", "1").strip().lower() not in ("0", "false", "off")
+
+
+def _auto_exit_enabled(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    if os.environ.get("DEMO_TPSL_AUTO_EXECUTE", "1").strip().lower() in ("0", "false", "off"):
+        return False
+    return bool(context.user_data.get("ai_auto_trade", False))
+
+
+def _get_exit_check_interval_seconds() -> int:
+    raw = os.environ.get("DEMO_EXIT_CHECK_INTERVAL_SECONDS", "30")
+    try:
+        return max(5, int(float(raw)))
+    except ValueError:
+        return 30
+
+
+def _should_run_exit_checks(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    if not _exit_checks_enabled():
+        return False
+    positions = context.user_data.get("positions", [])
+    if not positions:
+        return False
+    interval = _get_exit_check_interval_seconds()
+    now = time.time()
+    last = context.user_data.get("last_exit_check_ts")
+    if last and (now - last) < interval:
+        return False
+    context.user_data["last_exit_check_ts"] = now
+    return True
+
+
+async def _check_demo_exit_triggers(
+    context: ContextTypes.DEFAULT_TYPE,
+    positions: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Check TP/SL/trailing stops for demo positions."""
+    if not positions or not _exit_checks_enabled():
+        return []
+
+    alerts: List[Dict[str, Any]] = []
+    jupiter = _get_jupiter_client()
+    trailing_stops = context.user_data.get("trailing_stops", [])
+
+    for pos in positions:
+        token_mint = pos.get("address")
+        entry_price = float(pos.get("entry_price", 0) or 0)
+        current_price = float(pos.get("current_price", 0) or 0)
+        if not current_price and token_mint:
+            try:
+                current_price = await jupiter.get_token_price(token_mint)
+                pos["current_price"] = current_price
+            except Exception:
+                continue
+
+        if entry_price <= 0 or current_price <= 0:
+            continue
+
+        tp_pct = pos.get("tp_percent", pos.get("take_profit"))
+        sl_pct = pos.get("sl_percent", pos.get("stop_loss"))
+        if tp_pct is not None:
+            tp_price = entry_price * (1 + float(tp_pct) / 100)
+            if current_price >= tp_price and not pos.get("tp_triggered"):
+                pos["tp_triggered"] = True
+                alerts.append({"type": "take_profit", "position": pos, "price": current_price})
+        if sl_pct is not None:
+            sl_price = entry_price * (1 - float(sl_pct) / 100)
+            if current_price <= sl_price and not pos.get("sl_triggered"):
+                pos["sl_triggered"] = True
+                alerts.append({"type": "stop_loss", "position": pos, "price": current_price})
+
+    # Update trailing stops
+    for stop in trailing_stops:
+        if not stop.get("active", True):
+            continue
+        pos_id = stop.get("position_id")
+        position = next((p for p in positions if p.get("id") == pos_id), None)
+        if not position:
+            continue
+        current_price = float(position.get("current_price", 0) or 0)
+        if current_price <= 0:
+            continue
+        highest = float(stop.get("highest_price", 0) or 0)
+        trail_pct = float(stop.get("trail_percent", 10) or 10) / 100
+        if current_price > highest:
+            highest = current_price
+            stop["highest_price"] = highest
+            stop["current_stop_price"] = highest * (1 - trail_pct)
+        current_stop = float(stop.get("current_stop_price", 0) or 0)
+        if current_stop and current_price <= current_stop and not stop.get("triggered"):
+            stop["triggered"] = True
+            stop["active"] = False
+            alerts.append({"type": "trailing_stop", "position": position, "price": current_price})
+
+    context.user_data["trailing_stops"] = trailing_stops
+    return alerts
+
+
+async def _maybe_execute_exit(
+    context: ContextTypes.DEFAULT_TYPE,
+    alert: Dict[str, Any],
+) -> bool:
+    """Execute an auto-exit if enabled. Returns True if position closed."""
+    if not _auto_exit_enabled(context):
+        return False
+
+    position = alert.get("position", {})
+    token_mint = position.get("address")
+    token_amount = position.get("amount", 0)
+    wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+    slippage_bps = _get_demo_slippage_bps()
+    swap = await _execute_swap_with_fallback(
+        from_token=token_mint,
+        to_token="So11111111111111111111111111111111111111112",
+        amount=token_amount,
+        wallet_address=wallet_address,
+        slippage_bps=slippage_bps,
+    )
+    if swap.get("success"):
+        position["closed_at"] = datetime.now(timezone.utc).isoformat()
+        position["exit_tx"] = swap.get("tx_hash")
+        position["exit_source"] = swap.get("source")
+        position["exit_reason"] = alert.get("type")
+        return True
+    return False
+
+
+def _format_exit_alert_message(alert: Dict[str, Any], auto_executed: bool) -> str:
+    position = alert.get("position", {})
+    symbol = escape_md(position.get("symbol", "TOKEN"))
+    entry_price = float(position.get("entry_price", 0) or 0)
+    current_price = float(alert.get("price", 0) or position.get("current_price", 0) or 0)
+    alert_type = alert.get("type", "alert")
+
+    reason_map = {
+        "take_profit": "🎯 Take-profit hit",
+        "stop_loss": "🛑 Stop-loss hit",
+        "trailing_stop": "🛡️ Trailing stop hit",
+    }
+    reason = reason_map.get(alert_type, "⚠️ Exit alert")
+
+    lines = [f"{reason} — *{symbol}*"]
+    if entry_price:
+        lines.append(f"Entry: ${entry_price:.6f}")
+    if current_price:
+        lines.append(f"Now: ${current_price:.6f}")
+    if entry_price and current_price:
+        pnl_pct = ((current_price - entry_price) / entry_price) * 100
+        lines.append(f"P&L: {pnl_pct:+.1f}%")
+
+    if auto_executed:
+        source = position.get("exit_source", "swap")
+        tx_hash = position.get("exit_tx")
+        tx_display = f"{tx_hash[:8]}...{tx_hash[-8:]}" if tx_hash else "N/A"
+        lines.append(f"Auto-exit: {source}")
+        lines.append(f"TX: {tx_display}")
+    else:
+        lines.append("_Auto-exit disabled — review position._")
+
+    return "\n".join(lines)
+
+
+async def _process_demo_exit_checks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Run TP/SL/trailing checks with throttling and optional auto-exit."""
+    try:
+        if not _should_run_exit_checks(context):
+            return
+
+        positions = context.user_data.get("positions", [])
+        if not positions:
+            return
+
+        try:
+            alerts = await asyncio.wait_for(
+                _check_demo_exit_triggers(context, positions),
+                timeout=2.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Demo exit checks timed out")
+            return
+
+        if not alerts:
+            return
+
+        closed_ids: List[str] = []
+        chat_id = update.effective_chat.id if update and update.effective_chat else None
+
+        for alert in alerts:
+            executed = False
+            try:
+                executed = await asyncio.wait_for(
+                    _maybe_execute_exit(context, alert),
+                    timeout=5.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Demo auto-exit timed out")
+            except Exception as exc:
+                logger.warning(f"Demo auto-exit failed: {exc}")
+
+            position = alert.get("position", {})
+            if executed and position.get("id"):
+                closed_ids.append(position.get("id"))
+
+            if chat_id:
+                message = _format_exit_alert_message(alert, executed)
+                try:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=message,
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                except Exception as exc:
+                    logger.warning(f"Failed to send demo exit alert: {exc}")
+
+        if closed_ids:
+            context.user_data["positions"] = [
+                p for p in positions if p.get("id") not in closed_ids
+            ]
+            trailing_stops = context.user_data.get("trailing_stops", [])
+            if trailing_stops:
+                context.user_data["trailing_stops"] = [
+                    s for s in trailing_stops if s.get("position_id") not in closed_ids
+                ]
+        else:
+            context.user_data["positions"] = positions
+
+    except Exception as exc:
+        logger.warning(f"Exit check processing failed: {exc}")
 
 def get_success_fee_manager():
     """Get Success Fee Manager for 0.5% fee on winning trades."""
@@ -3589,8 +3967,12 @@ Reply with a Solana token address to buy.
         keyboard = []
 
         if not picks:
-            lines.append("_No picks available in this category_")
-            lines.append("_Check back after next report refresh_")
+            if section == "prestocks":
+                lines.append("_PreStocks data is not live yet._")
+                lines.append("_Check back soon for private market listings._")
+            else:
+                lines.append("_No picks available in this category_")
+                lines.append("_Check back after next report refresh_")
         else:
             for i, pick in enumerate(picks[:8]):
                 symbol = pick.get("symbol", "???")
@@ -5712,6 +6094,34 @@ async def demo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle all demo:* callbacks."""
     query = update.callback_query
+    data = query.data if query else ""
+
+    # Enforce admin-only demo access (callbacks can be clicked by anyone)
+    try:
+        config = get_config()
+        user_id = query.from_user.id if query and query.from_user else 0
+        username = query.from_user.username if query and query.from_user else None
+        try:
+            is_admin = config.is_admin(user_id, username)
+        except TypeError:
+            is_admin = config.is_admin(user_id)
+        if not is_admin:
+            try:
+                await query.answer("Admin only.", show_alert=True)
+            except BadRequest as exc:
+                if (
+                    "Query is too old" in str(exc)
+                    or "response timeout expired" in str(exc)
+                    or "query id is invalid" in str(exc)
+                ):
+                    logger.debug("Demo callback expired before admin check.")
+                    return
+                raise
+            logger.warning(f"Unauthorized demo callback by user {user_id} (@{username})")
+            return
+    except Exception as exc:
+        logger.warning(f"Demo admin check failed: {exc}")
+
     try:
         await query.answer()
     except BadRequest as exc:
@@ -5724,7 +6134,9 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         raise
 
-    data = query.data
+    # Run TP/SL/trailing stop checks for demo positions (throttled)
+    await _process_demo_exit_checks(update, context)
+
     callback_data = data  # Store for error logging
 
     if not data.startswith("demo:"):
@@ -6639,61 +7051,24 @@ first, then create DCA plans from there.
                 symbol = token.get("symbol", "???")
                 price = token.get("price_usd", 0)
 
-                # Execute trade via Bags API (or simulate)
+                # Execute trade via Bags API with Jupiter fallback
                 try:
-                    bags_client = get_bags_client()
-                    if bags_client:
-                        # Real trade execution
-                        wallet_address = context.user_data.get("wallet_address", "demo_wallet")
-                        result = await bags_client.swap(
-                            from_token="So11111111111111111111111111111111111111112",  # SOL
-                            to_token=address,
-                            amount=amount_sol,
-                            wallet_address=wallet_address,
+                    wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+                    slippage_bps = _get_demo_slippage_bps()
+                    swap = await _execute_swap_with_fallback(
+                        from_token="So11111111111111111111111111111111111111112",  # SOL
+                        to_token=address,
+                        amount=amount_sol,
+                        wallet_address=wallet_address,
+                        slippage_bps=slippage_bps,
+                    )
+
+                    if swap.get("success"):
+                        tokens_received = swap.get("amount_out") or (
+                            (amount_sol * 225 / price) if price > 0 else 0
                         )
 
-                        if result.success:
-                            tokens_received = result.to_amount if result.to_amount else (amount_sol * 225 / price) if price > 0 else 0
-
-                            # Add position to portfolio
-                            positions = context.user_data.get("positions", [])
-                            new_position = {
-                                "id": f"bags_{len(positions) + 1}",
-                                "symbol": symbol,
-                                "address": address,
-                                "amount": tokens_received,
-                                "amount_sol": amount_sol,
-                                "entry_price": price,
-                                "tp_percent": tp_percent,
-                                "sl_percent": sl_percent,
-                                "source": "bags_fm",
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                            }
-                            positions.append(new_position)
-                            context.user_data["positions"] = positions
-
-                            text, keyboard = DemoMenuBuilder.bags_buy_result(
-                                success=True,
-                                symbol=symbol,
-                                amount_sol=amount_sol,
-                                tokens_received=tokens_received,
-                                price=price,
-                                tp_percent=tp_percent,
-                                sl_percent=sl_percent,
-                                tx_hash=result.tx_hash,
-                            )
-                        else:
-                            text, keyboard = DemoMenuBuilder.bags_buy_result(
-                                success=False,
-                                symbol=symbol,
-                                amount_sol=amount_sol,
-                                error=result.error or "Trade execution failed",
-                            )
-                    else:
-                        # Demo mode - simulate trade
-                        tokens_received = (amount_sol * 225 / price) if price > 0 else 1000000
-
-                        # Add demo position
+                        # Add position to portfolio
                         positions = context.user_data.get("positions", [])
                         new_position = {
                             "id": f"bags_{len(positions) + 1}",
@@ -6704,7 +7079,7 @@ first, then create DCA plans from there.
                             "entry_price": price,
                             "tp_percent": tp_percent,
                             "sl_percent": sl_percent,
-                            "source": "bags_fm_demo",
+                            "source": swap.get("source", "bags_fm"),
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         }
                         positions.append(new_position)
@@ -6718,7 +7093,14 @@ first, then create DCA plans from there.
                             price=price,
                             tp_percent=tp_percent,
                             sl_percent=sl_percent,
-                            tx_hash="demo_tx_" + str(hash(address + str(amount_sol)))[:8],
+                            tx_hash=swap.get("tx_hash"),
+                        )
+                    else:
+                        text, keyboard = DemoMenuBuilder.bags_buy_result(
+                            success=False,
+                            symbol=symbol,
+                            amount_sol=amount_sol,
+                            error=swap.get("error") or "Trade execution failed",
                         )
                 except Exception as e:
                     logger.error(f"Bags buy error: {e}")
@@ -7310,18 +7692,9 @@ _Reply with token address or symbol:_
                         {"symbol": "WIF", "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", "price": 2.85, "change_24h": 8.5, "conviction": "HIGH", "tp_percent": 25, "sl_percent": 12, "score": 88},
                         {"symbol": "POPCAT", "address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr", "price": 1.42, "change_24h": 22.1, "conviction": "HIGH", "tp_percent": 35, "sl_percent": 15, "score": 86},
                     ],
-                    "xstocks": [
-                        {"symbol": "xTSLA", "address": "xTSLA111111111111111111111111111111111111111", "price": 425.00, "change_24h": 3.2, "conviction": "MEDIUM", "tp_percent": 15, "sl_percent": 8, "score": 75},
-                        {"symbol": "xNVDA", "address": "xNVDA111111111111111111111111111111111111111", "price": 142.50, "change_24h": 2.1, "conviction": "MEDIUM", "tp_percent": 12, "sl_percent": 7, "score": 72},
-                    ],
-                    "prestocks": [
-                        {"symbol": "STRIPE", "address": "STRIPE11111111111111111111111111111111111111", "price": 85.00, "change_24h": 0.5, "conviction": "HIGH", "tp_percent": 50, "sl_percent": 20, "score": 80},
-                        {"symbol": "SPACEX", "address": "SPACEX11111111111111111111111111111111111111", "price": 125.00, "change_24h": 1.2, "conviction": "HIGH", "tp_percent": 100, "sl_percent": 25, "score": 78},
-                    ],
-                    "indexes": [
-                        {"symbol": "SPX500", "address": "SPX50011111111111111111111111111111111111111", "price": 1.05, "change_24h": 0.3, "conviction": "MEDIUM", "tp_percent": 10, "sl_percent": 5, "score": 70},
-                        {"symbol": "DJIA", "address": "DJIA1111111111111111111111111111111111111111", "price": 0.98, "change_24h": -0.2, "conviction": "LOW", "tp_percent": 8, "sl_percent": 4, "score": 65},
-                    ],
+                    "xstocks": [],
+                    "prestocks": [],
+                    "indexes": [],
                     "trending": [
                         {"symbol": "FARTCOIN", "address": "FART1111111111111111111111111111111111111111", "price": 0.00125, "change_24h": 245.5, "conviction": "VERY HIGH", "tp_percent": 50, "sl_percent": 25, "score": 95},
                         {"symbol": "GIGA", "address": "GIGA1111111111111111111111111111111111111111", "price": 0.0425, "change_24h": 85.2, "conviction": "HIGH", "tp_percent": 40, "sl_percent": 20, "score": 88},
@@ -7330,6 +7703,60 @@ _Reply with token address or symbol:_
                 }
 
                 picks = section_picks.get(section, [])
+                if section in ("xstocks", "indexes"):
+                    try:
+                        from core.enhanced_market_data import fetch_backed_stocks, fetch_backed_indexes
+
+                        if section == "xstocks":
+                            assets, warnings = await asyncio.to_thread(fetch_backed_stocks)
+                        else:
+                            assets, warnings = await asyncio.to_thread(fetch_backed_indexes)
+
+                        if warnings:
+                            logger.warning(f"Backed asset warnings: {warnings[:3]}")
+
+                        picks = [
+                            {
+                                "symbol": asset.symbol,
+                                "address": asset.mint_address,
+                                "price": asset.price_usd,
+                                "change_24h": 0.0,
+                                "conviction": "MEDIUM",
+                                "tp_percent": 12,
+                                "sl_percent": 8,
+                                "score": 70,
+                            }
+                            for asset in assets
+                        ]
+                    except Exception as exc:
+                        logger.warning(f"Backed asset fetch failed for {section}: {exc}")
+                if section in ("xstocks", "indexes"):
+                    try:
+                        from core.enhanced_market_data import fetch_backed_stocks, fetch_backed_indexes
+
+                        if section == "xstocks":
+                            assets, warnings = await asyncio.to_thread(fetch_backed_stocks)
+                        else:
+                            assets, warnings = await asyncio.to_thread(fetch_backed_indexes)
+
+                        if warnings:
+                            logger.warning(f"Backed asset warnings: {warnings[:3]}")
+
+                        picks = [
+                            {
+                                "symbol": asset.symbol,
+                                "address": asset.mint_address,
+                                "price": asset.price_usd,
+                                "change_24h": 0.0,
+                                "conviction": "MEDIUM",
+                                "tp_percent": 12,
+                                "sl_percent": 8,
+                                "score": 70,
+                            }
+                            for asset in assets
+                        ]
+                    except Exception as exc:
+                        logger.warning(f"Backed asset fetch failed for {section}: {exc}")
                 for pick in picks:
                     pick["token_id"] = _register_token_id(context, pick.get("address"))
 
@@ -8129,10 +8556,8 @@ You are about to sell *{position_count} positions*
                 logger.warning(f"Flow validation error (continuing): {e}")
 
             try:
-                from core.trading.bags_client import get_bags_client
-
-                bags_client = get_bags_client()
                 wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+                slippage_bps = _get_demo_slippage_bps()
 
                 closed_count = 0
                 failed_count = 0
@@ -8146,18 +8571,20 @@ You are about to sell *{position_count} positions*
                         token_amount = pos.get("amount", 0)
                         symbol = pos.get("symbol", "???")
 
-                        # Sell via Bags API (Token -> SOL)
-                        result = await bags_client.swap(
+                        # Sell via Bags API with Jupiter fallback (Token -> SOL)
+                        swap = await _execute_swap_with_fallback(
                             from_token=token_address,
                             to_token="So11111111111111111111111111111111111111112",  # SOL
                             amount=token_amount,
                             wallet_address=wallet_address,
-                            slippage_bps=100,  # 1% slippage
+                            slippage_bps=slippage_bps,
                         )
 
-                        if result.success:
+                        if swap.get("success"):
                             closed_count += 1
-                            logger.info(f"Sold {symbol} via Bags API: {result.tx_hash}")
+                            logger.info(
+                                f"Sold {symbol} via {swap.get('source', 'bags_fm')}: {swap.get('tx_hash')}"
+                            )
 
                             # Calculate success fee for winning positions
                             pnl_usd = pos.get("pnl_usd", 0)
@@ -8174,7 +8601,7 @@ You are about to sell *{position_count} positions*
                                     total_fees += fee_result.get("fee_amount", 0)
                         else:
                             failed_count += 1
-                            logger.warning(f"Failed to sell {symbol} via Bags API: {result.error}")
+                            logger.warning(f"Failed to sell {symbol}: {swap.get('error')}")
                     except Exception as e:
                         failed_count += 1
                         logger.warning(f"Failed to sell position {pos.get('symbol')}: {e}")
@@ -8367,8 +8794,6 @@ Coming soon in V2!
                 pos_data = next((p for p in positions if p["id"] == pos_id), None)
                 if pos_data:
                     try:
-                        from core.trading.bags_client import get_bags_client
-
                         symbol = pos_data.get("symbol", "???")
                         token_address = pos_data.get("address")
                         entry_price = pos_data.get("entry_price", 0)
@@ -8378,19 +8803,18 @@ Coming soon in V2!
                         pnl_pct = pos_data.get("pnl_pct", 0)
                         pnl_usd = pos_data.get("pnl_usd", 0) * (pct / 100)
 
-                        # Execute sell via Bags API
-                        bags_client = get_bags_client()
                         wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+                        slippage_bps = _get_demo_slippage_bps()
 
-                        result = await bags_client.swap(
+                        swap = await _execute_swap_with_fallback(
                             from_token=token_address,
                             to_token="So11111111111111111111111111111111111111112",  # SOL
                             amount=token_amount,
                             wallet_address=wallet_address,
-                            slippage_bps=100,
+                            slippage_bps=slippage_bps,
                         )
 
-                        if result.success:
+                        if swap.get("success"):
                             # Calculate success fee if winning trade
                             fee_manager = get_success_fee_manager()
                             fee_result = fee_manager.calculate_success_fee(
@@ -8421,17 +8845,17 @@ Coming soon in V2!
                                 pnl_percent=pnl_pct,
                                 success_fee=success_fee,
                                 net_profit=net_profit,
-                                tx_hash=result.tx_hash or "pending",
+                                tx_hash=swap.get("tx_hash") or "pending",
                             )
 
                             logger.info(
-                                f"Sold {pct}% of {symbol} via Bags API | "
+                                f"Sold {pct}% of {symbol} via {swap.get('source', 'bags_fm')} | "
                                 f"PnL: ${pnl_usd:.2f} ({pnl_pct:+.1f}%) | "
-                                f"Fee: ${success_fee:.4f} | TX: {result.tx_hash}"
+                                f"Fee: ${success_fee:.4f} | TX: {swap.get('tx_hash')}"
                             )
                         else:
                             text, keyboard = DemoMenuBuilder.error_message(
-                                f"Bags.fm sell failed: {result.error or 'Unknown error'}"
+                                f"Sell failed: {swap.get('error') or 'Unknown error'}"
                             )
                     except Exception as e:
                         logger.error(f"Sell position error: {e}")
@@ -8535,28 +8959,27 @@ Coming soon in V2!
                 except Exception as e:
                     logger.warning(f"Flow validation error (continuing): {e}")
 
-                # Execute via Bags.fm API (hardcoded as requested)
+                # Execute via Bags.fm API with Jupiter fallback
                 try:
-                    from core.trading.bags_client import get_bags_client
-
                     sentiment_data = await get_ai_sentiment_for_token(token_addr)
                     token_symbol = sentiment_data.get("symbol", "TOKEN")
                     token_price = sentiment_data.get("price", 0) or 0
 
-                    bags_client = get_bags_client()
                     wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+                    slippage_bps = _get_demo_slippage_bps()
 
-                    # Execute swap via Bags API
-                    result = await bags_client.swap(
+                    swap = await _execute_swap_with_fallback(
                         from_token="So11111111111111111111111111111111111111112",  # SOL
                         to_token=token_addr,
                         amount=amount,
                         wallet_address=wallet_address,
-                        slippage_bps=100,  # 1% slippage
+                        slippage_bps=slippage_bps,
                     )
 
-                    if result.success:
-                        tokens_received = result.to_amount if result.to_amount else (amount * 225 / token_price) if token_price > 0 else 0
+                    if swap.get("success"):
+                        tokens_received = swap.get("amount_out") if swap.get("amount_out") else (
+                            (amount * 225 / token_price) if token_price > 0 else 0
+                        )
 
                         # Add position to portfolio
                         positions = context.user_data.get("positions", [])
@@ -8567,26 +8990,33 @@ Coming soon in V2!
                             "amount": tokens_received,
                             "amount_sol": amount,
                             "entry_price": token_price,
-                            "source": "bags_api",
+                            "source": swap.get("source", "bags_api"),
                             "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "tx_hash": result.tx_hash,
+                            "tx_hash": swap.get("tx_hash"),
                         }
                         positions.append(new_position)
                         context.user_data["positions"] = positions
 
+                        tx_hash = swap.get("tx_hash")
+                        tx_display = f"{tx_hash[:8]}...{tx_hash[-8:]}" if tx_hash else "N/A"
+
                         text, keyboard = DemoMenuBuilder.success_message(
-                            action="Buy Order Executed via Bags.fm",
+                            action=(
+                                "Buy Order Executed via Bags.fm"
+                                if swap.get("source") == "bags_fm"
+                                else "Buy Order Executed via Jupiter"
+                            ),
                             details=(
                                 f"Bought {token_symbol} with {amount:.2f} SOL\n"
                                 f"Received: {tokens_received:,.0f} {token_symbol}\n"
                                 f"Entry: ${token_price:.8f}\n"
-                                f"TX: {result.tx_hash[:8]}...{result.tx_hash[-8:] if result.tx_hash else 'N/A'}\n\n"
+                                f"TX: {tx_display}\n\n"
                                 "Check /positions to monitor."
                             ),
                         )
                     else:
                         text, keyboard = DemoMenuBuilder.error_message(
-                            f"Bags.fm swap failed: {result.error or 'Unknown error'}"
+                            f"Swap failed: {swap.get('error') or 'Unknown error'}"
                         )
                 except Exception as e:
                     logger.error(f"Bags API buy execution failed: {e}")
@@ -8647,9 +9077,13 @@ Coming soon in V2!
 # =============================================================================
 
 @error_handler
+@admin_only
 async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages when awaiting token input or watchlist add."""
     text = update.message.text.strip()
+
+    # Run TP/SL/trailing stop checks for demo positions (throttled)
+    await _process_demo_exit_checks(update, context)
 
     # Handle watchlist token addition
     if context.user_data.get("awaiting_watchlist_token"):
