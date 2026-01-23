@@ -73,6 +73,11 @@ class IntentClassificationRule:
         context: DecisionContext,
         current_decision: Decision = Decision.EXECUTE,
     ) -> tuple[Decision, str, List[str]]:
+        # Non-command chat messages should not be blocked by command intent rules.
+        # This keeps normal chat replies responsive while preserving command safety.
+        if context.intent == "respond_message":
+            return (Decision.EXECUTE, "Non-command message response allowed", [])
+
         command = context.data.get("command", "").lower().strip("/")
         what_would_change = []
 

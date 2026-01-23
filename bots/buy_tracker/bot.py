@@ -185,6 +185,21 @@ class JarvisBuyBot:
             )
             return
 
+        # Log non-sensitive config summary for diagnostics (no secrets)
+        token_addr = self.config.token_address
+        pair_addr = self.config.pair_address
+        logger.info(
+            "Buy bot config: token=%s pair=%s min_usd=%.2f extra_pairs=%d",
+            f"{token_addr[:6]}...{token_addr[-4:]}" if token_addr else "unset",
+            f"{pair_addr[:6]}...{pair_addr[-4:]}" if pair_addr else "unset",
+            self.config.min_buy_usd,
+            len(self.config.additional_pairs),
+        )
+        if token_addr and not pair_addr:
+            logger.warning(
+                "BUY_BOT_PAIR_ADDRESS not set/resolved; monitoring token address only (may miss swaps)."
+            )
+
         # Initialize Telegram Application for callback handling
         self.app = Application.builder().token(self.config.bot_token).build()
         self.bot = self.app.bot
