@@ -748,15 +748,19 @@ async def create_bags_intel():
 async def create_ai_supervisor():
     """Create and run optional AI runtime supervisor (Ollama-backed)."""
     try:
-        from core.ai_runtime.supervisor import AISupervisor
+        from core.ai_runtime.integration import get_ai_runtime_manager
     except Exception as exc:
         logger.warning(f"AI runtime unavailable: {exc}")
         # Run forever but idle to avoid restart churn
         while True:
             await asyncio.sleep(60)
 
-    supervisor = AISupervisor()
-    await supervisor.start()
+    manager = get_ai_runtime_manager()
+    started = await manager.start()
+    if not started:
+        logger.info("AI runtime disabled or unavailable; supervisor idle")
+        while True:
+            await asyncio.sleep(60)
 
 
 def validate_startup() -> bool:
