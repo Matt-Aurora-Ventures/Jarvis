@@ -33,6 +33,7 @@ else:
 HOST = os.environ.get('VPS_HOST', '72.61.7.126')
 USERNAME = os.environ.get('VPS_USERNAME', 'root')
 PASSWORD = os.environ.get('VPS_PASSWORD')
+JARVIS_HOME = os.environ.get('JARVIS_HOME', '/home/jarvis/Jarvis')
 PORTS = [int(os.environ.get('VPS_SSH_PORT_PRIMARY', '22')),
          int(os.environ.get('VPS_SSH_PORT_ALTERNATE', '65002'))]
 
@@ -64,8 +65,8 @@ def deploy():
             logger.info("")
 
             # DEPLOYMENT SEQUENCE
-            logger.info("[1/9] Verifying ~/Jarvis directory...")
-            stdin, stdout, stderr = ssh.exec_command("cd ~/Jarvis && pwd")
+            logger.info(f"[1/9] Verifying {JARVIS_HOME} directory...")
+            stdin, stdout, stderr = ssh.exec_command(f"cd {JARVIS_HOME} && pwd")
             result = stdout.read().decode().strip()
             if "Jarvis" in result:
                 logger.info(f"[OK] {result}")
@@ -74,7 +75,7 @@ def deploy():
                 continue
 
             logger.info("[2/9] Pulling latest code...")
-            ssh.exec_command("cd ~/Jarvis && git fetch origin main && git reset --hard origin/main")
+            ssh.exec_command(f"cd {JARVIS_HOME} && git fetch origin main && git reset --hard origin/main")
             time.sleep(5)
             logger.info("[OK] Code updated")
 
@@ -89,7 +90,7 @@ def deploy():
             ]
             all_ok = True
             for f in files:
-                stdin, stdout, stderr = ssh.exec_command(f"test -f ~/Jarvis/{f} && echo OK")
+                stdin, stdout, stderr = ssh.exec_command(f"test -f {JARVIS_HOME}/{f} && echo OK")
                 if "OK" not in stdout.read().decode():
                     logger.error(f"[MISSING] {f}")
                     all_ok = False
@@ -99,7 +100,7 @@ def deploy():
 
             logger.info("[4/9] Creating directories...")
             ssh.exec_command(
-                "mkdir -p ~/Jarvis/data/{moderation,learning,vibe_coding,validation_proof} ~/Jarvis/logs"
+                f"mkdir -p {JARVIS_HOME}/data/{{moderation,learning,vibe_coding,validation_proof}} {JARVIS_HOME}/logs"
             )
             logger.info("[OK] Directories created")
 
@@ -115,7 +116,7 @@ def deploy():
 
             logger.info("[7/9] Verifying autonomous_manager...")
             stdin, stdout, stderr = ssh.exec_command(
-                "tail -50 ~/Jarvis/logs/supervisor.log | grep -i autonomous_manager"
+                f"tail -50 {JARVIS_HOME}/logs/supervisor.log | grep -i autonomous_manager"
             )
             if "autonomous_manager" in stdout.read().decode().lower():
                 logger.info("[OK] autonomous_manager detected in logs")
@@ -124,7 +125,7 @@ def deploy():
 
             logger.info("[8/9] Starting validation loop...")
             ssh.exec_command(
-                "cd ~/Jarvis && nohup python scripts/validate_autonomous_system.py > logs/validation_continuous.log 2>&1 &"
+                f"cd {JARVIS_HOME} && nohup python scripts/validate_autonomous_system.py > logs/validation_continuous.log 2>&1 &"
             )
             time.sleep(5)
             logger.info("[OK] Validation loop started")
