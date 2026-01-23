@@ -433,26 +433,35 @@ async def get_trending_with_sentiment(limit: int = 15) -> List[Dict[str, Any]]:
     except Exception as e:
         logger.warning(f"Could not get trending: {e}")
 
-    # Bags.fm fallback - ensures we always have tradable tokens
+    # DexScreener fallback - reliable trending token data
     try:
-        bags_tokens = await get_bags_top_tokens_with_sentiment(limit=limit)
-        if bags_tokens:
+        from core.dexscreener import get_solana_trending
+        dex_tokens = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: get_solana_trending(
+                min_liquidity=10_000,
+                min_volume_24h=50_000,
+                limit=limit
+            )
+        )
+        if dex_tokens:
             return [
                 {
-                    "symbol": t.get("symbol", "???"),
-                    "address": t.get("address", ""),
-                    "price_usd": t.get("price_usd", 0),
-                    "change_24h": t.get("change_24h", 0),
-                    "volume": t.get("volume_24h", 0),
-                    "liquidity": t.get("liquidity", 0),
-                    "sentiment": t.get("sentiment", "neutral"),
-                    "sentiment_score": t.get("sentiment_score", 0.5),
-                    "signal": t.get("signal", "NEUTRAL"),
+                    "symbol": t.base_token_symbol,
+                    "address": t.base_token_address,
+                    "price_usd": t.price_usd,
+                    "change_24h": t.price_change_24h,
+                    "volume": t.volume_24h,
+                    "liquidity": t.liquidity_usd,
+                    "sentiment": "neutral",  # No AI sentiment in fallback
+                    "sentiment_score": 0.5,
+                    "signal": "NEUTRAL",
+                    "chart_url": f"https://dexscreener.com/solana/{t.base_token_address}",
                 }
-                for t in bags_tokens
+                for t in dex_tokens
             ]
     except Exception as e:
-        logger.warning(f"Could not get Bags trending fallback: {e}")
+        logger.warning(f"Could not get DexScreener trending fallback: {e}")
     return []
 
 
@@ -703,36 +712,43 @@ async def get_conviction_picks() -> List[Dict[str, Any]]:
 # UI Constants - Trojan-Style Theme
 async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, Any]]:
     """
-    Get top Bags.fm tokens by volume with AI sentiment overlay.
+    Get top trending tokens by volume with AI sentiment overlay.
 
-    Returns tokens with:
-    - Volume data from Bags.fm API
-    - AI sentiment analysis per token
-    - Price and market data
+    Now uses DexScreener for reliable token data.
+    Bags API is reserved for trade execution only.
     """
     tokens = []
 
     try:
-        # Try to get real data from Bags API
-        bags_client = get_bags_client()
-        if bags_client:
-            raw_tokens = await bags_client.get_top_tokens_by_volume(limit=limit)
+        # Use DexScreener for token data (more reliable than Bags API)
+        from core.dexscreener import get_solana_trending
+        raw_tokens = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: get_solana_trending(
+                min_liquidity=10_000,
+                min_volume_24h=50_000,
+                limit=limit
+            )
+        )
+
+        if raw_tokens:
             for t in raw_tokens:
                 token_data = {
-                    "symbol": t.symbol,
-                    "name": t.name,
-                    "address": t.address,
+                    "symbol": t.base_token_symbol,
+                    "name": t.base_token_name or t.base_token_symbol,
+                    "address": t.base_token_address,
                     "price_usd": t.price_usd,
-                    "change_24h": getattr(t, "price_change_24h", 0),
+                    "change_24h": t.price_change_24h,
                     "volume_24h": t.volume_24h,
-                    "liquidity": t.liquidity,
-                    "market_cap": t.market_cap,
-                    "holders": t.holders,
+                    "liquidity": t.liquidity_usd,
+                    "market_cap": 0,  # DexScreener doesn't provide market cap directly
+                    "holders": 0,  # DexScreener doesn't provide holder count
+                    "chart_url": f"https://dexscreener.com/solana/{t.base_token_address}",
                 }
 
                 # Add AI sentiment overlay
                 try:
-                    sentiment = await get_ai_sentiment_for_token(t.address)
+                    sentiment = await get_ai_sentiment_for_token(t.base_token_address)
                     token_data["sentiment"] = sentiment.get("sentiment", "neutral")
                     token_data["sentiment_score"] = sentiment.get("score", 0.5)
                     token_data["signal"] = sentiment.get("signal", "NEUTRAL")
@@ -747,7 +763,7 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
                 return tokens
 
     except Exception as e:
-        logger.warning(f"Could not get Bags tokens: {e}")
+        logger.warning(f"Could not get DexScreener tokens: {e}")
 
     # Fallback to real trending tokens (DexScreener or signal service) so we have tradable addresses.
     try:
@@ -3144,13 +3160,19 @@ Reply with a Solana token address to buy.
             lines.append("")
 
             if token_ref:
+                # Build button row with chart URL if available
+                chart_url = token.get("chart_url", f"https://dexscreener.com/solana/{token_ref}")
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"{theme.BUY} Buy {symbol}",
+                        f"{theme.BUY} Buy",
                         callback_data=f"demo:quick_buy:{token_ref}"
                     ),
                     InlineKeyboardButton(
-                        f"{theme.CHART} Analyze",
+                        f"{theme.CHART} Chart",
+                        url=chart_url
+                    ),
+                    InlineKeyboardButton(
+                        f"🔍 Analyze",
                         callback_data=f"demo:analyze:{token_ref}"
                     ),
                 ])
@@ -8455,51 +8477,61 @@ Coming soon in V2!
                 except Exception as e:
                     logger.warning(f"Flow validation error (continuing): {e}")
 
-                # Execute via treasury engine
+                # Execute via Bags.fm API (hardcoded as requested)
                 try:
-                    engine = await _get_demo_engine()
-                    portfolio = await engine.get_portfolio_value()
-                    if not portfolio:
-                        raise RuntimeError("Portfolio unavailable")
-                    balance_sol, balance_usd = portfolio
-                    if balance_sol <= 0:
-                        text, keyboard = DemoMenuBuilder.error_message("Treasury balance is zero.")
-                        return
-
-                    sol_usd = balance_usd / balance_sol if balance_sol > 0 else 0
-                    amount_usd = amount * sol_usd
+                    from core.trading.bags_client import get_bags_client
 
                     sentiment_data = await get_ai_sentiment_for_token(token_addr)
                     token_symbol = sentiment_data.get("symbol", "TOKEN")
-                    signal_name = sentiment_data.get("signal", "NEUTRAL")
-                    grade = _grade_for_signal_name(signal_name)
-                    sentiment_score = sentiment_data.get("score", 0) or 0
+                    token_price = sentiment_data.get("price", 0) or 0
 
-                    from bots.treasury.trading import TradeDirection
-                    success, msg, position = await engine.open_position(
-                        token_mint=token_addr,
-                        token_symbol=token_symbol,
-                        direction=TradeDirection.LONG,
-                        amount_usd=amount_usd,
-                        sentiment_grade=grade,
-                        sentiment_score=sentiment_score,
-                        user_id=user_id,
+                    bags_client = get_bags_client()
+                    wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+
+                    # Execute swap via Bags API
+                    result = await bags_client.swap(
+                        from_token="So11111111111111111111111111111111111111112",  # SOL
+                        to_token=token_addr,
+                        amount=amount,
+                        wallet_address=wallet_address,
+                        slippage_bps=100,  # 1% slippage
                     )
 
-                    if success and position:
+                    if result.success:
+                        tokens_received = result.to_amount if result.to_amount else (amount * 225 / token_price) if token_price > 0 else 0
+
+                        # Add position to portfolio
+                        positions = context.user_data.get("positions", [])
+                        new_position = {
+                            "id": f"buy_{len(positions) + 1}",
+                            "symbol": token_symbol,
+                            "address": token_addr,
+                            "amount": tokens_received,
+                            "amount_sol": amount,
+                            "entry_price": token_price,
+                            "source": "bags_api",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "tx_hash": result.tx_hash,
+                        }
+                        positions.append(new_position)
+                        context.user_data["positions"] = positions
+
                         text, keyboard = DemoMenuBuilder.success_message(
-                            action="Buy Order Executed",
+                            action="Buy Order Executed via Bags.fm",
                             details=(
                                 f"Bought {token_symbol} with {amount:.2f} SOL\n"
-                                f"Entry: ${position.entry_price:.8f}\n"
-                                f"TP: ${position.take_profit_price:.8f} | "
-                                f"SL: ${position.stop_loss_price:.8f}\n\n"
+                                f"Received: {tokens_received:,.0f} {token_symbol}\n"
+                                f"Entry: ${token_price:.8f}\n"
+                                f"TX: {result.tx_hash[:8]}...{result.tx_hash[-8:] if result.tx_hash else 'N/A'}\n\n"
                                 "Check /positions to monitor."
                             ),
                         )
                     else:
-                        text, keyboard = DemoMenuBuilder.error_message(msg or "Buy order failed - check logs")
+                        text, keyboard = DemoMenuBuilder.error_message(
+                            f"Bags.fm swap failed: {result.error or 'Unknown error'}"
+                        )
                 except Exception as e:
+                    logger.error(f"Bags API buy execution failed: {e}")
                     text, keyboard = DemoMenuBuilder.error_message(f"Buy failed: {str(e)[:50]}")
 
         else:
