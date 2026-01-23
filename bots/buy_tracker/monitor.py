@@ -287,6 +287,11 @@ class TransactionMonitor:
                 if resp.status == 200:
                     data = await resp.json()
                     return data.get("result", [])
+                logger.warning(
+                    "Signature poll failed for %s... (status=%s)",
+                    watch_address[:12],
+                    resp.status,
+                )
 
         except Exception as e:
             logger.error(f"Failed to get signatures for {watch_address[:12]}...: {e}")
