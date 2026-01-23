@@ -80,6 +80,20 @@ async def _safe_edit(message, text: str, parse_mode=None, **kwargs):
         raise
 
 
+async def _cleanup_menu_message(query):
+    """Remove or neutralize the original menu message after opening a submenu."""
+    if not query or not getattr(query, "message", None):
+        return
+    try:
+        await query.message.delete()
+        return
+    except Exception as exc:
+        try:
+            await query.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            logger.debug(f"Failed to cleanup menu message: {exc}")
+
+
 # Structured error logging integration
 def _log_tg_error(error: Exception, context: str, metadata: dict = None):
     """Log Telegram handler error with structured data."""
@@ -523,6 +537,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cb_update = CallbackUpdate(query)
         context.args = []
         await dashboard(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "quick_report":
@@ -533,6 +548,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cb_update = CallbackUpdate(query)
         context.args = []
         await report(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     # Handle quick command callbacks
@@ -650,6 +666,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await signals(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_digest":
@@ -659,6 +676,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await digest(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_brain":
@@ -668,6 +686,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await brain(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_reload":
@@ -677,6 +696,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await reload(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_health":
@@ -686,6 +706,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await health(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_flags":
@@ -695,6 +716,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await flags(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_score":
@@ -704,6 +726,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await score(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_config":
@@ -713,6 +736,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await config_cmd(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_system":
@@ -722,6 +746,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await system(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_orders":
@@ -731,6 +756,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await orders(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_wallet":
@@ -740,6 +766,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await wallet(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_logs":
@@ -749,6 +776,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await logs(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_metrics":
@@ -758,6 +786,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await metrics(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     if data == "menu_audit":
@@ -767,6 +796,7 @@ _admin only:_
         cb_update = CallbackUpdate(query)
         context.args = []
         await audit(cb_update, context)
+        await _cleanup_menu_message(query)
         return
 
     # Trading callbacks

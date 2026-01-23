@@ -111,6 +111,10 @@ def register_handlers(app: Application, config) -> None:
     # Demo UI - Beautiful Trojan-style trading interface (v6.0.0)
     app.add_handler(CommandHandler("demo", demo))
     app.add_handler(CallbackQueryHandler(demo_callback, pattern=r"^demo:"))
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, demo_message_handler),
+        group=1,
+    )
 
     # Raid Bot - Twitter engagement campaigns (v6.1.0)
     register_raid_handlers(app, app.job_queue)

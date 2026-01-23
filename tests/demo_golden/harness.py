@@ -380,6 +380,17 @@ def run_case(case_name: str) -> GoldenResult:
             asyncio.run(demo_callback(cb_update, context))
             return _extract_last_edit(cb_update.callback_query.message)
 
+        if case_name == "demo_buy_confirm":
+            from tg_bot.handlers.demo import demo_message_handler
+            context.user_data["awaiting_token"] = True
+            context.user_data["buy_amount"] = 0.1
+            base_update.message.text = "So11111111111111111111111111111111111111112"
+            base_update.message.reply_text.reset_mock()
+            base_update.message.edit_text.reset_mock()
+            import asyncio
+            asyncio.run(demo_message_handler(base_update, context))
+            return _extract_last_reply(base_update.message)
+
         if case_name == "demo_sell_all_confirm":
             from tg_bot.handlers.demo import demo_callback
             cb_update = _build_callback_update("demo:sell_all", base_update)
@@ -442,6 +453,7 @@ if __name__ == "__main__":
         "demo_main",
         "demo_positions",
         "demo_buy_prompt",
+        "demo_buy_confirm",
         "demo_sell_all_confirm",
         "demo_sell_position",
         "demo_refresh",

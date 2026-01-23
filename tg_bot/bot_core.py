@@ -4188,22 +4188,42 @@ async def _toggle_live_mode(query):
 
 async def _handle_trending_inline(query):
     """Handle trending request from inline keyboard."""
-    await _send_with_retry(
-        query,
-        "_Fetching trending tokens..._",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    try:
+        await query.message.edit_text(
+            "_Fetching trending tokens..._",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    except Exception as e:
+        logger.debug(f"Failed to edit trending loading message: {e}")
+        await _send_with_retry(
+            query,
+            "_Fetching trending tokens..._",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
     config = get_config()
     service = get_signal_service()
     signals_list = await service.get_trending_tokens(limit=5)
 
     if not signals_list:
-        await _send_with_retry(
-            query,
-            fmt.format_error("Could not fetch trending tokens.", "Check /status for availability."),
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        error_text = fmt.format_error("Could not fetch trending tokens.", "Check /status for availability.")
+        fallback_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Menu", callback_data="menu_back")]
+        ])
+        try:
+            await query.message.edit_text(
+                error_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=fallback_keyboard,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to edit trending error message: {e}")
+            await _send_with_retry(
+                query,
+                error_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=fallback_keyboard,
+            )
         return
 
     lines = [
@@ -4238,13 +4258,22 @@ async def _handle_trending_inline(query):
         InlineKeyboardButton("Menu", callback_data="menu_back"),
     ])
 
-    await _send_with_retry(
-        query,
-        "\n".join(lines),
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        disable_web_page_preview=True,
-    )
+    try:
+        await query.message.edit_text(
+            "\n".join(lines),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            disable_web_page_preview=True,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to edit trending menu: {e}")
+        await _send_with_retry(
+            query,
+            "\n".join(lines),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            disable_web_page_preview=True,
+        )
 
 
 async def _show_trade_ticket(query, token_address: str):
@@ -4496,11 +4525,19 @@ async def _handle_status_inline(query):
 
     keyboard = [[InlineKeyboardButton("🏠 Back to Menu", callback_data="menu_back")]]
 
-    await query.message.reply_text(
-        message,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-    )
+    try:
+        await query.message.edit_text(
+            message,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+    except Exception as e:
+        logger.warning(f"Failed to edit status menu: {e}")
+        await query.message.reply_text(
+            message,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
 
 
 # =============================================================================
@@ -4927,6 +4964,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = update.message.text.strip()
+    if context and getattr(context, "user_data", None):
+        if (
+            context.user_data.get("awaiting_token")
+            or context.user_data.get("awaiting_wallet_import")
+            or context.user_data.get("awaiting_watchlist_token")
+        ):
+            return
     user_id = update.effective_user.id if update.effective_user else 0
     import sys
     # Sanitize text for Windows console (remove emojis/special chars)

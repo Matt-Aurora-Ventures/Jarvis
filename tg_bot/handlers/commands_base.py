@@ -52,6 +52,9 @@ what do you need:"""
             InlineKeyboardButton("📈 Report", callback_data="quick_report"),
         ])
         keyboard.insert(1, [
+            InlineKeyboardButton("\U0001f680 Launch /demo", callback_data="demo:main"),
+        ])
+        keyboard.insert(2, [
             InlineKeyboardButton("\U0001f680 SIGNALS", callback_data="menu_signals"),
             InlineKeyboardButton("\U0001f4cb Digest", callback_data="menu_digest"),
         ])
