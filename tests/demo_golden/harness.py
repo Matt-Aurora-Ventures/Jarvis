@@ -185,6 +185,27 @@ class _FakeFeeManager:
         return {"applies": True, "fee_amount": 0.12, "net_profit": 1.23}
 
 
+class _FakeIntelligence:
+    def get_learning_summary(self):
+        return {
+            "total_trades_analyzed": 42,
+            "pattern_memories": 7,
+            "stable_strategies": 3,
+            "signals": {
+                "fast_breakout_v1": {"win_rate": "58%", "avg_return": "12%", "trades": 11},
+                "mean_revert_v2": {"win_rate": "47%", "avg_return": "-2%", "trades": 8},
+            },
+            "regimes": {
+                "BULL_MARKET": {"win_rate": "60%", "avg_return": "8%"},
+                "RANGE_BOUND": {"win_rate": "50%", "avg_return": "1%"},
+            },
+            "optimal_hold_time": 90,
+        }
+
+    def get_compression_stats(self):
+        return {"compression_ratio": 2.5, "learned_patterns": 12}
+
+
 def _extract_last_reply(message: Message) -> GoldenResult:
     if message.reply_text.call_args_list:
         call = message.reply_text.call_args_list[-1]
@@ -232,6 +253,7 @@ def run_case(case_name: str) -> GoldenResult:
     ]
     demo_engine = _FakeEngine(fake_positions)
     treasury_engine = _FakeEngine([fake_positions[0]])
+    fake_intel = _FakeIntelligence()
 
     async def _simple_report(update, _context):
         await update.message.reply_text(
@@ -264,6 +286,7 @@ def run_case(case_name: str) -> GoldenResult:
         patch("tg_bot.handlers.demo.get_market_regime", new=AsyncMock(return_value={"regime": "BULL", "risk_level": "LOW", "btc_change_24h": 1.2, "sol_change_24h": -0.4})), \
         patch("tg_bot.handlers.demo.get_trending_with_sentiment", new=AsyncMock(return_value=None)), \
         patch("tg_bot.handlers.demo.get_success_fee_manager", return_value=_FakeFeeManager()), \
+        patch("tg_bot.handlers.demo.get_trade_intelligence", return_value=fake_intel), \
         patch("bots.treasury.scorekeeper.get_scorekeeper", return_value=_FakeScorekeeper()), \
         patch("tg_bot.bot_core._is_treasury_admin", return_value=True), \
         patch("tg_bot.bot_core._show_trade_ticket", new=_trade_ticket), \
@@ -381,6 +404,14 @@ def run_case(case_name: str) -> GoldenResult:
             asyncio.run(demo_callback(cb_update, context))
             return _extract_last_edit(cb_update.callback_query.message)
 
+        if case_name == "demo_learning":
+            from tg_bot.handlers.demo import demo_callback
+            cb_update = _build_callback_update("demo:learning", base_update)
+            cb_update.callback_query.message.edit_text.reset_mock()
+            import asyncio
+            asyncio.run(demo_callback(cb_update, context))
+            return _extract_last_edit(cb_update.callback_query.message)
+
     raise ValueError(f"Unknown case: {case_name}")
 
 
@@ -414,6 +445,7 @@ if __name__ == "__main__":
         "demo_sell_all_confirm",
         "demo_sell_position",
         "demo_refresh",
+        "demo_learning",
     ]
     base = Path(__file__).resolve().parent
     generate_golden(base / "golden", cases)

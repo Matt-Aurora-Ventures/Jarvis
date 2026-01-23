@@ -4931,8 +4931,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     import sys
     # Sanitize text for Windows console (remove emojis/special chars)
     safe_text = text[:60].encode('ascii', 'replace').decode('ascii')
-    print(f"[MSG] user_id={user_id} text={safe_text}", flush=True)
-    sys.stdout.flush()
+    try:
+        if sys.stdout and not sys.stdout.closed:
+            print(f"[MSG] user_id={user_id} text={safe_text}", flush=True)
+    except Exception as exc:  # Avoid breaking message handling on stdout issues
+        logger.debug(f"Stdout unavailable for message log: {exc}")
     logger.info(f"Message from {user_id}: {safe_text}")
     username = update.effective_user.username or "" if update.effective_user else ""
 

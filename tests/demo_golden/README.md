@@ -18,4 +18,4 @@ These tests lock in the **canonical demo behavior**. They run the demo/telegram 
 ## What’s Covered
 - Command outputs: `/start`, `/help`, `/dashboard`, `/positions`, `/report`
 - Trading callbacks: `trade_*`, `sell_pos:*`
-- Demo flows: `/demo`, `demo:positions`, `demo:buy:*`, `demo:sell_all`, `demo:sell:*`, `demo:refresh`
+- Demo flows: `/demo`, `demo:positions`, `demo:buy:*`, `demo:sell_all`, `demo:sell:*`, `demo:refresh`, `demo:learning`
