@@ -9,6 +9,7 @@ Commands:
 """
 
 import logging
+import os
 from typing import Optional
 from pathlib import Path
 from telegram import Update
@@ -16,6 +17,7 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from tg_bot.handlers import error_handler
+from tg_bot.services import digest_formatter as fmt
 from core.state_paths import STATE_PATHS
 from bots.treasury.display import TreasuryDisplay
 
@@ -40,6 +42,29 @@ class TreasuryHandler:
 
         # Ensure data directory exists
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self._treasury_admin_ids = self._parse_admin_ids()
+
+    @staticmethod
+    def _parse_admin_ids() -> set[int]:
+        """Parse treasury admin IDs from env (fallback to TELEGRAM_ADMIN_IDS)."""
+        admin_str = os.environ.get("TREASURY_ADMIN_IDS", "").strip()
+        if not admin_str:
+            admin_str = os.environ.get("TELEGRAM_ADMIN_IDS", "").strip()
+        admin_ids: set[int] = set()
+        for raw in admin_str.split(","):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                admin_ids.add(int(raw))
+            except ValueError:
+                continue
+        return admin_ids
+
+    def _is_authorized(self, update: Update) -> bool:
+        """Check if user is authorized for treasury commands."""
+        user_id = update.effective_user.id if update and update.effective_user else 0
+        return user_id in self._treasury_admin_ids
 
     def _resolve_files(self) -> tuple[Path, Path]:
         positions = self.positions_file if self.positions_file.exists() else self._legacy_positions_file
@@ -49,6 +74,12 @@ class TreasuryHandler:
     @error_handler
     async def handle_treasury(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /treasury command - Full display."""
+        if not self._is_authorized(update):
+            await update.message.reply_text(
+                fmt.format_unauthorized(),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
         try:
             # Load treasury data
             positions_path, trades_path = self._resolve_files()
@@ -83,6 +114,12 @@ class TreasuryHandler:
     @error_handler
     async def handle_portfolio(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /portfolio or /p command - Quick overview."""
+        if not self._is_authorized(update):
+            await update.message.reply_text(
+                fmt.format_unauthorized(),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
         try:
             positions_path, trades_path = self._resolve_files()
             display = TreasuryDisplay.from_json_files(
@@ -125,6 +162,12 @@ Closed Trades:        {len(display.closed_trades)}
     @error_handler
     async def handle_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /balance or /b command - Balance summary."""
+        if not self._is_authorized(update):
+            await update.message.reply_text(
+                fmt.format_unauthorized(),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
         try:
             positions_path, trades_path = self._resolve_files()
             display = TreasuryDisplay.from_json_files(
@@ -166,6 +209,12 @@ Trades Closed:    {len(display.closed_trades):>12}
     @error_handler
     async def handle_pnl(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /pnl command - P&L details."""
+        if not self._is_authorized(update):
+            await update.message.reply_text(
+                fmt.format_unauthorized(),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
         try:
             display = TreasuryDisplay.from_json_files(
                 str(self.positions_file),
@@ -190,6 +239,12 @@ Trades Closed:    {len(display.closed_trades):>12}
     @error_handler
     async def handle_sector(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /sector command - Sector breakdown."""
+        if not self._is_authorized(update):
+            await update.message.reply_text(
+                fmt.format_unauthorized(),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
         try:
             display = TreasuryDisplay.from_json_files(
                 str(self.positions_file),
