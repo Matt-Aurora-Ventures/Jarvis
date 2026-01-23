@@ -1,29 +1,19 @@
 """
-Claude API Client for Sentiment Analysis.
+Claude CLI Client for Sentiment Analysis.
 
-Uses Anthropic's Claude API to analyze token sentiment.
+Uses Claude CLI (no Anthropic API usage) to analyze token sentiment.
 """
 
 import asyncio
 import logging
+import os
+import platform
+import shutil
+import subprocess
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
-
-# Lazy import anthropic to handle missing package gracefully
-anthropic = None
-
-
-def _get_anthropic():
-    global anthropic
-    if anthropic is None:
-        try:
-            import anthropic as _anthropic
-            anthropic = _anthropic
-        except ImportError:
-            raise ImportError("anthropic package not installed. Run: pip install anthropic")
-    return anthropic
 
 
 @dataclass
@@ -82,7 +72,7 @@ Score guide:
 
 
 class ClaudeClient:
-    """Client for Claude API sentiment analysis."""
+    """Client for Claude CLI sentiment analysis."""
 
     def __init__(
         self,
@@ -91,28 +81,58 @@ class ClaudeClient:
         max_tokens: int = 1024,
         temperature: float = 0.7,
     ):
-        self.api_key = api_key
+        self.api_key = None  # API disabled; CLI only
         self.model = model
         self.max_tokens = max_tokens
         self.temperature = temperature
         self._client = None
         self._healthy = False
+        self.cli_path = os.getenv("CLAUDE_CLI_PATH", "claude")
 
-    def _ensure_client(self):
-        """Lazily initialize the Anthropic client."""
-        if self._client is None and self.api_key:
-            anthropic_module = _get_anthropic()
-            from core.llm.anthropic_utils import get_anthropic_base_url
+    def _cli_available(self) -> bool:
+        return bool(shutil.which(self.cli_path))
 
-            self._client = anthropic_module.Anthropic(
-                api_key=self.api_key,
-                base_url=get_anthropic_base_url(),
+    def _run_cli(self, prompt: str) -> Optional[str]:
+        cli_path = shutil.which(self.cli_path)
+        if not cli_path:
+            return None
+        args = [
+            cli_path,
+            "--print",
+            "--no-session-persistence",
+            prompt,
+        ]
+        if platform.system() == "Windows":
+            args.insert(2, "--dangerously-skip-permissions")
+            completed = subprocess.run(
+                ["cmd", "/c"] + args,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60,
+                check=False,
+                env=os.environ.copy(),
             )
-            self._healthy = True
+        else:
+            completed = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60,
+                check=False,
+                env=os.environ.copy(),
+            )
+        if completed.returncode != 0:
+            return None
+        output = (completed.stdout or "").strip()
+        return output or None
 
     def is_healthy(self) -> bool:
         """Check if client is healthy."""
-        return self._healthy and self.api_key is not None
+        return self._cli_available()
 
     async def analyze_sentiment(
         self,
@@ -129,15 +149,13 @@ class ClaudeClient:
         Returns:
             SentimentResult with analysis
         """
-        self._ensure_client()
-
-        if not self._client:
+        if not self._cli_available():
             # Return neutral sentiment if no API key
             return SentimentResult(
                 score=0.0,
                 confidence=0.0,
-                summary="Unable to analyze - API not configured.",
-                key_factors=["API key required"],
+                summary="Unable to analyze - Claude CLI not configured.",
+                key_factors=["Claude CLI required"],
                 suggested_action="HOLD",
             )
 
@@ -156,31 +174,20 @@ Market Data:
 Provide your sentiment analysis as JSON."""
 
         try:
-            # Run in thread pool since anthropic client is sync
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self._client.messages.create(
-                    model=self.model,
-                    max_tokens=self.max_tokens,
-                    temperature=self.temperature,
-                    system=SENTIMENT_SYSTEM_PROMPT,
-                    messages=[{"role": "user", "content": prompt}],
-                ),
-            )
-
-            # Parse the response
-            content = response.content[0].text
+            cli_prompt = f"{SENTIMENT_SYSTEM_PROMPT}\n\nUSER REQUEST:\n{prompt}\n\nReturn ONLY the JSON."
+            content = await loop.run_in_executor(None, self._run_cli, cli_prompt)
+            if not content:
+                raise RuntimeError("Claude CLI returned empty output")
             return self._parse_response(content)
 
         except Exception as e:
-            logger.error(f"Claude API error: {e}")
-            self._healthy = False
+            logger.error(f"Claude CLI error: {e}")
             return SentimentResult(
                 score=0.0,
                 confidence=0.0,
                 summary=f"Analysis failed: {str(e)[:100]}",
-                key_factors=["API error"],
+                key_factors=["CLI error"],
                 suggested_action="HOLD",
             )
 

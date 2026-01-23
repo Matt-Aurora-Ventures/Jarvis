@@ -27,11 +27,6 @@ if exist "venv\Scripts\activate.bat" (
 REM Start JARVIS daemon
 echo Starting JARVIS daemon...
 echo.
-python -c "import jarvis_cli" >nul 2>&1
-if errorlevel 1 (
-    python jarvis_daemon.py %*
-) else (
-    python -m jarvis_cli up --profile voice %*
-)
+python jarvis_daemon.py %*
 
 pause
