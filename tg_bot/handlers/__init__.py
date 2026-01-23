@@ -48,6 +48,15 @@ def error_handler(func: Callable[..., Awaitable[Any]]):
                 )
                 return None
             if isinstance(exc, BadRequest) and (
+                "Message to be replied not found" in str(exc)
+                or "Message to edit not found" in str(exc)
+            ):
+                logger.debug(
+                    "Message no longer available in %s; skipping reply/edit",
+                    func.__name__,
+                )
+                return None
+            if isinstance(exc, BadRequest) and (
                 "Query is too old" in str(exc)
                 or "response timeout expired" in str(exc)
                 or "query id is invalid" in str(exc)

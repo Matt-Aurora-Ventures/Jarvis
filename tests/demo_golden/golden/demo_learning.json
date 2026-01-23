@@ -1,0 +1,34 @@
+{
+  "text": "\ud83e\udd16 *JARVIS LEARNING DASHBOARD*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n\ud83e\udde0 *Memory Compression*\n\u251c Trades Analyzed: *42*\n\u251c Pattern Memories: *7*\n\u251c Learned Patterns: *12*\n\u2514 Compression: *2.5x*\n\n\ud83d\udcca *Signal Effectiveness*\n\u251c \ud83d\udfe2 fast\\_breakout\\_v1: 58% (11 trades)\n\u251c \ud83d\udfe1 mean\\_revert\\_v2: 47% (8 trades)\n\n\ud83d\udcc8 *Regime Performance*\n\u251c \ud83d\udfe1 BULL\\_MARKET: 60% | 8%\n\u251c \ud83d\udfe1 RANGE\\_BOUND: 50% | 1%\n\n\u23f1\ufe0f *Optimal Timing*\n\u2514 Hold Time: *90 min*\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n_\ud83e\udd16 Self-Improving AI_\n_Every trade makes JARVIS smarter_",
+  "parse_mode": "Markdown",
+  "keyboard": [
+    [
+      {
+        "text": "\ud83d\udd2c Full Analysis",
+        "callback_data": "demo:learning_deep"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udcca Signal Stats",
+        "callback_data": "demo:signal_stats"
+      },
+      {
+        "text": "\ud83d\udcc8 Regime Stats",
+        "callback_data": "demo:regime_stats"
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udd04 Refresh",
+        "callback_data": "demo:learning"
+      }
+    ],
+    [
+      {
+        "text": "\u25c0\ufe0f Back",
+        "callback_data": "demo:main"
+      }
+    ]
+  ]
+}

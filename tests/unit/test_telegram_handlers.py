@@ -393,6 +393,22 @@ class TestErrorResponses:
         mock_context.bot.send_message.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_error_handler_ignores_missing_message(self, mock_update, mock_context, mock_config):
+        """Missing message errors should be ignored to avoid noisy retries."""
+        from telegram.error import BadRequest
+        from tg_bot.handlers import error_handler
+
+        @error_handler
+        async def failing_command(update, context):
+            raise BadRequest("Message to edit not found")
+
+        result = await failing_command(mock_update, mock_context)
+
+        assert result is None
+        mock_update.effective_message.reply_text.assert_not_called()
+        mock_context.bot.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_unauthorized_message_is_friendly(self, mock_update, mock_context, mock_config):
         """Test unauthorized message is user-friendly."""
         from tg_bot.services.digest_formatter import format_unauthorized
