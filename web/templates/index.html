@@ -282,6 +282,42 @@
             border: 1px solid var(--line);
         }
 
+        .action-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .action-item {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 12px;
+        }
+
+        .action-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .action-meta {
+            font-size: 12px;
+            color: var(--muted);
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .action-controls {
+            margin-top: 8px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn.disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
         @media (max-width: 900px) {
             .hero {
                 grid-template-columns: 1fr;
@@ -455,10 +491,27 @@
                 <ul class="log-list" id="security-log"></ul>
             </div>
         </section>
+
+        <section class="grid">
+            <div class="card">
+                <h3>Pending Actions</h3>
+                <div class="status-pill">Kill Switch <span id="kill-switch-status">--</span></div>
+                <div class="action-list" id="pending-actions"></div>
+            </div>
+            <div class="card">
+                <h3>Trading Approvals</h3>
+                <div class="action-list" id="pending-trades"></div>
+            </div>
+            <div class="card">
+                <h3>Action Journal</h3>
+                <ul class="log-list" id="action-journal"></ul>
+            </div>
+        </section>
     </div>
 
     <script>
         const consoleOutput = document.getElementById('console-output');
+        let killSwitchActive = false;
 
         function logConsole(message) {
             const ts = new Date().toISOString().slice(11, 19);
@@ -510,6 +563,86 @@
                 const detail = entry.offenders ? `Offenders: ${entry.offenders.length}` : (entry.action || 'event');
                 return `<li>${ts} - ${detail}</li>`;
             }).join('');
+        }
+
+        async function loadActions() {
+            const data = await fetch('/api/actions').then(r => r.json());
+            killSwitchActive = Boolean(data.kill_switch && data.kill_switch.active);
+            document.getElementById('kill-switch-status').textContent = killSwitchActive ? 'ON' : 'off';
+
+            const pending = data.pending || {};
+            renderActionList('pending-actions', pending.supervisor || [], 'supervisor');
+            renderActionList('pending-trades', pending.trading || [], 'trade');
+            renderJournal(data.timeline || []);
+        }
+
+        function renderActionList(targetId, actions, source) {
+            const container = document.getElementById(targetId);
+            if (!actions.length) {
+                container.innerHTML = '<div class="action-item">No pending actions.</div>';
+                return;
+            }
+            container.innerHTML = actions.map(action => {
+                const disabled = killSwitchActive ? 'disabled' : '';
+                const disableClass = killSwitchActive ? 'disabled' : '';
+                return `
+                    <div class="action-item">
+                        <div class="action-title">${action.summary || action.intent}</div>
+                        <div class="action-meta">
+                            <span>${action.action_id}</span>
+                            <span>${action.source}</span>
+                            <span>${action.status}</span>
+                        </div>
+                        <div class="action-controls">
+                            <button class="btn ${disableClass}" ${disabled} onclick="approveAction('${action.action_id}', '${source}')">Approve</button>
+                            <button class="btn secondary ${disableClass}" ${disabled} onclick="rejectAction('${action.action_id}', '${source}')">Reject</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderJournal(entries) {
+            const log = document.getElementById('action-journal');
+            if (!entries.length) {
+                log.innerHTML = '<li>No recent journal entries.</li>';
+                return;
+            }
+            log.innerHTML = entries.map(entry => {
+                return `<li>${entry.timestamp} - ${entry.type} (${entry.action_id})</li>`;
+            }).join('');
+        }
+
+        async function approveAction(actionId, source) {
+            if (killSwitchActive) {
+                logConsole('Kill switch active. Approval blocked.');
+                return;
+            }
+            const response = await fetch(`/api/actions/${actionId}/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ actor: 'ui', note: `Approved via ${source}` })
+            }).then(r => r.json());
+            if (!response.success) {
+                logConsole('Approval blocked.');
+                return;
+            }
+            logConsole(`Approved ${actionId}`);
+            loadActions();
+        }
+
+        async function rejectAction(actionId, source) {
+            const response = await fetch(`/api/actions/${actionId}/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ actor: 'ui', reason: `Rejected via ${source}` })
+            }).then(r => r.json());
+            if (!response.success) {
+                logConsole('Rejection failed.');
+                return;
+            }
+            logConsole(`Rejected ${actionId}`);
+            loadActions();
         }
 
         async function toggleConfig(path, value) {
@@ -637,6 +770,7 @@
             loadConfig();
             loadSecurity();
             loadTasks();
+            loadActions();
         }
 
         setInterval(loadAll, 15000);
