@@ -1967,6 +1967,102 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def vibe(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /vibe command - quick vibe coding with Claude (admin only).
+
+    Usage: /vibe <your request>
+    Example: /vibe add error handling to the sentiment function
+
+    Like /code but sends responses directly to the current chat.
+    """
+    try:
+        if not context.args:
+            await update.message.reply_text(
+                "🎯 <b>/vibe - Quick vibe coding</b>\n\n"
+                "Usage: /vibe <your request>\n\n"
+                "Examples:\n"
+                "• /vibe add logging to the buy tracker\n"
+                "• /vibe optimize the sentiment analysis\n"
+                "• /vibe refactor the /trending command\n\n"
+                "<i>Responses sent to this chat</i>",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        from tg_bot.services.claude_cli_handler import get_claude_cli_handler
+        from core.telegram_console_bridge import get_console_bridge
+
+        cli_handler = get_claude_cli_handler()
+        bridge = get_console_bridge()
+
+        use_api = bool(getattr(cli_handler, "USE_API_MODE", False))
+
+        if use_api and not getattr(cli_handler, "_api_mode_available", False):
+            await update.message.reply_text(
+                "⚠️ <b>Claude API not configured</b>\n\n"
+                "Set <code>ANTHROPIC_API_KEY</code> for vibe coding.",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        if not use_api and (not cli_handler._claude_path or cli_handler._claude_path == "claude"):
+            await update.message.reply_text(
+                "⚠️ <b>Claude CLI not configured</b>\n\n"
+                "Install: <code>npm install -g @anthropic-ai/claude-code</code>",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        user_id = update.effective_user.id if update.effective_user else 0
+        username = update.effective_user.username or "admin" if update.effective_user else "admin"
+        message = " ".join(context.args)
+        chat_id = update.effective_chat.id if update.effective_chat else 0
+
+        # Store in memory
+        bridge.memory.add_message(user_id, username, "user", message, chat_id)
+
+        # Send confirmation
+        confirm_msg = await update.message.reply_text(
+            "🎯 <b>Vibe coding...</b>\n\n"
+            f"<i>{message[:200]}{'...' if len(message) > 200 else ''}</i>",
+            parse_mode=ParseMode.HTML
+        )
+
+        # Execute via Claude
+        async def send_status(msg: str):
+            try:
+                await confirm_msg.edit_text(msg, parse_mode=ParseMode.HTML)
+            except Exception:
+                pass
+
+        success, summary, output = await cli_handler.execute(
+            message, user_id, username=username, send_update=send_status
+        )
+
+        # Send result to CURRENT CHAT (not hardcoded group)
+        status_emoji = "✅" if success else "⚠️"
+        result_msg = (
+            f"{status_emoji} <b>Vibe Complete</b>\n\n"
+            f"<b>Summary:</b>\n{summary}\n\n"
+            f"<b>Output:</b>\n<pre>{output[:2000]}</pre>"
+        )
+
+        await update.message.reply_text(
+            result_msg,
+            parse_mode=ParseMode.HTML
+        )
+
+        # Store response
+        bridge.memory.add_message(user_id, "jarvis", "assistant", summary, chat_id)
+
+    except Exception as e:
+        await update.message.reply_text(
+            f"⚠️ Vibe error: {str(e)[:200]}",
+            parse_mode=ParseMode.HTML,
+        )
+
+
+@admin_only
 async def remember(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /remember command - store a standing instruction (admin only).
     
