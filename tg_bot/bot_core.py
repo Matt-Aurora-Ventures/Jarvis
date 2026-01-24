@@ -1968,134 +1968,199 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def vibe(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /vibe command - quick vibe coding with Claude (admin only).
+    """Handle /vibe command - continuous console vibe coding (admin only).
 
     Usage: /vibe <your request>
     Example: /vibe add error handling to the sentiment function
 
-    Like /code but sends responses directly to the current chat.
+    Uses continuous Claude console with persistent sessions.
     """
     try:
         if not context.args:
+            # Get session info for help text
+            from core.continuous_console import get_continuous_console
+            console = get_continuous_console()
+            user_id = update.effective_user.id if update.effective_user else 0
+            session_info = console.get_session_info(user_id)
+
+            session_text = ""
+            if session_info:
+                session_text = (
+                    f"\n\n📊 <b>Your Session</b>\n"
+                    f"• Messages: {session_info['message_count']}\n"
+                    f"• Tokens: {session_info['total_tokens']:,}\n"
+                    f"• Age: {session_info['age_hours']:.1f}h\n"
+                    f"• Use /console clear to reset"
+                )
+
             await update.message.reply_text(
-                "🎯 <b>/vibe - Quick vibe coding</b>\n\n"
+                "🎯 <b>/vibe - Continuous Console Coding</b>\n\n"
                 "Usage: /vibe <your request>\n\n"
                 "Examples:\n"
                 "• /vibe add logging to the buy tracker\n"
                 "• /vibe optimize the sentiment analysis\n"
                 "• /vibe refactor the /trending command\n\n"
-                "<i>Responses sent to this chat</i>",
+                "<i>✨ Persistent session - I remember context!</i>"
+                f"{session_text}",
                 parse_mode=ParseMode.HTML
             )
             return
 
-        from tg_bot.services.claude_cli_handler import get_claude_cli_handler
-        from core.telegram_console_bridge import get_console_bridge
-
-        cli_handler = get_claude_cli_handler()
-        bridge = get_console_bridge()
-
-        use_api = bool(getattr(cli_handler, "USE_API_MODE", False))
-
-        if use_api and not getattr(cli_handler, "_api_mode_available", False):
-            await update.message.reply_text(
-                "⚠️ <b>Claude API not configured</b>\n\n"
-                "Set <code>ANTHROPIC_API_KEY</code> for vibe coding.",
-                parse_mode=ParseMode.HTML
-            )
-            return
-
-        if not use_api and (not cli_handler._claude_path or cli_handler._claude_path == "claude"):
-            await update.message.reply_text(
-                "⚠️ <b>Claude CLI not configured</b>\n\n"
-                "Install: <code>npm install -g @anthropic-ai/claude-code</code>",
-                parse_mode=ParseMode.HTML
-            )
-            return
-
+        # Parse message
+        message = " ".join(context.args)
         user_id = update.effective_user.id if update.effective_user else 0
         username = update.effective_user.username or "admin" if update.effective_user else "admin"
-        message = " ".join(context.args)
         chat_id = update.effective_chat.id if update.effective_chat else 0
 
-        # Store in memory
-        bridge.memory.add_message(user_id, username, "user", message, chat_id)
+        # Import continuous console
+        from core.continuous_console import get_continuous_console
+        console = get_continuous_console()
 
-        # STEP 1: Initial acknowledgement with timestamp
-        from datetime import datetime
-        start_time = datetime.now()
-        confirm_msg = await update.message.reply_text(
-            "🎯 <b>Vibe Coding Request Received</b>\n\n"
-            f"<i>{message[:200]}{'...' if len(message) > 200 else ''}</i>\n\n"
-            f"⏳ <b>Status:</b> Sending to Claude Code...\n"
-            f"📝 <b>Time:</b> {start_time.strftime('%H:%M:%S')}",
-            parse_mode=ParseMode.HTML
-        )
-
-        # STEP 2: Update status during execution
-        async def send_status(msg: str):
-            try:
-                elapsed = (datetime.now() - start_time).seconds
-                await confirm_msg.edit_text(
-                    f"🎯 <b>Vibe Coding in Progress</b>\n\n"
-                    f"<i>{message[:200]}{'...' if len(message) > 200 else ''}</i>\n\n"
-                    f"⏳ <b>Status:</b> {msg}\n"
-                    f"⏱️ <b>Elapsed:</b> {elapsed}s",
-                    parse_mode=ParseMode.HTML
-                )
-            except Exception:
-                pass
-
-        # Execute via Claude
-        success, summary, output = await cli_handler.execute(
-            message, user_id, username=username, send_update=send_status
-        )
-
-        # STEP 3: Show execution complete
-        end_time = datetime.now()
-        duration = (end_time - start_time).seconds
-        await confirm_msg.edit_text(
-            f"{'✅' if success else '⚠️'} <b>Claude Code {'Complete' if success else 'Error'}</b>\n\n"
-            f"⏱️ <b>Duration:</b> {duration}s\n"
-            f"📤 <b>Sending response to chat...</b>",
-            parse_mode=ParseMode.HTML
-        )
-
-        # STEP 4: Send result to CURRENT CHAT (scrubbed of private info)
-        status_emoji = "✅" if success else "⚠️"
-        result_msg = (
-            f"{status_emoji} <b>Vibe Result</b>\n\n"
-            f"<b>Summary:</b>\n{summary}\n\n"
-            f"<b>Output:</b>\n<pre>{output[:2000]}</pre>\n\n"
-            f"<i>🔒 All output sanitized for privacy</i>"
-        )
-
-        result_sent = await update.message.reply_text(
-            result_msg,
-            parse_mode=ParseMode.HTML
-        )
-
-        # STEP 5: Final verification message
-        if result_sent:
-            await confirm_msg.edit_text(
-                f"{'✅' if success else '⚠️'} <b>Vibe Complete</b>\n\n"
-                f"⏱️ <b>Duration:</b> {duration}s\n"
-                f"✅ <b>Response delivered to chat</b>\n"
-                f"🔒 <b>Privacy:</b> All secrets scrubbed\n\n"
-                f"<i>Verified at {end_time.strftime('%H:%M:%S')}</i>",
+        # Check if console available
+        if not console.client:
+            await update.message.reply_text(
+                "⚠️ <b>Console Unavailable</b>\n\n"
+                "Vibe coding requires VIBECODING_ANTHROPIC_KEY in .env\n"
+                "Contact admin to configure.",
                 parse_mode=ParseMode.HTML
             )
+            return
 
-        # Store response
-        bridge.memory.add_message(user_id, "jarvis", "assistant", summary, chat_id)
+        # Get session info for confirmation
+        session_info = console.get_session_info(user_id)
+        session_status = ""
+        if session_info:
+            session_status = f"\n📊 Session: {session_info['message_count']} msgs, {session_info['age_hours']:.1f}h old"
+
+        # Send confirmation
+        from datetime import datetime
+        start_time = datetime.now()
+
+        confirm_msg = await update.message.reply_text(
+            f"🔄 <b>Vibe Request Processing</b>\n\n"
+            f"<i>{message[:200]}{'...' if len(message) > 200 else ''}</i>\n\n"
+            f"⏳ Status: Sending to Claude...{session_status}",
+            parse_mode=ParseMode.HTML
+        )
+
+        # Execute via continuous console
+        result = await console.execute(
+            user_id=user_id,
+            username=username,
+            chat_id=chat_id,
+            prompt=message,
+            mode="vibe"
+        )
+
+        duration = (datetime.now() - start_time).total_seconds()
+
+        # Send result
+        if result['success']:
+            response_text = result['response']
+
+            # Truncate if too long
+            if len(response_text) > 4000:
+                response_text = response_text[:3950] + "\n\n... (truncated)"
+
+            status_emoji = "✅"
+            sanitized_note = "\n🔒 <i>Output sanitized</i>" if result['sanitized'] else ""
+
+            result_msg = (
+                f"{status_emoji} <b>Vibe Complete</b>\n\n"
+                f"<pre>{response_text}</pre>\n\n"
+                f"⏱️ {duration:.1f}s | "
+                f"🎯 {result['tokens_used']:,} tokens | "
+                f"💬 {result['message_count']} msgs"
+                f"{sanitized_note}"
+            )
+        else:
+            result_msg = (
+                f"⚠️ <b>Vibe Error</b>\n\n"
+                f"<code>{result['response'][:500]}</code>\n\n"
+                f"<i>{duration:.1f}s</i>"
+            )
+
+        # Update confirmation with result
+        try:
+            await confirm_msg.edit_text(result_msg, parse_mode=ParseMode.HTML)
+        except Exception:
+            # If edit fails, send new message
+            await update.message.reply_text(result_msg, parse_mode=ParseMode.HTML)
 
     except Exception as e:
         logger.exception(f"Vibe command error: {e}")
         await update.message.reply_text(
             f"⚠️ <b>Vibe Error</b>\n\n"
-            f"<code>{str(e)[:200]}</code>\n\n"
-            f"<i>Request failed - check logs for details</i>",
+            f"<code>{str(e)[:200]}</code>",
             parse_mode=ParseMode.HTML,
+        )
+
+
+@admin_only
+async def console(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /console command - manage continuous console sessions (admin only).
+
+    Usage:
+        /console - show session info
+        /console clear - clear your session
+        /console info - detailed session stats
+    """
+    try:
+        from core.continuous_console import get_continuous_console
+        console_sys = get_continuous_console()
+        user_id = update.effective_user.id if update.effective_user else 0
+
+        # Parse subcommand
+        subcommand = context.args[0].lower() if context.args else "info"
+
+        if subcommand == "clear":
+            # Clear session
+            cleared = console_sys.clear_session(user_id)
+            if cleared:
+                await update.message.reply_text(
+                    "✅ <b>Console Session Cleared</b>\n\n"
+                    "Your conversation history has been reset.\n"
+                    "Next /vibe command will start fresh.",
+                    parse_mode=ParseMode.HTML
+                )
+            else:
+                await update.message.reply_text(
+                    "ℹ️ No active session to clear.",
+                    parse_mode=ParseMode.HTML
+                )
+            return
+
+        # Show session info
+        session_info = console_sys.get_session_info(user_id)
+
+        if not session_info:
+            await update.message.reply_text(
+                "ℹ️ <b>No Active Console Session</b>\n\n"
+                "Start one with /vibe <request>",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        info_msg = (
+            f"📊 <b>Console Session Info</b>\n\n"
+            f"🆔 Session: <code>{session_info['session_id']}</code>\n"
+            f"👤 User: {session_info['username']}\n\n"
+            f"<b>Statistics:</b>\n"
+            f"• Messages: {session_info['message_count']}\n"
+            f"• Total Tokens: {session_info['total_tokens']:,}\n"
+            f"• Created: {session_info['created_at'][:19]}\n"
+            f"• Last Active: {session_info['last_active'][:19]}\n"
+            f"• Age: {session_info['age_hours']:.1f} hours\n\n"
+            f"<i>Use /console clear to reset</i>"
+        )
+
+        await update.message.reply_text(info_msg, parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.exception(f"Console command error: {e}")
+        await update.message.reply_text(
+            f"⚠️ Error: {str(e)[:200]}",
+            parse_mode=ParseMode.HTML
         )
 
 
@@ -5211,76 +5276,111 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text_lower = text.lower().strip()
             # Only trigger on explicit prefixes to avoid false positives
             # Removed broad prefixes like "fix the", "add a" which triggered on normal conversation
-            # VIBE CODING COMPLETELY DISABLED - per user request
-            # The bot should NOT execute coding tasks or use Claude CLI/API at all
-            is_vibe_request = False
+            # VIBE CODING RE-ENABLED with Continuous Console (2026-01-24)
+            # Now uses Anthropic API directly with persistent sessions and sanitization
+            is_vibe_request = text_lower.startswith(explicit_prefixes)
 
-            logger.info(f"Vibe detection: DISABLED (admin={is_admin}, text={text[:100]}...)")
+            logger.info(f"Vibe detection: {'TRIGGERED' if is_vibe_request else 'not triggered'} (admin={is_admin}, text={text[:100]}...)")
 
-            if False:  # Disabled - was: if is_vibe_request:
-                from tg_bot.services.claude_cli_handler import get_claude_cli_handler
-                cli_handler = get_claude_cli_handler()
+            if is_vibe_request:
+                # Import continuous console
+                from core.continuous_console import get_continuous_console
 
-                if not cli_handler.is_admin(user_id, username):
-                    logger.warning(f"Unauthorized coding request from user {user_id} ({username})")
+                console = get_continuous_console()
+
+                # Verify admin access
+                if not is_admin:
+                    logger.warning(f"Unauthorized vibe request from user {user_id} ({username})")
+                    await _safe_reply_text(
+                        update,
+                        context,
+                        "⛔ <b>Admin Only</b>\n\nVibe coding is restricted to authorized users.",
+                        parse_mode=ParseMode.HTML
+                    )
                     return
 
-                # Check if Claude CLI is available
-                if not cli_handler._claude_path or cli_handler._claude_path == "claude":
-                    logger.warning("Claude CLI not available on this deployment")
+                # Check if console is available
+                if not console.client:
+                    logger.warning("Continuous console not available - API key missing")
+                    await _safe_reply_text(
+                        update,
+                        context,
+                        "⚠️ <b>Console Unavailable</b>\n\n"
+                        "Vibe coding requires VIBECODING_ANTHROPIC_KEY in .env\n"
+                        "Contact admin to configure.",
+                        parse_mode=ParseMode.HTML
+                    )
                     return
 
-                # Send confirmation
+                # Send confirmation with session info
+                session_info = console.get_session_info(user_id)
+                session_status = ""
+                if session_info:
+                    session_status = f"\n📊 Session: {session_info['message_count']} msgs, {session_info['age_hours']:.1f}h old"
+
                 confirm_msg = await _safe_reply_text(
                     update,
                     context,
-                    "🔄 <b>Processing coding request...</b>\n\n"
-                    f"<i>{text[:200]}{'...' if len(text) > 200 else ''}</i>",
+                    f"🔄 <b>Vibe Coding Request Received</b>\n\n"
+                    f"<i>{text[:200]}{'...' if len(text) > 200 else ''}</i>\n\n"
+                    f"⏳ Status: Processing via continuous console...{session_status}",
                     parse_mode=ParseMode.HTML
                 )
 
-                # Execute via Claude CLI
-                async def send_status(msg: str):
-                    if not confirm_msg:
-                        return
-                    try:
-                        await confirm_msg.edit_text(msg, parse_mode=ParseMode.HTML)
-                    except Exception:  # noqa: BLE001 - intentional catch-all
-                        pass
+                # Execute via continuous console (automatic sanitization)
+                from datetime import datetime
+                start_time = datetime.now()
 
-                success, summary, output = await cli_handler.execute(
-                    text,
-                    user_id,
+                result = await console.execute(
+                    user_id=user_id,
                     username=username,
-                    send_update=send_status,
-                    include_context=False,
+                    chat_id=chat_id,
+                    prompt=text,
+                    mode="vibe"
                 )
 
-                # Double-sanitize output before sending to group
-                # CLI handler already sanitizes, but be extra careful
-                safe_output = cli_handler.sanitize_output(output, paranoid=True)
-                safe_summary = cli_handler.sanitize_output(summary, paranoid=True)
+                duration = (datetime.now() - start_time).total_seconds()
 
-                # Send result to GROUP (not DM)
-                GROUP_CHAT_ID = -1003408655098
-                status_emoji = "✅" if success else "⚠️"
-                result_msg = (
-                    f"{status_emoji} <b>Coding Task Complete</b>\n\n"
-                    f"<b>Summary:</b>\n{safe_summary}\n\n"
-                    f"<b>Details:</b>\n<pre>{safe_output[:2000]}</pre>"
-                )
+                # Send result to chat
+                if result['success']:
+                    response_text = result['response']
 
-                # Always send to group, not DM
-                await context.bot.send_message(
-                    chat_id=GROUP_CHAT_ID,
-                    text=result_msg,
-                    parse_mode=ParseMode.HTML
-                )
-                
+                    # Truncate if too long for Telegram
+                    if len(response_text) > 4000:
+                        response_text = response_text[:3950] + "\n\n... (truncated for Telegram)"
+
+                    status_emoji = "✅"
+                    sanitized_note = "\n🔒 <i>Output sanitized</i>" if result['sanitized'] else ""
+
+                    result_msg = (
+                        f"{status_emoji} <b>Vibe Complete</b>\n\n"
+                        f"<pre>{response_text}</pre>\n\n"
+                        f"⏱️ Duration: {duration:.1f}s | "
+                        f"🎯 Tokens: {result['tokens_used']}"
+                        f"{sanitized_note}"
+                    )
+                else:
+                    result_msg = (
+                        f"⚠️ <b>Vibe Error</b>\n\n"
+                        f"<code>{result['response'][:500]}</code>\n\n"
+                        f"<i>Duration: {duration:.1f}s</i>"
+                    )
+
+                # Update confirmation message with result
+                if confirm_msg:
+                    try:
+                        await confirm_msg.edit_text(result_msg, parse_mode=ParseMode.HTML)
+                    except Exception as e:
+                        # If edit fails (message too old), send new message
+                        logger.debug(f"Could not edit message, sending new: {e}")
+                        await _safe_reply_text(update, context, result_msg, parse_mode=ParseMode.HTML)
+                else:
+                    await _safe_reply_text(update, context, result_msg, parse_mode=ParseMode.HTML)
+
                 # Store response in memory
-                bridge.memory.add_message(user_id, "jarvis", "assistant", summary, chat_id)
-                
-                logger.info(f"Completed coding request for {user_id}: {success}")
+                bridge.memory.add_message(user_id, "jarvis", "assistant", result['response'][:500], chat_id)
+
+                logger.info(f"Completed vibe request for {user_id}: {result['success']}, {result['tokens_used']} tokens")
                 return
         except Exception as e:
             logger.error(f"Claude CLI error: {e}")
