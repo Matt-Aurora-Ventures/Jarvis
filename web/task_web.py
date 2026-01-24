@@ -23,6 +23,10 @@ from core import (
     system_profiler,
     task_manager,
 )
+from core.approval_gate import get_approval_gate
+from core.harness.aggregate import aggregate_actions
+from core.harness.decision_gate import DecisionGate
+from core.harness.validators import get_kill_switch_status
 
 RESOURCE_MONITOR_DIR = ROOT / "data" / "resource_monitor"
 SECURITY_LOG_PATH = RESOURCE_MONITOR_DIR / "security_log.jsonl"
@@ -92,6 +96,22 @@ def _serialize(value: Any) -> Any:
     if isinstance(value, list):
         return [_serialize(v) for v in value]
     return value
+
+
+def _maybe_approve_trade(action_id: str, actor: str) -> bool:
+    gate = get_approval_gate()
+    pending_ids = {proposal.id for proposal in gate.get_pending()}
+    if action_id not in pending_ids:
+        return False
+    return gate.approve(action_id, approved_by=actor)
+
+
+def _maybe_reject_trade(action_id: str, reason: str) -> bool:
+    gate = get_approval_gate()
+    pending_ids = {proposal.id for proposal in gate.get_pending()}
+    if action_id not in pending_ids:
+        return False
+    return gate.reject(action_id, reason=reason)
 
 
 @app.route("/")
@@ -197,6 +217,36 @@ def api_run_action():
         return jsonify({"success": True, "result": _serialize(result)})
     except Exception as exc:
         return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@app.route("/api/actions", methods=["GET"])
+def api_actions():
+    return jsonify(aggregate_actions())
+
+
+@app.route("/api/actions/<action_id>/approve", methods=["POST"])
+def api_actions_approve(action_id: str):
+    payload = request.get_json() or {}
+    actor = payload.get("actor", "user")
+    note = payload.get("note", "")
+    gate = DecisionGate()
+    ok = gate.approve(action_id, actor=actor, note=note)
+    trade_approved = _maybe_approve_trade(action_id, actor)
+    if not ok:
+        active, source = get_kill_switch_status()
+        return jsonify({"success": False, "kill_switch": active, "source": source}), 409
+    return jsonify({"success": True, "trade_approved": trade_approved})
+
+
+@app.route("/api/actions/<action_id>/reject", methods=["POST"])
+def api_actions_reject(action_id: str):
+    payload = request.get_json() or {}
+    actor = payload.get("actor", "user")
+    reason = payload.get("reason", "Rejected via UI")
+    gate = DecisionGate()
+    gate.reject(action_id, actor=actor, reason=reason)
+    trade_rejected = _maybe_reject_trade(action_id, reason)
+    return jsonify({"success": True, "trade_rejected": trade_rejected})
 
 
 @app.route("/api/research", methods=["POST"])
