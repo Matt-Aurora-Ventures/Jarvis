@@ -29,7 +29,7 @@ def _read_mcp_config() -> Dict:
     if not MCP_CONFIG_PATH.exists():
         return {"log_dir": "lifeos/logs/mcp", "servers": []}
 
-    with open(MCP_CONFIG_PATH, "r", encoding="utf-8") as handle:
+    with open(MCP_CONFIG_PATH, "r", encoding="utf-8-sig") as handle:
         return _expand_config(json.load(handle))
 
 
