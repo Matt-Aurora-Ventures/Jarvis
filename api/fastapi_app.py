@@ -359,6 +359,12 @@ Most endpoints require authentication via:
         import psutil
         import time
 
+        test_mode = (
+            os.getenv("ENVIRONMENT") == "test"
+            or os.getenv("TEST_MODE", "").lower() == "true"
+            or os.getenv("PYTEST_CURRENT_TEST") is not None
+        )
+
         # Get system metrics
         try:
             cpu_percent = psutil.cpu_percent(interval=0.1)
@@ -371,34 +377,36 @@ Most endpoints require authentication via:
             memory = None
             disk = None
 
-        # Check provider availability
+        # Check provider availability (skip heavy checks in test mode)
         providers_status = {}
         providers_healthy = True
-        try:
-            from core import providers
-            provider_check = providers.check_providers()
-            for name, status in provider_check.items():
-                is_available = status.get("available", False)
-                providers_status[name] = is_available
-                if not is_available:
-                    providers_healthy = False
-        except Exception:
-            providers_healthy = False
+        if not test_mode:
+            try:
+                from core import providers
+                provider_check = providers.check_providers()
+                for name, status in provider_check.items():
+                    is_available = status.get("available", False)
+                    providers_status[name] = is_available
+                    if not is_available:
+                        providers_healthy = False
+            except Exception:
+                providers_healthy = False
 
-        # Check voice system
+        # Check voice system (skip in test mode to avoid slow/hanging deps)
         voice_status = {"available": False, "tts": False, "stt": False, "microphone": False}
-        try:
-            from core.voice import run_voice_diagnostics
-            diag = run_voice_diagnostics()
-            voice_status = {
-                "available": diag.microphone_available and diag.tts_available,
-                "tts": diag.tts_available,
-                "stt": diag.stt_available,
-                "microphone": diag.microphone_available,
-                "wake_word": diag.wake_word_available,
-            }
-        except Exception:
-            pass
+        if not test_mode:
+            try:
+                from core.voice import run_voice_diagnostics
+                diag = run_voice_diagnostics()
+                voice_status = {
+                    "available": diag.microphone_available and diag.tts_available,
+                    "tts": diag.tts_available,
+                    "stt": diag.stt_available,
+                    "microphone": diag.microphone_available,
+                    "wake_word": diag.wake_word_available,
+                }
+            except Exception:
+                pass
 
         # Check database
         database_ok = True

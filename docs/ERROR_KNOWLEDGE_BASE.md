@@ -273,14 +273,14 @@ def check_dependencies():
 - **Symptom**: `IndexError: list index out of range` when parsing commands
 - **Root Cause**: User input didn't contain expected `:` delimiter
 - **Fix**: Added bounds checking pattern:
-  ```python
-  # BEFORE (unsafe)
-  token = action.split(":")[1]
+```python
+# BEFORE (unsafe)
+token = action.split(":")[1]
 
-  # AFTER (safe)
-  parts = action.split(":")
-  token = parts[1] if len(parts) > 1 else ""
-  ```
+# AFTER (safe)
+parts = action.split(":")
+token = parts[1] if len(parts) > 1 else ""
+```
 - **Prevention**:
   - Never assume list/array bounds without checking
   - Use defensive parsing for all user input

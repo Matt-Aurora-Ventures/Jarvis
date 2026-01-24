@@ -41,7 +41,7 @@ class ContextManager:
         self.max_tokens = context_max_tokens
 
         if session_dir is not None:
-            base_dir = Path(session_dir)
+            base_dir = Path(session_dir) / session_id
         else:
             base_dir = data_dir or Path("data/dexter/sessions")
             base_dir = base_dir / session_id
@@ -61,14 +61,28 @@ class ContextManager:
         timestamp = datetime.now(timezone.utc).isoformat()
         filename = self.data_dir / f"{data_type}_{timestamp.replace(':', '-')}.json"
 
+        summary = None
+        if isinstance(data, dict):
+            symbol = data.get("symbol") or data.get("token")
+            price = data.get("price") or data.get("price_usd")
+            if symbol and price is not None:
+                try:
+                    summary = f"{data_type}: {symbol} ${float(price):.2f} @ {timestamp}"
+                except Exception:
+                    summary = f"{data_type}: {symbol} ${price} @ {timestamp}"
+
+        if summary is None:
+            summary = f"{data_type}: saved {len(data) if isinstance(data, dict) else 0} fields @ {timestamp}"
+
         try:
             with open(filename, "w") as f:
                 json.dump({"ts": timestamp, "type": data_type, "data": data}, f)
             logger.info(f"Saved {data_type} to {filename}")
-            return str(filename)
         except IOError as e:
             logger.error(f"Failed to save data: {e}")
-            return None
+
+        self.add_summary(summary)
+        return summary
 
     def get_summary(self) -> str:
         """Get compressed context summary for LLM.
@@ -95,6 +109,23 @@ class ContextManager:
 
         if self.check_context_overflow():
             self.compact_context()
+
+    def save_session_state(self) -> Optional[str]:
+        """Persist session state (summaries + token count) to disk."""
+        state_path = self.data_dir / "state.json"
+        state = {
+            "session_id": self.session_id,
+            "summaries_count": len(self._summaries),
+            "token_count": self._token_count,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            with open(state_path, "w") as f:
+                json.dump(state, f)
+            return str(state_path)
+        except IOError as e:
+            logger.warning(f"Failed to save session state: {e}")
+            return None
 
     def check_context_overflow(self) -> bool:
         """Check whether context exceeds the configured token budget."""

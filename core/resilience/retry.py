@@ -235,6 +235,32 @@ def retry(
     return decorator
 
 
+def async_retry(
+    max_attempts: int = 3,
+    delay: float = 1.0,
+    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+) -> Callable:
+    """Simple async retry decorator expected by integration tests.
+
+    Re-raises the last exception after max attempts (no RetryExhausted).
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_exc: Optional[Exception] = None
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return await func(*args, **kwargs)
+                except exceptions as exc:
+                    last_exc = exc
+                    if attempt >= max_attempts:
+                        raise
+                    await asyncio.sleep(delay)
+            if last_exc:
+                raise last_exc
+        return wrapper
+    return decorator
+
 async def retry_async(func: Callable, *args, policy: RetryPolicy = None, **kwargs) -> Any:
     """Execute async function with retry."""
     policy = policy or RetryPolicy()
