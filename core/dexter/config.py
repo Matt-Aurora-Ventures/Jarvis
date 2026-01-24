@@ -29,6 +29,7 @@ class DexterConfig:
     save_scratchpad: bool = True
     tools_enabled: List[str] = field(default_factory=lambda: [
         "financial_research",
+        "sentiment",
         "sentiment_analyze",
         "market_data",
         "liquidations",

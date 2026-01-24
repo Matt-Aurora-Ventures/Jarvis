@@ -33,11 +33,18 @@ class RetentionAction(Enum):
 class RetentionPolicy:
     """A data retention policy"""
     name: str
-    data_type: str
-    retention_days: int
+    data_type: str = ""
+    retention_days: int = 0
     action: RetentionAction = RetentionAction.DELETE
     enabled: bool = True
     priority: int = 0  # Higher = process first
+    archive: bool = False  # Backward-compatible flag
+
+    def __post_init__(self) -> None:
+        if not self.data_type:
+            self.data_type = self.name
+        if self.archive and self.action == RetentionAction.DELETE:
+            self.action = RetentionAction.ARCHIVE
 
 
 @dataclass

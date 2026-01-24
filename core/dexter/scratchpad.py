@@ -195,7 +195,7 @@ class Scratchpad:
                 lines.append("")
 
             elif entry_type == "action":
-                lines.append(f"[Action] Called {entry.get('tool')}")
+                lines.append(f"[ACTION] Called {entry.get('tool')}")
                 lines.append(f"  Result: {entry.get('result')[:200]}...")
                 lines.append("")
 
