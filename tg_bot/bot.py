@@ -101,6 +101,7 @@ def register_handlers(app: Application, config) -> None:
     app.add_handler(CommandHandler("uptime", uptime))
     app.add_handler(CommandHandler("brain", brain))
     app.add_handler(CommandHandler("code", code))
+    app.add_handler(CommandHandler("vibe", vibe))
     app.add_handler(CommandHandler("remember", remember))
     app.add_handler(CommandHandler("modstats", modstats))
     app.add_handler(CommandHandler("unban", unban))
