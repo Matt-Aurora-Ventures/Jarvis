@@ -1,0 +1,78 @@
+# ============================================================================
+# JARVIS Bot Supervisor Docker Image
+# ============================================================================
+# Single-instance bot orchestration with health monitoring
+# ============================================================================
+
+FROM python:3.11-slim
+
+# Metadata
+LABEL maintainer="Jarvis Team"
+LABEL description="JARVIS Bot Supervisor - Autonomous trading and AI assistant"
+LABEL version="1.0"
+
+# Set working directory
+WORKDIR /app
+
+# Environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DATA_DIR=/app/data
+ENV LOG_DIR=/app/logs
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gcc \
+    g++ \
+    make \
+    libffi-dev \
+    git \
+    nodejs \
+    npm \
+    build-essential \
+    python3-dev \
+    linux-headers-amd64 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Claude CLI (needed when supervisor runs Telegram/Twitter stacks)
+RUN npm install -g @anthropic-ai/claude-code && npm cache clean --force
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash jarvis && \
+    mkdir -p /app/data /app/logs /app/secrets && \
+    chown -R jarvis:jarvis /app
+
+# Copy requirements first for better caching
+COPY requirements.txt ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt || \
+    (echo "Some packages failed, trying without optional dependencies" && \
+     grep -v "evdev\|ed25519-blake2b\|pyautogui" requirements.txt > requirements_filtered.txt && \
+     pip install --no-cache-dir -r requirements_filtered.txt)
+
+# Copy application code
+COPY --chown=jarvis:jarvis bots/ /app/bots/
+COPY --chown=jarvis:jarvis core/ /app/core/
+COPY --chown=jarvis:jarvis tg_bot/ /app/tg_bot/
+COPY --chown=jarvis:jarvis integrations/ /app/integrations/
+COPY --chown=jarvis:jarvis scripts/ /app/scripts/
+
+# Copy configuration files (if they exist)
+COPY --chown=jarvis:jarvis lifeos/config/ /app/lifeos/config/
+
+# Switch to non-root user
+USER jarvis
+
+# Health check - supervisor exposes health endpoint on port 8080
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${HEALTH_PORT:-8080}/health || exit 1
+
+# Expose health endpoint port
+EXPOSE 8080
+
+# Default command - run the supervisor
+CMD ["python", "-m", "bots.supervisor"]

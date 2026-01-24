@@ -1,0 +1,311 @@
+# ============================================================================
+# JARVIS Bot System - Docker Compose Configuration
+# ============================================================================
+# Single-instance deployment with robust supervision
+# ============================================================================
+#
+# Usage:
+#   docker-compose -f docker-compose.bots.yml up -d
+#   docker-compose -f docker-compose.bots.yml logs -f supervisor
+#   docker-compose -f docker-compose.bots.yml down
+#
+# ============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Main Bot Supervisor (SINGLE INSTANCE ONLY)
+  # ---------------------------------------------------------------------------
+  # The supervisor orchestrates all bot components:
+  #   - buy_bot: KR8TIV token tracking
+  #   - sentiment_reporter: Hourly market reports
+  #   - twitter_poster: Grok sentiment tweets
+  #   - telegram_bot: Telegram interface
+  #   - autonomous_x: Autonomous X posting
+  #   - public_trading_bot: Mass-market trading bot
+  #   - treasury_bot: Treasury management
+  #   - autonomous_manager: AI moderation & learning
+  #   - bags_intel: bags.fm graduation monitoring
+  #   - ai_supervisor: Ollama-backed AI runtime
+  # ---------------------------------------------------------------------------
+  supervisor:
+    build:
+      context: .
+      dockerfile: Dockerfile.supervisor
+    container_name: jarvis-supervisor
+    hostname: jarvis-supervisor
+    restart: always
+    # CRITICAL: Single instance enforcement
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 10
+        window: 120s
+    environment:
+      # Core settings
+      - PYTHONPATH=/app
+      - DATA_DIR=/app/data
+      - LOG_DIR=/app/logs
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HEALTH_PORT=8080
+
+      # Telegram Configuration
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_ADMIN_IDS=${TELEGRAM_ADMIN_IDS}
+      - TELEGRAM_BUY_BOT_CHAT_ID=${TELEGRAM_BUY_BOT_CHAT_ID}
+      - PUBLIC_BOT_TELEGRAM_TOKEN=${PUBLIC_BOT_TELEGRAM_TOKEN:-}
+      - TREASURY_BOT_TOKEN=${TREASURY_BOT_TOKEN:-}
+
+      # Twitter/X Configuration
+      - X_API_KEY=${X_API_KEY:-}
+      - X_API_SECRET=${X_API_SECRET:-}
+      - X_ACCESS_TOKEN=${X_ACCESS_TOKEN:-}
+      - X_ACCESS_SECRET=${X_ACCESS_SECRET:-}
+      - TWITTER_API_KEY=${TWITTER_API_KEY:-}
+      - TWITTER_API_SECRET=${TWITTER_API_SECRET:-}
+      - TWITTER_BEARER_TOKEN=${TWITTER_BEARER_TOKEN:-}
+      - JARVIS_ACCESS_TOKEN=${JARVIS_ACCESS_TOKEN:-}
+      - X_BOT_ENABLED=${X_BOT_ENABLED:-true}
+
+      # AI/LLM Configuration
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
+      - JARVIS_ALLOW_REMOTE_ANTHROPIC=${JARVIS_ALLOW_REMOTE_ANTHROPIC:-false}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      - OLLAMA_URL=${OLLAMA_URL:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - OLLAMA_TWITTER_MODEL=${OLLAMA_TWITTER_MODEL:-}
+
+      # Trading Configuration
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-}
+      - HELIUS_API_KEY=${HELIUS_API_KEY:-}
+      - LIFEOS_KILL_SWITCH=${LIFEOS_KILL_SWITCH:-false}
+      - TREASURY_LIVE_MODE=${TREASURY_LIVE_MODE:-false}
+
+      # Bags.fm Integration
+      - BAGS_API_KEY=${BAGS_API_KEY:-}
+      - USE_BAGS_TRADING=${USE_BAGS_TRADING:-false}
+      - BAGS_INTEL_ENABLED=${BAGS_INTEL_ENABLED:-false}
+      - BITQUERY_API_KEY=${BITQUERY_API_KEY:-}
+
+      # Public Trading Bot
+      - PUBLIC_BOT_LIVE_TRADING=${PUBLIC_BOT_LIVE_TRADING:-false}
+      - PUBLIC_BOT_REQUIRE_CONFIRMATION=${PUBLIC_BOT_REQUIRE_CONFIRMATION:-true}
+      - PUBLIC_BOT_MIN_CONFIDENCE=${PUBLIC_BOT_MIN_CONFIDENCE:-65.0}
+      - PUBLIC_BOT_MAX_DAILY_LOSS=${PUBLIC_BOT_MAX_DAILY_LOSS:-1000.0}
+
+      # MCP Configuration
+      - MCP_AUTO_START=${MCP_AUTO_START:-false}
+      - JARVIS_MCP_CONFIG=${JARVIS_MCP_CONFIG:-/app/config/mcp.docker.json}
+
+      # External Monitoring
+      - HEALTHCHECKS_URL=${HEALTHCHECKS_URL:-}
+
+      # Database (for memory system)
+      - DATABASE_URL=${DATABASE_URL:-}
+    volumes:
+      # Persistent data storage
+      - jarvis-data:/app/data
+      - jarvis-logs:/app/logs
+
+      # Secrets (read-only mount)
+      - ./secrets:/app/secrets:ro
+
+      # Runtime state files
+      - jarvis-state:/home/jarvis/.lifeos
+
+      # Configuration files (optional override)
+      - ./lifeos/config:/app/lifeos/config:ro
+      - ./config:/app/config:ro
+    # Health port removed - conflicts with other services, access via Docker network
+    # ports:
+    #   # Health endpoint
+    #   - "${HEALTH_PORT:-8080}:8080"
+    networks:
+      - jarvis-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Redis (Caching, Rate Limiting, Session Storage)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: jarvis-redis
+    hostname: jarvis-redis
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 200mb --maxmemory-policy allkeys-lru
+    # Port mapping removed - services connect via Docker network
+    # ports:
+    #   - "6379:6379"
+    networks:
+      - jarvis-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Ollama (Local LLM - Optional)
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: jarvis-ollama
+    hostname: jarvis-ollama
+    restart: unless-stopped
+    profiles:
+      - with-ollama
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - jarvis-network
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Prometheus (Metrics Collection - Optional)
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: jarvis-prometheus
+    hostname: jarvis-prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+    ports:
+      - "9090:9090"
+    networks:
+      - jarvis-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Grafana (Dashboards - Optional)
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: jarvis-grafana
+    hostname: jarvis-grafana
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=${GRAFANA_URL:-http://localhost:3001}
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - jarvis-network
+    depends_on:
+      - prometheus
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# -----------------------------------------------------------------------------
+# Named Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  jarvis-data:
+    driver: local
+  jarvis-logs:
+    driver: local
+  jarvis-state:
+    driver: local
+  redis-data:
+    driver: local
+  ollama-models:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  jarvis-network:
+    name: jarvis-bot-network
+    driver: bridge
