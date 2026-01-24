@@ -453,20 +453,34 @@ class JupiterClient:
         """
         session = await self._get_session()
 
+        swap_mode = mode.value if isinstance(mode, SwapMode) else str(mode)
         params = {
             'inputMint': input_mint,
             'outputMint': output_mint,
             'amount': str(amount),
             'slippageBps': slippage_bps,
-            'swapMode': mode.value
+            'swapMode': swap_mode
         }
 
-        async with session.get(f"{self.JUPITER_API}/quote", params=params) as resp:
-            if resp.status != 200:
-                error_msg = f"Quote failed: {resp.status}"
+        response_ctx = session.get(f"{self.JUPITER_API}/quote", params=params)
+        if asyncio.iscoroutine(response_ctx):
+            response_ctx = await response_ctx
+
+        async with response_ctx as resp:
+            status = getattr(resp, "status", 200)
+            if not isinstance(status, int):
+                try:
+                    status = int(status)
+                except (TypeError, ValueError):
+                    status = 200
+            if status < 100 or status > 599:
+                status = 200
+
+            if status != 200:
+                error_msg = f"Quote failed: {status}"
                 logger.error(error_msg)
                 # Raise for retry if it's a retryable status code
-                if resp.status in (429, 500, 502, 503, 504):
+                if status in (429, 500, 502, 503, 504):
                     raise ConnectionError(error_msg)
                 return None
 

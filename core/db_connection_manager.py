@@ -9,6 +9,7 @@ Provides:
 """
 
 import asyncio
+import inspect
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any
@@ -21,6 +22,15 @@ except ImportError:
     SHUTDOWN_MANAGER_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+
+def _get_static_attr(obj: Any, name: str) -> Optional[Any]:
+    """Safely get attribute without triggering dynamic __getattr__."""
+    try:
+        inspect.getattr_static(obj, name)
+    except AttributeError:
+        return None
+    return getattr(obj, name, None)
 
 
 class DatabaseConnectionManager:
@@ -73,21 +83,29 @@ class DatabaseConnectionManager:
         """Close a single connection."""
         try:
             # Try various close methods
-            if hasattr(conn, 'aclose'):
-                await conn.aclose()
-            elif hasattr(conn, 'close'):
-                if asyncio.iscoroutinefunction(conn.close):
-                    await conn.close()
+            aclose = _get_static_attr(conn, "aclose")
+            if callable(aclose):
+                if asyncio.iscoroutinefunction(aclose):
+                    await aclose()
                 else:
-                    conn.close()
-            elif hasattr(conn, 'disconnect'):
-                if asyncio.iscoroutinefunction(conn.disconnect):
-                    await conn.disconnect()
-                else:
-                    conn.disconnect()
+                    aclose()
             else:
-                logger.warning(f"Connection '{name}' has no close method")
-                return False
+                close = _get_static_attr(conn, "close")
+                if callable(close):
+                    if asyncio.iscoroutinefunction(close):
+                        await close()
+                    else:
+                        close()
+                else:
+                    disconnect = _get_static_attr(conn, "disconnect")
+                    if callable(disconnect):
+                        if asyncio.iscoroutinefunction(disconnect):
+                            await disconnect()
+                        else:
+                            disconnect()
+                    else:
+                        logger.warning(f"Connection '{name}' has no close method")
+                        return False
 
             logger.debug(f"Closed connection: {name}")
             return True
@@ -100,25 +118,31 @@ class DatabaseConnectionManager:
         """Close a connection pool."""
         try:
             # Try various close methods for pools
-            if hasattr(pool, 'aclose'):
-                await pool.aclose()
-            elif hasattr(pool, 'close'):
-                if asyncio.iscoroutinefunction(pool.close):
-                    await pool.close()
+            aclose = _get_static_attr(pool, "aclose")
+            if callable(aclose):
+                if asyncio.iscoroutinefunction(aclose):
+                    await aclose()
                 else:
-                    pool.close()
-
-                # Wait for pool to close
-                if hasattr(pool, 'wait_closed'):
-                    if asyncio.iscoroutinefunction(pool.wait_closed):
-                        await pool.wait_closed()
-
-            elif hasattr(pool, 'terminate'):
-                pool.terminate()
-
+                    aclose()
             else:
-                logger.warning(f"Pool '{name}' has no close method")
-                return False
+                close = _get_static_attr(pool, "close")
+                if callable(close):
+                    if asyncio.iscoroutinefunction(close):
+                        await close()
+                    else:
+                        close()
+
+                    # Wait for pool to close
+                    wait_closed = _get_static_attr(pool, "wait_closed")
+                    if callable(wait_closed) and asyncio.iscoroutinefunction(wait_closed):
+                        await wait_closed()
+                else:
+                    terminate = _get_static_attr(pool, "terminate")
+                    if callable(terminate):
+                        terminate()
+                    else:
+                        logger.warning(f"Pool '{name}' has no close method")
+                        return False
 
             logger.debug(f"Closed pool: {name}")
             return True
@@ -173,22 +197,25 @@ class DatabaseConnectionManager:
         for name, conn in self._connections.items():
             try:
                 # Try to ping the connection
-                if hasattr(conn, 'ping'):
-                    if asyncio.iscoroutinefunction(conn.ping):
-                        await conn.ping()
+                ping = _get_static_attr(conn, "ping")
+                if callable(ping):
+                    if asyncio.iscoroutinefunction(ping):
+                        await ping()
                     else:
-                        conn.ping()
-                    results[name] = True
-                elif hasattr(conn, 'execute'):
-                    # Try a simple query
-                    if asyncio.iscoroutinefunction(conn.execute):
-                        await conn.execute("SELECT 1")
-                    else:
-                        conn.execute("SELECT 1")
+                        ping()
                     results[name] = True
                 else:
-                    # Can't verify, assume healthy
-                    results[name] = True
+                    execute = _get_static_attr(conn, "execute")
+                    if callable(execute):
+                        # Try a simple query
+                        if asyncio.iscoroutinefunction(execute):
+                            await execute("SELECT 1")
+                        else:
+                            execute("SELECT 1")
+                        results[name] = True
+                    else:
+                        # Can't verify, assume healthy
+                        results[name] = True
 
             except Exception as e:
                 logger.error(f"Health check failed for '{name}': {e}")

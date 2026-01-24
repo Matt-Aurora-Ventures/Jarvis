@@ -377,7 +377,13 @@ class ExecutionMetricsTracker:
 
         # Success metrics
         successful = [m for m in filtered if m.status == ExecutionStatus.SUCCESS]
-        failed = [m for m in filtered if m.status == ExecutionStatus.FAILED]
+        failed_statuses = {
+            ExecutionStatus.FAILED,
+            ExecutionStatus.TIMEOUT,
+            ExecutionStatus.REJECTED,
+            ExecutionStatus.SIMULATED,
+        }
+        failed = [m for m in filtered if m.status in failed_statuses]
 
         stats.successful_executions = len(successful)
         stats.failed_executions = len(failed)

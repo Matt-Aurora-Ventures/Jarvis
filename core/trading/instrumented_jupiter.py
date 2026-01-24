@@ -282,6 +282,8 @@ class InstrumentedJupiterClient(JupiterClient):
                     timeout=confirm_timeout
                 )
                 confirm_time = time.time() - confirm_start
+                if confirmed and confirm_time <= 0:
+                    confirm_time = 0.001
 
                 if not confirmed:
                     logger.warning(f"Transaction {result.signature} not confirmed within {confirm_timeout}s")

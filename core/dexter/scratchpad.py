@@ -25,10 +25,14 @@ class Scratchpad:
             scratchpad_dir: Directory for scratchpad logs (default: data/dexter/scratchpad)
         """
         self.session_id = session_id
-        self.scratchpad_dir = scratchpad_dir or Path("data/dexter/scratchpad")
+        self.scratchpad_dir = Path(scratchpad_dir) if scratchpad_dir else Path("data/dexter/scratchpad")
         self.scratchpad_dir.mkdir(parents=True, exist_ok=True)
         self.scratchpad_path = self.scratchpad_dir / f"{session_id}.jsonl"
         self._entries = []
+
+    def start_session(self, goal: str, symbol: Optional[str] = None):
+        """Alias for log_start used by tests."""
+        self.log_start(goal, symbol)
 
     def log_start(self, goal: str, symbol: Optional[str] = None):
         """Log the start of a reasoning session.
@@ -37,8 +41,10 @@ class Scratchpad:
             goal: What the agent is trying to accomplish
             symbol: Optional token symbol being analyzed
         """
+        timestamp = datetime.now(timezone.utc).isoformat()
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": timestamp,
+            "timestamp": timestamp,
             "type": "start",
             "goal": goal,
             "symbol": symbol,
@@ -53,8 +59,10 @@ class Scratchpad:
             thought: The agent's reasoning at this step
             iteration: Which iteration of the loop (1-based)
         """
+        timestamp = datetime.now(timezone.utc).isoformat()
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": timestamp,
+            "timestamp": timestamp,
             "type": "reasoning",
             "thought": thought,
             "iteration": iteration,
@@ -70,8 +78,10 @@ class Scratchpad:
             args: Arguments passed to the tool
             result: Result from the tool (formatted as string)
         """
+        timestamp = datetime.now(timezone.utc).isoformat()
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": timestamp,
+            "timestamp": timestamp,
             "type": "action",
             "tool": tool,
             "args": args,
@@ -89,8 +99,10 @@ class Scratchpad:
             rationale: Why this decision was made
             confidence: 0-100 confidence score
         """
+        timestamp = datetime.now(timezone.utc).isoformat()
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": timestamp,
+            "timestamp": timestamp,
             "type": "decision",
             "action": action,
             "symbol": symbol,
@@ -100,21 +112,27 @@ class Scratchpad:
         self._append(entry)
         logger.info(f"Decision: {action} {symbol} (confidence: {confidence}%)")
 
-    def log_error(self, error: str, iteration: int):
+    def log_error(self, error_type: str, error_message: str = "", iteration: Optional[int] = None):
         """Log an error that occurred during reasoning.
 
         Args:
-            error: Error message
+            error_type: Error type/category
+            error_message: Error message
             iteration: Which iteration the error occurred on
         """
+        timestamp = datetime.now(timezone.utc).isoformat()
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": timestamp,
+            "timestamp": timestamp,
             "type": "error",
-            "error": error,
-            "iteration": iteration,
+            "error_type": error_type,
+            "error_message": error_message,
+            "error": error_message or error_type,
         }
+        if iteration is not None:
+            entry["iteration"] = iteration
         self._append(entry)
-        logger.error(f"Error on iteration {iteration}: {error}")
+        logger.error(f"Error on iteration {iteration}: {error_type} {error_message}")
 
     def _append(self, entry: Dict[str, Any]):
         """Append an entry to the scratchpad.
@@ -139,6 +157,20 @@ class Scratchpad:
         """
         return self._entries
 
+    @property
+    def entries(self) -> list:
+        """Public alias for entries."""
+        return self._entries
+
+    def save_to_disk(self) -> None:
+        """Write entries to disk as JSONL."""
+        try:
+            with open(self.scratchpad_path, "w") as f:
+                for entry in self._entries:
+                    f.write(json.dumps(entry) + "\n")
+        except IOError as e:
+            logger.warning(f"Failed to write scratchpad: {e}")
+
     def get_summary(self) -> str:
         """Get a human-readable summary of the reasoning process.
 
@@ -152,13 +184,13 @@ class Scratchpad:
             entry_type = entry.get("type", "unknown")
 
             if entry_type == "start":
-                lines.append(f"Goal: {entry.get('goal')}")
+                lines.append(f"START: {entry.get('goal')}")
                 if entry.get('symbol'):
                     lines.append(f"Symbol: {entry['symbol']}")
                 lines.append("")
 
             elif entry_type == "reasoning":
-                lines.append(f"[Iteration {entry.get('iteration')}] Reasoning:")
+                lines.append(f"[Iteration {entry.get('iteration')}] REASON:")
                 lines.append(f"  {entry.get('thought')}")
                 lines.append("")
 
@@ -168,13 +200,13 @@ class Scratchpad:
                 lines.append("")
 
             elif entry_type == "decision":
-                lines.append(f"[Decision] {entry.get('action')} {entry.get('symbol')}")
+                lines.append(f"[DECISION] {entry.get('action')} {entry.get('symbol')}")
                 lines.append(f"  Confidence: {entry.get('confidence')}%")
                 lines.append(f"  Rationale: {entry.get('rationale')}")
                 lines.append("")
 
             elif entry_type == "error":
-                lines.append(f"[ERROR] {entry.get('error')}")
+                lines.append(f"[ERROR] {entry.get('error_type')}: {entry.get('error_message')}")
                 lines.append("")
 
         return "\n".join(lines)

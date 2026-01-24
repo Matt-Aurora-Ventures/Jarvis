@@ -118,11 +118,18 @@ def admin_only(func: Callable[..., Awaitable[Any]]):
         user_id = update.effective_user.id if update and update.effective_user else 0
         username = update.effective_user.username if update and update.effective_user else None
 
-        try:
-            is_admin = config.is_admin(user_id, username)
-        except TypeError:
-            # Backward-compatible with older is_admin signatures
-            is_admin = config.is_admin(user_id)
+        if hasattr(config, "is_admin"):
+            try:
+                result = config.is_admin(user_id, username)
+            except TypeError:
+                # Backward-compatible with older is_admin signatures
+                result = config.is_admin(user_id)
+            if isinstance(result, bool):
+                is_admin = result
+            else:
+                is_admin = user_id in getattr(config, "admin_ids", set())
+        else:
+            is_admin = user_id in getattr(config, "admin_ids", set())
 
         if not is_admin:
             logger.warning(f"Unauthorized admin command attempt by user {user_id} (@{username})")

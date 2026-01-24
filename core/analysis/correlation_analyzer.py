@@ -505,6 +505,8 @@ class CorrelationAnalyzer:
         """
         Find pairs of assets with correlation above threshold.
 
+        Uses price-level correlation to better detect inverse trending pairs.
+
         Args:
             price_data: Dictionary of asset -> price series
             min_correlation: Minimum absolute correlation to include
@@ -513,13 +515,14 @@ class CorrelationAnalyzer:
         Returns:
             List of pairs with asset_a, asset_b, correlation
         """
-        matrix = self.calculate_correlation_matrix(price_data)
         assets = list(price_data.keys())
-        pairs = []
+        pairs: List[Dict[str, Any]] = []
 
         for i, asset_a in enumerate(assets):
+            series_a = price_data.get(asset_a, [])
             for asset_b in assets[i + 1:]:
-                corr = matrix.get(asset_a, {}).get(asset_b, 0.0)
+                series_b = price_data.get(asset_b, [])
+                corr = self.pearson_correlation(series_a, series_b)
 
                 if include_negative:
                     if abs(corr) >= min_correlation:

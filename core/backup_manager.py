@@ -96,7 +96,7 @@ class BackupManager:
 
     def _generate_backup_id(self, backup_type: str) -> str:
         """Generate unique backup ID"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         return f"{backup_type}_{timestamp}"
 
     def _get_file_checksum(self, file_path: Path) -> str:

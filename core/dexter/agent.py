@@ -14,19 +14,30 @@ import logging
 import os
 import json
 import uuid
-from enum import Enum
+from enum import Enum, EnumMeta
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
 
-class DecisionType(str, Enum):
+class _DecisionTypeMeta(EnumMeta):
+    """Custom EnumMeta to keep legacy iteration behavior."""
+    def __iter__(cls):
+        for name in ("BUY", "SELL", "HOLD", "UNKNOWN"):
+            yield cls.__members__[name]
+
+
+class DecisionType(str, Enum, metaclass=_DecisionTypeMeta):
     """Decision types for Dexter agent."""
     BUY = "BUY"
     SELL = "SELL"
     HOLD = "HOLD"
     UNKNOWN = "UNKNOWN"
+    TRADE_BUY = "TRADE_BUY"
+    TRADE_SELL = "TRADE_SELL"
+    ERROR = "ERROR"
+
 
 
 class ReActDecision:
@@ -34,25 +45,51 @@ class ReActDecision:
 
     def __init__(
         self,
-        action: str,
-        symbol: str,
-        confidence: float,
-        rationale: str,
+        decision: DecisionType = DecisionType.HOLD,
+        symbol: Optional[str] = None,
+        confidence: float = 0.0,
+        rationale: str = "",
         iterations: int = 0,
         tools_used: Optional[List[str]] = None,
         evidence: Optional[Dict[str, Any]] = None,
+        cost_usd: float = 0.0,
+        grok_sentiment_score: float = 0.0,
+        error: Optional[str] = None,
+        action: Optional[str] = None,
     ):
-        self.action = action
+        if action:
+            action_upper = action.upper()
+            action_map = {
+                "BUY": DecisionType.BUY,
+                "SELL": DecisionType.SELL,
+                "HOLD": DecisionType.HOLD,
+                "UNKNOWN": DecisionType.UNKNOWN,
+                "ERROR": DecisionType.ERROR,
+                "TRADE_BUY": DecisionType.TRADE_BUY,
+                "TRADE_SELL": DecisionType.TRADE_SELL,
+            }
+            decision = action_map.get(action_upper, decision)
+
+        self.decision = decision
         self.symbol = symbol
         self.confidence = confidence
         self.rationale = rationale
         self.iterations = iterations
         self.tools_used = tools_used or []
         self.evidence = evidence or {}
+        self.cost_usd = cost_usd
+        self.grok_sentiment_score = grok_sentiment_score
+        self.error = error
+
+    @property
+    def action(self) -> str:
+        """Backward-compatible action string."""
+        return self.decision.value if self.decision else ""
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
+            "decision": self.decision.value if self.decision else None,
             "action": self.action,
             "symbol": self.symbol,
             "confidence": self.confidence,
@@ -60,6 +97,9 @@ class ReActDecision:
             "iterations": self.iterations,
             "tools_used": self.tools_used,
             "evidence": self.evidence,
+            "cost_usd": self.cost_usd,
+            "grok_sentiment_score": self.grok_sentiment_score,
+            "error": self.error,
         }
 
 
@@ -97,13 +137,58 @@ Minimum confidence for BUY/SELL is 70%. Below that, default to HOLD.
 class DexterAgent:
     """ReAct agent for autonomous trading decisions."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    MAX_ITERATIONS = 15
+    MAX_COST_USD = 0.50
+    MIN_CONFIDENCE = 70.0
+
+    def __init__(
+        self,
+        grok_client: Optional[Any] = None,
+        sentiment_aggregator: Optional[Any] = None,
+        config: Optional[Any] = None,
+    ):
         """Initialize Dexter agent."""
         self.session_id = str(uuid.uuid4())[:8]
-        self.config = config or {}
-        self.model = self.config.get("model", "grok-3")
-        self.max_iterations = self.config.get("max_iterations", 15)
-        self.min_confidence = self.config.get("min_confidence", 70.0)
+
+        try:
+            from .config import DexterConfig
+        except Exception:
+            DexterConfig = None
+
+        # Allow legacy positional config usage
+        if config is None and DexterConfig is not None and isinstance(grok_client, DexterConfig):
+            config = grok_client
+            grok_client = None
+        elif config is None and isinstance(grok_client, dict):
+            config = grok_client
+            grok_client = None
+
+        if DexterConfig is not None and isinstance(config, DexterConfig):
+            self.config = config
+        elif isinstance(config, dict):
+            # Minimal dict-based config support
+            self.config = config
+        else:
+            self.config = DexterConfig() if DexterConfig is not None else {}
+
+        # Config-driven settings
+        if hasattr(self.config, "model"):
+            self.model = self.config.model
+            self.max_iterations = getattr(self.config, "max_iterations", self.MAX_ITERATIONS)
+            self.min_confidence = getattr(self.config, "min_confidence", self.MIN_CONFIDENCE)
+        else:
+            self.model = self.config.get("model", "grok-3") if isinstance(self.config, dict) else "grok-3"
+            self.max_iterations = self.config.get("max_iterations", self.MAX_ITERATIONS) if isinstance(self.config, dict) else self.MAX_ITERATIONS
+            self.min_confidence = self.config.get("min_confidence", self.MIN_CONFIDENCE) if isinstance(self.config, dict) else self.MIN_CONFIDENCE
+
+        self.grok_client = grok_client
+        self.sentiment_aggregator = sentiment_aggregator
+
+        self.iteration_count = 0
+        self.total_cost = 0.0
+        self.scratchpad: List[Dict[str, Any]] = []
+
+        # Legacy internal state
         self._iteration = 0
         self._cost = 0.0
         self._tools_used: List[str] = []
@@ -112,7 +197,7 @@ class DexterAgent:
         # Lazy load components
         self._scratchpad = None
         self._confidence_scorer = None
-        self._grok_client = None
+        self._grok_client = grok_client
 
     def _get_scratchpad(self):
         """Lazy load scratchpad."""
@@ -123,6 +208,39 @@ class DexterAgent:
             except ImportError:
                 self._scratchpad = MockScratchpad()
         return self._scratchpad
+
+    def _log_reasoning(self, thought: str, iteration: Optional[int] = None) -> None:
+        """Log a reasoning step to the in-memory scratchpad."""
+        entry = {
+            "type": "reasoning",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "thought": thought,
+        }
+        if iteration is not None:
+            entry["iteration"] = iteration
+        self.scratchpad.append(entry)
+
+    def _log_action(self, tool: str, args: Dict[str, Any], result: Any) -> None:
+        """Log a tool action to the in-memory scratchpad."""
+        entry = {
+            "type": "action",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "tool": tool,
+            "args": args,
+            "result": result,
+        }
+        self.scratchpad.append(entry)
+
+    def _log_error(self, error: str, iteration: Optional[int] = None) -> None:
+        """Log an error to the in-memory scratchpad."""
+        entry = {
+            "type": "error",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "error": error,
+        }
+        if iteration is not None:
+            entry["iteration"] = iteration
+        self.scratchpad.append(entry)
 
     def _get_confidence_scorer(self):
         """Lazy load confidence scorer."""
@@ -308,6 +426,46 @@ class DexterAgent:
             "source": "fallback"
         })
 
+    def _extract_sentiment_score(self, response: str) -> float:
+        """Extract sentiment score from Grok response."""
+        if not response:
+            return 50.0
+        import re
+        match = re.search(r"(SENTIMENT_SCORE|SENTIMENT)\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)", response, re.IGNORECASE)
+        if match:
+            try:
+                return float(match.group(2))
+            except ValueError:
+                return 50.0
+        return 50.0
+
+    def _extract_confidence(self, response: str) -> float:
+        """Extract confidence score from Grok response."""
+        if not response:
+            return 50.0
+        import re
+        match = re.search(r"CONFIDENCE\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)", response, re.IGNORECASE)
+        if match:
+            try:
+                return float(match.group(1))
+            except ValueError:
+                return 50.0
+        return 50.0
+
+    def _parse_recommendation(self, response: str) -> DecisionType:
+        """Parse recommendation from Grok response."""
+        if not response:
+            return DecisionType.HOLD
+        import re
+        upper = response.upper()
+        if re.search(r"\bBUY\b", upper):
+            return DecisionType.TRADE_BUY
+        if re.search(r"\bSELL\b", upper):
+            return DecisionType.TRADE_SELL
+        if re.search(r"\bHOLD\b", upper):
+            return DecisionType.HOLD
+        return DecisionType.HOLD
+
     def _parse_response(self, response: str) -> Dict[str, Any]:
         """Parse Grok response to extract action or decision."""
         result = {
@@ -449,6 +607,118 @@ Otherwise, gather more data."""
             "evidence": self._evidence,
             "cost": self._cost,
         }
+
+    async def analyze_trading_opportunity(
+        self,
+        symbol: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> ReActDecision:
+        """
+        Analyze a trading opportunity using Grok sentiment and aggregation.
+
+        Args:
+            symbol: Token symbol to analyze
+            context: Optional market context
+
+        Returns:
+            ReActDecision with decision, confidence, and rationale
+        """
+        self.iteration_count = 0
+        self.total_cost = 0.0
+        self.scratchpad = []
+        tools_used: List[str] = []
+        grok_score = 0.0
+        confidence = 50.0
+        recommendation = DecisionType.HOLD
+        rationale = ""
+        agg_score = None
+
+        for _ in range(self.MAX_ITERATIONS):
+            self.iteration_count += 1
+            self._log_reasoning(f"Analyzing {symbol}", iteration=self.iteration_count)
+
+            grok = self.grok_client
+
+            if grok is not None:
+                try:
+                    if hasattr(grok, "analyze_sentiment"):
+                        response = await grok.analyze_sentiment(symbol)
+                    elif hasattr(grok, "chat"):
+                        response = await grok.chat(system="Sentiment analysis", message=symbol)
+                    else:
+                        response = ""
+
+                    tools_used.append("sentiment_analyze")
+                    response_text = response
+                    if hasattr(response, "content"):
+                        response_text = getattr(response, "content", "")
+                    elif isinstance(response, dict) and "content" in response:
+                        response_text = response.get("content", "")
+
+                    self._log_action("sentiment_analyze", {"symbol": symbol}, response_text)
+
+                    grok_score = self._extract_sentiment_score(str(response_text))
+                    confidence = self._extract_confidence(str(response_text))
+                    recommendation = self._parse_recommendation(str(response_text))
+                    rationale = str(response_text).strip()
+                except Exception as e:
+                    self._log_error(str(e), iteration=self.iteration_count)
+                    return ReActDecision(
+                        decision=DecisionType.ERROR,
+                        symbol=symbol,
+                        confidence=0.0,
+                        rationale=str(e),
+                        iterations=self.iteration_count,
+                        tools_used=tools_used,
+                        cost_usd=self.total_cost,
+                        grok_sentiment_score=grok_score,
+                        error=str(e),
+                    )
+
+            if self.sentiment_aggregator and hasattr(self.sentiment_aggregator, "get_sentiment_score"):
+                try:
+                    agg_score = self.sentiment_aggregator.get_sentiment_score(symbol)
+                    tools_used.append("sentiment_aggregate")
+                    self._log_action("sentiment_aggregate", {"symbol": symbol}, agg_score)
+                except Exception as e:
+                    self._log_reasoning(f"Sentiment aggregator error: {e}", iteration=self.iteration_count)
+
+            decision = DecisionType.HOLD
+            if recommendation in (DecisionType.TRADE_BUY, DecisionType.TRADE_SELL):
+                if confidence >= self.MIN_CONFIDENCE:
+                    decision = recommendation
+                else:
+                    decision = DecisionType.HOLD
+                    if not rationale:
+                        rationale = f"Confidence {confidence:.1f} below threshold"
+            elif grok is None and agg_score is not None:
+                decision = DecisionType.TRADE_BUY if agg_score >= self.MIN_CONFIDENCE else DecisionType.HOLD
+
+            self._tools_used = tools_used
+            self._evidence = {"sentiment_aggregate": agg_score} if agg_score is not None else {}
+
+            return ReActDecision(
+                decision=decision,
+                symbol=symbol,
+                confidence=confidence,
+                rationale=rationale or "No clear signal",
+                iterations=self.iteration_count,
+                tools_used=tools_used,
+                cost_usd=self.total_cost,
+                grok_sentiment_score=grok_score,
+                evidence=self._evidence,
+            )
+
+        return ReActDecision(
+            decision=DecisionType.HOLD,
+            symbol=symbol,
+            confidence=50.0,
+            rationale="Max iterations reached",
+            iterations=self.iteration_count,
+            tools_used=tools_used,
+            cost_usd=self.total_cost,
+            grok_sentiment_score=grok_score,
+        )
 
     async def quick_sentiment(self, symbol: str) -> Dict[str, Any]:
         """Quick sentiment check without full ReAct loop."""

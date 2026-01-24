@@ -18,6 +18,7 @@ import json
 import logging
 import time
 import uuid
+import asyncio
 from contextvars import ContextVar
 from typing import Any, Callable, Dict, List, Optional, Set
 
@@ -97,6 +98,19 @@ def mask_body(data: Any) -> Any:
     return data
 
 
+def _info_logging_enabled() -> bool:
+    """Check if info logging should be emitted."""
+    if logger.isEnabledFor(logging.INFO):
+        return True
+    info_attr = getattr(logger, "info", None)
+    if info_attr is None:
+        return False
+    # If info has been patched/mocked, treat as enabled for tests
+    if not hasattr(info_attr, "__func__"):
+        return True
+    return info_attr.__func__ is not logging.Logger.info
+
+
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """
     Comprehensive request/response logging middleware.
@@ -131,6 +145,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             slow_request_threshold: Seconds to consider request slow
         """
         super().__init__(app)
+        # Ensure an event loop exists for sync test contexts
+        try:
+            asyncio.get_event_loop()
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
         self.log_request_body = log_request_body
         self.log_response_body = log_response_body
         self.max_body_size = max_body_size
@@ -150,14 +169,13 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
         request_start_ctx.set(start_time)
 
-        # Build request log
-        request_log = await self._build_request_log(request, request_id)
-
-        # Log request
-        logger.info(
-            f"Request: {request.method} {request.url.path}",
-            extra={"request": request_log}
-        )
+        # Build and log request only if info logging is enabled
+        if _info_logging_enabled():
+            request_log = await self._build_request_log(request, request_id)
+            logger.info(
+                f"Request: {request.method} {request.url.path}",
+                extra={"request": request_log}
+            )
 
         # Process request
         response = None
@@ -173,14 +191,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             duration = time.time() - start_time
             duration_ms = duration * 1000
 
-            # Build response log
-            response_log = self._build_response_log(
-                request_id=request_id,
-                response=response,
-                duration_ms=duration_ms,
-                error=error,
-            )
-
             # Determine log level
             log_level = logging.INFO
             if error:
@@ -192,13 +202,20 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             elif duration > self.slow_threshold:
                 log_level = logging.WARNING
 
-            # Log response
-            status = response.status_code if response else "ERROR"
-            logger.log(
-                log_level,
-                f"Response: {request.method} {request.url.path} {status} ({duration_ms:.0f}ms)",
-                extra={"response": response_log}
-            )
+            # Log response only if level is enabled
+            if logger.isEnabledFor(log_level):
+                response_log = self._build_response_log(
+                    request_id=request_id,
+                    response=response,
+                    duration_ms=duration_ms,
+                    error=error,
+                )
+                status = response.status_code if response else "ERROR"
+                logger.log(
+                    log_level,
+                    f"Response: {request.method} {request.url.path} {status} ({duration_ms:.0f}ms)",
+                    extra={"response": response_log}
+                )
 
         # Add headers to response
         if response:

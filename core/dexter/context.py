@@ -17,17 +17,35 @@ logger = logging.getLogger(__name__)
 class ContextManager:
     """Manages context memory with persistence and compaction."""
 
-    def __init__(self, session_id: str, max_tokens: int = 100000, data_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        session_id: str,
+        session_dir: Optional[Path] = None,
+        context_max_tokens: int = 100000,
+        max_tokens: Optional[int] = None,
+        data_dir: Optional[Path] = None,
+    ):
         """Initialize context manager.
 
         Args:
             session_id: Unique session identifier
-            max_tokens: Maximum tokens to keep in memory (approximate)
-            data_dir: Directory for persisted data (default: data/dexter/sessions)
+            session_dir: Optional directory for session data
+            context_max_tokens: Maximum tokens to keep in memory (approximate)
+            max_tokens: Legacy alias for context_max_tokens
+            data_dir: Base directory for persisted data (default: data/dexter/sessions)
         """
         self.session_id = session_id
-        self.max_tokens = max_tokens
-        self.data_dir = (data_dir or Path("data/dexter/sessions")) / session_id
+        if max_tokens is not None:
+            context_max_tokens = max_tokens
+        self.context_max_tokens = context_max_tokens
+        self.max_tokens = context_max_tokens
+
+        if session_dir is not None:
+            base_dir = Path(session_dir)
+        else:
+            base_dir = data_dir or Path("data/dexter/sessions")
+            base_dir = base_dir / session_id
+        self.data_dir = base_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self._full_data = {}  # Full market data
         self._summaries = []  # Compressed summaries (kept in memory)
@@ -58,7 +76,7 @@ class ContextManager:
         Returns:
             Human-readable summary of current context
         """
-        lines = ["=== Market Context ===", ""]
+        lines = ["=== Context Summary ===", ""]
 
         # Add summaries
         for summary in self._summaries[-3:]:  # Keep last 3 summaries
@@ -75,11 +93,21 @@ class ContextManager:
         self._summaries.append(summary)
         self._token_count += len(summary.split())  # Rough estimate
 
-        # Keep only last 3 summaries if exceeding token limit
-        if self._token_count > self.max_tokens / 4:  # When summaries exceed 25K tokens
-            self._summaries = self._summaries[-3:]
-            self._token_count = sum(len(s.split()) for s in self._summaries)
-            logger.info(f"Compacted context: {len(self._summaries)} summaries, ~{self._token_count} tokens")
+        if self.check_context_overflow():
+            self.compact_context()
+
+    def check_context_overflow(self) -> bool:
+        """Check whether context exceeds the configured token budget."""
+        return self._token_count > self.context_max_tokens
+
+    def compact_context(self) -> None:
+        """Compact summaries to fit within token budget."""
+        if not self._summaries:
+            return
+        # Keep only the most recent summaries
+        self._summaries = self._summaries[-3:]
+        self._token_count = sum(len(s.split()) for s in self._summaries)
+        logger.info(f"Compacted context: {len(self._summaries)} summaries, ~{self._token_count} tokens")
 
     def load_historical(self, data_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Load most recent historical data.
@@ -110,6 +138,11 @@ class ContextManager:
             Approximate token count
         """
         return self._token_count
+
+    @property
+    def summaries(self) -> list:
+        """Public alias for summaries list."""
+        return self._summaries
 
 
 __all__ = ["ContextManager"]
