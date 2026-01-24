@@ -92,11 +92,17 @@ BLOCKED_PATTERNS = [
 
 # Patterns that indicate a command (admin-only)
 COMMAND_PATTERNS = [
-    r"^(?:run|execute|do|make|create|add|fix|update|deploy)\s+",
-    r"^/\w+",  # Slash commands
-    r"trade\s+\d+",
-    r"buy\s+\d+",
-    r"sell\s+(?:all|\d+)",
+    # Only actual slash commands like /trade, /buy, /balance
+    r"^/\w+",
+    # Trading commands with explicit amounts: "trade 100 SOL", "buy 50 USDC"
+    r"\btrade\s+\d+",
+    r"\bbuy\s+\d+",
+    r"\bsell\s+(?:all|\d+)",
+    # Explicit deployment/admin commands with specific keywords
+    r"\b(?:deploy|restart|shutdown)\s+(?:bot|service|system)",
+    r"\b(?:pull|push)\s+(?:github|git|updates)",
+    # Removed overly broad patterns like "^(?:run|execute|do|make|create|add|fix|update)"
+    # These catch casual conversation like "do you think..." or "make sense"
 ]
 
 # Patterns for group interaction - topics JARVIS should engage with
@@ -324,9 +330,23 @@ User message:
 
 Respond briefly (under 200 words) in character as JARVIS:"""
 
-            # Truncate if too long
-            if len(combined_prompt) > 3000:
-                combined_prompt = combined_prompt[:3000]
+            # Truncate if too long - increased limit to preserve full personality
+            # JARVIS_VOICE_BIBLE is ~8600 chars, need higher limit to avoid cutting personality
+            if len(combined_prompt) > 10000:
+                # Smart truncation: keep core personality, truncate conversation context
+                voice_bible_marker = "TELEGRAM CHAT CONTEXT"
+                if voice_bible_marker in combined_prompt:
+                    parts = combined_prompt.split(voice_bible_marker, 1)
+                    # Keep voice bible intact, truncate context if needed
+                    context_part = voice_bible_marker + parts[1] if len(parts) > 1 else ""
+                    if len(parts[0]) + len(context_part) > 10000:
+                        # Truncate context part only
+                        max_context = 10000 - len(parts[0]) - 500  # Leave room
+                        context_part = context_part[:max_context] + "\n\n[context truncated]"
+                    combined_prompt = parts[0] + context_part
+                else:
+                    # Fallback: simple truncation
+                    combined_prompt = combined_prompt[:10000]
 
             # Build command
             cmd_args = [
