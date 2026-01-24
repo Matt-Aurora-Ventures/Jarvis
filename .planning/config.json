@@ -1,0 +1,15 @@
+{
+  "workflow_mode": "yolo",
+  "model_profile": "balanced",
+  "planning": {
+    "commit_docs": true,
+    "search_gitignored": false
+  },
+  "gates": {
+    "use_researcher": true,
+    "use_checker": true,
+    "use_verifier": true
+  },
+  "created_at": "2026-01-24T13:45:00Z",
+  "version": "1.0"
+}
