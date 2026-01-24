@@ -1896,21 +1896,18 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         if not use_api and (not cli_handler._claude_path or cli_handler._claude_path == "claude"):
             # Claude CLI not found - provide helpful message
+            cli_help = (
+                "?? <b>Claude CLI not configured</b>\n\n"
+                "The /code command requires Claude Code CLI to be installed.\n\n"
+                "<b>Setup (local only):</b>\n"
+                "<code>npm install -g @anthropic-ai/claude-code</code>\n\n"
+                "Note: This feature is designed for local development, not VPS deployment."
+            )
             await update.message.reply_text(
-                "⚠️ <b>Claude CLI not configured</b>\n\n"
-                "The /code command requires Claude Code CLI to be installed.
-
-"
-                "<b>Setup (local only):</b>
-"
-                "<code>npm install -g @anthropic-ai/claude-code</code>
-
-"
-                "Note: This feature is designed for local development, not VPS deployment.",
+                cli_help,
                 parse_mode=ParseMode.HTML
             )
             return
-
         user_id = update.effective_user.id if update.effective_user else 0
         username = update.effective_user.username or "admin" if update.effective_user else "admin"
         message = " ".join(context.args)
