@@ -25,6 +25,7 @@
 - [What Jarvis Does Today](#-what-jarvis-does-today)
 - [Core Capabilities](#-core-capabilities)
 - [Quick Start](#-quick-start)
+- [Documentation & Legacy Docs](#-documentation--legacy-docs)
 - [Repository Map](#repository-map)
 - [The Portable Brain](#-the-portable-brain)
 - [Trading Engine](#-trading-engine)
@@ -466,6 +467,20 @@ python bots/bags_intel/bags_intel_bot.py
 
 ---
 
+## 📚 Documentation & Legacy Docs
+
+Jarvis uses this root README as the **canonical source of truth** for product narrative,
+architecture overview, and deployment guidance.
+
+- **Canonical README**: [`README.md`](README.md)
+- **GitBook documentation**: [`docs/gitbook`](docs/gitbook/README.md)
+- **Legacy README snapshots** (archived for historical context): [`docs/history`](docs/history)
+
+If you encounter older links referencing `README_NEW.md` or `README_BACKUP.md`, use the
+archived copies and defer to this README for current guidance.
+
+---
+
 ## 📂 Repository Map
 
 ```
@@ -514,8 +529,8 @@ jarvis/
 │   ├── validate_autonomous_system.py # System validation
 │   └── db/migrate.py              # Schema versioning
 │
-└── systemd/
-    └── jarvis-supervisor.service  # Systemd service file
+├── deploy.sh                       # VPS deployment + systemd generator
+└── deployment/                     # Deployment resources & guides
 ```
 
 ---
@@ -1623,12 +1638,13 @@ ENABLE_STOP_LOSS_MONITORING=true
 #### Systemd Service (Linux)
 
 ```bash
-# Copy service file
-sudo cp systemd/jarvis-supervisor.service /etc/systemd/system/
+# Recommended: run the automated deploy script (creates systemd units)
+sudo bash deploy.sh
 
-# Enable and start
+# Or enable services created by deploy.sh
 sudo systemctl enable jarvis-supervisor
 sudo systemctl start jarvis-supervisor
+sudo systemctl enable jarvis-twitter jarvis-telegram
 
 # Check status
 sudo systemctl status jarvis-supervisor
@@ -1636,6 +1652,10 @@ sudo systemctl status jarvis-supervisor
 # View logs
 sudo journalctl -u jarvis-supervisor -f
 ```
+
+`deploy.sh` generates the systemd unit files in `/etc/systemd/system/` for
+`jarvis-supervisor`, `jarvis-twitter`, and `jarvis-telegram`. If you prefer a
+manual setup, use `deploy.sh` as the source of truth for unit definitions.
 
 #### Docker Deployment
 
