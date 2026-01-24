@@ -331,9 +331,11 @@ Most endpoints require authentication via:
             503: "SYS_002",
         }
         error_code = error_map.get(exc.status_code, "SYS_003")
+        payload = make_error_response(error_code, str(exc.detail))
+        payload["detail"] = str(exc.detail)
         return JSONResponse(
             status_code=exc.status_code,
-            content=make_error_response(error_code, str(exc.detail))
+            content=payload
         )
 
     @app.exception_handler(Exception)

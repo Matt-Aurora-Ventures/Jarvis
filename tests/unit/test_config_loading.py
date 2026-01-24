@@ -41,12 +41,25 @@ class TestEnvironmentVariableLoading:
             prefix in k for prefix in [
                 "TELEGRAM", "TREASURY", "JARVIS", "XAI", "ANTHROPIC",
                 "SOLANA", "HELIUS", "BIRDEYE", "GROQ", "OPENAI",
+                "OPENROUTER", "OLLAMA",
                 "API_", "LOG_", "DEBUG", "CORS", "JWT", "RATE_LIMIT",
                 "METRICS", "SENTRY"
             ]
         )]
         for var in env_vars:
             monkeypatch.delenv(var, raising=False)
+        # Prevent dotenv loaders from re-populating API keys during tests
+        for key in [
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "XAI_API_KEY",
+            "GROQ_API_KEY",
+            "OPENROUTER_API_KEY",
+            "BIRDEYE_API_KEY",
+        ]:
+            monkeypatch.setenv(key, "")
+        monkeypatch.setenv("OLLAMA_MODEL", "llama3.2")
+        monkeypatch.setenv("OLLAMA_URL", "http://localhost:11434")
         return monkeypatch
 
     def test_load_telegram_config_from_env(self, clean_env):
@@ -248,12 +261,26 @@ class TestConfigDefaults:
         """Clean environment for testing."""
         env_vars = [k for k in os.environ.keys() if any(
             prefix in k for prefix in [
-                "TELEGRAM", "TREASURY", "SOLANA", "XAI", "GROQ",
+                "TELEGRAM", "TREASURY", "SOLANA", "HELIUS", "BIRDEYE",
+                "XAI", "ANTHROPIC", "OPENAI", "GROQ", "OPENROUTER",
+                "OLLAMA",
                 "API_", "LOG_", "DEBUG", "CORS", "JWT", "RATE_LIMIT"
             ]
         )]
         for var in env_vars:
             monkeypatch.delenv(var, raising=False)
+        # Prevent dotenv loaders from re-populating API keys during tests
+        for key in [
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "XAI_API_KEY",
+            "GROQ_API_KEY",
+            "OPENROUTER_API_KEY",
+            "BIRDEYE_API_KEY",
+        ]:
+            monkeypatch.setenv(key, "")
+        monkeypatch.setenv("OLLAMA_MODEL", "llama3.2")
+        monkeypatch.setenv("OLLAMA_URL", "http://localhost:11434")
         return monkeypatch
 
     def test_telegram_config_defaults(self, clean_env):
@@ -845,12 +872,26 @@ class TestJarvisConfigDataclasses:
         """Clean environment for testing."""
         env_vars = [k for k in os.environ.keys() if any(
             prefix in k for prefix in [
-                "TELEGRAM", "TREASURY", "SOLANA", "XAI", "GROQ",
-                "OPENAI", "ANTHROPIC", "API_", "LOG_", "DEBUG"
+                "TELEGRAM", "TREASURY", "SOLANA", "HELIUS", "BIRDEYE",
+                "XAI", "ANTHROPIC", "OPENAI", "GROQ", "OPENROUTER",
+                "OLLAMA",
+                "API_", "LOG_", "DEBUG"
             ]
         )]
         for var in env_vars:
             monkeypatch.delenv(var, raising=False)
+        # Prevent dotenv loaders from re-populating API keys during tests
+        for key in [
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "XAI_API_KEY",
+            "GROQ_API_KEY",
+            "OPENROUTER_API_KEY",
+            "BIRDEYE_API_KEY",
+        ]:
+            monkeypatch.setenv(key, "")
+        monkeypatch.setenv("OLLAMA_MODEL", "llama3.2")
+        monkeypatch.setenv("OLLAMA_URL", "http://localhost:11434")
         return monkeypatch
 
     def test_jarvis_config_load_creates_all_sections(self, clean_env):

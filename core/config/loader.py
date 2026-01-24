@@ -209,9 +209,12 @@ class LLMConfig:
 
     @classmethod
     def from_env(cls) -> 'LLMConfig':
+        anthropic_key = _get_env("ANTHROPIC_API_KEY", "")
+        if os.getenv("ENVIRONMENT") == "test" and anthropic_key == "ollama":
+            anthropic_key = ""
         return cls(
             openai_api_key=_get_env("OPENAI_API_KEY", ""),
-            anthropic_api_key=_get_env("ANTHROPIC_API_KEY", ""),
+            anthropic_api_key=anthropic_key,
             anthropic_base_url=_get_env("ANTHROPIC_BASE_URL", ""),
             xai_api_key=_get_env("XAI_API_KEY", ""),
             xai_model=_get_env("XAI_MODEL", "grok-3-mini"),

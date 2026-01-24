@@ -11,11 +11,42 @@ Provides detailed subsystem health monitoring:
 """
 
 import logging
+import asyncio
+import os
 import time
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+# Imported at module load for test patching.
+from core import state  # noqa: F401
+
+try:
+    from core import birdeye  # noqa: F401
+except Exception:
+    birdeye = None
+
+try:
+    import requests  # noqa: F401
+except Exception:  # pragma: no cover - optional dependency
+    requests = None
+
+try:
+    from core import secrets  # noqa: F401
+except Exception:
+    secrets = None
+
+try:
+    from core.providers import check_provider_health  # noqa: F401
+except Exception:  # pragma: no cover - optional dependency
+    def check_provider_health():  # type: ignore[no-redef]
+        return {}
+
+try:
+    from core.cache.api_cache import APICache  # noqa: F401
+except Exception:
+    APICache = None
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +75,6 @@ def check_database_health() -> HealthStatus:
     """Check database connectivity and performance."""
     start = time.time()
     try:
-        from core import state
-
         # Try to read state
         state_data = state.read_state()
         latency_ms = int((time.time() - start) * 1000)
@@ -83,9 +112,9 @@ def check_birdeye_api() -> HealthStatus:
     """Check Birdeye API availability."""
     start = time.time()
     try:
-        from core import birdeye
-
         # Try a simple API call (get SOL price as a canary)
+        if not birdeye:
+            raise ImportError("Birdeye module not available")
         result = birdeye.get_token_price("So11111111111111111111111111111111111111112")
         latency_ms = int((time.time() - start) * 1000)
 
@@ -126,9 +155,9 @@ def check_jupiter_api() -> HealthStatus:
     """Check Jupiter aggregator API availability."""
     start = time.time()
     try:
-        import requests
-
         # Check Jupiter quote API (lightweight health check)
+        if not requests:
+            raise RuntimeError("Requests not available")
         response = requests.get(
             "https://quote-api.jup.ag/v6/quote",
             params={
@@ -154,14 +183,15 @@ def check_jupiter_api() -> HealthStatus:
                 message=f"Jupiter API returned {response.status_code}",
                 latency_ms=latency_ms
             )
-    except requests.Timeout:
-        return HealthStatus(
-            healthy=False,
-            status="degraded",
-            message="Jupiter API timeout",
-            latency_ms=5000
-        )
     except Exception as e:
+        timeout_cls = getattr(requests, "Timeout", None)
+        if (isinstance(timeout_cls, type) and isinstance(e, timeout_cls)) or e.__class__.__name__ == "Timeout":
+            return HealthStatus(
+                healthy=False,
+                status="degraded",
+                message="Jupiter API timeout",
+                latency_ms=5000
+            )
         latency_ms = int((time.time() - start) * 1000)
         logger.error(f"Jupiter health check failed: {e}")
         return HealthStatus(
@@ -176,9 +206,9 @@ def check_grok_api() -> HealthStatus:
     """Check Grok/X.AI API availability."""
     start = time.time()
     try:
-        from core import secrets
-
         # Check if key is configured
+        if not secrets:
+            raise RuntimeError("Secrets not available")
         grok_key = secrets.get_grok_key()
         if not grok_key:
             return HealthStatus(
@@ -222,8 +252,6 @@ def check_llm_providers() -> HealthStatus:
     """Check LLM provider health (Groq, OpenRouter, Ollama, etc.)."""
     start = time.time()
     try:
-        from core.providers import check_provider_health
-
         health = check_provider_health()
         latency_ms = int((time.time() - start) * 1000)
 
@@ -269,8 +297,6 @@ def check_telegram_bot() -> HealthStatus:
     """Check Telegram bot health."""
     start = time.time()
     try:
-        from core import state
-
         # Read bot state from daemon state
         daemon_state = state.read_state()
         component_status = daemon_state.get("component_status", {})
@@ -315,9 +341,6 @@ def check_twitter_bot() -> HealthStatus:
     """Check Twitter/X bot health."""
     start = time.time()
     try:
-        from core import state
-        import os
-
         # Check if X bot is enabled
         x_enabled = os.getenv("X_BOT_ENABLED", "true").lower() == "true"
 
@@ -375,8 +398,8 @@ def check_cache_status() -> HealthStatus:
     """Check cache system health."""
     start = time.time()
     try:
-        from core.cache.api_cache import APICache
-
+        if not APICache:
+            raise ImportError("Cache not available")
         cache = APICache()
 
         # Get cache stats
@@ -423,17 +446,25 @@ async def health_check():
     """
     start = time.time()
 
-    # Run all health checks
-    subsystems = {
-        "database": check_database_health(),
-        "birdeye_api": check_birdeye_api(),
-        "jupiter_api": check_jupiter_api(),
-        "grok_api": check_grok_api(),
-        "llm_providers": check_llm_providers(),
-        "telegram_bot": check_telegram_bot(),
-        "twitter_bot": check_twitter_bot(),
-        "cache": check_cache_status(),
+    # Run all health checks concurrently to avoid slow sequential calls
+    async def _run_check(name: str, func):
+        return name, await asyncio.to_thread(func)
+
+    checks = {
+        "database": check_database_health,
+        "birdeye_api": check_birdeye_api,
+        "jupiter_api": check_jupiter_api,
+        "grok_api": check_grok_api,
+        "llm_providers": check_llm_providers,
+        "telegram_bot": check_telegram_bot,
+        "twitter_bot": check_twitter_bot,
+        "cache": check_cache_status,
     }
+
+    results = await asyncio.gather(
+        *(_run_check(name, func) for name, func in checks.items())
+    )
+    subsystems = {name: health for name, health in results}
 
     # Determine overall health
     critical_subsystems = ["database", "llm_providers"]
