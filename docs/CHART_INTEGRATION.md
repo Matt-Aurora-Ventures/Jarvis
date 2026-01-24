@@ -66,7 +66,7 @@ def generate_price_chart(
 Located at: [tg_bot/handlers/demo.py:7164-7231](tg_bot/handlers/demo.py#L7164-L7231)
 
 ```python
-elif action == "view_chart":
+if action == "view_chart":
     # Generate and send BTC/SOL price chart
     btc_chart = generate_price_chart(prices=btc_prices, timestamps=timestamps, symbol="BTC")
     sol_chart = generate_price_chart(prices=sol_prices, timestamps=timestamps, symbol="SOL")

@@ -252,6 +252,28 @@ class DexterAgent:
                 self._confidence_scorer = MockConfidenceScorer()
         return self._confidence_scorer
 
+    def get_scratchpad(self) -> str:
+        """Return a human-readable scratchpad summary."""
+        if self.scratchpad:
+            lines = ["=== Dexter Scratchpad ===", ""]
+            for entry in self.scratchpad:
+                entry_type = entry.get("type", "unknown")
+                if entry_type == "reasoning":
+                    lines.append(f"[Iteration {entry.get('iteration')}] REASON:")
+                    lines.append(f"  {entry.get('thought')}")
+                elif entry_type == "action":
+                    lines.append(f"[Action] {entry.get('tool')}")
+                    lines.append(f"  Result: {str(entry.get('result', ''))[:200]}...")
+                elif entry_type == "error":
+                    lines.append(f"[ERROR] {entry.get('error')}")
+                lines.append("")
+            return "\n".join(lines).strip()
+
+        scratchpad = self._get_scratchpad()
+        if hasattr(scratchpad, "get_summary"):
+            return scratchpad.get_summary()
+        return ""
+
     async def _get_grok_client(self):
         """Get or initialize Grok client."""
         if self._grok_client is None:
@@ -570,17 +592,20 @@ class DexterAgent:
                     rationale = f"Insufficient confidence ({calibrated_confidence:.1f}%). {rationale}"
 
                 scratchpad.log_decision(decision, symbol, rationale, calibrated_confidence)
-
-                return {
+                iterations = self._iteration
+                result = {
                     "action": decision,
                     "symbol": symbol,
                     "confidence": calibrated_confidence,
                     "rationale": rationale,
-                    "iterations": self._iteration,
+                    "iterations": iterations,
                     "tools_used": self._tools_used,
                     "evidence": self._evidence,
                     "cost": self._cost,
                 }
+                # Reset loop state so successive analyses start clean.
+                self._iteration = 0
+                return result
 
             elif parsed["type"] == "action" and parsed["tool"]:
                 tool_result = await self._call_tool(parsed["tool"], parsed["args"])
@@ -596,8 +621,7 @@ Otherwise, gather more data."""
 
         logger.warning(f"Max iterations ({self.max_iterations}) reached for {symbol}")
         scratchpad.log_decision("HOLD", symbol, "Max iterations reached without confident decision", 50.0)
-
-        return {
+        result = {
             "action": "HOLD",
             "symbol": symbol,
             "confidence": 50.0,
@@ -607,6 +631,8 @@ Otherwise, gather more data."""
             "evidence": self._evidence,
             "cost": self._cost,
         }
+        self._iteration = 0
+        return result
 
     async def analyze_trading_opportunity(
         self,
@@ -642,7 +668,13 @@ Otherwise, gather more data."""
             if grok is not None:
                 try:
                     if hasattr(grok, "analyze_sentiment"):
-                        response = await grok.analyze_sentiment(symbol)
+                        try:
+                            response = await grok.analyze_sentiment(
+                                symbol,
+                                f"Analyze sentiment for {symbol}",
+                            )
+                        except TypeError:
+                            response = await grok.analyze_sentiment(symbol)
                     elif hasattr(grok, "chat"):
                         response = await grok.chat(system="Sentiment analysis", message=symbol)
                     else:
@@ -657,10 +689,17 @@ Otherwise, gather more data."""
 
                     self._log_action("sentiment_analyze", {"symbol": symbol}, response_text)
 
-                    grok_score = self._extract_sentiment_score(str(response_text))
-                    confidence = self._extract_confidence(str(response_text))
-                    recommendation = self._parse_recommendation(str(response_text))
-                    rationale = str(response_text).strip()
+                    response_str = str(response_text)
+                    grok_score = self._extract_sentiment_score(response_str)
+                    confidence = self._extract_confidence(response_str)
+                    recommendation = self._parse_recommendation(response_str)
+                    explicit_reco = "RECOMMENDATION" in response_str.upper()
+                    if recommendation == DecisionType.HOLD and not explicit_reco:
+                        if grok_score >= self.MIN_CONFIDENCE and confidence >= self.MIN_CONFIDENCE:
+                            recommendation = DecisionType.TRADE_BUY
+                        elif grok_score <= (100 - self.MIN_CONFIDENCE) and confidence >= self.MIN_CONFIDENCE:
+                            recommendation = DecisionType.TRADE_SELL
+                    rationale = response_str.strip()
                 except Exception as e:
                     self._log_error(str(e), iteration=self.iteration_count)
                     return ReActDecision(

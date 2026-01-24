@@ -99,6 +99,64 @@ class DatabaseConfig:
         return config
 
 
+class DatabasePool:
+    """Legacy SQLAlchemy-style pool wrapper expected by integration tests."""
+
+    def __init__(
+        self,
+        database_url: str,
+        pool_size: int = 5,
+        max_overflow: int = 10,
+        **kwargs: Any,
+    ) -> None:
+        self.database_url = database_url
+        self.pool_size = pool_size
+        self.max_overflow = max_overflow
+        self._engine = self._create_engine(**kwargs)
+
+    def _create_engine(self, **kwargs: Any) -> Any:
+        try:
+            from sqlalchemy import create_engine
+        except Exception as exc:  # pragma: no cover - optional dependency
+            raise ImportError("sqlalchemy is required for DatabasePool") from exc
+
+        return create_engine(
+            self.database_url,
+            pool_size=self.pool_size,
+            max_overflow=self.max_overflow,
+            pool_pre_ping=True,
+            **kwargs,
+        )
+
+    def health_check(self) -> bool:
+        """Return True if the engine can execute a simple query."""
+        conn = None
+        try:
+            conn = self._engine.connect() if hasattr(self._engine, "connect") else self._engine
+            if hasattr(conn, "execute"):
+                conn.execute("SELECT 1")
+            return True
+        except Exception:
+            return False
+        finally:
+            if conn is not None and hasattr(conn, "close"):
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    @contextmanager
+    def get_connection(self) -> Generator[Any, None, None]:
+        conn = self._engine.connect() if hasattr(self._engine, "connect") else self._engine
+        try:
+            yield conn
+        finally:
+            if hasattr(conn, "close"):
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
 class ConnectionWrapper:
     """Wrapper around database connection with metrics and health checking."""
 
