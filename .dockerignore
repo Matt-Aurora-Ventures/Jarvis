@@ -1,0 +1,140 @@
+# ============================================================================
+# JARVIS Docker Ignore File
+# ============================================================================
+# Excludes files from Docker build context for faster builds
+# ============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Documentation
+docs/_build/
+*.md
+!README.md
+!CLAUDE.md
+
+# Logs (will be mounted as volume)
+logs/
+*.log
+
+# Data directories (will be mounted as volume)
+data/
+*.db
+*.sqlite
+
+# Secrets (mounted separately)
+secrets/
+*.pem
+*.key
+*.crt
+
+# Node modules (for frontend builds)
+node_modules/
+npm-debug.log
+
+# Frontend build artifacts
+frontend/dist/
+frontend/node_modules/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local development
+*.local
+.envrc
+docker-compose.override.yml
+
+# Test fixtures and mocks
+tests/
+test_*.py
+*_test.py
+conftest.py
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Archive files
+*.tar
+*.tar.gz
+*.zip
+*.rar
+
+# Large model files
+*.onnx
+*.pt
+*.pth
+*.bin
+*.h5
+*.safetensors
+
+# Web demo (separate deployment)
+web_demo/
+
+# Thoughts and handoffs (internal)
+thoughts/
+
+# Playwright state
+*.json.bak
+playwright-state/

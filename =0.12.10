@@ -1,0 +1,19 @@
+Requirement already satisfied: pandas in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (2.3.3)
+Collecting mplfinance
+  Downloading mplfinance-0.12.10b0-py3-none-any.whl.metadata (19 kB)
+Requirement already satisfied: numpy>=1.26.0 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from pandas) (2.1.3)
+Requirement already satisfied: python-dateutil>=2.8.2 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from pandas) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from pandas) (2025.2)
+Requirement already satisfied: tzdata>=2022.7 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from pandas) (2025.3)
+Requirement already satisfied: matplotlib in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from mplfinance) (3.10.8)
+Requirement already satisfied: six>=1.5 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from python-dateutil>=2.8.2->pandas) (1.17.0)
+Requirement already satisfied: contourpy>=1.0.1 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from matplotlib->mplfinance) (1.3.3)
+Requirement already satisfied: cycler>=0.10 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from matplotlib->mplfinance) (0.12.1)
+Requirement already satisfied: fonttools>=4.22.0 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from matplotlib->mplfinance) (4.61.1)
+Requirement already satisfied: kiwisolver>=1.3.1 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from matplotlib->mplfinance) (1.4.9)
+Requirement already satisfied: packaging>=20.0 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from matplotlib->mplfinance) (25.0)
+Requirement already satisfied: pillow>=8 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from matplotlib->mplfinance) (12.1.0)
+Requirement already satisfied: pyparsing>=3 in c:\users\lucid\appdata\local\programs\python\python312\lib\site-packages (from matplotlib->mplfinance) (3.3.1)
+Downloading mplfinance-0.12.10b0-py3-none-any.whl (75 kB)
+Installing collected packages: mplfinance
+Successfully installed mplfinance-0.12.10b0

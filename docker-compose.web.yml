@@ -1,0 +1,214 @@
+# Jarvis Web Demo - Production Deployment
+# Separate from bot services to avoid conflicts
+# Deploy at jarvislife.io/demo or demo.jarvislife.io
+
+version: '3.8'
+
+services:
+  # PostgreSQL for web demo (separate from bot DB)
+  demo-postgres:
+    image: postgres:15-alpine
+    container_name: jarvis-demo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: jarvis_demo
+      POSTGRES_USER: jarvis_demo
+      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD}
+    volumes:
+      - demo_postgres_data:/var/lib/postgresql/data
+    networks:
+      - jarvis-web
+    # Internal port only - not exposed to host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jarvis_demo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for web demo sessions
+  demo-redis:
+    image: redis:7-alpine
+    container_name: jarvis-demo-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - demo_redis_data:/data
+    networks:
+      - jarvis-web
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API (FastAPI)
+  demo-backend:
+    build:
+      context: ./web_demo/backend
+      dockerfile: Dockerfile
+    container_name: jarvis-demo-backend
+    restart: unless-stopped
+    environment:
+      # App
+      APP_ENV: production
+      DEBUG: "false"
+
+      # Security
+      SECRET_KEY: ${DEMO_SECRET_KEY}
+      JWT_SECRET: ${DEMO_JWT_SECRET}
+
+      # Database
+      DATABASE_URL: postgresql://jarvis_demo:${DEMO_DB_PASSWORD}@demo-postgres:5432/jarvis_demo
+      REDIS_URL: redis://demo-redis:6379/0
+
+      # Solana
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL}
+      JUPITER_API_URL: https://quote-api.jup.ag/v6
+
+      # AI
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      XAI_API_KEY: ${XAI_API_KEY}
+      XAI_ENABLED: "true"
+      OLLAMA_ENABLED: "false"
+
+      # Bags API
+      BAGS_API_URL: http://bags-monitor:3000
+      BAGS_API_KEY: ${BAGS_API_KEY}
+
+      # State sharing with main bot (optional)
+      JARVIS_STATE_DIR: /app/shared_state
+
+      # CORS - adjust for your domain
+      CORS_ORIGINS: "https://jarvislife.io,https://demo.jarvislife.io,https://jarvislife.cloud"
+
+    depends_on:
+      demo-postgres:
+        condition: service_healthy
+      demo-redis:
+        condition: service_healthy
+    volumes:
+      - demo_wallets:/app/wallets
+      - demo_state:/app/shared_state
+      # Mount code for hot reload in development
+      # - ./web_demo/backend:/app
+    networks:
+      - jarvis-web
+    # Internal port - nginx will proxy
+    expose:
+      - "8000"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Bags Monitor API
+  bags-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.bags
+    container_name: jarvis-bags-monitor
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      BAGS_API_KEY: ${BAGS_API_KEY}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL}
+      HELIUS_API_KEY: ${HELIUS_API_KEY}
+      XAI_API_KEY: ${XAI_API_KEY}
+      BITQUERY_API_KEY: ${BITQUERY_API_KEY}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_BUY_BOT_CHAT_ID: ${TELEGRAM_BUY_BOT_CHAT_ID}
+      # Share state with main bots
+      STATE_DIR: /app/shared_state
+    volumes:
+      - bags_state:/app/shared_state
+      - bags_logs:/app/logs
+    networks:
+      - jarvis-web
+    expose:
+      - "3000"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Frontend (React - production build)
+  demo-frontend:
+    build:
+      context: ./web_demo/frontend
+      dockerfile: Dockerfile
+      args:
+        # Pass API URL for build-time env
+        VITE_API_URL: https://jarvislife.io/api
+    container_name: jarvis-demo-frontend
+    restart: unless-stopped
+    networks:
+      - jarvis-web
+    expose:
+      - "3000"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: jarvis-web-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/web.conf:/etc/nginx/conf.d/web.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - demo-backend
+      - demo-frontend
+      - bags-monitor
+    networks:
+      - jarvis-web
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+volumes:
+  demo_postgres_data:
+    driver: local
+  demo_redis_data:
+    driver: local
+  demo_wallets:
+    driver: local
+  demo_state:
+    driver: local
+  bags_state:
+    driver: local
+  bags_logs:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  jarvis-web:
+    name: jarvis-web-network
+    driver: bridge

@@ -1,0 +1,41 @@
+{
+  "log_dir": "data/logs/mcp",
+  "servers": [
+    {
+      "name": "filesystem",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/app"
+      ],
+      "env": {}
+    },
+    {
+      "name": "memory",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "env": {
+        "MEMORY_FILE_PATH": "/app/data/ai_memory/jarvis-memory.jsonl"
+      }
+    },
+    {
+      "name": "sequential-thinking",
+      "enabled": true,
+      "autostart": true,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "env": {}
+    }
+  ]
+}

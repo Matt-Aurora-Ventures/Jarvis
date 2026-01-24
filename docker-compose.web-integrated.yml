@@ -1,0 +1,363 @@
+# ============================================================================
+# Jarvis Web Demo - Integrated Deployment
+# ============================================================================
+# Extends docker-compose.bots.yml with web demo services
+# Uses same network, Ollama, and supervisor as Telegram bot
+# ============================================================================
+#
+# Usage:
+#   # Start bots first (includes Ollama)
+#   docker-compose -f docker-compose.bots.yml --profile with-ollama up -d
+#
+#   # Then start web demo
+#   docker-compose -f docker-compose.web-integrated.yml up -d
+#
+#   # Or start both together
+#   docker-compose -f docker-compose.bots.yml -f docker-compose.web-integrated.yml --profile with-ollama up -d
+#
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database (Web Demo Only)
+  # ---------------------------------------------------------------------------
+  web-postgres:
+    image: postgres:15-alpine
+    container_name: jarvis-web-postgres
+    hostname: web-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: jarvis_demo
+      POSTGRES_USER: jarvis_demo
+      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD}
+    volumes:
+      - web-postgres-data:/var/lib/postgresql/data
+    networks:
+      - jarvis-network  # SHARED NETWORK with bots
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jarvis_demo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Redis Cache (Web Demo Only)
+  # ---------------------------------------------------------------------------
+  web-redis:
+    image: redis:7-alpine
+    container_name: jarvis-web-redis
+    hostname: web-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - web-redis-data:/data
+    networks:
+      - jarvis-network  # SHARED NETWORK
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Backend API (FastAPI)
+  # ---------------------------------------------------------------------------
+  # Connects to SHARED Ollama instance at ollama:11434
+  # Uses same AI runtime config as Telegram bot
+  # ---------------------------------------------------------------------------
+  web-backend:
+    build:
+      context: ./web_demo/backend
+      dockerfile: Dockerfile
+    container_name: jarvis-web-backend
+    hostname: web-backend
+    restart: unless-stopped
+    environment:
+      # App
+      APP_ENV: production
+      DEBUG: "false"
+
+      # Security
+      SECRET_KEY: ${DEMO_SECRET_KEY}
+      JWT_SECRET: ${DEMO_JWT_SECRET}
+
+      # Database (internal)
+      DATABASE_URL: postgresql://jarvis_demo:${DEMO_DB_PASSWORD}@web-postgres:5432/jarvis_demo
+      REDIS_URL: redis://web-redis:6379/0
+
+      # Solana
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL}
+      HELIUS_API_KEY: ${HELIUS_API_KEY}
+      JUPITER_API_URL: https://quote-api.jup.ag/v6
+
+      # AI - SHARED OLLAMA INSTANCE
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      XAI_API_KEY: ${XAI_API_KEY}
+      XAI_ENABLED: "true"
+
+      # CRITICAL: Use shared Ollama container
+      OLLAMA_ENABLED: "true"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:7b}
+
+      # AI Runtime (same config as bots)
+      AI_RUNTIME_ENABLED: "true"
+      AI_RUNTIME_INTERVAL_SECONDS: "60"
+      AI_TIMEOUT_SECONDS: "30"
+      AI_MAX_TOKENS: "512"
+
+      # Shared AI Bus (optional - for supervisor integration)
+      AI_BUS_SOCKET: "/shared/ai_bus.sock"
+      AI_MEMORY_DB: "/shared/ai_memory.db"
+
+      # Bags API
+      BAGS_API_URL: http://bags-monitor:3000
+      BAGS_API_KEY: ${BAGS_API_KEY}
+
+      # State sharing with bots
+      JARVIS_STATE_DIR: /app/shared_state
+
+      # CORS
+      CORS_ORIGINS: "https://jarvislife.io,https://demo.jarvislife.io,https://jarvislife.cloud,http://localhost:3000"
+
+      # Supervisor integration
+      SUPERVISOR_ENABLED: "true"
+      COMPONENT_NAME: "web_demo_api"
+
+    depends_on:
+      web-postgres:
+        condition: service_healthy
+      web-redis:
+        condition: service_healthy
+      # Optionally wait for Ollama (if using with-ollama profile)
+      # ollama:
+      #   condition: service_started
+    volumes:
+      - web-wallets:/app/wallets
+      - jarvis-state:/app/shared_state  # SHARED with bots
+      - jarvis-data:/shared  # SHARED AI runtime data
+    networks:
+      - jarvis-network  # SHARED NETWORK - can access ollama:11434
+    expose:
+      - "8000"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Bags Monitor API
+  # ---------------------------------------------------------------------------
+  # Supervised component - integrates with main supervisor
+  # ---------------------------------------------------------------------------
+  bags-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.bags
+    container_name: jarvis-bags-monitor
+    hostname: bags-monitor
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+
+      # API Keys
+      BAGS_API_KEY: ${BAGS_API_KEY}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL}
+      HELIUS_API_KEY: ${HELIUS_API_KEY}
+      XAI_API_KEY: ${XAI_API_KEY}
+      BITQUERY_API_KEY: ${BITQUERY_API_KEY}
+
+      # Telegram notifications
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_BUY_BOT_CHAT_ID: ${TELEGRAM_BUY_BOT_CHAT_ID}
+
+      # AI - SHARED OLLAMA
+      OLLAMA_ENABLED: "true"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:7b}
+
+      # Shared state
+      STATE_DIR: /app/shared_state
+
+      # Supervisor integration
+      SUPERVISOR_ENABLED: "true"
+      COMPONENT_NAME: "bags_monitor"
+
+    volumes:
+      - bags-state:/app/state
+      - bags-logs:/app/logs
+      - jarvis-state:/app/shared_state  # SHARED
+    networks:
+      - jarvis-network  # SHARED NETWORK
+    expose:
+      - "3000"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Frontend (React - Production Build)
+  # ---------------------------------------------------------------------------
+  web-frontend:
+    build:
+      context: ./web_demo/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: https://jarvislife.io/api
+    container_name: jarvis-web-frontend
+    hostname: web-frontend
+    restart: unless-stopped
+    networks:
+      - jarvis-network  # SHARED NETWORK
+    expose:
+      - "80"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Nginx Reverse Proxy
+  # ---------------------------------------------------------------------------
+  # Routes traffic to demo frontend, API, and bags monitor
+  # Integrates with existing site
+  # ---------------------------------------------------------------------------
+  web-nginx:
+    image: nginx:alpine
+    container_name: jarvis-web-nginx
+    hostname: web-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/web.conf:/etc/nginx/conf.d/web.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/www:/var/www/html:ro  # Static site (if exists)
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - web-backend
+      - web-frontend
+      - bags-monitor
+    networks:
+      - jarvis-network  # SHARED NETWORK
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  # New volumes for web demo
+  web-postgres-data:
+    driver: local
+  web-redis-data:
+    driver: local
+  web-wallets:
+    driver: local
+  bags-state:
+    driver: local
+  bags-logs:
+    driver: local
+  nginx-logs:
+    driver: local
+
+  # SHARED volumes (defined in docker-compose.bots.yml)
+  jarvis-data:
+    external: true
+    name: jarvis-bots_jarvis-data
+  jarvis-state:
+    external: true
+    name: jarvis-bots_jarvis-state
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  # SHARED network with existing bots
+  jarvis-network:
+    external: true
+    name: jarvis-bot-network

@@ -1,0 +1,37 @@
+# ============================================================================
+# Jarvis Treasury Trading Bot - Isolated Container
+# ============================================================================
+FROM python:3.12-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Treasury-specific dependencies
+RUN pip install --no-cache-dir \
+    solana==0.36.11 \
+    base58==2.1.1 \
+    pynacl==1.6.2 \
+    bip-utils==2.10.0
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data /root/.lifeos /root/.lifeos/trading
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
+
+# Run treasury bot
+CMD ["python", "-u", "/app/bots/treasury/run_treasury.py"]

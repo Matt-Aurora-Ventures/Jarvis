@@ -3986,6 +3986,9 @@ Reply with a Solana token address to buy.
                 lines.append("")
 
                 if token_ref:
+                    # DexScreener chart link
+                    chart_url = pick.get("chart_url", f"https://dexscreener.com/solana/{token_ref}")
+
                     keyboard.append([
                         InlineKeyboardButton(
                             f"{theme.BUY} Buy {symbol}",
@@ -3993,7 +3996,7 @@ Reply with a Solana token address to buy.
                         ),
                         InlineKeyboardButton(
                             f"{theme.CHART} Chart",
-                            callback_data=f"demo:analyze:{token_ref}"
+                            url=chart_url
                         ),
                     ])
         else:
@@ -4755,10 +4758,17 @@ Reply with a Solana token address to buy.
 
             # Add buy/sell buttons for each token with CLEAR LABELS
             if token_ref:
+                # DexScreener chart link
+                chart_url = token.get("chart_url", f"https://dexscreener.com/solana/{address}")
+
                 keyboard.append([
                     InlineKeyboardButton(
                         f"💰 Buy 0.1 SOL of {symbol}",
                         callback_data=f"demo:bags_exec:{token_ref}:0.1:{default_tp_percent}:{default_sl_percent}"
+                    ),
+                    InlineKeyboardButton(
+                        f"{theme.CHART} Chart",
+                        url=chart_url
                     ),
                 ])
                 keyboard.append([
@@ -5558,6 +5568,9 @@ _Updated: {datetime.now(timezone.utc).strftime('%H:%M UTC')}_
 
         text = "\n".join(lines)
 
+        # DexScreener chart link
+        chart_url = token_data.get("chart_url", f"https://dexscreener.com/solana/{address}")
+
         keyboard = [
             [
                 InlineKeyboardButton(f"{theme.BUY} Buy 0.1 SOL", callback_data=f"demo:quick_buy:{token_ref}:0.1"),
@@ -5568,6 +5581,7 @@ _Updated: {datetime.now(timezone.utc).strftime('%H:%M UTC')}_
                 InlineKeyboardButton(f"{theme.BUY} Buy 5 SOL", callback_data=f"demo:quick_buy:{token_ref}:5"),
             ],
             [
+                InlineKeyboardButton(f"{theme.CHART} Chart", url=chart_url),
                 InlineKeyboardButton(f"{theme.REFRESH} Refresh Analysis", callback_data=f"demo:analyze:{token_ref}"),
             ],
             [

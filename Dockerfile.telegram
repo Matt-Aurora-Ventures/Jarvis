@@ -1,0 +1,40 @@
+# ============================================================================
+# Jarvis Telegram Bot - Isolated Container
+# ============================================================================
+FROM python:3.12-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Claude CLI (used by Telegram chat responder)
+RUN npm install -g @anthropic-ai/claude-code && npm cache clean --force
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Telegram-specific dependencies
+RUN pip install --no-cache-dir \
+    python-telegram-bot==21.9 \
+    apscheduler==3.10.4
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data /root/.lifeos
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
+
+# Run telegram bot
+CMD ["python", "-u", "/app/tg_bot/bot.py"]

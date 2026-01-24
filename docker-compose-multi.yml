@@ -1,0 +1,454 @@
+# ============================================================================
+# JARVIS Multi-Container Architecture
+# ============================================================================
+# Each bot runs in its own isolated container for maximum reliability
+# ============================================================================
+#
+# Usage:
+#   docker-compose -f docker-compose-multi.yml up -d
+#   docker-compose -f docker-compose-multi.yml logs -f <service>
+#   docker-compose -f docker-compose-multi.yml down
+#
+# Start with monitoring:
+#   docker-compose -f docker-compose-multi.yml --profile monitoring up -d
+#
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # ==========================================================
+  # CORE: Supervisor (Lightweight Orchestrator)
+  # ==========================================================
+  supervisor:
+    build:
+      context: .
+      dockerfile: Dockerfile.supervisor
+    container_name: jarvis-supervisor
+    hostname: jarvis-supervisor
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HEALTH_PORT=8080
+      - MCP_AUTO_START=${MCP_AUTO_START:-false}
+      - JARVIS_MCP_CONFIG=${JARVIS_MCP_CONFIG:-/app/config/mcp.docker.json}
+    volumes:
+      - jarvis-data:/app/data
+      - jarvis-logs:/app/logs
+      - ./secrets:/app/secrets:ro
+      - ./config:/app/config:ro
+      - jarvis-state:/root/.lifeos
+    ports:
+      - "${HEALTH_PORT:-8080}:8080"
+    networks:
+      - jarvis-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ==========================================================
+  # TELEGRAM BOT (Main Interface)
+  # ==========================================================
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.telegram
+    container_name: jarvis-telegram-bot
+    hostname: jarvis-telegram
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+    environment:
+      - PYTHONPATH=/app
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_ADMIN_IDS=${TELEGRAM_ADMIN_IDS}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
+      - JARVIS_ALLOW_REMOTE_ANTHROPIC=${JARVIS_ALLOW_REMOTE_ANTHROPIC:-false}
+      - OLLAMA_URL=${OLLAMA_URL:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - HELIUS_API_KEY=${HELIUS_API_KEY:-}
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - jarvis-data:/app/data
+      - jarvis-logs:/app/logs
+      - ./secrets:/app/secrets:ro
+      - jarvis-state:/root/.lifeos
+    networks:
+      - jarvis-network
+    depends_on:
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "3"
+
+  # ==========================================================
+  # BUY TRACKER BOT (KR8TIV Monitoring)
+  # ==========================================================
+  buy-tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile.buy-tracker
+    container_name: jarvis-buy-tracker
+    hostname: jarvis-buy-tracker
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+    environment:
+      - PYTHONPATH=/app
+      - BUY_BOT_TELEGRAM_TOKEN=${BUY_BOT_TELEGRAM_TOKEN:-${TELEGRAM_BOT_TOKEN}}
+      - TELEGRAM_BUY_BOT_CHAT_ID=${TELEGRAM_BUY_BOT_CHAT_ID}
+      - HELIUS_API_KEY=${HELIUS_API_KEY:-}
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
+      - JARVIS_ALLOW_REMOTE_ANTHROPIC=${JARVIS_ALLOW_REMOTE_ANTHROPIC:-false}
+      - OLLAMA_URL=${OLLAMA_URL:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - OLLAMA_TWITTER_MODEL=${OLLAMA_TWITTER_MODEL:-}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - jarvis-data:/app/data
+      - jarvis-logs:/app/logs
+      - ./secrets:/app/secrets:ro
+      - jarvis-state:/root/.lifeos
+      - buy-tracker-positions:/app/bots/buy_tracker
+    networks:
+      - jarvis-network
+    depends_on:
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "3"
+
+  # ==========================================================
+  # TWITTER/X AUTONOMOUS BOT
+  # ==========================================================
+  twitter-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.twitter
+    container_name: jarvis-twitter-bot
+    hostname: jarvis-twitter
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    environment:
+      - PYTHONPATH=/app
+      - X_BOT_ENABLED=${X_BOT_ENABLED:-true}
+      - X_API_KEY=${X_API_KEY:-}
+      - X_API_SECRET=${X_API_SECRET:-}
+      - X_ACCESS_TOKEN=${X_ACCESS_TOKEN:-}
+      - X_ACCESS_SECRET=${X_ACCESS_SECRET:-}
+      - TWITTER_API_KEY=${TWITTER_API_KEY:-}
+      - TWITTER_API_SECRET=${TWITTER_API_SECRET:-}
+      - TWITTER_BEARER_TOKEN=${TWITTER_BEARER_TOKEN:-}
+      - JARVIS_ACCESS_TOKEN=${JARVIS_ACCESS_TOKEN:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
+      - JARVIS_ALLOW_REMOTE_ANTHROPIC=${JARVIS_ALLOW_REMOTE_ANTHROPIC:-false}
+      - OLLAMA_URL=${OLLAMA_URL:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - OLLAMA_TWITTER_MODEL=${OLLAMA_TWITTER_MODEL:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_BUY_BOT_CHAT_ID=${TELEGRAM_BUY_BOT_CHAT_ID}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - jarvis-data:/app/data
+      - jarvis-logs:/app/logs
+      - ./secrets:/app/secrets:ro
+      - jarvis-state:/root/.lifeos
+      - twitter-state:/app/bots/twitter
+    networks:
+      - jarvis-network
+    depends_on:
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "3"
+
+  # ==========================================================
+  # TREASURY TRADING BOT
+  # ==========================================================
+  treasury:
+    build:
+      context: .
+      dockerfile: Dockerfile.treasury
+    container_name: jarvis-treasury
+    hostname: jarvis-treasury
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 3G
+    environment:
+      - PYTHONPATH=/app
+      - TREASURY_LIVE_MODE=${TREASURY_LIVE_MODE:-false}
+      - LIFEOS_KILL_SWITCH=${LIFEOS_KILL_SWITCH:-false}
+      - HELIUS_API_KEY=${HELIUS_API_KEY:-}
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-}
+      - TREASURY_WALLET_PATH=${TREASURY_WALLET_PATH:-}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - jarvis-data:/app/data
+      - jarvis-logs:/app/logs
+      - ./secrets:/app/secrets:ro
+      - jarvis-state:/root/.lifeos
+      - treasury-state:/root/.lifeos/trading
+    networks:
+      - jarvis-network
+    depends_on:
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "3"
+
+  # ==========================================================
+  # SENTIMENT REPORTER
+  # ==========================================================
+  sentiment-reporter:
+    build:
+      context: .
+      dockerfile: Dockerfile.sentiment
+    container_name: jarvis-sentiment-reporter
+    hostname: jarvis-sentiment
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    environment:
+      - PYTHONPATH=/app
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_BUY_BOT_CHAT_ID=${TELEGRAM_BUY_BOT_CHAT_ID}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - HELIUS_API_KEY=${HELIUS_API_KEY:-}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - jarvis-data:/app/data
+      - jarvis-logs:/app/logs
+      - ./secrets:/app/secrets:ro
+      - jarvis-state:/root/.lifeos
+    networks:
+      - jarvis-network
+    depends_on:
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ==========================================================
+  # BAGS.FM INTEL MONITOR (Optional)
+  # ==========================================================
+  bags-intel:
+    build:
+      context: .
+      dockerfile: Dockerfile.bags
+    container_name: jarvis-bags-intel
+    hostname: jarvis-bags
+    restart: always
+    profiles:
+      - full
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    environment:
+      - PYTHONPATH=/app
+      - BAGS_INTEL_ENABLED=${BAGS_INTEL_ENABLED:-false}
+      - BITQUERY_API_KEY=${BITQUERY_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_BUY_BOT_CHAT_ID=${TELEGRAM_BUY_BOT_CHAT_ID}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - jarvis-data:/app/data
+      - jarvis-logs:/app/logs
+      - ./secrets:/app/secrets:ro
+      - jarvis-state:/root/.lifeos
+    networks:
+      - jarvis-network
+    depends_on:
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ==========================================================
+  # REDIS (Shared Cache & State)
+  # ==========================================================
+  redis:
+    image: redis:7-alpine
+    container_name: jarvis-redis
+    hostname: jarvis-redis
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 200mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    networks:
+      - jarvis-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================
+  # PROMETHEUS (Metrics - Optional)
+  # ==========================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: jarvis-prometheus
+    hostname: jarvis-prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+    ports:
+      - "9090:9090"
+    networks:
+      - jarvis-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================
+  # GRAFANA (Dashboards - Optional)
+  # ==========================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: jarvis-grafana
+    hostname: jarvis-grafana
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=${GRAFANA_URL:-http://localhost:3001}
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - jarvis-network
+    depends_on:
+      - prometheus
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ==========================================================
+# NAMED VOLUMES
+# ==========================================================
+volumes:
+  jarvis-data:
+    driver: local
+  jarvis-logs:
+    driver: local
+  jarvis-state:
+    driver: local
+  buy-tracker-positions:
+    driver: local
+  twitter-state:
+    driver: local
+  treasury-state:
+    driver: local
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+# ==========================================================
+# NETWORKS
+# ==========================================================
+networks:
+  jarvis-network:
+    name: jarvis-multi-network
+    driver: bridge
