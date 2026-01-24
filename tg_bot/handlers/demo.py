@@ -9666,13 +9666,22 @@ def validate_buy_amount(amount: float) -> tuple:
 
 
 @error_handler
-@admin_only
 async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages when awaiting token input or watchlist add."""
     text = update.message.text.strip()
 
     # Run TP/SL/trailing stop checks for demo positions (throttled)
     await _process_demo_exit_checks(update, context)
+
+    # Early return if not awaiting any demo input - let message pass to other handlers
+    if not any([
+        context.user_data.get("awaiting_custom_buy_amount"),
+        context.user_data.get("awaiting_watchlist_token"),
+        context.user_data.get("awaiting_wallet_import"),
+        context.user_data.get("awaiting_token"),
+        context.user_data.get("awaiting_token_search"),
+    ]):
+        return
 
     # =========================================================================
     # Handle Custom Buy Amount Input (US-031)
