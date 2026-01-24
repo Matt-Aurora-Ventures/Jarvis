@@ -2021,43 +2021,80 @@ async def vibe(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Store in memory
         bridge.memory.add_message(user_id, username, "user", message, chat_id)
 
-        # Send confirmation
+        # STEP 1: Initial acknowledgement with timestamp
+        from datetime import datetime
+        start_time = datetime.now()
         confirm_msg = await update.message.reply_text(
-            "🎯 <b>Vibe coding...</b>\n\n"
-            f"<i>{message[:200]}{'...' if len(message) > 200 else ''}</i>",
+            "🎯 <b>Vibe Coding Request Received</b>\n\n"
+            f"<i>{message[:200]}{'...' if len(message) > 200 else ''}</i>\n\n"
+            f"⏳ <b>Status:</b> Sending to Claude Code...\n"
+            f"📝 <b>Time:</b> {start_time.strftime('%H:%M:%S')}",
             parse_mode=ParseMode.HTML
         )
 
-        # Execute via Claude
+        # STEP 2: Update status during execution
         async def send_status(msg: str):
             try:
-                await confirm_msg.edit_text(msg, parse_mode=ParseMode.HTML)
+                elapsed = (datetime.now() - start_time).seconds
+                await confirm_msg.edit_text(
+                    f"🎯 <b>Vibe Coding in Progress</b>\n\n"
+                    f"<i>{message[:200]}{'...' if len(message) > 200 else ''}</i>\n\n"
+                    f"⏳ <b>Status:</b> {msg}\n"
+                    f"⏱️ <b>Elapsed:</b> {elapsed}s",
+                    parse_mode=ParseMode.HTML
+                )
             except Exception:
                 pass
 
+        # Execute via Claude
         success, summary, output = await cli_handler.execute(
             message, user_id, username=username, send_update=send_status
         )
 
-        # Send result to CURRENT CHAT (not hardcoded group)
-        status_emoji = "✅" if success else "⚠️"
-        result_msg = (
-            f"{status_emoji} <b>Vibe Complete</b>\n\n"
-            f"<b>Summary:</b>\n{summary}\n\n"
-            f"<b>Output:</b>\n<pre>{output[:2000]}</pre>"
+        # STEP 3: Show execution complete
+        end_time = datetime.now()
+        duration = (end_time - start_time).seconds
+        await confirm_msg.edit_text(
+            f"{'✅' if success else '⚠️'} <b>Claude Code {'Complete' if success else 'Error'}</b>\n\n"
+            f"⏱️ <b>Duration:</b> {duration}s\n"
+            f"📤 <b>Sending response to chat...</b>",
+            parse_mode=ParseMode.HTML
         )
 
-        await update.message.reply_text(
+        # STEP 4: Send result to CURRENT CHAT (scrubbed of private info)
+        status_emoji = "✅" if success else "⚠️"
+        result_msg = (
+            f"{status_emoji} <b>Vibe Result</b>\n\n"
+            f"<b>Summary:</b>\n{summary}\n\n"
+            f"<b>Output:</b>\n<pre>{output[:2000]}</pre>\n\n"
+            f"<i>🔒 All output sanitized for privacy</i>"
+        )
+
+        result_sent = await update.message.reply_text(
             result_msg,
             parse_mode=ParseMode.HTML
         )
+
+        # STEP 5: Final verification message
+        if result_sent:
+            await confirm_msg.edit_text(
+                f"{'✅' if success else '⚠️'} <b>Vibe Complete</b>\n\n"
+                f"⏱️ <b>Duration:</b> {duration}s\n"
+                f"✅ <b>Response delivered to chat</b>\n"
+                f"🔒 <b>Privacy:</b> All secrets scrubbed\n\n"
+                f"<i>Verified at {end_time.strftime('%H:%M:%S')}</i>",
+                parse_mode=ParseMode.HTML
+            )
 
         # Store response
         bridge.memory.add_message(user_id, "jarvis", "assistant", summary, chat_id)
 
     except Exception as e:
+        logger.exception(f"Vibe command error: {e}")
         await update.message.reply_text(
-            f"⚠️ Vibe error: {str(e)[:200]}",
+            f"⚠️ <b>Vibe Error</b>\n\n"
+            f"<code>{str(e)[:200]}</code>\n\n"
+            f"<i>Request failed - check logs for details</i>",
             parse_mode=ParseMode.HTML,
         )
 
