@@ -3,7 +3,10 @@
 
 from .wallet import SecureWallet, WalletManager, WalletInfo
 from .jupiter import JupiterClient, SwapQuote, SwapResult, LimitOrderManager
-from .trading import TradingEngine, Position, TradeDirection, RiskLevel, TradeReport
+from .trading import (
+    TradingEngine, Position, TradeDirection, RiskLevel, TradeReport,
+    TreasuryTrader, _SimpleWallet, TradeStatus
+)
 from .telegram_ui import TradingUI
 from .backtest import SentimentBacktester, BacktestResult
 
@@ -23,6 +26,9 @@ __all__ = [
     'TradeDirection',
     'RiskLevel',
     'TradeReport',
+    'TreasuryTrader',
+    '_SimpleWallet',
+    'TradeStatus',
     # UI
     'TradingUI',
     # Backtest

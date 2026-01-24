@@ -52,6 +52,13 @@ from tg_bot.handlers.demo.demo_orders import (
     _process_demo_exit_checks,
 )
 
+# Import callback router (Phase 2 refactoring)
+from tg_bot.handlers.demo.demo_callbacks import (
+    CallbackRouter,
+    DemoContextLoader,
+    get_callback_router,
+)
+
 __all__ = [
     # Main handlers (from legacy)
     "demo",
@@ -80,4 +87,8 @@ __all__ = [
     # Orders (modular)
     "_background_tp_sl_monitor",
     "_process_demo_exit_checks",
+    # Callback router (Phase 2)
+    "CallbackRouter",
+    "DemoContextLoader",
+    "get_callback_router",
 ]
