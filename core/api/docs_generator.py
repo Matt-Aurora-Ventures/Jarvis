@@ -368,6 +368,17 @@ class EndpointDiscovery:
                                     validation["minimum"] = val
                                 elif attr == "le":
                                     validation["maximum"] = val
+                    # Pydantic v2 stores constraints in metadata
+                    if hasattr(default_val, "metadata"):
+                        for meta in default_val.metadata:
+                            for attr in ("ge", "gt", "le", "lt", "min_length", "max_length", "regex"):
+                                val = getattr(meta, attr, None)
+                                if val is not None and attr not in validation:
+                                    validation[attr] = val
+                                    if attr == "ge":
+                                        validation["minimum"] = val
+                                    elif attr == "le":
+                                        validation["maximum"] = val
                 else:
                     default_value = default_val
                     description = ""
@@ -661,7 +672,8 @@ class DocsGenerator:
     def export_json(self, app: FastAPI, indent: int = 2) -> str:
         """Export OpenAPI spec as JSON."""
         spec = self.generate_openapi_spec(app)
-        return json.dumps(spec, indent=indent)
+        spec = _clean_schema(spec)
+        return json.dumps(spec, indent=indent, default=_json_serializable)
 
     def export_yaml(self, app: FastAPI) -> str:
         """Export OpenAPI spec as YAML."""
@@ -669,10 +681,10 @@ class DocsGenerator:
             import yaml
         except ImportError:
             # Fallback to simple YAML-like format
-            spec = self.generate_openapi_spec(app)
+            spec = _clean_schema(self.generate_openapi_spec(app))
             return self._dict_to_yaml(spec)
 
-        spec = self.generate_openapi_spec(app)
+        spec = _clean_schema(self.generate_openapi_spec(app))
         return yaml.dump(spec, default_flow_style=False, sort_keys=False)
 
     def _dict_to_yaml(self, d: Dict, indent: int = 0) -> str:
@@ -699,7 +711,7 @@ class DocsGenerator:
 
     def export_html(self, app: FastAPI) -> str:
         """Export documentation as HTML."""
-        spec = self.generate_openapi_spec(app)
+        spec = _clean_schema(self.generate_openapi_spec(app))
 
         html_template = """<!DOCTYPE html>
 <html lang="en">
@@ -771,7 +783,7 @@ class DocsGenerator:
 
     def export_markdown(self, app: FastAPI) -> str:
         """Export documentation as Markdown."""
-        spec = self.generate_openapi_spec(app)
+        spec = _clean_schema(self.generate_openapi_spec(app))
         lines = []
 
         # Title

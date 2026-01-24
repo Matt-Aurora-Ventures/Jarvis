@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = ROOT / "data" / "jarvis.db"
+_INITIAL_DATABASE_URL = os.environ.get("DATABASE_URL")
 
 
 @dataclass
@@ -70,6 +71,10 @@ class DatabaseConfig:
     def from_env(cls) -> 'DatabaseConfig':
         """Load configuration from environment."""
         url = os.getenv("DATABASE_URL", "")
+        if os.getenv("ENVIRONMENT") == "test":
+            # Ignore a pre-set DATABASE_URL in test runs unless it's been overridden.
+            if url and url == _INITIAL_DATABASE_URL:
+                url = ""
 
         config = cls()
 

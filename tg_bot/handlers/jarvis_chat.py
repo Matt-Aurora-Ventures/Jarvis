@@ -201,7 +201,7 @@ Be helpful, data-driven, and concise.
 """
 
         response = client.chat.completions.create(
-            model="grok-2-1212",
+            model="grok-3",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": message}
