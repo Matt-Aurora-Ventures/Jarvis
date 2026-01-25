@@ -205,6 +205,10 @@ def reflect_daily() -> Dict[str, Any]:
         logger.warning(f"Failed to archive logs: {e}")
         archive_stats = {"archived": 0, "compressed": 0}
 
+    # Step 7: Detect contradictions
+    contradictions = detect_contradictions()
+    if contradictions:
+        logger.warning(f"Detected {len(contradictions)} contradictions - flagged for review")
     # Calculate duration
     duration = time.time() - start_time
 
@@ -219,6 +223,13 @@ def reflect_daily() -> Dict[str, Any]:
     state["total_reflections"] = state.get("total_reflections", 0) + 1
     state["total_facts_processed"] = state.get("total_facts_processed", 0) + len(facts)
 
+    # Store contradictions in reflect state for visibility
+    if contradictions:
+        state["contradictions"] = contradictions
+        state["contradictions_found"] = len(contradictions)
+    else:
+        state["contradictions_found"] = 0
+
     save_reflect_state(state)
 
     logger.info(f"Daily reflection completed. Processed {len(facts)} facts in {duration:.2f}s")
@@ -230,6 +241,7 @@ def reflect_daily() -> Dict[str, Any]:
         "entity_updates_queued": entity_updates_queued,
         "preferences_evolved": pref_stats.get("preferences_evolved", 0),
         "logs_archived": archive_stats.get("archived", 0),
+        "contradictions_found": len(contradictions),
     }
 
 
