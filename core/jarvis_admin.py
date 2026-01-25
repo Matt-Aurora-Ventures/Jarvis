@@ -556,6 +556,45 @@ class JarvisAdmin:
             conn.commit()
             conn.close()
 
+    def get_user_reputation(self, user_id: int) -> dict:
+        """Get user reputation info for spam decision context."""
+        user = self.get_user(user_id)
+        if not user:
+            return {
+                "is_trusted": False,
+                "clean_messages": 0,
+                "warning_count": 0,
+                "reputation_score": 0.0,
+                "auto_trust_eligible": False
+            }
+
+        # Calculate reputation score (0-100)
+        # Clean messages add points, warnings subtract
+        clean_messages = max(0, user.message_count - (user.warning_count * 5))
+        reputation_score = min(100, clean_messages * 10 - user.warning_count * 20)
+
+        # Auto-trust threshold: 3+ clean messages with 0 warnings
+        auto_trust_eligible = clean_messages >= 3 and user.warning_count == 0
+
+        return {
+            "is_trusted": user.is_trusted,
+            "clean_messages": clean_messages,
+            "warning_count": user.warning_count,
+            "reputation_score": max(0, reputation_score),
+            "auto_trust_eligible": auto_trust_eligible
+        }
+
+    def maybe_auto_trust(self, user_id: int) -> bool:
+        """Promote user to trusted if they meet auto-trust criteria. Returns True if promoted."""
+        reputation = self.get_user_reputation(user_id)
+
+        if reputation["auto_trust_eligible"] and not reputation["is_trusted"]:
+            self.trust_user(user_id)
+            logger.info(f"AUTO-TRUST: user={user_id} promoted after {reputation['clean_messages']} clean messages")
+            return True
+
+        return False
+
     def calculate_trust_score(self, user_id: int) -> Dict:
         """
         Calculate a comprehensive trust score for a user.
@@ -745,8 +784,13 @@ class JarvisAdmin:
                 confidence += 0.2 * user.warning_count
                 reasons.append(f"prior warnings: {user.warning_count}")
 
+            # Check for auto-trust promotion
+            self.maybe_auto_trust(user_id)
+            # Re-fetch user to get updated trust status
+            user = self.get_user(user_id)
+
             # Trusted users get benefit of doubt
-            if user.is_trusted:
+            if user and user.is_trusted:
                 confidence *= 0.3
                 reasons.append("trusted user - reduced")
 
