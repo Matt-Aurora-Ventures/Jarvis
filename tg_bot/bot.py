@@ -270,20 +270,28 @@ def main():
     _load_env_files()
 
     config = get_config()
-    from core.utils.instance_lock import acquire_instance_lock
 
-    lock = acquire_instance_lock(
-        config.telegram_token,
-        name="telegram_polling",
-        max_wait_seconds=30,
-    )
-    if not lock:
-        print("\n" + "=" * 50)
-        print("ERROR: Telegram polling lock is already held")
-        print("=" * 50)
-        print("\nAnother process is already polling with this token.")
-        print("Stop the other process or use a different token.")
-        sys.exit(1)
+    # Skip lock acquisition if supervisor already holds it (SKIP_TELEGRAM_LOCK=1)
+    # This enables the supervisor-level locking pattern where the parent process
+    # holds the lock for the entire bot lifetime, eliminating race conditions
+    lock = None
+    if os.environ.get("SKIP_TELEGRAM_LOCK") != "1":
+        from core.utils.instance_lock import acquire_instance_lock
+
+        lock = acquire_instance_lock(
+            config.telegram_token,
+            name="telegram_polling",
+            max_wait_seconds=30,
+        )
+        if not lock:
+            print("\n" + "=" * 50)
+            print("ERROR: Telegram polling lock is already held")
+            print("=" * 50)
+            print("\nAnother process is already polling with this token.")
+            print("Stop the other process or use a different token.")
+            sys.exit(1)
+    else:
+        print("Skipping lock acquisition - supervisor holds lock")
 
     # Validate config
     if not config.telegram_token:
@@ -399,8 +407,8 @@ def main():
 
     app.post_init = startup_tasks
 
-    # NOTE: Lock already acquired at line 228 (stored in `lock` variable)
-    # Do NOT acquire again here - Windows doesn't allow double-locking same file
+    # NOTE: Lock is acquired above (stored in `lock` variable) only if SKIP_TELEGRAM_LOCK != "1"
+    # When running under supervisor, lock is None and supervisor holds the lock instead
 
     # Clear any existing webhook before starting polling
     # This is CRITICAL to prevent "Conflict: terminated by other getUpdates request" errors
@@ -433,10 +441,12 @@ def main():
         # Exit with code 1 so supervisor knows there was an error
         sys.exit(1)
     finally:
-        try:
-            lock.close()  # Use the lock from line 228
-        except Exception:
-            pass
+        # Only close lock if we acquired it (not when supervisor holds it)
+        if lock:
+            try:
+                lock.close()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
