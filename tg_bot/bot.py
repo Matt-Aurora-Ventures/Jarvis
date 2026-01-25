@@ -1,5 +1,6 @@
 """Jarvis Telegram bot entrypoint."""
 
+import asyncio
 import os
 import sys
 import time
@@ -44,6 +45,32 @@ from tg_bot.handlers.demo import demo, demo_callback, demo_message_handler
 
 # Raid Bot (v6.1.0 - Twitter engagement campaigns)
 from tg_bot.handlers.raid import register_raid_handlers
+
+
+async def _clear_webhook_before_polling(app: Application):
+    """Delete any existing webhook to prevent polling conflicts.
+
+    Telegram only allows ONE connection method at a time:
+    - Either webhook (push updates)
+    - Or polling (pull updates via getUpdates)
+
+    If a webhook was previously set (or from another instance),
+    polling will fail with 'Conflict: terminated by other getUpdates request'.
+
+    Calling delete_webhook() with drop_pending_updates=True ensures:
+    1. Any existing webhook is removed
+    2. Any pending updates from the old connection are dropped
+    3. Polling can start fresh without conflicts
+    """
+    try:
+        result = await app.bot.delete_webhook(drop_pending_updates=True)
+        if result:
+            print("Webhook cleared successfully (ready for polling)")
+        else:
+            print("Warning: delete_webhook returned False (may already be cleared)")
+    except Exception as e:
+        print(f"Warning: Could not clear webhook: {e}")
+        # Continue anyway - polling might still work
 
 
 def register_handlers(app: Application, config) -> None:
@@ -375,8 +402,20 @@ def main():
     # NOTE: Lock already acquired at line 228 (stored in `lock` variable)
     # Do NOT acquire again here - Windows doesn't allow double-locking same file
 
+    # Clear any existing webhook before starting polling
+    # This is CRITICAL to prevent "Conflict: terminated by other getUpdates request" errors
+    try:
+        print("Clearing webhook before polling...")
+        asyncio.get_event_loop().run_until_complete(_clear_webhook_before_polling(app))
+    except Exception as e:
+        print(f"Webhook cleanup failed: {e} - continuing anyway")
+
     # Run with drop_pending_updates to clear any stale connections
     # This helps recover from Conflict errors caused by previous instances
+    # NOTE: run_polling's drop_pending_updates is different from delete_webhook's:
+    # - delete_webhook clears the server-side webhook and update queue
+    # - run_polling's drop_pending_updates only drops updates after polling starts
+    # Both are needed for clean startup
     try:
         print("Starting Telegram polling...")
         app.run_polling(
