@@ -42,6 +42,16 @@ from core.memory.search import (
     get_facts_count,
     benchmark_search,
 )
+from core.memory.pg_vector import (
+    PostgresVectorStore,
+    VectorSearchResult,
+    get_pg_vector_store,
+)
+from core.memory.hybrid_search import (
+    hybrid_search,
+    HybridSearchResult,
+    get_search_explanation,
+)
 
 # New deduplication-focused memory store (M1 implementation)
 try:
@@ -166,4 +176,12 @@ __all__ = [
     "get_entity_summary",
     "get_facts_count",
     "benchmark_search",
+    # PostgreSQL vector search (pg_vector.py)
+    "PostgresVectorStore",
+    "VectorSearchResult",
+    "get_pg_vector_store",
+    # Hybrid search (hybrid_search.py)
+    "hybrid_search",
+    "HybridSearchResult",
+    "get_search_explanation",
 ]
