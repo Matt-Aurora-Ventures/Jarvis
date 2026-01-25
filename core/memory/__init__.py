@@ -40,6 +40,7 @@ from core.memory.search import (
     get_recent_facts,
     get_entity_summary,
     get_facts_count,
+    benchmark_search,
 )
 
 # New deduplication-focused memory store (M1 implementation)
@@ -164,4 +165,5 @@ __all__ = [
     "get_recent_facts",
     "get_entity_summary",
     "get_facts_count",
+    "benchmark_search",
 ]
