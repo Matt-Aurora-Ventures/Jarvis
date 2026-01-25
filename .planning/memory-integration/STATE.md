@@ -10,18 +10,18 @@ See: .planning/memory-integration/PROJECT.md (updated 2026-01-25)
 ## Current Position
 
 Phase: 8 of 8 (Reflect & Intelligence)
-Plan: 1 of 5 in current phase
+Plan: 3 of 5 in current phase
 Status: In progress
-Last activity: 2026-01-25 — Completed 08-01-PLAN.md
+Last activity: 2026-01-25 — Completed 08-03-PLAN.md
 
-Progress: [███████████] 72% (13 of 18 plans complete)
+Progress: [███████████▓] 78% (14 of 18 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13
-- Average duration: 17.2 min
-- Total execution time: 3.7 hours
+- Total plans completed: 14
+- Average duration: 16.4 min
+- Total execution time: 3.8 hours
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [███████████] 72% (13 of 18 plans complete)
 |-------|-------|-------|----------|
 | 6 | 6 | 78min | 13.0min |
 | 7 | 6 | 132min | 22.0min |
-| 8 | 1 | 12min | 12.0min |
+| 8 | 2 | 22min | 11.0min |
 
 **Recent Trend:**
-- Last 6 plans: 07-02 (17min), 07-03 (9min), 07-04 (15min), 07-05 (15min), 07-06 (45min), 08-01 (12min)
-- Trend: Phase 8 starting fast with core infrastructure (12min), testing wave still slowest (45min)
+- Last 6 plans: 07-03 (9min), 07-04 (15min), 07-05 (15min), 07-06 (45min), 08-01 (12min), 08-03 (10min)
+- Trend: Phase 8 maintaining fast pace (11min avg), Wave 2 parallelism working well
 
 ## Accumulated Context
 
@@ -72,6 +72,10 @@ Progress: [███████████] 72% (13 of 18 plans complete)
 | 08-01 | Confidence markers: HIGH/MEDIUM/LOW | Evidence-based insight classification |
 | 08-01 | Skip reflection when no facts | No empty files, clean state tracking |
 | 08-01 | Store synthesis as meta-fact | Makes reflections searchable via recall API |
+| 08-03 | Confidence evolution: +0.1 confirm, -0.15 contradict | Asymmetric to make contradictions more impactful |
+| 08-03 | Preference flip threshold: <0.3 confidence | Low enough to avoid premature flips, responds to evidence |
+| 08-03 | Archive logs >30 days, compress >90 days | Balance workspace cleanliness vs storage efficiency |
+| 08-03 | memory.md never archived | Core memory with synthesized insights, not daily log |
 
 **Architectural decisions from PROJECT.md:**
 - Dual-layer memory: Markdown (human-readable) + SQLite (machine-efficient)
