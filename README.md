@@ -1961,6 +1961,7 @@ We aim to respond within 24 hours.
 - **2FA**: Enable for high-value operations
 - **Regular updates**: Keep dependencies up to date
 - **Audit logs**: Review system logs regularly
+- **Secret scan**: Run `python scripts/secret_scan_staged.py` before pushes (last run: Jan 25, 2026)
 
 ---
 

@@ -1,0 +1,76 @@
+{
+  "faqs": [
+    {
+      "id": 1,
+      "question": "What is Jarvis?",
+      "answer": "Jarvis is an AI-powered trading assistant for Solana tokens.",
+      "category": "general",
+      "keywords": [
+        "jarvis",
+        "what",
+        "about"
+      ],
+      "order": 2,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": 2,
+      "question": "How do I start trading?",
+      "answer": "Use `/balance` to check your wallet, then `/buy <token> <amount>` to make a trade.",
+      "category": "trading",
+      "keywords": [
+        "trading",
+        "start",
+        "begin",
+        "buy"
+      ],
+      "order": 3,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": 3,
+      "question": "What are the fees?",
+      "answer": "There are no fees for using Jarvis. You only pay standard Solana network fees.",
+      "category": "trading",
+      "keywords": [
+        "fees",
+        "cost",
+        "price"
+      ],
+      "order": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": 4,
+      "question": "How do I contact support?",
+      "answer": "Contact @matthaynes88 on Telegram or use the `/help` command.",
+      "category": "support",
+      "keywords": [
+        "support",
+        "help",
+        "contact"
+      ],
+      "order": 4,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": 5,
+      "question": "Is my wallet safe?",
+      "answer": "Yes, Jarvis never stores your private keys. All transactions require your approval.",
+      "category": "security",
+      "keywords": [
+        "security",
+        "safe",
+        "wallet",
+        "keys"
+      ],
+      "order": 5,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z"
+    }
+  ]
+}

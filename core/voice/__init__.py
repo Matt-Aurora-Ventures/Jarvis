@@ -47,6 +47,20 @@ start_chat_session = (
 )
 chat_session = getattr(_legacy_voice, "chat_session", None) if _legacy_voice else None
 
+# Voice doctor diagnostic functions
+diagnose_voice_pipeline = (
+    getattr(_legacy_voice, "diagnose_voice_pipeline", None) if _legacy_voice else None
+)
+format_voice_doctor_report = (
+    getattr(_legacy_voice, "format_voice_doctor_report", None) if _legacy_voice else None
+)
+check_voice_health = (
+    getattr(_legacy_voice, "check_voice_health", None) if _legacy_voice else None
+)
+get_voice_doctor_summary = (
+    getattr(_legacy_voice, "get_voice_doctor_summary", None) if _legacy_voice else None
+)
+
 __all__ = [
     "WakeWordEvent",
     "WakeWordDetector",
@@ -59,4 +73,8 @@ __all__ = [
     "VoiceManager",
     "start_chat_session",
     "chat_session",
+    "diagnose_voice_pipeline",
+    "format_voice_doctor_report",
+    "check_voice_health",
+    "get_voice_doctor_summary",
 ]

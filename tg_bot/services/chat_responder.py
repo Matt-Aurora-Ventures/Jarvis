@@ -671,11 +671,34 @@ Respond briefly (under 200 words) in character as JARVIS:"""
         # They can always say "jarvis" if they want the bot's input
         return False
 
-    async def _try_dexter_finance_response(self, text: str) -> Optional[str]:
-        """
-        Try to handle as a financial question using Dexter ReAct.
+    def _should_engage_with_message(self, text: str, chat_type: str, is_mentioned: bool) -> bool:
+        """Determine if Dexter should respond based on intent, not keywords."""
+        # Always engage in private chats
+        if chat_type == "private":
+            return True
 
-        Returns response if this is a finance question, None otherwise.
+        # Always engage when mentioned/tagged
+        if is_mentioned:
+            return True
+
+        # Detect questions by punctuation
+        text_lower = text.lower().strip()
+        if text_lower.endswith("?"):
+            return True
+
+        # Detect questions by common question starters
+        question_starters = ["what", "how", "why", "when", "where", "who", "can", "is", "are", "do", "does", "should", "will", "would"]
+        if any(text_lower.startswith(q) for q in question_starters):
+            return True
+
+        # Otherwise, don't engage (let humans chat)
+        return False
+
+    async def _try_dexter_response(self, text: str) -> Optional[str]:
+        """
+        Try to handle message using Dexter ReAct (AI-powered response).
+
+        Returns response if Dexter can handle it, None otherwise.
         Dexter uses Grok heavily (1.0 weighting) for all analysis.
         """
         try:
@@ -683,13 +706,90 @@ Respond briefly (under 200 words) in character as JARVIS:"""
             if not dexter:
                 return None
 
-            # Let Dexter check if this is a finance question
+            # Let Dexter handle the message
             response = await dexter.handle_telegram_message(text, user_id=0)
-            return response
+            if response:
+                # Add AI source attribution and EU AI Act disclosure
+                return f"[AI: Dexter] {response}\n\n_AI-generated response per EU AI Act Article 50_"
+            return None
 
         except Exception as e:
-            logger.debug(f"Dexter finance handling failed: {e}")
+            logger.debug(f"Dexter handling failed: {e}")
             return None
+
+    async def _try_grok_response(self, text: str) -> Optional[str]:
+        """
+        Try to get a response using Grok (fallback tier 2).
+
+        Returns response text or None if Grok fails.
+        """
+        try:
+            # Use xAI client for Grok
+            if not self.xai_api_key:
+                return None
+
+            session = await self._get_session()
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": "You are JARVIS, Matt's AI assistant. Reply briefly in character."},
+                    {"role": "user", "content": text},
+                ],
+                "max_tokens": 200,
+                "temperature": 0.6,
+            }
+            async with session.post(f"{self.BASE_URL}/chat/completions", json=payload) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                return self._clean_reply(content)
+
+        except Exception as e:
+            logger.debug(f"Grok response failed: {e}")
+            return None
+
+    async def _get_ai_response_with_fallback(
+        self,
+        text: str,
+        chat_type: str = "group",
+        is_mentioned: bool = False
+    ) -> Optional[str]:
+        """
+        Get AI response with fallback chain: Dexter -> Grok -> simple response.
+
+        Args:
+            text: User message
+            chat_type: "private" or group type
+            is_mentioned: Whether bot was explicitly mentioned
+
+        Returns:
+            Response text with AI source label, or None if shouldn't respond
+        """
+        if not self._should_engage_with_message(text, chat_type, is_mentioned):
+            return None
+
+        # Tier 1: Try Dexter (already has attribution from _try_dexter_response)
+        try:
+            response = await self._try_dexter_response(text)
+            if response:
+                logger.info("Fallback chain: Dexter response (Tier 1)")
+                return response
+        except Exception as e:
+            logger.warning(f"Dexter failed: {e}, trying Grok fallback")
+
+        # Tier 2: Try Grok
+        try:
+            grok_response = await self._try_grok_response(text)
+            if grok_response:
+                logger.info("Fallback chain: Grok response (Tier 2)")
+                return f"[AI: Grok] {grok_response}\n\n_AI-generated response per EU AI Act Article 50_"
+        except Exception as e:
+            logger.warning(f"Grok failed: {e}, using simple fallback")
+
+        # Tier 3: Simple fallback
+        logger.info("Fallback chain: Simple response (Tier 3)")
+        return "I'm having trouble connecting to my AI systems right now. Try again in a moment, or ask @admin for help."
 
     def get_blocked_response(self) -> str:
         """Response for blocked harmful requests."""
@@ -932,12 +1032,14 @@ Never mention Claude or Anthropic.
         # Detect engagement topic for context-aware responses
         engagement_topic = self.detect_engagement_topic(text)
 
-        # TRY DEXTER FINANCE: Check if this is a financial question
+        # TRY DEXTER AI: Check if this message should get an AI response
         # Dexter uses Grok heavily (1.0 weighting) for all responses
-        finance_response = await self._try_dexter_finance_response(text)
-        if finance_response:
-            logger.info(f"Dexter handled finance question from user {user_id}")
-            return finance_response
+        # Attribution is added in _try_dexter_response
+        dexter_response = await self._try_dexter_response(text)
+        if dexter_response:
+            logger.info(f"Dexter handled message from user {user_id}")
+            # dexter_response already has AI attribution and EU AI Act disclosure
+            return dexter_response
 
         # Update Jarvis internal state for sentience
         update_jarvis_state(

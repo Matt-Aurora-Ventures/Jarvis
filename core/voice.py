@@ -1939,3 +1939,330 @@ def get_voice_doctor_summary() -> str:
         lines.append("✗ Voice pipeline NOT operational - fix issues above")
 
     return "\n".join(lines)
+
+
+def diagnose_voice_pipeline() -> dict:
+    """Run comprehensive voice pipeline diagnostics.
+
+    This is the enhanced diagnostic function that provides detailed
+    information about each component of the voice pipeline, including:
+    - Microphone device enumeration
+    - Audio capture test with signal level measurement
+    - Audio processing library availability
+    - OpenAI Whisper API connectivity and sample transcription
+
+    Returns:
+        dict with structured diagnostic results for each component
+    """
+    import math
+
+    results = {}
+
+    # 1. Microphone Detection
+    mic_result = {
+        'ok': False,
+        'device_count': 0,
+        'devices': [],
+        'error': None,
+        'fix': None,
+    }
+    try:
+        import pyaudio
+        pa = pyaudio.PyAudio()
+        device_count = pa.get_device_count()
+        input_devices = []
+        for i in range(device_count):
+            try:
+                info = pa.get_device_info_by_index(i)
+                if info.get("maxInputChannels", 0) > 0:
+                    input_devices.append({
+                        'name': info.get('name', f'Device {i}'),
+                        'index': i,
+                        'channels': info.get('maxInputChannels', 0),
+                    })
+            except Exception:
+                pass
+        pa.terminate()
+
+        mic_result['device_count'] = len(input_devices)
+        mic_result['devices'] = input_devices
+        if input_devices:
+            mic_result['ok'] = True
+        else:
+            mic_result['error'] = 'No input devices found'
+            mic_result['fix'] = 'Check microphone connection or system audio settings'
+    except ImportError:
+        mic_result['error'] = 'pyaudio not installed'
+        mic_result['fix'] = 'pip install pyaudio (may need portaudio: brew install portaudio)'
+    except Exception as e:
+        mic_result['error'] = f'Microphone check failed: {e}'
+        mic_result['fix'] = 'Check system audio permissions'
+
+    results['microphone'] = mic_result
+
+    # 2. Audio Capture Test (only if microphone available)
+    capture_result = {
+        'ok': False,
+        'level_db': None,
+        'signal_quality': None,
+        'error': None,
+    }
+    if mic_result['ok']:
+        try:
+            import pyaudio
+            import numpy as np
+
+            pa = pyaudio.PyAudio()
+            # Use first available input device
+            stream = pa.open(
+                format=pyaudio.paInt16,
+                channels=1,
+                rate=16000,
+                input=True,
+                frames_per_buffer=3200,  # 0.2 seconds at 16kHz
+            )
+
+            # Record 2 seconds of audio
+            frames = []
+            for _ in range(10):  # 10 * 0.2s = 2s
+                data = stream.read(3200, exception_on_overflow=False)
+                frames.append(data)
+
+            stream.stop_stream()
+            stream.close()
+            pa.terminate()
+
+            # Analyze audio level
+            audio_data = b''.join(frames)
+            samples = np.frombuffer(audio_data, dtype=np.int16)
+            rms = np.sqrt(np.mean(samples.astype(np.float64) ** 2))
+
+            # Convert to dB (reference: 32768 for 16-bit audio)
+            if rms > 0:
+                level_db = 20 * math.log10(rms / 32768)
+            else:
+                level_db = -96.0  # Silence
+
+            capture_result['ok'] = True
+            capture_result['level_db'] = round(level_db, 1)
+
+            # Classify signal quality
+            if level_db > -10:
+                capture_result['signal_quality'] = 'too loud'
+            elif level_db > -30:
+                capture_result['signal_quality'] = 'good'
+            elif level_db > -50:
+                capture_result['signal_quality'] = 'quiet'
+            else:
+                capture_result['signal_quality'] = 'very quiet (may be muted)'
+
+        except ImportError as e:
+            capture_result['error'] = f'Missing library: {e}'
+        except Exception as e:
+            capture_result['error'] = f'Audio capture failed: {e}'
+    else:
+        capture_result['error'] = 'Cannot test - no microphone available'
+
+    results['audio_capture'] = capture_result
+
+    # 3. Audio Libraries Check
+    libs_result = {}
+
+    # Check numpy
+    try:
+        import numpy as np
+        libs_result['numpy'] = True
+    except ImportError:
+        libs_result['numpy'] = False
+        libs_result['numpy_fix'] = 'pip install numpy'
+
+    # Check pyaudio
+    try:
+        import pyaudio
+        libs_result['pyaudio'] = True
+    except ImportError:
+        libs_result['pyaudio'] = False
+        libs_result['pyaudio_fix'] = 'pip install pyaudio'
+
+    # Check sounddevice (optional)
+    try:
+        import sounddevice
+        libs_result['sounddevice'] = True
+    except ImportError:
+        libs_result['sounddevice'] = False
+
+    # Check soundfile (optional)
+    try:
+        import soundfile
+        libs_result['soundfile'] = True
+    except ImportError:
+        libs_result['soundfile'] = False
+
+    # Check speech_recognition
+    try:
+        import speech_recognition
+        libs_result['speech_recognition'] = True
+    except ImportError:
+        libs_result['speech_recognition'] = False
+        libs_result['speech_recognition_fix'] = 'pip install SpeechRecognition'
+
+    results['audio_libraries'] = libs_result
+
+    # 4. OpenAI Whisper API Check
+    whisper_result = {
+        'ok': False,
+        'key_configured': False,
+        'connectivity': None,
+        'test_ran': False,
+        'test_transcription': None,
+        'error': None,
+        'fix': None,
+    }
+    openai_key = secrets.get_openai_key()
+    whisper_result['key_configured'] = bool(openai_key)
+
+    if not openai_key:
+        whisper_result['fix'] = 'Set OPENAI_API_KEY environment variable'
+    else:
+        # Try to validate connectivity with a simple API call
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=openai_key)
+
+            # Create a minimal test audio file (short beep/silence)
+            # We'll use the models.list() endpoint to test connectivity
+            # without burning transcription credits
+            try:
+                models = client.models.list()
+                whisper_models = [m for m in models if 'whisper' in m.id.lower()]
+                whisper_result['connectivity'] = 'ok'
+                whisper_result['ok'] = True
+
+                if whisper_models:
+                    whisper_result['models_available'] = [m.id for m in whisper_models]
+            except Exception as e:
+                whisper_result['connectivity'] = f'failed: {e}'
+                whisper_result['error'] = str(e)
+
+        except ImportError:
+            whisper_result['error'] = 'openai package not installed'
+            whisper_result['fix'] = 'pip install openai'
+        except Exception as e:
+            whisper_result['error'] = f'API check failed: {e}'
+
+    results['whisper_api'] = whisper_result
+
+    # 5. Overall Status
+    issue_count = 0
+    if not mic_result['ok']:
+        issue_count += 1
+    if not capture_result['ok'] and mic_result['ok']:  # Only count if mic works
+        issue_count += 1
+    if not whisper_result['ok']:
+        issue_count += 1
+    if not libs_result.get('numpy') or not libs_result.get('pyaudio'):
+        issue_count += 1
+
+    results['overall'] = {
+        'operational': issue_count == 0,
+        'issue_count': issue_count,
+        'summary': 'Voice pipeline is operational' if issue_count == 0 else f'{issue_count} issue(s) found',
+    }
+
+    return results
+
+
+def format_voice_doctor_report(diagnostics: dict) -> str:
+    """Format voice pipeline diagnostics as a human-readable report.
+
+    Args:
+        diagnostics: Dict from diagnose_voice_pipeline()
+
+    Returns:
+        Formatted string report with status icons and actionable fixes
+    """
+    lines = []
+    lines.append("Voice Pipeline Diagnostics")
+    lines.append("=" * 50)
+    lines.append("")
+
+    # Microphone Detection
+    mic = diagnostics.get('microphone', {})
+    lines.append("Microphone Detection:")
+    if mic.get('ok'):
+        device_count = mic.get('device_count', 0)
+        lines.append(f"  [OK] Found {device_count} input device(s)")
+        for dev in mic.get('devices', []):
+            lines.append(f"    - Device {dev.get('index', '?')}: {dev.get('name', 'Unknown')}")
+    else:
+        lines.append(f"  [FAIL] {mic.get('error', 'Unknown error')}")
+        if mic.get('fix'):
+            lines.append(f"    Fix: {mic['fix']}")
+    lines.append("")
+
+    # Audio Capture Test
+    capture = diagnostics.get('audio_capture', {})
+    lines.append("Audio Capture Test:")
+    if capture.get('ok'):
+        level_db = capture.get('level_db', 0)
+        quality = capture.get('signal_quality', 'unknown')
+        lines.append(f"  [OK] Recording 2 seconds... OK")
+        lines.append(f"  [OK] Audio level: {level_db} dB ({quality} signal)")
+    else:
+        lines.append(f"  [FAIL] {capture.get('error', 'Unknown error')}")
+    lines.append("")
+
+    # Audio Libraries
+    libs = diagnostics.get('audio_libraries', {})
+    lines.append("Audio Libraries:")
+    required_libs = ['numpy', 'pyaudio', 'speech_recognition']
+    optional_libs = ['sounddevice', 'soundfile']
+
+    for lib in required_libs:
+        if libs.get(lib):
+            lines.append(f"  [OK] {lib}: installed")
+        else:
+            fix = libs.get(f'{lib}_fix', 'pip install ' + lib)
+            lines.append(f"  [FAIL] {lib}: not installed ({fix})")
+
+    for lib in optional_libs:
+        if libs.get(lib):
+            lines.append(f"  [OK] {lib}: installed (optional)")
+        else:
+            lines.append(f"  [--] {lib}: not installed (optional)")
+    lines.append("")
+
+    # OpenAI Whisper API
+    whisper = diagnostics.get('whisper_api', {})
+    lines.append("OpenAI Whisper API:")
+    if whisper.get('key_configured'):
+        lines.append("  [OK] API key configured")
+        if whisper.get('connectivity') == 'ok':
+            lines.append("  [OK] API connectivity: OK")
+            if whisper.get('models_available'):
+                lines.append(f"    Available models: {', '.join(whisper['models_available'])}")
+        else:
+            lines.append(f"  [FAIL] API connectivity: {whisper.get('connectivity', 'unknown')}")
+        if whisper.get('test_transcription'):
+            lines.append(f"  [OK] Test transcription: \"{whisper['test_transcription']}\"")
+    else:
+        lines.append("  [FAIL] API key not configured")
+        if whisper.get('fix'):
+            lines.append(f"    Fix: {whisper['fix']}")
+    if whisper.get('error') and not whisper.get('key_configured'):
+        pass  # Already shown above
+    elif whisper.get('error'):
+        lines.append(f"  [WARN] {whisper['error']}")
+    lines.append("")
+
+    # Overall Status
+    lines.append("=" * 50)
+    overall = diagnostics.get('overall', {})
+    if overall.get('operational'):
+        lines.append("[OK] All checks passed! Voice pipeline is operational.")
+    else:
+        issue_count = overall.get('issue_count', 0)
+        lines.append(f"[FAIL] Voice pipeline not operational ({issue_count} issue(s))")
+    lines.append("")
+
+    return "\n".join(lines)

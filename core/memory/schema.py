@@ -1,6 +1,6 @@
 """SQLite schema definitions for Jarvis memory system."""
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Core tables for facts and entities
 CREATE_TABLES_SQL = """
@@ -93,6 +93,23 @@ CREATE TABLE IF NOT EXISTS schema_info (
     version INTEGER PRIMARY KEY,
     applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Subagents: Track spawned agent tasks (Clawdbot-style)
+CREATE TABLE IF NOT EXISTS subagents (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    subagent_type TEXT NOT NULL,
+    description TEXT,
+    prompt TEXT,
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'stopped')),
+    started_at DATETIME,
+    completed_at DATETIME,
+    tokens_used INTEGER DEFAULT 0,
+    output_file TEXT,
+    error TEXT,
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 # FTS5 full-text search virtual table
@@ -143,6 +160,11 @@ CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active DESC
 
 CREATE INDEX IF NOT EXISTS idx_user_identities_telegram ON user_identities(telegram_username);
 CREATE INDEX IF NOT EXISTS idx_user_identities_twitter ON user_identities(twitter_username);
+
+-- Subagents indexes
+CREATE INDEX IF NOT EXISTS idx_subagents_session_id ON subagents(session_id);
+CREATE INDEX IF NOT EXISTS idx_subagents_status ON subagents(status);
+CREATE INDEX IF NOT EXISTS idx_subagents_created_at ON subagents(created_at DESC);
 """
 
 MIGRATION_V2_SQL = """
@@ -171,6 +193,31 @@ SET key = preference_key,
 CREATE INDEX IF NOT EXISTS idx_entity_mentions_entity_name ON entity_mentions(entity_name);
 CREATE INDEX IF NOT EXISTS idx_entity_mentions_entity_type ON entity_mentions(entity_type);
 CREATE INDEX IF NOT EXISTS idx_preferences_key ON preferences(key);
+"""
+
+MIGRATION_V3_SQL = """
+-- Migration from version 2 to version 3
+-- Adds subagents table for Clawdbot-style agent tracking
+
+CREATE TABLE IF NOT EXISTS subagents (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    subagent_type TEXT NOT NULL,
+    description TEXT,
+    prompt TEXT,
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'stopped')),
+    started_at DATETIME,
+    completed_at DATETIME,
+    tokens_used INTEGER DEFAULT 0,
+    output_file TEXT,
+    error TEXT,
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_subagents_session_id ON subagents(session_id);
+CREATE INDEX IF NOT EXISTS idx_subagents_status ON subagents(status);
+CREATE INDEX IF NOT EXISTS idx_subagents_created_at ON subagents(created_at DESC);
 """
 
 def get_all_schema_sql() -> str:
