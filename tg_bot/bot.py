@@ -201,6 +201,7 @@ def register_handlers(app: Application, config) -> None:
 
     app.add_handler(CommandHandler("addscam", addscam))
     app.add_handler(CommandHandler("trust", trust))
+    app.add_handler(CommandHandler("unspam", unspam_user))
     app.add_handler(CommandHandler("trustscore", trustscore))
     app.add_handler(CommandHandler("warn", warn))
     app.add_handler(CommandHandler("flag", report_spam))
