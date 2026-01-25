@@ -1,6 +1,6 @@
 """SQLite schema definitions for Jarvis memory system."""
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Core tables for facts and entities
 CREATE_TABLES_SQL = """
@@ -145,6 +145,34 @@ CREATE INDEX IF NOT EXISTS idx_user_identities_telegram ON user_identities(teleg
 CREATE INDEX IF NOT EXISTS idx_user_identities_twitter ON user_identities(twitter_username);
 """
 
+MIGRATION_V2_SQL = """
+-- Migration from version 1 to version 2
+-- Adds denormalized columns for Phase 8 reflect operations
+
+-- Add entity_name and entity_type to entity_mentions for faster queries
+ALTER TABLE entity_mentions ADD COLUMN entity_name TEXT;
+ALTER TABLE entity_mentions ADD COLUMN entity_type TEXT;
+
+-- Populate entity_name and entity_type from entities table
+UPDATE entity_mentions
+SET entity_name = (SELECT name FROM entities WHERE id = entity_mentions.entity_id),
+    entity_type = (SELECT type FROM entities WHERE id = entity_mentions.entity_id);
+
+-- Add key and value columns to preferences (aliases for preference_key/preference_value)
+ALTER TABLE preferences ADD COLUMN key TEXT;
+ALTER TABLE preferences ADD COLUMN value TEXT;
+
+-- Populate key and value from preference_key and preference_value
+UPDATE preferences
+SET key = preference_key,
+    value = preference_value;
+
+-- Add indexes for new columns
+CREATE INDEX IF NOT EXISTS idx_entity_mentions_entity_name ON entity_mentions(entity_name);
+CREATE INDEX IF NOT EXISTS idx_entity_mentions_entity_type ON entity_mentions(entity_type);
+CREATE INDEX IF NOT EXISTS idx_preferences_key ON preferences(key);
+"""
+
 def get_all_schema_sql() -> str:
     """Get complete schema SQL for database initialization."""
     return "\n".join([
@@ -153,3 +181,9 @@ def get_all_schema_sql() -> str:
         CREATE_INDEXES_SQL,
         f"INSERT OR IGNORE INTO schema_info (version) VALUES ({SCHEMA_VERSION});"
     ])
+
+def get_migration_sql(from_version: int) -> str:
+    """Get migration SQL for upgrading from a specific version."""
+    if from_version < 2:
+        return MIGRATION_V2_SQL
+    return ""
