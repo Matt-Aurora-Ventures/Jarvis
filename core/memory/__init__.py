@@ -5,6 +5,7 @@ Provides:
 - LongTermMemory: Persistent memories with semantic retrieval
 - MemoryStore: SQLite-backed storage with embeddings
 - Memory consolidation and archival
+- Clawdbot-inspired dual-layer memory workspace (NEW)
 """
 
 import asyncio
@@ -20,6 +21,10 @@ from core.memory.persistence import (
     ConsolidationResult,
     get_memory_store,
 )
+
+# New workspace-based memory system (Clawdbot architecture)
+from core.memory.config import MemoryConfig, get_config
+from core.memory.workspace import init_workspace, get_memory_path, MEMORY_ROOT
 
 # New deduplication-focused memory store (M1 implementation)
 try:
@@ -117,4 +122,10 @@ __all__ = [
     "DeduplicationMemoryType",
     "SQLiteDeduplicationStore",
     "get_dedup_store",
+    # New workspace-based memory system (config.py, workspace.py)
+    "MemoryConfig",
+    "get_config",
+    "init_workspace",
+    "get_memory_path",
+    "MEMORY_ROOT",
 ]
