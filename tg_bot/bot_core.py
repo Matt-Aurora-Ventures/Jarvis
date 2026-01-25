@@ -5170,28 +5170,20 @@ SPAM_PATTERNS = [
 
 async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, user_id: int) -> bool:
     """Check for spam and ban user if detected. Returns True if spam was detected."""
+    from tg_bot.logging import StructuredLogger
 
+    # Helper that wraps StructuredLogger.log_spam_decision for backward compatibility
     def log_spam_decision(action: str, user_id: int, username: str, confidence: float, reason: str, message_preview: str, reputation: dict = None):
-        """Log spam decision in structured JSON format for false positive tracking."""
-        import json
-        from datetime import datetime, timezone
-        log_entry = {
-            "event": "SPAM_DECISION",
-            "action": action,  # "allow", "warn", "mute", "ban", "delete"
-            "user_id": user_id,
-            "username": username,
-            "confidence": round(confidence, 3),
-            "reason": reason,
-            "message_preview": message_preview[:50],
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        if reputation:
-            log_entry["reputation"] = {
-                "is_trusted": reputation.get("is_trusted", False),
-                "clean_messages": reputation.get("clean_messages", 0),
-                "score": reputation.get("reputation_score", 0)
-            }
-        logger.info(f"SPAM_DECISION: {json.dumps(log_entry)}")
+        """Log spam decision via StructuredLogger."""
+        StructuredLogger.log_spam_decision(
+            action=action,
+            user_id=user_id,
+            username=username,
+            confidence=confidence,
+            reason=reason,
+            message_preview=message_preview,
+            reputation=reputation
+        )
 
     try:
         from core.jarvis_admin import get_jarvis_admin
@@ -5447,6 +5439,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Terminal command handling (admin only) - prefix with > or /term
     if text.startswith('>') or text.lower().startswith('/term '):
         from tg_bot.services.terminal_handler import get_terminal_handler
+        from tg_bot.logging import StructuredLogger
         handler = get_terminal_handler()
 
         if not handler.is_admin(user_id):
@@ -5465,8 +5458,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Execute and reply
         await update.message.reply_text(f"Executing: `{cmd[:50]}{'...' if len(cmd) > 50 else ''}`", parse_mode="Markdown")
-        result = await handler.execute(cmd, user_id)
-        await update.message.reply_text(f"```\n{result}\n```", parse_mode="Markdown")
+        try:
+            result = await handler.execute(cmd, user_id)
+            await update.message.reply_text(f"```\n{result}\n```", parse_mode="Markdown")
+            StructuredLogger.log_terminal_command(user_id, username, cmd, success=True, is_admin=True)
+        except Exception as e:
+            logger.error(f"Terminal command error: {e}")
+            await update.message.reply_text(f"Error: {str(e)[:200]}")
+            StructuredLogger.log_terminal_command(user_id, username, cmd, success=False, is_admin=True)
         return
 
     # Check if message seems directed at Jarvis
@@ -5616,6 +5615,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # Store response in memory
                 bridge.memory.add_message(user_id, "jarvis", "assistant", result['response'][:500], chat_id)
+
+                # Log vibe request via StructuredLogger
+                from tg_bot.logging import StructuredLogger
+                StructuredLogger.log_vibe_request(
+                    user_id=user_id,
+                    username=username,
+                    prompt_preview=text,
+                    success=result['success'],
+                    tokens_used=result['tokens_used'],
+                    duration_sec=duration,
+                    sanitized=result['sanitized']
+                )
 
                 logger.info(f"Completed vibe request for {user_id}: {result['success']}, {result['tokens_used']} tokens")
                 return

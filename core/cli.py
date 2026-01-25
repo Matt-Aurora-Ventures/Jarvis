@@ -390,21 +390,96 @@ def cmd_status(args: argparse.Namespace) -> None:
         component_status = current.get("component_status", {})
         startup_ok = current.get("startup_ok", 0)
         startup_failed = current.get("startup_failed", 0)
+        brain_status = current.get("brain_status", {})
+        running = current.get("running", False)
+        daemon_heartbeat = current.get("daemon_heartbeat", "unknown")
+        daemon_uptime = current.get("daemon_uptime_seconds", 0)
+        updated_at = current.get("updated_at", "unknown")
+        pid = state.read_pid()
+
+        if not running:
+            print("\n⚠️  Daemon is not running. Start with: lifeos on")
+            return
+
+        print("\n" + "=" * 60)
+        print("  DAEMON HEALTH STATUS")
+        print("=" * 60)
+
+        # Show daemon info
+        print(f"\nDaemon Process:")
+        print(f"  • PID: {pid if pid else 'unknown'}")
+        print(f"  • Uptime: {_format_uptime(daemon_uptime)}")
+        print(f"  • Last heartbeat: {daemon_heartbeat}")
+        print(f"  • Last state update: {updated_at}")
 
         if component_status:
-            print("\n" + "=" * 40)
-            print("Component Status:")
-            print("=" * 40)
-            for name, status in component_status.items():
+            # Group components by status
+            ok_components = []
+            failed_components = []
+
+            for name, status in sorted(component_status.items()):
                 if status.get("ok"):
-                    print(f"  ✓ {name}: running")
+                    ok_components.append(name)
                 elif status.get("error"):
-                    print(f"  ✗ {name}: FAILED - {status['error']}")
-                else:
-                    print(f"  ? {name}: unknown")
-            print(f"\nSummary: {startup_ok} OK, {startup_failed} failed")
+                    failed_components.append((name, status['error']))
+
+            # Show successful components
+            if ok_components:
+                print("\n✓ Running Components:")
+                for name in ok_components:
+                    print(f"  • {name}")
+
+            # Show failed components with details
+            if failed_components:
+                print("\n✗ Failed Components:")
+                for name, error in failed_components:
+                    print(f"  • {name}")
+                    print(f"    Error: {error}")
+
+            # Show brain status if available
+            if brain_status:
+                print("\n" + "-" * 60)
+                print("Brain (Orchestrator):")
+                phase = brain_status.get("phase", "unknown")
+                cycle_count = brain_status.get("cycle_count", 0)
+                errors = brain_status.get("errors_in_row", 0)
+                brain_running = brain_status.get("running", False)
+
+                brain_icon = "✓" if brain_running and errors == 0 else "⚠️"
+                print(f"  {brain_icon} Phase: {phase}")
+                print(f"  • Cycles completed: {cycle_count}")
+                print(f"  • Status: {'Running' if brain_running else 'Stopped'}")
+                if errors > 0:
+                    print(f"  ⚠️  Consecutive errors: {errors}")
+
+            # Summary
+            print("\n" + "=" * 60)
+            total = len(component_status)
+            if startup_failed == 0:
+                print(f"✅ All {total} components healthy")
+            else:
+                print(f"⚠️  {startup_ok}/{total} components OK, {startup_failed} failed")
+                print("\n💡 To fix issues, check: lifeos/logs/daemon.log")
+            print("=" * 60)
         else:
             print("\n(No component status available - daemon may not have started yet)")
+
+
+def _format_uptime(seconds: int) -> str:
+    """Format uptime in human-readable format."""
+    if seconds == 0:
+        return "just started"
+
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+
+    if hours > 0:
+        return f"{hours}h {minutes}m {secs}s"
+    elif minutes > 0:
+        return f"{minutes}m {secs}s"
+    else:
+        return f"{secs}s"
 
 
 def _resolve_mode(args: argparse.Namespace) -> safety.SafetyContext:

@@ -19,6 +19,7 @@ from telegram.ext import (
 import tg_bot.bot_core as bot_core
 from tg_bot.bot_core import *  # re-export non-underscore symbols for legacy imports
 from tg_bot.handlers.commands import start, help_command, status, subscribe, unsubscribe
+from tg_bot.handlers.commands.about_command import about_command
 from tg_bot.handlers.sentiment import trending, digest, report, sentiment, picks
 from tg_bot.handlers.admin import reload, config_cmd, logs, system, away, back, awaystatus, memory, sysmem, errors
 from tg_bot.handlers.trading import balance, positions, wallet, dashboard, button_callback, calibrate
@@ -73,10 +74,26 @@ async def _clear_webhook_before_polling(app: Application):
         # Continue anyway - polling might still work
 
 
+async def _pre_warm_dexter():
+    """Pre-warm Dexter integration to eliminate cold start latency."""
+    try:
+        from tg_bot.services.chat_responder import get_bot_finance_integration
+        dexter = get_bot_finance_integration()
+        if dexter:
+            # Send a test message to warm up the integration
+            await dexter.handle_telegram_message("test", user_id=0)
+            print("✓ Dexter pre-warmed (ready for fast responses)")
+        else:
+            print("⚠ Dexter integration not available for pre-warming")
+    except Exception as e:
+        print(f"Warning: Could not pre-warm Dexter: {e}")
+
+
 def register_handlers(app: Application, config) -> None:
     """Register command, callback, and message handlers on the Telegram app."""
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("about", about_command))
     app.add_handler(CommandHandler("commands", commands_command))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("subscribe", subscribe))
@@ -418,6 +435,13 @@ def main():
         asyncio.get_event_loop().run_until_complete(_clear_webhook_before_polling(app))
     except Exception as e:
         print(f"Webhook cleanup failed: {e} - continuing anyway")
+
+    # Pre-warm Dexter to eliminate cold start latency
+    try:
+        print("Pre-warming Dexter AI integration...")
+        asyncio.get_event_loop().run_until_complete(_pre_warm_dexter())
+    except Exception as e:
+        print(f"Dexter pre-warming failed: {e} - continuing anyway")
 
     # Run with drop_pending_updates to clear any stale connections
     # This helps recover from Conflict errors caused by previous instances

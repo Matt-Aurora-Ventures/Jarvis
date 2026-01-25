@@ -12,11 +12,36 @@ Usage:
 import logging
 import asyncio
 from typing import Optional, Dict, Any
+from functools import wraps
 
 from .agent import DexterAgent, ReActDecision, DecisionType
 from .tools.meta_router import financial_research
 
 logger = logging.getLogger(__name__)
+
+
+def retry_with_backoff(max_retries=3, base_delay=1.0):
+    """Retry with exponential backoff for rate limit errors."""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    if "429" in str(e) or "rate limit" in str(e).lower():
+                        if attempt < max_retries - 1:
+                            delay = base_delay * (2 ** attempt)
+                            jitter = delay * 0.1
+                            import random
+                            wait_time = delay + (jitter * (2 * random.random() - 1))
+                            logger.warning(f"Rate limit hit, retrying in {wait_time:.2f}s (attempt {attempt + 1}/{max_retries})")
+                            await asyncio.sleep(wait_time)
+                            continue
+                    raise
+            return None
+        return wrapper
+    return decorator
 
 
 class BotFinanceIntegration:
@@ -29,6 +54,7 @@ class BotFinanceIntegration:
         self.position_manager = position_manager
         self.dexter = DexterAgent(grok_client, sentiment_agg)
 
+    @retry_with_backoff(max_retries=3, base_delay=1.0)
     async def process_finance_question(
         self,
         question: str,

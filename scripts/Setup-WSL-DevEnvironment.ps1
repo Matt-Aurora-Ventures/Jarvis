@@ -20,12 +20,12 @@ function Write-Error { Write-ColorOutput $args[0] "Red" }
 function Write-Warning { Write-ColorOutput $args[0] "Yellow" }
 function Write-Info { Write-ColorOutput $args[0] "Cyan" }
 
-# ASCII Art
+# Banner (ASCII-only)
 Write-Host ""
-Write-ColorOutput "╔══════════════════════════════════════════════════════════════╗" "Blue"
-Write-ColorOutput "║           WSL Development Environment Setup (Windows)        ║" "Blue"
-Write-ColorOutput "║         Claude CLI • Clawd Bot • Windsurf • GSD              ║" "Blue"
-Write-ColorOutput "╚══════════════════════════════════════════════════════════════╝" "Blue"
+Write-ColorOutput "==============================================================" "Blue"
+Write-ColorOutput "   WSL Development Environment Setup (Windows)" "Blue"
+Write-ColorOutput "   Claude CLI - Clawd Bot - Windsurf - GSD" "Blue"
+Write-ColorOutput "==============================================================" "Blue"
 Write-Host ""
 
 if ($Help) {
@@ -54,10 +54,10 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "WSL not found"
     }
-    Write-Success "✓ WSL is installed"
+    Write-Success "[OK] WSL is installed"
     Write-Host $wslVersion
 } catch {
-    Write-Error "✗ WSL is not installed or not accessible"
+    Write-Error "[FAIL] WSL is not installed or not accessible"
     Write-Host ""
     Write-Warning "To install WSL:"
     Write-Host "  1. Open PowerShell as Administrator"
@@ -72,10 +72,10 @@ try {
 Write-Info "Checking WSL status..."
 try {
     $wslStatus = wsl --status 2>&1
-    Write-Success "✓ WSL is configured"
+    Write-Success "[OK] WSL is configured"
     Write-Host $wslStatus
 } catch {
-    Write-Warning "⚠ Could not get WSL status (this is usually fine)"
+    Write-Warning "[WARN] Could not get WSL status (this is usually fine)"
 }
 
 # List WSL distributions
@@ -85,7 +85,7 @@ wsl --list --verbose
 # Check if any distribution is installed
 $distributions = wsl --list --quiet
 if ($null -eq $distributions -or $distributions.Count -eq 0) {
-    Write-Error "✗ No WSL distributions installed"
+    Write-Error "[FAIL] No WSL distributions installed"
     Write-Host ""
     Write-Warning "To install Ubuntu:"
     Write-Host "  wsl --install -d Ubuntu"
@@ -94,7 +94,7 @@ if ($null -eq $distributions -or $distributions.Count -eq 0) {
 }
 
 if ($CheckOnly) {
-    Write-Success "✓ WSL check complete"
+    Write-Success "[OK] WSL check complete"
     exit 0
 }
 
@@ -104,11 +104,11 @@ $setupScript = Join-Path $scriptDir "setup_wsl_complete.sh"
 
 # Check if setup script exists
 if (-not (Test-Path $setupScript)) {
-    Write-Error "✗ Setup script not found: $setupScript"
+    Write-Error "[FAIL] Setup script not found: $setupScript"
     exit 1
 }
 
-Write-Success "✓ Found setup script: $setupScript"
+Write-Success "[OK] Found setup script: $setupScript"
 
 # Copy script to WSL
 Write-Info "Copying setup script to WSL..."
@@ -118,10 +118,12 @@ try {
     $tempPath = "/tmp/setup_wsl_complete.sh"
     wsl cp $setupScript.Replace('\', '/').Replace('C:', '/mnt/c') $tempPath
     wsl chmod +x $tempPath
+    # Normalize line endings to LF to avoid /bin/bash $'\r' errors
+    wsl bash -lc "tr -d '\r' < /tmp/setup_wsl_complete.sh > /tmp/setup_wsl_complete.sh.lf && mv /tmp/setup_wsl_complete.sh.lf /tmp/setup_wsl_complete.sh"
 
-    Write-Success "✓ Script copied to WSL"
+    Write-Success "[OK] Script copied to WSL"
 } catch {
-    Write-Error "✗ Failed to copy script to WSL"
+    Write-Error "[FAIL] Failed to copy script to WSL"
     Write-Host $_.Exception.Message
     exit 1
 }
@@ -129,13 +131,13 @@ try {
 # Ask for confirmation
 Write-Host ""
 Write-Warning "This will install the following in WSL:"
-Write-Host "  • Node.js 20.x"
-Write-Host "  • Claude CLI (@anthropic-ai/claude-code)"
-Write-Host "  • Python 3 with pip and uv"
-Write-Host "  • Clawd Discord Bot"
-Write-Host "  • GSD (Get Shit Done) Framework"
-Write-Host "  • Visual Studio Code"
-Write-Host "  • Development tools and dependencies"
+Write-Host "  - Node.js 20.x"
+Write-Host "  - Claude CLI (@anthropic-ai/claude-code)"
+Write-Host "  - Python 3 with pip and uv"
+Write-Host "  - Clawd Discord Bot"
+Write-Host "  - GSD (Get Shit Done) Framework"
+Write-Host "  - Visual Studio Code"
+Write-Host "  - Development tools and dependencies"
 Write-Host ""
 
 $confirmation = Read-Host "Continue with installation? (yes/no)"
@@ -156,9 +158,9 @@ try {
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""
-        Write-Success "════════════════════════════════════════════════════════════════"
-        Write-Success "                    🎉 Setup Complete! 🎉"
-        Write-Success "════════════════════════════════════════════════════════════════"
+        Write-Success "=============================================================="
+        Write-Success "                    Setup Complete!"
+        Write-Success "=============================================================="
         Write-Host ""
 
         Write-Info "Next Steps (run these in WSL):"
@@ -191,7 +193,7 @@ try {
             $Shortcut = $WshShell.CreateShortcut($wslShortcut)
             $Shortcut.TargetPath = "wsl.exe"
             $Shortcut.Save()
-            Write-Success "✓ Created: WSL Terminal.lnk"
+            Write-Success "[OK] Created: WSL Terminal.lnk"
 
             # Clawd shortcut
             $clawdShortcut = "$desktopPath\Start Clawd Bot.lnk"
@@ -199,7 +201,7 @@ try {
             $Shortcut.TargetPath = "wsl.exe"
             $Shortcut.Arguments = "bash -c 'cd ~/clawd && source venv/bin/activate && python main.py'"
             $Shortcut.Save()
-            Write-Success "✓ Created: Start Clawd Bot.lnk"
+            Write-Success "[OK] Created: Start Clawd Bot.lnk"
 
             # Verify shortcut
             $verifyShortcut = "$desktopPath\Verify WSL Setup.lnk"
@@ -207,23 +209,23 @@ try {
             $Shortcut.TargetPath = "wsl.exe"
             $Shortcut.Arguments = "bash ~/verify_wsl_setup.sh"
             $Shortcut.Save()
-            Write-Success "✓ Created: Verify WSL Setup.lnk"
+            Write-Success "[OK] Created: Verify WSL Setup.lnk"
 
-            Write-Success "✓ Desktop shortcuts created!"
+            Write-Success "[OK] Desktop shortcuts created!"
         }
 
     } else {
-        Write-Error "✗ Setup script failed with exit code $LASTEXITCODE"
+        Write-Error "[FAIL] Setup script failed with exit code $LASTEXITCODE"
         Write-Warning "Check the error messages above for details"
         exit 1
     }
 
 } catch {
-    Write-Error "✗ Failed to run setup script"
+    Write-Error "[FAIL] Failed to run setup script"
     Write-Host $_.Exception.Message
     exit 1
 }
 
 Write-Host ""
-Write-Success "🚀 You're all set! Launch WSL with: wsl"
+Write-Success "You're all set! Launch WSL with: wsl"
 Write-Host ""
