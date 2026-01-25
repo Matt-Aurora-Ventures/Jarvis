@@ -131,11 +131,11 @@ Which phases cover which requirements. Maps to Jarvis V1 Phases 6-8.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MEM-001 | Phase 6 | Pending |
-| MEM-002 | Phase 6 | Pending |
-| MEM-003 | Phase 6 | Pending |
-| MEM-004 | Phase 6 | Pending |
-| MEM-005 | Phase 6 | Pending |
+| MEM-001 | Phase 6 | Complete |
+| MEM-002 | Phase 6 | Complete |
+| MEM-003 | Phase 6 | Complete |
+| MEM-004 | Phase 6 | Complete |
+| MEM-005 | Phase 6 | Complete |
 | RET-001 | Phase 7 | Pending |
 | RET-002 | Phase 7 | Pending |
 | RET-003 | Phase 7 | Pending |
@@ -159,10 +159,10 @@ Which phases cover which requirements. Maps to Jarvis V1 Phases 6-8.
 | REF-005 | Phase 8 | Pending |
 | REF-006 | Phase 8 | Pending |
 | REF-007 | Phase 8 | Pending |
-| SES-001 | Phase 6 | Pending |
-| SES-002 | Phase 6 | Pending |
-| SES-003 | Phase 6 | Pending |
-| SES-004 | Phase 6 | Pending |
+| SES-001 | Phase 6 | Complete |
+| SES-002 | Phase 6 | Complete |
+| SES-003 | Phase 6 | Complete |
+| SES-004 | Phase 6 | Complete |
 | SES-005 | Phase 7 | Pending |
 | ENT-001 | Phase 7 | Pending |
 | ENT-002 | Phase 7 | Pending |
@@ -170,12 +170,12 @@ Which phases cover which requirements. Maps to Jarvis V1 Phases 6-8.
 | ENT-004 | Phase 7 | Pending |
 | ENT-005 | Phase 8 | Pending |
 | ENT-006 | Phase 8 | Pending |
-| INT-001 | Phase 6 | Pending |
-| INT-002 | Phase 6 | Pending |
-| INT-003 | Phase 6 | Pending |
+| INT-001 | Phase 6 | Complete |
+| INT-002 | Phase 6 | Complete |
+| INT-003 | Phase 6 | Complete |
 | INT-004 | Phase 7 | Pending |
 | INT-005 | Phase 7 | Pending |
-| INT-006 | Phase 6 | Pending |
+| INT-006 | Phase 6 | Complete |
 | PERF-001 | Phase 7 | Pending |
 | PERF-002 | Phase 8 | Pending |
 | PERF-003 | Phase 8 | Pending |

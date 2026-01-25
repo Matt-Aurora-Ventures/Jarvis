@@ -10,7 +10,7 @@ Integrate Clawdbot's hybrid Markdown + SQLite memory architecture across all Jar
 - Integer phases (6, 7, 8): Aligned with Jarvis V1 parent phases
 - This is a brownfield integration into existing production codebase
 
-- [ ] **Phase 6: Memory Foundation** - Unified workspace, SQLite schema, PostgreSQL integration
+- [x] **Phase 6: Memory Foundation** - Unified workspace, SQLite schema, PostgreSQL integration
 - [ ] **Phase 7: Retain/Recall Functions** - Active memory storage and retrieval across all bots
 - [ ] **Phase 8: Reflect & Intelligence** - Daily synthesis, confidence evolution, entity intelligence
 
@@ -30,14 +30,15 @@ Integrate Clawdbot's hybrid Markdown + SQLite memory architecture across all Jar
   4. Existing PostgreSQL archival_memory learnings (100+ entries) are accessible via new schema
   5. FTS5 full-text search returns results from stored facts in <100ms
 
-**Plans**: 5 plans in 3 waves
+**Plans**: 6 plans in 4 waves
 
 Plans:
-- [ ] 06-01-PLAN.md — Workspace & Directory Structure (Wave 1)
-- [ ] 06-02-PLAN.md — SQLite Schema & Database Initialization (Wave 1)
-- [ ] 06-03-PLAN.md — retain_fact() with Markdown Sync (Wave 2)
-- [ ] 06-04-PLAN.md — FTS5 Full-Text Search (Wave 2)
-- [ ] 06-05-PLAN.md — PostgreSQL Integration & Hybrid Search (Wave 3)
+- [x] 06-01-PLAN.md — Workspace & Directory Structure (Wave 1)
+- [x] 06-02-PLAN.md — SQLite Schema & Database Initialization (Wave 1)
+- [x] 06-03-PLAN.md — retain_fact() with Markdown Sync (Wave 2)
+- [x] 06-04-PLAN.md — FTS5 Full-Text Search (Wave 2)
+- [x] 06-05-PLAN.md — PostgreSQL Integration & Hybrid Search (Wave 3)
+- [x] 06-06-PLAN.md — Data Migration (Wave 4)
 
 ### Phase 7: Retain/Recall Functions
 **Goal**: Every Jarvis bot system (Treasury, Telegram, X, Bags Intel, Buy Tracker) actively stores and retrieves memory to inform decisions
@@ -93,12 +94,12 @@ Phases execute in numeric order: 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Memory Foundation | 0/5 | Ready for execution | - |
-| 7. Retain/Recall Functions | 0/TBD | Pending Phase 6 | - |
+| 6. Memory Foundation | 6/6 | ✓ Complete | 2026-01-25 |
+| 7. Retain/Recall Functions | 0/TBD | Ready for planning | - |
 | 8. Reflect & Intelligence | 0/TBD | Pending Phase 7 | - |
 
 ---
 
-**Roadmap Version:** 1.1
+**Roadmap Version:** 1.2
 **Created:** 2026-01-25
-**Last Updated:** 2026-01-25 (Phase 6 plans created)
+**Last Updated:** 2026-01-25 (Phase 6 complete)
