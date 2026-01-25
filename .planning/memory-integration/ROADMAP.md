@@ -82,10 +82,14 @@ Plans:
   5. Daily reflect completes in <5 minutes and archives logs older than 30 days
   6. Memory database stays under 500MB with 10K+ facts stored
 
-**Plans**: TBD (to be planned in Phase 8 planning session)
+**Plans**: 5 plans in 3 waves
 
 Plans:
-- TBD
+- [ ] 08-01-PLAN.md — Core Reflect Infrastructure + LLM Synthesis (Wave 1)
+- [ ] 08-02-PLAN.md — Entity Summary Auto-Update (Wave 2)
+- [ ] 08-03-PLAN.md — Preference Evolution + Log Archival (Wave 2, parallel)
+- [ ] 08-04-PLAN.md — Weekly Pattern Reports + Contradiction Detection (Wave 2, parallel)
+- [ ] 08-05-PLAN.md — Scheduler Integration + Tests (Wave 3)
 
 ## Progress
 
@@ -101,10 +105,10 @@ Phases execute in numeric order: 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 6. Memory Foundation | 6/6 | ✓ Complete | 2026-01-25 |
 | 7. Retain/Recall Functions | 6/6 | ✓ Complete | 2026-01-25 |
-| 8. Reflect & Intelligence | 0/TBD | Ready for planning | - |
+| 8. Reflect & Intelligence | 0/5 | Ready for execution | - |
 
 ---
 
-**Roadmap Version:** 1.4
+**Roadmap Version:** 1.5
 **Created:** 2026-01-25
-**Last Updated:** 2026-01-25 (Phase 7 complete - all 5 bots integrated)
+**Last Updated:** 2026-01-25 (Phase 8 planned - 5 plans in 3 waves)
