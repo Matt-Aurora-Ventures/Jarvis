@@ -30,10 +30,14 @@ Integrate Clawdbot's hybrid Markdown + SQLite memory architecture across all Jar
   4. Existing PostgreSQL archival_memory learnings (100+ entries) are accessible via new schema
   5. FTS5 full-text search returns results from stored facts in <100ms
 
-**Plans**: TBD (to be planned in Phase 6 planning session)
+**Plans**: 5 plans in 3 waves
 
 Plans:
-- TBD
+- [ ] 06-01-PLAN.md — Workspace & Directory Structure (Wave 1)
+- [ ] 06-02-PLAN.md — SQLite Schema & Database Initialization (Wave 1)
+- [ ] 06-03-PLAN.md — retain_fact() with Markdown Sync (Wave 2)
+- [ ] 06-04-PLAN.md — FTS5 Full-Text Search (Wave 2)
+- [ ] 06-05-PLAN.md — PostgreSQL Integration & Hybrid Search (Wave 3)
 
 ### Phase 7: Retain/Recall Functions
 **Goal**: Every Jarvis bot system (Treasury, Telegram, X, Bags Intel, Buy Tracker) actively stores and retrieves memory to inform decisions
@@ -89,12 +93,12 @@ Phases execute in numeric order: 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Memory Foundation | 0/TBD | Not started | - |
-| 7. Retain/Recall Functions | 0/TBD | Not started | - |
-| 8. Reflect & Intelligence | 0/TBD | Not started | - |
+| 6. Memory Foundation | 0/5 | Ready for execution | - |
+| 7. Retain/Recall Functions | 0/TBD | Pending Phase 6 | - |
+| 8. Reflect & Intelligence | 0/TBD | Pending Phase 7 | - |
 
 ---
 
-**Roadmap Version:** 1.0
+**Roadmap Version:** 1.1
 **Created:** 2026-01-25
-**Last Updated:** 2026-01-25
+**Last Updated:** 2026-01-25 (Phase 6 plans created)
