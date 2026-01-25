@@ -412,3 +412,70 @@ def _escape_fts_query(query: str) -> str:
 
     # Use OR to match any term (more flexible than phrase)
     return " OR ".join(f'"{t}"' for t in escaped_tokens)
+
+
+def benchmark_search(iterations: int = 100) -> Dict[str, Any]:
+    """
+    Benchmark search performance.
+
+    Args:
+        iterations: Number of iterations per query type.
+
+    Returns:
+        Dict with timing statistics.
+    """
+    import statistics
+    from .retain import retain_fact
+
+    db = get_db()
+
+    # Ensure we have some data
+    fact_count = get_facts_count()
+    if fact_count < 10:
+        # Add sample data for benchmarking
+        sample_facts = [
+            "bags.fm graduation detected for token XYZ",
+            "Strong bonding curve activity on KR8TIV",
+            "User lucid executed trade on Jupiter",
+            "Telegram command received for portfolio check",
+            "X post scheduled about market conditions",
+        ]
+        for content in sample_facts:
+            retain_fact(content, context="benchmark", source="system")
+
+    queries = [
+        "bags.fm",
+        "graduation",
+        "trade",
+        "KR8TIV",
+        "bonding curve",
+    ]
+
+    results = {"queries": {}, "summary": {}}
+    all_times = []
+
+    for query in queries:
+        times = []
+        for _ in range(iterations):
+            start = time.perf_counter()
+            search_facts(query, limit=10)
+            elapsed = (time.perf_counter() - start) * 1000
+            times.append(elapsed)
+
+        results["queries"][query] = {
+            "min_ms": round(min(times), 2),
+            "max_ms": round(max(times), 2),
+            "avg_ms": round(statistics.mean(times), 2),
+            "p95_ms": round(sorted(times)[int(0.95 * len(times))], 2),
+        }
+        all_times.extend(times)
+
+    results["summary"] = {
+        "iterations_per_query": iterations,
+        "total_queries": len(queries) * iterations,
+        "overall_avg_ms": round(statistics.mean(all_times), 2),
+        "overall_p95_ms": round(sorted(all_times)[int(0.95 * len(all_times))], 2),
+        "meets_target": sorted(all_times)[int(0.95 * len(all_times))] < 100,
+    }
+
+    return results
