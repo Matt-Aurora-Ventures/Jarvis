@@ -82,6 +82,9 @@ async def test_exit_triggers_trailing_stop(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_maybe_execute_exit_runs_when_enabled(monkeypatch):
+    # Import the module where the function is actually defined
+    from tg_bot.handlers.demo import demo_trading
+
     context = Mock(spec=ContextTypes.DEFAULT_TYPE)
     context.user_data = {"ai_auto_trade": True, "wallet_address": "demo_wallet"}
 
@@ -89,8 +92,9 @@ async def test_maybe_execute_exit_runs_when_enabled(monkeypatch):
     alert = {"type": "stop_loss", "position": position}
 
     monkeypatch.setenv("DEMO_TPSL_AUTO_EXECUTE", "1")
+    # Mock the function in the module where it's defined, not where it's imported
     monkeypatch.setattr(
-        demo_mod,
+        demo_trading,
         "_execute_swap_with_fallback",
         AsyncMock(return_value={"success": True, "tx_hash": "txhash", "source": "jupiter"}),
     )
