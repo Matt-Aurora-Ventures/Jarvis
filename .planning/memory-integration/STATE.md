@@ -10,18 +10,18 @@ See: .planning/memory-integration/PROJECT.md (updated 2026-01-25)
 ## Current Position
 
 Phase: 8 of 8 (Reflect & Intelligence)
-Plan: 3 of 5 in current phase
+Plan: 4 of 5 in current phase
 Status: In progress
-Last activity: 2026-01-25 — Completed 08-03-PLAN.md
+Last activity: 2026-01-25 — Completed 08-04-PLAN.md
 
-Progress: [███████████▓] 78% (14 of 18 plans complete)
+Progress: [████████████] 83% (15 of 18 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
-- Average duration: 16.4 min
-- Total execution time: 3.8 hours
+- Total plans completed: 15
+- Average duration: 16.1 min
+- Total execution time: 4.0 hours
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [███████████▓] 78% (14 of 18 plans complete)
 |-------|-------|-------|----------|
 | 6 | 6 | 78min | 13.0min |
 | 7 | 6 | 132min | 22.0min |
-| 8 | 2 | 22min | 11.0min |
+| 8 | 3 | 34min | 11.3min |
 
 **Recent Trend:**
-- Last 6 plans: 07-03 (9min), 07-04 (15min), 07-05 (15min), 07-06 (45min), 08-01 (12min), 08-03 (10min)
-- Trend: Phase 8 maintaining fast pace (11min avg), Wave 2 parallelism working well
+- Last 6 plans: 07-04 (15min), 07-05 (15min), 07-06 (45min), 08-01 (12min), 08-03 (10min), 08-04 (12min)
+- Trend: Phase 8 maintaining excellent pace (11.3min avg), Wave 2 parallelism working well
 
 ## Accumulated Context
 
@@ -76,6 +76,9 @@ Progress: [███████████▓] 78% (14 of 18 plans complete)
 | 08-03 | Preference flip threshold: <0.3 confidence | Low enough to avoid premature flips, responds to evidence |
 | 08-03 | Archive logs >30 days, compress >90 days | Balance workspace cleanliness vs storage efficiency |
 | 08-03 | memory.md never archived | Core memory with synthesized insights, not daily log |
+| 08-04 | Weekly summaries use last complete week (Monday-Sunday) | ISO week standard, avoids partial week data |
+| 08-04 | Contradiction detection confidence threshold: 0.4 | Filters low-confidence noise, focuses on meaningful conflicts |
+| 08-04 | Store contradictions in reflect_state.json | Provides visibility without polluting fact database |
 
 **Architectural decisions from PROJECT.md:**
 - Dual-layer memory: Markdown (human-readable) + SQLite (machine-efficient)
