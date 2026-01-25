@@ -60,6 +60,9 @@ async def store_trade_outcome(
         return -1
 
     try:
+        # Ensure strategy entity exists
+        await ensure_strategy_entity(strategy)
+
         # Build human-readable content
         outcome = "WIN" if pnl_pct > 0 else "LOSS"
         content = (

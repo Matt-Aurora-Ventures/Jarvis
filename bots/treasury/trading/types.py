@@ -54,6 +54,7 @@ class Position:
     sentiment_score: float = 0.0
     tp_order_id: Optional[str] = None
     sl_order_id: Optional[str] = None
+    peak_price: Optional[float] = None  # Highest price reached for trailing stop
 
     @property
     def is_open(self) -> bool:
@@ -92,7 +93,8 @@ class Position:
             'sentiment_grade': self.sentiment_grade,
             'sentiment_score': self.sentiment_score,
             'tp_order_id': self.tp_order_id,
-            'sl_order_id': self.sl_order_id
+            'sl_order_id': self.sl_order_id,
+            'peak_price': self.peak_price
         }
 
     @classmethod
@@ -107,6 +109,11 @@ class Position:
             tp_price = entry_price * 1.20
         if (sl_price is None or sl_price == 0) and entry_price > 0:
             sl_price = entry_price * 0.90
+
+        # Initialize peak_price to entry_price if not present (new field)
+        peak_price = data.get('peak_price')
+        if peak_price is None:
+            peak_price = entry_price
 
         return cls(
             id=data['id'],
@@ -128,7 +135,8 @@ class Position:
             sentiment_grade=data.get('sentiment_grade', ''),
             sentiment_score=data.get('sentiment_score', 0),
             tp_order_id=data.get('tp_order_id'),
-            sl_order_id=data.get('sl_order_id')
+            sl_order_id=data.get('sl_order_id'),
+            peak_price=peak_price
         )
 
 
@@ -171,3 +179,32 @@ Avg Win: <code>${self.average_win_usd:+.2f}</code> | Avg Loss: <code>${self.aver
 Count: <code>{self.open_positions}</code>
 Unrealized P&L: <code>${self.unrealized_pnl:+.2f}</code>
 """
+
+
+@dataclass
+class StrategyPerformance:
+    """Performance metrics for a trading strategy."""
+    strategy: str
+    trade_count: int = 0
+    win_count: int = 0
+    loss_count: int = 0
+    win_rate: float = 0.0
+    avg_pnl: float = 0.0
+    total_pnl: float = 0.0
+    best_trade_pnl: float = 0.0
+    worst_trade_pnl: float = 0.0
+    last_trade_date: Optional[datetime] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'strategy': self.strategy,
+            'trade_count': self.trade_count,
+            'win_count': self.win_count,
+            'loss_count': self.loss_count,
+            'win_rate': self.win_rate,
+            'avg_pnl': self.avg_pnl,
+            'total_pnl': self.total_pnl,
+            'best_trade_pnl': self.best_trade_pnl,
+            'worst_trade_pnl': self.worst_trade_pnl,
+            'last_trade_date': self.last_trade_date.isoformat() if self.last_trade_date else None,
+        }
