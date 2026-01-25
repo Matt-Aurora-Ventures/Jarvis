@@ -849,6 +849,34 @@ def cmd_listen(args: argparse.Namespace) -> None:
     _render(plain, technical)
 
 
+def cmd_voice(args: argparse.Namespace) -> int:
+    """Handle voice subcommand (e.g., `lifeos voice doctor`)."""
+    action = getattr(args, 'voice_action', None)
+
+    if action == 'doctor':
+        print("=" * 50)
+        print("LifeOS Voice Pipeline Diagnostics")
+        print("=" * 50)
+        print()
+
+        # Run comprehensive diagnostics
+        diagnostics = voice.diagnose_voice_pipeline()
+
+        # Format and print the report
+        report = voice.format_voice_doctor_report(diagnostics)
+        print(report)
+
+        # Return exit code based on operational status
+        if diagnostics.get('overall', {}).get('operational'):
+            return 0
+        else:
+            return 1
+
+    # Unknown action
+    print("Usage: lifeos voice doctor")
+    return 0
+
+
 def cmd_secret(args: argparse.Namespace) -> None:
     key_map = {
         "gemini": "google_api_key",
@@ -2334,6 +2362,11 @@ def build_parser() -> argparse.ArgumentParser:
     listen_parser = subparsers.add_parser("listen", parents=[mode_parser])
     listen_parser.add_argument("state", choices=["on", "off"])
 
+    # Voice subcommand with doctor action
+    voice_parser = subparsers.add_parser("voice", help="Voice pipeline management")
+    voice_subparsers = voice_parser.add_subparsers(dest="voice_action", required=True)
+    voice_doctor_parser = voice_subparsers.add_parser("doctor", help="Run voice pipeline diagnostics")
+
     secret_parser = subparsers.add_parser("secret")
     secret_parser.add_argument("provider", choices=["gemini", "openai"])
     secret_parser.add_argument("key")
@@ -2679,6 +2712,9 @@ def main() -> None:
     if args.command == "listen":
         cmd_listen(args)
         return
+    if args.command == "voice":
+        exit_code = cmd_voice(args)
+        sys.exit(exit_code)
     if args.command == "secret":
         cmd_secret(args)
         return
