@@ -10,27 +10,27 @@ See: .planning/memory-integration/PROJECT.md (updated 2026-01-25)
 ## Current Position
 
 Phase: 6 of 8 (Memory Foundation)
-Plan: 5 of 6 in current phase
-Status: In progress
-Last activity: 2026-01-25 — Completed 06-05-PLAN.md
+Plan: 6 of 6 in current phase
+Status: Phase complete
+Last activity: 2026-01-25 — Completed 06-06-PLAN.md (Data migration)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
+- Total plans completed: 6
 - Average duration: 13 min
-- Total execution time: 1.1 hours
+- Total execution time: 1.4 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 6 | 5 | 63min | 12.6min |
+| 6 | 6 | 78min | 13.0min |
 
 **Recent Trend:**
-- Last 5 plans: 06-01 (9min), 06-02 (7min), 06-03 (16min), 06-04 (18min), 06-05 (15min)
+- Last 6 plans: 06-01 (9min), 06-02 (7min), 06-03 (16min), 06-04 (18min), 06-05 (15min), 06-06 (15min)
 - Trend: Consistent 12-18min range, complex integration tasks well-scoped
 
 ## Accumulated Context
@@ -53,6 +53,8 @@ Progress: [█████░░░░░] 50%
 | 06-05 | Graceful fallback to FTS-only when PostgreSQL unavailable | Ensures functionality without vector search |
 | 06-05 | Reuse existing archival_memory table with BGE embeddings | Leverages 100+ learnings, no schema changes needed |
 | 06-05 | PostgresVectorStore singleton for connection reuse | Avoids connection overhead per search |
+| 06-06 | Use postgres_id column (not postgres_memory_id) | Matches existing schema.py definition |
+| 06-06 | Graceful PostgreSQL fallback in migration | System works without PostgreSQL, no hard dependency |
 
 **Architectural decisions from PROJECT.md:**
 - Dual-layer memory: Markdown (human-readable) + SQLite (machine-efficient)
@@ -66,7 +68,7 @@ None yet.
 
 ### Blockers/Concerns
 
-**Phase 6 Readiness:**
+**Phase 6 COMPLETE:**
 - ✓ SQLite FTS5 verified operational with porter unicode61 tokenizer
 - ✓ Database path set to ~/.lifeos/memory/ (consistent with existing ~/.lifeos/ structure)
 - ✓ retain_fact() dual-layer storage implemented (SQLite + Markdown)
@@ -76,7 +78,8 @@ None yet.
 - ✓ Schema includes is_active for soft-delete and summary for entities
 - ✓ PostgreSQL vector integration with hybrid RRF search operational (Plan 06-05)
 - ✓ Graceful fallback ensures FTS-only mode when PostgreSQL unavailable
-- Plan 06-06 (recall() API) remaining in Phase 6
+- ✓ PostgreSQL to SQLite migration system (Plan 06-06)
+- ✓ INT-006 compliance verified (state in ~/.lifeos/memory/)
 
 **Phase 7 Readiness:**
 - Requires all 5 bot systems to be integration-ready (Treasury, Telegram, X, Bags Intel, Buy Tracker)
@@ -88,10 +91,10 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-25T10:25:34Z
-Stopped at: Completed 06-05-PLAN.md (PostgreSQL vector + hybrid RRF search)
+Last session: 2026-01-25T10:47:15Z
+Stopped at: Completed 06-06-PLAN.md (PostgreSQL to SQLite migration)
 Resume file: None
 
 ---
 
-**Next Action:** Wave 3 complete (Plan 06-05). Continue to Plan 06-06 (recall() API) to complete Phase 6.
+**Next Action:** Phase 6 COMPLETE. Ready for Phase 7 (Bot Integration) or Phase 8 (Reflect & Summarize).
