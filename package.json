@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
+    "@metaplex-foundation/umi": "^1.4.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.4.1",
+    "@solana/web3.js": "^1.95.8",
+    "tweetnacl": "^1.0.3"
+  }
+}
