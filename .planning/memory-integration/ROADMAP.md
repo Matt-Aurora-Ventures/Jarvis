@@ -57,10 +57,15 @@ Plans:
   7. Entity mentions (@tokens, @users, @strategies) are auto-extracted and linked across all stored facts
   8. Recall queries complete in <100ms at p95 with hybrid FTS5 + vector search
 
-**Plans**: TBD (to be planned in Phase 7 planning session)
+**Plans**: 6 plans in 4 waves
 
 Plans:
-- TBD
+- [ ] 07-01-PLAN.md - Core Recall API + Session Context (Wave 1)
+- [ ] 07-02-PLAN.md - Entity Profile System (Wave 1, parallel)
+- [ ] 07-03-PLAN.md - Treasury Memory Integration (Wave 2)
+- [ ] 07-04-PLAN.md - Telegram Memory Integration (Wave 3)
+- [ ] 07-05-PLAN.md - X/Twitter + Bags Intel + Buy Tracker Integration (Wave 3, parallel)
+- [ ] 07-06-PLAN.md - Integration Tests + Quality Validation (Wave 4)
 
 ### Phase 8: Reflect & Intelligence
 **Goal**: Jarvis autonomously synthesizes daily experiences into evolving intelligence with confidence-weighted opinions
@@ -94,12 +99,12 @@ Phases execute in numeric order: 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Memory Foundation | 6/6 | ✓ Complete | 2026-01-25 |
-| 7. Retain/Recall Functions | 0/TBD | Ready for planning | - |
+| 6. Memory Foundation | 6/6 | Complete | 2026-01-25 |
+| 7. Retain/Recall Functions | 0/6 | Ready for execution | - |
 | 8. Reflect & Intelligence | 0/TBD | Pending Phase 7 | - |
 
 ---
 
-**Roadmap Version:** 1.2
+**Roadmap Version:** 1.3
 **Created:** 2026-01-25
-**Last Updated:** 2026-01-25 (Phase 6 complete)
+**Last Updated:** 2026-01-25 (Phase 7 planned - 6 plans in 4 waves)
