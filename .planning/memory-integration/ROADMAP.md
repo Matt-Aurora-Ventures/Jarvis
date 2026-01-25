@@ -11,7 +11,7 @@ Integrate Clawdbot's hybrid Markdown + SQLite memory architecture across all Jar
 - This is a brownfield integration into existing production codebase
 
 - [x] **Phase 6: Memory Foundation** - Unified workspace, SQLite schema, PostgreSQL integration
-- [ ] **Phase 7: Retain/Recall Functions** - Active memory storage and retrieval across all bots
+- [x] **Phase 7: Retain/Recall Functions** - Active memory storage and retrieval across all bots
 - [ ] **Phase 8: Reflect & Intelligence** - Daily synthesis, confidence evolution, entity intelligence
 
 ## Phase Details
@@ -60,12 +60,12 @@ Plans:
 **Plans**: 6 plans in 4 waves
 
 Plans:
-- [ ] 07-01-PLAN.md - Core Recall API + Session Context (Wave 1)
-- [ ] 07-02-PLAN.md - Entity Profile System (Wave 1, parallel)
-- [ ] 07-03-PLAN.md - Treasury Memory Integration (Wave 2)
-- [ ] 07-04-PLAN.md - Telegram Memory Integration (Wave 3)
-- [ ] 07-05-PLAN.md - X/Twitter + Bags Intel + Buy Tracker Integration (Wave 3, parallel)
-- [ ] 07-06-PLAN.md - Integration Tests + Quality Validation (Wave 4)
+- [x] 07-01-PLAN.md - Core Recall API + Session Context (Wave 1)
+- [x] 07-02-PLAN.md - Entity Profile System (Wave 1, parallel)
+- [x] 07-03-PLAN.md - Treasury Memory Integration (Wave 2)
+- [x] 07-04-PLAN.md - Telegram Memory Integration (Wave 3)
+- [x] 07-05-PLAN.md - X/Twitter + Bags Intel + Buy Tracker Integration (Wave 3, parallel)
+- [x] 07-06-PLAN.md - Integration Tests + Quality Validation (Wave 4)
 
 ### Phase 8: Reflect & Intelligence
 **Goal**: Jarvis autonomously synthesizes daily experiences into evolving intelligence with confidence-weighted opinions
@@ -99,12 +99,12 @@ Phases execute in numeric order: 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Memory Foundation | 6/6 | Complete | 2026-01-25 |
-| 7. Retain/Recall Functions | 0/6 | Ready for execution | - |
-| 8. Reflect & Intelligence | 0/TBD | Pending Phase 7 | - |
+| 6. Memory Foundation | 6/6 | ✓ Complete | 2026-01-25 |
+| 7. Retain/Recall Functions | 6/6 | ✓ Complete | 2026-01-25 |
+| 8. Reflect & Intelligence | 0/TBD | Ready for planning | - |
 
 ---
 
-**Roadmap Version:** 1.3
+**Roadmap Version:** 1.4
 **Created:** 2026-01-25
-**Last Updated:** 2026-01-25 (Phase 7 planned - 6 plans in 4 waves)
+**Last Updated:** 2026-01-25 (Phase 7 complete - all 5 bots integrated)
