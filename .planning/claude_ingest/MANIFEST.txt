@@ -1,0 +1,15 @@
+.planning/claude_ingest/Solana_and_telegram_libraries.txt
+docs/CLAUDE_OPUS_INGEST_GUIDE.md
+prd-demo-bot-enhancement.md
+bots/treasury/trading_legacy.py
+bots/treasury/trading/__init__.py
+bots/treasury/trading/trading_core.py
+bots/treasury/trading/trading_execution.py
+bots/treasury/trading/trading_positions.py
+bots/treasury/trading/trading_risk.py
+bots/treasury/trading/trading_analytics.py
+bots/treasury/trading/trading_operations.py
+bots/treasury/trading/treasury_trader.py
+bots/treasury/trading/types.py
+bots/treasury/trading/constants.py
+bots/treasury/trading/logging_utils.py

@@ -1144,7 +1144,7 @@ class JarvisBuyBot:
                 confidence = 0.7
                 content = f"Notable buy on {buy.token_symbol}: ${buy.usd_amount:,.2f} - growing interest"
             else:  # >= 100
-                learning_type = LearningType.CONTEXT_ADAPTATION
+                learning_type = LearningType.MARKET_INSIGHT
                 confidence = 0.6
                 content = f"Buy activity on {buy.token_symbol}: ${buy.usd_amount:,.2f}"
 
@@ -1159,7 +1159,7 @@ class JarvisBuyBot:
                     "usd_amount": buy.usd_amount,
                     "buyer": buy.buyer_short,
                     "timestamp": buy.timestamp,
-                    "tx_signature": buy.tx_signature,
+                    "tx_signature": buy.signature,
                 },
                 confidence=confidence
             )

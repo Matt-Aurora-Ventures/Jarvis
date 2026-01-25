@@ -1,0 +1,65 @@
+[Unit]
+Description=Clawd Discord Bot (Python)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%USERNAME%
+Group=%USERNAME%
+WorkingDirectory=%HOME%/clawd
+
+# Python virtual environment activation and execution
+ExecStart=%HOME%/clawd/venv/bin/python main.py
+
+# Automatically restart on failure
+Restart=on-failure
+RestartSec=10
+StartLimitInterval=200
+StartLimitBurst=5
+
+# Environment variables (or use EnvironmentFile)
+Environment="PYTHONUNBUFFERED=1"
+Environment="DISCORD_BOT_TOKEN=your_token_here"
+Environment="ANTHROPIC_API_KEY=your_api_key_here"
+
+# Alternatively, load from .env file
+# EnvironmentFile=%HOME%/clawd/.env
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=1G
+CPUQuota=50%
+
+# Logging
+StandardOutput=append:%HOME%/clawd/logs/clawd.log
+StandardError=append:%HOME%/clawd/logs/clawd-error.log
+SyslogIdentifier=clawd-bot
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
+# ======================================
+# Installation Instructions:
+# ======================================
+# 1. Replace %USERNAME% with your actual username
+# 2. Replace %HOME% with your actual home directory path
+# 3. Update environment variables or use EnvironmentFile
+# 4. Copy this file to systemd directory:
+#    sudo cp clawd-python.service /etc/systemd/system/
+# 5. Create log directory:
+#    mkdir -p ~/clawd/logs
+# 6. Reload systemd:
+#    sudo systemctl daemon-reload
+# 7. Enable auto-start:
+#    sudo systemctl enable clawd-python
+# 8. Start the service:
+#    sudo systemctl start clawd-python
+# 9. Check status:
+#    sudo systemctl status clawd-python
+# 10. View logs:
+#    journalctl -u clawd-python -f

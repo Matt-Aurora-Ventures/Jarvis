@@ -229,7 +229,7 @@ class ContinuousConsole:
             # Call Claude API
             logger.info(f"Executing console request for {username} (mode={mode})")
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",  # Latest Sonnet
+                model="claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (widely available)
                 max_tokens=4096,
                 system=system_prompt,
                 messages=messages,
