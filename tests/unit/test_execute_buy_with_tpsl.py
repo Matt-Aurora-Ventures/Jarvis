@@ -17,7 +17,7 @@ class TestExecuteBuyWithTPSL:
         from tg_bot.handlers.demo import execute_buy_with_tpsl
 
         # Mock the swap execution
-        with patch('tg_bot.handlers.demo._execute_swap_with_fallback') as mock_swap:
+        with patch('tg_bot.handlers.demo.demo_trading._execute_swap_with_fallback') as mock_swap:
             mock_swap.return_value = {
                 "success": True,
                 "source": "bags_fm",
@@ -25,7 +25,7 @@ class TestExecuteBuyWithTPSL:
                 "amount_out": 1000.0,
             }
 
-            with patch('tg_bot.handlers.demo.get_ai_sentiment_for_token') as mock_sentiment:
+            with patch('tg_bot.handlers.demo.demo_sentiment.get_ai_sentiment_for_token') as mock_sentiment:
                 mock_sentiment.return_value = {
                     "symbol": "TEST",
                     "price": 0.001,
@@ -46,7 +46,7 @@ class TestExecuteBuyWithTPSL:
         """execute_buy_with_tpsl() should accept custom TP/SL values."""
         from tg_bot.handlers.demo import execute_buy_with_tpsl
 
-        with patch('tg_bot.handlers.demo._execute_swap_with_fallback') as mock_swap:
+        with patch('tg_bot.handlers.demo.demo_trading._execute_swap_with_fallback') as mock_swap:
             mock_swap.return_value = {
                 "success": True,
                 "source": "jupiter",
@@ -54,7 +54,7 @@ class TestExecuteBuyWithTPSL:
                 "amount_out": 2000.0,
             }
 
-            with patch('tg_bot.handlers.demo.get_ai_sentiment_for_token') as mock_sentiment:
+            with patch('tg_bot.handlers.demo.demo_sentiment.get_ai_sentiment_for_token') as mock_sentiment:
                 mock_sentiment.return_value = {
                     "symbol": "CUSTOM",
                     "price": 0.002,
@@ -77,7 +77,7 @@ class TestExecuteBuyWithTPSL:
         """execute_buy_with_tpsl() should try Bags.fm first, fallback to Jupiter."""
         from tg_bot.handlers.demo import execute_buy_with_tpsl
 
-        with patch('tg_bot.handlers.demo._execute_swap_with_fallback') as mock_swap:
+        with patch('tg_bot.handlers.demo.demo_trading._execute_swap_with_fallback') as mock_swap:
             # Simulate Jupiter fallback (Bags failed)
             mock_swap.return_value = {
                 "success": True,
@@ -86,7 +86,7 @@ class TestExecuteBuyWithTPSL:
                 "amount_out": 500.0,
             }
 
-            with patch('tg_bot.handlers.demo.get_ai_sentiment_for_token') as mock_sentiment:
+            with patch('tg_bot.handlers.demo.demo_sentiment.get_ai_sentiment_for_token') as mock_sentiment:
                 mock_sentiment.return_value = {
                     "symbol": "FALLBACK",
                     "price": 0.0005,
@@ -107,7 +107,7 @@ class TestExecuteBuyWithTPSL:
         """execute_buy_with_tpsl() should return error if both DEXs fail."""
         from tg_bot.handlers.demo import execute_buy_with_tpsl
 
-        with patch('tg_bot.handlers.demo._execute_swap_with_fallback') as mock_swap:
+        with patch('tg_bot.handlers.demo.demo_trading._execute_swap_with_fallback') as mock_swap:
             mock_swap.return_value = {
                 "success": False,
                 "error": "All swap routes failed",
@@ -127,7 +127,7 @@ class TestExecuteBuyWithTPSL:
         """execute_buy_with_tpsl() position should have all required fields."""
         from tg_bot.handlers.demo import execute_buy_with_tpsl
 
-        with patch('tg_bot.handlers.demo._execute_swap_with_fallback') as mock_swap:
+        with patch('tg_bot.handlers.demo.demo_trading._execute_swap_with_fallback') as mock_swap:
             mock_swap.return_value = {
                 "success": True,
                 "source": "bags_fm",
@@ -135,7 +135,7 @@ class TestExecuteBuyWithTPSL:
                 "amount_out": 10000.0,
             }
 
-            with patch('tg_bot.handlers.demo.get_ai_sentiment_for_token') as mock_sentiment:
+            with patch('tg_bot.handlers.demo.demo_sentiment.get_ai_sentiment_for_token') as mock_sentiment:
                 mock_sentiment.return_value = {
                     "symbol": "COMPLETE",
                     "price": 0.00001,
@@ -171,7 +171,7 @@ class TestExecuteBuyWithTPSL:
 
         entry_price = 0.001
 
-        with patch('tg_bot.handlers.demo._execute_swap_with_fallback') as mock_swap:
+        with patch('tg_bot.handlers.demo.demo_trading._execute_swap_with_fallback') as mock_swap:
             mock_swap.return_value = {
                 "success": True,
                 "source": "bags_fm",
@@ -179,7 +179,7 @@ class TestExecuteBuyWithTPSL:
                 "amount_out": 1000.0,
             }
 
-            with patch('tg_bot.handlers.demo.get_ai_sentiment_for_token') as mock_sentiment:
+            with patch('tg_bot.handlers.demo.demo_sentiment.get_ai_sentiment_for_token') as mock_sentiment:
                 mock_sentiment.return_value = {
                     "symbol": "CALC",
                     "price": entry_price,
