@@ -967,6 +967,58 @@ async def create_ai_supervisor():
             await asyncio.sleep(60)
 
 
+async def register_memory_reflect_jobs():
+    """
+    Register daily/weekly memory reflection jobs with the global scheduler.
+
+    Jobs:
+    - Daily reflect: 3 AM UTC every day (PERF-002: <5min timeout)
+    - Weekly summary: 4 AM UTC every Sunday
+
+    Kill switch: Set MEMORY_REFLECT_ENABLED=false to disable.
+    """
+    from core.automation.scheduler import get_scheduler
+    from core.memory.reflect import reflect_daily
+    from core.memory.patterns import generate_weekly_summary
+
+    # Check kill switch
+    if os.environ.get("MEMORY_REFLECT_ENABLED", "true").lower() != "true":
+        logger.info("[memory_reflect] Disabled via MEMORY_REFLECT_ENABLED=false")
+        return
+
+    scheduler = get_scheduler()
+
+    # Daily reflection job - 3 AM UTC every day
+    daily_job_id = scheduler.schedule_cron(
+        name="memory_daily_reflect",
+        action=reflect_daily,
+        cron_expression="0 3 * * *",  # 3 AM UTC daily
+        params={},
+        enabled=True,
+        retry_on_failure=True,
+        timeout=300.0,  # 5 minutes max (PERF-002 requirement)
+        tags=["memory", "reflect", "critical"]
+    )
+    logger.info(f"[memory_reflect] Registered daily reflect job (3 AM UTC) - ID: {daily_job_id}")
+
+    # Weekly summary job - 4 AM UTC every Sunday
+    weekly_job_id = scheduler.schedule_cron(
+        name="memory_weekly_summary",
+        action=generate_weekly_summary,
+        cron_expression="0 4 * * 0",  # 4 AM UTC every Sunday
+        params={},
+        enabled=True,
+        retry_on_failure=True,
+        timeout=600.0,  # 10 minutes max
+        tags=["memory", "summary", "weekly"]
+    )
+    logger.info(f"[memory_reflect] Registered weekly summary job (Sundays 4 AM UTC) - ID: {weekly_job_id}")
+
+    # Start the scheduler if not already running
+    await scheduler.start()
+    logger.info("[memory_reflect] Scheduler started for memory reflection jobs")
+
+
 def validate_startup() -> bool:
     """
     Validate critical configuration before starting.
@@ -1283,6 +1335,15 @@ async def main():
             )
     except Exception as exc:
         logger.warning(f"Health bus unavailable: {exc}")
+
+    # ==========================================================
+    # MEMORY REFLECTION: Register scheduled jobs
+    # ==========================================================
+    try:
+        await register_memory_reflect_jobs()
+        logger.info("Memory reflection jobs: ENABLED")
+    except Exception as e:
+        logger.warning(f"Memory reflection jobs failed to register: {e}")
 
     # Register components
     # Each component runs independently - if one crashes, others continue
