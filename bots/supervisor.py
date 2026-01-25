@@ -645,7 +645,13 @@ async def create_twitter_poster():
 
 
 async def create_telegram_bot():
-    """Create and run the main Telegram bot with anti-scam."""
+    """Create and run the main Telegram bot with anti-scam.
+
+    Lock architecture (US-033 fix):
+    - Supervisor acquires and HOLDS the polling lock for the bot's entire lifetime
+    - Subprocess skips its own lock acquisition (SKIP_TELEGRAM_LOCK=1)
+    - This eliminates the race condition from probe-release-spawn pattern
+    """
     import subprocess
 
     tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -653,28 +659,39 @@ async def create_telegram_bot():
         logger.warning("No TELEGRAM_BOT_TOKEN set, skipping Telegram bot")
         return
 
-    # Avoid getUpdates conflicts by waiting for polling lock availability
+    # Import enhanced locking with PID validation
     try:
-        from core.utils.instance_lock import acquire_instance_lock
+        from core.utils.instance_lock import acquire_instance_lock, cleanup_stale_lock
     except Exception as exc:
         logger.warning(f"Polling lock helper unavailable: {exc}")
         acquire_instance_lock = None
+        cleanup_stale_lock = None
 
-    if acquire_instance_lock:
-        while True:
-            probe = acquire_instance_lock(tg_token, name="telegram_polling", max_wait_seconds=0)
-            if probe:
-                try:
-                    probe.close()
-                except Exception:
-                    pass
-                break
-            logger.warning("Telegram polling lock held by another process; waiting to start...")
-            await asyncio.sleep(15)
+    lock_handle = None
+
+    if acquire_instance_lock and cleanup_stale_lock:
+        # Clean up any stale locks from crashed processes FIRST
+        cleanup_stale_lock(tg_token, name="telegram_polling")
+
+        # Acquire lock at supervisor level - hold for entire bot lifetime
+        # This is the KEY FIX: supervisor holds lock, not just probes it
+        lock_handle = acquire_instance_lock(
+            tg_token,
+            name="telegram_polling",
+            max_wait_seconds=30,
+            validate_pid=True,
+        )
+        if not lock_handle:
+            logger.error("Cannot acquire Telegram polling lock - another instance is running")
+            return
+
+        logger.info("Acquired Telegram polling lock at supervisor level")
 
     # Run as subprocess to isolate it
     env = os.environ.copy()
     env["PYTHONPATH"] = str(project_root) + os.pathsep + env.get("PYTHONPATH", "")
+    # Tell subprocess to skip its own lock acquisition - supervisor holds it
+    env["SKIP_TELEGRAM_LOCK"] = "1"
 
     # Kill any lingering telegram bot processes from previous runs
     try:
@@ -710,6 +727,7 @@ async def create_telegram_bot():
                 raise RuntimeError(f"Telegram bot exited with code {ret}")
             await asyncio.sleep(5)
     finally:
+        # Terminate subprocess if still running
         if proc.poll() is None:
             proc.terminate()
             try:
@@ -717,6 +735,14 @@ async def create_telegram_bot():
             except subprocess.TimeoutExpired:
                 proc.kill()
                 logger.warning("Telegram bot process killed (timeout on terminate)")
+
+        # Release supervisor-level lock
+        if lock_handle:
+            try:
+                lock_handle.close()
+                logger.info("Released Telegram polling lock")
+            except Exception as e:
+                logger.warning(f"Error releasing lock: {e}")
 
 
 async def create_autonomous_x_engine():
