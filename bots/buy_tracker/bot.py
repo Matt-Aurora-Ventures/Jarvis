@@ -365,6 +365,31 @@ class JarvisBuyBot:
         """Handle detected buy transaction."""
         logger.info(f"Processing buy: ${buy.usd_amount:.2f} from {buy.buyer_short}")
 
+        # Store purchase event in memory (fire-and-forget)
+        try:
+            from bots.buy_tracker.memory_hooks import store_purchase_event
+            from core.async_utils import fire_and_forget
+
+            fire_and_forget(
+                store_purchase_event(
+                    token_symbol=self.config.token_symbol,
+                    token_mint=self.config.token_address,
+                    buyer_wallet=buy.buyer_wallet,
+                    purchase_amount_sol=buy.sol_amount,
+                    token_amount=buy.token_amount,
+                    price_at_purchase=buy.price_per_token,
+                    source="kr8tiv",
+                    metadata={
+                        "market_cap": buy.market_cap,
+                        "buyer_position_pct": buy.buyer_position_pct,
+                        "sol_price_usd": buy.usd_amount / buy.sol_amount if buy.sol_amount > 0 else 0,
+                    },
+                ),
+                name=f"store_purchase_{buy.signature[:8]}",
+            )
+        except Exception as e:
+            logger.debug(f"Memory hook skipped: {e}")
+
         # Format the message
         message = self._format_buy_message(buy)
         keyboard = get_faq_keyboard(show_faq=False)
