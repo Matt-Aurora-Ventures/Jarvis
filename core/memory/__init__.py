@@ -52,6 +52,11 @@ from core.memory.hybrid_search import (
     HybridSearchResult,
     get_search_explanation,
 )
+from core.memory.migration import (
+    get_migration_status,
+    migrate_archival_memory,
+    verify_migration,
+)
 
 # New deduplication-focused memory store (M1 implementation)
 try:
@@ -184,4 +189,8 @@ __all__ = [
     "hybrid_search",
     "HybridSearchResult",
     "get_search_explanation",
+    # Migration (migration.py)
+    "get_migration_status",
+    "migrate_archival_memory",
+    "verify_migration",
 ]
