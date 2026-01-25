@@ -34,6 +34,8 @@ from tg_bot.handlers.demo.demo_trading import (
     get_trade_intelligence,
     get_success_fee_manager,
     validate_buy_amount,
+    _get_jupiter_client,  # For testing
+    _execute_swap_with_fallback,  # For testing
 )
 
 from tg_bot.handlers.demo.demo_sentiment import (
@@ -50,6 +52,8 @@ from tg_bot.handlers.demo.demo_sentiment import (
 from tg_bot.handlers.demo.demo_orders import (
     _background_tp_sl_monitor,
     _process_demo_exit_checks,
+    _check_demo_exit_triggers,  # For testing
+    _maybe_execute_exit,  # For testing
 )
 
 # Import callback router (Phase 2 refactoring)
