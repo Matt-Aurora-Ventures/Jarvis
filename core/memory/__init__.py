@@ -79,6 +79,15 @@ from core.memory.entity_profiles import (
     get_entity_facts,
     on_fact_stored,
 )
+from core.memory.reflect import (
+    reflect_daily,
+    get_reflect_state,
+    save_reflect_state,
+)
+from core.memory.summarize import (
+    synthesize_daily_facts,
+    synthesize_entity_insights,
+)
 
 # New deduplication-focused memory store (M1 implementation)
 try:
@@ -234,4 +243,10 @@ __all__ = [
     "list_entities",
     "get_entity_facts",
     "on_fact_stored",
+    # Reflect & Intelligence (reflect.py, summarize.py)
+    "reflect_daily",
+    "get_reflect_state",
+    "save_reflect_state",
+    "synthesize_daily_facts",
+    "synthesize_entity_insights",
 ]
