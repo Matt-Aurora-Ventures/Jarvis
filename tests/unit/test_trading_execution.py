@@ -430,3 +430,458 @@ class TestSwapExecutorRecoveryAdapter:
         result = await swap_executor.execute_swap(quote)
 
         assert result.success is True
+
+
+# =============================================================================
+# Extended Signal Analysis Tests (Lines 226-399)
+# =============================================================================
+
+
+class TestSentimentSignalThresholds:
+    """Extended tests for sentiment signal analysis covering all thresholds."""
+
+    @pytest.fixture
+    def analyzer(self):
+        """Create analyzer with signals disabled (pure sentiment logic)."""
+        return SignalAnalyzer(enable_signals=False)
+
+    @pytest.mark.asyncio
+    async def test_high_conviction_bullish_a_plus(self, analyzer):
+        """Test high conviction bullish signal (A+, score > 0.40)."""
+        direction, reason = await analyzer.analyze_sentiment_signal(
+            token_mint="SOL_mint",
+            sentiment_score=0.45,
+            sentiment_grade="A+",
+            max_positions=10,
+            open_positions_count=3
+        )
+
+        assert direction == TradeDirection.LONG
+        assert "High conviction bullish" in reason
+        assert "A+" in reason
+        assert "0.45" in reason
+
+    @pytest.mark.asyncio
+    async def test_high_conviction_bullish_a(self, analyzer):
+        """Test high conviction bullish signal (A, score > 0.40)."""
+        direction, reason = await analyzer.analyze_sentiment_signal(
+            token_mint="SOL_mint",
+            sentiment_score=0.42,
+            sentiment_grade="A",
+            max_positions=10,
+            open_positions_count=3
+        )
+
+        assert direction == TradeDirection.LONG
+        assert "High conviction bullish" in reason
+        assert "Grade A" in reason
+
+    @pytest.mark.asyncio
+    async def test_strong_bullish_a_minus(self, analyzer):
+        """Test strong bullish signal (A-, score > 0.35)."""
+        direction, reason = await analyzer.analyze_sentiment_signal(
+            token_mint="SOL_mint",
+            sentiment_score=0.36,
+            sentiment_grade="A-",
+            max_positions=10,
+            open_positions_count=3
+        )
+
+        assert direction == TradeDirection.LONG
+        assert "Strong bullish signal" in reason
+        assert "A-" in reason
+
+    @pytest.mark.asyncio
+    async def test_strong_bullish_b_plus(self, analyzer):
+        """Test strong bullish signal (B+, score > 0.35)."""
+        direction, reason = await analyzer.analyze_sentiment_signal(
+            token_mint="SOL_mint",
+            sentiment_score=0.37,
+            sentiment_grade="B+",
+            max_positions=10,
+            open_positions_count=3
+        )
+
+        assert direction == TradeDirection.LONG
+        assert "Strong bullish signal" in reason
+        assert "B+" in reason
+
+    @pytest.mark.asyncio
+    async def test_moderate_bullish_b(self, analyzer):
+        """Test moderate bullish signal (B, score > 0.30)."""
+        direction, reason = await analyzer.analyze_sentiment_signal(
+            token_mint="SOL_mint",
+            sentiment_score=0.32,
+            sentiment_grade="B",
+            max_positions=10,
+            open_positions_count=3
+        )
+
+        assert direction == TradeDirection.LONG
+        assert "Moderate bullish signal" in reason
+        assert "Grade B" in reason
+
+    @pytest.mark.asyncio
+    async def test_bearish_signal(self, analyzer):
+        """Test bearish signal (score < -0.30)."""
+        direction, reason = await analyzer.analyze_sentiment_signal(
+            token_mint="SOL_mint",
+            sentiment_score=-0.35,
+            sentiment_grade="D",
+            max_positions=10,
+            open_positions_count=3
+        )
+
+        assert direction == TradeDirection.SHORT
+        assert "Bearish signal" in reason
+        assert "-0.35" in reason
+
+    @pytest.mark.asyncio
+    async def test_neutral_weak_score(self, analyzer):
+        """Test neutral when score not strong enough."""
+        direction, reason = await analyzer.analyze_sentiment_signal(
+            token_mint="SOL_mint",
+            sentiment_score=0.25,  # Below 0.30 threshold for B
+            sentiment_grade="B",
+            max_positions=10,
+            open_positions_count=3
+        )
+
+        assert direction == TradeDirection.NEUTRAL
+        assert "not strong enough" in reason
+        assert "0.25" in reason
+
+    @pytest.mark.asyncio
+    async def test_neutral_max_positions_reached(self, analyzer):
+        """Test neutral when max positions reached."""
+        direction, reason = await analyzer.analyze_sentiment_signal(
+            token_mint="SOL_mint",
+            sentiment_score=0.50,
+            sentiment_grade="A",
+            max_positions=10,
+            open_positions_count=10  # At max
+        )
+
+        assert direction == TradeDirection.NEUTRAL
+        assert "Max positions reached" in reason
+
+
+class TestLiquidationSignalAnalysis:
+    """Tests for liquidation signal analysis with mocked CoinGlass data."""
+
+    @pytest.fixture
+    def analyzer_with_coinglass(self):
+        """Create analyzer with mocked CoinGlass."""
+        analyzer = SignalAnalyzer(enable_signals=True)
+
+        # Mock CoinGlass
+        analyzer._coinglass = AsyncMock()
+
+        # Mock Liquidation Analyzer
+        from types import SimpleNamespace
+        analyzer._liquidation_analyzer = MagicMock()
+
+        return analyzer
+
+    @pytest.mark.asyncio
+    async def test_liquidation_signal_long(self, analyzer_with_coinglass):
+        """Test liquidation signal returning LONG direction."""
+        # Mock liquidation data
+        from types import SimpleNamespace
+        liq_data = [
+            SimpleNamespace(
+                timestamp=1234567890,
+                long_liquidations=5_000_000,  # $5M long liquidations
+                short_liquidations=500_000,   # $500k short liquidations
+            )
+        ]
+        analyzer_with_coinglass._coinglass.get_liquidations = AsyncMock(return_value=liq_data)
+
+        # Mock analyzer returning LONG signal
+        mock_signal = SimpleNamespace(
+            direction='long',
+            reasoning='High long liquidations signal bottom',
+            confidence=0.75
+        )
+        analyzer_with_coinglass._liquidation_analyzer.analyze = MagicMock(return_value=mock_signal)
+
+        direction, reason, signal = await analyzer_with_coinglass.analyze_liquidation_signal(symbol="BTC")
+
+        assert direction == TradeDirection.LONG
+        assert "Liquidation signal" in reason
+        assert "75%" in reason
+        assert signal == mock_signal
+
+    @pytest.mark.asyncio
+    async def test_liquidation_signal_short(self, analyzer_with_coinglass):
+        """Test liquidation signal returning SHORT direction."""
+        from types import SimpleNamespace
+        liq_data = [
+            SimpleNamespace(
+                timestamp=1234567890,
+                long_liquidations=500_000,     # $500k long liquidations
+                short_liquidations=5_000_000,  # $5M short liquidations
+            )
+        ]
+        analyzer_with_coinglass._coinglass.get_liquidations = AsyncMock(return_value=liq_data)
+
+        # Mock analyzer returning SHORT signal
+        mock_signal = SimpleNamespace(
+            direction='short',
+            reasoning='High short liquidations signal top',
+            confidence=0.65
+        )
+        analyzer_with_coinglass._liquidation_analyzer.analyze = MagicMock(return_value=mock_signal)
+
+        direction, reason, signal = await analyzer_with_coinglass.analyze_liquidation_signal(symbol="BTC")
+
+        assert direction == TradeDirection.SHORT
+        assert "Liquidation signal" in reason
+        assert "65%" in reason
+
+    @pytest.mark.asyncio
+    async def test_liquidation_signal_neutral(self, analyzer_with_coinglass):
+        """Test liquidation signal returning NEUTRAL (no signal)."""
+        from types import SimpleNamespace
+        liq_data = [
+            SimpleNamespace(
+                timestamp=1234567890,
+                long_liquidations=1_000_000,
+                short_liquidations=1_000_000,
+            )
+        ]
+        analyzer_with_coinglass._coinglass.get_liquidations = AsyncMock(return_value=liq_data)
+
+        # Analyzer returns None (no signal)
+        analyzer_with_coinglass._liquidation_analyzer.analyze = MagicMock(return_value=None)
+
+        direction, reason, signal = await analyzer_with_coinglass.analyze_liquidation_signal(symbol="BTC")
+
+        assert direction == TradeDirection.NEUTRAL
+        assert "No liquidation signal detected" in reason
+        assert signal is None
+
+    @pytest.mark.asyncio
+    async def test_liquidation_signal_no_data(self, analyzer_with_coinglass):
+        """Test liquidation signal when no data available."""
+        analyzer_with_coinglass._coinglass.get_liquidations = AsyncMock(return_value=[])
+
+        direction, reason, signal = await analyzer_with_coinglass.analyze_liquidation_signal(symbol="BTC")
+
+        assert direction == TradeDirection.NEUTRAL
+        assert "No liquidation data available" in reason
+        assert signal is None
+
+    @pytest.mark.asyncio
+    async def test_liquidation_signal_error_handling(self, analyzer_with_coinglass):
+        """Test liquidation signal handles errors gracefully."""
+        analyzer_with_coinglass._coinglass.get_liquidations = AsyncMock(side_effect=Exception("API error"))
+
+        direction, reason, signal = await analyzer_with_coinglass.analyze_liquidation_signal(symbol="BTC")
+
+        assert direction == TradeDirection.NEUTRAL
+        assert "error" in reason.lower()
+        assert signal is None
+
+
+class TestMASignalAnalysis:
+    """Tests for moving average signal analysis."""
+
+    @pytest.fixture
+    def analyzer_with_ma(self):
+        """Create analyzer with mocked MA analyzer."""
+        analyzer = SignalAnalyzer(enable_signals=True)
+        analyzer._ma_analyzer = MagicMock()
+        return analyzer
+
+    @pytest.mark.asyncio
+    async def test_ma_signal_long(self, analyzer_with_ma):
+        """Test MA signal returning LONG."""
+        from types import SimpleNamespace
+        mock_signal = SimpleNamespace(
+            direction='long',
+            reasoning='MA crossover bullish',
+            strength=0.80
+        )
+        analyzer_with_ma._ma_analyzer.analyze = MagicMock(return_value=mock_signal)
+
+        prices = [100.0] * 100  # Need 100+ prices
+        direction, reason, signal = await analyzer_with_ma.analyze_ma_signal(prices, symbol="BTC")
+
+        assert direction == TradeDirection.LONG
+        assert "MA signal" in reason
+        assert "80%" in reason
+
+    @pytest.mark.asyncio
+    async def test_ma_signal_short(self, analyzer_with_ma):
+        """Test MA signal returning SHORT."""
+        from types import SimpleNamespace
+        mock_signal = SimpleNamespace(
+            direction='short',
+            reasoning='MA crossover bearish',
+            strength=0.70
+        )
+        analyzer_with_ma._ma_analyzer.analyze = MagicMock(return_value=mock_signal)
+
+        prices = [100.0] * 100
+        direction, reason, signal = await analyzer_with_ma.analyze_ma_signal(prices, symbol="BTC")
+
+        assert direction == TradeDirection.SHORT
+        assert "MA signal" in reason
+        assert "70%" in reason
+
+    @pytest.mark.asyncio
+    async def test_ma_signal_neutral_no_signal(self, analyzer_with_ma):
+        """Test MA signal when analyzer returns None."""
+        analyzer_with_ma._ma_analyzer.analyze = MagicMock(return_value=None)
+
+        prices = [100.0] * 100
+        direction, reason, signal = await analyzer_with_ma.analyze_ma_signal(prices, symbol="BTC")
+
+        assert direction == TradeDirection.NEUTRAL
+        assert "No MA signal detected" in reason
+
+    @pytest.mark.asyncio
+    async def test_ma_signal_error_handling(self, analyzer_with_ma):
+        """Test MA signal handles errors gracefully."""
+        analyzer_with_ma._ma_analyzer.analyze = MagicMock(side_effect=Exception("Analysis failed"))
+
+        prices = [100.0] * 100
+        direction, reason, signal = await analyzer_with_ma.analyze_ma_signal(prices, symbol="BTC")
+
+        assert direction == TradeDirection.NEUTRAL
+        assert "error" in reason.lower()
+
+
+class TestCombinedSignalDecisionMatrix:
+    """Tests for combined signal with decision matrix enabled."""
+
+    @pytest.fixture
+    def analyzer_with_decision_matrix(self):
+        """Create analyzer with all components mocked."""
+        analyzer = SignalAnalyzer(enable_signals=True)
+
+        # Mock decision matrix
+        from types import SimpleNamespace
+        analyzer._decision_matrix = MagicMock()
+
+        # Mock all analyzers
+        analyzer._coinglass = AsyncMock()
+        analyzer._liquidation_analyzer = MagicMock()
+        analyzer._ma_analyzer = MagicMock()
+
+        return analyzer
+
+    @pytest.mark.asyncio
+    async def test_combined_signal_all_long(self, analyzer_with_decision_matrix):
+        """Test combined signal when all signals agree LONG."""
+        analyzer = analyzer_with_decision_matrix
+
+        # Mock liquidation signal: LONG
+        from types import SimpleNamespace
+        liq_data = [SimpleNamespace(timestamp=123, long_liquidations=5_000_000, short_liquidations=500_000)]
+        analyzer._coinglass.get_liquidations = AsyncMock(return_value=liq_data)
+        liq_signal = SimpleNamespace(direction='long', reasoning='Liq: long', confidence=0.75)
+        analyzer._liquidation_analyzer.analyze = MagicMock(return_value=liq_signal)
+
+        # Mock MA signal: LONG
+        ma_signal = SimpleNamespace(direction='long', reasoning='MA: long', strength=0.80)
+        analyzer._ma_analyzer.analyze = MagicMock(return_value=ma_signal)
+
+        direction, reason, confidence = await analyzer.get_combined_signal(
+            token_mint="SOL_mint",
+            symbol="BTC",
+            sentiment_score=0.50,  # Sentiment will be LONG too
+            sentiment_grade="A",
+            max_positions=10,
+            open_positions_count=3,
+            prices=[100.0] * 100
+        )
+
+        # All 3 signals are LONG
+        assert direction == TradeDirection.LONG
+        assert confidence > 0.0
+        assert "High conviction bullish" in reason or "Liquidation signal" in reason
+
+    @pytest.mark.asyncio
+    async def test_combined_signal_mixed_signals(self, analyzer_with_decision_matrix):
+        """Test combined signal with mixed directions."""
+        analyzer = analyzer_with_decision_matrix
+
+        # Sentiment: LONG
+        # Liquidation: SHORT
+        # MA: LONG
+        from types import SimpleNamespace
+        liq_data = [SimpleNamespace(timestamp=123, long_liquidations=500_000, short_liquidations=5_000_000)]
+        analyzer._coinglass.get_liquidations = AsyncMock(return_value=liq_data)
+        liq_signal = SimpleNamespace(direction='short', reasoning='Liq: short', confidence=0.60)
+        analyzer._liquidation_analyzer.analyze = MagicMock(return_value=liq_signal)
+
+        ma_signal = SimpleNamespace(direction='long', reasoning='MA: long', strength=0.70)
+        analyzer._ma_analyzer.analyze = MagicMock(return_value=ma_signal)
+
+        direction, reason, confidence = await analyzer.get_combined_signal(
+            token_mint="SOL_mint",
+            symbol="BTC",
+            sentiment_score=0.50,
+            sentiment_grade="A",
+            max_positions=10,
+            open_positions_count=3,
+            prices=[100.0] * 100
+        )
+
+        # 2 LONG (sentiment + MA) vs 1 SHORT (liquidation)
+        # Weighted score: long_score = 0.5 + 0.7 = 1.2, short_score = 0.6
+        assert direction == TradeDirection.LONG
+        assert confidence > 0.0
+
+    @pytest.mark.asyncio
+    async def test_combined_signal_no_signals(self, analyzer_with_decision_matrix):
+        """Test combined signal when no signals detected."""
+        analyzer = analyzer_with_decision_matrix
+
+        # All signals return NEUTRAL
+        analyzer._coinglass.get_liquidations = AsyncMock(return_value=[])
+        analyzer._ma_analyzer.analyze = MagicMock(return_value=None)
+
+        direction, reason, confidence = await analyzer.get_combined_signal(
+            token_mint="SOL_mint",
+            symbol="BTC",
+            sentiment_score=0.20,  # Below threshold
+            sentiment_grade="C",
+            max_positions=10,
+            open_positions_count=3,
+            prices=[100.0] * 100
+        )
+
+        assert direction == TradeDirection.NEUTRAL
+        assert "No signals detected" in reason
+        assert confidence == 0.0
+
+    @pytest.mark.asyncio
+    async def test_combined_signal_weak_confidence(self, analyzer_with_decision_matrix):
+        """Test combined signal when confidence is too low."""
+        analyzer = analyzer_with_decision_matrix
+
+        # Single weak signal
+        from types import SimpleNamespace
+        liq_data = [SimpleNamespace(timestamp=123, long_liquidations=1_000_000, short_liquidations=500_000)]
+        analyzer._coinglass.get_liquidations = AsyncMock(return_value=liq_data)
+        liq_signal = SimpleNamespace(direction='long', reasoning='Liq: weak', confidence=0.30)
+        analyzer._liquidation_analyzer.analyze = MagicMock(return_value=liq_signal)
+
+        analyzer._ma_analyzer.analyze = MagicMock(return_value=None)
+
+        direction, reason, confidence = await analyzer.get_combined_signal(
+            token_mint="SOL_mint",
+            symbol="BTC",
+            sentiment_score=0.20,  # Neutral sentiment
+            sentiment_grade="C",
+            max_positions=10,
+            open_positions_count=3,
+            prices=[100.0] * 100
+        )
+
+        # Only 1 weak signal (0.30 confidence) - below 0.6 threshold
+        assert direction == TradeDirection.NEUTRAL
+        assert confidence == 0.0
