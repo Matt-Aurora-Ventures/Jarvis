@@ -20,6 +20,7 @@ from .models import (
 )
 from .monitor import GraduationMonitor, PollingFallback
 from .scorer import IntelScorer
+from core.async_utils import fire_and_forget
 
 logger = logging.getLogger("jarvis.bags_intel")
 
@@ -142,6 +143,33 @@ class BagsIntelService:
                 f"Score={graduation.score.overall_score:.0f} "
                 f"MCap=${graduation.market.market_cap_usd:,.0f}"
             )
+
+            # Store graduation outcome in memory (fire-and-forget)
+            try:
+                from bots.bags_intel.memory_hooks import store_graduation_outcome
+
+                bonding_data = {
+                    "duration_seconds": graduation.bonding.duration_seconds,
+                    "total_volume_sol": graduation.bonding.total_volume_sol,
+                    "unique_buyers": graduation.bonding.unique_buyers,
+                    "unique_sellers": graduation.bonding.unique_sellers,
+                    "buy_sell_ratio": graduation.bonding.buy_sell_ratio,
+                }
+
+                fire_and_forget(
+                    store_graduation_outcome(
+                        token_symbol=graduation.token.symbol,
+                        token_mint=mint,
+                        graduation_score=graduation.score.overall_score,
+                        price_at_graduation=graduation.market.price_usd,
+                        outcome="pending",  # Will be updated later
+                        creator_twitter=graduation.creator.twitter_handle,
+                        bonding_curve_data=bonding_data,
+                    ),
+                    name=f"store_graduation_{graduation.token.symbol}",
+                )
+            except Exception as e:
+                logger.debug(f"Memory hook skipped: {e}")
 
         except Exception as e:
             logger.error(f"Error processing {mint[:12]}: {e}")
