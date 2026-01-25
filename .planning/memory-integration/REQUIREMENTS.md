@@ -55,14 +55,14 @@ Requirements for Clawdbot memory integration into Jarvis Phases 6-8.
 - [ ] **SES-002**: Link platform identities (Telegram user = X user = API user)
 - [ ] **SES-003**: Isolate memory by user (multi-user support)
 - [ ] **SES-004**: Store session metadata (conversation context, current task)
-- [ ] **SES-005**: Support cross-session context (resume conversations)
+- [x] **SES-005**: Support cross-session context (resume conversations)
 
 ### Entity System
 
-- [ ] **ENT-001**: Implement entity extraction from facts (@mentions)
-- [ ] **ENT-002**: Create entity profiles for tokens (bank/entities/tokens/)
-- [ ] **ENT-003**: Create entity profiles for users (bank/entities/users/)
-- [ ] **ENT-004**: Create entity profiles for strategies (bank/entities/strategies/)
+- [x] **ENT-001**: Implement entity extraction from facts (@mentions)
+- [x] **ENT-002**: Create entity profiles for tokens (bank/entities/tokens/)
+- [x] **ENT-003**: Create entity profiles for users (bank/entities/users/)
+- [x] **ENT-004**: Create entity profiles for strategies (bank/entities/strategies/)
 - [ ] **ENT-005**: Auto-update entity summaries during reflect
 - [ ] **ENT-006**: Support entity relationships (token → strategy, user → preferences)
 
@@ -71,8 +71,8 @@ Requirements for Clawdbot memory integration into Jarvis Phases 6-8.
 - [ ] **INT-001**: Migrate existing PostgreSQL archival_memory learnings to new schema
 - [ ] **INT-002**: Link SQLite fact_embeddings to PostgreSQL archival_memory.id
 - [ ] **INT-003**: Preserve existing semantic search functionality
-- [ ] **INT-004**: Integrate with Trust Ladder (confidence scores inform autonomy levels)
-- [ ] **INT-005**: Track 81+ trading strategy performance in memory
+- [x] **INT-004**: Integrate with Trust Ladder (confidence scores inform autonomy levels)
+- [x] **INT-005**: Track 81+ trading strategy performance in memory
 - [ ] **INT-006**: Store state in `~/.lifeos/memory/` alongside existing trading state
 
 ### Performance & Quality
@@ -136,22 +136,22 @@ Which phases cover which requirements. Maps to Jarvis V1 Phases 6-8.
 | MEM-003 | Phase 6 | Complete |
 | MEM-004 | Phase 6 | Complete |
 | MEM-005 | Phase 6 | Complete |
-| RET-001 | Phase 7 | Pending |
-| RET-002 | Phase 7 | Pending |
-| RET-003 | Phase 7 | Pending |
-| RET-004 | Phase 7 | Pending |
-| RET-005 | Phase 7 | Pending |
-| RET-006 | Phase 7 | Pending |
-| RET-007 | Phase 7 | Pending |
-| RET-008 | Phase 7 | Pending |
-| REC-001 | Phase 7 | Pending |
-| REC-002 | Phase 7 | Pending |
-| REC-003 | Phase 7 | Pending |
-| REC-004 | Phase 7 | Pending |
-| REC-005 | Phase 7 | Pending |
-| REC-006 | Phase 7 | Pending |
-| REC-007 | Phase 7 | Pending |
-| REC-008 | Phase 7 | Pending |
+| RET-001 | Phase 7 | Complete |
+| RET-002 | Phase 7 | Complete |
+| RET-003 | Phase 7 | Complete |
+| RET-004 | Phase 7 | Complete |
+| RET-005 | Phase 7 | Complete |
+| RET-006 | Phase 7 | Complete |
+| RET-007 | Phase 7 | Complete |
+| RET-008 | Phase 7 | Complete |
+| REC-001 | Phase 7 | Complete |
+| REC-002 | Phase 7 | Complete |
+| REC-003 | Phase 7 | Complete |
+| REC-004 | Phase 7 | Complete |
+| REC-005 | Phase 7 | Complete |
+| REC-006 | Phase 7 | Complete |
+| REC-007 | Phase 7 | Complete |
+| REC-008 | Phase 7 | Complete |
 | REF-001 | Phase 8 | Pending |
 | REF-002 | Phase 8 | Pending |
 | REF-003 | Phase 8 | Pending |
@@ -176,13 +176,13 @@ Which phases cover which requirements. Maps to Jarvis V1 Phases 6-8.
 | INT-004 | Phase 7 | Pending |
 | INT-005 | Phase 7 | Pending |
 | INT-006 | Phase 6 | Complete |
-| PERF-001 | Phase 7 | Pending |
+| PERF-001 | Phase 7 | Complete |
 | PERF-002 | Phase 8 | Pending |
 | PERF-003 | Phase 8 | Pending |
-| PERF-004 | Phase 7 | Pending |
-| QUAL-001 | Phase 7 | Pending |
-| QUAL-002 | Phase 7 | Pending |
-| QUAL-003 | Phase 7 | Pending |
+| PERF-004 | Phase 7 | Complete |
+| QUAL-001 | Phase 7 | Complete |
+| QUAL-002 | Phase 7 | Complete |
+| QUAL-003 | Phase 7 | Complete |
 
 **Coverage:**
 - v1 requirements: 50 total
