@@ -51,13 +51,21 @@ class DummyJupiter:
 
 @pytest.mark.asyncio
 async def test_swap_prefers_bags_success(monkeypatch):
-    monkeypatch.setattr(
-        demo_mod,
-        "get_bags_client",
-        lambda: DummyBagsClient(DummyBagsResult(True, to_amount=123.0, tx_hash="bags_tx")),
-    )
-    monkeypatch.setattr(demo_mod, "_get_jupiter_client", lambda: DummyJupiter(output_amount=999))
-    monkeypatch.setattr(demo_mod, "_load_demo_wallet", lambda _addr=None: object())
+    # Patch the actual bags client that gets imported in get_bags_client
+    def mock_get_bags(profile=None):
+        return DummyBagsClient(DummyBagsResult(True, to_amount=123.0, tx_hash="bags_tx"))
+
+    async def mock_to_base(mint, amt, jup):
+        return int(amt * 1e9)
+
+    async def mock_from_base(mint, amt, jup):
+        return amt / 1e9
+
+    monkeypatch.setattr("core.trading.bags_client.get_bags_client", mock_get_bags)
+    monkeypatch.setattr("tg_bot.handlers.demo.demo_trading._get_jupiter_client", lambda: DummyJupiter(output_amount=999))
+    monkeypatch.setattr("tg_bot.handlers.demo.demo_trading._load_demo_wallet", lambda _addr=None: object())
+    monkeypatch.setattr("tg_bot.handlers.demo.demo_trading._to_base_units", mock_to_base)
+    monkeypatch.setattr("tg_bot.handlers.demo.demo_trading._from_base_units", mock_from_base)
 
     result = await demo_mod._execute_swap_with_fallback(
         from_token="So11111111111111111111111111111111111111112",
@@ -75,14 +83,34 @@ async def test_swap_prefers_bags_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_swap_falls_back_to_jupiter(monkeypatch):
-    monkeypatch.setattr(
-        demo_mod,
-        "get_bags_client",
-        lambda: DummyBagsClient(DummyBagsResult(False, error="bags down")),
-    )
+    # Patch the actual bags client that gets imported in get_bags_client
+    def mock_get_bags(profile=None):
+        return DummyBagsClient(DummyBagsResult(False, error="bags down"))
+
+    async def mock_to_base(mint, amt, jup):
+        return int(amt * 1e9)
+
+    async def mock_from_base(mint, amt, jup):
+        return amt / 1e9
+
+    # Set up dummy Jupiter client
     jupiter = DummyJupiter(output_amount=1_000_000_000)
-    monkeypatch.setattr(demo_mod, "_get_jupiter_client", lambda: jupiter)
-    monkeypatch.setattr(demo_mod, "_load_demo_wallet", lambda _addr=None: object())
+
+    # Reset the global Jupiter client cache in demo_trading module
+    import tg_bot.handlers.demo.demo_trading as demo_trading_mod
+    demo_trading_mod._JUPITER_CLIENT = jupiter
+
+    class DummyWallet:
+        pass
+
+    def mock_load_wallet(_addr=None):
+        return DummyWallet()
+
+    monkeypatch.setattr("core.trading.bags_client.get_bags_client", mock_get_bags)
+    monkeypatch.setattr("tg_bot.handlers.demo.demo_trading._get_jupiter_client", lambda: jupiter)
+    monkeypatch.setattr("tg_bot.handlers.demo.demo_trading._load_demo_wallet", mock_load_wallet)
+    monkeypatch.setattr("tg_bot.handlers.demo.demo_trading._to_base_units", mock_to_base)
+    monkeypatch.setattr("tg_bot.handlers.demo.demo_trading._from_base_units", mock_from_base)
 
     result = await demo_mod._execute_swap_with_fallback(
         from_token="So11111111111111111111111111111111111111112",

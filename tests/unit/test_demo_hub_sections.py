@@ -40,9 +40,9 @@ async def test_demo_hub_prestocks_graceful_message():
     config.admin_ids = {base_update.effective_user.id}
     config.is_admin = lambda _uid, _username=None: True
 
-    with patch("tg_bot.handlers.demo.get_config", return_value=config), \
+    with patch("tg_bot.handlers.demo_legacy.get_config", return_value=config), \
         patch("tg_bot.handlers.demo.get_market_regime", new=AsyncMock(return_value={"regime": "BULL"})), \
-        patch("tg_bot.handlers.demo._get_demo_engine", new=AsyncMock(return_value=DummyEngine())):
+        patch("tg_bot.handlers.demo_legacy._get_demo_engine", new=AsyncMock(return_value=DummyEngine())):
         await demo_mod.demo_callback(cb_update, context)
 
     assert cb_update.callback_query.message.edit_text.called
