@@ -127,7 +127,7 @@ Output markdown format:
 
         # Call Claude 3.5 Sonnet with low temperature for factual synthesis
         response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-3-5-sonnet-20250122",
             max_tokens=2000,
             temperature=0.3,
             messages=[
@@ -229,7 +229,7 @@ def synthesize_entity_insights(
 
         # Call Claude with low temperature
         response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-3-5-sonnet-20250122",
             max_tokens=1000,
             temperature=0.3,
             messages=[
