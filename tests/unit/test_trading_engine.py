@@ -860,5 +860,310 @@ class TestTPSLConfigCoverage:
         assert a_plus_sl < f_sl
 
 
+# =============================================================================
+# Order Filled Callback Tests (Lines 648-713)
+# =============================================================================
+
+
+class TestOrderFilledCallback:
+    """Tests for handle_order_filled callback method."""
+
+    @pytest.fixture
+    def mock_engine(self):
+        """Create a mock trading engine for testing."""
+        with patch('bots.treasury.trading.SecureWallet') as MockWallet, \
+             patch('bots.treasury.trading.JupiterClient') as MockJupiter:
+
+            wallet = MockWallet.return_value
+            jupiter = MockJupiter.return_value
+
+            engine = TradingEngine(
+                wallet=wallet,
+                jupiter=jupiter,
+                risk_level=RiskLevel.MODERATE,
+                admin_user_ids=[123456],
+            )
+
+            yield engine
+
+    @pytest.mark.asyncio
+    async def test_take_profit_order_filled(self, mock_engine, tmp_path):
+        """Test handling TP order fill closes position correctly."""
+        # Setup: Create an open position
+        mock_engine.STATE_FILE = tmp_path / "state.json"
+
+        position = Position(
+            id="pos_123",
+            token_mint="test_mint",
+            token_symbol="TEST",
+            direction=TradeDirection.LONG,
+            entry_price=100.0,
+            current_price=120.0,
+            amount=10.0,
+            amount_usd=1000.0,
+            take_profit_price=120.0,
+            stop_loss_price=80.0,
+            status=TradeStatus.OPEN,
+            opened_at=datetime.utcnow().isoformat(),
+        )
+        position.tp_order_id = "tp_order_123"
+        position.sl_order_id = "sl_order_456"
+
+        mock_engine.positions = {"pos_123": position}
+        mock_engine.trade_history = []
+
+        # Mock order manager
+        mock_engine.order_manager = AsyncMock()
+        mock_engine.order_manager.cancel_order = AsyncMock()
+
+        # Mock jupiter price
+        mock_engine.jupiter.get_token_price = AsyncMock(return_value=150.0)
+
+        # Handle TP order fill at exit price $120
+        await mock_engine._handle_order_filled(
+            order_id="tp_order_123",
+            order_type="TAKE_PROFIT",
+            token_mint="test_mint",
+            exit_price=120.0,
+            output_amount=1.0,  # Swapped to SOL
+            tx_signature="tx_sig_123"
+        )
+
+        # Verify position was closed
+        assert "pos_123" not in mock_engine.positions
+        assert len(mock_engine.trade_history) == 1
+
+        closed_pos = mock_engine.trade_history[0]
+        assert closed_pos.status == TradeStatus.CLOSED
+        assert closed_pos.exit_price == 120.0
+        assert closed_pos.pnl_pct == pytest.approx(20.0)  # (120-100)/100 = 20%
+        assert closed_pos.pnl_usd == pytest.approx(200.0)  # 1000 * 0.20
+
+        # Verify SL order was cancelled
+        mock_engine.order_manager.cancel_order.assert_called_once_with("sl_order_456")
+
+    @pytest.mark.asyncio
+    async def test_stop_loss_order_filled(self, mock_engine, tmp_path):
+        """Test handling SL order fill closes position with loss."""
+        mock_engine.STATE_FILE = tmp_path / "state.json"
+
+        position = Position(
+            id="pos_456",
+            token_mint="test_mint_2",
+            token_symbol="LOSS",
+            direction=TradeDirection.LONG,
+            entry_price=100.0,
+            current_price=70.0,
+            amount=5.0,
+            amount_usd=500.0,
+            take_profit_price=120.0,
+            stop_loss_price=80.0,
+            status=TradeStatus.OPEN,
+            opened_at=datetime.utcnow().isoformat(),
+        )
+        position.tp_order_id = "tp_order_789"
+        position.sl_order_id = "sl_order_101"
+
+        mock_engine.positions = {"pos_456": position}
+        mock_engine.trade_history = []
+        mock_engine.order_manager = AsyncMock()
+        mock_engine.order_manager.cancel_order = AsyncMock()
+        mock_engine.jupiter.get_token_price = AsyncMock(return_value=150.0)
+
+        # Handle SL order fill at exit price $80
+        await mock_engine._handle_order_filled(
+            order_id="sl_order_101",
+            order_type="STOP_LOSS",
+            token_mint="test_mint_2",
+            exit_price=80.0,
+            output_amount=0.5,
+            tx_signature="tx_sig_456"
+        )
+
+        # Verify position was closed with loss
+        assert "pos_456" not in mock_engine.positions
+        closed_pos = mock_engine.trade_history[0]
+        assert closed_pos.pnl_pct == pytest.approx(-20.0)  # (80-100)/100 = -20%
+        assert closed_pos.pnl_usd == pytest.approx(-100.0)  # 500 * -0.20
+
+        # Verify TP order was cancelled
+        mock_engine.order_manager.cancel_order.assert_called_once_with("tp_order_789")
+
+    @pytest.mark.asyncio
+    async def test_order_filled_no_matching_position(self, mock_engine, tmp_path):
+        """Test order fill when no matching position exists (logs warning)."""
+        mock_engine.STATE_FILE = tmp_path / "state.json"
+        mock_engine.positions = {}
+        mock_engine.trade_history = []
+
+        # Should log warning but not crash
+        await mock_engine._handle_order_filled(
+            order_id="unknown_order",
+            order_type="TAKE_PROFIT",
+            token_mint="unknown_mint",
+            exit_price=100.0,
+            output_amount=1.0,
+            tx_signature="tx_sig"
+        )
+
+        # No positions should be closed
+        assert len(mock_engine.positions) == 0
+        assert len(mock_engine.trade_history) == 0
+
+    @pytest.mark.asyncio
+    async def test_order_filled_scorekeeper_update(self, mock_engine, tmp_path):
+        """Test order fill updates scorekeeper."""
+        mock_engine.STATE_FILE = tmp_path / "state.json"
+
+        position = Position(
+            id="pos_score",
+            token_mint="test_mint",
+            token_symbol="TEST",
+            direction=TradeDirection.LONG,
+            entry_price=100.0,
+            current_price=110.0,
+            amount=10.0,
+            amount_usd=1000.0,
+            take_profit_price=120.0,
+            stop_loss_price=80.0,
+            status=TradeStatus.OPEN,
+            opened_at=datetime.utcnow().isoformat(),
+        )
+        position.tp_order_id = "tp_123"
+
+        mock_engine.positions = {"pos_score": position}
+        mock_engine.trade_history = []
+        mock_engine.order_manager = None  # No order manager
+        mock_engine.jupiter.get_token_price = AsyncMock(return_value=150.0)
+
+        # Mock scorekeeper
+        mock_scorekeeper = MagicMock()
+        mock_scorekeeper.close_position = MagicMock()
+
+        with patch("bots.treasury.trading.trading_engine.get_scorekeeper", return_value=mock_scorekeeper):
+            await mock_engine._handle_order_filled(
+                order_id="tp_123",
+                order_type="TAKE_PROFIT",
+                token_mint="test_mint",
+                exit_price=110.0,
+                output_amount=1.5,
+                tx_signature="tx_sig_score"
+            )
+
+        # Verify scorekeeper was called
+        mock_scorekeeper.close_position.assert_called_once()
+        call_kwargs = mock_scorekeeper.close_position.call_args.kwargs
+        assert call_kwargs["position_id"] == "pos_score"
+        assert call_kwargs["exit_price"] == 110.0
+        assert call_kwargs["close_type"] == "tp"
+        assert call_kwargs["tx_signature"] == "tx_sig_score"
+
+
+# =============================================================================
+# Audit Logging Tests (Lines 350-394)
+# =============================================================================
+
+
+class TestAuditLogging:
+    """Tests for _log_audit method."""
+
+    @pytest.fixture
+    def mock_engine(self):
+        """Create a mock trading engine for testing."""
+        with patch('bots.treasury.trading.SecureWallet') as MockWallet, \
+             patch('bots.treasury.trading.JupiterClient') as MockJupiter:
+            wallet = MockWallet.return_value
+            jupiter = MockJupiter.return_value
+            engine = TradingEngine(
+                wallet=wallet,
+                jupiter=jupiter,
+                risk_level=RiskLevel.MODERATE,
+                admin_user_ids=[123456],
+            )
+            yield engine
+
+    def test_log_audit_creates_file(self, mock_engine, tmp_path):
+        """Test audit logging creates file on first log."""
+        audit_file = tmp_path / "audit.json"
+        mock_engine.AUDIT_LOG_FILE = audit_file
+
+        mock_engine._log_audit("TEST_ACTION", {"key": "value"}, 123456, True)
+
+        assert audit_file.exists()
+        with open(audit_file) as f:
+            logs = json.load(f)
+
+        assert len(logs) == 1
+        assert logs[0]["action"] == "TEST_ACTION"
+        assert logs[0]["user_id"] == 123456
+        assert logs[0]["success"] is True
+        assert logs[0]["details"]["key"] == "value"
+
+    def test_log_audit_appends_to_existing(self, mock_engine, tmp_path):
+        """Test audit logging appends to existing log file."""
+        audit_file = tmp_path / "audit.json"
+        mock_engine.AUDIT_LOG_FILE = audit_file
+
+        # Create initial log
+        with open(audit_file, "w") as f:
+            json.dump([{"action": "PREVIOUS", "success": True}], f)
+
+        mock_engine._log_audit("NEW_ACTION", {}, None, True)
+
+        with open(audit_file) as f:
+            logs = json.load(f)
+
+        assert len(logs) == 2
+        assert logs[0]["action"] == "PREVIOUS"
+        assert logs[1]["action"] == "NEW_ACTION"
+
+    def test_log_audit_trims_old_entries(self, mock_engine, tmp_path):
+        """Test audit log trims to 1000 entries max."""
+        audit_file = tmp_path / "audit.json"
+        mock_engine.AUDIT_LOG_FILE = audit_file
+
+        # Create 1000 entries
+        old_logs = [{"action": f"OLD_{i}", "success": True} for i in range(1000)]
+        with open(audit_file, "w") as f:
+            json.dump(old_logs, f)
+
+        # Add one more
+        mock_engine._log_audit("NEW_ACTION", {}, None, True)
+
+        with open(audit_file) as f:
+            logs = json.load(f)
+
+        # Should have exactly 1000 entries (trimmed oldest)
+        assert len(logs) == 1000
+        assert logs[-1]["action"] == "NEW_ACTION"
+        assert logs[0]["action"] == "OLD_1"  # OLD_0 was trimmed
+
+    def test_log_audit_handles_missing_file_gracefully(self, mock_engine, tmp_path):
+        """Test audit logging handles missing parent directory."""
+        audit_file = tmp_path / "nested" / "path" / "audit.json"
+        mock_engine.AUDIT_LOG_FILE = audit_file
+
+        # Should create parent directories
+        mock_engine._log_audit("ACTION", {}, None, True)
+
+        assert audit_file.exists()
+        assert audit_file.parent.exists()
+
+    def test_log_audit_handles_json_errors(self, mock_engine, tmp_path):
+        """Test audit logging handles corrupted JSON gracefully."""
+        audit_file = tmp_path / "audit.json"
+        mock_engine.AUDIT_LOG_FILE = audit_file
+
+        # Write corrupted JSON
+        with open(audit_file, "w") as f:
+            f.write("not valid json{")
+
+        # Should not crash, just start fresh log
+        mock_engine._log_audit("ACTION", {}, None, True)
+
+        # File should still have valid JSON now (or be handled)
+        assert audit_file.exists()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
