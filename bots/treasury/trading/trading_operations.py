@@ -20,6 +20,12 @@ from .logging_utils import (
     STRUCTURED_LOGGING_AVAILABLE
 )
 
+# Import memory hooks for trade outcome storage
+from .memory_hooks import (
+    store_trade_outcome_async,
+    should_enter_based_on_history,
+)
+
 # Import risk management types
 try:
     from core.risk import AlertLevel
@@ -92,6 +98,22 @@ class TradingOperationsMixin:
         # Classify token risk tier
         risk_tier = self.classify_token_risk(token_mint, token_symbol)
         logger.info(f"Token {token_symbol} classified as: {risk_tier}")
+
+        # OPTIONAL: Check historical performance
+        try:
+            should_enter, history_reason = await should_enter_based_on_history(
+                token_symbol=token_symbol,
+                min_win_rate=0.3,
+                min_trades=3,
+            )
+            logger.info(f"Historical check for {token_symbol}: {history_reason}")
+
+            # Log warning if history suggests avoiding, but don't block (configurable)
+            if not should_enter:
+                logger.warning(f"Historical performance warning for {token_symbol}: {history_reason}")
+                # Note: Not blocking trade, just logging. User can decide to proceed.
+        except Exception as e:
+            logger.warning(f"Failed to check historical performance for {token_symbol}: {e}")
 
         # Check max positions limit
         open_positions = [p for p in self.positions.values() if p.is_open]
@@ -292,7 +314,8 @@ class TradingOperationsMixin:
             status=TradeStatus.PENDING,
             opened_at=datetime.utcnow().isoformat(),
             sentiment_grade=sentiment_grade,
-            sentiment_score=sentiment_score
+            sentiment_score=sentiment_score,
+            peak_price=current_price  # Initialize peak price at entry
         )
 
         if self.dry_run:
@@ -522,6 +545,30 @@ class TradingOperationsMixin:
                 context={"reason": reason, "dry_run": True}
             )
 
+            # Store trade outcome in memory (fire-and-forget, dry_run)
+            try:
+                hold_duration = (datetime.fromisoformat(position.closed_at) - datetime.fromisoformat(position.opened_at)).total_seconds() / 3600.0
+
+                logger.info(f"Storing trade outcome for {position.token_symbol} in memory (dry_run)")
+                store_trade_outcome_async(
+                    token_symbol=position.token_symbol,
+                    token_mint=position.token_mint,
+                    entry_price=position.entry_price,
+                    exit_price=position.exit_price,
+                    pnl_pct=position.pnl_pct,
+                    hold_duration_hours=hold_duration,
+                    strategy="treasury",  # TODO: Extract actual strategy from position
+                    sentiment_score=position.sentiment_score if position.sentiment_score > 0 else None,
+                    exit_reason=reason,
+                    metadata={
+                        "position_id": position_id,
+                        "dry_run": True,
+                        "sentiment_grade": position.sentiment_grade,
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to store trade outcome in memory: {e}")
+
             return True, f"[DRY RUN] Closed with P&L: ${position.pnl_usd:+.2f} ({position.pnl_pct:+.1f}%)"
 
         # Execute real close
@@ -654,6 +701,30 @@ class TradingOperationsMixin:
             except Exception as e:
                 logger.warning(f"Failed to track close in scorekeeper: {e}")
 
+            # Store trade outcome in memory (fire-and-forget)
+            try:
+                hold_duration = (datetime.fromisoformat(position.closed_at) - datetime.fromisoformat(position.opened_at)).total_seconds() / 3600.0
+
+                logger.info(f"Storing trade outcome for {position.token_symbol} in memory")
+                store_trade_outcome_async(
+                    token_symbol=position.token_symbol,
+                    token_mint=position.token_mint,
+                    entry_price=position.entry_price,
+                    exit_price=position.exit_price,
+                    pnl_pct=position.pnl_pct,
+                    hold_duration_hours=hold_duration,
+                    strategy="treasury",  # TODO: Extract actual strategy from position
+                    sentiment_score=position.sentiment_score if position.sentiment_score > 0 else None,
+                    exit_reason=reason,
+                    metadata={
+                        "position_id": position_id,
+                        "tx_signature": result.signature,
+                        "sentiment_grade": position.sentiment_grade,
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to store trade outcome in memory: {e}")
+
             return True, f"Closed: {result.signature}, P&L: ${position.pnl_usd:+.2f}"
 
         except Exception as e:
@@ -700,6 +771,42 @@ class TradingOperationsMixin:
             position.current_price = current_price
 
             if position.direction == TradeDirection.LONG:
+                # TRAILING STOP LOGIC
+                # Initialize peak_price if not set (for legacy positions)
+                if position.peak_price is None or position.peak_price == 0:
+                    position.peak_price = position.entry_price
+
+                # Update peak price if we've reached a new high
+                if current_price > position.peak_price:
+                    position.peak_price = current_price
+
+                # Calculate current gain percentage
+                current_gain_pct = ((current_price - position.entry_price) / position.entry_price) * 100
+
+                # Apply trailing stop rules
+                original_sl = position.stop_loss_price
+
+                if current_gain_pct >= 15.0:
+                    # Trail stop at 5% below peak price
+                    position.stop_loss_price = position.peak_price * 0.95
+                    if position.stop_loss_price != original_sl:
+                        logger.info(
+                            f"TRAILING STOP ACTIVATED: {position.token_symbol} | "
+                            f"Gain: {current_gain_pct:.1f}% | "
+                            f"Peak: ${position.peak_price:.8f} | "
+                            f"SL updated: ${original_sl:.8f} -> ${position.stop_loss_price:.8f}"
+                        )
+                elif current_gain_pct >= 10.0:
+                    # Move stop to breakeven (lock in 0% loss minimum)
+                    if position.stop_loss_price < position.entry_price:
+                        position.stop_loss_price = position.entry_price
+                        logger.info(
+                            f"BREAKEVEN STOP SET: {position.token_symbol} | "
+                            f"Gain: {current_gain_pct:.1f}% | "
+                            f"SL moved to breakeven: ${position.stop_loss_price:.8f}"
+                        )
+
+                # Now check if stop loss is breached
                 if current_price <= position.stop_loss_price:
                     pnl_pct = ((current_price - position.entry_price) / position.entry_price) * 100
                     logger.warning(
