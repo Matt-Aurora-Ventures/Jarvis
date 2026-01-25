@@ -420,9 +420,20 @@ def run() -> None:
         _log_message(log_path, f"✓ Startup complete: {ok_count}/{len(component_status)} components OK")
         _send_notification("Jarvis Ready", f"All {ok_count} components started successfully")
 
+    # Heartbeat tracking
+    heartbeat_counter = 0
+
     while running:
         cfg = config_module.load_config()
         tz_name = str(cfg.get("timezone", "UTC"))
+
+        # Update heartbeat every 10 seconds (every 2nd iteration)
+        heartbeat_counter += 1
+        if heartbeat_counter % 2 == 0:
+            state.update_state(
+                daemon_heartbeat=_timestamp(),
+                daemon_uptime_seconds=int(time.time() - brain.start_time) if brain and hasattr(brain, 'start_time') else 0
+            )
 
         reports_cfg = cfg.get("reports", {})
         if reports_cfg.get("enabled", True):

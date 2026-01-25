@@ -1,0 +1,41 @@
+{
+  "name": "KR8TIV",
+  "symbol": "KR8TIV",
+  "description": "kr8tiv builds Decentralized Open Sourced AI for the masses — powerful, practical, and dangerous (in a good way).",
+  "image": "https://bafybeibbm7w2sitle6og6fukkm6mftz6mibih5nu2kp7i2u6oeonhhaqe4.ipfs.w3s.link/",
+  "external_url": "https://kr8tiv.ai",
+  "attributes": [
+    {
+      "trait_type": "Category",
+      "value": "AI"
+    },
+    {
+      "trait_type": "Type",
+      "value": "Utility Token"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana"
+    },
+    {
+      "trait_type": "Platform",
+      "value": "Decentralized AI"
+    }
+  ],
+  "properties": {
+    "files": [
+      {
+        "uri": "https://bafybeibbm7w2sitle6og6fukkm6mftz6mibih5nu2kp7i2u6oeonhhaqe4.ipfs.w3s.link/",
+        "type": "image/png"
+      }
+    ],
+    "category": "image",
+    "creators": []
+  },
+  "links": {
+    "website": "https://kr8tiv.ai",
+    "jarvis": "https://jarvislife.io",
+    "twitter": "https://x.com/kr8tivai",
+    "jarvis_twitter": "https://x.com/Jarvis_lifeos"
+  }
+}
