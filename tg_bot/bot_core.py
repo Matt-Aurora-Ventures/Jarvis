@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import os
+import psutil
 import sys
 import time
 from datetime import datetime, timezone
@@ -1069,31 +1070,130 @@ async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+def _format_uptime(seconds: float) -> str:
+    """Format uptime in human-readable form."""
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    elif seconds < 3600:
+        return f"{int(seconds // 60)}m {int(seconds % 60)}s"
+    elif seconds < 86400:
+        hours = int(seconds // 3600)
+        mins = int((seconds % 3600) // 60)
+        return f"{hours}h {mins}m"
+    else:
+        days = int(seconds // 86400)
+        hours = int((seconds % 86400) // 3600)
+        return f"{days}d {hours}h"
+
+
 @admin_only
 async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /health command - show system health (admin only)."""
+    """Handle /health command - show system health with instance diagnostics (admin only)."""
+    start_time = time.time()
+
     try:
         from core.health_monitor import get_health_monitor
+        from core.utils.instance_lock import _lock_path, _default_lock_dir
+        from tg_bot.config import get_config
+
         monitor = get_health_monitor()
-        
+        config = get_config()
+
         # Run all checks
         await monitor.run_all_checks()
         report = monitor.get_health_report()
-        
+
         status_emoji = {"healthy": "✅", "degraded": "⚠️", "unhealthy": "❌", "unknown": "❓"}
-        
+
         lines = [
             f"<b>System Health: {status_emoji.get(report['status'], '❓')} {report['status'].upper()}</b>",
             "",
         ]
-        
+
+        # Standard health checks
         for name, check in report["checks"].items():
             emoji = status_emoji.get(check["status"], "❓")
             lines.append(f"{emoji} <b>{name}</b>: {check['message']} ({check['latency_ms']:.0f}ms)")
-        
+
+        lines.append("")
+        lines.append("<b>━━━ Instance Status ━━━</b>")
+
+        # Current process info
+        current_pid = os.getpid()
+        try:
+            proc = psutil.Process(current_pid)
+            mem_mb = proc.memory_info().rss / (1024 * 1024)
+            cpu_pct = proc.cpu_percent(interval=0.1)
+            create_time = proc.create_time()
+            uptime_secs = time.time() - create_time
+            uptime_str = _format_uptime(uptime_secs)
+
+            lines.append(f"✅ <b>This Process</b>: PID {current_pid}")
+            lines.append(f"   Memory: {mem_mb:.1f} MB | CPU: {cpu_pct:.1f}%")
+            lines.append(f"   Uptime: {uptime_str}")
+        except Exception as e:
+            lines.append(f"⚠️ <b>Process Info</b>: Error - {str(e)[:50]}")
+
+        # Instance lock status
+        try:
+            lock_dir = _default_lock_dir()
+            lock_file = _lock_path(config.telegram_token, "telegram_polling")
+
+            if lock_file.exists():
+                lock_content = lock_file.read_text().strip()
+                lock_pid = int(lock_content) if lock_content.isdigit() else None
+
+                if lock_pid == current_pid:
+                    lines.append(f"✅ <b>Lock</b>: Held by this process (PID {lock_pid})")
+                elif lock_pid:
+                    # Check if that PID is still running
+                    try:
+                        other_proc = psutil.Process(lock_pid)
+                        if other_proc.is_running():
+                            lines.append(f"⚠️ <b>Lock</b>: Held by PID {lock_pid} (still running!)")
+                        else:
+                            lines.append(f"🔴 <b>Lock</b>: Stale (PID {lock_pid} not running)")
+                    except psutil.NoSuchProcess:
+                        lines.append(f"🔴 <b>Lock</b>: Stale (PID {lock_pid} no longer exists)")
+                else:
+                    lines.append(f"⚠️ <b>Lock</b>: File exists but unreadable")
+            else:
+                lines.append(f"🔴 <b>Lock</b>: No lock file found!")
+        except Exception as e:
+            lines.append(f"⚠️ <b>Lock Check</b>: Error - {str(e)[:50]}")
+
+        # Detect other tg_bot processes (zombie detection)
+        try:
+            other_tg_procs = []
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    cmdline = proc.info.get('cmdline') or []
+                    cmdline_str = ' '.join(cmdline) if cmdline else ''
+                    if 'tg_bot' in cmdline_str and proc.info['pid'] != current_pid:
+                        other_tg_procs.append(proc.info['pid'])
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            if other_tg_procs:
+                lines.append(f"🔴 <b>Zombie Detection</b>: {len(other_tg_procs)} other tg_bot process(es)!")
+                lines.append(f"   PIDs: {', '.join(map(str, other_tg_procs[:5]))}")
+            else:
+                lines.append(f"✅ <b>Zombie Detection</b>: No other tg_bot processes")
+        except Exception as e:
+            lines.append(f"⚠️ <b>Zombie Detection</b>: Error - {str(e)[:50]}")
+
+        # Response time
+        elapsed_ms = (time.time() - start_time) * 1000
+        lines.append("")
+        lines.append(f"<i>Response time: {elapsed_ms:.0f}ms</i>")
+
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
     except Exception as e:
-        await update.message.reply_text(f"Health check error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+        elapsed_ms = (time.time() - start_time) * 1000
+        await update.message.reply_text(
+            f"Health check error: {str(e)[:100]}\n<i>({elapsed_ms:.0f}ms)</i>",
+            parse_mode=ParseMode.HTML
+        )
 
 
 @admin_only
