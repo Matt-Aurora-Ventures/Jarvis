@@ -758,7 +758,7 @@ class JarvisAdmin:
         # Cap at 1.0
         confidence = min(confidence, 1.0)
 
-        is_spam = confidence >= 0.5
+        is_spam = confidence >= 0.65
         reason = ", ".join(reasons) if reasons else "clean"
 
         return is_spam, confidence, reason
