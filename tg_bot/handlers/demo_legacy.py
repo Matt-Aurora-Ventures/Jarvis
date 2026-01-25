@@ -9699,6 +9699,22 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     """Handle text messages when awaiting token input or watchlist add."""
     text = update.message.text.strip()
 
+    # Enforce admin-only demo access
+    try:
+        config = get_config()
+        user_id = update.message.from_user.id if update.message and update.message.from_user else 0
+        username = update.message.from_user.username if update.message and update.message.from_user else None
+        try:
+            is_admin = config.is_admin(user_id, username)
+        except TypeError:
+            is_admin = config.is_admin(user_id)
+        if not is_admin:
+            await update.message.reply_text("Unauthorized: Demo is admin-only.")
+            logger.warning(f"Unauthorized demo message by user {user_id} (@{username})")
+            return
+    except Exception as exc:
+        logger.warning(f"Demo message admin check failed: {exc}")
+
     # Run TP/SL/trailing stop checks for demo positions (throttled)
     await _process_demo_exit_checks(update, context)
 

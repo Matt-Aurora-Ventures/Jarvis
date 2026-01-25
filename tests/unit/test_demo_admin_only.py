@@ -17,7 +17,7 @@ async def test_demo_callback_requires_admin():
     config.admin_ids = set()
     config.is_admin = lambda _uid, _username=None: False
 
-    with patch("tg_bot.handlers.demo.get_config", return_value=config):
+    with patch("tg_bot.config.get_config", return_value=config):
         await demo_mod.demo_callback(cb_update, context)
 
     cb_update.callback_query.answer.assert_called()
@@ -36,7 +36,7 @@ async def test_demo_message_handler_requires_admin():
     config.admin_ids = set()
     config.is_admin = lambda _uid, _username=None: False
 
-    with patch("tg_bot.handlers.demo.get_config", return_value=config):
+    with patch("tg_bot.config.get_config", return_value=config):
         await demo_mod.demo_message_handler(update, context)
 
     update.message.reply_text.assert_called()
