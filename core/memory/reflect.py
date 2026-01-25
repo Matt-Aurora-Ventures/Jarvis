@@ -558,3 +558,106 @@ def update_entity_summaries(since_time: datetime) -> Dict[str, int]:
             "entities_updated": entities_updated,
             "entities_skipped": entities_skipped,
         }
+
+
+def archive_old_logs(archive_after_days: int = 30, compress_after_days: int = 90) -> Dict[str, int]:
+    """
+    Archive old daily logs and optionally compress very old logs.
+
+    Process:
+    1. Move logs older than archive_after_days to archives/ directory
+    2. Compress logs in archives/ older than compress_after_days to .md.gz
+
+    Args:
+        archive_after_days: Age threshold for archival (default 30 days).
+        compress_after_days: Age threshold for compression (default 90 days).
+
+    Returns:
+        Dict with stats:
+        - archived: count of logs moved to archives/
+        - compressed: count of logs compressed to .gz
+
+    Example:
+        # Archive logs >30 days, compress logs >90 days
+        stats = archive_old_logs()
+        # {"archived": 12, "compressed": 3}
+    """
+    config = get_config()
+    logs_dir = config.daily_logs_dir
+    archives_dir = config.archives_dir
+
+    archived_count = 0
+    compressed_count = 0
+
+    logger.info(f"Starting log archival: archive_after={archive_after_days}d, compress_after={compress_after_days}d")
+
+    # Ensure archives directory exists
+    archives_dir.mkdir(parents=True, exist_ok=True)
+
+    # Calculate cutoff dates
+    now = datetime.utcnow()
+    archive_cutoff = now - timedelta(days=archive_after_days)
+    compress_cutoff = now - timedelta(days=compress_after_days)
+
+    # Phase 1: Archive old logs from main directory
+    if logs_dir.exists():
+        for log_file in logs_dir.glob("*.md"):
+            # Skip memory.md (it's the core memory file, not a daily log)
+            if log_file.name == "memory.md":
+                logger.debug(f"Skipping core memory file: {log_file.name}")
+                continue
+
+            # Try to parse date from filename (expected format: YYYY-MM-DD.md)
+            try:
+                file_date = datetime.strptime(log_file.stem, "%Y-%m-%d")
+            except ValueError:
+                logger.debug(f"Skipping non-date file: {log_file.name}")
+                continue
+
+            # Archive if older than threshold
+            if file_date < archive_cutoff:
+                try:
+                    archive_path = archives_dir / log_file.name
+                    shutil.move(str(log_file), str(archive_path))
+                    archived_count += 1
+                    logger.debug(f"Archived {log_file.name} -> archives/")
+                except (OSError, PermissionError) as e:
+                    logger.warning(f"Failed to archive {log_file.name}: {e}")
+                    continue
+
+    # Phase 2: Compress very old logs in archives
+    if archives_dir.exists():
+        for archive_file in archives_dir.glob("*.md"):
+            # Try to parse date from filename
+            try:
+                file_date = datetime.strptime(archive_file.stem, "%Y-%m-%d")
+            except ValueError:
+                logger.debug(f"Skipping non-date archive: {archive_file.name}")
+                continue
+
+            # Compress if older than compression threshold
+            if file_date < compress_cutoff:
+                try:
+                    # Read file content
+                    with open(archive_file, "rb") as f_in:
+                        content = f_in.read()
+
+                    # Write compressed version
+                    gz_path = archives_dir / f"{archive_file.name}.gz"
+                    with gzip.open(gz_path, "wb") as f_out:
+                        f_out.write(content)
+
+                    # Delete uncompressed file
+                    archive_file.unlink()
+                    compressed_count += 1
+                    logger.debug(f"Compressed {archive_file.name} -> {gz_path.name}")
+                except (OSError, PermissionError) as e:
+                    logger.warning(f"Failed to compress {archive_file.name}: {e}")
+                    continue
+
+    logger.info(f"Log archival complete: {archived_count} archived, {compressed_count} compressed")
+
+    return {
+        "archived": archived_count,
+        "compressed": compressed_count,
+    }
