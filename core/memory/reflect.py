@@ -188,6 +188,23 @@ def reflect_daily() -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Failed to queue entity updates: {e}")
 
+
+    # Step 5: Evolve preference confidence
+    try:
+        pref_stats = evolve_preference_confidence(yesterday_start)
+        logger.info(f"Preference evolution: {pref_stats}")
+    except Exception as e:
+        logger.warning(f"Failed to evolve preferences: {e}")
+        pref_stats = {"preferences_evolved": 0, "flips": 0}
+
+    # Step 6: Archive old logs
+    try:
+        archive_stats = archive_old_logs(archive_after_days=30)
+        logger.info(f"Log archival: {archive_stats}")
+    except Exception as e:
+        logger.warning(f"Failed to archive logs: {e}")
+        archive_stats = {"archived": 0, "compressed": 0}
+
     # Calculate duration
     duration = time.time() - start_time
 
@@ -211,6 +228,8 @@ def reflect_daily() -> Dict[str, Any]:
         "facts_processed": len(facts),
         "duration_seconds": duration,
         "entity_updates_queued": entity_updates_queued,
+        "preferences_evolved": pref_stats.get("preferences_evolved", 0),
+        "logs_archived": archive_stats.get("archived", 0),
     }
 
 
