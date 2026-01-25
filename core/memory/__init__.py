@@ -25,6 +25,22 @@ from core.memory.persistence import (
 # New workspace-based memory system (Clawdbot architecture)
 from core.memory.config import MemoryConfig, get_config
 from core.memory.workspace import init_workspace, get_memory_path, MEMORY_ROOT
+from core.memory.database import get_db, DatabaseManager
+from core.memory.retain import retain_fact, retain_preference, get_or_create_entity, get_user_preferences
+from core.memory.markdown_sync import (
+    append_to_daily_log,
+    sync_fact_to_markdown,
+    extract_entities_from_text,
+    get_daily_log_path,
+)
+from core.memory.search import (
+    search_facts,
+    search_by_entity,
+    search_by_source,
+    get_recent_facts,
+    get_entity_summary,
+    get_facts_count,
+)
 
 # New deduplication-focused memory store (M1 implementation)
 try:
@@ -128,4 +144,24 @@ __all__ = [
     "init_workspace",
     "get_memory_path",
     "MEMORY_ROOT",
+    # Database (database.py)
+    "get_db",
+    "DatabaseManager",
+    # Retain functions (retain.py)
+    "retain_fact",
+    "retain_preference",
+    "get_or_create_entity",
+    "get_user_preferences",
+    # Markdown sync (markdown_sync.py)
+    "append_to_daily_log",
+    "sync_fact_to_markdown",
+    "extract_entities_from_text",
+    "get_daily_log_path",
+    # Search functions (search.py)
+    "search_facts",
+    "search_by_entity",
+    "search_by_source",
+    "get_recent_facts",
+    "get_entity_summary",
+    "get_facts_count",
 ]
