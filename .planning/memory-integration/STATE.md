@@ -10,28 +10,28 @@ See: .planning/memory-integration/PROJECT.md (updated 2026-01-25)
 ## Current Position
 
 Phase: 6 of 8 (Memory Foundation)
-Plan: 4 of 6 in current phase
+Plan: 5 of 6 in current phase
 Status: In progress
-Last activity: 2026-01-25 — Completed 06-04-PLAN.md
+Last activity: 2026-01-25 — Completed 06-05-PLAN.md
 
-Progress: [████░░░░░░] 44%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 12 min
-- Total execution time: 0.8 hours
+- Total plans completed: 5
+- Average duration: 13 min
+- Total execution time: 1.1 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 6 | 4 | 48min | 12min |
+| 6 | 5 | 63min | 12.6min |
 
 **Recent Trend:**
-- Last 5 plans: 06-01 (9min), 06-02 (7min), 06-03 (16min), 06-04 (18min)
-- Trend: Increasing complexity, parallel execution working well
+- Last 5 plans: 06-01 (9min), 06-02 (7min), 06-03 (16min), 06-04 (18min), 06-05 (15min)
+- Trend: Consistent 12-18min range, complex integration tasks well-scoped
 
 ## Accumulated Context
 
@@ -49,6 +49,10 @@ Progress: [████░░░░░░] 44%
 | 06-04 | FTS5 query escaping uses quoted tokens with OR | Flexible multi-term matching for search |
 | 06-04 | BM25 scores returned as absolute values | FTS5 returns negative, abs() for clarity |
 | 06-04 | Auto-generate benchmark data if <10 facts | Ensures meaningful performance testing |
+| 06-05 | RRF (Reciprocal Rank Fusion) with k=60, equal weights | Standard RRF constant, 0.5/0.5 FTS/vector balance |
+| 06-05 | Graceful fallback to FTS-only when PostgreSQL unavailable | Ensures functionality without vector search |
+| 06-05 | Reuse existing archival_memory table with BGE embeddings | Leverages 100+ learnings, no schema changes needed |
+| 06-05 | PostgresVectorStore singleton for connection reuse | Avoids connection overhead per search |
 
 **Architectural decisions from PROJECT.md:**
 - Dual-layer memory: Markdown (human-readable) + SQLite (machine-efficient)
@@ -70,7 +74,9 @@ None yet.
 - ✓ FTS5 full-text search with BM25 ranking operational (0.19ms p95 latency)
 - ✓ Temporal and source filtering verified working
 - ✓ Schema includes is_active for soft-delete and summary for entities
-- Must validate existing PostgreSQL archival_memory schema before migration planning (Plan 06-05)
+- ✓ PostgreSQL vector integration with hybrid RRF search operational (Plan 06-05)
+- ✓ Graceful fallback ensures FTS-only mode when PostgreSQL unavailable
+- Plan 06-06 (recall() API) remaining in Phase 6
 
 **Phase 7 Readiness:**
 - Requires all 5 bot systems to be integration-ready (Treasury, Telegram, X, Bags Intel, Buy Tracker)
@@ -82,10 +88,10 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-25T10:04:10Z
-Stopped at: Completed 06-04-PLAN.md (FTS5 search and benchmarking)
+Last session: 2026-01-25T10:25:34Z
+Stopped at: Completed 06-05-PLAN.md (PostgreSQL vector + hybrid RRF search)
 Resume file: None
 
 ---
 
-**Next Action:** Wave 2 complete (Plans 06-03, 06-04). Continue to Wave 3 (Plan 06-05: PostgreSQL vector integration) or verify Wave 2 integration.
+**Next Action:** Wave 3 complete (Plan 06-05). Continue to Plan 06-06 (recall() API) to complete Phase 6.
