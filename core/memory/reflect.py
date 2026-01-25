@@ -11,8 +11,10 @@ from typing import Dict, Any, Optional
 
 from .database import get_db
 from .config import get_config
-from .summarize import synthesize_daily_facts
+from .summarize import synthesize_daily_facts, synthesize_entity_insights
 from .retain import retain_fact
+from .entity_profiles import get_entity_facts, update_entity_profile
+from .patterns import detect_contradictions
 
 logger = logging.getLogger(__name__)
 
@@ -377,3 +379,182 @@ def evolve_preference_confidence(since_time: datetime) -> Dict[str, Any]:
         "confirmations": confirmations,
         "contradictions": contradictions,
     }
+
+
+def update_entity_summaries(since_time: datetime) -> Dict[str, int]:
+    """
+    Update entity summaries for entities with new facts since given time.
+
+    Process:
+    1. Query entities with new facts since since_time
+    2. For each entity, get recent facts (last 100)
+    3. Score facts by recency + importance (7-day half-life)
+    4. Take top 20 facts
+    5. Synthesize insights via LLM
+    6. Update entity profile markdown with new summary
+
+    Args:
+        since_time: Only update entities with facts after this time
+
+    Returns:
+        Dict with update statistics:
+        - entities_updated: count of entities that got new summaries
+        - entities_skipped: count of entities with no new facts
+
+    Example:
+        from datetime import datetime, timedelta
+        since_time = datetime.utcnow() - timedelta(hours=24)
+        result = update_entity_summaries(since_time)
+        # {"entities_updated": 5, "entities_skipped": 2}
+    """
+    logger.info(f"Updating entity summaries for facts since {since_time}")
+
+    db = get_db()
+    entities_updated = 0
+    entities_skipped = 0
+
+    # Context weights for fact scoring
+    context_weights = {
+        "trade_outcome": 1.0,
+        "user_preference": 0.8,
+        "graduation_pattern": 0.7,
+        "market_observation": 0.6,
+        "general": 0.5,
+    }
+
+    try:
+        # Query entities with new facts since since_time
+        with db.get_cursor() as cursor:
+            rows = cursor.execute(
+                """
+                SELECT DISTINCT e.id, e.name, e.type
+                FROM entities e
+                JOIN entity_mentions em ON e.id = em.entity_id
+                JOIN facts f ON em.fact_id = f.id
+                WHERE f.timestamp > ? AND f.is_active = 1
+                ORDER BY e.name
+                """,
+                (since_time,)
+            ).fetchall()
+
+        if not rows:
+            logger.info("No entities with new facts to update")
+            return {"entities_updated": 0, "entities_skipped": 0}
+
+        logger.info(f"Found {len(rows)} entities with new facts")
+
+        # Process each entity
+        for row in rows:
+            entity_id = row["id"] if hasattr(row, "keys") else row[0]
+            entity_name = row["name"] if hasattr(row, "keys") else row[1]
+            entity_type = row["type"] if hasattr(row, "keys") else row[2]
+
+            # Default to "other" if no entity_type
+            if not entity_type:
+                entity_type = "other"
+
+            logger.info(f"Processing entity: {entity_name} (type: {entity_type})")
+
+            # Get recent facts for this entity (last 100)
+            with db.get_cursor() as cursor:
+                fact_rows = cursor.execute(
+                    """
+                    SELECT f.id, f.content, f.timestamp, f.source, f.context, f.confidence
+                    FROM facts f
+                    INNER JOIN entity_mentions em ON em.fact_id = f.id
+                    WHERE em.entity_id = ? AND f.is_active = 1
+                    ORDER BY f.timestamp DESC
+                    LIMIT 100
+                    """,
+                    (entity_id,)
+                ).fetchall()
+
+            if not fact_rows:
+                entities_skipped += 1
+                continue
+
+            # Score facts by recency + importance
+            now = datetime.utcnow()
+            scored_facts = []
+
+            for fact_row in fact_rows:
+                fact_id = fact_row["id"] if hasattr(fact_row, "keys") else fact_row[0]
+                content = fact_row["content"] if hasattr(fact_row, "keys") else fact_row[1]
+                timestamp_str = fact_row["timestamp"] if hasattr(fact_row, "keys") else fact_row[2]
+                source = fact_row["source"] if hasattr(fact_row, "keys") else fact_row[3]
+                context = fact_row["context"] if hasattr(fact_row, "keys") else fact_row[4]
+                confidence = fact_row["confidence"] if hasattr(fact_row, "keys") else fact_row[5]
+
+                # Parse timestamp
+                if isinstance(timestamp_str, str):
+                    fact_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00').replace('+00:00', ''))
+                else:
+                    fact_time = timestamp_str
+
+                # Calculate recency score (7-day half-life)
+                hours_ago = (now - fact_time).total_seconds() / 3600
+                recency_score = 2 ** (-hours_ago / (7 * 24))
+
+                # Calculate importance score
+                context_weight = context_weights.get(context, 0.5)
+                confidence_val = confidence if confidence is not None else 0.5
+                importance = context_weight * confidence_val
+
+                # Total score
+                total_score = recency_score * importance
+
+                scored_facts.append({
+                    "id": fact_id,
+                    "content": content,
+                    "timestamp": fact_time,
+                    "source": source,
+                    "context": context,
+                    "confidence": confidence_val,
+                    "score": total_score,
+                })
+
+            # Sort by score and take top 20
+            scored_facts.sort(key=lambda x: x["score"], reverse=True)
+            top_facts = scored_facts[:20]
+
+            logger.info(f"Selected {len(top_facts)} top-scored facts for {entity_name}")
+
+            # Synthesize insights using LLM
+            synthesis = synthesize_entity_insights(
+                entity_name=entity_name,
+                entity_type=entity_type,
+                facts=top_facts
+            )
+
+            # Handle empty synthesis
+            if not synthesis or synthesis.strip() == "":
+                synthesis = "No significant activity"
+
+            # Update entity profile with new summary
+            success = update_entity_profile(
+                entity_name=entity_name,
+                new_fact="",  # Not adding a fact, just updating summary
+                update_summary=True,
+                new_summary=synthesis
+            )
+
+            if success:
+                entities_updated += 1
+                logger.info(f"Updated summary for {entity_name}")
+            else:
+                entities_skipped += 1
+                logger.warning(f"Failed to update summary for {entity_name}")
+
+        logger.info(f"Entity summary update complete: {entities_updated} updated, {entities_skipped} skipped")
+
+        return {
+            "entities_updated": entities_updated,
+            "entities_skipped": entities_skipped,
+        }
+
+    except Exception as e:
+        logger.error(f"Error updating entity summaries: {e}", exc_info=True)
+        return {
+            "entities_updated": entities_updated,
+            "entities_skipped": entities_skipped,
+        }
