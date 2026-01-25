@@ -471,8 +471,12 @@ class TestLiveExecution:
         """Create engine configured for live execution."""
         trading_engine.dry_run = False
 
-        # Reset daily volume to avoid limits
-        trading_engine._daily_volume_usd = 0.0
+        # Reset daily volume to avoid limits - use risk_checker
+        trading_engine._risk_checker._daily_volume_usd = 0.0
+
+        # Increase spending limits for testing
+        trading_engine.MAX_TRADE_USD = 1000.0
+        trading_engine.MAX_DAILY_USD = 5000.0
 
         # Mock _execute_swap for live execution
         from types import SimpleNamespace
@@ -522,7 +526,7 @@ class TestLiveExecution:
                 user_id=12345,
             )
 
-            assert success is True
+            assert success is True, f"Expected success but got: {message}"
             assert "test_tx_signature_123" in message
             assert position is not None
             assert position.status == TradeStatus.OPEN
@@ -875,7 +879,7 @@ class TestMonitorStopLosses:
 
     @pytest.mark.asyncio
     async def test_monitor_stop_losses_cancels_orders_on_close(self, monitored_engine):
-        """Test update_positions cancels TP/SL orders when closing."""
+        """Test monitor_stop_losses cancels TP/SL orders when closing."""
         position = Position(
             id="cancel_test",
             token_mint="tp_mint",
@@ -883,7 +887,7 @@ class TestMonitorStopLosses:
             direction=TradeDirection.LONG,
             entry_price=100.0,
             current_price=100.0,
-            amount=0.0,
+            amount=1000.0,  # Non-zero amount so close happens
             amount_usd=500.0,
             take_profit_price=120.0,
             stop_loss_price=80.0,
@@ -899,7 +903,7 @@ class TestMonitorStopLosses:
         monitored_engine.jupiter.get_quote = AsyncMock(return_value=MagicMock(input_amount=1000000000000))
 
         with patch('bots.treasury.trading.trading_operations.log_trading_error'):
-            await monitored_engine.update_positions()
+            await monitored_engine.monitor_stop_losses()
 
         # Verify both orders cancelled
         assert monitored_engine.order_manager.cancel_order.call_count == 2
