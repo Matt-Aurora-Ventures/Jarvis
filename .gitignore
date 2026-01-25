@@ -22,6 +22,7 @@ bots/twitter/*_tokens.json
 .env
 .env.*
 .env.local
+.env.*.local
 .envrc
 
 # === API KEYS (common patterns) ===
@@ -59,6 +60,8 @@ logs/
 # === BROWSER & SESSION DATA ===
 cookies/
 browser-data/
+playwright-data/
+puppeteer-data/
 .puppeteer/
 temp_puppeteer_oauth.js
 chrome-data/
@@ -74,6 +77,8 @@ x_cookies.json
 # === TRANSCRIPTS & PERSONAL DATA ===
 transcripts/
 recordings/
+voice-cache/
+audio-cache/
 *.wav
 *.mp3
 *.m4a
@@ -117,11 +122,15 @@ package-lock.json
 yarn.lock
 
 # === OS FILES ===
+# macOS
 .DS_Store
 .DS_Store?
 ._*
+.AppleDouble
+.LSOverride
 .Spotlight-V100
 .Trashes
+# Windows
 ehthumbs.db
 Thumbs.db
 desktop.ini
@@ -129,6 +138,8 @@ desktop.ini
 # === IDE ===
 .idea/
 .vscode/
+.vscode-server/
+.cursor/
 *.swp
 *.swo
 *~
