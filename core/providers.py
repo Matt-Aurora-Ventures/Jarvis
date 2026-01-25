@@ -1616,6 +1616,234 @@ def get_fallback_stats() -> Dict[str, Any]:
     }
 
 
+def validate_api_keys(timeout: int = 5) -> Dict[str, Dict[str, Any]]:
+    """Validate all API keys by making lightweight API calls.
+
+    Makes actual API requests to verify keys are valid and working,
+    not just configured. This catches expired keys, invalid keys,
+    and network issues.
+
+    Args:
+        timeout: Request timeout in seconds (default 5)
+
+    Returns:
+        Dict with provider name as key, containing:
+        - status: "valid" | "invalid" | "missing" | "error"
+        - valid: bool - True if key works
+        - message: Human-readable status message
+        - fix: URL/instructions to fix (if not valid)
+
+    Example:
+        >>> result = validate_api_keys()
+        >>> result["groq"]
+        {"status": "valid", "valid": True, "message": "Groq API key is valid"}
+    """
+    results: Dict[str, Dict[str, Any]] = {}
+
+    # Provider validation configs
+    providers_config = [
+        {
+            "name": "groq",
+            "get_key": secrets.get_groq_key,
+            "key_prefix": "gsk_",
+            "api_url": "https://api.groq.com/openai/v1/models",
+            "env_var": "GROQ_API_KEY",
+            "fix_url": "https://console.groq.com",
+            "notes": "Free, fast inference",
+        },
+        {
+            "name": "openai",
+            "get_key": secrets.get_openai_key,
+            "key_prefix": "sk-",
+            "api_url": "https://api.openai.com/v1/models",
+            "env_var": "OPENAI_API_KEY",
+            "fix_url": "https://platform.openai.com/api-keys",
+            "notes": "Paid - charged per token",
+        },
+        {
+            "name": "xai",
+            "get_key": secrets.get_grok_key,
+            "key_prefix": None,  # X.AI keys don't have standard prefix
+            "api_url": "https://api.x.ai/v1/models",
+            "env_var": "XAI_API_KEY",
+            "fix_url": "https://console.x.ai",
+            "notes": "Grok models for sentiment analysis",
+        },
+        {
+            "name": "anthropic",
+            "get_key": secrets.get_anthropic_key,
+            "key_prefix": "sk-ant-",
+            "api_url": "https://api.anthropic.com/v1/models",
+            "env_var": "ANTHROPIC_API_KEY",
+            "fix_url": "https://console.anthropic.com/settings/keys",
+            "notes": "Claude models",
+        },
+        {
+            "name": "openrouter",
+            "get_key": secrets.get_openrouter_key,
+            "key_prefix": "sk-or-",
+            "api_url": "https://openrouter.ai/api/v1/models",
+            "env_var": "OPENROUTER_API_KEY",
+            "fix_url": "https://openrouter.ai/keys",
+            "notes": "Multi-provider routing (MiniMax, etc.)",
+        },
+    ]
+
+    for cfg in providers_config:
+        name = cfg["name"]
+        key = cfg["get_key"]()
+
+        # Check if key is missing
+        if not key:
+            results[name] = {
+                "status": "missing",
+                "valid": False,
+                "message": f"{cfg['env_var']} not configured",
+                "fix": f"Get key at: {cfg['fix_url']}",
+            }
+            continue
+
+        # Check key format (if prefix specified)
+        if cfg["key_prefix"] and not key.startswith(cfg["key_prefix"]):
+            results[name] = {
+                "status": "invalid",
+                "valid": False,
+                "message": f"Key should start with '{cfg['key_prefix']}' - got '{key[:8]}...'",
+                "fix": f"Check key format at: {cfg['fix_url']}",
+            }
+            continue
+
+        # Make API call to validate
+        try:
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            }
+            # Anthropic uses different header
+            if name == "anthropic":
+                headers = {
+                    "x-api-key": key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                }
+
+            response = requests.get(
+                cfg["api_url"],
+                headers=headers,
+                timeout=timeout,
+            )
+
+            if response.status_code == 200:
+                results[name] = {
+                    "status": "valid",
+                    "valid": True,
+                    "message": f"{name.capitalize()} API key is valid",
+                    "fix": None,
+                }
+            elif response.status_code == 401:
+                results[name] = {
+                    "status": "invalid",
+                    "valid": False,
+                    "message": "Invalid or expired API key",
+                    "fix": f"Check key at: {cfg['fix_url']}",
+                }
+            elif response.status_code == 403:
+                results[name] = {
+                    "status": "invalid",
+                    "valid": False,
+                    "message": "Access forbidden - check API permissions",
+                    "fix": f"Check permissions at: {cfg['fix_url']}",
+                }
+            else:
+                # Other errors (500, etc.)
+                results[name] = {
+                    "status": "error",
+                    "valid": False,
+                    "message": f"API error: HTTP {response.status_code}",
+                    "fix": f"Check status at: {cfg['fix_url']}",
+                }
+
+        except requests.Timeout:
+            results[name] = {
+                "status": "error",
+                "valid": False,
+                "message": "Connection timeout - API may be down",
+                "fix": "Check network connectivity or try again later",
+            }
+        except requests.ConnectionError:
+            results[name] = {
+                "status": "error",
+                "valid": False,
+                "message": "Network error - could not reach API",
+                "fix": "Check internet connection",
+            }
+        except Exception as e:
+            results[name] = {
+                "status": "error",
+                "valid": False,
+                "message": f"Validation error: {_safe_error_message(e, 100)}",
+                "fix": "Check configuration",
+            }
+
+    return results
+
+
+def format_api_key_validation(results: Dict[str, Dict[str, Any]]) -> str:
+    """Format validate_api_keys results for display.
+
+    Args:
+        results: Output from validate_api_keys()
+
+    Returns:
+        Human-readable formatted string for CLI output
+    """
+    lines = ["", "Checking API keys...", ""]
+
+    valid_count = 0
+    issues = []
+
+    for provider, info in results.items():
+        if info["valid"]:
+            lines.append(f"  [OK] {provider.upper()} ({info.get('env_var', provider.upper() + '_API_KEY')}): Valid")
+            valid_count += 1
+        elif info["status"] == "missing":
+            lines.append(f"  [--] {provider.upper()}: Missing")
+            issues.append((provider, info))
+        elif info["status"] == "invalid":
+            lines.append(f"  [XX] {provider.upper()}: Invalid or expired")
+            issues.append((provider, info))
+        else:
+            lines.append(f"  [!!] {provider.upper()}: {info['message']}")
+            issues.append((provider, info))
+
+    lines.append("")
+
+    if issues:
+        lines.append("Issues found:")
+        for provider, info in issues:
+            if info.get("fix"):
+                lines.append(f"  - {provider.upper()}: {info['fix']}")
+        lines.append("")
+
+    total = len(results)
+    missing_count = sum(1 for r in results.values() if r["status"] == "missing")
+    invalid_count = sum(1 for r in results.values() if r["status"] == "invalid")
+    error_count = sum(1 for r in results.values() if r["status"] == "error")
+
+    if valid_count == total:
+        lines.append(f"All {total} providers validated successfully!")
+    else:
+        lines.append(f"{valid_count} of {total} providers valid")
+        if missing_count:
+            lines.append(f"  {missing_count} missing (not configured)")
+        if invalid_count:
+            lines.append(f"  {invalid_count} invalid (need attention)")
+        if error_count:
+            lines.append(f"  {error_count} errors (network/API issues)")
+
+    return "\n".join(lines)
+
+
 class Providers:
     """Class wrapper for provider operations."""
 
@@ -1630,3 +1858,6 @@ class Providers:
 
     def get_fallback_stats(self) -> Dict[str, Any]:
         return get_fallback_stats()
+
+    def validate_api_keys(self, timeout: int = 5) -> Dict[str, Dict[str, Any]]:
+        return validate_api_keys(timeout)
