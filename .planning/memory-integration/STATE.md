@@ -10,18 +10,18 @@ See: .planning/memory-integration/PROJECT.md (updated 2026-01-25)
 ## Current Position
 
 Phase: 8 of 8 (Reflect & Intelligence)
-Plan: 4 of 5 in current phase
+Plan: 2 of 5 in current phase (just completed)
 Status: In progress
-Last activity: 2026-01-25 — Completed 08-04-PLAN.md
+Last activity: 2026-01-25 — Completed 08-02-PLAN.md
 
-Progress: [████████████] 83% (15 of 18 plans complete)
+Progress: [█████████████] 89% (16 of 18 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15
-- Average duration: 16.1 min
-- Total execution time: 4.0 hours
+- Total plans completed: 16
+- Average duration: 15.6 min
+- Total execution time: 4.2 hours
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [████████████] 83% (15 of 18 plans complete)
 |-------|-------|-------|----------|
 | 6 | 6 | 78min | 13.0min |
 | 7 | 6 | 132min | 22.0min |
-| 8 | 3 | 34min | 11.3min |
+| 8 | 4 | 42min | 10.5min |
 
 **Recent Trend:**
-- Last 6 plans: 07-04 (15min), 07-05 (15min), 07-06 (45min), 08-01 (12min), 08-03 (10min), 08-04 (12min)
-- Trend: Phase 8 maintaining excellent pace (11.3min avg), Wave 2 parallelism working well
+- Last 6 plans: 07-05 (15min), 07-06 (45min), 08-01 (12min), 08-02 (8min), 08-03 (10min), 08-04 (12min)
+- Trend: Phase 8 maintaining exceptional pace (10.5min avg), fastest phase yet
 
 ## Accumulated Context
 
@@ -76,6 +76,11 @@ Progress: [████████████] 83% (15 of 18 plans complete)
 | 08-03 | Preference flip threshold: <0.3 confidence | Low enough to avoid premature flips, responds to evidence |
 | 08-03 | Archive logs >30 days, compress >90 days | Balance workspace cleanliness vs storage efficiency |
 | 08-03 | memory.md never archived | Core memory with synthesized insights, not daily log |
+| 08-02 | Fact scoring: 7-day half-life for recency | Recent facts weighted higher using 2^(-hours_ago/168) |
+| 08-02 | Context weights: trade_outcome=1.0, user_preference=0.8, graduation_pattern=0.7, market_observation=0.6, general=0.5 | Prioritizes actionable, high-value data |
+| 08-02 | Minimum 2 co-occurrences for relationship tracking | Reduces noise from single coincidental mentions |
+| 08-02 | Fire-and-forget pattern for entity updates | Non-blocking execution, falls back to sync if no event loop |
+| 08-02 | Claude model: claude-3-5-sonnet-20250122 | Updated to current version after 20241022 deprecated |
 | 08-04 | Weekly summaries use last complete week (Monday-Sunday) | ISO week standard, avoids partial week data |
 | 08-04 | Contradiction detection confidence threshold: 0.4 | Filters low-confidence noise, focuses on meaningful conflicts |
 | 08-04 | Store contradictions in reflect_state.json | Provides visibility without polluting fact database |
