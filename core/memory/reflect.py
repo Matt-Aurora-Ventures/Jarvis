@@ -1,6 +1,9 @@
 """Daily reflection orchestration for memory consolidation."""
+import gzip
 import json
 import logging
+import re
+import shutil
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -232,3 +235,145 @@ def save_reflect_state(state: Dict[str, Any]) -> None:
     except OSError as e:
         logger.error(f"Failed to save reflect_state.json: {e}", exc_info=True)
         raise
+
+
+def evolve_preference_confidence(since_time: datetime) -> Dict[str, Any]:
+    """
+    Evolve preference confidence scores based on confirmations/contradictions.
+
+    Process:
+    1. Query preference-related facts from the period
+    2. Parse each fact to extract user, key, and action (confirmed/contradicted)
+    3. For confirmed preferences: increase confidence by +0.1 (max 0.95)
+    4. For contradicted preferences: decrease confidence by -0.15 (min 0.1)
+    5. If confidence drops below 0.3: flip preference to new value, reset to 0.5
+
+    Args:
+        since_time: Only process facts after this timestamp.
+
+    Returns:
+        Dict with stats:
+        - preferences_evolved: count of preferences updated
+        - flips: count of preferences that flipped
+        - confirmations: count of confirmations processed
+        - contradictions: count of contradictions processed
+
+    Example fact format:
+        "User daryl preference: response_style=concise (confirmed)"
+        "User daryl preference: verbosity=high (contradicted)"
+    """
+    db = get_db()
+    preferences_evolved = 0
+    flips = 0
+    confirmations = 0
+    contradictions = 0
+
+    logger.info(f"Evolving preference confidence since {since_time}")
+
+    # Query preference-related facts
+    with db.get_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, content, context, timestamp
+            FROM facts
+            WHERE source = 'preference_tracking'
+            AND timestamp >= ?
+            ORDER BY timestamp ASC
+            """,
+            (since_time,)
+        )
+        facts = cursor.fetchall()
+
+    logger.debug(f"Found {len(facts)} preference tracking facts")
+
+    # Pattern: "User {user} preference: {key}={value} (confirmed|contradicted)"
+    pattern = r"User (\w+) preference: (\w+)=(\w+) \((confirmed|contradicted)\)"
+
+    for fact in facts:
+        content = fact["content"] if hasattr(fact, "keys") else fact[1]
+        match = re.search(pattern, content)
+
+        if not match:
+            logger.debug(f"Fact {fact['id']} doesn't match preference pattern, skipping")
+            continue
+
+        user, key, value, action = match.groups()
+
+        # Get current preference from database
+        with db.get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, confidence, evidence_count, value
+                FROM preferences
+                WHERE user_id = ? AND key = ?
+                """,
+                (user, key)
+            )
+            pref_row = cursor.fetchone()
+
+        if not pref_row:
+            logger.warning(f"Preference {user}.{key} not found in database, skipping")
+            continue
+
+        pref_id = pref_row["id"] if hasattr(pref_row, "keys") else pref_row[0]
+        old_confidence = pref_row["confidence"] if hasattr(pref_row, "keys") else pref_row[1]
+        evidence_count = pref_row["evidence_count"] if hasattr(pref_row, "keys") else pref_row[2]
+        current_value = pref_row["value"] if hasattr(pref_row, "keys") else pref_row[3]
+
+        # Calculate new confidence
+        if action == "confirmed":
+            new_confidence = min(0.95, old_confidence + 0.1)
+            confirmations += 1
+        else:  # contradicted
+            new_confidence = max(0.1, old_confidence - 0.15)
+            contradictions += 1
+
+        # Check if we need to flip the preference
+        did_flip = False
+        new_value = current_value
+
+        if action == "contradicted" and new_confidence < 0.3:
+            # Flip preference to the contradicted value
+            new_value = value
+            new_confidence = 0.5  # Reset to neutral
+            did_flip = True
+            flips += 1
+            logger.info(f"Flipped preference {user}.{key}: {current_value} -> {new_value} (confidence dropped to {old_confidence:.2f})")
+
+        # Check if already at bounds (skip update but still count)
+        if not did_flip and new_confidence == old_confidence:
+            logger.debug(f"Preference {user}.{key} already at confidence bound ({old_confidence}), skipping update")
+            continue
+
+        # Update database
+        with db.get_cursor() as cursor:
+            if did_flip:
+                cursor.execute(
+                    """
+                    UPDATE preferences
+                    SET confidence = ?, value = ?, evidence_count = evidence_count + 1, last_updated = ?
+                    WHERE user_id = ? AND key = ?
+                    """,
+                    (new_confidence, new_value, datetime.utcnow(), user, key)
+                )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE preferences
+                    SET confidence = ?, evidence_count = evidence_count + 1, last_updated = ?
+                    WHERE user_id = ? AND key = ?
+                    """,
+                    (new_confidence, datetime.utcnow(), user, key)
+                )
+
+        preferences_evolved += 1
+        logger.info(f"Evolved {user}.{key}: confidence {old_confidence:.2f} -> {new_confidence:.2f} ({action})")
+
+    logger.info(f"Preference evolution complete: {preferences_evolved} evolved, {flips} flipped, {confirmations} confirmed, {contradictions} contradicted")
+
+    return {
+        "preferences_evolved": preferences_evolved,
+        "flips": flips,
+        "confirmations": confirmations,
+        "contradictions": contradictions,
+    }
