@@ -57,6 +57,28 @@ from core.memory.migration import (
     migrate_archival_memory,
     verify_migration,
 )
+from core.memory.recall import (
+    recall,
+    recall_by_entity,
+    recall_recent,
+)
+from core.memory.session import (
+    save_session_context,
+    get_session_context,
+    clear_session_context,
+    get_or_create_session,
+    update_session_activity,
+    get_active_sessions,
+)
+from core.memory.entity_profiles import (
+    get_entity_profile,
+    create_entity_profile,
+    update_entity_profile,
+    get_entity_summary as get_entity_profile_summary,
+    list_entities,
+    get_entity_facts,
+    on_fact_stored,
+)
 
 # New deduplication-focused memory store (M1 implementation)
 try:
@@ -193,4 +215,23 @@ __all__ = [
     "get_migration_status",
     "migrate_archival_memory",
     "verify_migration",
+    # Recall API (recall.py)
+    "recall",
+    "recall_by_entity",
+    "recall_recent",
+    # Session context (session.py)
+    "save_session_context",
+    "get_session_context",
+    "clear_session_context",
+    "get_or_create_session",
+    "update_session_activity",
+    "get_active_sessions",
+    # Entity profiles (entity_profiles.py)
+    "get_entity_profile",
+    "create_entity_profile",
+    "update_entity_profile",
+    "get_entity_profile_summary",
+    "list_entities",
+    "get_entity_facts",
+    "on_fact_stored",
 ]
