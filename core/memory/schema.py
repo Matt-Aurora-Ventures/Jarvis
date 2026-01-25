@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS facts (
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     source TEXT CHECK(source IN ('telegram', 'treasury', 'x', 'bags_intel', 'buy_tracker', 'system', NULL)),
     confidence REAL DEFAULT 1.0 CHECK(confidence >= 0.0 AND confidence <= 1.0),
+    is_active INTEGER DEFAULT 1 CHECK(is_active IN (0, 1)),
     entity_id INTEGER,
     user_id INTEGER,
     session_id TEXT,
@@ -24,6 +25,7 @@ CREATE TABLE IF NOT EXISTS entities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     type TEXT NOT NULL CHECK(type IN ('token', 'user', 'strategy', 'other')),
+    summary TEXT,
     metadata TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -121,6 +123,7 @@ END;
 CREATE_INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_facts_timestamp ON facts(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_facts_source ON facts(source);
+CREATE INDEX IF NOT EXISTS idx_facts_is_active ON facts(is_active);
 CREATE INDEX IF NOT EXISTS idx_facts_entity_id ON facts(entity_id);
 CREATE INDEX IF NOT EXISTS idx_facts_user_id ON facts(user_id);
 CREATE INDEX IF NOT EXISTS idx_facts_session_id ON facts(session_id);
