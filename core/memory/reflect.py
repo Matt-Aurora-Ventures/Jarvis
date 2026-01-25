@@ -188,8 +188,14 @@ def reflect_daily() -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Failed to queue entity updates: {e}")
 
+    # Step 5: Track entity relationships
+    try:
+        rel_stats = track_entity_relationships(yesterday_start)
+        logger.info(f"Entity relationships tracked: {rel_stats}")
+    except Exception as e:
+        logger.warning(f"Failed to track entity relationships: {e}")
 
-    # Step 5: Evolve preference confidence
+    # Step 6: Evolve preference confidence
     try:
         pref_stats = evolve_preference_confidence(yesterday_start)
         logger.info(f"Preference evolution: {pref_stats}")
@@ -622,6 +628,194 @@ def update_entity_summaries(since_time: datetime) -> Dict[str, int]:
         return {
             "entities_updated": entities_updated,
             "entities_skipped": entities_skipped,
+        }
+
+
+def track_entity_relationships(since_time: datetime) -> Dict[str, int]:
+    """
+    Track and persist entity relationships based on co-occurrence in facts.
+
+    Identifies relationships like:
+    - Token → Strategy: when token and strategy appear in same trade_outcome fact
+    - User → Preference: when user and preference key appear in same user_preference fact
+    - Token → Token: when tokens co-occur in trades
+
+    Args:
+        since_time: Only consider facts after this time
+
+    Returns:
+        Dict with relationship tracking statistics:
+        - relationships_tracked: count of new relationships found
+        - entities_updated: count of entities whose profiles were updated
+
+    Example:
+        from datetime import datetime, timedelta
+        since_time = datetime.utcnow() - timedelta(hours=24)
+        result = track_entity_relationships(since_time)
+        # {"relationships_tracked": 12, "entities_updated": 5}
+    """
+    logger.info(f"Tracking entity relationships for facts since {since_time}")
+
+    db = get_db()
+    relationships_tracked = 0
+    entities_updated_count = 0
+
+    try:
+        # Query co-occurring entities in facts
+        with db.get_cursor() as cursor:
+            rows = cursor.execute(
+                """
+                SELECT
+                    e1.name as entity1,
+                    e1.type as type1,
+                    e2.name as entity2,
+                    e2.type as type2,
+                    f.context,
+                    COUNT(*) as co_occurrence_count
+                FROM entity_mentions em1
+                JOIN entity_mentions em2 ON em1.fact_id = em2.fact_id
+                JOIN entities e1 ON em1.entity_id = e1.id
+                JOIN entities e2 ON em2.entity_id = e2.id
+                JOIN facts f ON em1.fact_id = f.id
+                WHERE em1.entity_id < em2.entity_id
+                AND f.timestamp > ?
+                AND f.is_active = 1
+                GROUP BY e1.name, e1.type, e2.name, e2.type, f.context
+                HAVING COUNT(*) >= 2
+                ORDER BY co_occurrence_count DESC
+                """,
+                (since_time,)
+            ).fetchall()
+
+        if not rows:
+            logger.info("No entity relationships found")
+            return {"relationships_tracked": 0, "entities_updated": 0}
+
+        logger.info(f"Found {len(rows)} entity relationship pairs")
+
+        # Build relationship mapping
+        entity_relationships = {}  # {entity_name: {"related_to": [(other_entity, type, count, context), ...]}}
+
+        for row in rows:
+            entity1 = row["entity1"] if hasattr(row, "keys") else row[0]
+            type1 = row["type1"] if hasattr(row, "keys") else row[1]
+            entity2 = row["entity2"] if hasattr(row, "keys") else row[2]
+            type2 = row["type2"] if hasattr(row, "keys") else row[3]
+            context = row["context"] if hasattr(row, "keys") else row[4]
+            count = row["co_occurrence_count"] if hasattr(row, "keys") else row[5]
+
+            # Add relationship from entity1 to entity2
+            if entity1 not in entity_relationships:
+                entity_relationships[entity1] = {"related_to": []}
+            entity_relationships[entity1]["related_to"].append((entity2, type2, count, context))
+
+            # Add relationship from entity2 to entity1
+            if entity2 not in entity_relationships:
+                entity_relationships[entity2] = {"related_to": []}
+            entity_relationships[entity2]["related_to"].append((entity1, type1, count, context))
+
+            relationships_tracked += 1
+
+        logger.info(f"Built relationship mapping for {len(entity_relationships)} entities")
+
+        # Update entity profiles with relationships
+        for entity_name, rel_data in entity_relationships.items():
+            try:
+                # Get entity type
+                with db.get_cursor() as cursor:
+                    type_row = cursor.execute(
+                        "SELECT type FROM entities WHERE name = ?",
+                        (entity_name,)
+                    ).fetchone()
+
+                if not type_row:
+                    continue
+
+                entity_type = type_row["type"] if hasattr(type_row, "keys") else type_row[0]
+
+                # Get profile path
+                from .entity_profiles import get_entity_type_dir, _sanitize_entity_name
+                entity_dir = get_entity_type_dir(entity_type)
+                sanitized_name = _sanitize_entity_name(entity_name)
+                profile_path = entity_dir / f"{sanitized_name}.md"
+
+                if not profile_path.exists():
+                    continue
+
+                # Read current profile
+                content = profile_path.read_text(encoding='utf-8')
+
+                # Build relationships section
+                relationships_section = "\n## Relationships\n\n"
+
+                # Group relationships by type and context
+                by_type = {}
+                for other_entity, other_type, count, context in rel_data["related_to"]:
+                    key = (other_type, context)
+                    if key not in by_type:
+                        by_type[key] = []
+                    by_type[key].append((other_entity, count))
+
+                # Format relationships
+                for (rel_type, context), entities in sorted(by_type.items()):
+                    # Create readable context label
+                    context_label = context.replace('_', ' ').title() if context else "General"
+                    relationships_section += f"**{rel_type.title()}s ({context_label})**:\n"
+                    for other_entity, count in sorted(entities, key=lambda x: x[1], reverse=True):
+                        relationships_section += f"- {other_entity} ({count} occurrences)\n"
+                    relationships_section += "\n"
+
+                # Check if Relationships section already exists
+                relationships_match = re.search(r'## Relationships\s*\n', content)
+
+                if relationships_match:
+                    # Find the end of the relationships section (next ## header or end of file)
+                    next_section = re.search(r'\n## ', content[relationships_match.end():])
+                    if next_section:
+                        section_end = relationships_match.end() + next_section.start()
+                    else:
+                        section_end = len(content)
+
+                    # Replace the relationships section
+                    updated_content = (
+                        content[:relationships_match.start()] +
+                        relationships_section +
+                        content[section_end:]
+                    )
+                else:
+                    # Append relationships section before Metadata if exists, else at end
+                    metadata_match = re.search(r'## Metadata\s*\n', content)
+                    if metadata_match:
+                        insert_pos = metadata_match.start()
+                        updated_content = (
+                            content[:insert_pos] +
+                            relationships_section +
+                            content[insert_pos:]
+                        )
+                    else:
+                        updated_content = content + "\n" + relationships_section
+
+                # Write updated profile
+                profile_path.write_text(updated_content, encoding='utf-8')
+                entities_updated_count += 1
+                logger.info(f"Updated relationships for {entity_name}")
+
+            except Exception as e:
+                logger.warning(f"Failed to update relationships for {entity_name}: {e}")
+                continue
+
+        logger.info(f"Entity relationship tracking complete: {relationships_tracked} relationships, {entities_updated_count} entities updated")
+
+        return {
+            "relationships_tracked": relationships_tracked,
+            "entities_updated": entities_updated_count,
+        }
+
+    except Exception as e:
+        logger.error(f"Error tracking entity relationships: {e}", exc_info=True)
+        return {
+            "relationships_tracked": 0,
+            "entities_updated": 0,
         }
 
 
