@@ -260,7 +260,8 @@ class SignalAnalyzer:
                         timestamp=ld.timestamp,
                         symbol=symbol,
                         side='long',
-                        size_usd=ld.long_liquidations,
+                        value_usd=ld.long_liquidations,
+                        quantity=ld.long_liquidations / 100,  # Approximate quantity
                         price=0,
                         exchange='aggregated',
                     ))
@@ -269,7 +270,8 @@ class SignalAnalyzer:
                         timestamp=ld.timestamp,
                         symbol=symbol,
                         side='short',
-                        size_usd=ld.short_liquidations,
+                        value_usd=ld.short_liquidations,
+                        quantity=ld.short_liquidations / 100,  # Approximate quantity
                         price=0,
                         exchange='aggregated',
                     ))
