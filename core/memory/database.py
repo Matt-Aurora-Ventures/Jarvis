@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, Generator
 
 from .config import get_config, MemoryConfig
-from .schema import get_all_schema_sql, SCHEMA_VERSION
+from .schema import get_all_schema_sql, get_migration_sql, SCHEMA_VERSION
 
 
 class DatabaseManager:
@@ -95,8 +95,17 @@ class DatabaseManager:
 
             # Apply schema if needed
             if current_version < SCHEMA_VERSION:
-                schema_sql = get_all_schema_sql()
-                conn.executescript(schema_sql)
+                if current_version == 0:
+                    # Fresh database - apply full schema
+                    schema_sql = get_all_schema_sql()
+                    conn.executescript(schema_sql)
+                else:
+                    # Existing database - apply migrations
+                    migration_sql = get_migration_sql(current_version)
+                    if migration_sql:
+                        conn.executescript(migration_sql)
+                        # Update schema version
+                        conn.execute(f"INSERT OR REPLACE INTO schema_info (version) VALUES ({SCHEMA_VERSION})")
                 conn.commit()
 
             self._initialized = True
