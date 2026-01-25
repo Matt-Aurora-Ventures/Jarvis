@@ -154,11 +154,44 @@ def reflect_daily() -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Failed to store synthesis as meta-fact: {e}")
 
+    # Update entity summaries (fire-and-forget if async context available)
+    # Get last reflect time to know which entities to update
+    state = get_reflect_state()
+    last_reflect = state.get("last_reflect_time")
+    if last_reflect:
+        try:
+            since_time = datetime.fromisoformat(last_reflect)
+        except (ValueError, TypeError):
+            since_time = yesterday_start
+    else:
+        # First run: only update entities from yesterday
+        since_time = yesterday_start
+
+    # Try to run entity updates in background if event loop exists
+    entity_updates_queued = False
+    try:
+        import asyncio
+        from core.async_utils import fire_and_forget
+
+        async def _update_entities():
+            return update_entity_summaries(since_time)
+
+        try:
+            loop = asyncio.get_running_loop()
+            fire_and_forget(_update_entities(), name="update_entity_summaries")
+            entity_updates_queued = True
+            logger.info("Entity summary updates queued in background")
+        except RuntimeError:
+            # No event loop, run synchronously
+            entity_stats = update_entity_summaries(since_time)
+            logger.info(f"Entity summaries updated: {entity_stats}")
+    except Exception as e:
+        logger.warning(f"Failed to queue entity updates: {e}")
+
     # Calculate duration
     duration = time.time() - start_time
 
-    # Update reflect state
-    state = get_reflect_state()
+    # Update reflect state (already loaded above)
     state["last_reflect_time"] = datetime.utcnow().isoformat()
     state["last_status"] = "completed"
     state["facts_processed"] = len(facts)
@@ -177,6 +210,7 @@ def reflect_daily() -> Dict[str, Any]:
         "status": "completed",
         "facts_processed": len(facts),
         "duration_seconds": duration,
+        "entity_updates_queued": entity_updates_queued,
     }
 
 
