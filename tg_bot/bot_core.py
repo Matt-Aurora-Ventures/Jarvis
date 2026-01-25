@@ -5086,10 +5086,27 @@ SPAM_PATTERNS = [
 
 async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, user_id: int) -> bool:
     """Check for spam and ban user if detected. Returns True if spam was detected."""
+
+    def log_spam_decision(action: str, user_id: int, username: str, confidence: float, reason: str, message_preview: str):
+        """Log spam decision in structured JSON format for false positive tracking."""
+        import json
+        from datetime import datetime, timezone
+        log_entry = {
+            "event": "SPAM_DECISION",
+            "action": action,  # "allow", "warn", "mute", "ban", "delete"
+            "user_id": user_id,
+            "username": username,
+            "confidence": round(confidence, 3),
+            "reason": reason,
+            "message_preview": message_preview[:50],
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        logger.info(f"SPAM_DECISION: {json.dumps(log_entry)}")
+
     try:
         from core.jarvis_admin import get_jarvis_admin
         admin = get_jarvis_admin()
-        
+
         chat_id = update.effective_chat.id
         message_id = update.message.message_id
         username = update.effective_user.username or "unknown"
@@ -5131,6 +5148,7 @@ async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE,
         # Check for scam wallet addresses - instant ban
         is_scam_wallet, scam_addr = admin.check_scam_wallet(text)
         if is_scam_wallet:
+            log_spam_decision("ban", user_id, username, 1.0, f"scam_wallet: {scam_addr[:20]}", text)
             await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
             await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
             admin.ban_user(user_id, f"scam wallet: {scam_addr[:20]}...")
@@ -5143,6 +5161,7 @@ async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE,
         # Check new user link restrictions
         is_link_restricted, link_reason = admin.check_new_user_links(text, user_id)
         if is_link_restricted:
+            log_spam_decision("delete", user_id, username, 0.7, link_reason, text)
             await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
             response = admin.get_random_response("new_user_link", username=username)
             await context.bot.send_message(chat_id=chat_id, text=response)
@@ -5152,6 +5171,7 @@ async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE,
         # Check for phishing links - instant ban
         is_phishing, phishing_match = admin.check_phishing_link(text)
         if is_phishing:
+            log_spam_decision("ban", user_id, username, 1.0, f"phishing: {phishing_match}", text)
             await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
             await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
             admin.ban_user(user_id, f"phishing link: {phishing_match}")
@@ -5188,6 +5208,7 @@ async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE,
             
             if confidence >= 0.8 or warning_count >= 3:
                 # Ban for high confidence spam or repeat offenders
+                log_spam_decision("ban", user_id, username, confidence, reason, text)
                 await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
                 admin.ban_user(user_id, reason)
 
@@ -5209,6 +5230,7 @@ async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE,
                         permissions=ChatPermissions(can_send_messages=False),
                         until_date=until_date
                     )
+                    log_spam_decision("mute", user_id, username, confidence, reason, text)
                     admin.mute_user(user_id, reason, mute_hours)
                     response = admin.get_random_response("user_muted", username=username, hours=mute_hours)
                     response += admin.get_random_response("mistake_footer")
@@ -5222,6 +5244,7 @@ async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE,
                     await context.bot.send_message(chat_id=chat_id, text=response)
             else:
                 # Warn for lower confidence
+                log_spam_decision("warn", user_id, username, confidence, reason, text)
                 new_warnings = admin.warn_user(user_id)
                 if "rate_limited" in reason:
                     response = admin.get_random_response("rate_limited", username=username)
@@ -5236,23 +5259,44 @@ async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE,
             
     except Exception as e:
         logger.error(f"JarvisAdmin spam check error: {e}")
-        # Fallback to simple pattern matching
+        # Fallback to simple pattern matching with confidence scoring
         text_lower = text.lower()
+        fallback_confidence = 0.0
+        matched_patterns = []
+
         for pattern in SPAM_PATTERNS:
             if pattern in text_lower:
-                try:
-                    chat_id = update.effective_chat.id
-                    message_id = update.message.message_id
-                    username = update.effective_user.username or "unknown"
-                    await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                fallback_confidence += 0.4  # Each pattern adds confidence
+                matched_patterns.append(pattern)
+
+        if fallback_confidence >= 0.65 and matched_patterns:
+            try:
+                chat_id = update.effective_chat.id
+                message_id = update.message.message_id
+                username = update.effective_user.username or "unknown"
+                reason = f"fallback_patterns: {', '.join(matched_patterns[:3])}"
+
+                await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+
+                if fallback_confidence >= 0.8:
+                    # High confidence - ban
+                    log_spam_decision("ban", user_id, username, min(fallback_confidence, 1.0), reason, text)
                     await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
                     await context.bot.send_message(
                         chat_id=chat_id,
                         text=f"removed spam. @{username} banned.\n\nif this was a mistake, reach out to @MattFromKr8tiv.",
                     )
-                    return True
-                except Exception:  # noqa: BLE001 - intentional catch-all
-                    pass
+                else:
+                    # Medium confidence - just delete, don't ban
+                    log_spam_decision("delete", user_id, username, fallback_confidence, reason, text)
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"message removed. @{username}, that looked suspicious.",
+                    )
+
+                return True
+            except Exception:  # noqa: BLE001 - intentional catch-all
+                pass
     
     return False
 
