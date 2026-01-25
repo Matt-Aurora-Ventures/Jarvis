@@ -88,6 +88,10 @@ from core.memory.summarize import (
     synthesize_daily_facts,
     synthesize_entity_insights,
 )
+from core.memory.patterns import (
+    generate_weekly_summary,
+    detect_contradictions,
+)
 
 # New deduplication-focused memory store (M1 implementation)
 try:
@@ -243,10 +247,12 @@ __all__ = [
     "list_entities",
     "get_entity_facts",
     "on_fact_stored",
-    # Reflect & Intelligence (reflect.py, summarize.py)
+    # Reflect & Intelligence (reflect.py, summarize.py, patterns.py)
     "reflect_daily",
     "get_reflect_state",
     "save_reflect_state",
     "synthesize_daily_facts",
     "synthesize_entity_insights",
+    "generate_weekly_summary",
+    "detect_contradictions",
 ]
