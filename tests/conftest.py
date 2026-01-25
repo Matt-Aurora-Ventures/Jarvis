@@ -5,18 +5,42 @@ Central pytest configuration and shared fixtures for all tests.
 Includes coverage configuration and factory fixtures.
 """
 
+import os
+import sys
+from unittest.mock import MagicMock
+
+# Add project root to path FIRST
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# ==============================================================================
+# CRITICAL: Mock sklearn/scipy BEFORE they get imported by coverage
+# This prevents scipy/numpy/coverage interaction issue on Windows
+# ==============================================================================
+if 'sklearn' not in sys.modules:
+    # Create mock sklearn module
+    sklearn_mock = MagicMock()
+    sklearn_mock.ensemble = MagicMock()
+    sklearn_mock.preprocessing = MagicMock()
+    sklearn_mock.model_selection = MagicMock()
+    sys.modules['sklearn'] = sklearn_mock
+    sys.modules['sklearn.ensemble'] = sklearn_mock.ensemble
+    sys.modules['sklearn.preprocessing'] = sklearn_mock.preprocessing
+    sys.modules['sklearn.model_selection'] = sklearn_mock.model_selection
+
+if 'scipy' not in sys.modules:
+    scipy_mock = MagicMock()
+    scipy_mock.stats = MagicMock()
+    sys.modules['scipy'] = scipy_mock
+    sys.modules['scipy.stats'] = scipy_mock.stats
+
+# Now import the rest
 import pytest
 import asyncio
 import tempfile
-import os
-import sys
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
 from datetime import datetime
 from typing import Generator
-
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Configure async tests
 @pytest.fixture(scope="session")
