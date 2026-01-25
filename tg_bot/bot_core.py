@@ -3390,6 +3390,90 @@ async def trust(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Error: {str(e)[:100]}")
 
 
+async def unspam_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /unspam @username or /unspam user_id - Mark a user as trusted (admin only).
+    Trusted users have reduced spam sensitivity and won't be flagged for borderline content.
+    """
+    if not update.message or not update.effective_user:
+        return
+
+    user_id = update.effective_user.id
+    admin_ids_str = os.environ.get("TELEGRAM_ADMIN_IDS", "")
+    admin_ids = [int(x.strip()) for x in admin_ids_str.split(",") if x.strip().isdigit()]
+
+    if user_id not in admin_ids:
+        await update.message.reply_text("only admins can use /unspam.")
+        return
+
+    # Parse target user from args or reply
+    target_user_id = None
+    target_username = None
+
+    if context.args:
+        arg = context.args[0]
+        if arg.startswith("@"):
+            target_username = arg[1:]
+        elif arg.isdigit():
+            target_user_id = int(arg)
+        else:
+            await update.message.reply_text("Usage: /unspam @username or /unspam user_id")
+            return
+    elif update.message.reply_to_message:
+        target_user_id = update.message.reply_to_message.from_user.id
+        target_username = update.message.reply_to_message.from_user.username
+    else:
+        await update.message.reply_text(
+            "Usage:\n"
+            "• Reply to a user's message with /unspam\n"
+            "• Or: /unspam @username\n"
+            "• Or: /unspam user_id"
+        )
+        return
+
+    try:
+        from core.jarvis_admin import get_jarvis_admin
+        admin = get_jarvis_admin()
+
+        # If we only have username, try to find user_id
+        if target_username and not target_user_id:
+            # Search in database
+            with admin._lock:
+                import sqlite3
+                conn = sqlite3.connect(str(admin.db_path))
+                cursor = conn.cursor()
+                cursor.execute("SELECT user_id FROM users WHERE username = ?", (target_username,))
+                row = cursor.fetchone()
+                conn.close()
+                if row:
+                    target_user_id = row[0]
+
+        if not target_user_id:
+            await update.message.reply_text(f"Could not find user @{target_username}. They need to send at least one message first.")
+            return
+
+        # Trust the user
+        admin.trust_user(target_user_id)
+
+        # Get their reputation for confirmation
+        reputation = admin.get_user_reputation(target_user_id)
+
+        display_name = f"@{target_username}" if target_username else f"user {target_user_id}"
+        await update.message.reply_text(
+            f"✅ {display_name} marked as trusted.\n\n"
+            f"• Spam sensitivity: Reduced (0.3x)\n"
+            f"• Clean messages: {reputation['clean_messages']}\n"
+            f"• Reputation score: {reputation['reputation_score']}\n\n"
+            f"They can now post freely without being flagged for borderline content."
+        )
+
+        logger.info(f"ADMIN UNSPAM: admin={user_id} trusted user={target_user_id} @{target_username}")
+
+    except Exception as e:
+        logger.error(f"Error in /unspam: {e}")
+        await update.message.reply_text(f"Error: {e}")
+
+
 async def trustscore(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /trustscore [@username] - Check trust score for a user.
