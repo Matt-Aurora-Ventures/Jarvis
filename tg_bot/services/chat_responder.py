@@ -25,6 +25,15 @@ from typing import Optional, List, Dict, Tuple
 
 import aiohttp
 
+from tg_bot.services.memory_service import (
+    detect_preferences,
+    store_user_preference,
+    get_user_context,
+    personalize_response,
+    store_conversation_fact,
+)
+from core.async_utils import fire_and_forget
+
 # Voice bible - canonical brand guide (lazy-loaded to avoid circular imports)
 try:
     from core.jarvis_voice_bible import validate_jarvis_response, JARVIS_VOICE_BIBLE
@@ -36,6 +45,9 @@ except ImportError:
     JARVIS_VOICE_BIBLE = ""  # Fallback empty
 
 logger = logging.getLogger(__name__)
+
+# Memory integration toggle
+TELEGRAM_MEMORY_ENABLED = os.getenv("TELEGRAM_MEMORY_ENABLED", "true").lower() == "true"
 
 # Persistent memory import (lazy-loaded to avoid circular imports)
 _persistent_memory = None
@@ -893,6 +905,30 @@ Never mention Claude or Anthropic.
         except Exception as e:
             logger.warning(f"TG decision engine error (continuing): {e}")
 
+        # MEMORY: Detect and store preferences from user message
+        if TELEGRAM_MEMORY_ENABLED and user_id:
+            detected_prefs = detect_preferences(text)
+            for pref_key, pref_value, matched_text in detected_prefs:
+                fire_and_forget(
+                    store_user_preference(
+                        user_id=str(user_id),
+                        preference_key=pref_key,
+                        preference_value=pref_value,
+                        evidence=f"User said: {text}"
+                    ),
+                    name=f"store_pref_{pref_key}"
+                )
+
+        # MEMORY: Get user context for personalization
+        user_context = {}
+        if TELEGRAM_MEMORY_ENABLED and user_id:
+            try:
+                user_context = await get_user_context(str(user_id))
+                if user_context.get("preferences"):
+                    logger.debug(f"User {user_id} has {len(user_context['preferences'])} stored preferences")
+            except Exception as e:
+                logger.debug(f"Failed to get user context: {e}")
+
         # Detect engagement topic for context-aware responses
         engagement_topic = self.detect_engagement_topic(text)
 
@@ -999,6 +1035,16 @@ Never mention Claude or Anthropic.
                 # Log issue for monitoring but still return response
                 # (Jarvis should stay true to voice even if imperfect)
 
+            # MEMORY: Personalize response based on user preferences
+            if TELEGRAM_MEMORY_ENABLED and user_id:
+                try:
+                    reply = await personalize_response(
+                        base_response=reply,
+                        user_id=str(user_id)
+                    )
+                except Exception as e:
+                    logger.debug(f"Failed to personalize response: {e}")
+
             # Store JARVIS response in memory and conversation history
             if memory:
                 try:
@@ -1021,6 +1067,19 @@ Never mention Claude or Anthropic.
                                 pmem.update_chat_topics(chat_id, current_topics)
                 except Exception as e:
                     logger.debug(f"Failed to update persistent memory: {e}")
+
+            # MEMORY: Store conversation for context (fire-and-forget)
+            if TELEGRAM_MEMORY_ENABLED and user_id:
+                fire_and_forget(
+                    store_conversation_fact(
+                        user_id=str(user_id),
+                        message_text=text,
+                        response_text=reply,
+                        topic=engagement_topic
+                    ),
+                    name="store_conversation"
+                )
+
             return reply
 
         # Fallback to xAI (Grok) if CLI unavailable
@@ -1031,6 +1090,28 @@ Never mention Claude or Anthropic.
                 is_valid, issues = validate_jarvis_response(reply)
                 if not is_valid:
                     logger.warning(f"xAI response failed voice bible validation: {issues}")
+
+                # MEMORY: Personalize response based on user preferences
+                if TELEGRAM_MEMORY_ENABLED and user_id:
+                    try:
+                        reply = await personalize_response(
+                            base_response=reply,
+                            user_id=str(user_id)
+                        )
+                    except Exception as e:
+                        logger.debug(f"Failed to personalize response: {e}")
+
+                    # MEMORY: Store conversation for context (fire-and-forget)
+                    fire_and_forget(
+                        store_conversation_fact(
+                            user_id=str(user_id),
+                            message_text=text,
+                            response_text=reply,
+                            topic=engagement_topic
+                        ),
+                        name="store_conversation"
+                    )
+
                 return reply
 
         return "Claude CLI unavailable. Check CLI installation on server."
