@@ -36,6 +36,7 @@ from core.memory.dedup_store import (
 )
 from bots.twitter.telegram_sync import sync_tweet_to_telegram
 from core.context_engine import context
+from core.async_utils import fire_and_forget
 
 # Import self-correcting AI system for learning and optimization
 try:
@@ -3967,6 +3968,24 @@ Reply type guidance:
                     get_x_decision_engine().record_success()
                 except Exception:
                     pass
+
+                # Store post performance in memory (fire-and-forget)
+                try:
+                    from bots.twitter.memory_hooks import store_post_performance
+                    fire_and_forget(
+                        store_post_performance(
+                            tweet_id=result.tweet_id,
+                            content=content,
+                            likes=0,  # Initial values, will be updated later
+                            retweets=0,
+                            replies=0,
+                            topic=draft.category,
+                            posting_time=datetime.now(timezone.utc),
+                        ),
+                        name=f"store_post_performance_{result.tweet_id}",
+                    )
+                except Exception as e:
+                    logger.debug(f"Memory hook skipped: {e}")
 
                 return result.tweet_id
             else:
