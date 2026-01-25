@@ -1209,6 +1209,71 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         print("=" * 50)
         return
 
+    # Validate API keys mode - makes actual API calls
+    if getattr(args, "validate_keys", False):
+        print("=" * 60)
+        print("API KEY VALIDATION")
+        print("=" * 60)
+        print()
+        print("Validating API keys with actual API calls...")
+        print("(This may take a few seconds)")
+        print()
+
+        validation_results = providers.validate_api_keys()
+
+        # Display results
+        valid_count = 0
+        invalid_count = 0
+        missing_count = 0
+        error_count = 0
+
+        for provider, info in validation_results.items():
+            if info["valid"]:
+                print(f"  [OK] {provider.upper()}: Valid")
+                valid_count += 1
+            elif info["status"] == "missing":
+                print(f"  [--] {provider.upper()}: Missing")
+                missing_count += 1
+            elif info["status"] == "invalid":
+                print(f"  [XX] {provider.upper()}: {info['message']}")
+                invalid_count += 1
+            else:
+                print(f"  [!!] {provider.upper()}: {info['message']}")
+                error_count += 1
+
+        print()
+
+        # Show fixes for issues
+        issues = [(p, i) for p, i in validation_results.items() if not i["valid"]]
+        if issues:
+            print("Issues found:")
+            for provider, info in issues:
+                if info.get("fix"):
+                    print(f"  - {provider.upper()}: {info['fix']}")
+            print()
+
+        # Summary
+        total = len(validation_results)
+        print("=" * 60)
+        if valid_count == total:
+            print(f"All {total} providers validated successfully!")
+        else:
+            print(f"{valid_count} of {total} providers valid")
+            if missing_count:
+                print(f"  {missing_count} missing (not configured)")
+            if invalid_count:
+                print(f"  {invalid_count} invalid (need attention)")
+            if error_count:
+                print(f"  {error_count} errors (network/API issues)")
+
+        # Exit code for scripting
+        if invalid_count > 0:
+            print()
+            print("Exit code: 1 (invalid keys found)")
+            sys.exit(1)
+        print("=" * 60)
+        return
+
     print("=" * 50)
     print("LifeOS Doctor - System Health Check")
     print("=" * 50)
@@ -2228,6 +2293,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_parser.add_argument("--test", action="store_true", help="Run quick provider test")
     doctor_parser.add_argument("--voice", action="store_true", help="Run voice pipeline diagnostics")
     doctor_parser.add_argument("--mcp", action="store_true", help="Run comprehensive MCP server diagnostics")
+    doctor_parser.add_argument("--validate-keys", action="store_true", help="Validate API keys with actual API calls")
 
     log_parser = subparsers.add_parser("log", parents=[mode_parser])
     log_parser.add_argument("text", nargs="?", default="")
