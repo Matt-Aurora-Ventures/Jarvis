@@ -364,13 +364,15 @@ class SecureWallet:
             Tuple of (sol_balance, usd_value)
         """
         import aiohttp
+        from aiohttp import ClientTimeout
 
         addr = address or self._active_wallet
         if not addr:
             return 0.0, 0.0
 
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout = ClientTimeout(total=60, connect=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 # Get SOL balance from RPC
                 rpc_url = os.environ.get('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com')
 
@@ -410,13 +412,15 @@ class SecureWallet:
             Dict of {mint_address: {symbol, balance, usd_value}}
         """
         import aiohttp
+        from aiohttp import ClientTimeout
 
         addr = address or self._active_wallet
         if not addr:
             return {}
 
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout = ClientTimeout(total=60, connect=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 rpc_url = os.environ.get('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com')
 
                 async with session.post(rpc_url, json={
