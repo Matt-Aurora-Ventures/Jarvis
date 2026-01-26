@@ -16,6 +16,13 @@ import aiohttp
 import json
 import os
 
+try:
+    from solana.rpc.websocket_api import connect
+    from solders.signature import Signature
+    WEBSOCKET_AVAILABLE = True
+except ImportError:
+    WEBSOCKET_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -208,14 +215,94 @@ class TransactionConfirmationService:
 
         return result
 
-    async def _check_transaction_status(
+    async def _check_transaction_status_websocket(
         self,
         signature: str,
         timeout: int,
         commitment: CommitmentLevel
     ) -> TransactionResult:
         """
-        Check transaction status with timeout.
+        Check transaction status via WebSocket subscription (instant notifications).
+
+        Args:
+            signature: Transaction signature
+            timeout: Timeout in seconds
+            commitment: Commitment level
+
+        Returns:
+            TransactionResult
+        """
+        if not WEBSOCKET_AVAILABLE:
+            logger.debug("WebSocket not available, falling back to polling")
+            return await self._check_transaction_status_polling(signature, timeout, commitment)
+
+        # Convert HTTP RPC URL to WebSocket URL
+        ws_url = self.rpc_url.replace("https://", "wss://").replace("http://", "ws://")
+
+        try:
+            async with connect(ws_url) as websocket:
+                # Subscribe to signature status
+                await websocket.signature_subscribe(
+                    Signature.from_string(signature),
+                    commitment=commitment.value
+                )
+
+                # Wait for confirmation or timeout
+                try:
+                    async with asyncio.timeout(timeout):
+                        async for notification in websocket:
+                            if notification.value:
+                                # Check for error
+                                if notification.value.err:
+                                    return TransactionResult(
+                                        success=False,
+                                        signature=signature,
+                                        status=TransactionStatus.FAILED,
+                                        error=f"Transaction failed on-chain: {notification.value.err}"
+                                    )
+
+                                # Transaction confirmed successfully
+                                slot = getattr(notification.value, 'slot', None)
+                                confirmations = getattr(notification.value, 'confirmations', 0)
+
+                                # Determine status based on commitment
+                                if commitment == CommitmentLevel.FINALIZED:
+                                    tx_status = TransactionStatus.FINALIZED
+                                else:
+                                    tx_status = TransactionStatus.CONFIRMED
+
+                                # Get block time
+                                block_time = await self._get_block_time(signature)
+
+                                return TransactionResult(
+                                    success=True,
+                                    signature=signature,
+                                    status=tx_status,
+                                    slot=slot,
+                                    block_time=block_time,
+                                    confirmations=confirmations
+                                )
+
+                except asyncio.TimeoutError:
+                    return TransactionResult(
+                        success=False,
+                        signature=signature,
+                        status=TransactionStatus.TIMEOUT,
+                        error=f"Transaction confirmation timeout after {timeout}s (WebSocket)"
+                    )
+
+        except Exception as e:
+            logger.warning(f"WebSocket confirmation failed: {e}, falling back to polling")
+            return await self._check_transaction_status_polling(signature, timeout, commitment)
+
+    async def _check_transaction_status_polling(
+        self,
+        signature: str,
+        timeout: int,
+        commitment: CommitmentLevel
+    ) -> TransactionResult:
+        """
+        Check transaction status via polling (fallback method).
 
         Args:
             signature: Transaction signature
@@ -235,7 +322,7 @@ class TransactionConfirmationService:
                     success=False,
                     signature=signature,
                     status=TransactionStatus.TIMEOUT,
-                    error=f"Transaction confirmation timeout after {timeout}s"
+                    error=f"Transaction confirmation timeout after {timeout}s (polling)"
                 )
 
             try:
@@ -304,6 +391,34 @@ class TransactionConfirmationService:
                 logger.warning(f"Error checking transaction status: {e}")
 
             await asyncio.sleep(0.5)
+
+    async def _check_transaction_status(
+        self,
+        signature: str,
+        timeout: int,
+        commitment: CommitmentLevel
+    ) -> TransactionResult:
+        """
+        Check transaction status with automatic WebSocket/polling selection.
+
+        Uses WebSocket subscriptions for instant notifications (preferred),
+        falls back to polling if WebSocket unavailable or fails.
+
+        Args:
+            signature: Transaction signature
+            timeout: Timeout in seconds
+            commitment: Commitment level
+
+        Returns:
+            TransactionResult
+        """
+        # Try WebSocket first (instant notifications)
+        if WEBSOCKET_AVAILABLE:
+            return await self._check_transaction_status_websocket(signature, timeout, commitment)
+        else:
+            # Fallback to polling
+            logger.debug("WebSocket not available, using polling")
+            return await self._check_transaction_status_polling(signature, timeout, commitment)
 
     async def _get_block_time(self, signature: str) -> Optional[int]:
         """Get block time for a transaction."""

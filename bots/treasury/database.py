@@ -417,8 +417,13 @@ class TreasuryDatabase:
         with self._get_conn() as conn:
             cursor = conn.cursor()
 
-            # Get the position
-            cursor.execute("SELECT * FROM positions WHERE id = ?", (position_id,))
+            # Get the position - optimized query with explicit columns
+            cursor.execute("""
+                SELECT id, token_address, token_symbol, side, entry_price, entry_amount_sol,
+                       entry_amount_tokens, entry_timestamp, status, tp_price, sl_price,
+                       tx_entry, tx_exit, user_id
+                FROM positions WHERE id = ?
+            """, (position_id,))
             row = cursor.fetchone()
 
             if not row:
@@ -497,8 +502,13 @@ class TreasuryDatabase:
 
     def _update_treasury_stats(self, cursor, pnl_sol: float, is_win: bool, token_symbol: str):
         """Update running treasury statistics."""
-        # Get current stats
-        cursor.execute("SELECT * FROM treasury_stats WHERE id = 1")
+        # Get current stats - optimized query with explicit columns
+        cursor.execute("""
+            SELECT total_trades, total_wins, total_losses, current_streak,
+                   best_win_streak, worst_loss_streak, all_time_pnl_sol,
+                   largest_win_sol, largest_win_token, largest_loss_sol, largest_loss_token
+            FROM treasury_stats WHERE id = 1
+        """)
         stats = dict(cursor.fetchone())
 
         # Update streak
@@ -563,37 +573,58 @@ class TreasuryDatabase:
     # =========================================================================
 
     def get_open_positions(self) -> List[DBPosition]:
-        """Get all open positions."""
+        """Get all open positions - HOT PATH optimized."""
         with self._get_conn() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM positions WHERE status = 'OPEN'")
+            # Explicit column list for better query plan
+            cursor.execute("""
+                SELECT id, token_address, token_symbol, side, entry_price, entry_amount_sol,
+                       entry_amount_tokens, entry_timestamp, exit_price, exit_timestamp,
+                       exit_reason, pnl_sol, pnl_percent, tp_price, sl_price, status,
+                       tx_entry, tx_exit, user_id
+                FROM positions WHERE status = 'OPEN'
+            """)
             return [DBPosition(**dict(row)) for row in cursor.fetchall()]
 
     def get_position(self, position_id: str) -> Optional[DBPosition]:
-        """Get a position by ID."""
+        """Get a position by ID - optimized."""
         with self._get_conn() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM positions WHERE id = ?", (position_id,))
+            cursor.execute("""
+                SELECT id, token_address, token_symbol, side, entry_price, entry_amount_sol,
+                       entry_amount_tokens, entry_timestamp, exit_price, exit_timestamp,
+                       exit_reason, pnl_sol, pnl_percent, tp_price, sl_price, status,
+                       tx_entry, tx_exit, user_id
+                FROM positions WHERE id = ?
+            """, (position_id,))
             row = cursor.fetchone()
             return DBPosition(**dict(row)) if row else None
 
     def get_position_by_token(self, token_address: str) -> Optional[DBPosition]:
-        """Get open position for a token."""
+        """Get open position for a token - HOT PATH optimized."""
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT * FROM positions
+                SELECT id, token_address, token_symbol, side, entry_price, entry_amount_sol,
+                       entry_amount_tokens, entry_timestamp, exit_price, exit_timestamp,
+                       exit_reason, pnl_sol, pnl_percent, tp_price, sl_price, status,
+                       tx_entry, tx_exit, user_id
+                FROM positions
                 WHERE token_address = ? AND status = 'OPEN'
             """, (token_address,))
             row = cursor.fetchone()
             return DBPosition(**dict(row)) if row else None
 
     def get_recent_trades(self, limit: int = 10) -> List[DBPosition]:
-        """Get recent closed trades."""
+        """Get recent closed trades - optimized."""
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT * FROM positions
+                SELECT id, token_address, token_symbol, side, entry_price, entry_amount_sol,
+                       entry_amount_tokens, entry_timestamp, exit_price, exit_timestamp,
+                       exit_reason, pnl_sol, pnl_percent, tp_price, sl_price, status,
+                       tx_entry, tx_exit, user_id
+                FROM positions
                 WHERE status = 'CLOSED'
                 ORDER BY exit_timestamp DESC
                 LIMIT ?
@@ -601,10 +632,15 @@ class TreasuryDatabase:
             return [DBPosition(**dict(row)) for row in cursor.fetchall()]
 
     def get_stats(self) -> TreasuryStats:
-        """Get overall treasury statistics."""
+        """Get overall treasury statistics - optimized."""
         with self._get_conn() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM treasury_stats WHERE id = 1")
+            cursor.execute("""
+                SELECT total_trades, total_wins, total_losses, current_streak,
+                       best_win_streak, worst_loss_streak, all_time_pnl_sol,
+                       largest_win_sol, largest_win_token, largest_loss_sol, largest_loss_token
+                FROM treasury_stats WHERE id = 1
+            """)
             row = cursor.fetchone()
             if row:
                 return TreasuryStats(
@@ -635,7 +671,10 @@ class TreasuryDatabase:
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT * FROM daily_stats
+                SELECT date, trades_opened, trades_closed, wins, losses,
+                       total_pnl_sol, total_pnl_percent, largest_win,
+                       largest_loss, win_rate
+                FROM daily_stats
                 WHERE date >= ?
                 ORDER BY date DESC
             """, (cutoff,))
@@ -724,7 +763,10 @@ class TreasuryDatabase:
         """Get learnings, optionally filtered by type."""
         with self._get_conn() as conn:
             cursor = conn.cursor()
-            query = "SELECT * FROM trade_learnings WHERE confidence >= ?"
+            # Optimized: explicit column list
+            query = """SELECT id, trade_id, token_symbol, token_type, learning_type,
+                             insight, confidence, created_at, applied_count
+                      FROM trade_learnings WHERE confidence >= ?"""
             params = [min_confidence]
 
             if token_type:
@@ -745,7 +787,9 @@ class TreasuryDatabase:
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT * FROM trade_learnings
+                SELECT id, trade_id, token_symbol, token_type, learning_type,
+                       insight, confidence, created_at, applied_count
+                FROM trade_learnings
                 WHERE token_symbol = ? OR token_symbol = ''
                 ORDER BY confidence DESC, created_at DESC
                 LIMIT 10
@@ -795,16 +839,19 @@ class TreasuryDatabase:
         """Get recent errors, optionally filtered by component."""
         with self._get_conn() as conn:
             cursor = conn.cursor()
+            columns = "id, error_type, component, message, context, stack_trace, resolved, created_at"
             if component:
-                cursor.execute("""
-                    SELECT * FROM error_logs
+                cursor.execute(f"""
+                    SELECT {columns}
+                    FROM error_logs
                     WHERE component = ?
                     ORDER BY created_at DESC
                     LIMIT ?
                 """, (component, limit))
             else:
-                cursor.execute("""
-                    SELECT * FROM error_logs
+                cursor.execute(f"""
+                    SELECT {columns}
+                    FROM error_logs
                     ORDER BY created_at DESC
                     LIMIT ?
                 """, (limit,))
@@ -815,7 +862,9 @@ class TreasuryDatabase:
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT * FROM error_logs
+                SELECT id, error_type, component, message, context,
+                       stack_trace, resolved, created_at
+                FROM error_logs
                 WHERE resolved = 0
                 ORDER BY created_at DESC
             """)
@@ -918,15 +967,21 @@ class TreasuryDatabase:
         with self._get_conn() as conn:
             cursor = conn.cursor()
 
-            # Get the pick
+            # Get the pick - optimized query
+            columns = """id, pick_date, symbol, asset_class, contract, conviction_score,
+                        entry_price, target_price, stop_loss, timeframe, current_price,
+                        max_price, min_price, pnl_pct, max_gain_pct, hit_target, hit_stop,
+                        outcome, last_updated, reasoning, days_held"""
             if pick_date:
-                cursor.execute("""
-                    SELECT * FROM pick_performance
+                cursor.execute(f"""
+                    SELECT {columns}
+                    FROM pick_performance
                     WHERE symbol = ? AND pick_date = ?
                 """, (symbol, pick_date))
             else:
-                cursor.execute("""
-                    SELECT * FROM pick_performance
+                cursor.execute(f"""
+                    SELECT {columns}
+                    FROM pick_performance
                     WHERE symbol = ? AND outcome = 'PENDING'
                     ORDER BY pick_date DESC LIMIT 1
                 """, (symbol,))

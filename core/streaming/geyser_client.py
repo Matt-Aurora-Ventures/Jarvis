@@ -34,6 +34,15 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
+# Import shutdown manager for graceful cleanup
+try:
+    from core.shutdown_manager import get_shutdown_manager, ShutdownPhase
+    SHUTDOWN_MANAGER_AVAILABLE = True
+except ImportError:
+    SHUTDOWN_MANAGER_AVAILABLE = False
+    get_shutdown_manager = None
+    ShutdownPhase = None
+
 # Check for grpc availability
 try:
     import grpc
@@ -237,6 +246,18 @@ class GeyserClient:
         self._lock = asyncio.Lock()
         self._should_reconnect = True
         self._ping_task: Optional[asyncio.Task] = None
+
+        # Register with shutdown manager
+        if SHUTDOWN_MANAGER_AVAILABLE:
+            shutdown_mgr = get_shutdown_manager()
+            shutdown_mgr.register_hook(
+                name="geyser_client",
+                callback=self.disconnect,
+                phase=ShutdownPhase.GRACEFUL,
+                timeout=10.0,
+                priority=70,
+            )
+            logger.debug("Geyser client registered with shutdown manager")
 
     @classmethod
     def from_endpoint(

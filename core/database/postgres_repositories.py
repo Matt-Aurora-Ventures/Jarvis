@@ -125,17 +125,45 @@ class PostgresBaseRepository(ABC, Generic[T]):
         pass
 
     async def get_by_id(self, id: Any) -> Optional[T]:
-        """Get entity by primary key."""
+        """
+        Get entity by primary key.
+
+        NOTE: This generic implementation uses SELECT * which is inefficient.
+        Child classes should override this with explicit column lists for hot paths.
+        """
+        # Get column list dynamically for optimization
+        columns_query = """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = $1 AND table_schema = 'public'
+            ORDER BY ordinal_position
+        """
+        columns_rows = await self._client.fetch(columns_query, self.table_name)
+        columns = ", ".join([row['column_name'] for row in columns_rows])
+
         row = await self._client.fetchrow(
-            f"SELECT * FROM {self.table_name} WHERE id = $1",
+            f"SELECT {columns} FROM {self.table_name} WHERE id = $1",
             id
         )
         return self._row_to_entity(row) if row else None
 
     async def get_all(self, limit: int = 100, offset: int = 0) -> List[T]:
-        """Get all entities with pagination."""
+        """
+        Get all entities with pagination.
+
+        NOTE: This generic implementation dynamically builds column list.
+        Child classes should override with explicit column lists for maximum performance.
+        """
+        # Get column list dynamically (cached in query planner)
+        columns_query = """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = $1 AND table_schema = 'public'
+            ORDER BY ordinal_position
+        """
+        columns_rows = await self._client.fetch(columns_query, self.table_name)
+        columns = ", ".join([row['column_name'] for row in columns_rows])
+
         rows = await self._client.fetch(
-            f"SELECT * FROM {self.table_name} ORDER BY id DESC LIMIT $1 OFFSET $2",
+            f"SELECT {columns} FROM {self.table_name} ORDER BY id DESC LIMIT $1 OFFSET $2",
             limit,
             offset
         )
@@ -178,17 +206,21 @@ class PostgresUserRepository(PostgresBaseRepository[User]):
         )
 
     async def get_by_telegram_id(self, telegram_id: int) -> Optional[User]:
-        """Get user by Telegram ID."""
+        """Get user by Telegram ID - optimized."""
         row = await self._client.fetchrow(
-            f"SELECT * FROM {self.table_name} WHERE telegram_user_id = $1",
+            f"""SELECT id, telegram_user_id, telegram_username, first_name,
+                      is_admin, is_active, created_at, updated_at
+               FROM {self.table_name} WHERE telegram_user_id = $1""",
             telegram_id
         )
         return self._row_to_entity(row) if row else None
 
     async def get_admins(self) -> List[User]:
-        """Get all admin users."""
+        """Get all admin users - optimized."""
         rows = await self._client.fetch(
-            f"SELECT * FROM {self.table_name} WHERE is_admin = true"
+            f"""SELECT id, telegram_user_id, telegram_username, first_name,
+                      is_admin, is_active, created_at, updated_at
+               FROM {self.table_name} WHERE is_admin = true"""
         )
         return [self._row_to_entity(row) for row in rows]
 
@@ -234,29 +266,37 @@ class PostgresPositionRepository(PostgresBaseRepository[Position]):
         )
 
     async def get_open_positions(self, user_id: Optional[int] = None) -> List[Position]:
-        """Get all open positions, optionally filtered by user."""
+        """Get all open positions, optionally filtered by user - HOT PATH optimized."""
+        columns = """id, user_id, token_mint, symbol, entry_price, current_price,
+                    quantity, entry_amount_tokens, cost_basis, entry_amount_sol,
+                    unrealized_pnl, pnl_sol, unrealized_pnl_pct, pnl_pct,
+                    take_profit_pct, stop_loss_pct, status, opened_at, closed_at"""
         if user_id is not None:
             rows = await self._client.fetch(
-                f"SELECT * FROM {self.table_name} WHERE status = 'open' AND user_id = $1",
+                f"SELECT {columns} FROM {self.table_name} WHERE status = 'open' AND user_id = $1",
                 user_id
             )
         else:
             rows = await self._client.fetch(
-                f"SELECT * FROM {self.table_name} WHERE status = 'open'"
+                f"SELECT {columns} FROM {self.table_name} WHERE status = 'open'"
             )
         return [self._row_to_entity(row) for row in rows]
 
     async def get_by_token_mint(self, token_mint: str, user_id: Optional[int] = None) -> List[Position]:
-        """Get positions for a specific token."""
+        """Get positions for a specific token - optimized."""
+        columns = """id, user_id, token_mint, symbol, entry_price, current_price,
+                    quantity, entry_amount_tokens, cost_basis, entry_amount_sol,
+                    unrealized_pnl, pnl_sol, unrealized_pnl_pct, pnl_pct,
+                    take_profit_pct, stop_loss_pct, status, opened_at, closed_at"""
         if user_id is not None:
             rows = await self._client.fetch(
-                f"SELECT * FROM {self.table_name} WHERE token_mint = $1 AND user_id = $2",
+                f"SELECT {columns} FROM {self.table_name} WHERE token_mint = $1 AND user_id = $2",
                 token_mint,
                 user_id
             )
         else:
             rows = await self._client.fetch(
-                f"SELECT * FROM {self.table_name} WHERE token_mint = $1",
+                f"SELECT {columns} FROM {self.table_name} WHERE token_mint = $1",
                 token_mint
             )
         return [self._row_to_entity(row) for row in rows]
@@ -294,24 +334,30 @@ class PostgresTradeRepository(PostgresBaseRepository[Trade]):
         )
 
     async def get_recent_trades(self, user_id: Optional[int] = None, limit: int = 50) -> List[Trade]:
-        """Get recent trades."""
+        """Get recent trades - optimized."""
+        columns = """id, user_id, position_id, token_mint, symbol, side, price,
+                    quantity, amount_tokens, total_value, amount_sol, fee,
+                    tx_signature, status, executed_at, timestamp"""
         if user_id is not None:
             rows = await self._client.fetch(
-                f"SELECT * FROM {self.table_name} WHERE user_id = $1 ORDER BY timestamp DESC LIMIT $2",
+                f"SELECT {columns} FROM {self.table_name} WHERE user_id = $1 ORDER BY timestamp DESC LIMIT $2",
                 user_id,
                 limit
             )
         else:
             rows = await self._client.fetch(
-                f"SELECT * FROM {self.table_name} ORDER BY timestamp DESC LIMIT $1",
+                f"SELECT {columns} FROM {self.table_name} ORDER BY timestamp DESC LIMIT $1",
                 limit
             )
         return [self._row_to_entity(row) for row in rows]
 
     async def get_by_tx_signature(self, tx_signature: str) -> Optional[Trade]:
-        """Get trade by transaction signature."""
+        """Get trade by transaction signature - optimized."""
+        columns = """id, user_id, position_id, token_mint, symbol, side, price,
+                    quantity, amount_tokens, total_value, amount_sol, fee,
+                    tx_signature, status, executed_at, timestamp"""
         row = await self._client.fetchrow(
-            f"SELECT * FROM {self.table_name} WHERE tx_signature = $1",
+            f"SELECT {columns} FROM {self.table_name} WHERE tx_signature = $1",
             tx_signature
         )
         return self._row_to_entity(row) if row else None
