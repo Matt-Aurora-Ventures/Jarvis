@@ -456,6 +456,12 @@ async def execute_buy_with_tpsl(
             "error": swap.get("error", "Swap failed"),
         }
 
+    # Log trade metrics
+    from core.trading.bags_metrics import log_trade
+    source = swap.get("source", "bags_api")
+    partner_fee = swap.get("partner_fee", 0)
+    log_trade(via=source, success=True, volume_sol=amount_sol, partner_fee=partner_fee)
+
     # Calculate tokens received
     tokens_received = swap.get("amount_out")
     if not tokens_received and token_price > 0:

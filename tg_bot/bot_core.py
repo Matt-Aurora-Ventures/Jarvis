@@ -105,6 +105,22 @@ try:
 except ImportError:
     SELF_IMPROVING_AVAILABLE = False
 
+# Redis-backed rate limiting (optional - falls back to memory)
+try:
+    from tg_bot.services.rate_limiter import (
+        get_telegram_rate_limiter,
+        detect_action_type,
+        format_rate_limit_message,
+        ActionType,
+    )
+    RATE_LIMITER_AVAILABLE = True
+except ImportError:
+    RATE_LIMITER_AVAILABLE = False
+    get_telegram_rate_limiter = None
+    detect_action_type = None
+    format_rate_limit_message = None
+    ActionType = None
+
 # Configure logging (NO API RESPONSES - security)
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -1335,29 +1351,55 @@ async def flags(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ratelimits(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /ratelimits command - show API rate limiter stats (admin only)."""
     try:
-        from core.utils.rate_limiter import get_rate_limiter
-        
-        limiter = get_rate_limiter()
-        stats = limiter.get_stats()
-        
-        if not stats:
-            await update.message.reply_text("No rate limiters configured.", parse_mode=ParseMode.HTML)
-            return
-        
-        lines = ["<b>📊 API Rate Limiter Stats</b>", ""]
-        
-        for api, data in sorted(stats.items()):
-            tokens = data["tokens_available"]
-            capacity = data["bucket_capacity"]
-            pct = (tokens / capacity * 100) if capacity > 0 else 0
-            window_used = data["window_requests"]
-            window_max = data["window_max"]
-            
-            status = "🟢" if pct > 50 else "🟡" if pct > 20 else "🔴"
-            lines.append(f"{status} <b>{api}</b>")
-            lines.append(f"   Tokens: {tokens}/{capacity} ({pct:.0f}%)")
-            lines.append(f"   Window: {window_used}/{window_max} req/{data['window_seconds']}s")
-        
+        lines = ["<b>Rate Limiter Stats</b>", ""]
+
+        # API rate limiters
+        try:
+            from core.utils.rate_limiter import get_rate_limiter
+
+            limiter = get_rate_limiter()
+            stats = limiter.get_stats()
+
+            if stats:
+                lines.append("<b>API Rate Limiters:</b>")
+                for api, data in sorted(stats.items()):
+                    tokens = data["tokens_available"]
+                    capacity = data["bucket_capacity"]
+                    pct = (tokens / capacity * 100) if capacity > 0 else 0
+                    window_used = data["window_requests"]
+                    window_max = data["window_max"]
+
+                    status = "G" if pct > 50 else "Y" if pct > 20 else "R"
+                    lines.append(f"  [{status}] <b>{api}</b>")
+                    lines.append(f"      Tokens: {tokens}/{capacity} ({pct:.0f}%)")
+                    lines.append(f"      Window: {window_used}/{window_max}")
+                lines.append("")
+        except Exception as e:
+            lines.append(f"<i>API limiters: {str(e)[:50]}</i>")
+            lines.append("")
+
+        # Telegram user rate limiter stats
+        if RATE_LIMITER_AVAILABLE:
+            try:
+                tg_limiter = get_telegram_rate_limiter()
+                redis_ok = await tg_limiter.check_redis_connection()
+                backend = "Redis" if redis_ok else "Memory"
+                user_count = len(tg_limiter._memory_state)
+
+                lines.append("<b>Telegram Rate Limiter:</b>")
+                lines.append(f"  Backend: {backend}")
+                lines.append(f"  Users tracked: {user_count}")
+                lines.append("")
+                lines.append("<b>Tier Limits (per min):</b>")
+                lines.append("  Query: 60/min, burst 10")
+                lines.append("  Trade: 6/min, burst 3")
+                lines.append("  Admin: 30/min, burst 5")
+                lines.append("  Chat: 30/min, burst 5")
+            except Exception as e:
+                lines.append(f"<i>TG limiter: {str(e)[:50]}</i>")
+        else:
+            lines.append("<i>Telegram rate limiter not available</i>")
+
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
     except Exception as e:
         await update.message.reply_text(f"Rate limits error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
@@ -5487,6 +5529,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_spam = await check_and_ban_spam(update, context, text, user_id)
         if is_spam:
             return  # Message was spam, user banned, stop processing
+
+    # Rate limiting - skip for admin
+    if not is_admin and RATE_LIMITER_AVAILABLE:
+        try:
+            tg_limiter = get_telegram_rate_limiter()
+            action_type = detect_action_type(text)
+            result = await tg_limiter.check_rate_limit(user_id, action_type)
+
+            if not result.allowed:
+                message = format_rate_limit_message(result, action_type)
+                await update.message.reply_text(message)
+                await tg_limiter.record_violation(user_id)
+                logger.info(f"Rate limited user {user_id} for {action_type.value}")
+                return
+        except Exception as e:
+            logger.debug(f"Rate limiter check failed: {e}")
 
     # Auto-responder check - respond to non-admin messages when admin is away
     if not is_admin:

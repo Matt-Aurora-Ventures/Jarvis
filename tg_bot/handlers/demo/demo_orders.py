@@ -121,6 +121,10 @@ async def _check_demo_exit_triggers(
                 pos["tp_triggered"] = True
                 alerts.append({"type": "take_profit", "position": pos, "price": current_price})
 
+                # Log metrics
+                from core.trading.bags_metrics import log_exit_trigger
+                log_exit_trigger("take_profit")
+
         # Check stop-loss
         sl_pct = pos.get("sl_percent", pos.get("stop_loss"))
         if sl_pct is not None:
@@ -128,6 +132,10 @@ async def _check_demo_exit_triggers(
             if current_price <= sl_price and not pos.get("sl_triggered"):
                 pos["sl_triggered"] = True
                 alerts.append({"type": "stop_loss", "position": pos, "price": current_price})
+
+                # Log metrics
+                from core.trading.bags_metrics import log_exit_trigger
+                log_exit_trigger("stop_loss")
 
     # Update trailing stops
     for stop in trailing_stops:
@@ -151,6 +159,10 @@ async def _check_demo_exit_triggers(
             stop["triggered"] = True
             stop["active"] = False
             alerts.append({"type": "trailing_stop", "position": position, "price": current_price})
+
+            # Log metrics
+            from core.trading.bags_metrics import log_exit_trigger
+            log_exit_trigger("trailing_stop")
 
     # Update trailing stops in user_data if using context
     if hasattr(context_or_user_data, 'user_data'):
