@@ -12,20 +12,21 @@ Usage:
     from tg_bot.handlers.demo import register_demo_handlers
     register_demo_handlers(app)
 
-For backward compatibility, you can still use:
-    from tg_bot.handlers.demo_legacy import demo, demo_callback
+Legacy module `demo_legacy.py` remains as a fallback, but handlers now live in
+`demo_core.py`.
 """
 
-# Import from legacy module for backward compatibility
-from tg_bot.handlers.demo_legacy import (
+# Import core handlers (delegates to legacy until fully extracted)
+from tg_bot.handlers.demo.demo_core import (
     demo,
     demo_callback,
     demo_message_handler,
     register_demo_handlers,
     JarvisTheme,
     DemoMenuBuilder,
-    safe_symbol,
 )
+
+from tg_bot.handlers.demo.demo_ui import safe_symbol
 
 # Import from modular components
 from tg_bot.handlers.demo.demo_trading import (
@@ -47,6 +48,7 @@ from tg_bot.handlers.demo.demo_sentiment import (
     get_cached_sentiment_tokens,
     get_cached_macro_sentiment,
     get_sentiment_cache_age,
+    _update_sentiment_cache,
 )
 
 from tg_bot.handlers.demo.demo_orders import (
@@ -64,12 +66,12 @@ from tg_bot.handlers.demo.demo_callbacks import (
 )
 
 __all__ = [
-    # Main handlers (from legacy)
+    # Main handlers
     "demo",
     "demo_callback",
     "demo_message_handler",
     "register_demo_handlers",
-    # UI (from legacy)
+    # UI (legacy-backed for now)
     "JarvisTheme",
     "DemoMenuBuilder",
     "safe_symbol",
@@ -88,6 +90,7 @@ __all__ = [
     "get_cached_sentiment_tokens",
     "get_cached_macro_sentiment",
     "get_sentiment_cache_age",
+    "_update_sentiment_cache",
     # Orders (modular)
     "_background_tp_sl_monitor",
     "_process_demo_exit_checks",

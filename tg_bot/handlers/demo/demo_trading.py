@@ -9,7 +9,10 @@ Contains:
 """
 
 import os
+import asyncio
+import hashlib
 import logging
+import random
 from pathlib import Path
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone
@@ -121,6 +124,33 @@ def _load_demo_wallet(wallet_address: Optional[str] = None):
 
 
 # =============================================================================
+# Token ID Helpers (callback-safe token references)
+# =============================================================================
+
+def _register_token_id(context, token_address: str) -> str:
+    """Register a short callback-safe token id for a given address."""
+    if not token_address:
+        return ""
+    token_map = context.user_data.setdefault("token_id_map", {})
+    reverse_map = context.user_data.setdefault("token_id_reverse", {})
+    if token_address in reverse_map:
+        return reverse_map[token_address]
+    token_id = hashlib.sha1(token_address.encode("utf-8")).hexdigest()[:10]
+    token_map[token_id] = token_address
+    reverse_map[token_address] = token_id
+    return token_id
+
+
+def _resolve_token_ref(context, token_ref: str) -> str:
+    """Resolve short token id back to full address (fallback to ref)."""
+    if not token_ref:
+        return token_ref
+    if len(token_ref) >= 32:
+        return token_ref
+    return context.user_data.get("token_id_map", {}).get(token_ref, token_ref)
+
+
+# =============================================================================
 # Slippage Configuration
 # =============================================================================
 
@@ -218,17 +248,39 @@ async def _execute_swap_with_fallback(
     """
     last_error = None
 
+    async def _retry_async(fn, attempts: int = 3, base_delay: float = 0.5):
+        """Retry helper with exponential backoff and jitter."""
+        for attempt in range(1, attempts + 1):
+            try:
+                return await fn()
+            except Exception as exc:
+                if attempt >= attempts:
+                    raise
+                delay = base_delay * (2 ** (attempt - 1))
+                delay += random.uniform(0, base_delay / 4)
+                logger.warning(
+                    "Swap attempt %s/%s failed: %s (retrying in %.2fs)",
+                    attempt,
+                    attempts,
+                    exc,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+
     # Try Bags.fm first
     bags_client = get_bags_client()
     if bags_client and getattr(bags_client, "api_key", None) and getattr(bags_client, "partner_key", None):
-        try:
-            bags_result = await bags_client.swap(
+        async def _bags_swap():
+            return await bags_client.swap(
                 from_token=from_token,
                 to_token=to_token,
                 amount=amount,
                 wallet_address=wallet_address,
                 slippage_bps=slippage_bps,
             )
+
+        try:
+            bags_result = await _retry_async(_bags_swap)
             if bags_result and bags_result.success:
                 return {
                     "success": True,
@@ -251,16 +303,23 @@ async def _execute_swap_with_fallback(
             }
 
         amount_base = await _to_base_units(from_token, amount, jupiter)
-        quote = await jupiter.get_quote(
-            input_mint=from_token,
-            output_mint=to_token,
-            amount=amount_base,
-            slippage_bps=slippage_bps,
-        )
+
+        async def _get_quote():
+            return await jupiter.get_quote(
+                input_mint=from_token,
+                output_mint=to_token,
+                amount=amount_base,
+                slippage_bps=slippage_bps,
+            )
+
+        quote = await _retry_async(_get_quote)
         if not quote:
             return {"success": False, "error": last_error or "Jupiter quote failed"}
 
-        jup_result = await jupiter.execute_swap(quote, wallet)
+        async def _execute_swap():
+            return await jupiter.execute_swap(quote, wallet)
+
+        jup_result = await _retry_async(_execute_swap)
         if jup_result and getattr(jup_result, "success", False):
             amount_out_ui = await _from_base_units(
                 to_token,
