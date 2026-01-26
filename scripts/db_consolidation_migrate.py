@@ -205,22 +205,26 @@ class DatabaseMigrator:
 
         # Map legacy tables to consolidated analytics schema
         # Legacy llm_usage → jarvis_analytics.llm_costs
+        # Schema mapping:
+        #   input_tokens → prompt_tokens
+        #   output_tokens → completion_tokens
+        #   provider stays the same
+        #   Add user_id, feature, metadata_json as NULL/defaults
         self.migrate_table_data(
             DATA_DIR / "llm_costs.db",
             "llm_usage",
             TARGET_ANALYTICS,
             "llm_costs",
             transform_fn=lambda row: {
-                'id': row.get('id'),
-                'timestamp': row.get('timestamp'),
+                'provider': row.get('provider', 'unknown'),
                 'model': row.get('model', 'unknown'),
-                'input_tokens': row.get('input_tokens', 0),
-                'output_tokens': row.get('output_tokens', 0),
-                'total_tokens': row.get('total_tokens', 0),
+                'prompt_tokens': row.get('input_tokens', 0),
+                'completion_tokens': row.get('output_tokens', 0),
+                'total_tokens': row.get('input_tokens', 0) + row.get('output_tokens', 0),
                 'cost_usd': row.get('cost_usd', 0.0),
-                'endpoint': row.get('endpoint', 'unknown'),
-                'user_id': row.get('user_id'),
-                'session_id': row.get('session_id')
+                'feature': 'legacy_import',
+                'timestamp': row.get('timestamp') or row.get('created_at'),
+                'metadata_json': row.get('metadata')
             }
         )
 
@@ -240,25 +244,15 @@ class DatabaseMigrator:
         self.log("MIGRATING CACHE DATA")
         self.log("="*80)
 
-        # Map legacy rate_configs → rate_limit_state
-        self.migrate_table_data(
-            DATA_DIR / "rate_limiter.db",
-            "rate_configs",
-            TARGET_CACHE,
-            "rate_limit_state",
-            transform_fn=lambda row: {
-                'id': row.get('id'),
-                'endpoint': row.get('endpoint', 'unknown'),
-                'requests_per_minute': row.get('requests_per_minute', 60),
-                'requests_per_hour': row.get('requests_per_hour', 1000),
-                'requests_per_day': row.get('requests_per_day', 10000),
-                'created_at': row.get('created_at'),
-                'updated_at': row.get('updated_at')
-            }
-        )
-
-        # Note: request_log and limit_stats don't have clear mappings
+        # Note: Legacy rate_limiter.db schema doesn't match current jarvis_cache.db schema
+        # Legacy: rate_configs (configuration) vs Current: rate_limit_state (runtime state)
+        # These serve different purposes and cannot be directly mapped
+        self.log("NOTE: rate_configs not migrated (schema mismatch - config vs runtime state)", "WARNING")
         self.log("NOTE: request_log and limit_stats not migrated (no matching schema in target)", "WARNING")
+
+        # The legacy rate limiter data represents configuration, not runtime state
+        # This should be handled by the application's configuration system instead
+        self.log("INFO: Rate limiter configuration should be set via application config, not migrated", "INFO")
 
         return True
 
@@ -289,36 +283,14 @@ class DatabaseMigrator:
             }
 
             if legacy_count == target_count:
-                self.log(f"✓ llm_usage: {legacy_count} rows migrated successfully")
+                self.log(f"[OK] llm_usage: {legacy_count} rows migrated successfully")
             else:
-                self.log(f"✗ llm_usage: Mismatch! Legacy={legacy_count}, Consolidated={target_count}", "ERROR")
+                self.log(f"[ERROR] llm_usage: Mismatch! Legacy={legacy_count}, Consolidated={target_count}", "ERROR")
         except Exception as e:
             self.log(f"Validation error for llm_usage: {e}", "ERROR")
 
-        # Validate cache migration
-        try:
-            # Check legacy
-            legacy_conn = sqlite3.connect(DATA_DIR / "rate_limiter.db")
-            legacy_count = legacy_conn.execute("SELECT COUNT(*) FROM rate_configs").fetchone()[0]
-            legacy_conn.close()
-
-            # Check consolidated
-            target_conn = sqlite3.connect(TARGET_CACHE)
-            target_count = target_conn.execute("SELECT COUNT(*) FROM rate_limit_state").fetchone()[0]
-            target_conn.close()
-
-            validation_results['rate_configs'] = {
-                'legacy': legacy_count,
-                'consolidated': target_count,
-                'match': legacy_count == target_count
-            }
-
-            if legacy_count == target_count:
-                self.log(f"✓ rate_configs: {legacy_count} rows migrated successfully")
-            else:
-                self.log(f"✗ rate_configs: Mismatch! Legacy={legacy_count}, Consolidated={target_count}", "ERROR")
-        except Exception as e:
-            self.log(f"Validation error for rate_configs: {e}", "ERROR")
+        # Note: Cache migration was skipped due to schema mismatch
+        self.log("NOTE: Cache data validation skipped (no data migrated due to schema mismatch)", "WARNING")
 
         return validation_results
 
@@ -366,7 +338,7 @@ class DatabaseMigrator:
 
         # Save report
         report_path = self.backup_dir / "migration_report.txt"
-        with open(report_path, 'w') as f:
+        with open(report_path, 'w', encoding='utf-8') as f:
             for entry in self.migration_log:
                 f.write(entry + "\n")
         self.log(f"Report saved: {report_path}")
@@ -394,11 +366,11 @@ def main():
         )
 
     if success:
-        print("\n✅ Migration complete!")
-        print(f"📁 Backup: {migrator.backup_dir}")
+        print("\n[OK] Migration complete!")
+        print(f"Backup: {migrator.backup_dir}")
     else:
-        print(f"\n❌ Migration failed with {len(migrator.errors)} errors")
-        print(f"📁 Backup preserved: {migrator.backup_dir}")
+        print(f"\n[ERROR] Migration failed with {len(migrator.errors)} errors")
+        print(f"Backup preserved: {migrator.backup_dir}")
         return 1
 
     return 0
