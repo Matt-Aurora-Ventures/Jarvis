@@ -57,17 +57,41 @@ class BaseRepository(ABC, Generic[T]):
         pass
     
     def get_by_id(self, id: int) -> Optional[T]:
-        """Get entity by primary key."""
+        """
+        Get entity by primary key.
+
+        NOTE: This generic implementation uses SELECT * which is inefficient.
+        Child classes should override this with explicit column lists for production use.
+        Example:
+            columns = "id, name, created_at"
+            cursor.execute(f"SELECT {columns} FROM {self.table_name} WHERE id = ?", (id,))
+        """
+        # Fallback implementation - child classes should override with explicit columns
         with self.pool.cursor() as cursor:
-            cursor.execute(f"SELECT * FROM {self.table_name} WHERE id = ?", (id,))
+            # Get column list from table schema for optimization
+            cursor.execute(f"PRAGMA table_info({self.table_name})")
+            column_names = [col[1] for col in cursor.fetchall()]
+            columns = ", ".join(column_names)
+
+            cursor.execute(f"SELECT {columns} FROM {self.table_name} WHERE id = ?", (id,))
             row = cursor.fetchone()
             return self._row_to_entity(row) if row else None
     
     def get_all(self, limit: int = 100, offset: int = 0) -> List[T]:
-        """Get all entities with pagination."""
+        """
+        Get all entities with pagination.
+
+        NOTE: This generic implementation dynamically builds column list from schema.
+        Child classes should override with explicit column lists for maximum performance.
+        """
         with self.pool.cursor() as cursor:
+            # Get column list from table schema (cached per table)
+            cursor.execute(f"PRAGMA table_info({self.table_name})")
+            column_names = [col[1] for col in cursor.fetchall()]
+            columns = ", ".join(column_names)
+
             cursor.execute(
-                f"SELECT * FROM {self.table_name} ORDER BY id DESC LIMIT ? OFFSET ?",
+                f"SELECT {columns} FROM {self.table_name} ORDER BY id DESC LIMIT ? OFFSET ?",
                 (limit, offset)
             )
             return [self._row_to_entity(row) for row in cursor.fetchall()]
@@ -186,9 +210,11 @@ class UserRepository(BaseRepository[User]):
     
     def get_by_telegram_id(self, telegram_id: int) -> Optional[User]:
         """Get user by Telegram ID."""
+        # Optimized: Only fetch needed columns
+        columns = "id, telegram_id, username, first_name, is_admin, is_active, created_at, updated_at"
         with self.pool.cursor() as cursor:
             cursor.execute(
-                f"SELECT * FROM {self.table_name} WHERE telegram_id = ?",
+                f"SELECT {columns} FROM {self.table_name} WHERE telegram_id = ?",
                 (telegram_id,)
             )
             row = cursor.fetchone()
@@ -196,9 +222,11 @@ class UserRepository(BaseRepository[User]):
     
     def get_admins(self) -> List[User]:
         """Get all admin users."""
+        # Optimized: Only fetch needed columns
+        columns = "id, telegram_id, username, first_name, is_admin, is_active, created_at, updated_at"
         with self.pool.cursor() as cursor:
             cursor.execute(
-                f"SELECT * FROM {self.table_name} WHERE is_admin = 1"
+                f"SELECT {columns} FROM {self.table_name} WHERE is_admin = 1"
             )
             return [self._row_to_entity(row) for row in cursor.fetchall()]
     
@@ -261,29 +289,33 @@ class PositionRepository(BaseRepository[Position]):
     
     def get_open_positions(self, user_id: Optional[int] = None) -> List[Position]:
         """Get all open positions, optionally filtered by user."""
+        # Optimized: Only fetch needed columns for trading hot path
+        columns = "id, user_id, token_mint, token_symbol, entry_price, current_price, quantity, cost_basis, unrealized_pnl, unrealized_pnl_pct, take_profit_pct, stop_loss_pct, status, opened_at, closed_at"
         with self.pool.cursor() as cursor:
             if user_id:
                 cursor.execute(
-                    f"SELECT * FROM {self.table_name} WHERE status = 'open' AND user_id = ?",
+                    f"SELECT {columns} FROM {self.table_name} WHERE status = 'open' AND user_id = ?",
                     (user_id,)
                 )
             else:
                 cursor.execute(
-                    f"SELECT * FROM {self.table_name} WHERE status = 'open'"
+                    f"SELECT {columns} FROM {self.table_name} WHERE status = 'open'"
                 )
             return [self._row_to_entity(row) for row in cursor.fetchall()]
     
     def get_by_token(self, token_mint: str, user_id: Optional[int] = None) -> List[Position]:
         """Get positions for a specific token."""
+        # Optimized: Only fetch needed columns
+        columns = "id, user_id, token_mint, token_symbol, entry_price, current_price, quantity, cost_basis, unrealized_pnl, unrealized_pnl_pct, take_profit_pct, stop_loss_pct, status, opened_at, closed_at"
         with self.pool.cursor() as cursor:
             if user_id:
                 cursor.execute(
-                    f"SELECT * FROM {self.table_name} WHERE token_mint = ? AND user_id = ?",
+                    f"SELECT {columns} FROM {self.table_name} WHERE token_mint = ? AND user_id = ?",
                     (token_mint, user_id)
                 )
             else:
                 cursor.execute(
-                    f"SELECT * FROM {self.table_name} WHERE token_mint = ?",
+                    f"SELECT {columns} FROM {self.table_name} WHERE token_mint = ?",
                     (token_mint,)
                 )
             return [self._row_to_entity(row) for row in cursor.fetchall()]
@@ -341,24 +373,28 @@ class TradeRepository(BaseRepository[Trade]):
     
     def get_recent_trades(self, user_id: Optional[int] = None, limit: int = 50) -> List[Trade]:
         """Get recent trades."""
+        # Optimized: Only fetch needed columns for trade history
+        columns = "id, user_id, position_id, token_mint, token_symbol, side, price, quantity, total_value, fee, tx_signature, status, executed_at"
         with self.pool.cursor() as cursor:
             if user_id:
                 cursor.execute(
-                    f"SELECT * FROM {self.table_name} WHERE user_id = ? ORDER BY executed_at DESC LIMIT ?",
+                    f"SELECT {columns} FROM {self.table_name} WHERE user_id = ? ORDER BY executed_at DESC LIMIT ?",
                     (user_id, limit)
                 )
             else:
                 cursor.execute(
-                    f"SELECT * FROM {self.table_name} ORDER BY executed_at DESC LIMIT ?",
+                    f"SELECT {columns} FROM {self.table_name} ORDER BY executed_at DESC LIMIT ?",
                     (limit,)
                 )
             return [self._row_to_entity(row) for row in cursor.fetchall()]
     
     def get_by_tx_signature(self, tx_signature: str) -> Optional[Trade]:
         """Get trade by transaction signature."""
+        # Optimized: Only fetch needed columns
+        columns = "id, user_id, position_id, token_mint, token_symbol, side, price, quantity, total_value, fee, tx_signature, status, executed_at"
         with self.pool.cursor() as cursor:
             cursor.execute(
-                f"SELECT * FROM {self.table_name} WHERE tx_signature = ?",
+                f"SELECT {columns} FROM {self.table_name} WHERE tx_signature = ?",
                 (tx_signature,)
             )
             row = cursor.fetchone()
