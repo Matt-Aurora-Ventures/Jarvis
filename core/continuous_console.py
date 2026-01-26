@@ -87,6 +87,10 @@ class ContinuousConsole:
         self.sessions: Dict[int, ConsoleSession] = {}
         self._load_sessions()
 
+        # Per-user concurrency protection
+        self._user_locks: Dict[int, asyncio.Lock] = {}
+        self._active_requests: Dict[int, Dict[str, Any]] = {}
+
         # Sensitive pattern detection for output sanitization
         self.sensitive_patterns = [
             (re.compile(r'(sk-ant-[a-zA-Z0-9_-]{95,})', re.IGNORECASE), '[ANTHROPIC_KEY_REDACTED]'),
@@ -127,6 +131,12 @@ class ContinuousConsole:
                 json.dump(asdict(session), f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save session: {e}")
+
+    def _get_user_lock(self, user_id: int) -> asyncio.Lock:
+        """Get or create a lock for a specific user."""
+        if user_id not in self._user_locks:
+            self._user_locks[user_id] = asyncio.Lock()
+        return self._user_locks[user_id]
 
     def get_or_create_session(
         self,
@@ -263,124 +273,153 @@ class ContinuousConsole:
                 "sanitized": False
             }
 
-        try:
-            # Get or create session
-            session = self.get_or_create_session(user_id, username, chat_id)
-
-            # Add user message to session
-            user_msg = ConsoleMessage(
-                role="user",
-                content=prompt,
-                timestamp=datetime.now(timezone.utc).isoformat()
-            )
-            session.messages.append(user_msg)
-
-            # Build system prompt based on mode
-            if mode == "vibe":
-                system_prompt = self._get_vibe_system_prompt(username)
-            else:
-                system_prompt = self._get_financial_system_prompt(username)
-
-            # Build conversation history for API (last 20 messages)
-            messages = []
-            for msg in session.messages[-20:]:
-                messages.append({
-                    "role": msg.role,
-                    "content": msg.content
-                })
-
-            # Call Claude API with timeout and retry handling
-            logger.info(f"Executing console request for {username} (mode={mode})")
-            try:
-                response = self.client.messages.create(
-                    model="claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (widely available)
-                    max_tokens=4096,
-                    system=system_prompt,
-                    messages=messages,
-                    temperature=0.7
-                )
-            except anthropic.APITimeoutError as e:
-                logger.warning(f"API timeout for user {user_id}: {e}")
-                return {
-                    "success": False,
-                    "response": "⏱️ Request timed out after 5 minutes.\n\nTry breaking your task into smaller steps.",
-                    "tokens_used": 0,
-                    "sanitized": False
-                }
-            except anthropic.RateLimitError as e:
-                logger.warning(f"Rate limited for user {user_id}: {e}")
-                return {
-                    "success": False,
-                    "response": "⚠️ API rate limit reached.\n\nPlease wait a moment and try again.",
-                    "tokens_used": 0,
-                    "sanitized": False
-                }
-            except anthropic.APIConnectionError as e:
-                logger.error(f"API connection error for user {user_id}: {e}")
-                return {
-                    "success": False,
-                    "response": "🌐 Network error connecting to Claude API.\n\nCheck your internet connection and try again.",
-                    "tokens_used": 0,
-                    "sanitized": False
-                }
-            except anthropic.AuthenticationError as e:
-                logger.error(f"API authentication error: {e}")
-                return {
-                    "success": False,
-                    "response": "🔑 API authentication failed.\n\nContact admin to check API key configuration.",
-                    "tokens_used": 0,
-                    "sanitized": False
-                }
-            except anthropic.APIError as e:
-                logger.error(f"Claude API error for user {user_id}: {e}")
-                return {
-                    "success": False,
-                    "response": f"❌ Claude API error: {str(e)}\n\nThis has been logged for investigation.",
-                    "tokens_used": 0,
-                    "sanitized": False
-                }
-
-            # Extract response
-            assistant_content = response.content[0].text if response.content else ""
-
-            # Sanitize output
-            sanitized_content = self.sanitize_output(assistant_content)
-            was_sanitized = sanitized_content != assistant_content
-
-            # Add assistant message to session
-            assistant_msg = ConsoleMessage(
-                role="assistant",
-                content=sanitized_content,
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                sanitized=was_sanitized
-            )
-            session.messages.append(assistant_msg)
-
-            # Update session stats
-            session.message_count += 1
-            session.total_tokens += response.usage.input_tokens + response.usage.output_tokens
-            session.last_active = datetime.now(timezone.utc).isoformat()
-
-            # Save session
-            self._save_session(session)
-
-            return {
-                "success": True,
-                "response": sanitized_content,
-                "tokens_used": response.usage.input_tokens + response.usage.output_tokens,
-                "sanitized": was_sanitized,
-                "session_id": session.session_id,
-                "message_count": session.message_count
-            }
-
-        except Exception as e:
-            logger.error(f"Console execution error: {e}", exc_info=True)
+        # Check if user already has active request
+        if user_id in self._active_requests:
+            active_info = self._active_requests[user_id]
             return {
                 "success": False,
-                "response": f"❌ Unexpected error: {type(e).__name__}\n\nThis has been logged for investigation.",
+                "response": (
+                    "⏸️ You already have a vibe request running.\n\n"
+                    f"Started: {active_info['started_at']}\n"
+                    f"Request: {active_info['request_preview']}\n\n"
+                    "Please wait for it to complete before starting a new one."
+                ),
                 "tokens_used": 0,
                 "sanitized": False
             }
+
+        # Acquire per-user lock
+        user_lock = self._get_user_lock(user_id)
+
+        async with user_lock:
+            # Mark request as active
+            self._active_requests[user_id] = {
+                "request_preview": prompt[:50] + ("..." if len(prompt) > 50 else ""),
+                "started_at": datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+            }
+
+            try:
+                # Get or create session
+                session = self.get_or_create_session(user_id, username, chat_id)
+
+                # Add user message to session
+                user_msg = ConsoleMessage(
+                    role="user",
+                    content=prompt,
+                    timestamp=datetime.now(timezone.utc).isoformat()
+                )
+                session.messages.append(user_msg)
+
+                # Build system prompt based on mode
+                if mode == "vibe":
+                    system_prompt = self._get_vibe_system_prompt(username)
+                else:
+                    system_prompt = self._get_financial_system_prompt(username)
+
+                # Build conversation history for API (last 20 messages)
+                messages = []
+                for msg in session.messages[-20:]:
+                    messages.append({
+                        "role": msg.role,
+                        "content": msg.content
+                    })
+
+                # Call Claude API with timeout and retry handling
+                logger.info(f"Executing console request for {username} (mode={mode})")
+                try:
+                    response = self.client.messages.create(
+                        model="claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (widely available)
+                        max_tokens=4096,
+                        system=system_prompt,
+                        messages=messages,
+                        temperature=0.7
+                    )
+                except anthropic.APITimeoutError as e:
+                    logger.warning(f"API timeout for user {user_id}: {e}")
+                    return {
+                        "success": False,
+                        "response": "⏱️ Request timed out after 5 minutes.\n\nTry breaking your task into smaller steps.",
+                        "tokens_used": 0,
+                        "sanitized": False
+                    }
+                except anthropic.RateLimitError as e:
+                    logger.warning(f"Rate limited for user {user_id}: {e}")
+                    return {
+                        "success": False,
+                        "response": "⚠️ API rate limit reached.\n\nPlease wait a moment and try again.",
+                        "tokens_used": 0,
+                        "sanitized": False
+                    }
+                except anthropic.APIConnectionError as e:
+                    logger.error(f"API connection error for user {user_id}: {e}")
+                    return {
+                        "success": False,
+                        "response": "🌐 Network error connecting to Claude API.\n\nCheck your internet connection and try again.",
+                        "tokens_used": 0,
+                        "sanitized": False
+                    }
+                except anthropic.AuthenticationError as e:
+                    logger.error(f"API authentication error: {e}")
+                    return {
+                        "success": False,
+                        "response": "🔑 API authentication failed.\n\nContact admin to check API key configuration.",
+                        "tokens_used": 0,
+                        "sanitized": False
+                    }
+                except anthropic.APIError as e:
+                    logger.error(f"Claude API error for user {user_id}: {e}")
+                    return {
+                        "success": False,
+                        "response": f"❌ Claude API error: {str(e)}\n\nThis has been logged for investigation.",
+                        "tokens_used": 0,
+                        "sanitized": False
+                    }
+
+                # Extract response
+                assistant_content = response.content[0].text if response.content else ""
+
+                # Sanitize output
+                sanitized_content = self.sanitize_output(assistant_content)
+                was_sanitized = sanitized_content != assistant_content
+
+                # Add assistant message to session
+                assistant_msg = ConsoleMessage(
+                    role="assistant",
+                    content=sanitized_content,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    sanitized=was_sanitized
+                )
+                session.messages.append(assistant_msg)
+
+                # Update session stats
+                session.message_count += 1
+                session.total_tokens += response.usage.input_tokens + response.usage.output_tokens
+                session.last_active = datetime.now(timezone.utc).isoformat()
+
+                # Save session
+                self._save_session(session)
+
+                return {
+                    "success": True,
+                    "response": sanitized_content,
+                    "tokens_used": response.usage.input_tokens + response.usage.output_tokens,
+                    "sanitized": was_sanitized,
+                    "session_id": session.session_id,
+                    "message_count": session.message_count
+                }
+
+            except Exception as e:
+                logger.error(f"Console execution error: {e}", exc_info=True)
+                return {
+                    "success": False,
+                    "response": f"❌ Unexpected error: {type(e).__name__}\n\nThis has been logged for investigation.",
+                    "tokens_used": 0,
+                    "sanitized": False
+                }
+            finally:
+                # Always clean up active request tracking
+                if user_id in self._active_requests:
+                    del self._active_requests[user_id]
 
     def _get_vibe_system_prompt(self, username: str) -> str:
         """System prompt for vibe coding mode."""
