@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Union
 
+from core.security_validation import sanitize_sql_identifier
+
 logger = logging.getLogger(__name__)
 
 
@@ -154,7 +156,9 @@ class SafeQueryBuilder:
         params = [] if self.param_style == "qmark" else {}
 
         if self._operation == "SELECT":
-            query = f"SELECT {', '.join(self._columns)} FROM {self._table}"
+            safe_table = sanitize_sql_identifier(self._table)
+            safe_columns = [sanitize_sql_identifier(col) if col != '*' else '*' for col in self._columns]
+            query = f"SELECT {', '.join(safe_columns)} FROM {safe_table}"
 
         elif self._operation == "INSERT":
             columns = list(self._values.keys())
