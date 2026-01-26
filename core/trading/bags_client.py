@@ -350,12 +350,12 @@ class BagsAPIClient:
                 logger.error(f"Failed to get token info: {e}")
             return None
 
-    async def get_trending_tokens(self, limit: int = 10) -> List[TokenInfo]:
+    async def get_trending_tokens(self, limit: int = 10, allow_public: bool = False) -> List[TokenInfo]:
         """Get trending tokens"""
 
         if not self.client:
             return []
-        if not self.api_key:
+        if not self.api_key and not allow_public:
             self._warn_missing_api_key("trending tokens")
             return []
 
@@ -396,12 +396,12 @@ class BagsAPIClient:
                 logger.error(f"Failed to get trending tokens: {e}")
             return []
 
-    async def get_top_tokens_by_volume(self, limit: int = 15) -> List[TokenInfo]:
+    async def get_top_tokens_by_volume(self, limit: int = 15, allow_public: bool = False) -> List[TokenInfo]:
         """Get top tokens sorted by 24h volume"""
 
         if not self.client:
             return []
-        if not self.api_key:
+        if not self.api_key and not allow_public:
             self._warn_missing_api_key("top tokens by volume")
             return []
 

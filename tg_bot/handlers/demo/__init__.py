@@ -27,6 +27,7 @@ from tg_bot.handlers.demo.demo_core import (
 )
 
 from tg_bot.handlers.demo.demo_ui import safe_symbol
+from tg_bot.config import get_config
 
 # Import from modular components
 from tg_bot.handlers.demo.demo_trading import (
@@ -36,6 +37,7 @@ from tg_bot.handlers.demo.demo_trading import (
     get_success_fee_manager,
     validate_buy_amount,
     _get_jupiter_client,  # For testing
+    _get_demo_engine,  # For testing
     _execute_swap_with_fallback,  # For testing
 )
 
@@ -75,12 +77,14 @@ __all__ = [
     "JarvisTheme",
     "DemoMenuBuilder",
     "safe_symbol",
+    "get_config",
     # Trading (modular)
     "execute_buy_with_tpsl",
     "get_bags_client",
     "get_trade_intelligence",
     "get_success_fee_manager",
     "validate_buy_amount",
+    "_get_demo_engine",
     # Sentiment (modular)
     "get_market_regime",
     "get_ai_sentiment_for_token",
