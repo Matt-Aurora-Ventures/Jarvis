@@ -2,6 +2,8 @@
 from typing import Any, List, Optional, Tuple
 from dataclasses import dataclass
 
+from core.security_validation import sanitize_sql_identifier
+
 
 @dataclass
 class QueryResult:
@@ -62,7 +64,9 @@ class QueryBuilder:
         return self
     
     def build(self) -> Tuple[str, list]:
-        parts = [f"SELECT {', '.join(self._select)} FROM {self.table}"]
+        safe_table = sanitize_sql_identifier(self.table)
+        safe_columns = [sanitize_sql_identifier(col) if col != '*' else '*' for col in self._select]
+        parts = [f"SELECT {', '.join(safe_columns)} FROM {safe_table}"]
         
         for join in self._joins:
             parts.append(join)
@@ -82,7 +86,8 @@ class QueryBuilder:
         return " ".join(parts), self._params
     
     def build_count(self) -> Tuple[str, list]:
-        parts = [f"SELECT COUNT(*) as count FROM {self.table}"]
+        safe_table = sanitize_sql_identifier(self.table)
+        parts = [f"SELECT COUNT(*) as count FROM {safe_table}"]
         for join in self._joins:
             parts.append(join)
         if self._where:
