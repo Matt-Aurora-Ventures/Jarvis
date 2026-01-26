@@ -229,7 +229,7 @@ class TestModelManagerGenerate:
         with patch.object(manager, '_generate_with_provider', new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = {"content": "OK", "tokens_in": 1000, "tokens_out": 500}
 
-            with patch('core.models.manager.get_cost_tracker') as mock_tracker:
+            with patch('core.llm.cost_tracker.get_cost_tracker') as mock_tracker:
                 mock_tracker.return_value.record_usage = MagicMock()
 
                 await manager.generate(
