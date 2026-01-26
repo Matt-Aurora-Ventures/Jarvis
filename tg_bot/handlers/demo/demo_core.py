@@ -568,7 +568,7 @@ def register_demo_handlers(app) -> None:
             filters.TEXT & ~filters.COMMAND,
             demo_message_handler,
         ),
-        group=1,
+        group=0,
     )
 
     logger.info("Demo handlers registered")
