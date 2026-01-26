@@ -221,7 +221,8 @@ class PositionMonitor:
         if isinstance(opened_at, str):
             try:
                 opened_at = datetime.fromisoformat(opened_at.replace('Z', '+00:00'))
-            except:
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse opened_at timestamp '{opened_at}': {e}")
                 opened_at = datetime.utcnow()
 
         if pos_id in self.position_snapshots:

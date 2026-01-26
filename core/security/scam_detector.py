@@ -926,7 +926,8 @@ class ScamDetector:
             if isinstance(ts, str):
                 try:
                     ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                except:
+                except (ValueError, TypeError) as e:
+                    logger.debug(f"Failed to parse trade timestamp '{ts}': {e}")
                     continue
             timestamps.append(ts)
 

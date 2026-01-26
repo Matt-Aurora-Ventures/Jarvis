@@ -18,6 +18,7 @@ Each module handles a specific category of callbacks:
 - analysis: token analysis
 - learning: learning dashboard
 - chart: chart generation
+- tpsl: TP/SL settings and ladder exits
 - misc: miscellaneous
 """
 
@@ -37,6 +38,7 @@ from tg_bot.handlers.demo.callbacks.watchlist import handle_watchlist
 from tg_bot.handlers.demo.callbacks.analysis import handle_analysis
 from tg_bot.handlers.demo.callbacks.learning import handle_learning
 from tg_bot.handlers.demo.callbacks.chart import handle_chart
+from tg_bot.handlers.demo.callbacks.tpsl import handle_tpsl
 from tg_bot.handlers.demo.callbacks.misc import handle_misc
 
 __all__ = [
@@ -56,5 +58,6 @@ __all__ = [
     "handle_analysis",
     "handle_learning",
     "handle_chart",
+    "handle_tpsl",
     "handle_misc",
 ]

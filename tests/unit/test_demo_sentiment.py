@@ -478,30 +478,53 @@ class TestBagsTopTokens:
     async def test_get_bags_top_tokens_with_sentiment(self):
         """Test gets top tokens from Bags with sentiment."""
         mock_bags_client = AsyncMock()
+        # Token needs name or symbol ending in "bags" due to filtering
         mock_token = SimpleNamespace(
-            symbol="BAGS",
+            symbol="TESTBAGS",
+            name="Test Bags",
             address="bags_addr",
             price_usd=2.0,
             price_change_24h=5.0,
             volume_24h=100_000,
             liquidity=200_000,
         )
-        mock_bags_client.get_top_tokens = AsyncMock(return_value=[mock_token])
+        # The function calls get_top_tokens_by_volume, not get_top_tokens
+        mock_bags_client.get_top_tokens_by_volume = AsyncMock(return_value=[mock_token])
 
         with patch("tg_bot.handlers.demo.demo_trading.get_bags_client", return_value=mock_bags_client), \
              patch("tg_bot.handlers.demo.demo_sentiment.get_ai_sentiment_for_token", new_callable=AsyncMock, return_value={"sentiment": "bullish", "score": 0.7, "signal": "BUY"}):
             result = await demo_sentiment.get_bags_top_tokens_with_sentiment(limit=15)
 
         assert len(result) == 1
-        assert result[0]["symbol"] == "BAGS"
+        assert result[0]["symbol"] == "TESTBAGS"
         assert result[0]["sentiment"] == "bullish"
 
     @pytest.mark.asyncio
     async def test_get_bags_top_tokens_fallback_to_trending(self, mock_signal_service):
         """Test falls back to trending on Bags failure."""
+        # Create a signal that ends with "bags" to pass the filter
+        bags_signal = SimpleNamespace(
+            symbol="TESTBAGS",
+            name="Test Bags Token",
+            address="testbags_addr",
+            price_usd=1.0,
+            price_change_24h=5.0,
+            volume_24h=50_000,
+            liquidity_usd=25_000,
+            sentiment="neutral",
+            sentiment_score=0.5,
+            sentiment_confidence=0.6,
+            sentiment_summary="Test token",
+            signal="NEUTRAL",
+            signal_score=0.5,
+            signal_reasons=["Test"],
+        )
+        mock_signal_service.get_trending_tokens = AsyncMock(return_value=[bags_signal])
+
         with patch("tg_bot.handlers.demo.demo_trading.get_bags_client", return_value=None), \
              patch("tg_bot.services.signal_service.get_signal_service", return_value=mock_signal_service):
             result = await demo_sentiment.get_bags_top_tokens_with_sentiment(limit=15)
 
-        # Should fall back to trending (signal service)
+        # Should fall back to trending (signal service) with bags-suffixed tokens
         assert len(result) >= 1
+        assert result[0]["symbol"] == "TESTBAGS"

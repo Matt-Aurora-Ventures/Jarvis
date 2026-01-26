@@ -542,7 +542,8 @@ class EnhancedSecretsManager:
                 try:
                     version_obj = SecretVersion.from_dict(v)
                     version_info["value"] = self._decrypt(version_obj.encrypted_value)
-                except:
+                except Exception as e:
+                    logger.warning(f"Failed to decrypt secret version {v.get('version')}: {e}")
                     version_info["value"] = "[DECRYPTION_FAILED]"
 
                 versions.append(version_info)
@@ -694,7 +695,8 @@ class EnhancedSecretsManager:
                     "updated_at": data.get("updated_at"),
                     "current_version": data.get("current_version")
                 })
-            except:
+            except Exception as e:
+                logger.warning(f"Failed to parse secret data from file {f}: {e}")
                 continue
 
         return secrets_list

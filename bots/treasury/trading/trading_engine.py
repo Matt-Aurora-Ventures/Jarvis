@@ -601,11 +601,22 @@ class TradingEngine(TradingOperationsMixin):
         open_positions = self.get_open_positions()
         daily_pnl = self._calculate_daily_pnl()
 
-        from asyncio import get_event_loop
+        # Get portfolio value - handle async/sync boundary properly
         try:
-            loop = get_event_loop()
-            _, portfolio_value = loop.run_until_complete(self.get_portfolio_value())
-        except:
+            import asyncio
+            # Check if we're already in an async context
+            try:
+                loop = asyncio.get_running_loop()
+                # Already in async context - use asyncio.create_task or similar
+                logger.warning("get_risk_metrics called from async context - portfolio value may be stale")
+                portfolio_value = 0.0
+            except RuntimeError:
+                # Not in async context - safe to use run_until_complete
+                loop = asyncio.new_event_loop()
+                _, portfolio_value = loop.run_until_complete(self.get_portfolio_value())
+                loop.close()
+        except Exception as e:
+            logger.error(f"Failed to get portfolio value for risk metrics: {e}")
             portfolio_value = 0.0
 
         portfolio_peak = max(portfolio_value, portfolio_value - daily_pnl if daily_pnl < 0 else portfolio_value)

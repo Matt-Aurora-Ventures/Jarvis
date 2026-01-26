@@ -6,6 +6,10 @@ Contains:
 - Buy with TP/SL execution
 - Wallet and Jupiter client management
 - Token decimals/price utilities
+
+Integrates with:
+- Circuit breakers for endpoint protection
+- Error handlers for user-friendly error messages
 """
 
 import os
@@ -22,6 +26,65 @@ logger = logging.getLogger(__name__)
 # Profile configuration
 DEMO_PROFILE = (os.environ.get("DEMO_TRADING_PROFILE", "demo") or "demo").strip().lower()
 DEMO_DEFAULT_SLIPPAGE_BPS = 100  # 1% default
+
+# Import circuit breaker and error handler for enhanced error handling
+try:
+    from core.solana.circuit_breaker import (
+        RPCCircuitBreaker,
+        CircuitOpenError,
+        get_rpc_circuit_breaker,
+    )
+    CIRCUIT_BREAKER_AVAILABLE = True
+except ImportError:
+    CIRCUIT_BREAKER_AVAILABLE = False
+    RPCCircuitBreaker = None
+    CircuitOpenError = Exception
+    get_rpc_circuit_breaker = None
+
+try:
+    from core.solana.error_handler import (
+        RPCErrorHandler,
+        ErrorCategory,
+        get_rpc_error_handler,
+    )
+    ERROR_HANDLER_AVAILABLE = True
+except ImportError:
+    ERROR_HANDLER_AVAILABLE = False
+    RPCErrorHandler = None
+    ErrorCategory = None
+    get_rpc_error_handler = None
+
+# Import config for Jupiter settings
+try:
+    from core.config import load_config
+    CONFIG_AVAILABLE = True
+except ImportError:
+    CONFIG_AVAILABLE = False
+    load_config = None
+
+# Initialize demo trading circuit breaker
+_DEMO_CIRCUIT_BREAKER = None
+_DEMO_ERROR_HANDLER = None
+
+
+def _get_demo_circuit_breaker():
+    """Get or create circuit breaker for demo trading."""
+    global _DEMO_CIRCUIT_BREAKER
+    if CIRCUIT_BREAKER_AVAILABLE and _DEMO_CIRCUIT_BREAKER is None:
+        _DEMO_CIRCUIT_BREAKER = get_rpc_circuit_breaker(
+            "demo_trading",
+            failure_threshold=5,
+            recovery_timeout=60.0,
+        )
+    return _DEMO_CIRCUIT_BREAKER
+
+
+def _get_demo_error_handler():
+    """Get or create error handler for demo trading."""
+    global _DEMO_ERROR_HANDLER
+    if ERROR_HANDLER_AVAILABLE and _DEMO_ERROR_HANDLER is None:
+        _DEMO_ERROR_HANDLER = get_rpc_error_handler()
+    return _DEMO_ERROR_HANDLER
 
 
 # =============================================================================
@@ -271,6 +334,10 @@ async def _execute_swap_with_fallback(
     """
     Execute swap via Bags.fm with Jupiter fallback.
 
+    Integrates with:
+    - Circuit breaker to prevent cascading failures
+    - Error handler for user-friendly error messages
+
     Args:
         from_token: Input token mint address
         to_token: Output token mint address
@@ -282,6 +349,15 @@ async def _execute_swap_with_fallback(
         Dict with success/error status and transaction details
     """
     last_error = None
+
+    # Check circuit breaker before execution
+    circuit_breaker = _get_demo_circuit_breaker()
+    if circuit_breaker and not circuit_breaker.allow_request():
+        remaining = circuit_breaker.get_remaining_timeout()
+        return {
+            "success": False,
+            "error": f"Trading temporarily paused due to recent failures. Please retry in {remaining:.0f} seconds.",
+        }
 
     async def _retry_async(fn, attempts: int = 3, base_delay: float = 0.5):
         """Retry helper with exponential backoff and jitter."""
@@ -317,6 +393,9 @@ async def _execute_swap_with_fallback(
         try:
             bags_result = await _retry_async(_bags_swap)
             if bags_result and bags_result.success:
+                # Record success with circuit breaker
+                if circuit_breaker:
+                    circuit_breaker.record_success()
                 return {
                     "success": True,
                     "source": "bags_fm",
@@ -383,12 +462,16 @@ async def _execute_swap_with_fallback(
 
         jup_result = await _retry_async(_execute_swap)
         if jup_result and getattr(jup_result, "success", False):
+            # Record success with circuit breaker
+            if circuit_breaker:
+                circuit_breaker.record_success()
+
             amount_out_ui = await _from_base_units(
                 to_token,
                 getattr(jup_result, "output_amount", 0),
                 jupiter,
             )
-            logger.info("✅ Trade executed successfully via Jupiter fallback")
+            logger.info("Trade executed successfully via Jupiter fallback")
             return {
                 "success": True,
                 "source": "jupiter",
@@ -396,20 +479,44 @@ async def _execute_swap_with_fallback(
                 "amount_out": amount_out_ui,
             }
 
-        # Both bags.fm and Jupiter failed
+        # Both bags.fm and Jupiter failed - record failure
+        if circuit_breaker:
+            circuit_breaker.record_failure("swap_failed")
+
         jup_error = getattr(jup_result, "error", None)
         raise BagsAPIError(
             "Trade execution failed on all platforms",
             hint=f"bags.fm error: {last_error or 'Unknown'}. Jupiter error: {jup_error or 'Unknown'}. Try again later or contact support."
         )
     except BagsAPIError:
+        # Record failure with circuit breaker
+        if circuit_breaker:
+            circuit_breaker.record_failure("bags_api_error")
         # Re-raise our custom errors
         raise
     except Exception as exc:
-        logger.error(f"Unexpected error during swap execution: {exc}")
+        # Record failure with circuit breaker
+        if circuit_breaker:
+            circuit_breaker.record_failure(str(exc))
+
+        # Use error handler for user-friendly message if available
+        error_handler = _get_demo_error_handler()
+        if error_handler:
+            user_msg = error_handler.sanitize_for_user(exc)
+            # Log detailed error for developers
+            dev_msg = error_handler.format_for_developer(exc, {
+                "from_token": from_token[:8] if from_token else "unknown",
+                "to_token": to_token[:8] if to_token else "unknown",
+                "amount": amount,
+            })
+            logger.error(f"Swap error (dev): {dev_msg}")
+        else:
+            user_msg = "An unexpected error occurred"
+            logger.error(f"Unexpected error during swap execution: {exc}")
+
         raise BagsAPIError(
             "Trade execution failed due to unexpected error",
-            hint="An unexpected error occurred. Please try again or contact support if the issue persists."
+            hint=f"{user_msg}. Please try again or contact support if the issue persists."
         )
 
 

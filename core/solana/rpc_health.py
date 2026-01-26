@@ -811,6 +811,67 @@ class RPCHealthScorer:
 
 
 # =============================================================================
+# CIRCUIT BREAKER INTEGRATION
+# =============================================================================
+
+def get_rpc_with_circuit_breaker():
+    """
+    Get RPC health scorer with integrated circuit breaker.
+
+    This creates a combined system where:
+    - RPCHealthScorer manages endpoint health scoring
+    - Circuit breakers protect each endpoint from cascading failures
+    - Error handler provides user-friendly messages
+
+    Example:
+        >>> from core.solana.rpc_health import get_rpc_with_circuit_breaker
+        >>> scorer, cb_manager, error_handler = get_rpc_with_circuit_breaker()
+        >>>
+        >>> endpoint = scorer.get_healthy_provider()
+        >>> cb = cb_manager.get_or_create(endpoint.name)
+        >>>
+        >>> if cb.allow_request():
+        ...     try:
+        ...         result = await make_rpc_call(endpoint.url)
+        ...         cb.record_success()
+        ...         endpoint.record_success(latency_ms)
+        ...     except Exception as e:
+        ...         cb.record_failure(str(e))
+        ...         endpoint.record_failure(str(e))
+        ...         user_msg = error_handler.sanitize_for_user(e)
+        ...         raise RPCError(user_msg) from e
+
+    Returns:
+        Tuple of (RPCHealthScorer, RPCCircuitBreakerManager, RPCErrorHandler)
+    """
+    try:
+        from core.solana.circuit_breaker import RPCCircuitBreakerManager, RPC_PROVIDER_CONFIGS
+        from core.solana.error_handler import RPCErrorHandler
+    except ImportError:
+        logger.warning("Circuit breaker or error handler not available")
+        return None, None, None
+
+    # Create health scorer from config if available, otherwise use defaults
+    try:
+        scorer = RPCHealthScorer.from_config()
+    except (RuntimeError, Exception):
+        # Fallback to empty scorer - caller needs to configure
+        scorer = None
+
+    # Create circuit breaker manager with pre-configured providers
+    cb_manager = RPCCircuitBreakerManager()
+
+    # Pre-register common providers with appropriate thresholds
+    for provider, config in RPC_PROVIDER_CONFIGS.items():
+        cb_manager.register_endpoint(provider, **config)
+
+    # Create error handler
+    error_handler = RPCErrorHandler()
+
+    return scorer, cb_manager, error_handler
+
+
+# =============================================================================
 # EXPORTS
 # =============================================================================
 
@@ -823,4 +884,5 @@ __all__ = [
     "HEALTH_CHECK_INTERVAL",
     "LATENCY_UNHEALTHY_THRESHOLD_MS",
     "NoHealthyProviderError",
+    "get_rpc_with_circuit_breaker",
 ]

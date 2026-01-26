@@ -23,7 +23,32 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from core.feature_manager import is_enabled_default
 from core.security.emergency_shutdown import is_emergency_shutdown
-from core.secrets import get_key
+
+# Import get_key from the standalone secrets module (not the package)
+# This works around Python's module/package name conflict
+import importlib.util
+import sys
+from pathlib import Path
+
+def _import_secrets_module():
+    """Import the standalone core/secrets.py module (not the package)."""
+    secrets_file = Path(__file__).parent.parent / "secrets.py"
+    if not secrets_file.exists():
+        # Fallback to environment variable
+        return None
+    spec = importlib.util.spec_from_file_location("core_secrets_module", secrets_file)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+_secrets_module = _import_secrets_module()
+
+def get_key(name: str, env_name: str) -> str:
+    """Get API key from secrets file or environment."""
+    if _secrets_module and hasattr(_secrets_module, 'get_key'):
+        return _secrets_module.get_key(name, env_name)
+    import os
+    return os.environ.get(env_name, "")
 
 logger = logging.getLogger("jarvis.trading.bags_adapter")
 

@@ -7,7 +7,7 @@ Contains enums, dataclasses, and type definitions used across trading modules.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 
 class TradeDirection(Enum):
@@ -55,6 +55,7 @@ class Position:
     tp_order_id: Optional[str] = None
     sl_order_id: Optional[str] = None
     peak_price: Optional[float] = None  # Highest price reached for trailing stop
+    ladder_exits: Optional[List[Dict[str, Any]]] = None  # Ladder exit configuration
 
     @property
     def is_open(self) -> bool:
@@ -107,7 +108,8 @@ class Position:
             'sentiment_score': self.sentiment_score,
             'tp_order_id': self.tp_order_id,
             'sl_order_id': self.sl_order_id,
-            'peak_price': self.peak_price
+            'peak_price': self.peak_price,
+            'ladder_exits': self.ladder_exits
         }
 
     @classmethod
@@ -127,6 +129,9 @@ class Position:
         peak_price = data.get('peak_price')
         if peak_price is None:
             peak_price = entry_price
+
+        # Ladder exits for partial exit strategy
+        ladder_exits = data.get('ladder_exits')
 
         return cls(
             id=data['id'],
@@ -149,7 +154,8 @@ class Position:
             sentiment_score=data.get('sentiment_score', 0),
             tp_order_id=data.get('tp_order_id'),
             sl_order_id=data.get('sl_order_id'),
-            peak_price=peak_price
+            peak_price=peak_price,
+            ladder_exits=ladder_exits
         )
 
 

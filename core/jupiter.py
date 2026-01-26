@@ -23,9 +23,29 @@ SOL_MINT = "So11111111111111111111111111111111111111112"
 USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 USDT_MINT = "Es9vMFrzaCER3EJmqvQC2Uo9qowWP1h1xFh3Le7YpR1V"
 
+# Session reuse to reduce 50-100ms overhead per request
+_session: Optional[requests.Session] = None
+
 
 def _backoff_delay(base: float, attempt: int, max_delay: float = 30.0) -> float:
     return min(max_delay, base * (2 ** attempt))
+
+
+def _get_session() -> requests.Session:
+    """Get or create reusable HTTP session."""
+    global _session
+    if _session is None:
+        _session = requests.Session()
+        _session.headers.update({"User-Agent": USER_AGENT})
+    return _session
+
+
+def close_session() -> None:
+    """Close the reusable session (call on shutdown)."""
+    global _session
+    if _session is not None:
+        _session.close()
+        _session = None
 
 
 def _extract_token_list(payload: Any) -> List[Dict[str, Any]]:
@@ -216,12 +236,12 @@ def _get_json(
         if cached is not None:
             return cached
 
-    headers = {"User-Agent": USER_AGENT}
+    session = _get_session()
     last_error = None
-    
+
     for attempt in range(retries):
         try:
-            resp = requests.get(url, headers=headers, params=params, timeout=timeout)
+            resp = session.get(url, params=params, timeout=timeout)
             if resp.status_code in (429, 503):
                 time.sleep(_backoff_delay(backoff_seconds, attempt))
                 continue

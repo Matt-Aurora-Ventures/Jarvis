@@ -11,9 +11,10 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import Enum
+from collections import OrderedDict
 
 from core.resilience.retry import retry, JUPITER_QUOTE_RETRY, JUPITER_SWAP_RETRY
 from core.security.tx_confirmation import (
@@ -24,6 +25,55 @@ from core.security.tx_confirmation import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class LRUCacheWithTTL:
+    """LRU cache with time-to-live to prevent unbounded growth."""
+
+    def __init__(self, max_size: int = 1000, ttl_seconds: int = 3600):
+        """
+        Initialize LRU cache with TTL.
+
+        Args:
+            max_size: Maximum number of entries before eviction
+            ttl_seconds: Time-to-live for each entry in seconds
+        """
+        self.cache: OrderedDict = OrderedDict()
+        self.max_size = max_size
+        self.ttl = timedelta(seconds=ttl_seconds)
+        self.timestamps: Dict[str, datetime] = {}
+
+    def get(self, key: str) -> Optional[Any]:
+        """Get value from cache, returns None if expired or missing."""
+        if key not in self.cache:
+            return None
+
+        # Check TTL
+        if datetime.now() - self.timestamps[key] > self.ttl:
+            del self.cache[key]
+            del self.timestamps[key]
+            return None
+
+        # Move to end (most recently used)
+        self.cache.move_to_end(key)
+        return self.cache[key]
+
+    def set(self, key: str, value: Any) -> None:
+        """Set value in cache with automatic LRU eviction."""
+        if key in self.cache:
+            self.cache.move_to_end(key)
+        self.cache[key] = value
+        self.timestamps[key] = datetime.now()
+
+        # Evict oldest if over max_size
+        if len(self.cache) > self.max_size:
+            oldest = next(iter(self.cache))
+            del self.cache[oldest]
+            del self.timestamps[oldest]
+
+    def __contains__(self, key: str) -> bool:
+        """Check if key exists and is not expired."""
+        return self.get(key) is not None
 
 
 class SwapMode(Enum):
@@ -158,7 +208,7 @@ class JupiterClient:
             'https://api.mainnet-beta.solana.com'
         )
         self._session: Optional[aiohttp.ClientSession] = None
-        self._token_cache: Dict[str, TokenInfo] = {}
+        self._token_cache = LRUCacheWithTTL(max_size=1000, ttl_seconds=3600)  # 1 hour TTL
         self._recent_priority_fees: List[int] = []  # Track recent fees for dynamic calculation
         self._token_api_available: bool = True
         self._token_api_failure_logged: bool = False
@@ -245,8 +295,9 @@ class JupiterClient:
 
     async def get_token_info(self, mint: str) -> Optional[TokenInfo]:
         """Get token information by mint address."""
-        if mint in self._token_cache:
-            return self._token_cache[mint]
+        cached = self._token_cache.get(mint)
+        if cached is not None:
+            return cached
 
         session = await self._get_session()
         token = None
@@ -261,7 +312,7 @@ class JupiterClient:
                         data = await resp.json()
                         if data:
                             token = TokenInfo.from_dict(data[0] if isinstance(data, list) else data)
-                            self._token_cache[mint] = token
+                            self._token_cache.set(mint, token)
                             return token
             except aiohttp.ClientConnectorError as e:
                 if not self._token_api_failure_logged:
@@ -293,7 +344,7 @@ class JupiterClient:
                             decimals=9,
                             price_usd=price_info.get('price', 0)
                         )
-                        self._token_cache[mint] = token
+                        self._token_cache.set(mint, token)
                         return token
         except Exception as e:
             logger.warning(f"Jupiter price API failed for {mint[:8]}...: {e}")
@@ -311,7 +362,7 @@ class JupiterClient:
                     decimals=bags_token.decimals or 9,
                     price_usd=bags_token.price_usd,
                 )
-                self._token_cache[mint] = token
+                self._token_cache.set(mint, token)
                 return token
         except Exception as e:
             logger.warning(f"Bags token info fallback failed for {mint[:8]}...: {e}")
@@ -329,7 +380,7 @@ class JupiterClient:
                 price_usd=self._pair_price_usd(best),
                 logo_uri=base.get("logoURI", ""),
             )
-            self._token_cache[mint] = token
+            self._token_cache.set(mint, token)
             return token
 
         # Fallback: known mints
@@ -342,7 +393,7 @@ class JupiterClient:
                 decimals=9,
                 price_usd=sol_price,
             )
-            self._token_cache[mint] = token
+            self._token_cache.set(mint, token)
             return token
 
         if mint in (self.USDC_MINT, self.USDT_MINT):
@@ -353,7 +404,7 @@ class JupiterClient:
                 decimals=6,
                 price_usd=1.0,
             )
-            self._token_cache[mint] = token
+            self._token_cache.set(mint, token)
             return token
 
         return None

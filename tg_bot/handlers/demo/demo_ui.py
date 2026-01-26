@@ -7,8 +7,7 @@ Contains:
 - safe_symbol: Token symbol sanitization
 - generate_price_chart: Optional chart renderer (matplotlib)
 
-NOTE: This module re-exports UI classes from demo_legacy for now.
-The full UI implementation remains in demo_legacy.py due to its size.
+This module re-exports from the new ui/ package structure.
 """
 
 import logging
@@ -29,8 +28,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Re-export UI components from the legacy module
-from tg_bot.handlers.demo_legacy import (
+# Re-export UI components from the ui package
+from tg_bot.handlers.demo.ui import (
     JarvisTheme,
     DemoMenuBuilder,
 )

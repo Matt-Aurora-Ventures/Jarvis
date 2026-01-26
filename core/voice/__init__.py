@@ -28,6 +28,17 @@ from .wakeword import (
     start_voice_listener,
 )
 
+from .command_parser import (
+    VoiceCommandParser,
+    CommandIntent,
+    Intent,
+)
+
+from .trading_commands import (
+    VoiceTradingCommands,
+    VoiceResponse,
+)
+
 def _load_legacy_voice_module():
     legacy_path = Path(__file__).resolve().parents[1] / "voice.py"
     if not legacy_path.exists():
@@ -77,4 +88,10 @@ __all__ = [
     "format_voice_doctor_report",
     "check_voice_health",
     "get_voice_doctor_summary",
+    # Voice trading terminal
+    "VoiceCommandParser",
+    "CommandIntent",
+    "Intent",
+    "VoiceTradingCommands",
+    "VoiceResponse",
 ]

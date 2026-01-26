@@ -383,17 +383,18 @@ class TestSwapExecution:
         with patch("tg_bot.handlers.demo.demo_trading.get_bags_client", return_value=mock_bags_client), \
              patch("tg_bot.handlers.demo.demo_trading._load_demo_wallet", return_value=None):
 
-            result = await demo_trading._execute_swap_with_fallback(
-                from_token="SOL",
-                to_token="TOKEN",
-                amount=1.0,
-                wallet_address="wallet123",
-                slippage_bps=100,
-            )
+            # New API raises exceptions instead of returning error dicts
+            with pytest.raises(demo_trading.BagsAPIError) as exc_info:
+                await demo_trading._execute_swap_with_fallback(
+                    from_token="SOL",
+                    to_token="TOKEN",
+                    amount=1.0,
+                    wallet_address="wallet123",
+                    slippage_bps=100,
+                )
 
-        assert result["success"] is False
-        # Error should mention wallet issue (last_error from Bags is propagated)
-        assert result["error"] is not None
+        # Error should mention wallet issue
+        assert "wallet" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
     async def test_swap_jupiter_quote_failure(self, mock_bags_client, mock_jupiter_client, mock_wallet):
@@ -406,17 +407,18 @@ class TestSwapExecution:
              patch("tg_bot.handlers.demo.demo_trading._get_jupiter_client", return_value=mock_jupiter_client), \
              patch("tg_bot.handlers.demo.demo_trading._load_demo_wallet", return_value=mock_wallet):
 
-            result = await demo_trading._execute_swap_with_fallback(
-                from_token="SOL",
-                to_token="TOKEN",
-                amount=1.0,
-                wallet_address="wallet123",
-                slippage_bps=100,
-            )
+            # New API raises exceptions instead of returning error dicts
+            with pytest.raises(demo_trading.BagsAPIError) as exc_info:
+                await demo_trading._execute_swap_with_fallback(
+                    from_token="SOL",
+                    to_token="TOKEN",
+                    amount=1.0,
+                    wallet_address="wallet123",
+                    slippage_bps=100,
+                )
 
-        assert result["success"] is False
         # Error from Jupiter quote failure
-        assert result["error"] is not None
+        assert "quote" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
     async def test_swap_bags_skipped_without_keys(self):
@@ -428,16 +430,18 @@ class TestSwapExecution:
         with patch("tg_bot.handlers.demo.demo_trading.get_bags_client", return_value=mock_bags_no_keys), \
              patch("tg_bot.handlers.demo.demo_trading._load_demo_wallet", return_value=None):
 
-            result = await demo_trading._execute_swap_with_fallback(
-                from_token="SOL",
-                to_token="TOKEN",
-                amount=1.0,
-                wallet_address="wallet123",
-                slippage_bps=100,
-            )
+            # New API raises exceptions - should skip Bags and fail on wallet (Jupiter fallback)
+            with pytest.raises(demo_trading.BagsAPIError) as exc_info:
+                await demo_trading._execute_swap_with_fallback(
+                    from_token="SOL",
+                    to_token="TOKEN",
+                    amount=1.0,
+                    wallet_address="wallet123",
+                    slippage_bps=100,
+                )
 
-        # Should skip Bags and fail on wallet (Jupiter fallback)
-        assert result["success"] is False
+        # Should fail on wallet not configured
+        assert "wallet" in str(exc_info.value).lower()
         mock_bags_no_keys.swap.assert_not_called()
 
 
@@ -487,14 +491,15 @@ class TestBuyWithTPSL:
              patch("tg_bot.handlers.demo.demo_sentiment.get_ai_sentiment_for_token", new_callable=AsyncMock, return_value=mock_sentiment_data), \
              patch("tg_bot.handlers.demo.demo_trading._load_demo_wallet", return_value=None):
 
-            result = await demo_trading.execute_buy_with_tpsl(
-                token_address="TokenMint123",
-                amount_sol=1.0,
-                wallet_address="wallet123",
-            )
-
-        assert result["success"] is False
-        assert "error" in result
+            # New API raises exceptions when swap fails
+            with pytest.raises(demo_trading.BagsAPIError):
+                await demo_trading.execute_buy_with_tpsl(
+                    token_address="TokenMint123",
+                    amount_sol=1.0,
+                    wallet_address="wallet123",
+                    tp_percent=50.0,  # Required
+                    sl_percent=20.0,  # Required
+                )
 
     @pytest.mark.asyncio
     async def test_buy_with_tpsl_sentiment_failure_fallback(self, mock_bags_client):
@@ -506,6 +511,8 @@ class TestBuyWithTPSL:
                 token_address="TokenMint123",
                 amount_sol=1.0,
                 wallet_address="wallet123",
+                tp_percent=50.0,  # Required
+                sl_percent=20.0,  # Required
             )
 
         assert result["success"] is True
@@ -523,6 +530,8 @@ class TestBuyWithTPSL:
                 token_address="TokenMint123",
                 amount_sol=1.0,
                 wallet_address="wallet123",
+                tp_percent=50.0,  # Required
+                sl_percent=20.0,  # Required
                 slippage_bps=500,
             )
 
@@ -551,6 +560,8 @@ class TestBuyWithTPSL:
                 token_address="TokenMint123",
                 amount_sol=1.0,
                 wallet_address="wallet123",
+                tp_percent=50.0,  # Required
+                sl_percent=20.0,  # Required
             )
 
         assert result["success"] is True
