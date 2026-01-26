@@ -93,11 +93,11 @@ def verify_consolidated_databases() -> bool:
     for db_name in KEEP_DATABASES:
         db_path = DATA_DIR / db_name
         if not db_path.exists():
-            print(f"❌ CRITICAL: Missing consolidated database: {db_name}")
+            print(f"[ERROR] CRITICAL: Missing consolidated database: {db_name}")
             all_exist = False
         else:
             size = db_path.stat().st_size
-            print(f"✅ {db_name}: {size / 1024:.1f}K")
+            print(f"[OK] {db_name}: {size / 1024:.1f}K")
 
     return all_exist
 
@@ -131,28 +131,28 @@ def archive_databases(dry_run: bool = False) -> Dict:
     print("="*60)
 
     if dry_run:
-        print("🔍 DRY-RUN MODE: No files will be moved")
+        print("[DRY-RUN] No files will be moved")
     else:
-        print("⚠️  LIVE MODE: Files will be archived")
+        print("[LIVE MODE] Files will be archived")
 
     # Verify consolidated databases exist
     if not verify_consolidated_databases():
-        print("\n❌ Pre-flight checks FAILED")
+        print("\n[ERROR] Pre-flight checks FAILED")
         print("Cannot proceed without consolidated databases")
         return {"success": False, "error": "Missing consolidated databases"}
 
     # Find databases to archive
     to_archive, not_found = find_databases_to_archive()
 
-    print(f"\n📊 Found {len(to_archive)} legacy databases to archive")
+    print(f"\n[INFO] Found {len(to_archive)} legacy databases to archive")
     if not_found:
-        print(f"ℹ️  {len(not_found)} databases not found (likely already archived)")
+        print(f"[INFO]  {len(not_found)} databases not found (likely already archived)")
 
     # Create archive directory
     timestamp = datetime.now().strftime("%Y-%m-%d")
     archive_dir = DATA_DIR / "archive" / timestamp
 
-    print(f"\n📁 Archive directory: {archive_dir}")
+    print(f"\n[DIR] Archive directory: {archive_dir}")
 
     if not dry_run:
         archive_dir.mkdir(parents=True, exist_ok=True)
@@ -167,24 +167,24 @@ def archive_databases(dry_run: bool = False) -> Dict:
         archive_path = archive_dir / db_path.name
 
         if dry_run:
-            print(f"📦 Would archive: {db_path.name}")
-            print(f"   → {archive_path}")
+            print(f"[PKG] Would archive: {db_path.name}")
+            print(f"   -> {archive_path}")
             print(f"   Size: {file_info['size_human']}, Modified: {file_info['modified']}")
         else:
-            print(f"📦 Archiving: {db_path.name}")
+            print(f"[PKG] Archiving: {db_path.name}")
             shutil.move(str(db_path), str(archive_path))
 
             # Verify archive succeeded
             if not archive_path.exists():
-                print(f"   ❌ ERROR: Archive failed for {db_path.name}")
+                print(f"   [ERROR] ERROR: Archive failed for {db_path.name}")
                 continue
 
             # Verify checksum matches
             archive_checksum = calculate_md5(archive_path)
             if archive_checksum != file_info['checksum']:
-                print(f"   ⚠️  WARNING: Checksum mismatch for {db_path.name}")
+                print(f"   [WARN]  WARNING: Checksum mismatch for {db_path.name}")
             else:
-                print(f"   ✅ Verified: {file_info['size_human']}")
+                print(f"   [OK] Verified: {file_info['size_human']}")
 
         archived_files.append({
             "name": db_path.name,
@@ -235,7 +235,7 @@ def archive_databases(dry_run: bool = False) -> Dict:
                 for name in not_found:
                     f.write(f"  - {name}\n")
 
-        print(f"\n📝 Manifest written to: {manifest_path}")
+        print(f"\n[LOG] Manifest written to: {manifest_path}")
 
     # Summary
     print("\n" + "="*60)
@@ -243,27 +243,27 @@ def archive_databases(dry_run: bool = False) -> Dict:
     print("="*60)
 
     if dry_run:
-        print(f"🔍 DRY-RUN: {len(archived_files)} databases would be archived")
+        print(f"[DRY-RUN] DRY-RUN: {len(archived_files)} databases would be archived")
     else:
-        print(f"✅ SUCCESS: {len(archived_files)} databases archived")
+        print(f"[OK] SUCCESS: {len(archived_files)} databases archived")
 
-    print(f"📊 Total size: {manifest['total_size_human']}")
-    print(f"📁 Location: {archive_dir}")
+    print(f"[INFO] Total size: {manifest['total_size_human']}")
+    print(f"[DIR] Location: {archive_dir}")
 
     if not_found:
-        print(f"ℹ️  {len(not_found)} databases not found (already archived?)")
+        print(f"[INFO]  {len(not_found)} databases not found (already archived?)")
 
     # Verify final state
     if not dry_run:
         remaining_dbs = list(DATA_DIR.glob("*.db"))
-        print(f"\n✅ Databases remaining in data/: {len(remaining_dbs)}")
+        print(f"\n[OK] Databases remaining in data/: {len(remaining_dbs)}")
         for db in remaining_dbs:
             print(f"   - {db.name}")
 
         if len(remaining_dbs) == 3:
-            print("\n🎉 GOAL ACHIEVED: Exactly 3 consolidated databases remain!")
+            print("\n[SUCCESS] GOAL ACHIEVED: Exactly 3 consolidated databases remain!")
         else:
-            print(f"\n⚠️  Expected 3 databases, found {len(remaining_dbs)}")
+            print(f"\n[WARN]  Expected 3 databases, found {len(remaining_dbs)}")
 
     return manifest
 
@@ -278,7 +278,7 @@ def main():
     result = archive_databases(dry_run=dry_run)
 
     if result.get("success") == False:
-        print(f"\n❌ Archival failed: {result.get('error')}")
+        print(f"\n[ERROR] Archival failed: {result.get('error')}")
         sys.exit(1)
 
     if not dry_run:
