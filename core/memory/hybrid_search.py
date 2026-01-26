@@ -47,6 +47,7 @@ def hybrid_search(
     fts_weight: float = 0.5,
     vector_weight: float = 0.5,
     rrf_k: int = 60,
+    exclude_assistant_outputs: bool = True,
 ) -> Dict[str, Any]:
     """
     Hybrid search combining FTS5 keyword search and vector semantic search.
@@ -64,6 +65,8 @@ def hybrid_search(
         fts_weight: Weight for FTS5 results in RRF (default 0.5).
         vector_weight: Weight for vector results in RRF (default 0.5).
         rrf_k: RRF constant (default 60, standard value).
+        exclude_assistant_outputs: Exclude facts marked as assistant outputs (default True).
+                                   This prevents the "echo chamber" effect.
 
     Returns:
         Dict with 'results' (HybridSearchResult list), 'count', 'query', 'elapsed_ms',
@@ -85,6 +88,7 @@ def hybrid_search(
         limit=limit * 2,  # Get more candidates for RRF
         time_filter=time_filter,
         source=source,
+        exclude_assistant_outputs=exclude_assistant_outputs,
         min_confidence=min_confidence,
     )
 

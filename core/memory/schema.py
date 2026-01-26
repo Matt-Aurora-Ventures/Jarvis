@@ -1,6 +1,6 @@
 """SQLite schema definitions for Jarvis memory system."""
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4  # Bumped for is_assistant_output column
 
 # Core tables for facts and entities
 CREATE_TABLES_SQL = """
@@ -10,9 +10,10 @@ CREATE TABLE IF NOT EXISTS facts (
     content TEXT NOT NULL,
     context TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    source TEXT CHECK(source IN ('telegram', 'treasury', 'x', 'bags_intel', 'buy_tracker', 'system', NULL)),
+    source TEXT CHECK(source IN ('telegram', 'treasury', 'x', 'bags_intel', 'buy_tracker', 'system', 'assistant', NULL)),
     confidence REAL DEFAULT 1.0 CHECK(confidence >= 0.0 AND confidence <= 1.0),
     is_active INTEGER DEFAULT 1 CHECK(is_active IN (0, 1)),
+    is_assistant_output INTEGER DEFAULT 0 CHECK(is_assistant_output IN (0, 1)),
     entity_id INTEGER,
     user_id INTEGER,
     session_id TEXT,

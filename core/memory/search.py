@@ -18,6 +18,7 @@ def search_facts(
     source: Optional[SourceFilter] = None,
     min_confidence: float = 0.0,
     include_inactive: bool = False,
+    exclude_assistant_outputs: bool = True,
 ) -> Dict[str, Any]:
     """
     Search facts using FTS5 full-text search with BM25 ranking.
@@ -29,12 +30,18 @@ def search_facts(
         source: Filter by source system.
         min_confidence: Minimum confidence threshold (0.0-1.0).
         include_inactive: Include soft-deleted facts.
+        exclude_assistant_outputs: Exclude facts marked as assistant outputs (default True).
+                                   This prevents the "echo chamber" effect where LLM sees
+                                   its own previous responses as external facts.
 
     Returns:
         Dict with 'results' (list of facts), 'count', 'query', 'elapsed_ms'.
 
     Example:
         results = search_facts("bags.fm graduation", limit=5, time_filter="week")
+
+        # Include assistant outputs (for debugging/context review)
+        results = search_facts("analysis", exclude_assistant_outputs=False)
     """
     db = get_db()
     start_time = time.perf_counter()
@@ -51,6 +58,9 @@ def search_facts(
 
     # Build active filter
     active_clause = "" if include_inactive else "AND f.is_active = 1"
+
+    # Build assistant output filter (echo chamber prevention)
+    assistant_clause = "AND f.is_assistant_output = 0" if exclude_assistant_outputs else ""
 
     # Escape special FTS5 characters in query
     safe_query = _escape_fts_query(query)
@@ -73,6 +83,7 @@ def search_facts(
         {time_clause}
         {source_clause}
         {active_clause}
+        {assistant_clause}
         ORDER BY bm25(facts_fts)
         LIMIT ?
     """
@@ -219,6 +230,7 @@ def search_by_source(
 def get_recent_facts(
     limit: int = 20,
     source: Optional[SourceFilter] = None,
+    exclude_assistant_outputs: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     Get most recent facts.
@@ -226,6 +238,8 @@ def get_recent_facts(
     Args:
         limit: Maximum results.
         source: Optional source filter.
+        exclude_assistant_outputs: Exclude facts marked as assistant outputs (default True).
+                                   This prevents the "echo chamber" effect.
 
     Returns:
         List of recent facts.
@@ -237,6 +251,9 @@ def get_recent_facts(
     if source:
         source_clause = "AND source = ?"
         source_params = [source]
+
+    # Build assistant output filter (echo chamber prevention)
+    assistant_clause = "AND is_assistant_output = 0" if exclude_assistant_outputs else ""
 
     conn = db._get_connection()
     sql = f"""
@@ -250,6 +267,7 @@ def get_recent_facts(
         FROM facts
         WHERE is_active = 1
         {source_clause}
+        {assistant_clause}
         ORDER BY timestamp DESC
         LIMIT ?
     """
