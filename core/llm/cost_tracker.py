@@ -14,12 +14,13 @@ Pricing based on January 2026 rates.
 import asyncio
 import logging
 import os
-import sqlite3
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from core.database import get_analytics_db
 
 logger = logging.getLogger("jarvis.llm.cost_tracker")
 
@@ -156,10 +157,7 @@ class LLMCostTracker:
         db_path: str = None,
         pricing: Dict[str, Tuple[float, float]] = None,
     ):
-        self.db_path = db_path or os.getenv(
-            "LLM_COST_DB",
-            "data/llm_costs.db"
-        )
+        # Unified database layer (db_path parameter kept for backward compatibility but ignored)
         self.pricing = pricing or MODEL_PRICING
 
         # Budget alerts
@@ -173,74 +171,69 @@ class LLMCostTracker:
 
     def _init_database(self):
         """Initialize cost tracking database"""
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        db = get_analytics_db()
+        with db.cursor() as cursor:
+            # Usage records
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS llm_usage (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    input_tokens INTEGER NOT NULL,
+                    output_tokens INTEGER NOT NULL,
+                    cost_usd REAL NOT NULL,
+                    latency_ms REAL,
+                    success INTEGER NOT NULL,
+                    error TEXT,
+                    metadata TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+            # Daily aggregates for faster queries
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS llm_daily_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    total_requests INTEGER NOT NULL,
+                    successful_requests INTEGER NOT NULL,
+                    total_input_tokens INTEGER NOT NULL,
+                    total_output_tokens INTEGER NOT NULL,
+                    total_cost_usd REAL NOT NULL,
+                    avg_latency_ms REAL,
+                    UNIQUE(date, provider, model)
+                )
+            """)
 
-        # Usage records
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS llm_usage (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                model TEXT NOT NULL,
-                input_tokens INTEGER NOT NULL,
-                output_tokens INTEGER NOT NULL,
-                cost_usd REAL NOT NULL,
-                latency_ms REAL,
-                success INTEGER NOT NULL,
-                error TEXT,
-                metadata TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+            # Budget alerts log
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS budget_alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    alert_name TEXT NOT NULL,
+                    threshold_usd REAL NOT NULL,
+                    actual_usd REAL NOT NULL,
+                    period TEXT NOT NULL,
+                    triggered_at TEXT NOT NULL
+                )
+            """)
 
-        # Daily aggregates for faster queries
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS llm_daily_stats (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                model TEXT NOT NULL,
-                total_requests INTEGER NOT NULL,
-                successful_requests INTEGER NOT NULL,
-                total_input_tokens INTEGER NOT NULL,
-                total_output_tokens INTEGER NOT NULL,
-                total_cost_usd REAL NOT NULL,
-                avg_latency_ms REAL,
-                UNIQUE(date, provider, model)
-            )
-        """)
-
-        # Budget alerts log
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS budget_alerts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                alert_name TEXT NOT NULL,
-                threshold_usd REAL NOT NULL,
-                actual_usd REAL NOT NULL,
-                period TEXT NOT NULL,
-                triggered_at TEXT NOT NULL
-            )
-        """)
-
-        # Indexes
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_llm_usage_timestamp
-            ON llm_usage(timestamp)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_llm_usage_provider
-            ON llm_usage(provider)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_llm_daily_date
-            ON llm_daily_stats(date)
-        """)
-
-        conn.commit()
-        conn.close()
+            # Indexes
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_llm_usage_timestamp
+                ON llm_usage(timestamp)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_llm_usage_provider
+                ON llm_usage(provider)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_llm_daily_date
+                ON llm_daily_stats(date)
+            """)
+            # Connection pool automatically commits on context exit
 
     # =========================================================================
     # COST CALCULATION
@@ -351,54 +344,50 @@ class LLMCostTracker:
         """Save record to database"""
         import json
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        db = get_analytics_db()
+        with db.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO llm_usage
+                (timestamp, provider, model, input_tokens, output_tokens,
+                 cost_usd, latency_ms, success, error, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                record.timestamp.isoformat(),
+                record.provider,
+                record.model,
+                record.input_tokens,
+                record.output_tokens,
+                record.cost_usd,
+                record.latency_ms,
+                1 if record.success else 0,
+                record.error,
+                json.dumps(record.metadata) if record.metadata else None,
+            ))
 
-        cursor.execute("""
-            INSERT INTO llm_usage
-            (timestamp, provider, model, input_tokens, output_tokens,
-             cost_usd, latency_ms, success, error, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            record.timestamp.isoformat(),
-            record.provider,
-            record.model,
-            record.input_tokens,
-            record.output_tokens,
-            record.cost_usd,
-            record.latency_ms,
-            1 if record.success else 0,
-            record.error,
-            json.dumps(record.metadata) if record.metadata else None,
-        ))
-
-        # Update daily aggregates
-        date_str = record.timestamp.strftime("%Y-%m-%d")
-        cursor.execute("""
-            INSERT INTO llm_daily_stats
-            (date, provider, model, total_requests, successful_requests,
-             total_input_tokens, total_output_tokens, total_cost_usd, avg_latency_ms)
-            VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)
-            ON CONFLICT(date, provider, model) DO UPDATE SET
-                total_requests = total_requests + 1,
-                successful_requests = successful_requests + excluded.successful_requests,
-                total_input_tokens = total_input_tokens + excluded.total_input_tokens,
-                total_output_tokens = total_output_tokens + excluded.total_output_tokens,
-                total_cost_usd = total_cost_usd + excluded.total_cost_usd,
-                avg_latency_ms = (avg_latency_ms + excluded.avg_latency_ms) / 2
-        """, (
-            date_str,
-            record.provider,
-            record.model,
-            1 if record.success else 0,
-            record.input_tokens,
-            record.output_tokens,
-            record.cost_usd,
-            record.latency_ms,
-        ))
-
-        conn.commit()
-        conn.close()
+            # Update daily aggregates
+            date_str = record.timestamp.strftime("%Y-%m-%d")
+            cursor.execute("""
+                INSERT INTO llm_daily_stats
+                (date, provider, model, total_requests, successful_requests,
+                 total_input_tokens, total_output_tokens, total_cost_usd, avg_latency_ms)
+                VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)
+                ON CONFLICT(date, provider, model) DO UPDATE SET
+                    total_requests = total_requests + 1,
+                    successful_requests = successful_requests + excluded.successful_requests,
+                    total_input_tokens = total_input_tokens + excluded.total_input_tokens,
+                    total_output_tokens = total_output_tokens + excluded.total_output_tokens,
+                    total_cost_usd = total_cost_usd + excluded.total_cost_usd,
+                    avg_latency_ms = (avg_latency_ms + excluded.avg_latency_ms) / 2
+            """, (
+                date_str,
+                record.provider,
+                record.model,
+                1 if record.success else 0,
+                record.input_tokens,
+                record.output_tokens,
+                record.cost_usd,
+                record.latency_ms,
+            ))
 
     def _update_session_stats(self, record: UsageRecord):
         """Update session statistics"""
@@ -496,31 +485,25 @@ class LLMCostTracker:
         else:
             since = now - timedelta(days=1)
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        db = get_analytics_db()
+        with db.cursor() as cursor:
+            cursor.execute("""
+                SELECT COALESCE(SUM(cost_usd), 0) FROM llm_usage
+                WHERE timestamp >= ? AND success = 1
+            """, (since.isoformat(),))
 
-        cursor.execute("""
-            SELECT COALESCE(SUM(cost_usd), 0) FROM llm_usage
-            WHERE timestamp >= ? AND success = 1
-        """, (since.isoformat(),))
-
-        result = cursor.fetchone()[0]
-        conn.close()
+            result = cursor.fetchone()[0]
 
         return result
 
     def _log_alert(self, name: str, threshold: float, actual: float, period: str):
         """Log alert to database"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            INSERT INTO budget_alerts (alert_name, threshold_usd, actual_usd, period, triggered_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (name, threshold, actual, period, datetime.now(timezone.utc).isoformat()))
-
-        conn.commit()
-        conn.close()
+        db = get_analytics_db()
+        with db.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO budget_alerts (alert_name, threshold_usd, actual_usd, period, triggered_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (name, threshold, actual, period, datetime.now(timezone.utc).isoformat()))
 
     # =========================================================================
     # STATISTICS
@@ -547,8 +530,7 @@ class LLMCostTracker:
         Returns:
             UsageStats
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        db = get_analytics_db()
 
         since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
 
@@ -574,81 +556,80 @@ class LLMCostTracker:
             query += " AND model = ?"
             params.append(model)
 
-        cursor.execute(query, params)
-        row = cursor.fetchone()
+        with db.cursor() as cursor:
+            cursor.execute(query, params)
+            row = cursor.fetchone()
 
-        stats = UsageStats(
-            total_requests=row[0] or 0,
-            successful_requests=row[1] or 0,
-            failed_requests=row[2] or 0,
-            total_input_tokens=row[3] or 0,
-            total_output_tokens=row[4] or 0,
-            total_cost_usd=row[5] or 0.0,
-            avg_latency_ms=row[6] or 0.0,
-        )
+            stats = UsageStats(
+                total_requests=row[0] or 0,
+                successful_requests=row[1] or 0,
+                failed_requests=row[2] or 0,
+                total_input_tokens=row[3] or 0,
+                total_output_tokens=row[4] or 0,
+                total_cost_usd=row[5] or 0.0,
+                avg_latency_ms=row[6] or 0.0,
+            )
 
-        # Get by-provider breakdown
-        cursor.execute("""
-            SELECT provider, COUNT(*), SUM(input_tokens), SUM(output_tokens), SUM(cost_usd)
-            FROM llm_usage
-            WHERE timestamp >= ? AND success = 1
-            GROUP BY provider
-        """, (since,))
+            # Get by-provider breakdown
+            cursor.execute("""
+                SELECT provider, COUNT(*), SUM(input_tokens), SUM(output_tokens), SUM(cost_usd)
+                FROM llm_usage
+                WHERE timestamp >= ? AND success = 1
+                GROUP BY provider
+            """, (since,))
 
-        for row in cursor.fetchall():
-            stats.by_provider[row[0]] = {
-                "requests": row[1],
-                "input_tokens": row[2],
-                "output_tokens": row[3],
-                "cost_usd": row[4],
-            }
+            for row in cursor.fetchall():
+                stats.by_provider[row[0]] = {
+                    "requests": row[1],
+                    "input_tokens": row[2],
+                    "output_tokens": row[3],
+                    "cost_usd": row[4],
+                }
 
-        # Get by-model breakdown
-        cursor.execute("""
-            SELECT model, COUNT(*), SUM(input_tokens), SUM(output_tokens), SUM(cost_usd)
-            FROM llm_usage
-            WHERE timestamp >= ? AND success = 1
-            GROUP BY model
-        """, (since,))
+            # Get by-model breakdown
+            cursor.execute("""
+                SELECT model, COUNT(*), SUM(input_tokens), SUM(output_tokens), SUM(cost_usd)
+                FROM llm_usage
+                WHERE timestamp >= ? AND success = 1
+                GROUP BY model
+            """, (since,))
 
-        for row in cursor.fetchall():
-            stats.by_model[row[0]] = {
-                "requests": row[1],
-                "input_tokens": row[2],
-                "output_tokens": row[3],
-                "cost_usd": row[4],
-            }
+            for row in cursor.fetchall():
+                stats.by_model[row[0]] = {
+                    "requests": row[1],
+                    "input_tokens": row[2],
+                    "output_tokens": row[3],
+                    "cost_usd": row[4],
+                }
 
-        conn.close()
         return stats
 
     def get_daily_costs(self, days: int = 30) -> List[Dict[str, Any]]:
         """Get daily cost breakdown"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        db = get_analytics_db()
 
         since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
 
-        cursor.execute("""
-            SELECT date, SUM(total_cost_usd), SUM(total_requests),
-                   SUM(total_input_tokens), SUM(total_output_tokens)
-            FROM llm_daily_stats
-            WHERE date >= ?
-            GROUP BY date
-            ORDER BY date DESC
-        """, (since,))
+        with db.cursor() as cursor:
+            cursor.execute("""
+                SELECT date, SUM(total_cost_usd), SUM(total_requests),
+                       SUM(total_input_tokens), SUM(total_output_tokens)
+                FROM llm_daily_stats
+                WHERE date >= ?
+                GROUP BY date
+                ORDER BY date DESC
+            """, (since,))
 
-        results = []
-        for row in cursor.fetchall():
-            results.append({
-                "date": row[0],
-                "cost_usd": row[1],
-                "requests": row[2],
-                "input_tokens": row[3],
-                "output_tokens": row[4],
-            })
+            results = []
+            for row in cursor.fetchall():
+                results.append({
+                    "date": row[0],
+                    "cost_usd": row[1],
+                    "requests": row[2],
+                    "input_tokens": row[3],
+                    "output_tokens": row[4],
+                })
 
-        conn.close()
         return results
 
     def get_top_models(
@@ -658,33 +639,32 @@ class LLMCostTracker:
         sort_by: str = "cost",
     ) -> List[Dict[str, Any]]:
         """Get top models by usage or cost"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        db = get_analytics_db()
 
         since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
 
         order_by = "SUM(cost_usd)" if sort_by == "cost" else "COUNT(*)"
 
-        cursor.execute(f"""
-            SELECT model, provider, COUNT(*), SUM(input_tokens + output_tokens), SUM(cost_usd)
-            FROM llm_usage
-            WHERE timestamp >= ? AND success = 1
-            GROUP BY model, provider
-            ORDER BY {order_by} DESC
-            LIMIT ?
-        """, (since, limit))
+        with db.cursor() as cursor:
+            cursor.execute(f"""
+                SELECT model, provider, COUNT(*), SUM(input_tokens + output_tokens), SUM(cost_usd)
+                FROM llm_usage
+                WHERE timestamp >= ? AND success = 1
+                GROUP BY model, provider
+                ORDER BY {order_by} DESC
+                LIMIT ?
+            """, (since, limit))
 
-        results = []
-        for row in cursor.fetchall():
-            results.append({
-                "model": row[0],
-                "provider": row[1],
-                "requests": row[2],
-                "tokens": row[3],
-                "cost_usd": row[4],
-            })
+            results = []
+            for row in cursor.fetchall():
+                results.append({
+                    "model": row[0],
+                    "provider": row[1],
+                    "requests": row[2],
+                    "tokens": row[3],
+                    "cost_usd": row[4],
+                })
 
-        conn.close()
         return results
 
     def get_cost_projection(self) -> Dict[str, float]:
