@@ -39,7 +39,7 @@ Consolidate 28+ SQLite databases into 3 databases max:
 
 ### REQ-002: /demo Trading Bot - Fix Execution
 **Priority:** P0
-**Status:** Pending
+**Status:** Complete
 
 Fix all trade execution failures in `/demo` bot:
 - Register message handler for token input (currently missing)
@@ -148,7 +148,7 @@ Fix all remaining security vulnerabilities:
 
 ### REQ-007: Code Refactoring (Critical Files)
 **Priority:** P0
-**Status:** Pending
+**Status:** Complete
 
 Refactor massive files to maintainable modules:
 - Break trading.py (3,754 lines) into ≤5 modules
