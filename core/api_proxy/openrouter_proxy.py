@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import json
 import hashlib
 import aiohttp
+from aiohttp import ClientTimeout
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +183,9 @@ class OpenRouterProxy:
 
     async def start(self):
         """Initialize the proxy"""
-        self._session = aiohttp.ClientSession()
+        # Configure timeouts: 60s total, 30s connect (for OpenRouter API calls)
+        timeout = ClientTimeout(total=60, connect=30)
+        self._session = aiohttp.ClientSession(timeout=timeout)
         logger.info("OpenRouter proxy started")
 
     async def stop(self):

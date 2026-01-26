@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
 import aiohttp
+from aiohttp import ClientTimeout
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,9 @@ class MultiVenueRouter:
 
     async def connect(self):
         """Initialize connections"""
-        self._session = aiohttp.ClientSession()
+        # Configure timeouts: 60s total, 30s connect (for venue API calls)
+        timeout = ClientTimeout(total=60, connect=30)
+        self._session = aiohttp.ClientSession(timeout=timeout)
 
     async def close(self):
         """Close connections"""
