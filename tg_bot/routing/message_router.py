@@ -15,7 +15,7 @@ from typing import Dict, Any, List
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from tg_bot.logging import StructuredLogger
+from tg_bot.log_utils import StructuredLogger
 
 logger = logging.getLogger(__name__)
 

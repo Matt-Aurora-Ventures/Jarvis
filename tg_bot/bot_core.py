@@ -5170,7 +5170,7 @@ SPAM_PATTERNS = [
 
 async def check_and_ban_spam(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, user_id: int) -> bool:
     """Check for spam and ban user if detected. Returns True if spam was detected."""
-    from tg_bot.logging import StructuredLogger
+    from tg_bot.log_utils import StructuredLogger
 
     # Helper that wraps StructuredLogger.log_spam_decision for backward compatibility
     def log_spam_decision(action: str, user_id: int, username: str, confidence: float, reason: str, message_preview: str, reputation: dict = None):
@@ -5439,7 +5439,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Terminal command handling (admin only) - prefix with > or /term
     if text.startswith('>') or text.lower().startswith('/term '):
         from tg_bot.services.terminal_handler import get_terminal_handler
-        from tg_bot.logging import StructuredLogger
+        from tg_bot.log_utils import StructuredLogger
         handler = get_terminal_handler()
 
         if not handler.is_admin(user_id):
@@ -5617,7 +5617,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 bridge.memory.add_message(user_id, "jarvis", "assistant", result['response'][:500], chat_id)
 
                 # Log vibe request via StructuredLogger
-                from tg_bot.logging import StructuredLogger
+                from tg_bot.log_utils import StructuredLogger
                 StructuredLogger.log_vibe_request(
                     user_id=user_id,
                     username=username,

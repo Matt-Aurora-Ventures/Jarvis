@@ -39,6 +39,9 @@ from .types import (
 # Main engine and trader classes
 from .trading_core import TradingEngine, TreasuryTrader, _SimpleWallet
 
+# Backward compatibility alias (legacy imports)
+TreasuryEngine = TradingEngine
+
 # Risk management utilities
 from .trading_risk import RiskChecker
 
@@ -73,6 +76,7 @@ __all__ = [
     'TradeReport',
     # Main classes
     'TradingEngine',
+    'TreasuryEngine',
     'TreasuryTrader',
     '_SimpleWallet',
     # Utilities

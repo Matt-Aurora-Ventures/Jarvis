@@ -42,7 +42,7 @@ from tg_bot.handlers.commands.commands_command import commands_command
 from core.utils.instance_lock import acquire_instance_lock
 
 # Demo UI (v6.0.0 - Trojan-style trading interface)
-from tg_bot.handlers.demo import demo, demo_callback, demo_message_handler
+from tg_bot.handlers.demo import register_demo_handlers
 
 # Raid Bot (v6.1.0 - Twitter engagement campaigns)
 from tg_bot.handlers.raid import register_raid_handlers
@@ -155,12 +155,7 @@ def register_handlers(app: Application, config) -> None:
     app.add_handler(CommandHandler("paper", paper))
 
     # Demo UI - Beautiful Trojan-style trading interface (v6.0.0)
-    app.add_handler(CommandHandler("demo", demo))
-    app.add_handler(CallbackQueryHandler(demo_callback, pattern=r"^demo:"))
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, demo_message_handler),
-        group=1,
-    )
+    register_demo_handlers(app)
 
     # Raid Bot - Twitter engagement campaigns (v6.1.0)
     register_raid_handlers(app, app.job_queue)

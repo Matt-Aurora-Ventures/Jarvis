@@ -44,7 +44,7 @@ async def handle_chart(
 
     if action == "view_chart":
         try:
-            from tg_bot.handlers.demo_legacy import MATPLOTLIB_AVAILABLE, generate_price_chart
+            from tg_bot.handlers.demo.demo_ui import MATPLOTLIB_AVAILABLE, generate_price_chart
 
             if not MATPLOTLIB_AVAILABLE:
                 return DemoMenuBuilder.error_message(

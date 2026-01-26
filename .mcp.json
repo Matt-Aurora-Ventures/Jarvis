@@ -1,1 +1,86 @@
-{"mcpServers":{"MCP_DOCKER":{"command":"docker","args":["mcp","gateway","run"],"env":{"LOCALAPPDATA":"C:\\Users\\lucid\\AppData\\Local","ProgramData":"C:\\ProgramData","ProgramFiles":"C:\\Program Files"},"type":"stdio"}}}
+{
+    "mcpServers": {
+        "filesystem": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-filesystem",
+                "C:\\Users\\lucid\\OneDrive\\Desktop\\Projects"
+            ],
+            "type": "stdio"
+        },
+        "memory": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-memory"
+            ],
+            "type": "stdio"
+        },
+        "sequential-thinking": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-sequential-thinking"
+            ],
+            "type": "stdio"
+        },
+        "brave-search": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-brave-search"
+            ],
+            "env": {
+                "BRAVE_API_KEY": "YOUR_BRAVE_API_KEY_HERE"
+            },
+            "type": "stdio"
+        },
+        "context7": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@upyesp/mcp-context7"
+            ],
+            "type": "stdio"
+        },
+        "github": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-github"
+            ],
+            "env": {
+                "GITHUB_PERSONAL_ACCESS_TOKEN": "YOUR_GITHUB_TOKEN_HERE"
+            },
+            "type": "stdio"
+        },
+        "postgres": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-postgres",
+                "postgresql://localhost/jarvis"
+            ],
+            "type": "stdio"
+        },
+        "sqlite": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-sqlite",
+                "--db-path",
+                "C:\\Users\\lucid\\OneDrive\\Desktop\\Projects\\Jarvis\\database.db"
+            ],
+            "type": "stdio"
+        },
+        "notebooklm": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "notebooklm-mcp@latest"
+            ],
+            "type": "stdio"
+        }
+    }
+}

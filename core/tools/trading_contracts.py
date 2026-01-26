@@ -192,16 +192,10 @@ async def check_token_safety(
 ) -> dict:
     """Check token safety using treasury engine rules."""
     try:
-        from bots.treasury.trading import TreasuryEngine
+        from bots.treasury.trading import RiskChecker
 
-        # Create a minimal engine just for safety checks
-        # In production, use the singleton engine
-        engine = TreasuryEngine.__new__(TreasuryEngine)
-        engine.BLOCKED_TOKENS = TreasuryEngine.BLOCKED_TOKENS
-        engine.BLOCKED_SYMBOLS = TreasuryEngine.BLOCKED_SYMBOLS
-
-        is_blocked, block_reason = engine.is_blocked_token(token_mint, token_symbol)
-        is_high_risk = engine.is_high_risk_token(token_mint)
+        is_blocked, block_reason = RiskChecker.is_blocked_token(token_mint, token_symbol)
+        is_high_risk = RiskChecker.is_high_risk_token(token_mint)
 
         return {
             "is_safe": not is_blocked and not is_high_risk,
