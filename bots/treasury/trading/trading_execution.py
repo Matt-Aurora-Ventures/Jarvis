@@ -2,6 +2,10 @@
 Trading Execution
 
 Swap execution, signal analysis, and trade operations.
+Integrates with:
+- Circuit breakers for RPC endpoint protection
+- Error handlers for user-friendly error messages
+- Transaction simulation for preflight checks
 """
 
 import os
@@ -27,6 +31,41 @@ try:
 except ImportError:
     BAGS_AVAILABLE = False
     BagsTradeAdapter = None
+
+# Import circuit breaker and error handler
+try:
+    from core.solana.circuit_breaker import (
+        RPCCircuitBreaker,
+        CircuitOpenError,
+        get_rpc_circuit_breaker,
+    )
+    CIRCUIT_BREAKER_AVAILABLE = True
+except ImportError:
+    CIRCUIT_BREAKER_AVAILABLE = False
+    RPCCircuitBreaker = None
+    CircuitOpenError = Exception
+    get_rpc_circuit_breaker = None
+
+try:
+    from core.solana.error_handler import (
+        RPCErrorHandler,
+        ErrorCategory,
+        get_rpc_error_handler,
+    )
+    ERROR_HANDLER_AVAILABLE = True
+except ImportError:
+    ERROR_HANDLER_AVAILABLE = False
+    RPCErrorHandler = None
+    ErrorCategory = None
+    get_rpc_error_handler = None
+
+# Import config for Jupiter settings
+try:
+    from core.config import load_config
+    CONFIG_AVAILABLE = True
+except ImportError:
+    CONFIG_AVAILABLE = False
+    load_config = None
 
 # Import signal analyzers
 try:
@@ -60,7 +99,14 @@ except ImportError:
 
 
 class SwapExecutor:
-    """Handles swap execution via Bags.fm or Jupiter."""
+    """
+    Handles swap execution via Bags.fm or Jupiter.
+
+    Integrates with:
+    - Circuit breakers for endpoint protection
+    - Error handlers for user-friendly error messages
+    - Transaction simulation for preflight checks
+    """
 
     def __init__(self, jupiter_client, wallet, bags_adapter=None):
         """
@@ -75,11 +121,75 @@ class SwapExecutor:
         self.wallet = wallet
         self.bags_adapter = bags_adapter
 
+        # Initialize error handler for user-friendly messages
+        self._error_handler = None
+        if ERROR_HANDLER_AVAILABLE:
+            self._error_handler = get_rpc_error_handler()
+
+        # Initialize circuit breaker for swap execution
+        self._circuit_breaker = None
+        if CIRCUIT_BREAKER_AVAILABLE:
+            self._circuit_breaker = get_rpc_circuit_breaker(
+                "swap_execution",
+                failure_threshold=5,
+                recovery_timeout=60.0,
+            )
+
+        # Load Jupiter config
+        self._jupiter_config = {}
+        if CONFIG_AVAILABLE:
+            try:
+                config = load_config()
+                self._jupiter_config = config.get("jupiter", {})
+            except Exception as e:
+                logger.warning(f"Failed to load Jupiter config: {e}")
+
+    def _sanitize_error(self, error: Exception, context: Dict[str, Any] = None) -> str:
+        """
+        Sanitize error for user display.
+
+        Args:
+            error: The exception to sanitize
+            context: Optional context for developer logging
+
+        Returns:
+            User-friendly error message
+        """
+        if self._error_handler:
+            # Log detailed error for developers
+            if context:
+                dev_msg = self._error_handler.format_for_developer(error, context)
+                logger.error(f"Swap error (dev): {dev_msg}")
+
+            # Return sanitized message for user
+            return self._error_handler.sanitize_for_user(error)
+
+        # Fallback: basic error message
+        return f"Trade failed: {type(error).__name__}"
+
+    def _check_circuit_breaker(self) -> Tuple[bool, Optional[str]]:
+        """
+        Check if circuit breaker allows execution.
+
+        Returns:
+            Tuple of (allowed, error_message)
+        """
+        if not self._circuit_breaker:
+            return True, None
+
+        if not self._circuit_breaker.allow_request():
+            remaining = self._circuit_breaker.get_remaining_timeout()
+            return False, f"Trading temporarily paused. Retry in {remaining:.0f}s"
+
+        return True, None
+
     async def execute_swap(
         self,
         quote: SwapQuote,
         input_mint: str = None,
         output_mint: str = None,
+        simulate: bool = None,
+        priority_level: str = None,
     ) -> SwapResult:
         """
         Execute a swap, routing through Bags.fm if available (earns partner fees).
@@ -90,6 +200,8 @@ class SwapExecutor:
             quote: SwapQuote from Jupiter
             input_mint: Input token mint (optional, extracted from quote)
             output_mint: Output token mint (optional, extracted from quote)
+            simulate: Whether to simulate before execution (default from config)
+            priority_level: Priority fee level (min/low/medium/high/veryHigh)
 
         Returns:
             SwapResult with success status and transaction details
@@ -100,7 +212,23 @@ class SwapExecutor:
         if output_mint is None:
             output_mint = quote.output_mint
 
-        # Check recovery adapter circuit breaker
+        # Build execution context for error logging
+        execution_context = {
+            "input_mint": input_mint[:8] if input_mint else "unknown",
+            "output_mint": output_mint[:8] if output_mint else "unknown",
+            "amount": getattr(quote, 'in_amount', 0),
+        }
+
+        # Check our integrated circuit breaker first
+        allowed, cb_error = self._check_circuit_breaker()
+        if not allowed:
+            logger.warning(f"Swap blocked by circuit breaker: {cb_error}")
+            return SwapResult(
+                success=False,
+                error=cb_error,
+            )
+
+        # Check recovery adapter circuit breaker (legacy - keeps backward compat)
         adapter = None
         try:
             from core.recovery.adapters import TradingAdapter
@@ -123,6 +251,12 @@ class SwapExecutor:
             logger.debug("Recovery adapter not available, using direct execution")
         except Exception as e:
             logger.warning(f"Recovery adapter error (continuing): {e}")
+
+        # Get simulation and priority settings from config if not provided
+        if simulate is None:
+            simulate = self._jupiter_config.get("enable_simulation", True)
+        if priority_level is None:
+            priority_level = self._jupiter_config.get("default_priority_level", "high")
 
         # Try Bags.fm first if available (earns partner fees)
         if self.bags_adapter is not None:
@@ -150,6 +284,10 @@ class SwapExecutor:
                 if adapter:
                     adapter.record_success("execute_swap_bags")
 
+                # Record success with circuit breaker
+                if self._circuit_breaker:
+                    self._circuit_breaker.record_success()
+
                 return result
 
             except Exception as bags_error:
@@ -158,15 +296,59 @@ class SwapExecutor:
                     adapter.record_failure("execute_swap_bags", str(bags_error))
 
         # Execute via Jupiter (fallback or primary if Bags not configured)
-        result = await self.jupiter.execute_swap(quote, self.wallet)
+        try:
+            # Pass simulation and priority settings to Jupiter execute_swap
+            # Check if jupiter client supports these parameters
+            execute_kwargs = {"quote": quote, "wallet": self.wallet}
 
-        if adapter:
-            if result.success:
-                adapter.record_success("execute_swap_jupiter")
+            # Add optional parameters if Jupiter API supports them
+            if hasattr(self.jupiter, 'execute_swap'):
+                import inspect
+                sig = inspect.signature(self.jupiter.execute_swap)
+                params = sig.parameters
+
+                if 'simulate' in params:
+                    execute_kwargs['simulate'] = simulate
+                if 'priority_level' in params:
+                    execute_kwargs['priority_level'] = priority_level
+
+            # For older Jupiter clients, just pass quote and wallet
+            if len(execute_kwargs) == 2:
+                result = await self.jupiter.execute_swap(quote, self.wallet)
             else:
-                adapter.record_failure("execute_swap_jupiter", result.error or "Unknown")
+                result = await self.jupiter.execute_swap(**execute_kwargs)
 
-        return result
+            if adapter:
+                if result.success:
+                    adapter.record_success("execute_swap_jupiter")
+                else:
+                    adapter.record_failure("execute_swap_jupiter", result.error or "Unknown")
+
+            # Record with circuit breaker
+            if self._circuit_breaker:
+                if result.success:
+                    self._circuit_breaker.record_success()
+                else:
+                    self._circuit_breaker.record_failure(result.error or "Unknown")
+
+            return result
+
+        except Exception as jupiter_error:
+            # Record failure with circuit breaker
+            if self._circuit_breaker:
+                self._circuit_breaker.record_failure(str(jupiter_error))
+
+            if adapter:
+                adapter.record_failure("execute_swap_jupiter", str(jupiter_error))
+
+            # Return user-friendly error
+            user_error = self._sanitize_error(jupiter_error, execution_context)
+            logger.error(f"Jupiter swap failed: {jupiter_error}")
+
+            return SwapResult(
+                success=False,
+                error=user_error,
+            )
 
 
 class SignalAnalyzer:

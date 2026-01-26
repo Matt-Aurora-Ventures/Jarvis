@@ -2646,6 +2646,10 @@ _Adjust your exit strategy_
             [
                 InlineKeyboardButton(f"🤖 AI Auto-Trade Settings", callback_data="demo:ai_auto_settings"),
             ],
+            # TP/SL Advanced Settings (ladder exits, custom targets)
+            [
+                InlineKeyboardButton(f"🎯 TP/SL Advanced Settings", callback_data="demo:tpsl_settings"),
+            ],
             # Fee Stats
             [
                 InlineKeyboardButton(f"💰 Fee Stats (0.5% on wins)", callback_data="demo:fee_stats"),

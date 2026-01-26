@@ -36,6 +36,7 @@ class AutonomyOrchestrator:
         self._analytics = None
         self._news_detector = None
         self._sentiment_pipeline = None
+        self._regime_orchestrator = None
 
     # =========================================================================
     # Module Accessors (lazy loading)
@@ -140,6 +141,18 @@ class AutonomyOrchestrator:
             from core.sentiment_trading import get_sentiment_pipeline
             self._sentiment_pipeline = get_sentiment_pipeline()
         return self._sentiment_pipeline
+
+    @property
+    def regime(self):
+        """Regime-adaptive strategy orchestrator for market regime awareness."""
+        if self._regime_orchestrator is None:
+            from core.regime import get_adaptive_orchestrator
+            self._regime_orchestrator = get_adaptive_orchestrator()
+        return self._regime_orchestrator
+
+    def get_regime_orchestrator(self):
+        """Get the regime orchestrator (alias for regime property)."""
+        return self.regime
 
     # =========================================================================
     # Core Operations
