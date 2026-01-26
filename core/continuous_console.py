@@ -32,6 +32,14 @@ import anthropic
 
 logger = logging.getLogger(__name__)
 
+# Import database helper for analytics
+try:
+    from core.database import get_analytics_db
+    _ANALYTICS_AVAILABLE = True
+except ImportError:
+    _ANALYTICS_AVAILABLE = False
+    logger.warning("Analytics database not available - vibe request logging disabled")
+
 # Console session storage
 CONSOLE_DIR = Path.home() / ".jarvis" / "console_sessions"
 CONSOLE_DIR.mkdir(parents=True, exist_ok=True)
@@ -137,6 +145,60 @@ class ContinuousConsole:
         if user_id not in self._user_locks:
             self._user_locks[user_id] = asyncio.Lock()
         return self._user_locks[user_id]
+
+    def _log_vibe_request(
+        self,
+        user_id: int,
+        username: str,
+        chat_id: int,
+        request: str,
+        status: str,
+        started_at: datetime,
+        completed_at: datetime,
+        response_length: int = 0,
+        chunks_sent: int = 1,
+        tokens_used: int = 0,
+        sanitized: bool = False,
+        session_message_count: int = 0,
+        error_message: str = None
+    ):
+        """Log vibe request to analytics database."""
+        if not _ANALYTICS_AVAILABLE:
+            return
+
+        try:
+            duration = (completed_at - started_at).total_seconds()
+
+            analytics_db = get_analytics_db()
+            analytics_db.execute(
+                """
+                INSERT INTO vibe_requests (
+                    user_id, username, chat_id, request,
+                    started_at, completed_at, duration_seconds,
+                    status, error_message, response_length, chunks_sent,
+                    tokens_used, sanitized, session_message_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    username,
+                    chat_id,
+                    request[:500],  # Truncate long requests
+                    started_at.isoformat(),
+                    completed_at.isoformat(),
+                    duration,
+                    status,
+                    error_message[:500] if error_message else None,
+                    response_length,
+                    chunks_sent,
+                    tokens_used,
+                    1 if sanitized else 0,
+                    session_message_count
+                )
+            )
+            logger.debug(f"Logged vibe request: user={user_id}, status={status}, duration={duration:.1f}s")
+        except Exception as e:
+            logger.error(f"Failed to log vibe request: {e}", exc_info=True)
 
     def get_or_create_session(
         self,
@@ -273,9 +335,20 @@ class ContinuousConsole:
                 "sanitized": False
             }
 
+        # Track timing for logging
+        request_start_time = datetime.now(timezone.utc)
+
         # Check if user already has active request
         if user_id in self._active_requests:
             active_info = self._active_requests[user_id]
+            # Log concurrent block
+            self._log_vibe_request(
+                user_id, username, chat_id, prompt,
+                status="concurrent_blocked",
+                started_at=request_start_time,
+                completed_at=datetime.now(timezone.utc),
+                error_message="User already has active request"
+            )
             return {
                 "success": False,
                 "response": (
@@ -336,6 +409,13 @@ class ContinuousConsole:
                     )
                 except anthropic.APITimeoutError as e:
                     logger.warning(f"API timeout for user {user_id}: {e}")
+                    self._log_vibe_request(
+                        user_id, username, chat_id, prompt,
+                        status="timeout",
+                        started_at=request_start_time,
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=str(e)
+                    )
                     return {
                         "success": False,
                         "response": "⏱️ Request timed out after 5 minutes.\n\nTry breaking your task into smaller steps.",
@@ -344,6 +424,13 @@ class ContinuousConsole:
                     }
                 except anthropic.RateLimitError as e:
                     logger.warning(f"Rate limited for user {user_id}: {e}")
+                    self._log_vibe_request(
+                        user_id, username, chat_id, prompt,
+                        status="rate_limited",
+                        started_at=request_start_time,
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=str(e)
+                    )
                     return {
                         "success": False,
                         "response": "⚠️ API rate limit reached.\n\nPlease wait a moment and try again.",
@@ -352,6 +439,13 @@ class ContinuousConsole:
                     }
                 except anthropic.APIConnectionError as e:
                     logger.error(f"API connection error for user {user_id}: {e}")
+                    self._log_vibe_request(
+                        user_id, username, chat_id, prompt,
+                        status="error",
+                        started_at=request_start_time,
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=f"Connection error: {str(e)}"
+                    )
                     return {
                         "success": False,
                         "response": "🌐 Network error connecting to Claude API.\n\nCheck your internet connection and try again.",
@@ -360,6 +454,13 @@ class ContinuousConsole:
                     }
                 except anthropic.AuthenticationError as e:
                     logger.error(f"API authentication error: {e}")
+                    self._log_vibe_request(
+                        user_id, username, chat_id, prompt,
+                        status="error",
+                        started_at=request_start_time,
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=f"Authentication error: {str(e)}"
+                    )
                     return {
                         "success": False,
                         "response": "🔑 API authentication failed.\n\nContact admin to check API key configuration.",
@@ -368,6 +469,13 @@ class ContinuousConsole:
                     }
                 except anthropic.APIError as e:
                     logger.error(f"Claude API error for user {user_id}: {e}")
+                    self._log_vibe_request(
+                        user_id, username, chat_id, prompt,
+                        status="error",
+                        started_at=request_start_time,
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=f"API error: {str(e)}"
+                    )
                     return {
                         "success": False,
                         "response": f"❌ Claude API error: {str(e)}\n\nThis has been logged for investigation.",
@@ -399,10 +507,24 @@ class ContinuousConsole:
                 # Save session
                 self._save_session(session)
 
+                # Log successful request
+                tokens_total = response.usage.input_tokens + response.usage.output_tokens
+                self._log_vibe_request(
+                    user_id, username, chat_id, prompt,
+                    status="success",
+                    started_at=request_start_time,
+                    completed_at=datetime.now(timezone.utc),
+                    response_length=len(sanitized_content),
+                    chunks_sent=1,  # Note: actual chunk count is determined in bot_core.py
+                    tokens_used=tokens_total,
+                    sanitized=was_sanitized,
+                    session_message_count=session.message_count
+                )
+
                 return {
                     "success": True,
                     "response": sanitized_content,
-                    "tokens_used": response.usage.input_tokens + response.usage.output_tokens,
+                    "tokens_used": tokens_total,
                     "sanitized": was_sanitized,
                     "session_id": session.session_id,
                     "message_count": session.message_count
@@ -410,6 +532,14 @@ class ContinuousConsole:
 
             except Exception as e:
                 logger.error(f"Console execution error: {e}", exc_info=True)
+                # Log error
+                self._log_vibe_request(
+                    user_id, username, chat_id, prompt,
+                    status="error",
+                    started_at=request_start_time,
+                    completed_at=datetime.now(timezone.utc),
+                    error_message=str(e)
+                )
                 return {
                     "success": False,
                     "response": f"❌ Unexpected error: {type(e).__name__}\n\nThis has been logged for investigation.",
