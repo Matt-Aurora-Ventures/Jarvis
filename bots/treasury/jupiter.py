@@ -7,6 +7,7 @@ import os
 import json
 import asyncio
 import aiohttp
+from aiohttp import ClientTimeout
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
@@ -218,9 +219,11 @@ class JupiterClient:
         self._confirmation_service: Optional[TransactionConfirmationService] = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create aiohttp session."""
+        """Get or create aiohttp session with timeouts."""
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            # Configure timeouts: 60s total, 30s connect
+            timeout = ClientTimeout(total=60, connect=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def close(self):
