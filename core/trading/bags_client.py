@@ -332,91 +332,78 @@ class BagsAPIClient:
             )
 
     async def get_token_info(self, mint: str) -> Optional[TokenInfo]:
-        """Get token information"""
+        """Get token information via Helius RPC
+
+        NOTE: bags.fm API v1 does not provide a token info endpoint.
+        Using Helius RPC as alternative (requires HELIUS_API_KEY in .env)
+        """
 
         if not self.client:
             return None
-        if not self.api_key:
-            self._warn_missing_api_key("token info")
+
+        helius_api_key = os.getenv("HELIUS_API_KEY")
+        if not helius_api_key:
+            logger.warning("HELIUS_API_KEY not configured; cannot fetch token info")
             return None
 
-        await self._check_rate_limit()
-
         try:
+            # Use Helius token metadata API
+            helius_url = "https://api.helius.xyz/v0/token-metadata"
             response = await self.client.get(
-                f"{self.BASE_URL}/token/{mint}",
-                headers=self._get_headers()
+                helius_url,
+                params={"api-key": helius_api_key, "mint": mint}
             )
 
             response.raise_for_status()
-            data = response.json()
+            result = response.json()
+
+            # Helius returns array of token metadata
+            if not result or not isinstance(result, list) or len(result) == 0:
+                logger.warning(f"Token metadata not found for mint: {mint}")
+                return None
+
+            data = result[0]  # First result
+            metadata = data.get("onChainMetadata", {}).get("metadata", {})
 
             return TokenInfo(
                 address=mint,
-                symbol=data.get("symbol", ""),
-                name=data.get("name", ""),
+                symbol=data.get("symbol", metadata.get("symbol", "UNKNOWN")),
+                name=data.get("name", metadata.get("name", "Unknown Token")),
                 decimals=int(data.get("decimals", 9)),
-                price_usd=float(data.get("priceUsd", 0)),
-                price_sol=float(data.get("priceSol", 0)),
-                volume_24h=float(data.get("volume24h", 0)),
-                liquidity=float(data.get("liquidity", 0)),
-                holders=int(data.get("holders", 0)),
-                market_cap=float(data.get("marketCap", 0))
+                # Note: Helius doesn't provide price/volume - would need additional API
+                price_usd=0.0,
+                price_sol=0.0,
+                volume_24h=0.0,
+                liquidity=0.0,
+                holders=0,
+                market_cap=0.0
             )
 
         except Exception as e:
             status = getattr(getattr(e, "response", None), "status_code", None)
             if status == 404:
-                logger.warning("Bags token not found: %s", mint)
+                logger.warning("Token not found via Helius: %s", mint)
             else:
-                logger.error(f"Failed to get token info: {e}")
+                logger.error(f"Failed to get token info via Helius: {e}")
             return None
 
     async def get_trending_tokens(self, limit: int = 10, allow_public: bool = False) -> List[TokenInfo]:
-        """Get trending tokens"""
+        """Get trending tokens
 
-        if not self.client:
-            return []
-        if not self.api_key and not allow_public:
-            self._warn_missing_api_key("trending tokens")
-            return []
+        NOTE: bags.fm API v1 does not provide a trending tokens endpoint.
+        This feature is deferred to V1.1. Returns empty list.
 
-        await self._check_rate_limit()
+        To implement in future:
+        - Build custom analytics from on-chain transaction volume data
+        - Query bags.fm token launches and sort by recent activity
+        - Integrate Bitquery or similar for trending analytics
+        """
 
-        try:
-            response = await self.client.get(
-                f"{self.BASE_URL}/tokens/trending",
-                params={"limit": limit},
-                headers=self._get_headers()
-            )
-
-            response.raise_for_status()
-            data = response.json()
-
-            tokens = []
-            for token_data in data.get("tokens", [])[:limit]:
-                tokens.append(TokenInfo(
-                    address=token_data.get("address", ""),
-                    symbol=token_data.get("symbol", ""),
-                    name=token_data.get("name", ""),
-                    decimals=int(token_data.get("decimals", 9)),
-                    price_usd=float(token_data.get("priceUsd", 0)),
-                    price_sol=float(token_data.get("priceSol", 0)),
-                    volume_24h=float(token_data.get("volume24h", 0)),
-                    liquidity=float(token_data.get("liquidity", 0)),
-                    holders=int(token_data.get("holders", 0)),
-                    market_cap=float(token_data.get("marketCap", 0))
-                ))
-
-            return tokens
-
-        except Exception as e:
-            status = getattr(getattr(e, "response", None), "status_code", None)
-            if status == 404:
-                logger.warning("Bags trending endpoint unavailable")
-            else:
-                logger.error(f"Failed to get trending tokens: {e}")
-            return []
+        logger.warning(
+            "Trending tokens endpoint not available in bags.fm API v1 - "
+            "returning empty list (feature deferred to V1.1)"
+        )
+        return []
 
     async def get_top_tokens_by_volume(self, limit: int = 15, allow_public: bool = False) -> List[TokenInfo]:
         """Get top tokens sorted by 24h volume"""
@@ -527,7 +514,10 @@ class BagsAPIClient:
             return {"success": False, "error": str(e)}
 
     async def get_partner_stats(self) -> Dict[str, Any]:
-        """Get partner statistics"""
+        """Get partner statistics
+
+        Uses bags.fm API v1 endpoint: GET /fee-share/partner-config/stats
+        """
 
         if not self.partner_key:
             return {"error": "No partner key configured"}
@@ -539,20 +529,26 @@ class BagsAPIClient:
 
         try:
             response = await self.client.get(
-                f"{self.BASE_URL}/partner/stats",
-                params={"partnerKey": self.partner_key},
+                f"{self.BASE_URL}/fee-share/partner-config/stats",  # FIXED: correct API v1 path
+                params={"partner": self.partner_key},  # FIXED: param name is "partner" not "partnerKey"
                 headers=self._get_headers()
             )
 
             response.raise_for_status()
-            data = response.json()
+            result = response.json()
 
+            # API v1 returns: {"success": true, "response": {"claimedFees": "...", "unclaimedFees": "..."}}
+            if not result.get("success"):
+                logger.error(f"Partner stats API returned error: {result.get('error')}")
+                return {"error": result.get("error", "Unknown error")}
+
+            data = result.get("response", {})
             return {
-                "total_volume": float(data.get("totalVolume", 0)),
-                "total_fees_earned": float(data.get("totalFeesEarned", 0)),
-                "pending_fees": float(data.get("pendingFees", 0)),
-                "total_swaps": int(data.get("totalSwaps", 0)),
-                "unique_users": int(data.get("uniqueUsers", 0))
+                "claimed_fees": int(data.get("claimedFees", 0)),  # In lamports
+                "unclaimed_fees": int(data.get("unclaimedFees", 0)),  # In lamports
+                # Legacy field mappings for backward compatibility
+                "total_fees_earned": int(data.get("claimedFees", 0)),
+                "pending_fees": int(data.get("unclaimedFees", 0))
             }
 
         except Exception as e:
