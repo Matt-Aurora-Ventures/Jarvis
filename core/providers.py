@@ -1024,16 +1024,22 @@ def _ollama_available(base_url: str) -> bool:
 
 def get_ranked_providers(prefer_free: bool = True) -> list:
     """Get providers ranked by intelligence, with free models first if preferred.
-    
+
     Priority order:
     1. OpenRouter (MiniMax 2.1 PRIMARY) - no rate limits with credits
     2. Groq (backup) - fast but rate limited
     3. Ollama (local fallback) - always available offline
+
+    Respects providers.allow_paid_fallback config setting.
     """
     cfg = config.load_config()
     available = []
+    allow_paid = cfg.get("providers", {}).get("allow_paid_fallback", False)
 
     for provider in PROVIDER_RANKINGS:
+        # Skip paid providers if consent not given
+        if not allow_paid and not provider.get("free", False):
+            continue
         if provider["provider"] == "openrouter":
             # OpenRouter is PRIMARY if key is available
             if _openrouter_client():
@@ -1249,8 +1255,13 @@ def generate_text(
     ranked = _apply_routing_override(ranked, cfg)
 
     if not ranked:
-        _log("No AI providers available")
-        logger.error("No AI providers available - check configuration")
+        allow_paid = cfg.get("providers", {}).get("allow_paid_fallback", False)
+        if not allow_paid:
+            _log("No AI providers available - paid providers blocked (set providers.allow_paid_fallback=true to enable)")
+            logger.error("No AI providers available - paid fallback disabled in config")
+        else:
+            _log("No AI providers available")
+            logger.error("No AI providers available - check configuration")
         return None
 
     # Initialize fallback logger
