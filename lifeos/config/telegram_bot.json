@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "chat_id": "-1003408655098",
+  "admin_ids": ["8527130908"],
+  "features": {
+    "sentiment_digests": true,
+    "buy_notifications": true,
+    "admin_commands": true
+  },
+  "rate_limits": {
+    "messages_per_minute": 30,
+    "sentiment_checks_per_day": 24
+  },
+  "note": "Legacy config file - primary config is now in environment variables"
+}

@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "username": "jarvis_lifeos",
+  "features": {
+    "auto_reply": true,
+    "sentiment_tweets": true,
+    "thread_generation": true,
+    "quote_strategy": true
+  },
+  "rate_limits": {
+    "tweets_per_hour": 10,
+    "replies_per_hour": 30
+  },
+  "note": "Legacy config file - primary config is now in environment variables"
+}
