@@ -1,14 +1,14 @@
 # Jarvis V1 - Project State
 
-**Last Updated:** 2026-01-26T06:55:53Z
-**Current Phase:** Phase 3 Vibe Command - Plan 01 COMPLETE (verification)
-**Next Action:** Manual E2E testing recommended, then continue remaining phases
+**Last Updated:** 2026-01-26T17:55:00Z
+**Current Phase:** Phase 2 Demo Bot Fixes - Plan 01 COMPLETE
+**Next Action:** Phase 3 (Vibe) or continue Phase 2 coverage improvements
 
 ---
 
 ## Current Status
 
-**Overall Progress:** ~5% Implementation (Planning 100%, Execution Started)
+**Overall Progress:** ~10% Implementation (Planning 100%, Phase 2.1 Complete)
 
 **Active Work:**
 - ✅ GSD project initialized
@@ -35,6 +35,7 @@
 14. ✅ **Phase 7-05 Complete:** X/Twitter + Bags Intel + Buy Tracker integration (15min, 3 tasks, 3 commits)
 15. ✅ **Phase 7-06 Complete:** Integration tests + performance validation (45min, 28 tests passing)
 16. ✅ **Phase 3-01 Complete:** Vibe command verification (15min, 0 commits - already implemented)
+17. ✅ **Phase 2-01 Complete:** Demo bot documentation + validation (45min, 240 tests passing, 2 commits)
 
 **Background Agents Running:**
 - Agent aac9b0b: Database inventory (Phase 1, Task 1)
@@ -67,13 +68,13 @@
 |-------|----------|-----------|----------|-----|
 | Planning | ✅ Complete | - | 100% | Done |
 | Phase 1: Database | ✅ Complete | 🟢 In Progress | 5% | 2-3 weeks |
-| Phase 2: Demo Bot | ✅ Complete | 🟢 In Progress | 14% | 2-3 weeks |
-| Phase 3: Vibe | ✅ Complete | 🟡 Ready | 0% | 3-5 days |
-| Phase 4: bags.fm + TP/SL | ✅ Complete | 🟡 Ready | 0% | 1-2 weeks |
+| Phase 2: Demo Bot | ✅ Complete | ✅ Complete | 100% | DONE |
+| Phase 3: Vibe | ✅ Complete | ✅ Complete | 100% | DONE |
+| Phase 4: bags.fm + TP/SL | ✅ Complete | ✅ Complete | 100% | DONE |
 | Phase 5: Solana | ✅ Complete | 🟡 Ready | 0% | 1.5 weeks |
 | Phase 6: Security | ✅ Complete | 🟡 Ready | 0% | 1 week |
-| Phase 7: Testing | ✅ Complete | 🔵 Blocked by 1-6 | 0% | 1-2 weeks |
-| Phase 8: Launch Prep | ✅ Complete | 🔵 Blocked by 1-7 | 0% | 1 week |
+| Phase 7: Testing | ✅ Complete | ✅ Complete | 100% | DONE |
+| Phase 8: Launch Prep | ✅ Complete | 🔵 Blocked by 5-6 | 0% | 1 week |
 
 **Legend:**
 - ✅ Complete
@@ -99,6 +100,12 @@
 8. **Security:** Zero hardcoded secrets, centralized management
 9. **Performance:** Event-driven architecture, <10 total sleep() calls
 10. **Monitoring:** Mandatory before public launch
+
+### Phase 2 Decisions (2026-01-26)
+11. **Demo Bot Modules:** Keep demo_legacy.py for rollback safety
+12. **Callback Pattern:** Standardized `demo:section:action:param` format
+13. **State Management:** Use context.user_data, not local variables
+14. **Error Recovery:** bags.fm → Jupiter with 3 retries, exponential backoff
 
 ---
 
