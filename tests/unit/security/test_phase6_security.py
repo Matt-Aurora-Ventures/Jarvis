@@ -218,18 +218,18 @@ class TestInputValidation:
     
     def test_sanitize_sql_identifier_valid(self):
         """Test valid SQL identifier."""
-        result = validate_sql_identifier("table_name_123")
+        result = sanitize_sql_identifier("table_name_123")
         assert result == "table_name_123"
     
     def test_sanitize_sql_identifier_invalid_chars(self):
         """Test SQL identifier with invalid characters is rejected."""
         with pytest.raises(ValidationError, match="Only alphanumeric"):
-            validate_sql_identifier("table-name")  # Hyphen not allowed
+            sanitize_sql_identifier("table-name")  # Hyphen not allowed
     
     def test_sanitize_sql_identifier_sql_keyword(self):
         """Test SQL keywords are rejected as identifiers."""
         with pytest.raises(ValidationError, match="reserved keyword"):
-            validate_sql_identifier("SELECT")
+            sanitize_sql_identifier("SELECT")
 
 
 class TestRateLimiting:
