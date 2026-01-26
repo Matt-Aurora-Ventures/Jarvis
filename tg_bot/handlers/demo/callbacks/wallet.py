@@ -143,7 +143,7 @@ _QR code coming in V2_
         # Show actual private key (SENSITIVE)
         try:
             from bots.treasury.wallet import SecureWallet
-            from tg_bot.handlers.demo_legacy import _get_demo_wallet_password, _get_demo_wallet_dir
+            from tg_bot.handlers.demo.demo_trading import _get_demo_wallet_password, _get_demo_wallet_dir
 
             wallet_password = _get_demo_wallet_password()
             if not wallet_password:
@@ -169,7 +169,7 @@ _QR code coming in V2_
         # Generate new wallet
         try:
             from bots.treasury.wallet import SecureWallet
-            from tg_bot.handlers.demo_legacy import _get_demo_wallet_password, _get_demo_wallet_dir
+            from tg_bot.handlers.demo.demo_trading import _get_demo_wallet_password, _get_demo_wallet_dir
 
             wallet_password = _get_demo_wallet_password()
             if not wallet_password:

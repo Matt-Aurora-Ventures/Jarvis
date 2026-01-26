@@ -360,7 +360,7 @@ class DemoContextLoader:
     def DemoMenuBuilder(self):
         """Lazy load DemoMenuBuilder."""
         if self._menu_builder is None:
-            from tg_bot.handlers.demo_legacy import DemoMenuBuilder
+            from tg_bot.handlers.demo.demo_ui import DemoMenuBuilder
             self._menu_builder = DemoMenuBuilder
         return self._menu_builder
 
@@ -368,110 +368,110 @@ class DemoContextLoader:
     def JarvisTheme(self):
         """Lazy load JarvisTheme."""
         if self._theme is None:
-            from tg_bot.handlers.demo_legacy import JarvisTheme
+            from tg_bot.handlers.demo.demo_ui import JarvisTheme
             self._theme = JarvisTheme
         return self._theme
 
     @staticmethod
     def safe_symbol(symbol: str) -> str:
         """Sanitize token symbol for safe display."""
-        from tg_bot.handlers.demo_legacy import safe_symbol
+        from tg_bot.handlers.demo.demo_ui import safe_symbol
         return safe_symbol(symbol)
 
     @staticmethod
     async def get_demo_engine():
         """Get demo trading engine."""
-        from tg_bot.handlers.demo_legacy import _get_demo_engine
+        from tg_bot.handlers.demo.demo_trading import _get_demo_engine
         return await _get_demo_engine()
 
     @staticmethod
     async def get_market_regime():
         """Get current market regime."""
-        from tg_bot.handlers.demo_legacy import get_market_regime
+        from tg_bot.handlers.demo.demo_sentiment import get_market_regime
         return await get_market_regime()
 
     @staticmethod
     async def get_ai_sentiment_for_token(address: str):
         """Get AI sentiment for a token."""
-        from tg_bot.handlers.demo_legacy import get_ai_sentiment_for_token
+        from tg_bot.handlers.demo.demo_sentiment import get_ai_sentiment_for_token
         return await get_ai_sentiment_for_token(address)
 
     @staticmethod
     async def get_trending_with_sentiment():
         """Get trending tokens with sentiment."""
-        from tg_bot.handlers.demo_legacy import get_trending_with_sentiment
+        from tg_bot.handlers.demo.demo_sentiment import get_trending_with_sentiment
         return await get_trending_with_sentiment()
 
     @staticmethod
     async def get_conviction_picks():
         """Get AI conviction picks."""
-        from tg_bot.handlers.demo_legacy import get_conviction_picks
+        from tg_bot.handlers.demo.demo_sentiment import get_conviction_picks
         return await get_conviction_picks()
 
     @staticmethod
     async def get_bags_top_tokens_with_sentiment(limit: int = 15):
         """Get Bags.fm top tokens with sentiment."""
-        from tg_bot.handlers.demo_legacy import get_bags_top_tokens_with_sentiment
+        from tg_bot.handlers.demo.demo_sentiment import get_bags_top_tokens_with_sentiment
         return await get_bags_top_tokens_with_sentiment(limit=limit)
 
     @staticmethod
     def get_trade_intelligence():
         """Get trade intelligence engine."""
-        from tg_bot.handlers.demo_legacy import get_trade_intelligence
+        from tg_bot.handlers.demo.demo_trading import get_trade_intelligence
         return get_trade_intelligence()
 
     @staticmethod
     def get_success_fee_manager():
         """Get success fee manager."""
-        from tg_bot.handlers.demo_legacy import get_success_fee_manager
+        from tg_bot.handlers.demo.demo_trading import get_success_fee_manager
         return get_success_fee_manager()
 
     @staticmethod
     def get_bags_client():
         """Get Bags.fm API client."""
-        from tg_bot.handlers.demo_legacy import get_bags_client
+        from tg_bot.handlers.demo.demo_trading import get_bags_client
         return get_bags_client()
 
     @staticmethod
     def register_token_id(context, token_address: str) -> str:
         """Register a short callback-safe token id."""
-        from tg_bot.handlers.demo_legacy import _register_token_id
+        from tg_bot.handlers.demo.demo_trading import _register_token_id
         return _register_token_id(context, token_address)
 
     @staticmethod
     def resolve_token_ref(context, token_ref: str) -> str:
         """Resolve short token id back to full address."""
-        from tg_bot.handlers.demo_legacy import _resolve_token_ref
+        from tg_bot.handlers.demo.demo_trading import _resolve_token_ref
         return _resolve_token_ref(context, token_ref)
 
     @staticmethod
     async def execute_swap_with_fallback(**kwargs):
         """Execute swap via Bags.fm with Jupiter fallback."""
-        from tg_bot.handlers.demo_legacy import _execute_swap_with_fallback
+        from tg_bot.handlers.demo.demo_trading import _execute_swap_with_fallback
         return await _execute_swap_with_fallback(**kwargs)
 
     @staticmethod
     def get_demo_slippage_bps() -> int:
         """Get demo slippage in basis points."""
-        from tg_bot.handlers.demo_legacy import _get_demo_slippage_bps
+        from tg_bot.handlers.demo.demo_trading import _get_demo_slippage_bps
         return _get_demo_slippage_bps()
 
     @staticmethod
     def grade_for_signal_name(signal_name: str):
         """Convert signal name to grade."""
-        from tg_bot.handlers.demo_legacy import _grade_for_signal_name
+        from tg_bot.handlers.demo.demo_sentiment import _grade_for_signal_name
         return _grade_for_signal_name(signal_name)
 
     @staticmethod
     def conviction_label(score: int) -> str:
         """Get conviction label from score."""
-        from tg_bot.handlers.demo_legacy import _conviction_label
+        from tg_bot.handlers.demo.demo_sentiment import _conviction_label
         return _conviction_label(score)
 
     @staticmethod
     def get_pick_stats():
         """Get AI pick statistics."""
-        from tg_bot.handlers.demo_legacy import _get_pick_stats
+        from tg_bot.handlers.demo.demo_sentiment import _get_pick_stats
         return _get_pick_stats()
 
 
