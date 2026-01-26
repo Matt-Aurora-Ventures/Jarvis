@@ -94,15 +94,6 @@ def get_cache_db() -> ConnectionPool:
     return get_pool(CACHE_DB)
 
 
-def get_legacy_db() -> ConnectionPool:
-    """
-    Get connection pool for legacy database (deprecated).
-    
-    Use get_core_db() instead for new code.
-    """
-    return get_pool(LEGACY_DB)
-
-
 def health_check() -> dict:
     """
     Run health check on all databases.
@@ -159,7 +150,6 @@ __all__ = [
     "get_core_db",
     "get_analytics_db",
     "get_cache_db",
-    "get_legacy_db",
     "health_check",
     "close_all",
     "ConnectionPool",
