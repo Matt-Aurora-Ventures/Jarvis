@@ -314,27 +314,27 @@ class EndpointHealth:
     @property
     def success_rate(self) -> float:
         """Calculate success rate as percentage."""
-        with self._lock:
-            total = self.success_count + self.failure_count
-            if total == 0:
-                return 100.0  # No data = assume healthy
-            return (self.success_count / total) * 100.0
+        # Note: Caller should hold lock or this is a snapshot read
+        total = self.success_count + self.failure_count
+        if total == 0:
+            return 100.0  # No data = assume healthy
+        return (self.success_count / total) * 100.0
 
     @property
     def is_circuit_open(self) -> bool:
         """Check if circuit breaker is open."""
-        with self._lock:
-            if self._circuit_open_until is None:
-                return False
-            return datetime.utcnow() < self._circuit_open_until
+        # Note: Caller should hold lock or this is a snapshot read
+        if self._circuit_open_until is None:
+            return False
+        return datetime.utcnow() < self._circuit_open_until
 
     @property
     def is_circuit_half_open(self) -> bool:
         """Check if circuit breaker is in half-open state (recovery attempt)."""
-        with self._lock:
-            if self._circuit_open_until is None:
-                return False
-            return datetime.utcnow() >= self._circuit_open_until
+        # Note: Caller should hold lock or this is a snapshot read
+        if self._circuit_open_until is None:
+            return False
+        return datetime.utcnow() >= self._circuit_open_until
 
     def calculate_score(self) -> float:
         """Calculate current health score."""
@@ -343,8 +343,12 @@ class EndpointHealth:
             if self.last_failure:
                 last_failure_seconds = (datetime.utcnow() - self.last_failure).total_seconds()
 
+            # Access internal state directly to avoid lock recursion
+            total = self.success_count + self.failure_count
+            rate = 100.0 if total == 0 else (self.success_count / total) * 100.0
+
             self._cached_score = HealthScore.calculate(
-                success_rate=self.success_rate,
+                success_rate=rate,
                 latency_p50=self.latency_stats.p50,
                 latency_p95=self.latency_stats.p95,
                 latency_p99=self.latency_stats.p99,
