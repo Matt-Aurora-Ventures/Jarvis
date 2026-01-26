@@ -35,10 +35,11 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     session_data TEXT, -- JSON blob
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     expires_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    INDEX idx_sessions_user (user_id),
-    INDEX idx_sessions_expires (expires_at)
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON user_sessions(expires_at);
 
 CREATE TABLE IF NOT EXISTS admin_actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,11 +50,12 @@ CREATE TABLE IF NOT EXISTS admin_actions (
     metadata_json TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (admin_user_id) REFERENCES users(user_id),
-    FOREIGN KEY (target_user_id) REFERENCES users(user_id),
-    INDEX idx_admin_actions_admin (admin_user_id),
-    INDEX idx_admin_actions_target (target_user_id),
-    INDEX idx_admin_actions_type (action_type)
+    FOREIGN KEY (target_user_id) REFERENCES users(user_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_admin_actions_admin ON admin_actions(admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_actions_target ON admin_actions(target_user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_actions_type ON admin_actions(action_type);
 
 -- ============================================================================
 -- TRADING & POSITIONS
@@ -81,12 +83,13 @@ CREATE TABLE IF NOT EXISTS positions (
     tx_signature_entry TEXT,
     tx_signature_exit TEXT,
     metadata_json TEXT, -- Additional data
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    INDEX idx_positions_user (user_id),
-    INDEX idx_positions_token (token_mint),
-    INDEX idx_positions_status (status),
-    INDEX idx_positions_opened (opened_at)
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_positions_user ON positions(user_id);
+CREATE INDEX IF NOT EXISTS idx_positions_token ON positions(token_mint);
+CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(status);
+CREATE INDEX IF NOT EXISTS idx_positions_opened ON positions(opened_at);
 
 CREATE TABLE IF NOT EXISTS trades (
     id TEXT PRIMARY KEY, -- UUID
@@ -106,12 +109,13 @@ CREATE TABLE IF NOT EXISTS trades (
     error_message TEXT,
     execution_time_ms INTEGER,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE SET NULL,
-    INDEX idx_trades_user (user_id),
-    INDEX idx_trades_token (token_mint),
-    INDEX idx_trades_timestamp (timestamp),
-    INDEX idx_trades_position (position_id)
+    FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE SET NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_trades_user ON trades(user_id);
+CREATE INDEX IF NOT EXISTS idx_trades_token ON trades(token_mint);
+CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp);
+CREATE INDEX IF NOT EXISTS idx_trades_position ON trades(position_id);
 
 CREATE TABLE IF NOT EXISTS orders (
     order_id TEXT PRIMARY KEY, -- UUID
@@ -130,12 +134,13 @@ CREATE TABLE IF NOT EXISTS orders (
     cancelled_at TEXT,
     tx_signature TEXT,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE,
-    INDEX idx_orders_user (user_id),
-    INDEX idx_orders_position (position_id),
-    INDEX idx_orders_status (status),
-    INDEX idx_orders_type (order_type)
+    FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_position ON orders(position_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_type ON orders(order_type);
 
 -- ============================================================================
 -- BOT CONFIGURATIONS
@@ -175,11 +180,12 @@ CREATE TABLE IF NOT EXISTS token_metadata (
     cached_at TEXT DEFAULT CURRENT_TIMESTAMP,
     is_verified BOOLEAN DEFAULT 0,
     is_scam BOOLEAN DEFAULT 0,
-    metadata_json TEXT, -- Full metadata blob
-    INDEX idx_token_symbol (symbol),
-    INDEX idx_token_verified (is_verified),
-    INDEX idx_token_cached (cached_at)
+    metadata_json TEXT -- Full metadata blob
 );
+
+CREATE INDEX IF NOT EXISTS idx_token_symbol ON token_metadata(symbol);
+CREATE INDEX IF NOT EXISTS idx_token_verified ON token_metadata(is_verified);
+CREATE INDEX IF NOT EXISTS idx_token_cached ON token_metadata(cached_at);
 
 -- ============================================================================
 -- PERFORMANCE SCORECARDS
@@ -220,9 +226,10 @@ CREATE TABLE IF NOT EXISTS daily_pnl (
     largest_loss REAL DEFAULT 0,
     win_rate REAL DEFAULT 0,
     UNIQUE(user_id, date),
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    INDEX idx_daily_pnl_user_date (user_id, date)
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_daily_pnl_user_date ON daily_pnl(user_id, date);
 
 -- ============================================================================
 -- INDEXES FOR PERFORMANCE
