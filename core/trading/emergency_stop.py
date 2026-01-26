@@ -387,8 +387,8 @@ class EmergencyStopManager:
                 if datetime.utcnow() >= resume_time:
                     self.resume_trading(resumed_by="auto")
                     return True, ""
-            except:
-                pass
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse auto_resume_at timestamp '{self.state.auto_resume_at}': {e}")
 
         # Check global stops
         if self.state.level == StopLevel.KILL_SWITCH:

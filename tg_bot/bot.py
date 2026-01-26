@@ -47,6 +47,15 @@ from tg_bot.handlers.demo import register_demo_handlers
 # Raid Bot (v6.1.0 - Twitter engagement campaigns)
 from tg_bot.handlers.raid import register_raid_handlers
 
+# FSM Session Management (v7.0.0 - Redis-backed state persistence)
+try:
+    from tg_bot.fsm import get_fsm_storage, FSMMiddleware
+    FSM_AVAILABLE = True
+except ImportError:
+    FSM_AVAILABLE = False
+    get_fsm_storage = None
+    FSMMiddleware = None
+
 
 async def _clear_webhook_before_polling(app: Application):
     """Delete any existing webhook to prevent polling conflicts.
@@ -341,6 +350,7 @@ def main():
     service = get_signal_service()
     sources = service.get_available_sources()
     print(f"Data sources: {', '.join(sources) if sources else 'None'}")
+    print(f"FSM Storage: {'Available' if FSM_AVAILABLE else 'NOT AVAILABLE'}")
 
     # Start metrics server (best-effort)
     try:
@@ -403,6 +413,26 @@ def main():
     else:
         print("TP/SL monitor: DISABLED (no job queue)")
 
+    # Schedule FSM session cleanup (v7.0.0 - every 15 minutes)
+    if job_queue and FSM_AVAILABLE:
+        async def _cleanup_fsm_sessions(context):
+            """Clean up expired FSM sessions (memory fallback only)."""
+            try:
+                storage = get_fsm_storage()
+                cleaned = await storage.cleanup_expired()
+                if cleaned > 0:
+                    print(f"FSM cleanup: removed {cleaned} expired sessions")
+            except Exception as e:
+                print(f"FSM cleanup error: {e}")
+
+        job_queue.run_repeating(
+            _cleanup_fsm_sessions,
+            interval=timedelta(minutes=15),
+            first=60,  # Start 1 minute after bot launch
+            name="fsm_session_cleanup",
+        )
+        print("FSM session cleanup: ENABLED (15-minute cycle)")
+
     print("=" * 50)
     print("Bot started! Press Ctrl+C to stop.")
     print("=" * 50 + "\n")
@@ -417,6 +447,22 @@ def main():
             print("Health monitoring: STARTED")
         except Exception as e:
             print(f"Health monitoring: FAILED - {e}")
+
+        # Initialize FSM storage and recover active sessions
+        if FSM_AVAILABLE:
+            try:
+                storage = get_fsm_storage()
+                health = await storage.health_check()
+                if health.get("redis_connected"):
+                    print("FSM Storage: REDIS CONNECTED")
+                    # Recover active sessions from Redis
+                    sessions = await storage.get_active_sessions()
+                    if sessions:
+                        print(f"FSM Storage: Recovered {len(sessions)} active sessions")
+                else:
+                    print("FSM Storage: MEMORY FALLBACK (Redis unavailable)")
+            except Exception as e:
+                print(f"FSM Storage: FAILED - {e}")
 
     app.post_init = startup_tasks
 

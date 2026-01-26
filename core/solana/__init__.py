@@ -22,21 +22,50 @@ from core.solana.priority_fees import (
     estimate_swap_priority_fee,
 )
 
-from core.solana.retry_logic import (
+# Retry logic requires solana-py, make imports optional
+try:
+    from core.solana.retry_logic import (
+        ErrorType,
+        BlockhashCache,
+        RetryConfig,
+        RetryStats,
+        TransactionRetryManager,
+        send_transaction_with_retry,
+    )
+    HAS_RETRY_LOGIC = True
+except ImportError:
+    HAS_RETRY_LOGIC = False
+    ErrorType = None
+    BlockhashCache = None
+    RetryConfig = None
+    RetryStats = None
+    TransactionRetryManager = None
+    send_transaction_with_retry = None
+
+# Import circuit breaker and error handler
+from core.solana.circuit_breaker import (
+    CircuitState,
+    CircuitStats,
+    CircuitOpenError,
+    RPCCircuitBreaker,
+    RPCCircuitBreakerManager,
+    get_rpc_circuit_manager,
+    get_rpc_circuit_breaker,
+    rpc_circuit_breaker,
+    get_rpc_provider_breaker,
+    RPC_PROVIDER_CONFIGS,
+)
+
+from core.solana.error_handler import (
     ErrorCategory,
-    classify_error,
-    is_retryable,
-    needs_blockhash_refresh,
-    calculate_backoff,
-    execute_with_retry,
-    BlockhashCache,
-    RetryStrategy,
-    RetryMetrics,
-    RetryResult,
-    TransactionRetryExecutor,
-    BLOCKHASH_VALIDITY_SECONDS,
-    DEFAULT_VALIDITY_THRESHOLD,
-    DEFAULT_MAX_RETRIES,
+    ErrorPattern,
+    RPCErrorHandler,
+    get_rpc_error_handler,
+    categorize_error,
+    get_user_error_message,
+    should_retry_error,
+    log_rpc_error,
+    USER_MESSAGES,
 )
 
 from core.solana.jito_bundles import (
@@ -86,20 +115,33 @@ __all__ = [
     "get_priority_fee",
     "estimate_swap_priority_fee",
     # Retry Logic
-    "ErrorCategory",
-    "classify_error",
-    "is_retryable",
-    "needs_blockhash_refresh",
-    "calculate_backoff",
-    "execute_with_retry",
+    "ErrorType",
     "BlockhashCache",
-    "RetryStrategy",
-    "RetryMetrics",
-    "RetryResult",
-    "TransactionRetryExecutor",
-    "BLOCKHASH_VALIDITY_SECONDS",
-    "DEFAULT_VALIDITY_THRESHOLD",
-    "DEFAULT_MAX_RETRIES",
+    "RetryConfig",
+    "RetryStats",
+    "TransactionRetryManager",
+    "send_transaction_with_retry",
+    # Circuit Breaker
+    "CircuitState",
+    "CircuitStats",
+    "CircuitOpenError",
+    "RPCCircuitBreaker",
+    "RPCCircuitBreakerManager",
+    "get_rpc_circuit_manager",
+    "get_rpc_circuit_breaker",
+    "rpc_circuit_breaker",
+    "get_rpc_provider_breaker",
+    "RPC_PROVIDER_CONFIGS",
+    # Error Handler
+    "ErrorCategory",
+    "ErrorPattern",
+    "RPCErrorHandler",
+    "get_rpc_error_handler",
+    "categorize_error",
+    "get_user_error_message",
+    "should_retry_error",
+    "log_rpc_error",
+    "USER_MESSAGES",
     # Jito Bundles
     "DynamicTipCalculator",
     "JitoBundleBuilder",
