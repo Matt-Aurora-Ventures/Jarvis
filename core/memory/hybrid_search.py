@@ -31,10 +31,11 @@ class HybridSearchResult:
     confidence: float
     timestamp: str
     rrf_score: float
-    fts_rank: Optional[int]  # Rank in FTS5 results (1-based, None if not in FTS5)
-    vector_rank: Optional[int]  # Rank in vector results (1-based, None if not in vector)
-    fts_bm25: Optional[float]  # Original BM25 score from FTS5
-    vector_similarity: Optional[float]  # Original cosine similarity from vector search
+    fact_id: Optional[int] = None  # Fact ID for entity extraction
+    fts_rank: Optional[int] = None  # Rank in FTS5 results (1-based, None if not in FTS5)
+    vector_rank: Optional[int] = None  # Rank in vector results (1-based, None if not in vector)
+    fts_bm25: Optional[float] = None  # Original BM25 score from FTS5
+    vector_similarity: Optional[float] = None  # Original cosine similarity from vector search
 
 
 def hybrid_search(
@@ -188,6 +189,7 @@ def _rrf_merge(
             confidence=fact.get("confidence", 1.0),
             timestamp=fact.get("timestamp", ""),
             rrf_score=rrf_score,
+            fact_id=fact.get("id"),
             fts_rank=rank,
             vector_rank=None,
             fts_bm25=fact.get("score"),
@@ -213,6 +215,7 @@ def _rrf_merge(
                 confidence=vec_result.metadata.get("confidence", 1.0),
                 timestamp=vec_result.metadata.get("created_at", ""),
                 rrf_score=rrf_contribution,
+                fact_id=vec_result.metadata.get("fact_id"),  # May be None for vector-only results
                 fts_rank=None,
                 vector_rank=rank,
                 fts_bm25=None,
@@ -242,6 +245,7 @@ def _fts_only_results(fts_facts: List[Dict[str, Any]]) -> List[HybridSearchResul
                 confidence=fact.get("confidence", 1.0),
                 timestamp=fact.get("timestamp", ""),
                 rrf_score=fact.get("score", 0.0),  # Use BM25 as RRF score
+                fact_id=fact.get("id"),
                 fts_rank=rank,
                 vector_rank=None,
                 fts_bm25=fact.get("score"),
