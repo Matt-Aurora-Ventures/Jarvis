@@ -1,12 +1,13 @@
 """
 Deep Observer module for LifeOS.
-Silently logs ALL keyboard input, mouse actions, and screen activity.
-Lightweight, compressed logging with privacy controls.
+Observes keyboard input, mouse actions, and screen activity with privacy controls.
+Lightweight, compressed logging. REDACTS sensitive input (passwords, credit cards).
 """
 
 import gzip
 import json
 import random
+import re
 import threading
 import time
 from collections import deque
@@ -19,6 +20,73 @@ from core import config, guardian, input_broker
 
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVER_LOG_PATH = ROOT / "data" / "observer"
+
+
+# Privacy: Apps where ALL keystrokes are ALWAYS sensitive (password managers, terminals)
+ALWAYS_SENSITIVE_APPS = [
+    "1Password", "LastPass", "Bitwarden", "KeePass", "Dashlane",
+    "Terminal", "iTerm", "cmd.exe", "powershell.exe",  # Shell commands
+    "Banking", "PayPal", "Venmo", "CashApp",  # Finance apps
+    "Signal", "Telegram", "WhatsApp",  # Private messaging
+]
+
+# Privacy: Apps where sensitivity depends on window title (browsers)
+CONTEXT_SENSITIVE_APPS = [
+    "Chrome", "Firefox", "Safari", "Edge", "Brave", "Opera",
+]
+
+# Privacy: Window titles indicating sensitive input
+SENSITIVE_WINDOW_PATTERNS = [
+    r"password", r"login", r"sign in", r"authenticate",
+    r"credit card", r"payment", r"billing",
+    r"ssn", r"social security",
+    r"private", r"confidential", r"secure",
+]
+
+
+class PrivacyFilter:
+    """Detects sensitive input contexts and redacts accordingly."""
+
+    def __init__(self, sensitive_apps: Optional[List[str]] = None):
+        # Apps that are always sensitive
+        self.always_sensitive = set(sensitive_apps or ALWAYS_SENSITIVE_APPS)
+        # Apps that are context-sensitive (browsers)
+        self.context_sensitive = set(CONTEXT_SENSITIVE_APPS)
+        self.sensitive_patterns = [re.compile(p, re.IGNORECASE) for p in SENSITIVE_WINDOW_PATTERNS]
+
+    def is_sensitive_context(self, app: str, window: str) -> bool:
+        """Check if current context is sensitive (password field, banking app, etc.)."""
+        # Check always-sensitive app blocklist (password managers, terminals, etc.)
+        if any(sensitive in app for sensitive in self.always_sensitive):
+            return True
+
+        # For browsers: only sensitive if window title matches a pattern
+        is_browser = any(browser in app for browser in self.context_sensitive)
+        if is_browser:
+            # Browsers are only sensitive in specific contexts (login, payment, etc.)
+            if window:
+                for pattern in self.sensitive_patterns:
+                    if pattern.search(window):
+                        return True
+            return False  # Browser with non-sensitive window
+
+        # Check window title patterns for other apps
+        if window:
+            for pattern in self.sensitive_patterns:
+                if pattern.search(window):
+                    return True
+
+        return False
+
+    def redact_key(self, key: str, is_sensitive: bool) -> str:
+        """Redact key if in sensitive context."""
+        if not is_sensitive:
+            return key
+
+        # In sensitive contexts, only log key type, not actual value
+        if key.startswith("["):
+            return key  # Keep special keys like [enter], [tab]
+        return "[REDACTED]"
 
 
 @dataclass
@@ -64,7 +132,7 @@ class DeepObserver(threading.Thread):
             flush_interval = int(obs_cfg.get("flush_interval", flush_interval))
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
-        
+
         # Rolling buffer for recent actions
         self._buffer: Deque[ActionLog] = deque(maxlen=buffer_size)
         self._flush_interval = flush_interval
@@ -72,19 +140,25 @@ class DeepObserver(threading.Thread):
         self._log_mouse = bool(obs_cfg.get("log_mouse", True))
         self._mouse_move_interval = float(obs_cfg.get("mouse_move_interval", 2))
         self._key_sample_rate = float(obs_cfg.get("key_sample_rate", 1.0))
-        
+
+        # Privacy controls
+        sensitive_apps = obs_cfg.get("sensitive_apps", None)
+        self._privacy_filter = PrivacyFilter(sensitive_apps)
+        self._privacy_mode = str(obs_cfg.get("privacy_mode", "redact")).lower()  # redact, metadata, disabled
+
         # Input broker subscriptions
         self._broker = input_broker.get_input_broker()
         self._keyboard_subscription = None
         self._mouse_subscription = None
-        
+
         # Current context
         self._current_app = ""
         self._current_window = ""
-        
+
         # Stats
         self._total_keys = 0
         self._total_clicks = 0
+        self._total_redacted = 0
         self._session_start = time.time()
 
     def _get_frontmost_app(self) -> tuple:
@@ -110,7 +184,7 @@ class DeepObserver(threading.Thread):
             ))
 
     def _start_keyboard_listener(self) -> bool:
-        """Start capturing all keyboard input."""
+        """Start capturing keyboard input with privacy controls."""
         if not self._log_keys:
             return False
 
@@ -120,7 +194,16 @@ class DeepObserver(threading.Thread):
             if self._key_sample_rate < 1.0 and random.random() > self._key_sample_rate:
                 return
             self._current_app, self._current_window = self._get_frontmost_app()
-            
+
+            # Privacy check
+            is_sensitive = self._privacy_filter.is_sensitive_context(
+                self._current_app, self._current_window
+            )
+
+            # Privacy mode: metadata - skip keystroke logging in sensitive contexts
+            if self._privacy_mode == "metadata" and is_sensitive:
+                return
+
             # Get key representation
             try:
                 if hasattr(key, 'char') and key.char:
@@ -129,11 +212,19 @@ class DeepObserver(threading.Thread):
                     key_str = f"[{key.name}]" if hasattr(key, 'name') else "[?]"
             except Exception as e:
                 key_str = "[?]"
-            
+
+            # Privacy mode: redact - replace actual characters with [REDACTED]
+            if self._privacy_mode == "redact":
+                original_key = key_str
+                key_str = self._privacy_filter.redact_key(key_str, is_sensitive)
+                if is_sensitive and original_key != key_str:
+                    self._total_redacted += 1
+
             self._log_action("key", {
                 "key": key_str,
                 "app": self._current_app,
                 "window": self._current_window[:80] if self._current_window else "",
+                "sensitive": is_sensitive,  # Mark sensitive contexts
             })
             self._total_keys += 1
 
@@ -208,13 +299,19 @@ class DeepObserver(threading.Thread):
         with self._lock:
             return [a for a in self._buffer if a.ts > cutoff]
 
-    def get_recent_text(self, seconds: int = 30) -> str:
-        """Reconstruct recently typed text."""
+    def get_recent_text(self, seconds: int = 30, include_redacted: bool = False) -> str:
+        """Reconstruct recently typed text (skips [REDACTED] by default)."""
         actions = self.get_recent_actions(seconds)
         chars = []
         for a in actions:
             if a.action_type == "key":
                 key = a.data.get("key", "")
+
+                # Skip redacted keys unless explicitly requested
+                if key == "[REDACTED]" and not include_redacted:
+                    chars.append("█")  # Visual indicator of redacted content
+                    continue
+
                 if key.startswith("["):
                     if key == "[space]":
                         chars.append(" ")
@@ -222,6 +319,7 @@ class DeepObserver(threading.Thread):
                         chars.append("\n")
                     elif key == "[backspace]" and chars:
                         chars.pop()
+                    # Skip other special keys
                 else:
                     chars.append(key)
         return "".join(chars)
@@ -232,8 +330,11 @@ class DeepObserver(threading.Thread):
             "session_duration": time.time() - self._session_start,
             "total_keystrokes": self._total_keys,
             "total_clicks": self._total_clicks,
+            "total_redacted": self._total_redacted,
+            "redaction_rate": self._total_redacted / max(self._total_keys, 1),
             "buffer_size": len(self._buffer),
             "current_app": self._current_app,
+            "privacy_mode": self._privacy_mode,
         }
 
     def run(self) -> None:
