@@ -25,6 +25,7 @@ async def recall(
     entity_filter: Optional[str] = None,
     confidence_min: float = 0.0,
     include_embeddings: bool = False,
+    exclude_assistant_outputs: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     Recall facts from memory using hybrid search.
@@ -41,6 +42,9 @@ async def recall(
         entity_filter: Filter by entity mention (e.g., '@KR8TIV', '@lucid').
         confidence_min: Minimum confidence threshold (0.0-1.0).
         include_embeddings: Whether to use vector search (requires PostgreSQL).
+        exclude_assistant_outputs: Exclude facts marked as assistant outputs (default True).
+                                   This prevents the "echo chamber" effect where LLM sees
+                                   its own previous responses as external facts.
 
     Returns:
         List of dicts with keys:
@@ -57,7 +61,7 @@ async def recall(
         Logs warning if query takes >100ms.
 
     Example:
-        # Recent trade outcomes
+        # Recent trade outcomes (excludes assistant outputs by default)
         results = await recall(
             "KR8TIV trade outcomes",
             k=5,
@@ -72,6 +76,9 @@ async def recall(
             source_filter="telegram",
             context_filter="user_preference"
         )
+
+        # Include assistant outputs (for debugging/context review)
+        all_facts = await recall("analysis", exclude_assistant_outputs=False)
     """
     start_time = asyncio.get_event_loop().time()
 
@@ -114,6 +121,7 @@ async def recall(
         time_filter=time_filter,
         source=source_filter,
         min_confidence=confidence_min,
+        exclude_assistant_outputs=exclude_assistant_outputs,
     )
 
     # Convert HybridSearchResult to dict format
