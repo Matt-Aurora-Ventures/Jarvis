@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
+from aiohttp import ClientTimeout
 
 from bots.treasury.jupiter import JupiterClient, SwapQuote, SwapResult
 from bots.treasury.wallet import WalletInfo
@@ -358,5 +359,7 @@ class PublicTradingService:
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            # Configure timeouts: 60s total, 30s connect (for token/wallet data fetching)
+            timeout = ClientTimeout(total=60, connect=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
