@@ -14,20 +14,19 @@ Data persisted to JSON for reliability.
 import json
 import logging
 import os
-import sqlite3
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from enum import Enum
 
-from core.database.sqlite_pool import sql_connection
+from core.database import get_core_db
 
 logger = logging.getLogger(__name__)
 
 # Persistence paths
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
-DB_PATH = DATA_DIR / "jarvis.db"
+DB_PATH = DATA_DIR / "jarvis.db"  # Kept for compatibility
 SCOREKEEPER_FILE = DATA_DIR / "treasury_scorekeeper.json"
 ORDERS_FILE = DATA_DIR / "treasury_orders.json"
 
@@ -144,20 +143,17 @@ class Scorekeeper:
         self._initialized = True
         logger.info(f"Scorekeeper initialized: {len(self.positions)} positions, {len(self.trades)} trades")
 
-    def _get_conn(self) -> sqlite3.Connection:
-        """Get a SQLite connection using the pooled connection manager."""
+    def _get_conn(self):
+        """Get a SQLite connection using the unified database layer."""
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        # Note: This returns a new connection managed by the pool.
-        # The caller is responsible for closing it via try/finally.
-        conn = sqlite3.connect(str(DB_PATH), timeout=10.0, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        return conn
+        db = get_core_db()
+        return db.connection()
 
     def _init_db(self) -> None:
         """Initialize SQLite schema for treasury tracking."""
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        with sql_connection(str(DB_PATH)) as conn:
+        db = get_core_db()
+        with db.connection() as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS positions (
                     id TEXT PRIMARY KEY,
