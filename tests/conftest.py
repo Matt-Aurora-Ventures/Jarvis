@@ -33,6 +33,53 @@ if 'scipy' not in sys.modules:
     sys.modules['scipy'] = scipy_mock
     sys.modules['scipy.stats'] = scipy_mock.stats
 
+# Mock solana SDK if not available
+if 'solana' not in sys.modules:
+    solana_mock = MagicMock()
+    solana_rpc_mock = MagicMock()
+    solana_rpc_mock.async_api = MagicMock()
+    solana_rpc_mock.async_api.AsyncClient = MagicMock()
+    solana_rpc_mock.commitment = MagicMock()
+    solana_rpc_mock.types = MagicMock()
+    solana_rpc_mock.types.TxOpts = MagicMock()
+    solana_mock.rpc = solana_rpc_mock
+    sys.modules['solana'] = solana_mock
+    sys.modules['solana.rpc'] = solana_rpc_mock
+    sys.modules['solana.rpc.async_api'] = solana_rpc_mock.async_api
+    sys.modules['solana.rpc.commitment'] = solana_rpc_mock.commitment
+    sys.modules['solana.rpc.types'] = solana_rpc_mock.types
+
+# Mock solders if not available
+if 'solders' not in sys.modules:
+    solders_mock = MagicMock()
+    solders_pubkey_mock = MagicMock()
+    solders_keypair_mock = MagicMock()
+    solders_transaction_mock = MagicMock()
+    solders_instruction_mock = MagicMock()
+    solders_signature_mock = MagicMock()
+    solders_hash_mock = MagicMock()
+    solders_rpc_mock = MagicMock()
+    solders_rpc_responses_mock = MagicMock()
+
+    solders_mock.pubkey = solders_pubkey_mock
+    solders_mock.keypair = solders_keypair_mock
+    solders_mock.transaction = solders_transaction_mock
+    solders_mock.instruction = solders_instruction_mock
+    solders_mock.signature = solders_signature_mock
+    solders_mock.hash = solders_hash_mock
+    solders_mock.rpc = solders_rpc_mock
+    solders_mock.rpc.responses = solders_rpc_responses_mock
+
+    sys.modules['solders'] = solders_mock
+    sys.modules['solders.pubkey'] = solders_pubkey_mock
+    sys.modules['solders.keypair'] = solders_keypair_mock
+    sys.modules['solders.transaction'] = solders_transaction_mock
+    sys.modules['solders.instruction'] = solders_instruction_mock
+    sys.modules['solders.signature'] = solders_signature_mock
+    sys.modules['solders.hash'] = solders_hash_mock
+    sys.modules['solders.rpc'] = solders_rpc_mock
+    sys.modules['solders.rpc.responses'] = solders_rpc_responses_mock
+
 # Now import the rest
 import pytest
 import asyncio

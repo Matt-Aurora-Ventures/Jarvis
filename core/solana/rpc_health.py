@@ -69,6 +69,21 @@ LATENCY_GOOD = 300
 LATENCY_DEGRADED = 1000
 LATENCY_POOR = 3000
 
+# Unhealthy latency threshold for failover (audit requirement: 200ms)
+LATENCY_UNHEALTHY_THRESHOLD_MS = 200
+
+
+# =============================================================================
+# EXCEPTIONS
+# =============================================================================
+
+class NoHealthyProviderError(Exception):
+    """Raised when no healthy RPC provider is available."""
+
+    def __init__(self, message: str = "No healthy RPC provider available"):
+        self.message = message
+        super().__init__(self.message)
+
 
 # =============================================================================
 # DATABASE PROTOCOL
@@ -206,7 +221,17 @@ class HealthScore:
 
     @staticmethod
     def _latency_score(p50: Optional[float], p95: Optional[float], p99: Optional[float]) -> float:
-        """Score latency (higher is better, lower latency = higher score)."""
+        """
+        Score latency (higher is better, lower latency = higher score).
+
+        Scoring tiers:
+        - <= 100ms (excellent): 100
+        - <= 200ms (healthy): 85-100 (audit threshold)
+        - <= 300ms (good): 70-85
+        - <= 1000ms (degraded): 40-70
+        - <= 3000ms (poor): 10-40
+        - > 3000ms: 0-10
+        """
         if p50 is None:
             return 50.0  # Neutral score if no data
 
@@ -217,16 +242,23 @@ class HealthScore:
         avg_latency = p50 * 0.5 + p95 * 0.3 + p99 * 0.2
 
         if avg_latency <= LATENCY_EXCELLENT:
+            # Excellent: 100ms or less = 100 score
             return 100.0
+        elif avg_latency <= LATENCY_UNHEALTHY_THRESHOLD_MS:
+            # Healthy: 100-200ms = 85-100 (audit threshold)
+            return 85.0 + 15.0 * (LATENCY_UNHEALTHY_THRESHOLD_MS - avg_latency) / (LATENCY_UNHEALTHY_THRESHOLD_MS - LATENCY_EXCELLENT)
         elif avg_latency <= LATENCY_GOOD:
-            return 80.0 + 20.0 * (LATENCY_GOOD - avg_latency) / (LATENCY_GOOD - LATENCY_EXCELLENT)
+            # Good but above healthy threshold: 200-300ms = 70-85
+            return 70.0 + 15.0 * (LATENCY_GOOD - avg_latency) / (LATENCY_GOOD - LATENCY_UNHEALTHY_THRESHOLD_MS)
         elif avg_latency <= LATENCY_DEGRADED:
-            return 50.0 + 30.0 * (LATENCY_DEGRADED - avg_latency) / (LATENCY_DEGRADED - LATENCY_GOOD)
+            # Degraded: 300-1000ms = 40-70
+            return 40.0 + 30.0 * (LATENCY_DEGRADED - avg_latency) / (LATENCY_DEGRADED - LATENCY_GOOD)
         elif avg_latency <= LATENCY_POOR:
-            return 20.0 + 30.0 * (LATENCY_POOR - avg_latency) / (LATENCY_POOR - LATENCY_DEGRADED)
+            # Poor: 1000-3000ms = 10-40
+            return 10.0 + 30.0 * (LATENCY_POOR - avg_latency) / (LATENCY_POOR - LATENCY_DEGRADED)
         else:
-            # Very poor latency
-            return max(0.0, 20.0 - (avg_latency - LATENCY_POOR) / 100)
+            # Very poor: > 3000ms = 0-10
+            return max(0.0, 10.0 - (avg_latency - LATENCY_POOR) / 300)
 
     @staticmethod
     def _failure_score(consecutive_failures: int) -> float:
@@ -623,6 +655,67 @@ class RPCHealthScorer:
         candidates.sort(key=lambda ep: (-ep.score, ep.priority))
         return candidates[0]
 
+    def get_healthy_provider(
+        self,
+        exclude: Optional[List[str]] = None,
+        strict: bool = False
+    ) -> EndpointHealth:
+        """
+        Get a healthy RPC provider with automatic failover.
+
+        This method implements priority-based selection with latency awareness.
+        Providers are selected based on:
+        1. Health score (higher is better)
+        2. Priority (lower is better, used as tiebreaker)
+        3. Latency threshold (providers over 200ms are deprioritized)
+
+        Args:
+            exclude: List of endpoint names to exclude from selection
+            strict: If True, raises NoHealthyProviderError when no healthy
+                   provider is available. If False, returns best available.
+
+        Returns:
+            The healthiest available endpoint
+
+        Raises:
+            NoHealthyProviderError: When strict=True and no healthy provider exists
+
+        Example:
+            >>> provider = scorer.get_healthy_provider()
+            >>> print(f"Using provider: {provider.name}")
+        """
+        exclude = exclude or []
+
+        # Filter to healthy endpoints (not circuit-open, good latency)
+        healthy_candidates = [
+            ep for ep in self.endpoints
+            if ep.name not in exclude
+            and not ep.is_circuit_open
+            and (ep.latency_stats.p50 is None or ep.latency_stats.p50 < LATENCY_UNHEALTHY_THRESHOLD_MS * 2)
+        ]
+
+        # If strict mode and no healthy candidates, raise error
+        if strict and not healthy_candidates:
+            all_circuit_open = all(ep.is_circuit_open for ep in self.endpoints if ep.name not in exclude)
+            if all_circuit_open:
+                logger.error("All RPC providers have circuit breakers open")
+                raise NoHealthyProviderError("All RPC providers have circuit breakers open")
+            logger.error("No healthy RPC provider available")
+            raise NoHealthyProviderError()
+
+        # If no healthy candidates, fall back to non-strict selection
+        if not healthy_candidates:
+            logger.warning("No healthy providers, falling back to best available")
+            return self.get_best_endpoint(exclude=exclude)
+
+        # Sort by score (desc) then priority (asc)
+        healthy_candidates.sort(key=lambda ep: (-ep.score, ep.priority))
+
+        selected = healthy_candidates[0]
+        logger.debug(f"Selected RPC provider: {selected.name} (score={selected.score:.1f}, priority={selected.priority})")
+
+        return selected
+
     def get_all_scores(self) -> List[Dict[str, Any]]:
         """
         Get health scores for all endpoints.
@@ -728,4 +821,6 @@ __all__ = [
     "LatencyStats",
     "HealthCheckResult",
     "HEALTH_CHECK_INTERVAL",
+    "LATENCY_UNHEALTHY_THRESHOLD_MS",
+    "NoHealthyProviderError",
 ]
