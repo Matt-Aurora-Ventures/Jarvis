@@ -172,7 +172,18 @@ class BagsAPIClient:
         amount: float,
         slippage_bps: int = 100  # 1%
     ) -> Optional[Quote]:
-        """Get swap quote without executing"""
+        """
+        Get swap quote without executing
+
+        Args:
+            from_token: Input token mint address (base58)
+            to_token: Output token mint address (base58)
+            amount: Amount in SOL (will be converted to lamports)
+            slippage_bps: Slippage in basis points (100 = 1%)
+
+        Returns:
+            Quote object or None if failed
+        """
 
         if not self.client:
             logger.error("HTTP client not initialized")
@@ -181,31 +192,42 @@ class BagsAPIClient:
         await self._check_rate_limit()
 
         try:
+            # Convert SOL to lamports (1 SOL = 1_000_000_000 lamports)
+            # For SOL mint, decimals = 9
+            amount_lamports = int(amount * 1_000_000_000)
+
             response = await self.client.get(
-                f"{self.BASE_URL}/quote",
+                f"{self.BASE_URL}/trade/quote",  # FIXED: was /quote, now /trade/quote
                 params={
-                    "from": from_token,
-                    "to": to_token,
-                    "amount": str(amount),
+                    "inputMint": from_token,  # FIXED: was "from"
+                    "outputMint": to_token,    # FIXED: was "to"
+                    "amount": str(amount_lamports),  # FIXED: now in lamports
+                    "slippageMode": "manual",  # ADDED: required for slippageBps
                     "slippageBps": slippage_bps
                 },
                 headers=self._get_headers()
             )
 
             response.raise_for_status()
-            data = response.json()
+            result = response.json()
+
+            if not result.get("success"):
+                logger.error(f"Quote API returned error: {result.get('error')}")
+                return None
+
+            data = result.get("response", {})
 
             return Quote(
                 from_token=from_token,
                 to_token=to_token,
                 from_amount=amount,
-                to_amount=float(data.get("toAmount", 0)),
-                price=float(data.get("price", 0)),
-                price_impact=float(data.get("priceImpact", 0)),
-                fee=float(data.get("fee", 0)),
-                route=data.get("route", []),
-                expires_at=datetime.now(),  # Would parse from response
-                quote_id=data.get("quoteId", "")
+                to_amount=float(data.get("outAmount", 0)) / 1_000_000,  # Convert from micro-USDC to USDC
+                price=float(data.get("outAmount", 0)) / float(data.get("inAmount", 1)),  # Calculate price
+                price_impact=float(data.get("priceImpactPct", 0)),  # FIXED: was priceImpact
+                fee=0.0,  # Fee is included in the route, calculate separately if needed
+                route=data.get("routePlan", []),  # FIXED: was route
+                expires_at=datetime.now(),
+                quote_id=data.get("requestId", "")  # FIXED: was quoteId
             )
 
         except Exception as e:
