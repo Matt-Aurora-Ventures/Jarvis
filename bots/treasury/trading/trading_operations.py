@@ -1080,3 +1080,158 @@ class TradingOperationsMixin:
             logger.info(f"[RECONCILE] Auto-closed {closed_count} orphaned positions")
 
         return closed_count
+
+    async def scan_and_execute_opportunities(
+        self,
+        user_id: int = None,
+        confidence_threshold: float = 0.7,
+        max_opportunities: int = 3,
+        dry_run: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Scan for trading opportunities and execute if confidence > threshold.
+
+        This connects:
+        - opportunity_engine.run_engine() -> detects opportunities
+        - trading_decision_matrix.select_strategy() -> maps to strategy
+        - self.open_position() -> executes trades
+
+        Args:
+            user_id: Admin user ID for authentication
+            confidence_threshold: Min confidence to execute (0.0-1.0)
+            max_opportunities: Max trades to execute
+            dry_run: If True, log only without executing
+
+        Returns:
+            Dict with scan results and executed trades
+        """
+        from core import opportunity_engine, trading_decision_matrix
+
+        logger.info(f"[OPPORTUNITY] Scanning for opportunities (threshold={confidence_threshold})")
+
+        # Step 1: Detect opportunities
+        try:
+            engine_result = opportunity_engine.run_engine(
+                capital_usd=20.0,  # Default position size
+                refresh_equities=False
+            )
+        except Exception as e:
+            logger.error(f"[OPPORTUNITY] Engine failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "scanned": 0,
+                "executed": []
+            }
+
+        # Step 2: Filter by confidence
+        candidates = engine_result.get("unified_ranked", [])
+        logger.info(f"[OPPORTUNITY] Found {len(candidates)} total candidates")
+
+        qualified = []
+        for candidate in candidates[:max_opportunities * 3]:  # Check 3x to find best
+            scores = candidate.get("scores", {})
+            opportunity_score = scores.get("opportunity", 0.0)
+            sentiment_score = scores.get("sentiment", 0.0)
+
+            # Use average of opportunity & sentiment as confidence
+            confidence = (opportunity_score + sentiment_score) / 2.0
+
+            if confidence >= confidence_threshold:
+                qualified.append({
+                    "candidate": candidate,
+                    "confidence": confidence
+                })
+
+        logger.info(f"[OPPORTUNITY] {len(qualified)} candidates above threshold {confidence_threshold}")
+
+        # Step 3: Map to strategies and execute
+        executed = []
+        for item in qualified[:max_opportunities]:
+            candidate = item["candidate"]
+            confidence = item["confidence"]
+
+            symbol = candidate.get("symbol", "UNKNOWN")
+            mint = candidate.get("mint_address", "")
+
+            if not mint:
+                logger.warning(f"[OPPORTUNITY] Skipping {symbol} - no mint address")
+                continue
+
+            # Map to strategy via decision matrix
+            scores = candidate.get("scores", {})
+            momentum_score = scores.get("momentum", 0.0)
+
+            # Simple regime detection from momentum
+            if momentum_score > 0.6:
+                regime = "trending"
+            elif momentum_score < 0.4:
+                regime = "chopping"
+            else:
+                regime = "volatile"
+
+            try:
+                strategy_name = trading_decision_matrix.select_strategy(regime)
+                logger.info(f"[OPPORTUNITY] {symbol} mapped to strategy '{strategy_name}' (regime={regime})")
+            except Exception as e:
+                logger.warning(f"[OPPORTUNITY] Failed to select strategy for {symbol}: {e}")
+                strategy_name = "Unknown"
+
+            # Convert opportunity score to sentiment grade
+            opp_score = scores.get("opportunity", 0.0)
+            if opp_score >= 0.8:
+                grade = "A"
+            elif opp_score >= 0.6:
+                grade = "B"
+            elif opp_score >= 0.4:
+                grade = "C"
+            else:
+                grade = "D"
+
+            if dry_run:
+                logger.info(
+                    f"[OPPORTUNITY] DRY RUN: Would open {symbol} "
+                    f"(confidence={confidence:.2f}, grade={grade}, strategy={strategy_name})"
+                )
+                executed.append({
+                    "symbol": symbol,
+                    "confidence": confidence,
+                    "grade": grade,
+                    "strategy": strategy_name,
+                    "dry_run": True,
+                    "executed": False
+                })
+            else:
+                # Execute the trade
+                success, message, position = await self.open_position(
+                    token_mint=mint,
+                    token_symbol=symbol,
+                    direction=TradeDirection.LONG,
+                    sentiment_grade=grade,
+                    sentiment_score=confidence,
+                    user_id=user_id
+                )
+
+                executed.append({
+                    "symbol": symbol,
+                    "confidence": confidence,
+                    "grade": grade,
+                    "strategy": strategy_name,
+                    "success": success,
+                    "message": message,
+                    "position_id": position.id if position else None,
+                    "dry_run": False,
+                    "executed": success
+                })
+
+                logger.info(
+                    f"[OPPORTUNITY] {'SUCCESS' if success else 'FAILED'}: {symbol} - {message}"
+                )
+
+        return {
+            "success": True,
+            "scanned": len(candidates),
+            "qualified": len(qualified),
+            "executed": executed,
+            "confidence_threshold": confidence_threshold
+        }
