@@ -84,6 +84,7 @@ def retain_fact(
     source: Optional[str] = None,
     confidence: float = 1.0,
     auto_extract_entities: bool = True,
+    is_assistant_output: bool = False,
 ) -> int:
     """
     Store a fact in both SQLite and daily Markdown log.
@@ -95,9 +96,11 @@ def retain_fact(
         context: Situational context (e.g., 'bags.fm graduation').
         entities: Explicit entity mentions. If None and auto_extract_entities=True,
                   entities are extracted from content.
-        source: Source system ('telegram', 'treasury', 'x', 'bags_intel', 'buy_tracker').
+        source: Source system ('telegram', 'treasury', 'x', 'bags_intel', 'buy_tracker', 'assistant').
         confidence: Confidence score 0.0-1.0 (default 1.0).
         auto_extract_entities: Auto-extract entities from content if none provided.
+        is_assistant_output: Whether this fact is from assistant response (for echo chamber prevention).
+                            Default False. Set True for LLM responses to exclude from recall.
 
     Returns:
         The fact ID.
@@ -108,6 +111,13 @@ def retain_fact(
             context="bags.fm graduation within 2h, sentiment: 0.85",
             entities=["@KR8TIV", "@bags.fm", "@lucid"],
             source="treasury"
+        )
+
+        # Store assistant output (will be excluded from default recall)
+        fact_id = retain_fact(
+            content="I analyzed the token and found...",
+            source="assistant",
+            is_assistant_output=True
         )
     """
     db = get_db()
@@ -122,13 +132,13 @@ def retain_fact(
 
     # Use transaction via get_cursor()
     with db.get_cursor() as cursor:
-        # 1. Insert into facts table
+        # 1. Insert into facts table with is_assistant_output flag
         cursor.execute(
             """
-            INSERT INTO facts (content, context, timestamp, source, confidence)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO facts (content, context, timestamp, source, confidence, is_assistant_output)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (content, context, timestamp, source, confidence)
+            (content, context, timestamp, source, confidence, 1 if is_assistant_output else 0)
         )
         fact_id = cursor.lastrowid
 
@@ -160,6 +170,52 @@ def retain_fact(
     )
 
     return fact_id
+
+
+def retain_progress(
+    goal: str,
+    outcome: str,
+    status: str = "completed",
+    entities: Optional[List[str]] = None,
+    source: Optional[str] = None,
+) -> int:
+    """
+    Store a progress/outcome fact instead of raw assistant output.
+
+    Use this instead of storing raw LLM responses. Progress facts capture
+    WHAT was accomplished without storing the full response text that would
+    cause echo chamber effects.
+
+    Args:
+        goal: What the user asked for (e.g., "analyze token X").
+        outcome: What was accomplished (e.g., "Found 3 red flags, recommended skip").
+        status: Progress status ('completed', 'partial', 'failed').
+        entities: Related entity mentions.
+        source: Source system.
+
+    Returns:
+        The fact ID.
+
+    Example:
+        # Instead of storing full assistant analysis text:
+        retain_progress(
+            goal="Analyze KR8TIV token safety",
+            outcome="Analysis complete: 85/100 score, 2 minor concerns identified",
+            status="completed",
+            entities=["@KR8TIV"]
+        )
+    """
+    content = f"[{status.upper()}] Goal: {goal} | Outcome: {outcome}"
+    context = "progress_tracking"
+
+    return retain_fact(
+        content=content,
+        context=context,
+        entities=entities,
+        source=source or "system",
+        confidence=1.0,
+        is_assistant_output=False,  # Progress facts are NOT assistant outputs
+    )
 
 
 def retain_preference(
