@@ -23,10 +23,12 @@ import json
 
 try:
     import aiohttp
+    from aiohttp import ClientTimeout
     AIOHTTP_AVAILABLE = True
 except ImportError:
     AIOHTTP_AVAILABLE = False
     aiohttp = None
+    ClientTimeout = None
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +87,9 @@ class BaseLLMProvider(ABC):
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            # Configure timeouts: 60s total, 30s connect (for LLM API calls)
+            timeout = ClientTimeout(total=60, connect=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def close(self):
