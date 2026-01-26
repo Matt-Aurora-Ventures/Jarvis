@@ -25,6 +25,41 @@ DEMO_DEFAULT_SLIPPAGE_BPS = 100  # 1% default
 
 
 # =============================================================================
+# Error Classes (User-Friendly)
+# =============================================================================
+
+class TradingError(Exception):
+    """Base exception for user-friendly trading errors."""
+
+    def __init__(self, message: str, hint: Optional[str] = None):
+        self.message = message
+        self.hint = hint
+        super().__init__(message)
+
+    def format_telegram(self) -> str:
+        """Format error for Telegram display."""
+        msg = f"❌ {self.message}"
+        if self.hint:
+            msg += f"\n\n💡 Hint: {self.hint}"
+        return msg
+
+
+class BagsAPIError(TradingError):
+    """bags.fm API error with user-friendly messaging."""
+    pass
+
+
+class TPSLValidationError(TradingError):
+    """TP/SL validation error with helpful hints."""
+    pass
+
+
+class InsufficientBalanceError(TradingError):
+    """Insufficient balance for trade."""
+    pass
+
+
+# =============================================================================
 # Lazy-loaded Clients
 # =============================================================================
 
@@ -292,15 +327,39 @@ async def _execute_swap_with_fallback(
         except Exception as exc:
             last_error = str(exc)
 
+            # Check for specific HTTP errors from bags.fm
+            try:
+                import httpx
+                if isinstance(exc, httpx.HTTPStatusError):
+                    status = exc.response.status_code
+                    if status == 401 or status == 403:
+                        raise BagsAPIError(
+                            "bags.fm API authentication failed",
+                            hint="API key may be invalid or expired. Check BAGS_API_KEY and BAGS_PARTNER_KEY in settings"
+                        )
+                    elif status >= 500:
+                        logger.warning(f"bags.fm server error {status}, falling back to Jupiter: {exc}")
+                        # Continue to Jupiter fallback
+                    elif status == 429:
+                        logger.warning(f"bags.fm rate limit exceeded, falling back to Jupiter")
+                        # Continue to Jupiter fallback
+            except ImportError:
+                # httpx not available, continue with fallback
+                pass
+
+            # Log technical details for debugging
+            logger.info(f"⚠️ bags.fm unavailable, falling back to Jupiter: {exc}")
+
     # Jupiter fallback
+    logger.info("⚙️ Attempting Jupiter fallback for trade execution")
     try:
         jupiter = _get_jupiter_client()
         wallet = _load_demo_wallet(wallet_address)
         if not wallet:
-            return {
-                "success": False,
-                "error": last_error or "Wallet not configured for Jupiter fallback",
-            }
+            raise BagsAPIError(
+                "Trade execution failed - wallet not configured",
+                hint="Both bags.fm and Jupiter fallback require wallet setup. Contact admin."
+            )
 
         amount_base = await _to_base_units(from_token, amount, jupiter)
 
@@ -314,7 +373,10 @@ async def _execute_swap_with_fallback(
 
         quote = await _retry_async(_get_quote)
         if not quote:
-            return {"success": False, "error": last_error or "Jupiter quote failed"}
+            raise BagsAPIError(
+                "Trade execution failed - unable to get price quote",
+                hint=f"Both bags.fm and Jupiter could not provide a quote. Original error: {last_error or 'Unknown'}"
+            )
 
         async def _execute_swap():
             return await jupiter.execute_swap(quote, wallet)
@@ -326,18 +388,29 @@ async def _execute_swap_with_fallback(
                 getattr(jup_result, "output_amount", 0),
                 jupiter,
             )
+            logger.info("✅ Trade executed successfully via Jupiter fallback")
             return {
                 "success": True,
                 "source": "jupiter",
                 "tx_hash": getattr(jup_result, "signature", None),
                 "amount_out": amount_out_ui,
             }
-        return {
-            "success": False,
-            "error": getattr(jup_result, "error", None) or last_error or "Jupiter swap failed",
-        }
+
+        # Both bags.fm and Jupiter failed
+        jup_error = getattr(jup_result, "error", None)
+        raise BagsAPIError(
+            "Trade execution failed on all platforms",
+            hint=f"bags.fm error: {last_error or 'Unknown'}. Jupiter error: {jup_error or 'Unknown'}. Try again later or contact support."
+        )
+    except BagsAPIError:
+        # Re-raise our custom errors
+        raise
     except Exception as exc:
-        return {"success": False, "error": last_error or str(exc)}
+        logger.error(f"Unexpected error during swap execution: {exc}")
+        raise BagsAPIError(
+            "Trade execution failed due to unexpected error",
+            hint="An unexpected error occurred. Please try again or contact support if the issue persists."
+        )
 
 
 # =============================================================================
@@ -353,38 +426,48 @@ def _validate_tpsl_required(tp_percent: Optional[float], sl_percent: Optional[fl
         sl_percent: Stop-loss percentage
 
     Raises:
-        ValueError: If TP/SL are missing or invalid
+        TPSLValidationError: If TP/SL are missing or invalid
     """
     if tp_percent is None or sl_percent is None:
-        raise ValueError(
-            "❌ Take-profit and stop-loss are mandatory for all trades.\n"
-            "Example: tp_percent=50.0 (50% profit target), sl_percent=20.0 (20% max loss)"
+        raise TPSLValidationError(
+            "Take-profit and stop-loss are required for all trades",
+            hint="Example: tp_percent=50.0 (50% profit target), sl_percent=20.0 (20% max loss)"
         )
 
     if tp_percent <= 0:
-        raise ValueError(f"❌ Take-profit must be positive, got {tp_percent}%")
+        raise TPSLValidationError(
+            f"Take-profit must be positive, got {tp_percent}%",
+            hint="Try tp_percent=50.0 for a 50% profit target"
+        )
 
     if sl_percent <= 0:
-        raise ValueError(f"❌ Stop-loss must be positive, got {sl_percent}%")
+        raise TPSLValidationError(
+            f"Stop-loss must be positive, got {sl_percent}%",
+            hint="Try sl_percent=20.0 to risk 20% max loss"
+        )
 
     if sl_percent >= 100:
-        raise ValueError(
-            f"❌ Stop-loss cannot be >= 100% (would exceed your investment), got {sl_percent}%"
+        raise TPSLValidationError(
+            f"Stop-loss cannot be >= 100% (would exceed your investment), got {sl_percent}%",
+            hint="Maximum stop-loss is 99%. Typical range: 10-50%"
         )
 
     if tp_percent >= 500:
-        raise ValueError(
-            f"❌ Take-profit seems unrealistic: {tp_percent}%. Maximum recommended: 200%"
+        raise TPSLValidationError(
+            f"Take-profit seems unrealistic: {tp_percent}%",
+            hint="Maximum recommended TP is 200%. For aggressive targets, try 100-200%"
         )
 
     if tp_percent < 5:
-        raise ValueError(
-            f"❌ Take-profit too low: {tp_percent}%. Minimum recommended: 5% to cover fees"
+        raise TPSLValidationError(
+            f"Take-profit too low: {tp_percent}%",
+            hint="Minimum recommended: 5% to cover trading fees. Try 10-20% for conservative trades"
         )
 
     if sl_percent < 5:
-        raise ValueError(
-            f"❌ Stop-loss too low: {sl_percent}%. Minimum recommended: 5% to allow price movement"
+        raise TPSLValidationError(
+            f"Stop-loss too low: {sl_percent}%",
+            hint="Minimum recommended: 5% to allow natural price movement. Try 10-20% for conservative trades"
         )
 
 
