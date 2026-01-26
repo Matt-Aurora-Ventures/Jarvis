@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, List, Optional
 import json
 from decimal import Decimal
 import aiohttp
+from aiohttp import ClientTimeout
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -180,7 +181,9 @@ class BatchTradeProcessor:
 
     async def start(self):
         """Start the processor"""
-        self._session = aiohttp.ClientSession()
+        # Configure timeouts: 60s total, 30s connect (for bags.fm API calls)
+        timeout = ClientTimeout(total=60, connect=30)
+        self._session = aiohttp.ClientSession(timeout=timeout)
         self.scheduler.start()
 
         # Add recurring job to process pending orders

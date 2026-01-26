@@ -16,6 +16,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import aiohttp
+from aiohttp import ClientTimeout
 import json
 
 from .circuit_breaker import (
@@ -139,7 +140,9 @@ class APIGateway:
 
     async def start(self):
         """Initialize the gateway"""
-        self._session = aiohttp.ClientSession()
+        # Configure timeouts: 60s total, 30s connect (safety net - per-request timeouts take precedence)
+        timeout = ClientTimeout(total=60, connect=30)
+        self._session = aiohttp.ClientSession(timeout=timeout)
         logger.info("API Gateway started")
 
     async def stop(self):

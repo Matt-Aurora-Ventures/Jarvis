@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import random
 import aiohttp
+from aiohttp import ClientTimeout
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +148,9 @@ class RPCManager:
 
     async def start(self):
         """Start the RPC manager"""
-        self.session = aiohttp.ClientSession()
+        # Configure timeouts: 60s total, 30s connect (safety net - per-request timeouts take precedence)
+        timeout = ClientTimeout(total=60, connect=30)
+        self.session = aiohttp.ClientSession(timeout=timeout)
         self._running = True
         self._health_task = asyncio.create_task(self._health_check_loop())
         logger.info(f"RPC Manager started with {len(self.endpoints)} endpoints")
