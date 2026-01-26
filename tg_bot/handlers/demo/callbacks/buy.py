@@ -159,75 +159,68 @@ _Send a number like "0.5" or "2.5"_
             except Exception as e:
                 logger.warning(f"Flow validation error (continuing): {e}")
 
-            # Execute via Bags.fm API with Jupiter fallback
+            # Execute via execute_buy_with_tpsl (centralized TP/SL enforcement)
             try:
-                sentiment_data = await ctx.get_ai_sentiment_for_token(token_addr)
-                token_symbol = sentiment_data.get("symbol", "TOKEN")
-                token_price = sentiment_data.get("price", 0) or 0
-
                 wallet_address = context.user_data.get("wallet_address", "demo_wallet")
-                slippage_bps = ctx.get_demo_slippage_bps()
 
-                swap = await ctx.execute_swap_with_fallback(
-                    from_token="So11111111111111111111111111111111111111112",
-                    to_token=token_addr,
-                    amount=amount,
+                # Get TP/SL from user data or use defaults
+                # TODO: Add UI for user customization
+                tp_percent = context.user_data.get("tp_percent", 50.0)
+                sl_percent = context.user_data.get("sl_percent", 20.0)
+
+                # Execute buy with mandatory TP/SL validation
+                result = await ctx.execute_buy_with_tpsl(
+                    token_address=token_addr,
+                    amount_sol=amount,
                     wallet_address=wallet_address,
-                    slippage_bps=slippage_bps,
+                    tp_percent=tp_percent,
+                    sl_percent=sl_percent,
                 )
 
-                if swap.get("success"):
-                    tokens_received = swap.get("amount_out") if swap.get("amount_out") else (
-                        (amount * 225 / token_price) if token_price > 0 else 0
-                    )
+                if result.get("success"):
+                    position = result.get("position", {})
 
                     # Add position to portfolio
                     positions = context.user_data.get("positions", [])
-                    default_tp_pct = 50.0
-                    default_sl_pct = 20.0
-                    new_position = {
-                        "id": f"buy_{len(positions) + 1}",
-                        "symbol": token_symbol,
-                        "address": token_addr,
-                        "amount": tokens_received,
-                        "amount_sol": amount,
-                        "entry_price": token_price,
-                        "current_price": token_price,
-                        "tp_percent": default_tp_pct,
-                        "sl_percent": default_sl_pct,
-                        "tp_price": token_price * (1 + default_tp_pct / 100),
-                        "sl_price": token_price * (1 - default_sl_pct / 100),
-                        "source": swap.get("source", "bags_api"),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "tx_hash": swap.get("tx_hash"),
-                    }
-                    positions.append(new_position)
+                    positions.append(position)
                     context.user_data["positions"] = positions
 
-                    tx_hash = swap.get("tx_hash")
+                    tx_hash = position.get("tx_hash")
                     tx_display = f"{tx_hash[:8]}...{tx_hash[-8:]}" if tx_hash else "N/A"
+                    token_symbol = position.get("symbol", "TOKEN")
+                    tokens_received = position.get("amount", 0)
+                    token_price = position.get("entry_price", 0)
+                    tp_price = position.get("tp_price", 0)
+                    sl_price = position.get("sl_price", 0)
 
                     return DemoMenuBuilder.success_message(
                         action=(
                             "Buy Order Executed via Bags.fm"
-                            if swap.get("source") == "bags_fm"
+                            if position.get("source") == "bags_fm"
                             else "Buy Order Executed via Jupiter"
                         ),
                         details=(
                             f"Bought {token_symbol} with {amount:.2f} SOL\n"
                             f"Received: {tokens_received:,.0f} {token_symbol}\n"
                             f"Entry: ${token_price:.8f}\n"
+                            f"TP: ${tp_price:.8f} (+{tp_percent}%)\n"
+                            f"SL: ${sl_price:.8f} (-{sl_percent}%)\n"
                             f"TX: {tx_display}\n\n"
+                            "✅ TP/SL monitoring active\n"
                             "Check /positions to monitor."
                         ),
                     )
                 else:
-                    return DemoMenuBuilder.error_message(
-                        f"Swap failed: {swap.get('error') or 'Unknown error'}"
-                    )
+                    error_msg = result.get("error", "Unknown error")
+                    return DemoMenuBuilder.error_message(f"Buy failed: {error_msg}")
+
+            except ValueError as e:
+                # TP/SL validation error (user-friendly)
+                logger.warning(f"TP/SL validation failed: {e}")
+                return DemoMenuBuilder.error_message(str(e))
             except Exception as e:
-                logger.error(f"Bags API buy execution failed: {e}")
-                return DemoMenuBuilder.error_message(f"Buy failed: {str(e)[:50]}")
+                logger.error(f"Buy execution failed: {e}")
+                return DemoMenuBuilder.error_message(f"Buy failed: {str(e)[:100]}")
 
     # Default
     return DemoMenuBuilder.token_input_prompt()
