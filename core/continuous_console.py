@@ -157,6 +157,65 @@ class ContinuousConsole:
         logger.info(f"Created new console session for user {user_id} ({username})")
         return session
 
+    def chunk_response(self, text: str, max_size: int = 3800) -> List[str]:
+        """
+        Split response into Telegram-safe chunks with code block preservation.
+
+        Args:
+            text: The text to chunk
+            max_size: Maximum chunk size (default 3800, leaving margin under 4096 Telegram limit)
+
+        Returns:
+            List of chunks with preserved code block formatting
+        """
+        if len(text) <= max_size:
+            return [text]
+
+        chunks = []
+        current_chunk = ""
+        in_code_block = False
+        code_block_lang = ""
+
+        lines = text.split('\n')
+
+        for line in lines:
+            # Detect code block boundaries
+            if line.strip().startswith('```'):
+                if not in_code_block:
+                    # Opening code block
+                    in_code_block = True
+                    code_block_lang = line.strip()[3:].strip()  # Extract language
+                else:
+                    # Closing code block
+                    in_code_block = False
+
+            # Check if adding this line would exceed limit
+            if len(current_chunk) + len(line) + 1 > max_size:
+                # Close code block if open
+                if in_code_block:
+                    current_chunk += "\n```"
+
+                # Save current chunk
+                chunks.append(current_chunk.strip())
+
+                # Start new chunk
+                current_chunk = ""
+
+                # Reopen code block if we were in one
+                if in_code_block:
+                    current_chunk = f"```{code_block_lang}\n"
+
+            current_chunk += line + "\n"
+
+        # Add final chunk
+        if current_chunk.strip():
+            # Close any open code block
+            if in_code_block:
+                current_chunk += "```"
+            chunks.append(current_chunk.strip())
+
+        return chunks
+
     def sanitize_output(self, text: str) -> str:
         """
         Sanitize output to remove sensitive information.
