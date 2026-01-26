@@ -86,27 +86,164 @@ class DatabaseMigrator:
             conn = sqlite3.connect(TARGET_DB)
             cursor = conn.cursor()
             
-            # Execute schema (split by semicolon for multiple statements)
-            for statement in schema_sql.split(';'):
-                statement = statement.strip()
-                if statement and not statement.startswith('--'):
-                    try:
-                        cursor.execute(statement)
-                    except sqlite3.Error as e:
-                        # Ignore "already exists" errors
-                        if 'already exists' not in str(e):
-                            logger.warning(f"Schema statement warning: {e}")
-            
-            conn.commit()
-            conn.close()
-            
-            logger.info(f"✅ Created target database: {TARGET_DB}")
-            return True
+            # Execute schema script
+            try:
+                cursor.executescript(schema_sql)
+                conn.commit()
+                logger.info(f"✅ Created target database: {TARGET_DB}")
+                conn.close()
+                return True
+            except sqlite3.Error as e:
+                logger.error(f"❌ Failed to execute schema script: {e}")
+                conn.close()
+                return False
             
         except Exception as e:
             logger.error(f"❌ Failed to create schema: {e}")
             return False
     
+    def migrate_users(self) -> Tuple[int, int]:
+        """Infer users from positions and trades and create user records."""
+        logger.info("Migrating/Inferring users...")
+        
+        source_db = SOURCE_DBS['jarvis']
+        if not Path(source_db).exists():
+            return 0, 0
+            
+        source_conn = sqlite3.connect(source_db)
+        target_conn = sqlite3.connect(TARGET_DB)
+        cursor = source_conn.cursor()
+        target_cursor = target_conn.cursor()
+        
+        migrated = 0
+        errors = 0
+        
+        # Extract unique user_ids from positions
+        try:
+            cursor.execute("SELECT DISTINCT user_id FROM positions WHERE user_id IS NOT NULL")
+            user_ids = {row[0] for row in cursor.fetchall()}
+            
+            # Also check trades
+            try:
+                cursor.execute("SELECT DISTINCT user_id FROM trades WHERE user_id IS NOT NULL")
+                trade_user_ids = {row[0] for row in cursor.fetchall()}
+                user_ids.update(trade_user_ids)
+            except:
+                pass # Trades might not have user_id in old schema
+            
+            # Also check bot_config if it exists
+            try:
+                cursor.execute("SELECT DISTINCT user_id FROM bot_config")
+                config_user_ids = {row[0] for row in cursor.fetchall()}
+                user_ids.update(config_user_ids)
+            except:
+                pass
+
+            logger.info(f"Found {len(user_ids)} unique users to migrate")
+            
+            for uid in user_ids:
+                try:
+                    # Create basic user record
+                    # We don't have username/first_name easily available in legacy DB usually
+                    # But we might have it in jarvis_admin.db if we checked there.
+                    # For now, create minimal record
+                    
+                    # Check if user already exists
+                    target_cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (uid,))
+                    if target_cursor.fetchone():
+                        continue
+                        
+                    # Insert
+                    # Assuming user_id is the Telegram ID (it usually is in legacy)
+                    target_cursor.execute(
+                        """
+                        INSERT INTO users (user_id, telegram_user_id, created_at)
+                        VALUES (?, ?, CURRENT_TIMESTAMP)
+                        """,
+                        (uid, uid)
+                    )
+                    migrated += 1
+                except Exception as e:
+                    logger.error(f"Error migrating user {uid}: {e}")
+                    errors += 1
+                    
+            target_conn.commit()
+            
+        except Exception as e:
+            logger.error(f"Error scanning for users: {e}")
+            errors += 1
+            
+        source_conn.close()
+        target_conn.close()
+        
+        logger.info(f"✅ Migrated {migrated} users ({errors} errors)")
+        return migrated, errors
+
+    def migrate_bot_config(self) -> Tuple[int, int]:
+        """Migrate bot configuration."""
+        logger.info("Migrating bot_config...")
+        
+        source_db = SOURCE_DBS['jarvis']
+        if not Path(source_db).exists():
+            return 0, 0
+            
+        source_conn = sqlite3.connect(source_db)
+        target_conn = sqlite3.connect(TARGET_DB)
+        source_cursor = source_conn.cursor()
+        target_cursor = target_conn.cursor()
+        
+        migrated = 0
+        errors = 0
+        
+        try:
+            # Check if source table exists
+            source_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='bot_config'")
+            if not source_cursor.fetchone():
+                logger.info("No bot_config table in source")
+                return 0, 0
+                
+            source_cursor.execute("SELECT * FROM bot_config")
+            rows = source_cursor.fetchall()
+            
+            source_cursor.execute("PRAGMA table_info(bot_config)")
+            columns = [col[1] for col in source_cursor.fetchall()]
+            
+            # Target columns
+            target_cursor.execute("PRAGMA table_info(bot_config)")
+            target_columns = [col[1] for col in target_cursor.fetchall()]
+            
+            # Map columns
+            common_columns = [c for c in columns if c in target_columns]
+            
+            for row in rows:
+                try:
+                    row_dict = dict(zip(columns, row))
+                    
+                    # Prepare insert
+                    cols = common_columns
+                    vals = [row_dict[c] for c in cols]
+                    placeholders = ','.join(['?' for _ in cols])
+                    
+                    query = f"INSERT OR REPLACE INTO bot_config ({','.join(cols)}) VALUES ({placeholders})"
+                    target_cursor.execute(query, vals)
+                    migrated += 1
+                    
+                except Exception as e:
+                    logger.error(f"Error migrating config: {e}")
+                    errors += 1
+            
+            target_conn.commit()
+            
+        except Exception as e:
+            logger.error(f"Error migrating bot_config: {e}")
+            errors += 1
+            
+        source_conn.close()
+        target_conn.close()
+        
+        logger.info(f"✅ Migrated {migrated} configs ({errors} errors)")
+        return migrated, errors
+
     def migrate_positions(self) -> Tuple[int, int]:
         """Migrate positions table from jarvis.db."""
         logger.info("Migrating positions...")
@@ -276,6 +413,15 @@ class DatabaseMigrator:
         total_migrated = 0
         total_errors = 0
         
+        # Migrate users FIRST (Foreign Key dependency)
+        migrated, errors = self.migrate_users()
+        total_migrated += migrated
+        total_errors += errors
+        
+        migrated, errors = self.migrate_bot_config()
+        total_migrated += migrated
+        total_errors += errors
+
         migrated, errors = self.migrate_positions()
         total_migrated += migrated
         total_errors += errors

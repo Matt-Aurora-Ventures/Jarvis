@@ -16,8 +16,7 @@ CREATE TABLE IF NOT EXISTS rate_limit_state (
     request_count INTEGER DEFAULT 0,
     window_start TEXT DEFAULT CURRENT_TIMESTAMP,
     last_request TEXT DEFAULT CURRENT_TIMESTAMP,
-    blocked_until TEXT,
-    INDEX idx_rate_limit_window (window_start)
+    blocked_until TEXT
 );
 
 CREATE TABLE IF NOT EXISTS rate_limit_violations (
@@ -26,9 +25,7 @@ CREATE TABLE IF NOT EXISTS rate_limit_violations (
     api_name TEXT,
     violation_count INTEGER DEFAULT 1,
     blocked_duration_seconds INTEGER,
-    violated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_violations_identifier (identifier),
-    INDEX idx_violations_api (api_name)
+    violated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -42,9 +39,7 @@ CREATE TABLE IF NOT EXISTS session_cache (
     data_json TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     expires_at TEXT NOT NULL,
-    last_accessed TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_session_user (user_id),
-    INDEX idx_session_expires (expires_at)
+    last_accessed TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS websocket_subscriptions (
@@ -53,10 +48,7 @@ CREATE TABLE IF NOT EXISTS websocket_subscriptions (
     user_id INTEGER,
     subscription_type TEXT NOT NULL, -- 'token_price', 'portfolio', 'trades'
     params_json TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_ws_connection (connection_id),
-    INDEX idx_ws_user (user_id),
-    INDEX idx_ws_type (subscription_type)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -71,9 +63,7 @@ CREATE TABLE IF NOT EXISTS api_cache (
     status_code INTEGER DEFAULT 200,
     cached_at TEXT DEFAULT CURRENT_TIMESTAMP,
     expires_at TEXT NOT NULL,
-    hit_count INTEGER DEFAULT 0,
-    INDEX idx_cache_api (api_name),
-    INDEX idx_cache_expires (expires_at)
+    hit_count INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS price_cache (
@@ -83,8 +73,7 @@ CREATE TABLE IF NOT EXISTS price_cache (
     volume_24h_usd REAL,
     price_change_24h_pct REAL,
     source TEXT, -- 'jupiter', 'dexscreener', 'coingecko'
-    cached_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_price_cached (cached_at)
+    cached_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -100,9 +89,7 @@ CREATE TABLE IF NOT EXISTS file_cache (
     cached_at TEXT DEFAULT CURRENT_TIMESTAMP,
     accessed_at TEXT DEFAULT CURRENT_TIMESTAMP,
     access_count INTEGER DEFAULT 0,
-    expires_at TEXT,
-    INDEX idx_file_hash (file_hash),
-    INDEX idx_file_expires (expires_at)
+    expires_at TEXT
 );
 
 -- ============================================================================
@@ -117,9 +104,7 @@ CREATE TABLE IF NOT EXISTS spam_users (
     last_message_at TEXT,
     is_banned BOOLEAN DEFAULT 0,
     ban_reason TEXT,
-    banned_at TEXT,
-    INDEX idx_spam_score (spam_score DESC),
-    INDEX idx_spam_banned (is_banned)
+    banned_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS spam_patterns (
@@ -129,8 +114,7 @@ CREATE TABLE IF NOT EXISTS spam_patterns (
     severity INTEGER DEFAULT 1, -- 1-10
     action TEXT DEFAULT 'flag', -- 'flag', 'warn', 'ban'
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    is_active BOOLEAN DEFAULT 1,
-    INDEX idx_patterns_active (is_active)
+    is_active BOOLEAN DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS user_reputation (
@@ -140,9 +124,7 @@ CREATE TABLE IF NOT EXISTS user_reputation (
     reports_received INTEGER DEFAULT 0,
     reports_made INTEGER DEFAULT 0,
     helpful_count INTEGER DEFAULT 0,
-    last_updated TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_reputation_score (reputation_score DESC),
-    INDEX idx_reputation_trust (trust_level)
+    last_updated TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -157,10 +139,7 @@ CREATE TABLE IF NOT EXISTS computation_cache (
     computation_time_ms INTEGER,
     cached_at TEXT DEFAULT CURRENT_TIMESTAMP,
     expires_at TEXT,
-    hit_count INTEGER DEFAULT 0,
-    INDEX idx_comp_type (computation_type),
-    INDEX idx_comp_hash (input_hash),
-    INDEX idx_comp_expires (expires_at)
+    hit_count INTEGER DEFAULT 0
 );
 
 -- ============================================================================
@@ -172,8 +151,7 @@ CREATE TABLE IF NOT EXISTS telegram_state (
     conversation_state TEXT, -- 'awaiting_token', 'awaiting_amount', 'confirming_trade'
     state_data_json TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    expires_at TEXT,
-    INDEX idx_tg_state_expires (expires_at)
+    expires_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS telegram_message_cache (
@@ -183,9 +161,7 @@ CREATE TABLE IF NOT EXISTS telegram_message_cache (
     message_text TEXT,
     has_inline_keyboard BOOLEAN DEFAULT 0,
     sent_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    expires_at TEXT,
-    INDEX idx_tg_msg_chat (chat_id),
-    INDEX idx_tg_msg_expires (expires_at)
+    expires_at TEXT
 );
 
 -- ============================================================================
@@ -197,9 +173,7 @@ CREATE TABLE IF NOT EXISTS kv_cache (
     value TEXT NOT NULL,
     category TEXT, -- For grouping related keys
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    expires_at TEXT,
-    INDEX idx_kv_category (category),
-    INDEX idx_kv_expires (expires_at)
+    expires_at TEXT
 );
 
 -- ============================================================================
@@ -333,3 +307,35 @@ MAINTENANCE:
 - Triggers auto-clean expired data
 - Optional: VACUUM every week to reclaim space
 */
+
+
+-- ============================================================================
+-- FIXED INDEXES (Moved from inline)
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS idx_rate_limit_window ON rate_limit_state(window_start);
+CREATE INDEX IF NOT EXISTS idx_violations_identifier ON rate_limit_violations(identifier);
+CREATE INDEX IF NOT EXISTS idx_violations_api ON rate_limit_violations(api_name);
+CREATE INDEX IF NOT EXISTS idx_session_user ON session_cache(user_id);
+CREATE INDEX IF NOT EXISTS idx_session_expires ON session_cache(expires_at);
+CREATE INDEX IF NOT EXISTS idx_ws_connection ON websocket_subscriptions(connection_id);
+CREATE INDEX IF NOT EXISTS idx_ws_user ON websocket_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_ws_type ON websocket_subscriptions(subscription_type);
+CREATE INDEX IF NOT EXISTS idx_cache_api ON api_cache(api_name);
+CREATE INDEX IF NOT EXISTS idx_cache_expires ON api_cache(expires_at);
+CREATE INDEX IF NOT EXISTS idx_price_cached ON price_cache(cached_at);
+CREATE INDEX IF NOT EXISTS idx_file_hash ON file_cache(file_hash);
+CREATE INDEX IF NOT EXISTS idx_file_expires ON file_cache(expires_at);
+CREATE INDEX IF NOT EXISTS idx_spam_score ON spam_users(spam_score DESC);
+CREATE INDEX IF NOT EXISTS idx_spam_banned ON spam_users(is_banned);
+CREATE INDEX IF NOT EXISTS idx_patterns_active ON spam_patterns(is_active);
+CREATE INDEX IF NOT EXISTS idx_reputation_score ON user_reputation(reputation_score DESC);
+CREATE INDEX IF NOT EXISTS idx_reputation_trust ON user_reputation(trust_level);
+CREATE INDEX IF NOT EXISTS idx_comp_type ON computation_cache(computation_type);
+CREATE INDEX IF NOT EXISTS idx_comp_hash ON computation_cache(input_hash);
+CREATE INDEX IF NOT EXISTS idx_comp_expires ON computation_cache(expires_at);
+CREATE INDEX IF NOT EXISTS idx_tg_state_expires ON telegram_state(expires_at);
+CREATE INDEX IF NOT EXISTS idx_tg_msg_chat ON telegram_message_cache(chat_id);
+CREATE INDEX IF NOT EXISTS idx_tg_msg_expires ON telegram_message_cache(expires_at);
+CREATE INDEX IF NOT EXISTS idx_kv_category ON kv_cache(category);
+CREATE INDEX IF NOT EXISTS idx_kv_expires ON kv_cache(expires_at);
