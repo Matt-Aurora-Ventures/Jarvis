@@ -22,10 +22,7 @@ CREATE TABLE IF NOT EXISTS llm_costs (
     cost_usd REAL DEFAULT 0,
     feature TEXT, -- 'trading', 'chat', 'analysis', etc.
     timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-    metadata_json TEXT,
-    INDEX idx_llm_costs_user (user_id),
-    INDEX idx_llm_costs_provider (provider),
-    INDEX idx_llm_costs_timestamp (timestamp)
+    metadata_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS api_usage (
@@ -37,9 +34,7 @@ CREATE TABLE IF NOT EXISTS api_usage (
     response_time_ms INTEGER,
     error_message TEXT,
     user_id INTEGER,
-    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_api_usage_api (api_name),
-    INDEX idx_api_usage_timestamp (timestamp)
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -52,10 +47,7 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     metric_value REAL NOT NULL,
     metric_unit TEXT, -- 'ms', 'bytes', 'count', etc.
     component TEXT, -- 'bot', 'api', 'database', etc.
-    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_metrics_name (metric_name),
-    INDEX idx_metrics_component (component),
-    INDEX idx_metrics_timestamp (timestamp)
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS health_checks (
@@ -64,9 +56,7 @@ CREATE TABLE IF NOT EXISTS health_checks (
     status TEXT NOT NULL CHECK(status IN ('healthy', 'degraded', 'down')),
     response_time_ms INTEGER,
     error_message TEXT,
-    checked_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_health_service (service_name),
-    INDEX idx_health_timestamp (checked_at)
+    checked_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS error_logs (
@@ -78,11 +68,7 @@ CREATE TABLE IF NOT EXISTS error_logs (
     stack_trace TEXT,
     user_id INTEGER,
     resolved BOOLEAN DEFAULT 0,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_errors_type (error_type),
-    INDEX idx_errors_component (component),
-    INDEX idx_errors_resolved (resolved),
-    INDEX idx_errors_created (created_at)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -96,10 +82,7 @@ CREATE TABLE IF NOT EXISTS conversation_memory (
     role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
     content TEXT NOT NULL,
     tokens INTEGER,
-    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_conversation_user (user_id),
-    INDEX idx_conversation_platform (platform),
-    INDEX idx_conversation_timestamp (timestamp)
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS trade_learnings (
@@ -112,10 +95,7 @@ CREATE TABLE IF NOT EXISTS trade_learnings (
     confidence REAL DEFAULT 0.5,
     applied_count INTEGER DEFAULT 0,
     success_rate REAL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_learnings_token (token_symbol),
-    INDEX idx_learnings_type (learning_type),
-    INDEX idx_learnings_confidence (confidence DESC)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS user_preferences (
@@ -125,8 +105,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
     preference_key TEXT NOT NULL,
     preference_value TEXT NOT NULL,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, platform, preference_key),
-    INDEX idx_prefs_user (user_id)
+    UNIQUE(user_id, platform, preference_key)
 );
 
 -- ============================================================================
@@ -143,9 +122,7 @@ CREATE TABLE IF NOT EXISTS token_sentiment (
     neutral_count INTEGER DEFAULT 0,
     total_mentions INTEGER DEFAULT 0,
     sources_json TEXT, -- Array of sources
-    analyzed_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_sentiment_token (token_mint),
-    INDEX idx_sentiment_analyzed (analyzed_at)
+    analyzed_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS social_signals (
@@ -155,10 +132,7 @@ CREATE TABLE IF NOT EXISTS social_signals (
     signal_type TEXT, -- 'trending', 'whale_buy', 'influencer_mention'
     signal_strength REAL,
     metadata_json TEXT,
-    detected_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_signals_token (token_mint),
-    INDEX idx_signals_platform (platform),
-    INDEX idx_signals_detected (detected_at)
+    detected_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -172,9 +146,7 @@ CREATE TABLE IF NOT EXISTS user_achievements (
     achievement_name TEXT NOT NULL,
     description TEXT,
     icon_emoji TEXT,
-    earned_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_achievements_user (user_id),
-    INDEX idx_achievements_type (achievement_type)
+    earned_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS leaderboard (
@@ -185,8 +157,7 @@ CREATE TABLE IF NOT EXISTS leaderboard (
     rank INTEGER,
     score REAL,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(period, metric, user_id),
-    INDEX idx_leaderboard_period_metric (period, metric, rank)
+    UNIQUE(period, metric, user_id)
 );
 
 -- ============================================================================
@@ -214,10 +185,7 @@ CREATE TABLE IF NOT EXISTS whale_transactions (
     amount_tokens REAL,
     price REAL,
     timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (wallet_address) REFERENCES whale_wallets(wallet_address),
-    INDEX idx_whale_tx_wallet (wallet_address),
-    INDEX idx_whale_tx_token (token_mint),
-    INDEX idx_whale_tx_timestamp (timestamp)
+    FOREIGN KEY (wallet_address) REFERENCES whale_wallets(wallet_address)
 );
 
 -- ============================================================================
@@ -233,9 +201,7 @@ CREATE TABLE IF NOT EXISTS token_research (
     risk_score INTEGER, -- 1-10
     opportunity_score INTEGER, -- 1-10
     analyst TEXT, -- 'ai' or user_id
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_research_token (token_mint),
-    INDEX idx_research_type (research_type)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS token_calls (
@@ -249,10 +215,7 @@ CREATE TABLE IF NOT EXISTS token_calls (
     confidence INTEGER, -- 1-10
     called_at TEXT DEFAULT CURRENT_TIMESTAMP,
     outcome TEXT, -- 'hit', 'miss', 'pending'
-    actual_price REAL,
-    INDEX idx_calls_token (token_mint),
-    INDEX idx_calls_platform (platform),
-    INDEX idx_calls_outcome (outcome)
+    actual_price REAL
 );
 
 -- ============================================================================
@@ -270,9 +233,7 @@ CREATE TABLE IF NOT EXISTS backtest_results (
     total_pnl_sol REAL,
     sharpe_ratio REAL,
     max_drawdown_pct REAL,
-    run_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_backtest_strategy (strategy_name),
-    INDEX idx_backtest_run (run_at)
+    run_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS market_conditions (
@@ -283,8 +244,7 @@ CREATE TABLE IF NOT EXISTS market_conditions (
     market_cap_total_usd REAL,
     volume_24h_usd REAL,
     fear_greed_index INTEGER,
-    recorded_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_market_recorded (recorded_at)
+    recorded_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -302,10 +262,7 @@ CREATE TABLE IF NOT EXISTS tax_events (
     capital_gain_usd REAL,
     tx_signature TEXT,
     event_date TEXT NOT NULL,
-    tax_year INTEGER,
-    INDEX idx_tax_user (user_id),
-    INDEX idx_tax_year (tax_year),
-    INDEX idx_tax_event_date (event_date)
+    tax_year INTEGER
 );
 
 -- ============================================================================
@@ -320,9 +277,7 @@ CREATE TABLE IF NOT EXISTS airdrops (
     amount_tokens REAL,
     claimed BOOLEAN DEFAULT 0,
     claimed_at TEXT,
-    airdrop_date TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_airdrops_token (token_mint),
-    INDEX idx_airdrops_wallet (user_wallet)
+    airdrop_date TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -338,8 +293,7 @@ CREATE TABLE IF NOT EXISTS raid_campaigns (
     participant_count INTEGER DEFAULT 0,
     status TEXT DEFAULT 'active',
     started_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    ended_at TEXT,
-    INDEX idx_raids_status (status)
+    ended_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS raid_participants (
@@ -350,8 +304,7 @@ CREATE TABLE IF NOT EXISTS raid_participants (
     points_earned INTEGER DEFAULT 0,
     joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (campaign_id) REFERENCES raid_campaigns(id),
-    UNIQUE(campaign_id, user_id),
-    INDEX idx_raid_users_campaign (campaign_id)
+    UNIQUE(campaign_id, user_id)
 );
 
 -- ============================================================================
@@ -368,9 +321,7 @@ CREATE TABLE IF NOT EXISTS twitter_engagement (
     replies INTEGER DEFAULT 0,
     engagement_score REAL,
     posted_at TEXT,
-    analyzed_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_twitter_author (author_username),
-    INDEX idx_twitter_score (engagement_score DESC)
+    analyzed_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -432,3 +383,58 @@ ENHANCEMENTS:
 
 TOTAL TABLES: 26 tables + 2 views
 */
+
+
+-- ============================================================================
+-- FIXED INDEXES (Moved from inline)
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS idx_llm_costs_user ON llm_costs(user_id);
+CREATE INDEX IF NOT EXISTS idx_llm_costs_provider ON llm_costs(provider);
+CREATE INDEX IF NOT EXISTS idx_llm_costs_timestamp ON llm_costs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_api_usage_api ON api_usage(api_name);
+CREATE INDEX IF NOT EXISTS idx_api_usage_timestamp ON api_usage(timestamp);
+CREATE INDEX IF NOT EXISTS idx_metrics_name ON system_metrics(metric_name);
+CREATE INDEX IF NOT EXISTS idx_metrics_component ON system_metrics(component);
+CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON system_metrics(timestamp);
+CREATE INDEX IF NOT EXISTS idx_health_service ON health_checks(service_name);
+CREATE INDEX IF NOT EXISTS idx_health_timestamp ON health_checks(checked_at);
+CREATE INDEX IF NOT EXISTS idx_errors_type ON error_logs(error_type);
+CREATE INDEX IF NOT EXISTS idx_errors_component ON error_logs(component);
+CREATE INDEX IF NOT EXISTS idx_errors_resolved ON error_logs(resolved);
+CREATE INDEX IF NOT EXISTS idx_errors_created ON error_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_conversation_user ON conversation_memory(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_platform ON conversation_memory(platform);
+CREATE INDEX IF NOT EXISTS idx_conversation_timestamp ON conversation_memory(timestamp);
+CREATE INDEX IF NOT EXISTS idx_learnings_token ON trade_learnings(token_symbol);
+CREATE INDEX IF NOT EXISTS idx_learnings_type ON trade_learnings(learning_type);
+CREATE INDEX IF NOT EXISTS idx_learnings_confidence ON trade_learnings(confidence DESC);
+CREATE INDEX IF NOT EXISTS idx_prefs_user ON user_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_sentiment_token ON token_sentiment(token_mint);
+CREATE INDEX IF NOT EXISTS idx_sentiment_analyzed ON token_sentiment(analyzed_at);
+CREATE INDEX IF NOT EXISTS idx_signals_token ON social_signals(token_mint);
+CREATE INDEX IF NOT EXISTS idx_signals_platform ON social_signals(platform);
+CREATE INDEX IF NOT EXISTS idx_signals_detected ON social_signals(detected_at);
+CREATE INDEX IF NOT EXISTS idx_achievements_user ON user_achievements(user_id);
+CREATE INDEX IF NOT EXISTS idx_achievements_type ON user_achievements(achievement_type);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_period_metric ON leaderboard(period, metric, rank);
+CREATE INDEX IF NOT EXISTS idx_whale_tx_wallet ON whale_transactions(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_whale_tx_token ON whale_transactions(token_mint);
+CREATE INDEX IF NOT EXISTS idx_whale_tx_timestamp ON whale_transactions(timestamp);
+CREATE INDEX IF NOT EXISTS idx_research_token ON token_research(token_mint);
+CREATE INDEX IF NOT EXISTS idx_research_type ON token_research(research_type);
+CREATE INDEX IF NOT EXISTS idx_calls_token ON token_calls(token_mint);
+CREATE INDEX IF NOT EXISTS idx_calls_platform ON token_calls(platform);
+CREATE INDEX IF NOT EXISTS idx_calls_outcome ON token_calls(outcome);
+CREATE INDEX IF NOT EXISTS idx_backtest_strategy ON backtest_results(strategy_name);
+CREATE INDEX IF NOT EXISTS idx_backtest_run ON backtest_results(run_at);
+CREATE INDEX IF NOT EXISTS idx_market_recorded ON market_conditions(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_tax_user ON tax_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_tax_year ON tax_events(tax_year);
+CREATE INDEX IF NOT EXISTS idx_tax_event_date ON tax_events(event_date);
+CREATE INDEX IF NOT EXISTS idx_airdrops_token ON airdrops(token_mint);
+CREATE INDEX IF NOT EXISTS idx_airdrops_wallet ON airdrops(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_raids_status ON raid_campaigns(status);
+CREATE INDEX IF NOT EXISTS idx_raid_users_campaign ON raid_participants(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_twitter_author ON twitter_engagement(author_username);
+CREATE INDEX IF NOT EXISTS idx_twitter_score ON twitter_engagement(engagement_score DESC);
