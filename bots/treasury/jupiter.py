@@ -209,6 +209,7 @@ class JupiterClient:
         )
         self._session: Optional[aiohttp.ClientSession] = None
         self._token_cache = LRUCacheWithTTL(max_size=1000, ttl_seconds=3600)  # 1 hour TTL
+        self._price_cache = LRUCacheWithTTL(max_size=1000, ttl_seconds=30)  # 30 second TTL for prices
         self._recent_priority_fees: List[int] = []  # Track recent fees for dynamic calculation
         self._token_api_available: bool = True
         self._token_api_failure_logged: bool = False
@@ -414,18 +415,13 @@ class JupiterClient:
         Get current token price in USD.
 
         Uses DexScreener as primary (more reliable) with Jupiter as fallback.
-        Includes caching to reduce API spam.
+        Includes LRU caching with 30s TTL to reduce API spam.
         """
-        # Check price cache (30 second TTL)
+        # Check price cache (30 second TTL, automatic eviction via LRU)
         cache_key = f"price_{mint}"
-        if hasattr(self, '_price_cache'):
-            cached = self._price_cache.get(cache_key)
-            if cached:
-                price, timestamp = cached
-                if (datetime.utcnow() - timestamp).total_seconds() < 30:
-                    return price
-        else:
-            self._price_cache = {}
+        cached_price = self._price_cache.get(cache_key)
+        if cached_price is not None:
+            return cached_price
 
         # Stablecoin fast path
         if mint in (self.USDC_MINT, self.USDT_MINT):
@@ -435,7 +431,7 @@ class JupiterClient:
         if mint == self.SOL_MINT:
             sol_price = await self._fetch_coingecko_price("solana")
             if sol_price > 0:
-                self._price_cache[cache_key] = (sol_price, datetime.utcnow())
+                self._price_cache.set(cache_key, sol_price)
                 return sol_price
 
         # PRIMARY: DexScreener (more reliable than Jupiter price API)
@@ -444,7 +440,7 @@ class JupiterClient:
         if best:
             price = self._pair_price_usd(best)
             if price > 0:
-                self._price_cache[cache_key] = (price, datetime.utcnow())
+                self._price_cache.set(cache_key, price)
                 return price
 
         # FALLBACK: Bags.fm price
@@ -454,7 +450,7 @@ class JupiterClient:
             bags_token = await bags_client.get_token_info(mint)
             if bags_token and bags_token.price_usd:
                 price = float(bags_token.price_usd)
-                self._price_cache[cache_key] = (price, datetime.utcnow())
+                self._price_cache.set(cache_key, price)
                 return price
         except Exception:
             pass
@@ -472,7 +468,7 @@ class JupiterClient:
                     price = data.get('data', {}).get(mint, {}).get('price', 0.0)
                     if price:
                         price = float(price)
-                        self._price_cache[cache_key] = (price, datetime.utcnow())
+                        self._price_cache.set(cache_key, price)
                         return price
         except Exception:
             # Don't log - DexScreener already failed, Jupiter failing is expected
