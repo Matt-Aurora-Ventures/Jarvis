@@ -276,10 +276,31 @@ class Scorekeeper:
         """Load data from SQLite, migrating JSON if needed."""
         try:
             with self._get_conn() as conn:
-                pos_rows = conn.execute("SELECT * FROM positions").fetchall()
-                trade_rows = conn.execute("SELECT * FROM trades").fetchall()
-                score_row = conn.execute("SELECT * FROM scorecard WHERE id = 1").fetchone()
-                order_rows = conn.execute("SELECT * FROM treasury_orders").fetchall()
+                # Optimized queries with explicit column lists
+                pos_rows = conn.execute("""
+                    SELECT id, symbol, token_mint, entry_price, entry_amount_sol,
+                           entry_amount_tokens, take_profit_price, stop_loss_price,
+                           tp_order_id, sl_order_id, status, exit_price, exit_amount_sol,
+                           pnl_sol, pnl_pct, opened_at, closed_at,
+                           tx_signature_entry, tx_signature_exit, user_id
+                    FROM positions
+                """).fetchall()
+                trade_rows = conn.execute("""
+                    SELECT id, symbol, token_mint, side, amount_sol, amount_tokens,
+                           price, timestamp, tx_signature, position_id, user_id
+                    FROM trades
+                """).fetchall()
+                score_row = conn.execute("""
+                    SELECT total_trades, winning_trades, losing_trades, total_pnl_sol,
+                           total_pnl_usd, largest_win_sol, largest_loss_sol, current_streak,
+                           best_streak, worst_streak, avg_win_pct, avg_loss_pct,
+                           win_rate, last_updated
+                    FROM scorecard WHERE id = 1
+                """).fetchone()
+                order_rows = conn.execute("""
+                    SELECT order_id, position_id, type, price, status, placed_at, filled_at
+                    FROM treasury_orders
+                """).fetchall()
 
             if pos_rows or trade_rows or order_rows or score_row:
                 self.positions = {
@@ -1016,9 +1037,13 @@ class Scorekeeper:
         """
         try:
             with self._get_conn() as conn:
-                # Get existing pick
+                # Get existing pick - optimized query
                 row = conn.execute("""
-                    SELECT * FROM pick_performance
+                    SELECT id, pick_date, symbol, asset_class, contract, conviction_score,
+                           entry_price, target_price, stop_loss, timeframe, current_price,
+                           max_price, min_price, pnl_pct, max_gain_pct, hit_target, hit_stop,
+                           outcome, last_updated, reasoning, days_held
+                    FROM pick_performance
                     WHERE symbol = ? AND outcome = 'open'
                     ORDER BY pick_date DESC LIMIT 1
                 """, (symbol,)).fetchone()
@@ -1076,14 +1101,21 @@ class Scorekeeper:
         """
         try:
             with self._get_conn() as conn:
+                # Optimized pick_performance queries
+                columns = """id, pick_date, symbol, asset_class, contract, conviction_score,
+                            entry_price, target_price, stop_loss, timeframe, current_price,
+                            max_price, min_price, pnl_pct, max_gain_pct, hit_target, hit_stop,
+                            outcome, last_updated, reasoning, days_held"""
                 if asset_class:
-                    rows = conn.execute("""
-                        SELECT * FROM pick_performance
+                    rows = conn.execute(f"""
+                        SELECT {columns}
+                        FROM pick_performance
                         WHERE asset_class = ? AND outcome != 'open'
                     """, (asset_class,)).fetchall()
                 else:
-                    rows = conn.execute("""
-                        SELECT * FROM pick_performance WHERE outcome != 'open'
+                    rows = conn.execute(f"""
+                        SELECT {columns}
+                        FROM pick_performance WHERE outcome != 'open'
                     """).fetchall()
 
             if not rows:
@@ -1217,16 +1249,20 @@ class Scorekeeper:
         """
         try:
             with self._get_conn() as conn:
+                # Optimized trade_learnings queries
+                columns = "id, trade_id, token_symbol, token_type, learning_type, insight, confidence, applied_count, created_at"
                 if token_type:
-                    rows = conn.execute("""
-                        SELECT * FROM trade_learnings
+                    rows = conn.execute(f"""
+                        SELECT {columns}
+                        FROM trade_learnings
                         WHERE token_type = ?
                         ORDER BY confidence DESC, created_at DESC
                         LIMIT ?
                     """, (token_type, limit)).fetchall()
                 else:
-                    rows = conn.execute("""
-                        SELECT * FROM trade_learnings
+                    rows = conn.execute(f"""
+                        SELECT {columns}
+                        FROM trade_learnings
                         ORDER BY confidence DESC, created_at DESC
                         LIMIT ?
                     """, (limit,)).fetchall()
@@ -1264,8 +1300,13 @@ class Scorekeeper:
         """Get all open picks that need price updates."""
         try:
             with self._get_conn() as conn:
+                # Optimized query for open picks
                 rows = conn.execute("""
-                    SELECT * FROM pick_performance WHERE outcome = 'open'
+                    SELECT id, pick_date, symbol, asset_class, contract, conviction_score,
+                           entry_price, target_price, stop_loss, timeframe, current_price,
+                           max_price, min_price, pnl_pct, max_gain_pct, hit_target, hit_stop,
+                           outcome, last_updated, reasoning, days_held
+                    FROM pick_performance WHERE outcome = 'open'
                 """).fetchall()
                 return [dict(r) for r in rows]
         except Exception as e:

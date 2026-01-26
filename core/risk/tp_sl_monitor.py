@@ -16,6 +16,15 @@ from typing import Any, Dict, List, Optional, Protocol
 
 logger = logging.getLogger(__name__)
 
+# Import shutdown manager for graceful cleanup
+try:
+    from core.shutdown_manager import get_shutdown_manager, ShutdownPhase
+    SHUTDOWN_MANAGER_AVAILABLE = True
+except ImportError:
+    SHUTDOWN_MANAGER_AVAILABLE = False
+    get_shutdown_manager = None
+    ShutdownPhase = None
+
 
 # =============================================================================
 # Default Ladder Exit Configuration
@@ -135,6 +144,18 @@ class TPSLMonitor:
         self.poll_interval = poll_interval
         self.running = False
         self._task: Optional[asyncio.Task] = None
+
+        # Register with shutdown manager
+        if SHUTDOWN_MANAGER_AVAILABLE:
+            shutdown_mgr = get_shutdown_manager()
+            shutdown_mgr.register_hook(
+                name="tp_sl_monitor",
+                callback=self.stop,
+                phase=ShutdownPhase.IMMEDIATE,
+                timeout=10.0,
+                priority=80,
+            )
+            logger.debug("TP/SL monitor registered with shutdown manager")
 
     async def start(self) -> None:
         """Start the monitoring loop."""

@@ -48,6 +48,11 @@ try:
 except Exception:
     APICache = None
 
+try:
+    from core.database.postgres_client import get_postgres_client  # noqa: F401
+except Exception:
+    get_postgres_client = None
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/health", tags=["health"])
@@ -432,6 +437,50 @@ def check_cache_status() -> HealthStatus:
         )
 
 
+async def check_postgres_pool() -> HealthStatus:
+    """Check PostgreSQL connection pool health."""
+    start = time.time()
+    try:
+        if not get_postgres_client:
+            return HealthStatus(
+                healthy=True,
+                status="ok",
+                message="PostgreSQL not configured (using SQLite)",
+                latency_ms=0,
+                metadata={"configured": False}
+            )
+
+        client = get_postgres_client()
+        if not client._connected:
+            return HealthStatus(
+                healthy=True,
+                status="ok",
+                message="PostgreSQL pool not initialized",
+                latency_ms=0,
+                metadata={"initialized": False}
+            )
+
+        # Get pool health
+        pool_health = await client.get_pool_health()
+        latency_ms = int((time.time() - start) * 1000)
+
+        return HealthStatus(
+            healthy=pool_health["healthy"],
+            status=pool_health["status"],
+            message=pool_health["message"],
+            latency_ms=latency_ms,
+            metadata=pool_health.get("metrics", {})
+        )
+    except Exception as e:
+        logger.error(f"PostgreSQL pool health check failed: {e}")
+        return HealthStatus(
+            healthy=False,
+            status="down",
+            message=f"Pool check error: {str(e)[:100]}",
+            latency_ms=int((time.time() - start) * 1000)
+        )
+
+
 @router.get("/", response_model=HealthCheckResponse)
 async def health_check():
     """
@@ -450,7 +499,10 @@ async def health_check():
     async def _run_check(name: str, func):
         return name, await asyncio.to_thread(func)
 
-    checks = {
+    async def _run_async_check(name: str, func):
+        return name, await func()
+
+    sync_checks = {
         "database": check_database_health,
         "birdeye_api": check_birdeye_api,
         "jupiter_api": check_jupiter_api,
@@ -461,8 +513,13 @@ async def health_check():
         "cache": check_cache_status,
     }
 
+    async_checks = {
+        "postgres_pool": check_postgres_pool,
+    }
+
     results = await asyncio.gather(
-        *(_run_check(name, func) for name, func in checks.items())
+        *(_run_check(name, func) for name, func in sync_checks.items()),
+        *(_run_async_check(name, func) for name, func in async_checks.items())
     )
     subsystems = {name: health for name, health in results}
 
@@ -545,6 +602,7 @@ async def subsystem_health(subsystem_name: str):
 
     Available subsystems:
     - database
+    - postgres_pool
     - birdeye_api
     - jupiter_api
     - grok_api
@@ -553,7 +611,7 @@ async def subsystem_health(subsystem_name: str):
     - twitter_bot
     - cache
     """
-    health_checks = {
+    sync_health_checks = {
         "database": check_database_health,
         "birdeye_api": check_birdeye_api,
         "jupiter_api": check_jupiter_api,
@@ -564,14 +622,23 @@ async def subsystem_health(subsystem_name: str):
         "cache": check_cache_status,
     }
 
-    if subsystem_name not in health_checks:
+    async_health_checks = {
+        "postgres_pool": check_postgres_pool,
+    }
+
+    all_checks = list(sync_health_checks.keys()) + list(async_health_checks.keys())
+
+    if subsystem_name not in all_checks:
         from fastapi import HTTPException
         raise HTTPException(
             status_code=404,
-            detail=f"Subsystem '{subsystem_name}' not found. Available: {list(health_checks.keys())}"
+            detail=f"Subsystem '{subsystem_name}' not found. Available: {all_checks}"
         )
 
-    health_status = health_checks[subsystem_name]()
+    if subsystem_name in async_health_checks:
+        health_status = await async_health_checks[subsystem_name]()
+    else:
+        health_status = sync_health_checks[subsystem_name]()
 
     return {
         "subsystem": subsystem_name,
