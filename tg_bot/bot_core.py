@@ -497,6 +497,65 @@ def rate_limited(func):
     return wrapper
 
 
+def tg_rate_limited(action_type_override: "ActionType | None" = None):
+    """
+    Decorator for tiered Telegram rate limiting.
+
+    Args:
+        action_type_override: Force a specific action type (default: auto-detect)
+
+    Usage:
+        @tg_rate_limited()  # Auto-detect action type
+        @tg_rate_limited(ActionType.TRADE)  # Force trade limits
+    """
+    def decorator(func):
+        async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            # Skip rate limiting if not available
+            if not RATE_LIMITER_AVAILABLE:
+                return await func(update, context)
+
+            # Skip for admins
+            config = get_config()
+            user_id = update.effective_user.id if update.effective_user else 0
+            username = update.effective_user.username if update.effective_user else None
+
+            if config.is_admin(user_id, username):
+                return await func(update, context)
+
+            # Determine action type
+            if action_type_override:
+                action_type = action_type_override
+            else:
+                text = ""
+                if update.message and update.message.text:
+                    text = update.message.text
+                elif update.callback_query and update.callback_query.data:
+                    text = update.callback_query.data
+                action_type = detect_action_type(text)
+
+            # Check rate limit
+            try:
+                tg_limiter = get_telegram_rate_limiter()
+                result = await tg_limiter.check_rate_limit(user_id, action_type)
+
+                if not result.allowed:
+                    message = format_rate_limit_message(result, action_type)
+                    if update.message:
+                        await update.message.reply_text(message)
+                    elif update.callback_query:
+                        await update.callback_query.answer(message[:200], show_alert=True)
+                    await tg_limiter.record_violation(user_id)
+                    logger.info(f"Rate limited user {user_id} for {action_type.value}")
+                    return
+            except Exception as e:
+                logger.debug(f"Rate limiter check failed: {e}")
+
+            return await func(update, context)
+
+        return wrapper
+    return decorator
+
+
 # =============================================================================
 # Public Commands (anyone can use)
 # =============================================================================

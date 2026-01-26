@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from tg_bot.handlers.demo.demo_trading import execute_buy_with_tpsl, _validate_tpsl_required
+from tg_bot.handlers.demo.demo_trading import execute_buy_with_tpsl, _validate_tpsl_required, TPSLValidationError
 from tg_bot.handlers.demo.demo_orders import _check_demo_exit_triggers
 
 
@@ -197,53 +197,53 @@ class TestBagsTpslIntegration:
 
     def test_tpsl_validation_missing(self):
         """Test TP/SL validation rejects missing values."""
-        with pytest.raises(ValueError, match="mandatory"):
+        with pytest.raises(TPSLValidationError, match="required"):
             _validate_tpsl_required(None, 20.0)
 
-        with pytest.raises(ValueError, match="mandatory"):
+        with pytest.raises(TPSLValidationError, match="required"):
             _validate_tpsl_required(50.0, None)
 
-        with pytest.raises(ValueError, match="mandatory"):
+        with pytest.raises(TPSLValidationError, match="required"):
             _validate_tpsl_required(None, None)
 
     def test_tpsl_validation_negative(self):
         """Test TP/SL validation rejects negative values."""
-        with pytest.raises(ValueError, match="positive"):
+        with pytest.raises(TPSLValidationError, match="positive"):
             _validate_tpsl_required(-10.0, 20.0)
 
-        with pytest.raises(ValueError, match="positive"):
+        with pytest.raises(TPSLValidationError, match="positive"):
             _validate_tpsl_required(50.0, -5.0)
 
     def test_tpsl_validation_zero(self):
         """Test TP/SL validation rejects zero values."""
-        with pytest.raises(ValueError, match="positive"):
+        with pytest.raises(TPSLValidationError, match="positive"):
             _validate_tpsl_required(0.0, 20.0)
 
-        with pytest.raises(ValueError, match="positive"):
+        with pytest.raises(TPSLValidationError, match="positive"):
             _validate_tpsl_required(50.0, 0.0)
 
     def test_tpsl_validation_excessive_sl(self):
         """Test TP/SL validation rejects SL >= 100%."""
-        with pytest.raises(ValueError, match="cannot be >= 100%"):
+        with pytest.raises(TPSLValidationError, match="cannot be >= 100%"):
             _validate_tpsl_required(50.0, 100.0)
 
-        with pytest.raises(ValueError, match="cannot be >= 100%"):
+        with pytest.raises(TPSLValidationError, match="cannot be >= 100%"):
             _validate_tpsl_required(50.0, 150.0)
 
     def test_tpsl_validation_excessive_tp(self):
         """Test TP/SL validation rejects unrealistic TP."""
-        with pytest.raises(ValueError, match="unrealistic"):
+        with pytest.raises(TPSLValidationError, match="unrealistic"):
             _validate_tpsl_required(500.0, 20.0)
 
-        with pytest.raises(ValueError, match="unrealistic"):
+        with pytest.raises(TPSLValidationError, match="unrealistic"):
             _validate_tpsl_required(1000.0, 20.0)
 
     def test_tpsl_validation_too_low(self):
         """Test TP/SL validation rejects values <5%."""
-        with pytest.raises(ValueError, match="too low"):
+        with pytest.raises(TPSLValidationError, match="too low"):
             _validate_tpsl_required(2.0, 20.0)
 
-        with pytest.raises(ValueError, match="too low"):
+        with pytest.raises(TPSLValidationError, match="too low"):
             _validate_tpsl_required(50.0, 1.0)
 
     def test_tpsl_validation_valid_ranges(self):
@@ -257,7 +257,7 @@ class TestBagsTpslIntegration:
     @pytest.mark.asyncio
     async def test_execute_buy_with_invalid_tpsl(self):
         """Test execute_buy_with_tpsl rejects invalid TP/SL."""
-        with pytest.raises(ValueError, match="mandatory"):
+        with pytest.raises(TPSLValidationError, match="required"):
             await execute_buy_with_tpsl(
                 token_address="Token",
                 amount_sol=0.1,

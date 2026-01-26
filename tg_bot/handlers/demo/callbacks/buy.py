@@ -214,13 +214,26 @@ _Send a number like "0.5" or "2.5"_
                     error_msg = result.get("error", "Unknown error")
                     return DemoMenuBuilder.error_message(f"Buy failed: {error_msg}")
 
-            except ValueError as e:
-                # TP/SL validation error (user-friendly)
-                logger.warning(f"TP/SL validation failed: {e}")
-                return DemoMenuBuilder.error_message(str(e))
             except Exception as e:
-                logger.error(f"Buy execution failed: {e}")
-                return DemoMenuBuilder.error_message(f"Buy failed: {str(e)[:100]}")
+                # Import error classes for checking
+                from tg_bot.handlers.demo import demo_trading as ctx
+
+                # Check for our custom user-friendly errors
+                if isinstance(e, (ctx.TPSLValidationError, ctx.BagsAPIError, ctx.TradingError)):
+                    logger.warning(f"Trading error: {e.message}")
+                    return DemoMenuBuilder.error_message(e.format_telegram())
+                elif isinstance(e, ValueError):
+                    # Legacy validation errors
+                    logger.warning(f"Validation error: {e}")
+                    return DemoMenuBuilder.error_message(f"❌ {str(e)}")
+                else:
+                    # Unexpected error
+                    logger.error(f"Buy execution failed unexpectedly: {e}", exc_info=True)
+                    return DemoMenuBuilder.error_message(
+                        "❌ Trade execution failed\n\n"
+                        f"💡 Hint: {str(e)[:100] if str(e) else 'Unknown error'}. "
+                        "Please try again or contact support if the issue persists."
+                    )
 
     # Default
     return DemoMenuBuilder.token_input_prompt()
