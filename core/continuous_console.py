@@ -77,8 +77,12 @@ class ContinuousConsole:
             logger.warning("No valid Anthropic API key - console will be disabled")
             self.client = None
         else:
-            self.client = anthropic.Anthropic(api_key=self.api_key)
-            logger.info("Continuous console initialized with Anthropic API")
+            # Initialize with explicit timeout (5 minutes max per request)
+            self.client = anthropic.Anthropic(
+                api_key=self.api_key,
+                timeout=300.0  # 5 minutes
+            )
+            logger.info("Continuous console initialized with Anthropic API (timeout=300s)")
 
         self.sessions: Dict[int, ConsoleSession] = {}
         self._load_sessions()
@@ -226,15 +230,56 @@ class ContinuousConsole:
                     "content": msg.content
                 })
 
-            # Call Claude API
+            # Call Claude API with timeout and retry handling
             logger.info(f"Executing console request for {username} (mode={mode})")
-            response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (widely available)
-                max_tokens=4096,
-                system=system_prompt,
-                messages=messages,
-                temperature=0.7
-            )
+            try:
+                response = self.client.messages.create(
+                    model="claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (widely available)
+                    max_tokens=4096,
+                    system=system_prompt,
+                    messages=messages,
+                    temperature=0.7
+                )
+            except anthropic.APITimeoutError as e:
+                logger.warning(f"API timeout for user {user_id}: {e}")
+                return {
+                    "success": False,
+                    "response": "⏱️ Request timed out after 5 minutes.\n\nTry breaking your task into smaller steps.",
+                    "tokens_used": 0,
+                    "sanitized": False
+                }
+            except anthropic.RateLimitError as e:
+                logger.warning(f"Rate limited for user {user_id}: {e}")
+                return {
+                    "success": False,
+                    "response": "⚠️ API rate limit reached.\n\nPlease wait a moment and try again.",
+                    "tokens_used": 0,
+                    "sanitized": False
+                }
+            except anthropic.APIConnectionError as e:
+                logger.error(f"API connection error for user {user_id}: {e}")
+                return {
+                    "success": False,
+                    "response": "🌐 Network error connecting to Claude API.\n\nCheck your internet connection and try again.",
+                    "tokens_used": 0,
+                    "sanitized": False
+                }
+            except anthropic.AuthenticationError as e:
+                logger.error(f"API authentication error: {e}")
+                return {
+                    "success": False,
+                    "response": "🔑 API authentication failed.\n\nContact admin to check API key configuration.",
+                    "tokens_used": 0,
+                    "sanitized": False
+                }
+            except anthropic.APIError as e:
+                logger.error(f"Claude API error for user {user_id}: {e}")
+                return {
+                    "success": False,
+                    "response": f"❌ Claude API error: {str(e)}\n\nThis has been logged for investigation.",
+                    "tokens_used": 0,
+                    "sanitized": False
+                }
 
             # Extract response
             assistant_content = response.content[0].text if response.content else ""
@@ -273,7 +318,7 @@ class ContinuousConsole:
             logger.error(f"Console execution error: {e}", exc_info=True)
             return {
                 "success": False,
-                "response": f"Console error: {str(e)}",
+                "response": f"❌ Unexpected error: {type(e).__name__}\n\nThis has been logged for investigation.",
                 "tokens_used": 0,
                 "sanitized": False
             }
