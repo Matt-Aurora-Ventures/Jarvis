@@ -31,6 +31,9 @@ _request_timestamps: List[float] = []
 _last_rate_limit_time: float = 0
 _rate_limit_backoff: float = 0
 
+# Session reuse to reduce 50-100ms overhead per request
+_session: Optional["requests.Session"] = None
+
 
 @dataclass
 class GeckoTerminalResult:
@@ -84,6 +87,25 @@ def _record_rate_limit():
     _last_rate_limit_time = time.time()
     _rate_limit_backoff = min(_rate_limit_backoff * 2 if _rate_limit_backoff > 0 else 10, 120)
     logger.warning(f"GeckoTerminal rate limit hit, backing off for {_rate_limit_backoff:.1f}s")
+
+
+def _get_session():
+    """Get or create reusable HTTP session."""
+    global _session
+    if not HAS_REQUESTS:
+        return None
+    if _session is None:
+        _session = requests.Session()
+        _session.headers.update({"User-Agent": USER_AGENT})
+    return _session
+
+
+def close_session() -> None:
+    """Close the reusable session (call on shutdown)."""
+    global _session
+    if _session is not None:
+        _session.close()
+        _session = None
 
 
 def get_api_status() -> Dict[str, Any]:
@@ -267,14 +289,17 @@ def _get_json(
         logger.debug(f"Rate limit active, waiting {wait_time:.1f}s")
         time.sleep(wait_time)
 
-    headers = {"User-Agent": USER_AGENT}
+    session = _get_session()
+    if session is None:
+        return GeckoTerminalResult(success=False, error="requests_not_available", retryable=False)
+
     last_error = None
     last_retryable = True
-    
+
     for attempt in range(retries):
         try:
             _record_request()
-            resp = requests.get(url, headers=headers, params=params, timeout=timeout)
+            resp = session.get(url, params=params, timeout=timeout)
             
             # Handle rate limiting
             if resp.status_code == 429:

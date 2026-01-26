@@ -154,6 +154,14 @@ class CallbackRouter:
             # Chart
             "view_chart": self.handle_chart,
 
+            # TP/SL Settings
+            "tpsl_settings": self.handle_tpsl,
+            "tpsl_quick": self.handle_tpsl,
+            "tpsl_custom_tp": self.handle_tpsl,
+            "tpsl_custom_sl": self.handle_tpsl,
+            "ladder_menu": self.handle_tpsl,
+            "ladder_disable": self.handle_tpsl,
+
             # Other
             "new_pairs": self.handle_misc,
             "balance": self.handle_wallet,
@@ -235,6 +243,13 @@ class CallbackRouter:
 
         if data.startswith("demo:chart:"):
             return await self.handle_chart(action, data, update, context, shared_state)
+
+        # TP/SL Settings
+        if data.startswith("demo:tpsl_") or data.startswith("demo:ladder_"):
+            return await self.handle_tpsl(action, data, update, context, shared_state)
+
+        if data.startswith("demo:edit_tpsl:") or data.startswith("demo:pos_tp:") or data.startswith("demo:pos_sl:"):
+            return await self.handle_tpsl(action, data, update, context, shared_state)
 
         # Default: return to main menu
         return await self.handle_navigation("main", "demo:main", update, context, shared_state)
@@ -327,6 +342,11 @@ class CallbackRouter:
         """Handle miscellaneous callbacks like new_pairs."""
         from tg_bot.handlers.demo.callbacks.misc import handle_misc
         return await handle_misc(self.ctx, action, data, update, context, state)
+
+    async def handle_tpsl(self, action, data, update, context, state) -> Tuple[str, InlineKeyboardMarkup]:
+        """Handle TP/SL settings, ladder exits."""
+        from tg_bot.handlers.demo.callbacks.tpsl import handle_tpsl
+        return await handle_tpsl(self.ctx, action, data, update, context, state)
 
 
 # =============================================================================

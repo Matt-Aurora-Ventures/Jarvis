@@ -458,7 +458,8 @@ class SupervisorHealthBus:
                 seconds = float(parts[2])
                 return hours * 3600 + minutes * 60 + seconds
             return float(uptime_str)
-        except:
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.warning(f"Failed to parse uptime '{uptime_str}': {e}")
             return 0.0
 
     def _parse_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
@@ -467,7 +468,8 @@ class SupervisorHealthBus:
             return None
         try:
             return datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
-        except:
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.warning(f"Failed to parse datetime '{dt_str}': {e}")
             return None
 
     # =========================================================================

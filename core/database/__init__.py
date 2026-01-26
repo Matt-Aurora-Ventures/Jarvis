@@ -3,19 +3,60 @@ Unified Database Access Layer for Jarvis.
 
 Provides centralized, thread-safe access to all databases:
 - Core: Trades, positions, users, orders
-- Analytics: Sentiment, LLM costs, metrics  
+- Analytics: Sentiment, LLM costs, metrics
 - Cache: Sessions, rate limits, API cache
 
-Usage:
+SQLite Usage:
     from core.database import get_core_db, get_analytics_db, get_cache_db
-    
+
     db = get_core_db()
     with db.cursor() as cur:
         cur.execute("SELECT * FROM positions")
         positions = cur.fetchall()
+
+PostgreSQL Usage (async):
+    from core.database import get_postgres_client, PostgresClient
+    from core.database.postgres_repositories import PostgresPositionRepository
+
+    client = get_postgres_client()
+    positions = await client.fetch("SELECT * FROM positions")
+
+    # Or use repository pattern:
+    repo = PostgresPositionRepository()
+    positions = await repo.get_open_positions()
+
+TimescaleDB Usage:
+    from core.database import get_timescale_repository, TimescaleRepository
+
+    repo = get_timescale_repository()
+    ohlc = await repo.get_price_ohlc(token_mint="...", interval="1h", ...)
 """
 
 from .pool import ConnectionPool, get_pool
+
+# PostgreSQL async client
+from .postgres_client import (
+    PostgresClient,
+    get_postgres_client,
+    init_postgres,
+    close_postgres,
+)
+
+# TimescaleDB repository
+from .timescale_repository import (
+    TimescaleRepository,
+    PriceTick,
+    StrategySignal,
+    PositionSnapshot,
+    get_timescale_repository,
+    init_timescale,
+)
+
+# Data migration
+from .migration import (
+    DataMigrator,
+    MigrationRunner,
+)
 
 # Database paths
 CORE_DB = "data/jarvis_core.db"
@@ -114,11 +155,27 @@ def close_all() -> None:
 
 
 __all__ = [
+    # SQLite pools
     "get_core_db",
-    "get_analytics_db", 
+    "get_analytics_db",
     "get_cache_db",
     "get_legacy_db",
     "health_check",
     "close_all",
     "ConnectionPool",
+    # PostgreSQL async
+    "PostgresClient",
+    "get_postgres_client",
+    "init_postgres",
+    "close_postgres",
+    # TimescaleDB
+    "TimescaleRepository",
+    "PriceTick",
+    "StrategySignal",
+    "PositionSnapshot",
+    "get_timescale_repository",
+    "init_timescale",
+    # Migration
+    "DataMigrator",
+    "MigrationRunner",
 ]

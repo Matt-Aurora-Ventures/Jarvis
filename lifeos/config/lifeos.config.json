@@ -391,5 +391,34 @@
   "safety": {
     "default_mode": "dry-run",
     "require_apply_token": true
+  },
+  "jupiter": {
+    "default_priority_level": "high",
+    "enable_simulation": true,
+    "simulation_required_for_buy": true,
+    "max_priority_fee_lamports": 1000000000,
+    "use_dynamic_fees": true,
+    "circuit_breaker": {
+      "failure_threshold": 5,
+      "success_threshold": 2,
+      "recovery_timeout_seconds": 60
+    },
+    "rpc_providers": {
+      "helius": {
+        "priority": 1,
+        "failure_threshold": 5,
+        "recovery_timeout": 60
+      },
+      "quicknode": {
+        "priority": 2,
+        "failure_threshold": 5,
+        "recovery_timeout": 60
+      },
+      "public": {
+        "priority": 3,
+        "failure_threshold": 10,
+        "recovery_timeout": 120
+      }
+    }
   }
 }
