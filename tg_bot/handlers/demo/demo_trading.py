@@ -344,28 +344,73 @@ async def _execute_swap_with_fallback(
 # Buy with TP/SL
 # =============================================================================
 
+def _validate_tpsl_required(tp_percent: Optional[float], sl_percent: Optional[float]) -> None:
+    """
+    Validate that TP/SL are provided and within reasonable ranges.
+
+    Args:
+        tp_percent: Take-profit percentage
+        sl_percent: Stop-loss percentage
+
+    Raises:
+        ValueError: If TP/SL are missing or invalid
+    """
+    if tp_percent is None or sl_percent is None:
+        raise ValueError(
+            "❌ Take-profit and stop-loss are mandatory for all trades.\n"
+            "Example: tp_percent=50.0 (50% profit target), sl_percent=20.0 (20% max loss)"
+        )
+
+    if tp_percent <= 0:
+        raise ValueError(f"❌ Take-profit must be positive, got {tp_percent}%")
+
+    if sl_percent <= 0:
+        raise ValueError(f"❌ Stop-loss must be positive, got {sl_percent}%")
+
+    if sl_percent >= 100:
+        raise ValueError(
+            f"❌ Stop-loss cannot be >= 100% (would exceed your investment), got {sl_percent}%"
+        )
+
+    if tp_percent >= 500:
+        raise ValueError(
+            f"❌ Take-profit seems unrealistic: {tp_percent}%. Maximum recommended: 200%"
+        )
+
+    if tp_percent < 5:
+        raise ValueError(
+            f"❌ Take-profit too low: {tp_percent}%. Minimum recommended: 5% to cover fees"
+        )
+
+    if sl_percent < 5:
+        raise ValueError(
+            f"❌ Stop-loss too low: {sl_percent}%. Minimum recommended: 5% to allow price movement"
+        )
+
+
 async def execute_buy_with_tpsl(
     token_address: str,
     amount_sol: float,
     wallet_address: str,
-    tp_percent: float = 50.0,
-    sl_percent: float = 20.0,
+    tp_percent: float,  # REQUIRED (no default)
+    sl_percent: float,  # REQUIRED (no default)
     slippage_bps: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
-    Execute a buy order with TP/SL via Bags.fm with Jupiter fallback.
+    Execute a buy order with mandatory TP/SL via Bags.fm with Jupiter fallback.
 
     This function:
-    1. Tries Bags.fm first for partner fee collection
-    2. Falls back to Jupiter on Bags.fm failure
-    3. Creates a position with TP/SL metadata
+    1. Validates TP/SL are provided and reasonable
+    2. Tries Bags.fm first for partner fee collection
+    3. Falls back to Jupiter on Bags.fm failure
+    4. Creates a position with validated TP/SL
 
     Args:
         token_address: Token mint address to buy
         amount_sol: Amount of SOL to spend
         wallet_address: User's wallet address
-        tp_percent: Take-profit percentage (default 50%)
-        sl_percent: Stop-loss percentage (default 20%)
+        tp_percent: Take-profit percentage (REQUIRED, 5-200%)
+        sl_percent: Stop-loss percentage (REQUIRED, 5-99%)
         slippage_bps: Slippage in basis points (default from env)
 
     Returns:
@@ -373,9 +418,15 @@ async def execute_buy_with_tpsl(
             - success: bool
             - position: Position dict with TP/SL (on success)
             - error: Error message (on failure)
+
+    Raises:
+        ValueError: If TP/SL are missing or invalid
     """
     import uuid
     from tg_bot.handlers.demo.demo_sentiment import get_ai_sentiment_for_token
+
+    # CRITICAL: Validate TP/SL before executing trade
+    _validate_tpsl_required(tp_percent, sl_percent)
 
     if slippage_bps is None:
         slippage_bps = _get_demo_slippage_bps()
