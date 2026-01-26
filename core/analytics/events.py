@@ -18,6 +18,8 @@ import os
 import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+
+from core.security_validation import sanitize_sql_identifier
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from pathlib import Path
@@ -314,7 +316,11 @@ class SQLiteEventSink(EventSink):
         table = "event_counts_hourly" if granularity == "hourly" else "event_counts_daily"
         time_col = "hour" if granularity == "hourly" else "date"
 
-        query = f"SELECT event_type, {time_col}, count, sum_value FROM {table} WHERE 1=1"
+        # Sanitize identifiers
+        safe_table = sanitize_sql_identifier(table)
+        safe_time_col = sanitize_sql_identifier(time_col)
+
+        query = f"SELECT event_type, {safe_time_col}, count, sum_value FROM {safe_table} WHERE 1=1"
         params = []
 
         if event_type:
@@ -322,14 +328,14 @@ class SQLiteEventSink(EventSink):
             params.append(event_type.value)
 
         if since:
-            query += f" AND {time_col} >= ?"
+            query += f" AND {safe_time_col} >= ?"
             params.append(since.strftime("%Y-%m-%d") if granularity == "daily" else since.strftime("%Y-%m-%d-%H"))
 
         if until:
-            query += f" AND {time_col} <= ?"
+            query += f" AND {safe_time_col} <= ?"
             params.append(until.strftime("%Y-%m-%d") if granularity == "daily" else until.strftime("%Y-%m-%d-%H"))
 
-        query += f" ORDER BY {time_col} DESC"
+        query += f" ORDER BY {safe_time_col} DESC"
 
         cursor.execute(query, params)
         rows = cursor.fetchall()
