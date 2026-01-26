@@ -709,8 +709,8 @@ Respond briefly (under 200 words) in character as JARVIS:"""
             # Let Dexter handle the message
             response = await dexter.handle_telegram_message(text, user_id=0)
             if response:
-                # Add AI source attribution and EU AI Act disclosure
-                return f"[AI: Dexter] {response}\n\n_AI-generated response per EU AI Act Article 50_"
+                # Clean response without EU disclaimer
+                return response
             return None
 
         except Exception as e:
@@ -783,7 +783,7 @@ Respond briefly (under 200 words) in character as JARVIS:"""
             grok_response = await self._try_grok_response(text)
             if grok_response:
                 logger.info("Fallback chain: Grok response (Tier 2)")
-                return f"[AI: Grok] {grok_response}\n\n_AI-generated response per EU AI Act Article 50_"
+                return grok_response
         except Exception as e:
             logger.warning(f"Grok failed: {e}, using simple fallback")
 
