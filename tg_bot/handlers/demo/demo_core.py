@@ -273,7 +273,11 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @error_handler
 async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle text messages when awaiting token input or watchlist add."""
+    """
+    Handle text messages when awaiting input in demo mode.
+    
+    This is a router that delegates to specialized input handlers.
+    """
     text = update.message.text.strip()
 
     # Enforce admin-only demo access
@@ -295,6 +299,7 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     # Run TP/SL/trailing stop checks for demo positions (throttled)
     await _process_demo_exit_checks(update, context)
 
+    # Check if we're awaiting any input
     if not any([
         context.user_data.get("awaiting_custom_buy_amount"),
         context.user_data.get("awaiting_watchlist_token"),
@@ -304,253 +309,25 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     ]):
         return
 
-    # ---------------------------------------------------------------------
-    # Custom Buy Amount Input
-    # ---------------------------------------------------------------------
-    if context.user_data.get("awaiting_custom_buy_amount"):
-        context.user_data["awaiting_custom_buy_amount"] = False
-        token_ref = context.user_data.pop("custom_buy_token_ref", "")
+    # Import modular handlers
+    from .input_handlers import (
+        handle_custom_buy_amount,
+        handle_watchlist_token,
+        handle_wallet_import,
+        handle_token_input,
+    )
 
-        try:
-            amount = float(text)
-            is_valid, error_msg = validate_buy_amount(amount)
-
-            if not is_valid:
-                error_text, keyboard = DemoMenuBuilder.error_message(error_msg)
-                await update.message.reply_text(
-                    error_text,
-                    parse_mode=ParseMode.MARKDOWN,
-                    reply_markup=keyboard,
-                )
-                return
-
-            token_addr = _resolve_token_ref(context, token_ref)
-            sentiment_data = await get_ai_sentiment_for_token(token_addr)
-            token_symbol = sentiment_data.get("symbol", "TOKEN")
-            token_price = sentiment_data.get("price", 0) or 0
-            sentiment = sentiment_data.get("sentiment", "neutral")
-            score = sentiment_data.get("score", 0)
-            signal = sentiment_data.get("signal", "NEUTRAL")
-
-            theme = JarvisTheme
-            confirm_text = f"""
-{theme.BUY} *CONFIRM CUSTOM BUY*
-
-*Token:* {safe_symbol(token_symbol)}
-*Amount:* {amount} SOL
-*Est. Price:* ${token_price:.8f}
-
-{theme.AUTO} *AI Analysis*
-- Sentiment: *{sentiment.upper()}*
-- Score: *{score:.2f}*
-- Signal: *{signal}*
-
-_Tap Confirm to execute_
-"""
-            keyboard = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        f"{theme.SUCCESS} Confirm Buy",
-                        callback_data=f"demo:execute_buy:{token_ref}:{amount}",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        f"{theme.CLOSE} Cancel",
-                        callback_data="demo:main",
-                    ),
-                ],
-            ])
-
-            await update.message.reply_text(
-                confirm_text,
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=keyboard,
-            )
-
-        except ValueError:
-            error_text, keyboard = DemoMenuBuilder.error_message(
-                "Invalid amount. Please enter a number like 0.5 or 2.5"
-            )
-            await update.message.reply_text(
-                error_text,
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=keyboard,
-            )
-        except Exception as exc:
-            logger.error(f"Custom buy amount error: {exc}")
-            error_text, keyboard = DemoMenuBuilder.error_message(
-                f"Error: {str(exc)[:50]}"
-            )
-            await update.message.reply_text(
-                error_text,
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=keyboard,
-            )
-        return
-
-    # ---------------------------------------------------------------------
-    # Watchlist Token Addition
-    # ---------------------------------------------------------------------
-    if context.user_data.get("awaiting_watchlist_token"):
-        context.user_data["awaiting_watchlist_token"] = False
-
-        if len(text) < 32 or len(text) > 44:
-            error_text, keyboard = DemoMenuBuilder.error_message(
-                "Invalid Solana address. Must be 32-44 characters."
-            )
-            await update.message.reply_text(
-                error_text,
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=keyboard,
-            )
+    # Delegate to appropriate handler (first match wins)
+    handlers = [
+        handle_custom_buy_amount,
+        handle_watchlist_token,
+        handle_wallet_import,
+        handle_token_input,
+    ]
+    
+    for handler in handlers:
+        if await handler(update, context, text):
             return
-
-        try:
-            sentiment = await get_ai_sentiment_for_token(text)
-            token_data = {
-                "symbol": sentiment.get("symbol", "TOKEN"),
-                "address": text,
-                "price": sentiment.get("price", 0),
-                "change_24h": sentiment.get("change_24h", 0),
-            }
-            token_data["token_id"] = _register_token_id(context, text)
-
-            watchlist = context.user_data.get("watchlist", [])
-            if any(t.get("address") == text for t in watchlist):
-                error_text, keyboard = DemoMenuBuilder.error_message(
-                    "Token already in watchlist"
-                )
-                await update.message.reply_text(
-                    error_text,
-                    parse_mode=ParseMode.MARKDOWN,
-                    reply_markup=keyboard,
-                )
-                return
-
-            watchlist.append(token_data)
-            context.user_data["watchlist"] = watchlist
-
-            success_text, keyboard = DemoMenuBuilder.success_message(
-                action="Token Added",
-                details=f"Added {token_data['symbol']} to your watchlist!\n\n"
-                        f"Current price: ${token_data['price']:.6f}",
-            )
-            await update.message.reply_text(
-                success_text,
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=keyboard,
-            )
-        except Exception as exc:
-            error_text, keyboard = DemoMenuBuilder.error_message(
-                f"Failed to add token: {str(exc)[:50]}"
-            )
-            await update.message.reply_text(
-                error_text,
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=keyboard,
-            )
-        return
-
-    # ---------------------------------------------------------------------
-    # Wallet Import Input
-    # ---------------------------------------------------------------------
-    if context.user_data.get("awaiting_wallet_import"):
-        context.user_data["awaiting_wallet_import"] = False
-        import_mode = context.user_data.get("import_mode", "key")
-
-        try:
-            from bots.treasury.wallet import SecureWallet
-            from core.wallet_service import WalletService
-
-            wallet_password = _get_demo_wallet_password()
-            if not wallet_password:
-                raise ValueError("Demo wallet password not configured")
-
-            wallet_service = WalletService()
-            private_key = None
-
-            if import_mode == "seed":
-                words = text.strip().split()
-                if len(words) not in [12, 24]:
-                    raise ValueError(f"Seed phrase must be 12 or 24 words, got {len(words)}")
-                wallet_data, _ = await wallet_service.import_wallet(
-                    seed_phrase=text.strip(),
-                    user_password=wallet_password,
-                )
-                private_key = wallet_data.private_key
-            else:
-                if len(text.strip()) < 64:
-                    raise ValueError("Private key too short (min 64 chars)")
-                wallet_data, _ = await wallet_service.import_from_private_key(
-                    private_key=text.strip(),
-                    user_password=wallet_password,
-                )
-                private_key = wallet_data.private_key
-
-            secure_wallet = SecureWallet(
-                master_password=wallet_password,
-                wallet_dir=_get_demo_wallet_dir(),
-            )
-            wallet_info = secure_wallet.import_wallet(private_key, label="Demo Imported")
-            wallet_address = wallet_info.address
-
-            result_text, keyboard = DemoMenuBuilder.wallet_import_result(
-                success=True,
-                wallet_address=wallet_address,
-            )
-            logger.info(f"Wallet imported: {wallet_address[:8]}...")
-
-        except Exception as exc:
-            logger.error(f"Wallet import failed: {exc}")
-            result_text, keyboard = DemoMenuBuilder.wallet_import_result(
-                success=False,
-                error=str(exc)[:100],
-            )
-
-        await update.message.reply_text(
-            result_text,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=keyboard,
-        )
-        return
-
-    # ---------------------------------------------------------------------
-    # Buy Token Input
-    # ---------------------------------------------------------------------
-    if not context.user_data.get("awaiting_token"):
-        return
-
-    context.user_data["awaiting_token"] = False
-
-    if len(text) < 32 or len(text) > 44:
-        error_text, keyboard = DemoMenuBuilder.error_message(
-            "Invalid Solana address. Must be 32-44 characters."
-        )
-        await update.message.reply_text(
-            error_text,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=keyboard,
-        )
-        return
-
-    amount = context.user_data.get("buy_amount", 0.1)
-    token_ref = _register_token_id(context, text)
-
-    confirm_text, keyboard = DemoMenuBuilder.buy_confirmation(
-        token_symbol="TOKEN",
-        token_address=text,
-        amount_sol=amount,
-        estimated_tokens=1000000,
-        price_usd=0.00001,
-        token_ref=token_ref,
-    )
-
-    await update.message.reply_text(
-        confirm_text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=keyboard,
-    )
 
 
 # =============================================================================
