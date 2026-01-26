@@ -62,11 +62,13 @@ class _SimpleWallet:
     async def get_balance(self, address: str = None) -> Tuple[float, float]:
         """Get wallet balance in SOL and USD."""
         import aiohttp
+        from aiohttp import ClientTimeout
         try:
             target = address or self._address
             rpc_url = os.environ.get('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com')
 
-            async with aiohttp.ClientSession() as session:
+            timeout = ClientTimeout(total=60, connect=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 payload = {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -568,7 +570,9 @@ class TreasuryTrader:
 
         logger.info(f"Resolving partial mint '{partial_mint}' with symbol '{symbol}'")
         try:
-            async with aiohttp.ClientSession() as session:
+            from aiohttp import ClientTimeout
+            timeout = ClientTimeout(total=60, connect=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 search_term = symbol or partial_mint
                 url = f"https://api.dexscreener.com/latest/dex/search?q={search_term}"
                 logger.info(f"DexScreener search: {url}")
