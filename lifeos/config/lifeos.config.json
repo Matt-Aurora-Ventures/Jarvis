@@ -108,6 +108,7 @@
     "chat_activation": "ctrl+shift+up"
   },
   "providers": {
+    "allow_paid_fallback": false,
     "groq": {
       "enabled": true,
       "model": "llama-3.3-70b-versatile",
