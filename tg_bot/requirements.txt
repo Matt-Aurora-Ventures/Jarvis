@@ -19,5 +19,8 @@ matplotlib>=3.8.0
 # Database
 # (uses built-in sqlite3)
 
+# Redis for rate limiting (optional - falls back to memory)
+redis>=5.0.0
+
 # Optional: For type checking
 typing-extensions>=4.0.0
