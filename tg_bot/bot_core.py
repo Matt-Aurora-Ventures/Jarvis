@@ -2157,22 +2157,50 @@ async def vibe(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Send result
         if result['success']:
             response_text = result['response']
-
-            # Truncate if too long
-            if len(response_text) > 4000:
-                response_text = response_text[:3950] + "\n\n... (truncated)"
-
             status_emoji = "✅"
             sanitized_note = "\n🔒 <i>Output sanitized</i>" if result['sanitized'] else ""
 
-            result_msg = (
-                f"{status_emoji} <b>Vibe Complete</b>\n\n"
-                f"<pre>{response_text}</pre>\n\n"
-                f"⏱️ {duration:.1f}s | "
-                f"🎯 {result['tokens_used']:,} tokens | "
-                f"💬 {result['message_count']} msgs"
-                f"{sanitized_note}"
-            )
+            # Smart chunking for large responses
+            chunks = console.chunk_response(response_text, max_size=3800)
+
+            if len(chunks) == 1:
+                # Single message - use original format
+                result_msg = (
+                    f"{status_emoji} <b>Vibe Complete</b>\n\n"
+                    f"<pre>{response_text}</pre>\n\n"
+                    f"⏱️ {duration:.1f}s | "
+                    f"🎯 {result['tokens_used']:,} tokens | "
+                    f"💬 {result['message_count']} msgs"
+                    f"{sanitized_note}"
+                )
+
+                # Update confirmation with result
+                try:
+                    await confirm_msg.edit_text(result_msg, parse_mode=ParseMode.HTML)
+                except Exception:
+                    # If edit fails, send new message
+                    await update.message.reply_text(result_msg, parse_mode=ParseMode.HTML)
+            else:
+                # Multiple chunks - send header + chunks
+                header_msg = (
+                    f"{status_emoji} <b>Vibe Complete</b> ({len(chunks)} parts)\n\n"
+                    f"⏱️ {duration:.1f}s | "
+                    f"🎯 {result['tokens_used']:,} tokens | "
+                    f"💬 {result['message_count']} msgs"
+                    f"{sanitized_note}"
+                )
+
+                # Update confirmation with header
+                try:
+                    await confirm_msg.edit_text(header_msg, parse_mode=ParseMode.HTML)
+                except Exception:
+                    await update.message.reply_text(header_msg, parse_mode=ParseMode.HTML)
+
+                # Send chunks sequentially
+                for i, chunk in enumerate(chunks, 1):
+                    chunk_msg = f"<b>Part {i}/{len(chunks)}</b>\n\n<pre>{chunk}</pre>"
+                    await update.message.reply_text(chunk_msg, parse_mode=ParseMode.HTML)
+                    await asyncio.sleep(0.3)  # Prevent rate limiting
         else:
             result_msg = (
                 f"⚠️ <b>Vibe Error</b>\n\n"
@@ -2180,12 +2208,12 @@ async def vibe(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"<i>{duration:.1f}s</i>"
             )
 
-        # Update confirmation with result
-        try:
-            await confirm_msg.edit_text(result_msg, parse_mode=ParseMode.HTML)
-        except Exception:
-            # If edit fails, send new message
-            await update.message.reply_text(result_msg, parse_mode=ParseMode.HTML)
+            # Update confirmation with result
+            try:
+                await confirm_msg.edit_text(result_msg, parse_mode=ParseMode.HTML)
+            except Exception:
+                # If edit fails, send new message
+                await update.message.reply_text(result_msg, parse_mode=ParseMode.HTML)
 
     except Exception as e:
         logger.exception(f"Vibe command error: {e}")
