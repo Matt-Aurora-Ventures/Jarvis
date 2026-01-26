@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 import logging
 
+from core.security_validation import sanitize_sql_identifier
+
 logger = logging.getLogger(__name__)
 
 
@@ -102,26 +104,31 @@ class SoftDeleteManager(Generic[T]):
 
     def get_active(self, **filters) -> List[T]:
         """Get only active (non-deleted) records."""
-        query = f"SELECT * FROM {self.table_name} WHERE is_deleted = FALSE"
+        safe_table = sanitize_sql_identifier(self.table_name)
+        query = f"SELECT * FROM {safe_table} WHERE is_deleted = FALSE"
 
         for key, value in filters.items():
-            query += f" AND {key} = ?"
+            safe_key = sanitize_sql_identifier(key)
+            query += f" AND {safe_key} = ?"
 
         # Execute query and return results
         return self._execute_query(query, list(filters.values()))
 
     def get_deleted(self, **filters) -> List[T]:
         """Get only deleted records."""
-        query = f"SELECT * FROM {self.table_name} WHERE is_deleted = TRUE"
+        safe_table = sanitize_sql_identifier(self.table_name)
+        query = f"SELECT * FROM {safe_table} WHERE is_deleted = TRUE"
 
         for key, value in filters.items():
-            query += f" AND {key} = ?"
+            safe_key = sanitize_sql_identifier(key)
+            query += f" AND {safe_key} = ?"
 
         return self._execute_query(query, list(filters.values()))
 
     def get_all(self, include_deleted: bool = False, **filters) -> List[T]:
         """Get all records, optionally including deleted."""
-        query = f"SELECT * FROM {self.table_name}"
+        safe_table = sanitize_sql_identifier(self.table_name)
+        query = f"SELECT * FROM {safe_table}"
         conditions = []
         params = []
 
@@ -129,7 +136,8 @@ class SoftDeleteManager(Generic[T]):
             conditions.append("is_deleted = FALSE")
 
         for key, value in filters.items():
-            conditions.append(f"{key} = ?")
+            safe_key = sanitize_sql_identifier(key)
+            conditions.append(f"{safe_key} = ?")
             params.append(value)
 
         if conditions:
