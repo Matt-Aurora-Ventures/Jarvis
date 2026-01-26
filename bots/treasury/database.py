@@ -8,7 +8,6 @@ Migrates from JSON to proper SQLite for:
 - Performance metrics over time
 """
 
-import sqlite3
 import logging
 import os
 from dataclasses import dataclass, asdict
@@ -17,9 +16,11 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from contextlib import contextmanager
 
+from core.database import get_core_db
+
 logger = logging.getLogger(__name__)
 
-# Database path
+# Database path (kept for compatibility, but using unified layer)
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
 DB_PATH = DATA_DIR / "jarvis.db"
 
@@ -169,18 +170,10 @@ class TreasuryDatabase:
 
     @contextmanager
     def _get_conn(self):
-        """Context manager for database connections."""
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        try:
+        """Context manager for database connections (via unified layer)."""
+        db = get_core_db()
+        with db.connection() as conn:
             yield conn
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            raise e
-        finally:
-            conn.close()
 
     def _init_schema(self):
         """Initialize database schema."""
@@ -319,40 +312,40 @@ class TreasuryDatabase:
                     CREATE INDEX IF NOT EXISTS idx_positions_status
                     ON positions(status)
                 """)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Index idx_positions_status already exists or creation failed: {e}")
 
             try:
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_positions_token
                     ON positions(token_symbol)
                 """)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Index idx_positions_token already exists or creation failed: {e}")
 
             try:
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_positions_timestamp
                     ON positions(entry_timestamp)
                 """)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Index idx_positions_timestamp already exists or creation failed: {e}")
 
             try:
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_learnings_type
                     ON trade_learnings(learning_type)
                 """)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Index idx_learnings_type already exists or creation failed: {e}")
 
             try:
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_errors_component
                     ON error_logs(component)
                 """)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Index idx_errors_component already exists or creation failed: {e}")
 
     # =========================================================================
     # Position Management
