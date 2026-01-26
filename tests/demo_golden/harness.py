@@ -6,6 +6,7 @@ Runs handlers with mocked dependencies to produce deterministic outputs.
 from __future__ import annotations
 
 import json
+from contextlib import ExitStack
 import re
 from dataclasses import dataclass
 import sys
@@ -303,27 +304,54 @@ def run_case(case_name: str) -> GoldenResult:
             parse_mode="Markdown",
         )
 
-    with patch("tg_bot.handlers.get_config", return_value=config), \
-        patch("tg_bot.handlers.commands_base.get_config", return_value=config), \
-        patch("tg_bot.handlers.sentiment.get_config", return_value=config), \
-        patch("tg_bot.handlers.trading.get_config", return_value=config), \
-        patch("tg_bot.handlers.trading._is_rate_limited", return_value=False), \
-        patch("tg_bot.handlers.demo.get_config", return_value=config), \
-        patch("tg_bot.bot_core.SENTIMENT_REPORT_AVAILABLE", False), \
-        patch("tg_bot.bot_core._generate_simple_report", new=_simple_report), \
-        patch("tg_bot.bot_core._get_treasury_engine", new=AsyncMock(return_value=treasury_engine)), \
-        patch("tg_bot.handlers.demo._get_demo_engine", new=AsyncMock(return_value=demo_engine)), \
-        patch("tg_bot.handlers.demo.get_market_regime", new=AsyncMock(return_value={"regime": "BULL", "risk_level": "LOW", "btc_change_24h": 1.2, "sol_change_24h": -0.4})), \
-        patch("tg_bot.handlers.demo.get_trending_with_sentiment", new=AsyncMock(return_value=None)), \
-        patch("tg_bot.handlers.demo.get_bags_top_tokens_with_sentiment", new=AsyncMock(return_value=fake_bags_tokens)), \
-        patch("core.dexscreener.get_boosted_tokens_with_data", return_value=[]), \
-        patch("tg_bot.handlers.demo._execute_swap_with_fallback", new=AsyncMock(return_value={"success": True, "amount_out": 12345, "tx_hash": "tx_demo", "source": "bags_fm"})), \
-        patch("tg_bot.handlers.demo.get_success_fee_manager", return_value=_FakeFeeManager()), \
-        patch("tg_bot.handlers.demo.get_trade_intelligence", return_value=fake_intel), \
-        patch("bots.treasury.scorekeeper.get_scorekeeper", return_value=_FakeScorekeeper()), \
-        patch("tg_bot.bot_core._is_treasury_admin", return_value=True), \
-        patch("tg_bot.bot_core._show_trade_ticket", new=_trade_ticket), \
-        patch("tg_bot.bot_core._close_position_callback", new=_close_position):
+    with ExitStack() as stack:
+        stack.enter_context(patch("tg_bot.handlers.get_config", return_value=config))
+        stack.enter_context(patch("tg_bot.handlers.commands_base.get_config", return_value=config))
+        stack.enter_context(patch("tg_bot.handlers.sentiment.get_config", return_value=config))
+        stack.enter_context(patch("tg_bot.handlers.trading.get_config", return_value=config))
+        stack.enter_context(patch("tg_bot.handlers.trading._is_rate_limited", return_value=False))
+        stack.enter_context(patch("tg_bot.handlers.demo.get_config", return_value=config))
+        stack.enter_context(patch("tg_bot.handlers.demo.demo_core.get_config", return_value=config))
+        stack.enter_context(patch("tg_bot.bot_core.SENTIMENT_REPORT_AVAILABLE", False))
+        stack.enter_context(patch("tg_bot.bot_core._generate_simple_report", new=_simple_report))
+        stack.enter_context(patch("tg_bot.bot_core._get_treasury_engine", new=AsyncMock(return_value=treasury_engine)))
+        stack.enter_context(patch("tg_bot.handlers.demo._get_demo_engine", new=AsyncMock(return_value=demo_engine)))
+        stack.enter_context(patch("tg_bot.handlers.demo.demo_core._get_demo_engine", new=AsyncMock(return_value=demo_engine)))
+        stack.enter_context(
+            patch(
+                "tg_bot.handlers.demo.get_market_regime",
+                new=AsyncMock(return_value={"regime": "BULL", "risk_level": "LOW", "btc_change_24h": 1.2, "sol_change_24h": -0.4}),
+            )
+        )
+        stack.enter_context(
+            patch(
+                "tg_bot.handlers.demo.demo_core.get_market_regime",
+                new=AsyncMock(return_value={"regime": "BULL", "risk_level": "LOW", "btc_change_24h": 1.2, "sol_change_24h": -0.4}),
+            )
+        )
+        stack.enter_context(patch("tg_bot.handlers.demo.get_trending_with_sentiment", new=AsyncMock(return_value=None)))
+        stack.enter_context(patch("tg_bot.handlers.demo.get_bags_top_tokens_with_sentiment", new=AsyncMock(return_value=fake_bags_tokens)))
+        stack.enter_context(
+            patch(
+                "tg_bot.handlers.demo.demo_sentiment.get_market_regime",
+                new=AsyncMock(return_value={"regime": "BULL", "risk_level": "LOW", "btc_change_24h": 1.2, "sol_change_24h": -0.4}),
+            )
+        )
+        stack.enter_context(patch("tg_bot.handlers.demo.demo_sentiment.get_trending_with_sentiment", new=AsyncMock(return_value=None)))
+        stack.enter_context(patch("tg_bot.handlers.demo.demo_sentiment.get_bags_top_tokens_with_sentiment", new=AsyncMock(return_value=fake_bags_tokens)))
+        stack.enter_context(patch("core.dexscreener.get_boosted_tokens_with_data", return_value=[]))
+        stack.enter_context(
+            patch(
+                "tg_bot.handlers.demo._execute_swap_with_fallback",
+                new=AsyncMock(return_value={"success": True, "amount_out": 12345, "tx_hash": "tx_demo", "source": "bags_fm"}),
+            )
+        )
+        stack.enter_context(patch("tg_bot.handlers.demo.get_success_fee_manager", return_value=_FakeFeeManager()))
+        stack.enter_context(patch("tg_bot.handlers.demo.get_trade_intelligence", return_value=fake_intel))
+        stack.enter_context(patch("bots.treasury.scorekeeper.get_scorekeeper", return_value=_FakeScorekeeper()))
+        stack.enter_context(patch("tg_bot.bot_core._is_treasury_admin", return_value=True))
+        stack.enter_context(patch("tg_bot.bot_core._show_trade_ticket", new=_trade_ticket))
+        stack.enter_context(patch("tg_bot.bot_core._close_position_callback", new=_close_position))
 
         if case_name == "start_admin":
             from tg_bot.handlers.commands_base import start

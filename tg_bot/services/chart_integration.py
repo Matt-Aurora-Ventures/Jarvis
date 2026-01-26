@@ -47,6 +47,12 @@ class ChartIntegration:
             Dict with message_ids of all sent messages
         """
         try:
+            # Update position prices
+            try:
+                await self.trader.update_positions()
+            except Exception as e:
+                logger.warning(f"Failed to update positions: {e}")
+
             # Build text dashboard
             dashboard_text = self.dashboard.build_portfolio_dashboard(include_positions=True)
 

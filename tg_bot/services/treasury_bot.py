@@ -110,6 +110,12 @@ class TreasuryBot:
             action=ChatAction.TYPING
         )
 
+        # Update position prices before building dashboard
+        try:
+            await self.trader.update_positions()
+        except Exception as e:
+            logger.warning(f"Failed to update positions: {e}")
+
         # Build dashboard
         dashboard_msg = self.dashboard.build_portfolio_dashboard(include_positions=True)
         keyboard = self._get_dashboard_keyboard(update.effective_user.id)
@@ -137,6 +143,12 @@ class TreasuryBot:
             chat_id=update.effective_chat.id,
             action=ChatAction.TYPING
         )
+
+        # Update position prices before displaying
+        try:
+            await self.trader.update_positions()
+        except Exception as e:
+            logger.warning(f"Failed to update positions: {e}")
 
         positions_msg = self.dashboard.build_detailed_positions()
         keyboard = self._get_positions_keyboard()
@@ -581,6 +593,12 @@ Select an action:"""
 
     async def _refresh_dashboard(self, query, context):
         """Refresh dashboard."""
+        # Update position prices
+        try:
+            await self.trader.update_positions()
+        except Exception as e:
+            logger.warning(f"Failed to update positions: {e}")
+
         dashboard_msg = self.dashboard.build_portfolio_dashboard(include_positions=True)
         keyboard = self._get_dashboard_keyboard(query.from_user.id)
 
@@ -677,6 +695,12 @@ Select an action:"""
         try:
             context = session.get('context')
             if context and context.bot:
+                # Update position prices
+                try:
+                    await self.trader.update_positions()
+                except Exception as e:
+                    logger.warning(f"Failed to update positions during auto-refresh: {e}")
+
                 dashboard_msg = self.dashboard.build_portfolio_dashboard(include_positions=True)
                 keyboard = self._get_dashboard_keyboard(session.get('user_id', 0))
 
