@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from decimal import Decimal
 import aiohttp
+from aiohttp import ClientTimeout
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +208,8 @@ class SentimentBacktester:
         prices = []
 
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout = ClientTimeout(total=60, connect=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 # Try DexScreener first
                 url = f"https://api.dexscreener.com/latest/dex/tokens/{token_mint}"
 
