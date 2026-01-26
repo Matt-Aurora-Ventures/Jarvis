@@ -1,0 +1,6998 @@
+[
+  {
+    "database": "data/jarvis.db",
+    "table_count": 14,
+    "tables": {
+      "positions": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "token_mint",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "entry_price",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "entry_amount_sol",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "entry_amount_tokens",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "take_profit_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "stop_loss_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tp_order_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sl_order_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "exit_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "exit_amount_sol",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "pnl_sol",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "pnl_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "opened_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "closed_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tx_signature_entry",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tx_signature_exit",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "user_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 33
+      },
+      "trades": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "token_mint",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "side",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "amount_sol",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "amount_tokens",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "price",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tx_signature",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "position_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "user_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 27
+      },
+      "scorecard": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "total_trades",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "winning_trades",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "losing_trades",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "total_pnl_sol",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "total_pnl_usd",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "largest_win_sol",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "largest_loss_sol",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "current_streak",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "best_streak",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "worst_streak",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "avg_win_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "avg_loss_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "win_rate",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "last_updated",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "''",
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "treasury_orders": {
+        "columns": [
+          {
+            "name": "order_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "order_json",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "daily_stats": {
+        "columns": [
+          {
+            "name": "date",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "trades_opened",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "trades_closed",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "wins",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "losses",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "total_pnl_sol",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "total_pnl_percent",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "largest_win",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "largest_loss",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "win_rate",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "treasury_stats": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "total_trades",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "total_wins",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "total_losses",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "current_streak",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "best_win_streak",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "worst_loss_streak",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "all_time_pnl_sol",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "largest_win_sol",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "largest_win_token",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "''",
+            "pk": false
+          },
+          {
+            "name": "largest_loss_sol",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "largest_loss_token",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "''",
+            "pk": false
+          },
+          {
+            "name": "updated_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "trade_learnings": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "trade_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "token_symbol",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "token_type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "learning_type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "insight",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "confidence",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0.5",
+            "pk": false
+          },
+          {
+            "name": "applied_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 3
+      },
+      "error_logs": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "error_type",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "component",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "message",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "context",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "stack_trace",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "resolved",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "pick_performance": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "pick_date",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "asset_class",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "contract",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "conviction_score",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "entry_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "target_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "stop_loss",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "timeframe",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "current_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "max_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "min_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "pnl_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "max_gain_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "hit_target",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "hit_stop",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "outcome",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'PENDING'",
+            "pk": false
+          },
+          {
+            "name": "reasoning",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "days_held",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "last_updated",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 636
+      },
+      "users": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "name",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "email",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "items": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "value",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 10
+      },
+      "test": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          }
+        ],
+        "row_count": 1
+      },
+      "memory_entries": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "content",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "context",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tags",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "confidence",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "session_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "imported_at",
+            "type": "TIMESTAMP",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/jarvis_admin.db",
+    "table_count": 6,
+    "tables": {
+      "users": {
+        "columns": [
+          {
+            "name": "user_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "username",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "first_seen",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "message_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "warning_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "is_banned",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "is_trusted",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "spam_score",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0.0",
+            "pk": false
+          },
+          {
+            "name": "last_message_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "notes",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 70
+      },
+      "messages": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "message_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "user_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "username",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "text",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "chat_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "was_deleted",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "deletion_reason",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 706
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 4
+      },
+      "mod_actions": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "action_type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "user_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "message_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "reason",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "reversed",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 3
+      },
+      "upgrade_ideas": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "idea",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "source_user_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "source_message",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "detected_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'pending'",
+            "pk": false
+          },
+          {
+            "name": "priority",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 5
+      },
+      "engagement": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "user_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "action_type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "chat_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "details",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 325
+      }
+    }
+  },
+  {
+    "database": "data/jarvis_memory.db",
+    "table_count": 19,
+    "tables": {
+      "schema_version": {
+        "columns": [
+          {
+            "name": "version",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "applied_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "entities": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "name",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "entity_type",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "attributes",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'{}'",
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          },
+          {
+            "name": "updated_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "facts": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "entity",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "entity_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "fact",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "confidence",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0.8",
+            "pk": false
+          },
+          {
+            "name": "source",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'conversation'",
+            "pk": false
+          },
+          {
+            "name": "learned_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "reflections": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "trigger",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "what_happened",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "why_failed",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "lesson",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "new_approach",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "applied",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "applied_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "predictions": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "prediction",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "confidence",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "domain",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'general'",
+            "pk": false
+          },
+          {
+            "name": "deadline",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "outcome",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "was_correct",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          },
+          {
+            "name": "resolved_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "interactions": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "user_input",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "jarvis_response",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "feedback",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "session_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          },
+          {
+            "name": "metadata",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'{}'",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "trust": {
+        "columns": [
+          {
+            "name": "domain",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "level",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "successes",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "failures",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "last_success",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "last_failure",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "updated_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "settings": {
+        "columns": [
+          {
+            "name": "key",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "value",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "updated_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "facts_fts": {
+        "columns": [
+          {
+            "name": "entity",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "fact",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "facts_fts_data": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "block",
+            "type": "BLOB",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 2
+      },
+      "facts_fts_idx": {
+        "columns": [
+          {
+            "name": "segid",
+            "type": "",
+            "not_null": true,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "term",
+            "type": "",
+            "not_null": true,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "pgno",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "facts_fts_docsize": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "sz",
+            "type": "BLOB",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "facts_fts_config": {
+        "columns": [
+          {
+            "name": "k",
+            "type": "",
+            "not_null": true,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "v",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "reflections_fts": {
+        "columns": [
+          {
+            "name": "trigger",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "lesson",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "new_approach",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "reflections_fts_data": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "block",
+            "type": "BLOB",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 2
+      },
+      "reflections_fts_idx": {
+        "columns": [
+          {
+            "name": "segid",
+            "type": "",
+            "not_null": true,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "term",
+            "type": "",
+            "not_null": true,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "pgno",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "reflections_fts_docsize": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "sz",
+            "type": "BLOB",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "reflections_fts_config": {
+        "columns": [
+          {
+            "name": "k",
+            "type": "",
+            "not_null": true,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "v",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      }
+    }
+  },
+  {
+    "database": "data/telegram_memory.db",
+    "table_count": 5,
+    "tables": {
+      "messages": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "user_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "username",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "role",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "content",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "chat_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 1734
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 3
+      },
+      "memories": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "user_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "key",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "value",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "updated_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "instructions": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "instruction",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_by",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "active",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "1",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "learnings": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "topic",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "content",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "source_type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "source_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "confidence",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0.5",
+            "pk": false
+          }
+        ],
+        "row_count": 25
+      }
+    }
+  },
+  {
+    "database": "data/jarvis_x_memory.db",
+    "table_count": 9,
+    "tables": {
+      "tweets": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "tweet_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "content",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "category",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "cashtags",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "posted_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "engagement_likes",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "engagement_retweets",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "engagement_replies",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 217
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 4
+      },
+      "interactions": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "tweet_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "user_handle",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "user_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "interaction_type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "our_response",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "token_mentions": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "contract_address",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sentiment",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "first_mentioned",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "last_mentioned",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "mention_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "1",
+            "pk": false
+          },
+          {
+            "name": "avg_sentiment_score",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0.0",
+            "pk": false
+          }
+        ],
+        "row_count": 31
+      },
+      "users": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "handle",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "user_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "first_seen",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "interaction_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "sentiment",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'neutral'",
+            "pk": false
+          },
+          {
+            "name": "notes",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "content_queue": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "content",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "category",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "cashtags",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "scheduled_for",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'pending'",
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "mention_replies": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "tweet_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "author_handle",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "our_reply",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "replied_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 25
+      },
+      "content_fingerprints": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "fingerprint",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tokens",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "prices",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "topic_hash",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "semantic_hash",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tweet_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 41
+      },
+      "external_replies": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "original_tweet_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "author_handle",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "original_content",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "our_reply",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "our_tweet_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "reply_type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sentiment",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "replied_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/jarvis_spam_protection.db",
+    "table_count": 3,
+    "tables": {
+      "blocked_users": {
+        "columns": [
+          {
+            "name": "user_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "username",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "reason",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "spam_score",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "blocked_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "quote_tweet_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "scanned_quotes": {
+        "columns": [
+          {
+            "name": "tweet_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "author_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "is_spam",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "scanned_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "jarvis_tweets": {
+        "columns": [
+          {
+            "name": "tweet_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "posted_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "last_scanned",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 77
+      }
+    }
+  },
+  {
+    "database": "data/treasury_trades.db",
+    "table_count": 3,
+    "tables": {
+      "treasury_trades": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "token_mint",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "side",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "amount_in",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "amount_out",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "pnl",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "success",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "1",
+            "pk": false
+          },
+          {
+            "name": "signature",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "metadata_json",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 28
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "daily_snapshots": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "date",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "starting_balance",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "ending_balance",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_pnl",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "trade_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/llm_costs.db",
+    "table_count": 4,
+    "tables": {
+      "llm_usage": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "provider",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "model",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "input_tokens",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "output_tokens",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "cost_usd",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_ms",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "success",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "error",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "metadata",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 19
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 2
+      },
+      "llm_daily_stats": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "date",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "provider",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "model",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_requests",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "successful_requests",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_input_tokens",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_output_tokens",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_cost_usd",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "avg_latency_ms",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "budget_alerts": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "alert_name",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "threshold_usd",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "actual_usd",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "period",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "triggered_at",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/metrics.db",
+    "table_count": 4,
+    "tables": {
+      "metrics_1m": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "component",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_requests",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "failed_requests",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "error_rate",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_p50",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_p95",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_p99",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_min",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_max",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_mean",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "metrics_1h": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "component",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_requests",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "failed_requests",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "error_rate",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_p50",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_p95",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_p99",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_min",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_max",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_mean",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "alert_history": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "threshold_name",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "component",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "metric",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "value",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "threshold",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "severity",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "resolved_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/health.db",
+    "table_count": 3,
+    "tables": {
+      "health_history": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "component",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "latency_ms",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "message",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "checked_at",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "system_snapshots": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "healthy_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "degraded_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "unhealthy_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "uptime_seconds",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "snapshot_json",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "recorded_at",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/bot_health.db",
+    "table_count": 4,
+    "tables": {
+      "bot_health_history": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "bot_name",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "bot_type",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "is_running",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "messages_processed",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "commands_executed",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "errors_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "uptime_seconds",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "avg_response_time_ms",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "message",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "recorded_at",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "bot_errors": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "bot_name",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "error_type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "error_message",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "stack_trace",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "recorded_at",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "bot_activity": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "bot_name",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "activity_type",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "details",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "recorded_at",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/sentiment.db",
+    "table_count": 6,
+    "tables": {
+      "sentiment_readings": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "source",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "score",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "label",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "confidence",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "data_points",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "metadata_json",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "aggregated_sentiment": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "overall_score",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "overall_label",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "overall_confidence",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "source_scores_json",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "trend",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "trend_change",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "warning",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "predictions": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "components",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sentiment_score",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sentiment_grade",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "weights_used",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "predicted_direction",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "outcome_recorded_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "actual_price_change",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "outcome_correct",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "weight_history": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "weights",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "trigger_type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "performance_metric",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "component_correlations": {
+        "columns": [
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "component",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "correlation",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sample_size",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/research.db",
+    "table_count": 4,
+    "tables": {
+      "research_notes": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "topic",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "url",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "title",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "content",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "insights",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "DATETIME",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          },
+          {
+            "name": "processed",
+            "type": "BOOLEAN",
+            "not_null": false,
+            "default": "FALSE",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "knowledge_graph": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "concept",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "related_concepts",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "summary",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "examples",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "applications",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "confidence",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0.0",
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "DATETIME",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "research_log": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "action",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "details",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "DATETIME",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/cache/file_cache.db",
+    "table_count": 1,
+    "tables": {
+      "cache_entries": {
+        "columns": [
+          {
+            "name": "key",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "value",
+            "type": "BLOB",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "expires_at",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "namespace",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'default'",
+            "pk": false
+          },
+          {
+            "name": "tags",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 4
+      }
+    }
+  },
+  {
+    "database": "data/rate_limiter.db",
+    "table_count": 3,
+    "tables": {
+      "rate_configs": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "requests_per_second",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "burst_size",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "strategy",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "scope",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "retry_after_seconds",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "enabled",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "1",
+            "pk": false
+          },
+          {
+            "name": "priority",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "metadata",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 5
+      },
+      "request_log": {
+        "columns": [
+          {
+            "name": "request_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "endpoint",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "scope_key",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "allowed",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "wait_time_ms",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "limit_name",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "limit_stats": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "date",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "total_requests",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "allowed_requests",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "limited_requests",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "avg_wait_time_ms",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/custom.db",
+    "table_count": 1,
+    "tables": {
+      "products": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "name",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "price",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 3
+      }
+    }
+  },
+  {
+    "database": "data/community/achievements.db",
+    "table_count": 3,
+    "tables": {
+      "user_badges": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "user_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "badge_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "earned_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "notified",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "badge_progress": {
+        "columns": [
+          {
+            "name": "user_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "trade_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "win_streak",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "best_win_streak",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "total_pnl",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "win_rate",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "unique_tokens_analyzed",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "referral_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "vote_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "has_10x_trade",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "has_alpha_discovery",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "updated_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/whales.db",
+    "table_count": 4,
+    "tables": {
+      "whale_wallets": {
+        "columns": [
+          {
+            "name": "address",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "label",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "category",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'unknown'",
+            "pk": false
+          },
+          {
+            "name": "total_value_usd",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "sol_balance",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "is_active",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "1",
+            "pk": false
+          },
+          {
+            "name": "first_seen",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "last_activity",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "win_rate",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "avg_trade_size",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "notes",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tags_json",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "whale_movements": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "wallet_address",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "wallet_label",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "movement_type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "token_symbol",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "token_mint",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "amount",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "value_usd",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "direction",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tx_signature",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "counterparty",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "is_significant",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "whale_alerts": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "wallet_address",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "wallet_label",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "alert_type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "message",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "value_usd",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "token_symbol",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tx_signature",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "acknowledged",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/call_tracking.db",
+    "table_count": 5,
+    "tables": {
+      "calls": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "source",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "contract",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "verdict",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "score",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "price_at_call",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "reasoning",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "change_24h_at_call",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "buy_sell_ratio",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "volume_24h",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "market_cap",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "liquidity",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "holders",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "market_regime",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 550
+      },
+      "outcomes": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "call_id",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timeframe",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "price_after",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "change_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "measured_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "factor_stats": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "factor_name",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "factor_level",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_calls",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "wins",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "losses",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "avg_pnl_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "win_rate",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "last_updated",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "trades": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "call_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "contract",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "entry_time",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "exit_time",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "entry_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "exit_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "position_size",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "pnl_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "pnl_usd",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "exit_reason",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 14
+      },
+      "probability_model": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "pump_level",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "ratio_level",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "score_level",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "regime",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sample_size",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "win_probability",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "avg_win_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "avg_loss_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "expected_value",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "last_updated",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/distributions.db",
+    "table_count": 2,
+    "tables": {
+      "distributions": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_amount",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "staking_amount",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "operations_amount",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "development_amount",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "staking_signature",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "operations_signature",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "development_signature",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'pending'",
+            "pk": false
+          },
+          {
+            "name": "error_message",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/raid_bot.db",
+    "table_count": 6,
+    "tables": {
+      "raid_users": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "telegram_id",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "telegram_username",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "twitter_handle",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "twitter_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "is_verified",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "is_blue",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "weekly_points",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "total_points",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          },
+          {
+            "name": "updated_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "raids": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "tweet_id",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tweet_url",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tweet_author",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tweet_text",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "started_at",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "ended_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "'active'",
+            "pk": false
+          },
+          {
+            "name": "announcement_message_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "announcement_chat_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_participants",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "total_points_awarded",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "raid_participations": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "raid_id",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "user_id",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "liked",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "retweeted",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "commented",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "points_earned",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "verified_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "raid_config": {
+        "columns": [
+          {
+            "name": "key",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "value",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "updated_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 6
+      },
+      "weekly_winners": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "week_start",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "week_end",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "user_id",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "rank",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "points",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "reward_amount",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": "CURRENT_TIMESTAMP",
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/backtests.db",
+    "table_count": 3,
+    "tables": {
+      "backtest_results": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "strategy_name",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "start_date",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "end_date",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "initial_capital",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "final_capital",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_return_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sharpe_ratio",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "max_drawdown",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "win_rate",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_trades",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_fees",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "parameters_json",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "metrics_json",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "backtest_trades": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "backtest_id",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "trade_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "side",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "price",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "quantity",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "value",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "fee",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "pnl",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "cumulative_pnl",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "reason",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "data/tax.db",
+    "table_count": 4,
+    "tables": {
+      "tax_lots": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "quantity",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "remaining_quantity",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "cost_per_unit",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_cost",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "fee",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "purchase_date",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tx_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "adjusted_cost_basis",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "wash_sale_adjustment",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 2
+      },
+      "sales": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "quantity",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sale_price",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sale_date",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "proceeds",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "cost_basis",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "gain_loss",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "fee",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "is_long_term",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "holding_period_days",
+            "type": "INTEGER",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "long_term_gain_loss",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "short_term_gain_loss",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "lots_used_json",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "tx_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 1
+      },
+      "wash_sales": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sale_date",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sale_tx_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "replacement_date",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "replacement_tx_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "disallowed_loss",
+            "type": "REAL",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "replacement_lot_id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "bots/twitter/engagement.db",
+    "table_count": 5,
+    "tables": {
+      "tweet_metrics": {
+        "columns": [
+          {
+            "name": "tweet_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "text_preview",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "likes",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "retweets",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "replies",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "quotes",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "impressions",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "profile_clicks",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "url_clicks",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "hashtag_clicks",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "detail_expands",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "engagement_rate",
+            "type": "REAL",
+            "not_null": false,
+            "default": "0.0",
+            "pk": false
+          },
+          {
+            "name": "last_updated",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "thread_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "metrics_history": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "tweet_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "likes",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "retweets",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "replies",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "impressions",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "sqlite_sequence": {
+        "columns": [
+          {
+            "name": "name",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "seq",
+            "type": "",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "audience_snapshots": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "follower_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "following_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "data_json",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "threads": {
+        "columns": [
+          {
+            "name": "thread_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "tweet_count",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "topic",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "type",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  },
+  {
+    "database": "database.db",
+    "table_count": 5,
+    "tables": {
+      "calls": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "timestamp",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "source",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "contract",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "verdict",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "score",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "price_at_call",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "reasoning",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "change_24h_at_call",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "buy_sell_ratio",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "volume_24h",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "market_cap",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "liquidity",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "holders",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "market_regime",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "outcomes": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "call_id",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "timeframe",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "price_after",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "change_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "measured_at",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "factor_stats": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "factor_name",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "factor_level",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "total_calls",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "wins",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "losses",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": "0",
+            "pk": false
+          },
+          {
+            "name": "avg_pnl_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "win_rate",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "last_updated",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "trades": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "call_id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "symbol",
+            "type": "TEXT",
+            "not_null": true,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "contract",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "entry_time",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "exit_time",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "entry_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "exit_price",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "position_size",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "pnl_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "pnl_usd",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "exit_reason",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      },
+      "probability_model": {
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": true
+          },
+          {
+            "name": "pump_level",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "ratio_level",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "score_level",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "regime",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "sample_size",
+            "type": "INTEGER",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "win_probability",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "avg_win_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "avg_loss_pct",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "expected_value",
+            "type": "REAL",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          },
+          {
+            "name": "last_updated",
+            "type": "TEXT",
+            "not_null": false,
+            "default": null,
+            "pk": false
+          }
+        ],
+        "row_count": 0
+      }
+    }
+  }
+]
