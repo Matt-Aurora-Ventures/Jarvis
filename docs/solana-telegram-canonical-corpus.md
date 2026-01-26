@@ -1,0 +1,132 @@
+# Solana and Telegram Libraries (Canonical Build Corpus)
+
+0) Python library differentiation factors (choose one stack)
+
+Telegram bots (Python)
+- aiogram: modern, fully async, fast for high-throughput bots, clean middleware/router patterns.
+- python-telegram-bot: mature, ergonomic, async support; great default choice.
+
+Solana clients (Python)
+- solana-py: baseline Python SDK for RPC + transaction building.
+- solders: high-performance Rust-backed primitives/signing (often used with solana-py).
+- anchorpy (optional): Python client for Anchor IDL programs.
+
+Architectures
+- Event-driven (webhooks/streams -> strategy -> execution) is standard for Solana trading bots.
+- For speed, plan around: (1) low-latency RPC, (2) streaming (Geyser/gRPC),
+  (3) fast tx sending/bundles, (4) priority fees/tips.
+
+PRIMARY REFERENCES (must prefer these)
+
+(1) Solana RPC
+- Solana RPC (HTTP): https://solana.com/docs/rpc
+- Solana RPC (WebSocket): https://solana.com/docs/rpc/websocket
+- programSubscribe example: https://solana.com/docs/rpc/websocket/programsubscribe
+
+(2) Wallet Integrations
+- Wallet Adapter (repo): https://github.com/anza-xyz/wallet-adapter
+- Wallet Adapter (docs): https://anza-xyz.github.io/wallet-adapter/
+- Wallet Standard (Solana extensions): https://github.com/anza-xyz/wallet-standard
+- Mobile Wallet Adapter (repo): https://github.com/solana-mobile/mobile-wallet-adapter
+- MWA for Web Apps: https://docs.solanamobile.com/mobile-wallet-adapter/web-apps
+- SIWS (Phantom): https://github.com/phantom/sign-in-with-solana
+
+(3) Solana Pay
+- Solana Pay (repo): https://github.com/solana-foundation/solana-pay
+- Solana Pay spec: https://github.com/solana-foundation/solana-pay/blob/master/SPEC.md
+- Solana Pay docs: https://docs.solanapay.com/core/overview
+
+(4) Solana DEX Trading (DEX-only)
+- Jupiter Swap API V6: https://hub.jup.ag/docs/apis/swap-api
+- Jupiter swap OpenAPI: https://github.com/jup-ag/jupiter-quote-api-node/blob/main/swagger.yaml
+- Jupiter swap api client (Rust): https://github.com/jup-ag/jupiter-swap-api-client
+- OpenBook DEX program: https://github.com/raydium-io/openbook-dex
+- Meteora dev guide home: https://docs.meteora.ag/developer-guide/home
+- Meteora DLMM TS SDK getting started: https://docs.meteora.ag/developer-guide/guides/dlmm/typescript-sdk/getting-started
+- Pyth Solana integration: https://docs.pyth.network/price-feeds/core/use-real-time-data/pull-integration/solana
+- Pyth price feeds hub: https://docs.pyth.network/price-feeds/core/price-feeds
+
+(5) Telegram Bots
+- Telegram Bot API: https://core.telegram.org/bots/api
+- Webhooks guide: https://core.telegram.org/bots/webhooks
+- Bots FAQ: https://core.telegram.org/bots/faq
+- Samples list: https://core.telegram.org/bots/samples
+- aiogram: https://github.com/aiogram/aiogram and https://aiogram.dev/
+- python-telegram-bot: https://github.com/python-telegram-bot/python-telegram-bot and https://docs.python-telegram-bot.org/
+
+(6) BAGS.fm API
+- Bags docs root: https://docs.bags.fm/
+- Bags API base URL + endpoints index: https://docs.bags.fm/api-reference/introduction
+- Bags program IDs + LUT + IDL pointers: https://docs.bags.fm/principles/program-ids
+- Bags GitHub org: https://github.com/bagsfm
+- Bags SDK (npm): https://www.npmjs.com/package/@bagsfm/bags-sdk
+
+SECONDARY REFERENCES (optional)
+
+Solana core SDKs and programs
+- JS SDK @solana/web3.js: https://github.com/solana-labs/solana-web3.js/
+- SPL (Solana Program Library): https://github.com/solana-labs/solana-program-library
+- Token-2022 program: https://github.com/solana-program/token-2022
+- Solana web3 examples: https://github.com/solana-developers/web3-examples
+
+Streaming / indexing
+- Yellowstone gRPC overview (QuickNode): https://www.quicknode.com/docs/solana/yellowstone-grpc/overview
+- Yellowstone gRPC docs (Shyft): https://docs.shyft.to/solana-yellowstone-grpc/docs
+
+Fast tx sending / bundles
+- Jito docs: https://docs.jito.wtf/
+- Jito low latency tx send + bundles: https://docs.jito.wtf/lowlatencytxnsend/
+
+DEX/AMM extras
+- Orca Whirlpools: https://github.com/orca-so/whirlpools
+- Raydium SDK topic: https://github.com/topics/raydium-sdk
+- Serum (legacy, mostly replaced by OpenBook) and PySerum:
+  https://github.com/project-serum/serum-dex
+  https://github.com/serum-community/pyserum
+
+Telegram extras
+- telegraf (Node): https://github.com/telegraf/telegraf
+- Telethon (MTProto, advanced use cases): https://github.com/LonamiWebs/Telethon
+
+
+Single AI Dev Ingest Prompt (copy/paste)
+
+You are my senior full-stack + Solana + trading-bot + Telegram-bot engineer.
+
+Objective:
+Build production-grade systems on Solana (programs + clients), integrate Solana wallets,
+build Telegram bots, and build Solana on-chain trading bots (DEX-only, on-chain execution),
+and integrate the BAGS.fm API.
+
+Ground rules:
+- Use only the documentation and repos referenced below as primary sources.
+- Prefer official docs + canonical GitHub repos.
+- When you propose an implementation, include (a) architecture, (b) module boundaries,
+  (c) data flows, (d) key risks and mitigations, (e) minimal viable code scaffolds.
+- Optimize for correctness, security, and operational reliability (rate limits, retries,
+  key management, monitoring).
+- For trading bots, optimize for latency: streaming -> decision -> transaction build ->
+  simulation -> fast send -> confirmation -> post-trade accounting.
+
+PRIMARY REFERENCES
+- Solana RPC docs (HTTP + WebSocket): https://solana.com/docs/rpc
+- programSubscribe example: https://solana.com/docs/rpc/websocket/programsubscribe
+- Wallet Adapter: https://github.com/anza-xyz/wallet-adapter
+- Wallet Standard: https://github.com/anza-xyz/wallet-standard
+- Mobile Wallet Adapter: https://github.com/solana-mobile/mobile-wallet-adapter
+- MWA web apps: https://docs.solanamobile.com/mobile-wallet-adapter/web-apps
+- SIWS (Phantom): https://github.com/phantom/sign-in-with-solana
+- Solana Pay: https://github.com/solana-foundation/solana-pay
+- Jupiter Swap API V6: https://hub.jup.ag/docs/apis/swap-api
+- Jupiter OpenAPI: https://github.com/jup-ag/jupiter-quote-api-node/blob/main/swagger.yaml
+- OpenBook: https://github.com/raydium-io/openbook-dex
+- Meteora dev guide: https://docs.meteora.ag/developer-guide/home
+- Pyth: https://docs.pyth.network/price-feeds/core/use-real-time-data/pull-integration/solana
+- Telegram Bot API: https://core.telegram.org/bots/api
+- Telegram webhooks: https://core.telegram.org/bots/webhooks
+- aiogram: https://github.com/aiogram/aiogram
+- python-telegram-bot: https://github.com/python-telegram-bot/python-telegram-bot
+- Bags docs: https://docs.bags.fm/
+- Bags API intro: https://docs.bags.fm/api-reference/introduction
+- Bags program IDs: https://docs.bags.fm/principles/program-ids
+- Bags SDK: https://www.npmjs.com/package/@bagsfm/bags-sdk
