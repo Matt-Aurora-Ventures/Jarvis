@@ -2143,14 +2143,52 @@ async def vibe(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.HTML
         )
 
-        # Execute via continuous console
-        result = await console.execute(
-            user_id=user_id,
-            username=username,
-            chat_id=chat_id,
-            prompt=message,
-            mode="vibe"
-        )
+        # Animated progress indicator
+        progress_animations = [
+            "⏳ Processing",
+            "⏳ Processing.",
+            "⏳ Processing..",
+            "⏳ Processing..."
+        ]
+        animation_index = [0]  # Use list to allow modification in nested function
+        progress_task = None
+
+        async def update_progress():
+            """Animate progress message while request is processing."""
+            while True:
+                await asyncio.sleep(2)
+                animation_index[0] = (animation_index[0] + 1) % len(progress_animations)
+                try:
+                    await confirm_msg.edit_text(
+                        f"🔄 <b>Vibe Request Processing</b>\n\n"
+                        f"<i>{message[:200]}{'...' if len(message) > 200 else ''}</i>\n\n"
+                        f"{progress_animations[animation_index[0]]}{session_status}",
+                        parse_mode=ParseMode.HTML
+                    )
+                except Exception:
+                    # Message may have been deleted or edit failed - stop animation
+                    break
+
+        # Start progress animation
+        progress_task = asyncio.create_task(update_progress())
+
+        try:
+            # Execute via continuous console
+            result = await console.execute(
+                user_id=user_id,
+                username=username,
+                chat_id=chat_id,
+                prompt=message,
+                mode="vibe"
+            )
+        finally:
+            # Stop progress animation
+            if progress_task:
+                progress_task.cancel()
+                try:
+                    await progress_task
+                except asyncio.CancelledError:
+                    pass
 
         duration = (datetime.now() - start_time).total_seconds()
 
