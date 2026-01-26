@@ -22,10 +22,16 @@ from core.errors.exceptions import (
 )
 from core.errors.classification import classify_error, ErrorCategory, ClassifiedError
 from core.errors.recovery import RecoveryStrategy, with_recovery
+from core.errors.types import (
+    TransientError, PermanentError, QuotaExceededError, PermissionDeniedError,
+    CircuitOpenError, RetryableError, ServiceUnavailableError
+)
 
 __all__ = [
     "JarvisError", "ValidationError", "AuthenticationError", "AuthorizationError",
     "NotFoundError", "RateLimitError", "ProviderError", "TradingError",
     "classify_error", "ErrorCategory", "ClassifiedError",
-    "RecoveryStrategy", "with_recovery"
+    "RecoveryStrategy", "with_recovery",
+    "TransientError", "PermanentError", "QuotaExceededError", "PermissionDeniedError",
+    "CircuitOpenError", "RetryableError", "ServiceUnavailableError"
 ]
