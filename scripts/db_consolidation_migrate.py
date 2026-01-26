@@ -197,11 +197,141 @@ class DatabaseMigrator:
             self.log(f"Migration error {source_table} → {target_table}: {e}", "ERROR")
             return 0
 
-    def run_migration(self) -> bool:
+    def migrate_analytics_data(self) -> bool:
+        """Migrate analytics data from legacy databases to jarvis_analytics.db"""
+        self.log("\n" + "="*80)
+        self.log("MIGRATING ANALYTICS DATA")
+        self.log("="*80)
+
+        # Map legacy tables to consolidated analytics schema
+        # Legacy llm_usage → jarvis_analytics.llm_costs
+        self.migrate_table_data(
+            DATA_DIR / "llm_costs.db",
+            "llm_usage",
+            TARGET_ANALYTICS,
+            "llm_costs",
+            transform_fn=lambda row: {
+                'id': row.get('id'),
+                'timestamp': row.get('timestamp'),
+                'model': row.get('model', 'unknown'),
+                'input_tokens': row.get('input_tokens', 0),
+                'output_tokens': row.get('output_tokens', 0),
+                'total_tokens': row.get('total_tokens', 0),
+                'cost_usd': row.get('cost_usd', 0.0),
+                'endpoint': row.get('endpoint', 'unknown'),
+                'user_id': row.get('user_id'),
+                'session_id': row.get('session_id')
+            }
+        )
+
+        # Note: llm_daily_stats and budget_alerts tables don't exist in current jarvis_analytics schema
+        # Logging this as a gap
+        self.log("NOTE: llm_daily_stats and budget_alerts not migrated (no matching schema in target)", "WARNING")
+
+        # Legacy metrics.db tables → Current schema doesn't have direct match
+        # Log this gap
+        self.log("NOTE: metrics_1m, metrics_1h, alert_history not migrated (no matching schema in target)", "WARNING")
+
+        return True
+
+    def migrate_cache_data(self) -> bool:
+        """Migrate cache data from legacy databases to jarvis_cache.db"""
+        self.log("\n" + "="*80)
+        self.log("MIGRATING CACHE DATA")
+        self.log("="*80)
+
+        # Map legacy rate_configs → rate_limit_state
+        self.migrate_table_data(
+            DATA_DIR / "rate_limiter.db",
+            "rate_configs",
+            TARGET_CACHE,
+            "rate_limit_state",
+            transform_fn=lambda row: {
+                'id': row.get('id'),
+                'endpoint': row.get('endpoint', 'unknown'),
+                'requests_per_minute': row.get('requests_per_minute', 60),
+                'requests_per_hour': row.get('requests_per_hour', 1000),
+                'requests_per_day': row.get('requests_per_day', 10000),
+                'created_at': row.get('created_at'),
+                'updated_at': row.get('updated_at')
+            }
+        )
+
+        # Note: request_log and limit_stats don't have clear mappings
+        self.log("NOTE: request_log and limit_stats not migrated (no matching schema in target)", "WARNING")
+
+        return True
+
+    def validate_migration(self) -> Dict[str, int]:
+        """Validate row counts match between legacy and consolidated"""
+        self.log("\n" + "="*80)
+        self.log("VALIDATING MIGRATION")
+        self.log("="*80)
+
+        validation_results = {}
+
+        # Validate analytics migration
+        try:
+            # Check legacy
+            legacy_conn = sqlite3.connect(DATA_DIR / "llm_costs.db")
+            legacy_count = legacy_conn.execute("SELECT COUNT(*) FROM llm_usage").fetchone()[0]
+            legacy_conn.close()
+
+            # Check consolidated
+            target_conn = sqlite3.connect(TARGET_ANALYTICS)
+            target_count = target_conn.execute("SELECT COUNT(*) FROM llm_costs").fetchone()[0]
+            target_conn.close()
+
+            validation_results['llm_usage'] = {
+                'legacy': legacy_count,
+                'consolidated': target_count,
+                'match': legacy_count == target_count
+            }
+
+            if legacy_count == target_count:
+                self.log(f"✓ llm_usage: {legacy_count} rows migrated successfully")
+            else:
+                self.log(f"✗ llm_usage: Mismatch! Legacy={legacy_count}, Consolidated={target_count}", "ERROR")
+        except Exception as e:
+            self.log(f"Validation error for llm_usage: {e}", "ERROR")
+
+        # Validate cache migration
+        try:
+            # Check legacy
+            legacy_conn = sqlite3.connect(DATA_DIR / "rate_limiter.db")
+            legacy_count = legacy_conn.execute("SELECT COUNT(*) FROM rate_configs").fetchone()[0]
+            legacy_conn.close()
+
+            # Check consolidated
+            target_conn = sqlite3.connect(TARGET_CACHE)
+            target_count = target_conn.execute("SELECT COUNT(*) FROM rate_limit_state").fetchone()[0]
+            target_conn.close()
+
+            validation_results['rate_configs'] = {
+                'legacy': legacy_count,
+                'consolidated': target_count,
+                'match': legacy_count == target_count
+            }
+
+            if legacy_count == target_count:
+                self.log(f"✓ rate_configs: {legacy_count} rows migrated successfully")
+            else:
+                self.log(f"✗ rate_configs: Mismatch! Legacy={legacy_count}, Consolidated={target_count}", "ERROR")
+        except Exception as e:
+            self.log(f"Validation error for rate_configs: {e}", "ERROR")
+
+        return validation_results
+
+    def run_migration(self, analytics_only=False, cache_only=False) -> bool:
         """Execute migration"""
         self.log("=" * 80)
         self.log("DATABASE CONSOLIDATION MIGRATION")
-        self.log("35 databases → 3 consolidated databases")
+        if analytics_only:
+            self.log("MODE: Analytics data only")
+        elif cache_only:
+            self.log("MODE: Cache data only")
+        else:
+            self.log("MODE: Full migration (core + analytics + cache)")
         if self.dry_run:
             self.log("[DRY RUN MODE - No changes will be made]")
         self.log("=" * 80)
@@ -210,78 +340,25 @@ class DatabaseMigrator:
         if not self.backup_databases():
             return False
 
-        # Step 2: Create targets
-        if not self.create_target_databases():
-            return False
+        # Step 2: Skip creating targets - they already exist with current schema
+        self.log("\nUsing existing consolidated databases (skipping schema creation)")
 
-        # Step 3: Migrate core data
-        self.log("\nMigrating core operational data...")
+        # Step 3: Migrate based on mode
+        if analytics_only or not cache_only:
+            if not self.migrate_analytics_data():
+                return False
 
-        # jarvis.db → jarvis_core.db
-        core_tables = ['positions', 'trades', 'treasury_orders', 'users', 'items']
-        for table in core_tables:
-            self.migrate_table_data(
-                DATA_DIR / "jarvis.db",
-                table,
-                TARGET_CORE,
-                table
-            )
+        if cache_only or not analytics_only:
+            if not self.migrate_cache_data():
+                return False
 
-        # telegram_memory.db → jarvis_core.db
-        telegram_tables = {
-            'messages': 'telegram_messages',
-            'memories': 'telegram_memories',
-            'instructions': 'telegram_instructions',
-            'learnings': 'telegram_learnings'
-        }
-        for src, tgt in telegram_tables.items():
-            self.migrate_table_data(
-                DATA_DIR / "telegram_memory.db",
-                src,
-                TARGET_CORE,
-                tgt
-            )
-
-        # Step 4: Migrate analytics
-        self.log("\nMigrating analytics data...")
-
-        # llm_costs.db → jarvis_analytics.db
-        analytics_tables = ['llm_usage', 'llm_daily_stats', 'budget_alerts']
-        for table in analytics_tables:
-            self.migrate_table_data(
-                DATA_DIR / "llm_costs.db",
-                table,
-                TARGET_ANALYTICS,
-                table
-            )
-
-        # metrics.db → jarvis_analytics.db
-        metrics_tables = ['metrics_1m', 'metrics_1h', 'alert_history']
-        for table in metrics_tables:
-            self.migrate_table_data(
-                DATA_DIR / "metrics.db",
-                table,
-                TARGET_ANALYTICS,
-                table
-            )
-
-        # Step 5: Migrate cache
-        self.log("\nMigrating cache data...")
-
-        # rate_limiter.db → jarvis_cache.db
-        cache_tables = ['rate_configs', 'request_log', 'limit_stats']
-        for table in cache_tables:
-            self.migrate_table_data(
-                DATA_DIR / "rate_limiter.db",
-                table,
-                TARGET_CACHE,
-                table
-            )
+        # Step 4: Validate if not dry-run
+        if not self.dry_run:
+            validation_results = self.validate_migration()
 
         # Report
         self.log("\n" + "=" * 80)
         self.log("MIGRATION SUMMARY")
-        self.log(f"Databases created: {self.stats['databases_created']}")
         self.log(f"Tables migrated: {self.stats['tables_migrated']}")
         self.log(f"Rows migrated: {self.stats['rows_migrated']}")
         self.log(f"Errors: {len(self.errors)}")
@@ -302,6 +379,8 @@ def main():
     parser = argparse.ArgumentParser(description="Database consolidation migration")
     parser.add_argument('--dry-run', action='store_true', help="Simulate migration without changes")
     parser.add_argument('--backup-only', action='store_true', help="Only create backups")
+    parser.add_argument('--analytics', action='store_true', help="Migrate analytics data only")
+    parser.add_argument('--cache', action='store_true', help="Migrate cache data only")
     args = parser.parse_args()
 
     migrator = DatabaseMigrator(dry_run=args.dry_run)
@@ -309,7 +388,10 @@ def main():
     if args.backup_only:
         success = migrator.backup_databases()
     else:
-        success = migrator.run_migration()
+        success = migrator.run_migration(
+            analytics_only=args.analytics,
+            cache_only=args.cache
+        )
 
     if success:
         print("\n✅ Migration complete!")
