@@ -47,33 +47,33 @@ def restore_databases(archive_dir: Optional[Path] = None, dry_run: bool = False)
     print("="*60)
 
     if dry_run:
-        print("🔍 DRY-RUN MODE: No files will be moved")
+        print("[DRY-RUN] DRY-RUN MODE: No files will be moved")
     else:
-        print("⚠️  LIVE MODE: Databases will be restored")
+        print("[WARN]  LIVE MODE: Databases will be restored")
 
     # Find archive directory
     if archive_dir is None:
         archive_dir = find_latest_archive()
 
     if archive_dir is None:
-        print("\n❌ ERROR: No archive directory found")
+        print("\n[ERROR] ERROR: No archive directory found")
         print(f"Expected location: {ARCHIVE_BASE}")
         return {"success": False, "error": "No archive found"}
 
     if not archive_dir.exists():
-        print(f"\n❌ ERROR: Archive directory not found: {archive_dir}")
+        print(f"\n[ERROR] ERROR: Archive directory not found: {archive_dir}")
         return {"success": False, "error": "Archive directory missing"}
 
-    print(f"\n📁 Restoring from: {archive_dir}")
+    print(f"\n[DIR] Restoring from: {archive_dir}")
 
     # Find databases in archive
     archived_dbs = list(archive_dir.glob("*.db"))
 
     if not archived_dbs:
-        print("\n❌ ERROR: No databases found in archive")
+        print("\n[ERROR] ERROR: No databases found in archive")
         return {"success": False, "error": "Empty archive"}
 
-    print(f"📊 Found {len(archived_dbs)} databases to restore")
+    print(f"[INFO] Found {len(archived_dbs)} databases to restore")
 
     # Check for conflicts
     conflicts = []
@@ -83,7 +83,7 @@ def restore_databases(archive_dir: Optional[Path] = None, dry_run: bool = False)
             conflicts.append(archive_db.name)
 
     if conflicts:
-        print(f"\n⚠️  WARNING: {len(conflicts)} conflicts detected")
+        print(f"\n[WARN]  WARNING: {len(conflicts)} conflicts detected")
         print("The following databases already exist in data/:")
         for name in conflicts:
             print(f"   - {name}")
@@ -92,7 +92,7 @@ def restore_databases(archive_dir: Optional[Path] = None, dry_run: bool = False)
         if not dry_run:
             response = input("\nContinue with restore? (yes/no): ")
             if response.lower() != "yes":
-                print("❌ Restore cancelled by user")
+                print("[ERROR] Restore cancelled by user")
                 return {"success": False, "error": "User cancelled"}
 
     # Restore each database
@@ -104,18 +104,18 @@ def restore_databases(archive_dir: Optional[Path] = None, dry_run: bool = False)
         size = archive_db.stat().st_size
 
         if dry_run:
-            print(f"📦 Would restore: {archive_db.name}")
+            print(f"[PKG] Would restore: {archive_db.name}")
             print(f"   → {target_path}")
             print(f"   Size: {size / 1024:.1f}K")
         else:
-            print(f"📦 Restoring: {archive_db.name}")
+            print(f"[PKG] Restoring: {archive_db.name}")
             shutil.move(str(archive_db), str(target_path))
 
             if target_path.exists():
-                print(f"   ✅ Restored: {size / 1024:.1f}K")
+                print(f"   [OK] Restored: {size / 1024:.1f}K")
                 restored.append(archive_db.name)
             else:
-                print(f"   ❌ ERROR: Restore failed")
+                print(f"   [ERROR] ERROR: Restore failed")
 
     # Summary
     print("\n" + "="*60)
@@ -123,15 +123,15 @@ def restore_databases(archive_dir: Optional[Path] = None, dry_run: bool = False)
     print("="*60)
 
     if dry_run:
-        print(f"🔍 DRY-RUN: {len(archived_dbs)} databases would be restored")
+        print(f"[DRY-RUN] DRY-RUN: {len(archived_dbs)} databases would be restored")
     else:
-        print(f"✅ SUCCESS: {len(restored)} databases restored")
+        print(f"[OK] SUCCESS: {len(restored)} databases restored")
 
         # Show current database count
         all_dbs = list(DATA_DIR.glob("*.db"))
-        print(f"📊 Total databases in data/: {len(all_dbs)}")
+        print(f"[INFO] Total databases in data/: {len(all_dbs)}")
 
-    print(f"📁 Archive location: {archive_dir}")
+    print(f"[DIR] Archive location: {archive_dir}")
 
     if not dry_run and restored:
         print("\n" + "="*60)
@@ -169,7 +169,7 @@ def main():
     result = restore_databases(archive_dir=archive_dir, dry_run=dry_run)
 
     if result.get("success") == False:
-        print(f"\n❌ Restore failed: {result.get('error')}")
+        print(f"\n[ERROR] Restore failed: {result.get('error')}")
         sys.exit(1)
 
 
