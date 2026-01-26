@@ -344,7 +344,13 @@ def _status_payload() -> Dict[str, str]:
     memory_cfg = cfg.get("memory", {})
     passive_cfg = cfg.get("passive", {})
     interview_cfg = cfg.get("interview", {})
-    memory_state = memory.load_memory_state()
+
+    # Load memory state with fallback for import issues
+    try:
+        memory_state = memory.load_memory_state()
+    except AttributeError:
+        memory_state = {"memory_cap": "unknown", "recent_count": 0, "pending_count": 0}
+
     voice_enabled = current.get("voice_enabled", voice_cfg.get("enabled", False))
     hotkey_cfg = cfg.get("hotkeys", {})
 
@@ -398,7 +404,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         pid = state.read_pid()
 
         if not running:
-            print("\n⚠️  Daemon is not running. Start with: lifeos on")
+            print("\n[WARN] Daemon is not running. Start with: lifeos on")
             return
 
         print("\n" + "=" * 60)
@@ -407,10 +413,10 @@ def cmd_status(args: argparse.Namespace) -> None:
 
         # Show daemon info
         print(f"\nDaemon Process:")
-        print(f"  • PID: {pid if pid else 'unknown'}")
-        print(f"  • Uptime: {_format_uptime(daemon_uptime)}")
-        print(f"  • Last heartbeat: {daemon_heartbeat}")
-        print(f"  • Last state update: {updated_at}")
+        print(f"  - PID: {pid if pid else 'unknown'}")
+        print(f"  - Uptime: {_format_uptime(daemon_uptime)}")
+        print(f"  - Last heartbeat: {daemon_heartbeat}")
+        print(f"  - Last state update: {updated_at}")
 
         if component_status:
             # Group components by status
@@ -425,15 +431,15 @@ def cmd_status(args: argparse.Namespace) -> None:
 
             # Show successful components
             if ok_components:
-                print("\n✓ Running Components:")
+                print("\n[OK] Running Components:")
                 for name in ok_components:
-                    print(f"  • {name}")
+                    print(f"  - {name}")
 
             # Show failed components with details
             if failed_components:
-                print("\n✗ Failed Components:")
+                print("\n[FAILED] Failed Components:")
                 for name, error in failed_components:
-                    print(f"  • {name}")
+                    print(f"  - {name}")
                     print(f"    Error: {error}")
 
             # Show brain status if available
@@ -445,21 +451,24 @@ def cmd_status(args: argparse.Namespace) -> None:
                 errors = brain_status.get("errors_in_row", 0)
                 brain_running = brain_status.get("running", False)
 
-                brain_icon = "✓" if brain_running and errors == 0 else "⚠️"
+                brain_icon = "[OK]" if brain_running and errors == 0 else "[WARN]"
                 print(f"  {brain_icon} Phase: {phase}")
-                print(f"  • Cycles completed: {cycle_count}")
-                print(f"  • Status: {'Running' if brain_running else 'Stopped'}")
+                print(f"  - Cycles completed: {cycle_count}")
+                print(f"  - Status: {'Running' if brain_running else 'Stopped'}")
                 if errors > 0:
-                    print(f"  ⚠️  Consecutive errors: {errors}")
+                    print(f"  [WARN] Consecutive errors: {errors}")
 
-            # Summary
+            # Summary - use actual counts from current components
             print("\n" + "=" * 60)
             total = len(component_status)
-            if startup_failed == 0:
-                print(f"✅ All {total} components healthy")
+            ok_count = len(ok_components)
+            fail_count = len(failed_components)
+
+            if fail_count == 0:
+                print(f"[OK] All {total} components healthy")
             else:
-                print(f"⚠️  {startup_ok}/{total} components OK, {startup_failed} failed")
-                print("\n💡 To fix issues, check: lifeos/logs/daemon.log")
+                print(f"[WARN] {ok_count}/{total} components OK, {fail_count} failed")
+                print("\n[TIP] To fix issues, check: lifeos/logs/daemon.log")
             print("=" * 60)
         else:
             print("\n(No component status available - daemon may not have started yet)")
