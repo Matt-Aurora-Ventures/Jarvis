@@ -16,6 +16,38 @@ logger = logging.getLogger(__name__)
 PERFORMANCE_THRESHOLD_MS = 100
 
 
+def _extract_entities_for_fact(fact_id: int) -> List[str]:
+    """
+    Extract entity mentions for a given fact ID.
+
+    Args:
+        fact_id: Fact ID to query entity_mentions table
+
+    Returns:
+        List of entity names mentioned in this fact
+    """
+    from .database import get_db
+
+    db = get_db()
+    conn = db._get_connection()
+
+    try:
+        rows = conn.execute(
+            """
+            SELECT e.name
+            FROM entity_mentions em
+            INNER JOIN entities e ON e.id = em.entity_id
+            WHERE em.fact_id = ?
+            """,
+            (fact_id,)
+        ).fetchall()
+
+        return [row["name"] if hasattr(row, "keys") else row[0] for row in rows]
+    except Exception as e:
+        logger.warning(f"Failed to extract entities for fact {fact_id}: {e}")
+        return []
+
+
 async def recall(
     query: str,
     k: int = 10,
@@ -127,14 +159,17 @@ async def recall(
     # Convert HybridSearchResult to dict format
     results = []
     for result in search_results["results"]:
+        fact_id = result.fact_id
+        entities = _extract_entities_for_fact(fact_id) if fact_id else []
+
         results.append({
-            "id": None,  # Not exposed by hybrid_search
+            "id": fact_id,
             "content": result.content,
             "context": result.context,
             "source": result.source,
             "timestamp": result.timestamp,
             "confidence": result.confidence,
-            "entities": [],  # TODO: Extract from entity_mentions table
+            "entities": entities,
             "relevance_score": result.rrf_score,
         })
 
@@ -212,14 +247,17 @@ async def recall_recent(
     # Convert to recall format
     results = []
     for fact in facts:
+        fact_id = fact.get("id")
+        entities = _extract_entities_for_fact(fact_id) if fact_id else []
+
         results.append({
-            "id": fact.get("id"),
+            "id": fact_id,
             "content": fact["content"],
             "context": fact.get("context"),
             "source": fact.get("source", "unknown"),
             "timestamp": fact.get("timestamp", ""),
             "confidence": fact.get("confidence", 1.0),
-            "entities": [],  # TODO: Extract from entity_mentions
+            "entities": entities,
             "relevance_score": 1.0,  # Recent = always relevant
         })
 
