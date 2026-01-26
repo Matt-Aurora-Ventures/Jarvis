@@ -12,13 +12,13 @@ from unittest.mock import patch, MagicMock
 # Test imports
 from core.secrets.vault import SecretVault, get_vault, reset_vault
 from core.wallet.keystore import WalletKeystore
-from core.validation import (
+from core.security_validation import (
     validate_token_address,
     validate_amount,
     validate_percentage,
     validate_user_id,
     validate_callback_data,
-    validate_sql_identifier,
+    sanitize_sql_identifier,
     ValidationError,
 )
 from core.rate_limiting import RateLimiter, get_rate_limiter, reset_rate_limiter
