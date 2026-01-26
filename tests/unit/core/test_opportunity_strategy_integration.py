@@ -96,7 +96,7 @@ class TestOpportunityStrategyIntegration:
             "asset_type": "tokenized_equity",
             "underlying_ticker": "NVDA",
             "scores": {"opportunity": 0.7, "sentiment": 0.7, "momentum": 0.6},
-            "signal": {"confidence": 0.70, "expected_edge_pct": 0.03},
+            "signal": {"confidence": 0.70, "expected_edge_pct": 0.06},  # Fixed: 0.06/0.025 = 2.4 edge-to-cost ratio (> 2.0 threshold)
             "costs": {"total_pct": 0.025},
         }
 
