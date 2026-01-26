@@ -338,19 +338,19 @@ SELECT
 FROM llm_costs
 GROUP BY DATE(timestamp), provider;
 
+-- Note: Cross-database views removed - use application-level joins instead
+-- The v_top_tokens_by_sentiment view would require ATTACH DATABASE in SQLite
+-- which is handled at runtime by the application when needed.
+
 CREATE VIEW IF NOT EXISTS v_top_tokens_by_sentiment AS
 SELECT 
     ts.symbol,
     ts.token_mint,
     ts.sentiment_score,
     ts.total_mentions,
-    COUNT(tt.id) AS trade_count,
-    AVG(tt.pnl_pct) AS avg_pnl_pct
+    ts.analyzed_at
 FROM token_sentiment ts
-LEFT JOIN (SELECT * FROM jarvis_core.trades) tt 
-    ON ts.token_mint = tt.token_mint
 WHERE ts.analyzed_at > datetime('now', '-7 days')
-GROUP BY ts.token_mint
 ORDER BY ts.sentiment_score DESC, ts.total_mentions DESC
 LIMIT 100;
 
