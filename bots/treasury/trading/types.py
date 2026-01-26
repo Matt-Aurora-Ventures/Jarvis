@@ -72,6 +72,19 @@ class Position:
             return ((self.current_price - self.entry_price) / self.entry_price) * 100
         return 0.0
 
+    @property
+    def current_value_usd(self) -> float:
+        """Calculate current value of position in USD."""
+        if self.direction == TradeDirection.LONG:
+            # Current value = token amount * current price
+            return self.amount * self.current_price
+        return 0.0
+
+    @property
+    def unrealized_pnl_usd(self) -> float:
+        """Alias for unrealized_pnl for dashboard compatibility."""
+        return self.unrealized_pnl
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             'id': self.id,
