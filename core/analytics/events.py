@@ -362,7 +362,10 @@ class MixpanelSink(EventSink):
     async def _get_session(self):
         if self._session is None:
             import aiohttp
-            self._session = aiohttp.ClientSession()
+            from aiohttp import ClientTimeout
+            # Configure timeouts: 60s total, 30s connect (for analytics API calls)
+            timeout = ClientTimeout(total=60, connect=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def write(self, event: Event):
