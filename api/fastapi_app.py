@@ -481,6 +481,20 @@ Most endpoints require authentication via:
         except ImportError:
             return PlainTextResponse(content="# Metrics not available", media_type="text/plain")
 
+    @app.get("/api/metrics/bags")
+    async def get_bags_trading_metrics():
+        """Get bags.fm integration metrics and TP/SL trigger statistics."""
+        try:
+            from core.trading.bags_metrics import get_bags_metrics
+            return get_bags_metrics().to_dict()
+        except ImportError:
+            return {
+                "error": "bags.fm metrics not available",
+                "bags_trades": 0,
+                "jupiter_trades": 0,
+                "bags_usage_pct": 0.0,
+            }
+
     @app.get("/api/traces")
     async def recent_traces():
         """Get recent distributed traces."""
