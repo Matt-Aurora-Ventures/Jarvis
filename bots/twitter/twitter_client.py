@@ -415,10 +415,56 @@ class TwitterClient:
                             )
                             logger.debug("Bearer token client initialized for reading")
 
-                        logger.info(f"Connected to X as @{self._username} (OAuth 1.0a via tweepy)")
-                        return True
+                        if expected and not self._username_matches(self._username, expected):
+                            logger.warning(
+                                f"OAuth 1.0a authenticated as @{self._username}, "
+                                f"but expected @{expected}. Attempting OAuth 2.0 fallback."
+                            )
+                        else:
+                            logger.info(f"Connected to X as @{self._username} (OAuth 1.0a via tweepy)")
+                            return True
                 except Exception as e:
                     logger.warning(f"OAuth 1.0a connection failed: {e}")
+
+            # FALLBACK: OAuth 2.0 user context (if available)
+            if self.credentials.oauth2_access_token:
+                try:
+                    import requests
+
+                    headers = {"Authorization": f"Bearer {self.credentials.oauth2_access_token}"}
+                    resp = requests.get("https://api.twitter.com/2/users/me", headers=headers, timeout=10)
+                    if resp.status_code == 200:
+                        user = resp.json().get("data", {})
+                        oauth2_username = user.get("username")
+                        oauth2_user_id = user.get("id")
+                        if expected and not self._username_matches(oauth2_username, expected):
+                            logger.error(
+                                f"OAuth 2.0 authenticated as @{oauth2_username}, "
+                                f"but expected @{expected}."
+                            )
+                            return False
+                        self._username = oauth2_username
+                        self._user_id = str(oauth2_user_id) if oauth2_user_id else None
+                        self._use_oauth2 = True
+                        logger.info(f"Connected to X as @{self._username} (OAuth 2.0 user context)")
+                        return True
+
+                    if resp.status_code == 401 and self._refresh_oauth2_token():
+                        return self.connect()
+
+                    logger.error(f"OAuth 2.0 /users/me failed (status {resp.status_code})")
+                except Exception as e:
+                    logger.warning(f"OAuth 2.0 connection failed: {e}")
+
+            # If OAuth 1.0a connected but mismatched expected user, keep it running to avoid downtime
+            if tweepy_username and tweepy_user_id:
+                logger.warning(
+                    f"Continuing with OAuth 1.0a as @{tweepy_username} "
+                    f"(expected @{expected}) until OAuth 2.0 tokens are provided."
+                )
+                self._username = tweepy_username
+                self._user_id = tweepy_user_id
+                return True
 
             logger.error("Failed to connect to X with available credentials")
             _log_twitter_error(
