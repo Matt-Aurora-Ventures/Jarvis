@@ -11,6 +11,7 @@ Per GROK_COMPLIANCE_REGULATORY_GUIDE.md:
 
 import asyncio
 import aiohttp
+from aiohttp import ClientTimeout
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -93,7 +94,9 @@ class CommodityPriceClient:
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            # Configure timeouts: 60s total, 30s connect (for commodity price API calls)
+            timeout = ClientTimeout(total=60, connect=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def close(self):

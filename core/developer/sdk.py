@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
 import aiohttp
+from aiohttp import ClientTimeout
 import json
 
 logger = logging.getLogger(__name__)
@@ -108,7 +109,9 @@ class JarvisSDK:
 
     async def connect(self):
         """Initialize the SDK"""
-        self._session = aiohttp.ClientSession()
+        # Configure timeouts: 60s total, 30s connect (for developer API calls)
+        timeout = ClientTimeout(total=60, connect=30)
+        self._session = aiohttp.ClientSession(timeout=timeout)
         logger.info("JARVIS SDK connected")
 
     async def close(self):

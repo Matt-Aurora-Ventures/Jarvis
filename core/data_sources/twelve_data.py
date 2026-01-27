@@ -19,6 +19,7 @@ import json
 import time
 import asyncio
 import aiohttp
+from aiohttp import ClientTimeout
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -127,7 +128,9 @@ class TwelveDataClient:
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            # Configure timeouts: 60s total, 30s connect (for market data API calls)
+            timeout = ClientTimeout(total=60, connect=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def _rate_limit(self):
