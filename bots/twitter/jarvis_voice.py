@@ -481,6 +481,7 @@ Rules:
 
     async def generate_morning_briefing(self, data: Dict[str, Any]) -> Optional[str]:
         """Generate a morning market briefing tweet."""
+        grok_line = f"- Grok take: {data.get('grok_take')}\n" if data.get("grok_take") else ""
         prompt = f"""Write a morning market briefing. You're greeting your followers.
 
 Data:
@@ -488,6 +489,7 @@ Data:
 - BTC price: ${data.get('btc_price', 0):,.0f}
 - Top movers: {data.get('movers', 'checking...')}
 - Overnight sentiment: {data.get('sentiment', 'mixed')}
+{grok_line}
 
 Vibe: "gm. here's what happened while you slept" energy
 - Acknowledge the morning
@@ -505,6 +507,7 @@ Good examples:
 
     async def generate_evening_wrap(self, data: Dict[str, Any]) -> Optional[str]:
         """Generate an end-of-day market summary tweet."""
+        grok_line = f"- Grok take: {data.get('grok_take')}\n" if data.get("grok_take") else ""
         prompt = f"""Write an evening market wrap-up. Summarizing the day.
 
 Data:
@@ -512,6 +515,7 @@ Data:
 - BTC: ${data.get('btc_price', 0):,.0f} ({data.get('btc_change', 0):+.1f}%)
 - Day's highlight: {data.get('highlight', 'rotation day')}
 - Your take: {data.get('take', 'waiting game continues')}
+{grok_line}
 
 Vibe: "that's a wrap. here's what mattered" energy
 - Summarize the day objectively
