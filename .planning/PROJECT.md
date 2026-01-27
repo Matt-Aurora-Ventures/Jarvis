@@ -1,8 +1,40 @@
-# Jarvis V1 - Production-Ready Trading & AI Assistant
+# Jarvis - Autonomous Trading & AI Assistant
 
 **Created:** 2026-01-24
 **Owner:** @lucid
-**Status:** In Progress
+**Status:** V1 Complete, V2 In Progress
+
+---
+
+## Current Milestone: v2.0 Trading Web Interface
+
+**Goal:** Bring all Telegram `/demo` trading functionality to a production-grade web dashboard.
+
+**Target features:**
+- Real-time position monitoring with WebSocket updates
+- Buy/sell execution via web UI (mirroring Telegram flows)
+- AI sentiment analysis integration (Grok/xAI)
+- Portfolio value display and trade history
+- Mobile-responsive design with dark mode
+
+**Why:** Telegram is powerful for mobile/on-the-go trading, but web provides better UX for power users, multi-monitor workflows, and public demos. 85% of trading logic can be directly reused from existing `tg_bot/handlers/demo/`.
+
+---
+
+## Previous Milestones
+
+### v1.0 - Production-Ready Infrastructure ✅
+
+**Completed:** 2026-01-26
+**Goal:** Transform Jarvis from fragmented experimental system into production-ready platform.
+
+**Delivered:**
+- ✅ Database consolidation (28 → 3 databases, 89% reduction)
+- ✅ Demo bot fully functional with 240 tests passing
+- ✅ bags.fm API integrated with Jupiter fallback
+- ✅ Mandatory TP/SL on all trades
+- ✅ Zero critical security vulnerabilities
+- ✅ 80%+ test coverage on critical paths
 
 ---
 
@@ -172,6 +204,6 @@ Jarvis is a powerful but fragmented system with critical blockers preventing pub
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** 2026-01-24
-**Next Review:** After Phase 1 complete
+**Document Version:** 2.0
+**Last Updated:** 2026-01-27
+**Next Review:** After V2 Phase 1 complete
