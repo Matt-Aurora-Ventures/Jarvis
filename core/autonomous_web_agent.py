@@ -437,7 +437,9 @@ class AutonomousWebAgent:
     async def start_continuous(self, interval_seconds: int = 300):
         """Start continuous research loop."""
         self._running = True
-        self._session = aiohttp.ClientSession()
+        # Configure timeouts: 60s total, 30s connect (for continuous research)
+        timeout = ClientTimeout(total=60, connect=30)
+        self._session = aiohttp.ClientSession(timeout=timeout)
 
         logger.info(f"Starting autonomous research (interval: {interval_seconds}s)")
 
