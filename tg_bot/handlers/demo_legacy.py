@@ -5004,6 +5004,9 @@ Reply with a Solana token address to buy.
 
         return text, InlineKeyboardMarkup(keyboard)
 
+    # Snipe amount constants - defined once, used everywhere
+    SNIPE_AMOUNTS = [0.1, 0.25, 0.5, 1.0]
+
     @staticmethod
     def insta_snipe_menu(
         hottest_token: Dict[str, Any] = None,
@@ -5112,15 +5115,18 @@ Reply with a Solana token address to buy.
 
             text = "\n".join(lines)
 
+            # Use SNIPE_AMOUNTS constant for consistency
+            amounts = DemoMenuBuilder.SNIPE_AMOUNTS
             keyboard = [
-                # Quick snipe amounts
+                # Quick snipe amounts - row 1
                 [
-                    InlineKeyboardButton(f"⚡ 0.1 SOL", callback_data=f"demo:snipe_exec:{token_ref}:0.1"),
-                    InlineKeyboardButton(f"⚡ 0.25 SOL", callback_data=f"demo:snipe_exec:{token_ref}:0.25"),
+                    InlineKeyboardButton(f"⚡ {amounts[0]} SOL", callback_data=f"demo:snipe_exec:{token_ref}:{amounts[0]}"),
+                    InlineKeyboardButton(f"⚡ {amounts[1]} SOL", callback_data=f"demo:snipe_exec:{token_ref}:{amounts[1]}"),
                 ],
+                # Quick snipe amounts - row 2
                 [
-                    InlineKeyboardButton(f"⚡ 0.5 SOL", callback_data=f"demo:snipe_exec:{token_ref}:0.5"),
-                    InlineKeyboardButton(f"⚡ 1 SOL", callback_data=f"demo:snipe_exec:{token_ref}:1"),
+                    InlineKeyboardButton(f"⚡ {amounts[2]} SOL", callback_data=f"demo:snipe_exec:{token_ref}:{amounts[2]}"),
+                    InlineKeyboardButton(f"⚡ {amounts[3]} SOL", callback_data=f"demo:snipe_exec:{token_ref}:{amounts[3]}"),
                 ],
                 [
                     InlineKeyboardButton(f"🔄 Refresh Token", callback_data="demo:insta_snipe"),
