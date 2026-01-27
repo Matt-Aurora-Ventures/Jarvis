@@ -247,7 +247,7 @@ class TransactionMonitor:
                 if first_run and total_new_count > 0:
                     logger.info(f"Initialized with {total_new_count} existing transactions across {len(addresses_to_monitor)} pairs (skipped)")
                 elif poll_count % 15 == 0:  # Every ~30 seconds
-                    logger.info(f"Poll #{poll_count}: {len(self._processed_signatures)} txns tracked across {len(addresses_to_monitor)} pairs, min=${self.min_buy_usd}")
+                    logger.debug(f"Poll #{poll_count}: {len(self._processed_signatures)} txns tracked across {len(addresses_to_monitor)} pairs, min=${self.min_buy_usd}")
 
                 # Log new transactions found (for debugging)
                 if total_new_count > 0 and not first_run:
