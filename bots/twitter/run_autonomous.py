@@ -182,8 +182,13 @@ async def run_continuously():
     engine = get_autonomous_engine()
     cli_handler = get_x_claude_cli_handler()
 
+    expected = (
+        os.getenv("X_EXPECTED_USERNAME")
+        or os.getenv("TWITTER_EXPECTED_USERNAME")
+        or "jarvis_lifeos"
+    ).lstrip("@").strip()
     print(f"\nPosting interval: {engine._post_interval}s")
-    print("Vibe coding: ENABLED (@aurora_ventures can code via mentions)")
+    print(f"Vibe coding: ENABLED (@{expected} can code via mentions)")
     print("Press Ctrl+C to stop")
     print("="*60 + "\n")
 
