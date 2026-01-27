@@ -308,28 +308,50 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
     DemoMenuBuilder = ctx.DemoMenuBuilder
 
     try:
-        section_picks = {
-            "bluechips": [
+        # Fetch real data instead of using hardcoded mock data
+        picks = []
+
+        if section == "top10":
+            # Get real AI conviction picks
+            conviction_picks = await ctx.get_conviction_picks()
+            picks = [
+                {
+                    "symbol": p.get("symbol", "???"),
+                    "address": p.get("address", ""),
+                    "price": p.get("entry_price", 0),
+                    "change_24h": 0,  # Not available in conviction picks
+                    "conviction": p.get("conviction", "MEDIUM"),
+                    "tp_percent": p.get("tp_percent", 25),
+                    "sl_percent": p.get("sl_percent", 15),
+                    "score": int(p.get("score", 0)),
+                }
+                for p in conviction_picks[:10]  # Show all 10 picks
+            ]
+        elif section == "trending":
+            # Get real trending tokens
+            trending_tokens = await ctx.get_trending_with_sentiment()
+            picks = [
+                {
+                    "symbol": t.get("symbol", "???"),
+                    "address": t.get("address", ""),
+                    "price": t.get("price_usd", 0),
+                    "change_24h": t.get("change_24h", 0),
+                    "conviction": "MEDIUM",  # Default conviction for trending
+                    "tp_percent": 30,
+                    "sl_percent": 15,
+                    "score": int((t.get("sentiment_score", 0.5) or 0.5) * 100),
+                }
+                for t in trending_tokens[:10]
+            ]
+        elif section == "bluechips":
+            # Hardcoded blue chips (these are stable assets, not dynamic)
+            picks = [
                 {"symbol": "SOL", "address": "So11111111111111111111111111111111111111112", "price": 225.50, "change_24h": 2.5, "conviction": "HIGH", "tp_percent": 20, "sl_percent": 10, "score": 85},
                 {"symbol": "JUP", "address": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", "price": 1.25, "change_24h": 5.2, "conviction": "HIGH", "tp_percent": 25, "sl_percent": 12, "score": 82},
                 {"symbol": "RAY", "address": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R", "price": 8.45, "change_24h": 1.8, "conviction": "MEDIUM", "tp_percent": 15, "sl_percent": 10, "score": 78},
-            ],
-            "top10": [
-                {"symbol": "BONK", "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "price": 0.0000325, "change_24h": 15.2, "conviction": "VERY HIGH", "tp_percent": 30, "sl_percent": 15, "score": 92},
-                {"symbol": "WIF", "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", "price": 2.85, "change_24h": 8.5, "conviction": "HIGH", "tp_percent": 25, "sl_percent": 12, "score": 88},
-                {"symbol": "POPCAT", "address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr", "price": 1.42, "change_24h": 22.1, "conviction": "HIGH", "tp_percent": 35, "sl_percent": 15, "score": 86},
-            ],
-            "trending": [
-                {"symbol": "FARTCOIN", "address": "FART1111111111111111111111111111111111111111", "price": 0.00125, "change_24h": 245.5, "conviction": "VERY HIGH", "tp_percent": 50, "sl_percent": 25, "score": 95},
-                {"symbol": "GIGA", "address": "GIGA1111111111111111111111111111111111111111", "price": 0.0425, "change_24h": 85.2, "conviction": "HIGH", "tp_percent": 40, "sl_percent": 20, "score": 88},
-                {"symbol": "AI16Z", "address": "AI16Z111111111111111111111111111111111111111", "price": 0.875, "change_24h": 32.1, "conviction": "HIGH", "tp_percent": 35, "sl_percent": 18, "score": 85},
-            ],
-            "xstocks": [],
-            "prestocks": [],
-            "indexes": [],
-        }
-
-        picks = section_picks.get(section, [])
+            ]
+        elif section in ("xstocks", "prestocks", "indexes"):
+            picks = []  # Will be populated below
 
         # Try to fetch backed assets for xstocks/indexes
         if section in ("xstocks", "indexes"):
