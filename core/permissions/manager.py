@@ -494,6 +494,21 @@ class PermissionManager:
 
         return False
 
+    def close(self) -> None:
+        """
+        Close the database connection for the current thread.
+
+        Note: This only closes the connection for the calling thread.
+        Other threads' connections remain open. For full cleanup,
+        call close() from each thread that used the manager.
+        """
+        if hasattr(self._local, "connection") and self._local.connection is not None:
+            try:
+                self._local.connection.close()
+                self._local.connection = None
+            except Exception as e:
+                logger.warning(f"Error closing database connection: {e}")
+
 
 # Module-level singleton management
 

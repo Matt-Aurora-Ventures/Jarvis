@@ -453,9 +453,12 @@ class AutonomousWebAgent:
 
         await self._session.close()
 
-    def stop(self):
-        """Stop the research agent."""
+    async def stop(self):
+        """Stop the research agent and clean up resources."""
         self._running = False
+        if self._session and not self._session.closed:
+            await self._session.close()
+            self._session = None
         self._save_state()
 
 
