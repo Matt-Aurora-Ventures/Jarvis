@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 import aiohttp
+from aiohttp import ClientTimeout
 import json
 
 logger = logging.getLogger(__name__)
@@ -218,7 +219,9 @@ class WebhookManager:
 
     async def start(self):
         """Initialize the manager"""
-        self._session = aiohttp.ClientSession()
+        # Configure timeouts: 60s total, 30s connect (for webhook delivery)
+        timeout = ClientTimeout(total=60, connect=30)
+        self._session = aiohttp.ClientSession(timeout=timeout)
         logger.info("Webhook manager started")
 
     async def stop(self):
