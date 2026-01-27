@@ -160,7 +160,8 @@ class CacheMigrator:
                     sql = f"INSERT OR IGNORE INTO {target_table} ({','.join(cols)}) VALUES ({placeholders})"
                     t_cursor.execute(sql, vals)
                     migrated += 1
-                except:
+                except Exception as e:
+                    logger.debug(f"Row migration error: {e}")
                     errors += 1
                     
             target_conn.commit()
@@ -189,7 +190,8 @@ class CacheMigrator:
         if self.dry_run and TARGET_DB.exists():
             try:
                 TARGET_DB.unlink()
-            except:
+            except Exception as e:
+                logger.debug(f"Could not delete target DB: {e}")
                 pass
 
         if not self.create_target_schema():

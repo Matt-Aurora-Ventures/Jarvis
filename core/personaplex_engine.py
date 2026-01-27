@@ -440,7 +440,7 @@ class PersonaPlexEngine:
             if torch.cuda.is_available():
                 health["cuda_device"] = torch.cuda.get_device_name(0)
                 health["cuda_memory_allocated"] = torch.cuda.memory_allocated(0) / 1024**3  # GB
-        except:
+        except Exception as e:
             pass
 
         return health
