@@ -164,6 +164,40 @@ class JarvisVoice:
         except Exception as exc:
             logger.error(f"Claude CLI failed: {exc}")
             return None
+
+    async def _generate_with_grok(
+        self,
+        prompt: str,
+        max_tokens: int = 150,
+        temperature: float = 0.8
+    ) -> Optional[str]:
+        """Fallback: generate Jarvis voice using Grok when Claude is unavailable."""
+        try:
+            from bots.twitter.grok_client import GrokClient
+        except Exception as exc:
+            logger.error(f"Grok client unavailable: {exc}")
+            return None
+
+        grok = GrokClient()
+        grok_prompt = f"""{JARVIS_VOICE_BIBLE}
+
+TASK: {prompt}
+
+Respond with ONLY the tweet text. No quotes, no explanation, no markdown."""
+
+        response = await grok.generate_tweet(
+            grok_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        await grok.close()
+
+        if response and response.success:
+            return response.content.strip()
+
+        error = response.error if response else "unknown"
+        logger.error(f"Grok fallback failed: {error}")
+        return None
     
     async def generate_tweet(
         self,
@@ -184,10 +218,6 @@ class JarvisVoice:
         Returns:
             Tweet text in Jarvis voice, or None on failure
         """
-        if not self._cli_available() and not self.api_client:
-            logger.error("Claude not available - no local API or CLI configured")
-            return None
-
         try:
             # Format context into prompt if provided
             full_prompt = prompt
@@ -196,6 +226,10 @@ class JarvisVoice:
                 full_prompt = f"{prompt}\n\nData:\n{context_str}"
 
             full_prompt += "\n\nGenerate a single tweet. Can be up to 4,000 characters (Premium X). Lowercase. Do NOT end with 'nfa' every time - only occasionally."
+
+            if not self._cli_available() and not self.api_client:
+                logger.warning("Claude not available - falling back to Grok for voice")
+                return await self._generate_with_grok(full_prompt, max_tokens, temperature)
 
             # Prefer local Anthropic-compatible API when configured
             if self.api_client:
@@ -280,6 +314,9 @@ Respond with ONLY the tweet text. No quotes, no explanation, no markdown. Just t
                         logger.warning(f"Tweet validation issues: {issues}")
                     logger.info("Tweet generated via Claude CLI")
                     return tweet
+
+            logger.warning("Claude CLI unavailable or failed, falling back to Grok")
+            return await self._generate_with_grok(full_prompt, max_tokens, temperature)
                 else:
                     logger.error("Claude CLI returned no output - unable to generate tweet")
                     return None
