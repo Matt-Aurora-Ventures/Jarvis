@@ -263,7 +263,11 @@ class TelegramRateLimiter:
             return RateLimitResult(allowed=True)
 
         except Exception as e:
-            logger.error(f"Redis rate limit error: {e}, falling back to memory")
+            # During shutdown, event loop may be closed - this is expected
+            if "Event loop is closed" in str(e):
+                logger.debug(f"Redis unavailable (shutdown): {e}, using memory")
+            else:
+                logger.warning(f"Redis rate limit error: {e}, falling back to memory")
             return await self._check_memory(user_id, action_type, tier)
 
     async def _check_memory(
