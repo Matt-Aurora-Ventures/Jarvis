@@ -314,12 +314,10 @@ Respond with ONLY the tweet text. No quotes, no explanation, no markdown. Just t
                         logger.warning(f"Tweet validation issues: {issues}")
                     logger.info("Tweet generated via Claude CLI")
                     return tweet
+                logger.error("Claude CLI returned no output - unable to generate tweet")
 
             logger.warning("Claude CLI unavailable or failed, falling back to Grok")
             return await self._generate_with_grok(full_prompt, max_tokens, temperature)
-                else:
-                    logger.error("Claude CLI returned no output - unable to generate tweet")
-                    return None
                 
         except Exception as e:
             logger.error(f"Jarvis voice generation error: {e}")
