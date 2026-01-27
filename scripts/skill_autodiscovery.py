@@ -22,6 +22,8 @@ def run_find(query: str) -> Tuple[List[Tuple[str, str]], str]:
     cmd = SKILLS_FIND_CMD + [query]
     result = subprocess.run(cmd, capture_output=True, text=True)
     output = (result.stdout or "") + "\n" + (result.stderr or "")
+    # Strip ANSI escape codes to avoid polluted skill names
+    output = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", output)
 
     # Prefer parsing skills.sh URLs (normalized, hyphenated skill names)
     url_pattern = re.compile(r"https?://skills\.sh/([^/]+)/([^/]+)/([^\s]+)")
