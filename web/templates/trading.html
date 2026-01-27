@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis Trading Interface</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Space+Grotesk:wght@400;600;700&display=swap');
+
+        :root {
+            --bg: #f6f1e8;
+            --ink: #1b1f26;
+            --muted: #5d6b75;
+            --card: #fffaf4;
+            --accent: #0f766e;
+            --accent-2: #c2410c;
+            --accent-3: #1d4ed8;
+            --line: #e2d7c8;
+            --shadow: rgba(30, 41, 59, 0.15);
+            --mono: "IBM Plex Mono", "Courier New", monospace;
+            --sans: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--sans);
+            background: radial-gradient(circle at 20% 20%, #fff2dd, transparent 45%),
+                        radial-gradient(circle at 90% 10%, #dfe9ff, transparent 40%),
+                        linear-gradient(120deg, #f5efe6 0%, #f8f5f0 100%);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        .page {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px 20px 60px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            font-size: 42px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: var(--muted);
+            font-size: 16px;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 18px 40px -30px var(--shadow);
+        }
+
+        .card h3 {
+            font-size: 16px;
+            margin-bottom: 16px;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+        }
+
+        .stat {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .stat .value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--accent-3);
+        }
+
+        .stat .label {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 6px;
+        }
+
+        .stat.positive .value { color: var(--success); }
+        .stat.negative .value { color: var(--danger); }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #f3ebe1;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: var(--mono);
+        }
+
+        .status-pill.live {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-pill.dry-run {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .form-stack {
+            display: grid;
+            gap: 12px;
+        }
+
+        input, select, textarea {
+            font-family: var(--mono);
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            background: #fff;
+            font-size: 14px;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        .btn {
+            border: none;
+            padding: 12px 18px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            color: #fff;
+            background: var(--accent);
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-size: 14px;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px -10px var(--shadow);
+        }
+
+        .btn.secondary {
+            background: var(--accent-2);
+        }
+
+        .btn.danger {
+            background: var(--danger);
+        }
+
+        .btn.success {
+            background: var(--success);
+        }
+
+        .btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .positions-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .position-card {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .position-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .position-symbol {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .position-pnl {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .position-pnl.positive { color: var(--success); }
+        .position-pnl.negative { color: var(--danger); }
+
+        .position-details {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            font-size: 13px;
+            margin-bottom: 12px;
+            color: var(--muted);
+        }
+
+        .position-details .detail-value {
+            color: var(--ink);
+            font-weight: 600;
+            font-family: var(--mono);
+        }
+
+        .position-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .position-actions .btn {
+            padding: 8px 14px;
+            font-size: 13px;
+        }
+
+        .console {
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 14px;
+            padding: 14px;
+            font-family: var(--mono);
+            font-size: 12px;
+            min-height: 120px;
+            max-height: 300px;
+            overflow: auto;
+            white-space: pre-wrap;
+        }
+
+        .market-regime {
+            display: grid;
+            gap: 10px;
+        }
+
+        .regime-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background: #fff;
+            border-radius: 8px;
+            border: 1px solid var(--line);
+            font-size: 13px;
+        }
+
+        .regime-label {
+            color: var(--muted);
+        }
+
+        .regime-value {
+            font-weight: 600;
+            font-family: var(--mono);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge.bullish { background: #d1fae5; color: #065f46; }
+        .badge.bearish { background: #fecaca; color: #7f1d1d; }
+        .badge.neutral { background: #e2e8f0; color: #475569; }
+
+        .input-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #fff;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 900px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="header">
+            <h1>💎 Jarvis Trading</h1>
+            <p>AI-Powered Solana Trading Interface</p>
+        </div>
+
+        <section class="hero">
+            <div class="card">
+                <h3>Portfolio Overview</h3>
+                <div class="stat-grid">
+                    <div class="stat">
+                        <div class="value" id="sol-balance">--</div>
+                        <div class="label">SOL Balance</div>
+                    </div>
+                    <div class="stat">
+                        <div class="value" id="usd-value">--</div>
+                        <div class="label">USD Value</div>
+                    </div>
+                    <div class="stat">
+                        <div class="value" id="open-positions">--</div>
+                        <div class="label">Open Positions</div>
+                    </div>
+                    <div class="stat" id="total-pnl-stat">
+                        <div class="value" id="total-pnl">--</div>
+                        <div class="label">Total P&L</div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px;">
+                    <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">Wallet Address</div>
+                    <div style="font-family: var(--mono); font-size: 13px; word-break: break-all;" id="wallet-address">--</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Market Status</h3>
+                <div style="margin-bottom: 16px;">
+                    <span class="status-pill" id="mode-pill">LOADING...</span>
+                </div>
+                <div class="market-regime" id="market-regime">
+                    <div class="regime-item">
+                        <span class="regime-label">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid">
+            <div class="card">
+                <h3>🛒 Buy Token</h3>
+                <div class="form-stack">
+                    <input type="text" id="buy-token-address" placeholder="Token Address (e.g., pump.fun mint)">
+                    <button class="btn" onclick="loadSentiment()">📊 Get Sentiment</button>
+                    <div id="sentiment-display" style="display: none; padding: 12px; background: #f3ebe1; border-radius: 8px; font-size: 13px; margin-top: 8px;">
+                        <div style="font-weight: 600; margin-bottom: 8px;">Sentiment Analysis</div>
+                        <div id="sentiment-content">--</div>
+                    </div>
+                    <input type="number" id="buy-amount-sol" placeholder="Amount (SOL)" step="0.01" min="0.01" max="50" value="0.1">
+                    <div class="input-group">
+                        <input type="number" id="buy-tp-percent" placeholder="Take Profit %" step="1" min="5" max="200" value="50">
+                        <input type="number" id="buy-sl-percent" placeholder="Stop Loss %" step="1" min="5" max="99" value="20">
+                    </div>
+                    <input type="number" id="buy-slippage" placeholder="Slippage (%)" step="0.1" min="0.1" max="10" value="1.0">
+                    <button class="btn success" onclick="executeBuy()">🚀 Buy with TP/SL</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>📊 Console</h3>
+                <div class="console" id="console-output">Ready. Load data to begin trading.</div>
+                <button class="btn" style="margin-top: 12px; width: 100%;" onclick="loadAll()">🔄 Refresh All Data</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3>📈 Open Positions</h3>
+            <div class="positions-list" id="positions-list">
+                <div style="text-align: center; padding: 24px; color: var(--muted);">
+                    No positions loaded. Click "Refresh All Data" to load positions.
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const console_el = document.getElementById('console-output');
+
+        function log(message, type = 'info') {
+            const ts = new Date().toISOString().slice(11, 19);
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+            console_el.textContent = `[${ts}] ${prefix} ${message}\n` + console_el.textContent;
+        }
+
+        async function loadStatus() {
+            try {
+                const data = await fetch('/api/status').then(r => r.json());
+
+                if (!data.success) {
+                    log(data.error || 'Failed to load status', 'error');
+                    return;
+                }
+
+                document.getElementById('sol-balance').textContent = data.sol_balance.toFixed(4);
+                document.getElementById('usd-value').textContent = '$' + data.usd_value.toFixed(2);
+                document.getElementById('open-positions').textContent = data.open_positions;
+
+                const pnl = data.total_pnl;
+                const pnlStat = document.getElementById('total-pnl-stat');
+                document.getElementById('total-pnl').textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + ' SOL';
+                pnlStat.classList.toggle('positive', pnl >= 0);
+                pnlStat.classList.toggle('negative', pnl < 0);
+
+                document.getElementById('wallet-address').textContent = data.wallet_address;
+
+                const modePill = document.getElementById('mode-pill');
+                modePill.textContent = data.is_live ? '🔴 LIVE MODE' : '🟡 DRY RUN';
+                modePill.className = 'status-pill ' + (data.is_live ? 'live' : 'dry-run');
+
+                // Market regime
+                const regime = data.market_regime || {};
+                const regimeEl = document.getElementById('market-regime');
+                regimeEl.innerHTML = Object.keys(regime).length ? Object.entries(regime).map(([key, value]) => `
+                    <div class="regime-item">
+                        <span class="regime-label">${key}</span>
+                        <span class="regime-value">${value}</span>
+                    </div>
+                `).join('') : '<div class="regime-item"><span class="regime-label">No data</span></div>';
+
+            } catch (err) {
+                log('Network error loading status: ' + err.message, 'error');
+            }
+        }
+
+        async function loadPositions() {
+            try {
+                const data = await fetch('/api/positions').then(r => r.json());
+
+                if (!data.success) {
+                    log(data.error || 'Failed to load positions', 'error');
+                    return;
+                }
+
+                const positions = data.positions || [];
+                const listEl = document.getElementById('positions-list');
+
+                if (positions.length === 0) {
+                    listEl.innerHTML = '<div style="text-align: center; padding: 24px; color: var(--muted);">No open positions</div>';
+                    return;
+                }
+
+                listEl.innerHTML = positions.map(pos => {
+                    const pnl = pos.unrealized_pnl;
+                    const pnlPct = pos.unrealized_pnl_pct;
+                    const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+                    const pnlSign = pnl >= 0 ? '+' : '';
+
+                    return `
+                        <div class="position-card">
+                            <div class="position-header">
+                                <div class="position-symbol">${pos.symbol}</div>
+                                <div class="position-pnl ${pnlClass}">
+                                    ${pnlSign}${pnl.toFixed(4)} SOL (${pnlSign}${pnlPct.toFixed(2)}%)
+                                </div>
+                            </div>
+                            <div class="position-details">
+                                <div>
+                                    <div>Entry Price</div>
+                                    <div class="detail-value">$${pos.entry_price.toFixed(6)}</div>
+                                </div>
+                                <div>
+                                    <div>Current Price</div>
+                                    <div class="detail-value">$${pos.current_price.toFixed(6)}</div>
+                                </div>
+                                <div>
+                                    <div>Amount</div>
+                                    <div class="detail-value">${pos.amount.toFixed(2)}</div>
+                                </div>
+                            </div>
+                            <div class="position-details">
+                                <div>
+                                    <div>Cost Basis</div>
+                                    <div class="detail-value">${pos.cost_basis_sol.toFixed(4)} SOL</div>
+                                </div>
+                                <div>
+                                    <div>Current Value</div>
+                                    <div class="detail-value">${pos.current_value_sol.toFixed(4)} SOL</div>
+                                </div>
+                                <div>
+                                    <div>Address</div>
+                                    <div class="detail-value">${pos.address.slice(0, 6)}...${pos.address.slice(-4)}</div>
+                                </div>
+                            </div>
+                            <div class="position-actions">
+                                <button class="btn danger" onclick="sellPosition('${pos.id}', 100)">Sell 100%</button>
+                                <button class="btn secondary" onclick="sellPosition('${pos.id}', 50)">Sell 50%</button>
+                                <button class="btn secondary" onclick="sellPosition('${pos.id}', 25)">Sell 25%</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                log(`Loaded ${positions.length} position(s)`, 'success');
+            } catch (err) {
+                log('Network error loading positions: ' + err.message, 'error');
+            }
+        }
+
+        async function loadSentiment() {
+            const tokenAddress = document.getElementById('buy-token-address').value.trim();
+            if (!tokenAddress) {
+                log('Enter token address first', 'error');
+                return;
+            }
+
+            log('Loading sentiment analysis...');
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Loading...';
+
+            try {
+                const resp = await fetch('/api/token/sentiment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token_address: tokenAddress })
+                });
+                const data = await resp.json();
+
+                if (!data.success) {
+                    log('Sentiment error: ' + data.error, 'error');
+                    return;
+                }
+
+                const sentiment = data.sentiment;
+                const display = document.getElementById('sentiment-display');
+                const content = document.getElementById('sentiment-content');
+
+                content.innerHTML = `
+                    <div><strong>Symbol:</strong> ${sentiment.symbol || 'Unknown'}</div>
+                    <div><strong>Price:</strong> $${sentiment.price ? sentiment.price.toFixed(6) : 'N/A'}</div>
+                    <div><strong>Market Cap:</strong> $${sentiment.market_cap ? sentiment.market_cap.toLocaleString() : 'N/A'}</div>
+                    <div style="margin-top: 8px;"><strong>Analysis:</strong><br>${sentiment.analysis || 'No analysis available'}</div>
+                `;
+                display.style.display = 'block';
+
+                log('Sentiment loaded successfully', 'success');
+            } catch (err) {
+                log('Network error loading sentiment: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '📊 Get Sentiment';
+            }
+        }
+
+        async function executeBuy() {
+            const tokenAddress = document.getElementById('buy-token-address').value.trim();
+            const amountSol = parseFloat(document.getElementById('buy-amount-sol').value);
+            const tpPercent = parseFloat(document.getElementById('buy-tp-percent').value);
+            const slPercent = parseFloat(document.getElementById('buy-sl-percent').value);
+            const slippagePct = parseFloat(document.getElementById('buy-slippage').value);
+
+            if (!tokenAddress || !amountSol || !tpPercent || !slPercent) {
+                log('Fill all fields before buying', 'error');
+                return;
+            }
+
+            if (amountSol < 0.01 || amountSol > 50) {
+                log('Amount must be between 0.01 and 50 SOL', 'error');
+                return;
+            }
+
+            if (tpPercent < 5 || tpPercent > 200) {
+                log('Take Profit must be between 5% and 200%', 'error');
+                return;
+            }
+
+            if (slPercent < 5 || slPercent > 99) {
+                log('Stop Loss must be between 5% and 99%', 'error');
+                return;
+            }
+
+            if (!confirm(`Execute BUY for ${amountSol} SOL with TP=${tpPercent}% and SL=${slPercent}%?`)) {
+                return;
+            }
+
+            log('Executing buy order...');
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Executing...';
+
+            try {
+                const resp = await fetch('/api/trade/buy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token_address: tokenAddress,
+                        amount_sol: amountSol,
+                        tp_percent: tpPercent,
+                        sl_percent: slPercent,
+                        slippage_bps: slippagePct * 100,
+                    })
+                });
+                const data = await resp.json();
+
+                if (!data.success) {
+                    log('Buy failed: ' + data.error, 'error');
+                    alert('❌ Buy Failed\n\n' + data.error);
+                    return;
+                }
+
+                log(`✅ Buy executed! TX: ${data.tx_hash ? data.tx_hash.slice(0, 8) + '...' : 'N/A'}`, 'success');
+                alert('✅ Buy Successful!\n\nTransaction Hash: ' + (data.tx_hash || 'N/A'));
+
+                // Reload positions
+                await loadAll();
+            } catch (err) {
+                log('Network error executing buy: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🚀 Buy with TP/SL';
+            }
+        }
+
+        async function sellPosition(positionId, percentage) {
+            if (!confirm(`Sell ${percentage}% of position ${positionId}?`)) {
+                return;
+            }
+
+            log(`Selling ${percentage}% of position ${positionId}...`);
+
+            try {
+                const resp = await fetch('/api/trade/sell', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        position_id: positionId,
+                        percentage: percentage,
+                    })
+                });
+                const data = await resp.json();
+
+                if (!data.success) {
+                    log('Sell failed: ' + data.error, 'error');
+                    alert('❌ Sell Failed\n\n' + data.error);
+                    return;
+                }
+
+                log(`✅ Sell executed! TX: ${data.tx_hash ? data.tx_hash.slice(0, 8) + '...' : 'N/A'}`, 'success');
+                alert('✅ Sell Successful!\n\nTransaction Hash: ' + (data.tx_hash || 'N/A'));
+
+                // Reload positions
+                await loadAll();
+            } catch (err) {
+                log('Network error executing sell: ' + err.message, 'error');
+            }
+        }
+
+        async function loadAll() {
+            log('Refreshing all data...');
+            await Promise.all([
+                loadStatus(),
+                loadPositions(),
+            ]);
+            log('All data refreshed', 'success');
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadAll, 30000);
+
+        // Initial load
+        loadAll();
+    </script>
+</body>
+</html>

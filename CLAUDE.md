@@ -8,6 +8,7 @@ Jarvis is an autonomous LifeOS trading and AI assistant system running on Solana
 - `bots/` - Bot implementations (Telegram, Twitter/X, Treasury, Buy Tracker)
 - `tg_bot/` - Telegram bot handlers and services
 - `api/` - API server and handlers
+- `web/` - Web interfaces (trading UI, system control deck)
 - `lifeos/config/` - Configuration files
 - `scripts/` - Automation and utility scripts
 - `~/.lifeos/trading/` - Runtime state files
@@ -70,12 +71,54 @@ python bots/supervisor.py
 # - bags_intel: Bags.fm graduation monitoring & intel reports
 ```
 
+## Web Interfaces
+
+### Trading Interface (Port 5001)
+**Location**: `web/trading_web.py`
+**URL**: http://127.0.0.1:5001
+
+Web-based trading UI that mirrors the Telegram `/demo` interface:
+
+**Features**:
+- Portfolio overview (SOL balance, USD value, P&L)
+- Buy tokens with mandatory TP/SL
+- View all open positions with real-time P&L
+- Sell positions (25%, 50%, 100%)
+- AI sentiment analysis for tokens
+- Market regime indicators
+- Auto-refresh every 30 seconds
+
+**To Run**:
+```bash
+cd web
+python trading_web.py
+```
+
+### System Control Deck (Port 5000)
+**Location**: `web/task_web.py`
+**URL**: http://127.0.0.1:5000
+
+System-wide operations and monitoring:
+- System health (CPU, RAM, disk, network)
+- Mission control (research, backtesting, diagnostics)
+- Task management
+- Config toggles
+- Security logs
+- Action approval gates
+
+**To Run**:
+```bash
+cd web
+python task_web.py
+```
+
 ## Key Features
 1. **Autonomous Trading**: Jupiter DEX integration for Solana tokens
 2. **Sentiment Analysis**: Grok AI for token scoring
 3. **X/Twitter Bot**: @Jarvis_lifeos posts market updates
 4. **Telegram Integration**: Full admin interface via @Jarviskr8tivbot
-5. **CLI Commands**: Admin can execute code via X mentions
+5. **Web Interfaces**: Trading UI and system control deck
+6. **CLI Commands**: Admin can execute code via X mentions
 
 ## Bags Intel (bags.fm Intelligence Reports)
 
