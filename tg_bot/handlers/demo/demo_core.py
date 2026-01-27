@@ -190,6 +190,8 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "current_price": p.current_price,
                 "id": p.id,
                 "address": p.token_mint,
+                "amount": getattr(p, "token_amount", getattr(p, "amount", 0)),  # Token balance for selling
+                "amount_sol": getattr(p, "amount_sol", getattr(p, "entry_amount_sol", 0)),  # SOL amount invested
             }
             for p in open_pos
         ]
