@@ -23,6 +23,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 import tempfile
 import time
 from typing import Optional, Tuple, List, Dict, Any
@@ -1047,6 +1048,51 @@ class ClaudeCLIHandler:
             summary_lines.append("• Task processed")
         
         return "\n".join(summary_lines[:10])  # Max 10 lines
+
+    async def _maybe_run_skill_autodiscovery(self, prompt: str, send_update: callable = None) -> None:
+        """Run skill auto-discovery before execution (best-effort)."""
+        enabled = os.getenv("SKILL_AUTODISCOVERY", "").lower() in ("1", "true", "yes", "on")
+        if not enabled:
+            return
+
+        script_path = Path(__file__).resolve().parents[2] / "scripts" / "skill_autodiscovery.py"
+        if not script_path.exists():
+            logger.warning("Skill auto-discovery script not found: %s", script_path)
+            return
+
+        limit_raw = os.getenv("SKILL_AUTODISCOVERY_LIMIT", "5").strip()
+        try:
+            limit = max(1, int(limit_raw))
+        except ValueError:
+            limit = 5
+
+        install = os.getenv("SKILL_AUTODISCOVERY_INSTALL", "").lower() in ("1", "true", "yes", "on")
+
+        cmd = [sys.executable, str(script_path), prompt, "--limit", str(limit)]
+        if install:
+            cmd.append("--install")
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+            except asyncio.TimeoutError:
+                proc.kill()
+                logger.warning("Skill auto-discovery timed out")
+                return
+
+            out_text = (stdout or b"").decode("utf-8", errors="replace")
+            suggestions = [line.strip() for line in out_text.splitlines() if "@" in line]
+            if suggestions:
+                logger.info("Skill auto-discovery suggestions: %s", ", ".join(suggestions))
+                if send_update:
+                    await send_update("skills found: " + ", ".join(suggestions))
+        except Exception as exc:
+            logger.warning("Skill auto-discovery failed: %s", exc)
     
     async def execute(
         self,
@@ -1117,6 +1163,7 @@ class ClaudeCLIHandler:
 
                 # Build enhanced prompt with context (includes learnings & preferences)
                 scrubbed_prompt, redacted = self._scrub_prompt(prompt)
+                await self._maybe_run_skill_autodiscovery(scrubbed_prompt, send_update)
                 enhanced_prompt = scrubbed_prompt
                 logger.info(f"Executing request for admin {user_id}: {scrubbed_prompt[:100]}...")
 
