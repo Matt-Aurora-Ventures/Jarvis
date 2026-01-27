@@ -9,6 +9,7 @@ import os
 import asyncio
 import logging
 import aiohttp
+from aiohttp import ClientTimeout
 import time
 from typing import Optional, Dict, List, Any
 from datetime import datetime, timedelta
@@ -39,7 +40,9 @@ class LunarCrushAPI:
     
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            # Configure timeouts: 60s total, 30s connect (for social sentiment API calls)
+            timeout = ClientTimeout(total=60, connect=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
     
     async def close(self):

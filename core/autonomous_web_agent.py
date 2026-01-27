@@ -26,6 +26,7 @@ from typing import Any, Deque, Dict, List, Optional, Set
 from urllib.parse import urlparse
 
 import aiohttp
+from aiohttp import ClientTimeout
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +215,9 @@ class AutonomousWebAgent:
     async def research_topic(self, topic: ResearchTopic) -> List[KnowledgeEntry]:
         """Research a specific topic."""
         if not self._session:
-            self._session = aiohttp.ClientSession()
+            # Configure timeouts: 60s total, 30s connect (for web research)
+            timeout = ClientTimeout(total=60, connect=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
 
         findings = []
         category_sources = [
