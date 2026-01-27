@@ -208,7 +208,6 @@ async def run_continuously():
         # Notify via Telegram if possible
         try:
             import aiohttp
-            import os
             token = os.getenv("TG_BOT_TOKEN")
             chat_id = os.getenv("TG_CHAT_ID")
             if token and chat_id:
