@@ -5491,10 +5491,33 @@ Reply with a Solana token address to buy.
 ├ Trend: *{sol_trend}*
 └ Volume: {sol_vol_str}
 
-{theme.FIRE} *Market Activity*
-├ Hot Sectors: AI, DeFi, Memes
-├ Top Gainer: +{regime.get('top_gainer_pct', 0):.0f}%
-└ Top Loser: {regime.get('top_loser_pct', 0):+.0f}%
+{theme.FIRE} *Market Activity*"""
+
+        # Market Activity - show real data or meaningful fallbacks
+        top_gainer_pct = regime.get('top_gainer_pct')
+        top_gainer_symbol = regime.get('top_gainer_symbol', 'N/A')
+        top_loser_pct = regime.get('top_loser_pct')
+        top_loser_symbol = regime.get('top_loser_symbol', 'N/A')
+        hot_sectors = regime.get('hot_sectors', ['AI', 'DeFi', 'Memes'])  # Default sectors
+
+        if top_gainer_pct is not None and top_gainer_pct > 0:
+            gainer_line = f"├ Top Gainer: *{top_gainer_symbol}* +{top_gainer_pct:.0f}%"
+        else:
+            gainer_line = "├ Top Gainer: _Scanning..._"
+
+        if top_loser_pct is not None and top_loser_pct < 0:
+            loser_line = f"└ Top Loser: *{top_loser_symbol}* {top_loser_pct:.0f}%"
+        else:
+            loser_line = "└ Top Loser: _Scanning..._"
+
+        sectors_str = ", ".join(hot_sectors[:3]) if isinstance(hot_sectors, list) else "AI, DeFi, Memes"
+
+        text += f"""
+├ Hot Sectors: {sectors_str}
+{gainer_line}
+{loser_line}"""
+
+        text += f"""
 
 ━━━━━━━━━━━━━━━━━━━━━
 
