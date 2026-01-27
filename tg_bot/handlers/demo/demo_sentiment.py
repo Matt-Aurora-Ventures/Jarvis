@@ -458,9 +458,27 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
         return getattr(token, key, default)
 
     def _matches_bags_suffix(token: Any) -> bool:
+        """
+        Filter for Bags.fm tokens.
+        Bags.fm tokens typically have:
+        1. Name/symbol ending with 'bags'
+        2. Contract address ending with 'pump' (bags.fm uses pump.fun)
+        3. Source/platform field indicating bags.fm
+        """
         name = (_field(token, "name") or "").strip().lower()
         symbol = (_field(token, "symbol") or "").strip().lower()
-        return name.endswith("bags") or symbol.endswith("bags")
+        address = (_field(token, "address") or "").strip().lower()
+        platform = (_field(token, "platform") or "").strip().lower()
+        source = (_field(token, "source") or "").strip().lower()
+
+        # Check multiple indicators
+        return (
+            name.endswith("bags") or
+            symbol.endswith("bags") or
+            address.endswith("pump") or  # Bags.fm uses pump.fun contracts
+            "bags" in platform or
+            "bags" in source
+        )
 
     def _coerce_volume(token: Any) -> float:
         return float(_field(token, "volume_24h", _field(token, "volume", 0)) or 0)
