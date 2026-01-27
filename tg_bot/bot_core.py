@@ -5211,12 +5211,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Handle specific error types
     if isinstance(error, Conflict):
-        # Another instance is polling - this is a critical error that should stop the bot
-        logger.critical(
-            "CONFLICT ERROR: Another bot instance is polling. "
-            "Kill other instances or wait for them to stop. "
-            "Bot will continue retrying but may not receive updates."
-        )
+        # Another instance is polling - log and handle silently
+        logger.warning("Telegram polling conflict detected - another instance may be running")
         return  # Let the retry loop handle it
 
     if isinstance(error, RetryAfter):
