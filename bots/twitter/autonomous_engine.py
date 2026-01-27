@@ -2677,6 +2677,7 @@ Examples:
         """Generate an Ethereum/DeFi focused tweet."""
         try:
             voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
 
             from core.data.market_data_api import get_market_api
             market = get_market_api()
@@ -2693,10 +2694,22 @@ Examples:
             defi_topics = ["L2 adoption", "restaking", "RWA tokenization", "DEX volume", "stablecoin flows", "ETH staking yields"]
             topic = random.choice(defi_topics)
 
+            grok_take = ""
+            try:
+                grok_response = await grok.analyze_sentiment(
+                    {"asset": "ETH", "price": eth_price, "topic": topic},
+                    context_type="market"
+                )
+                if grok_response and grok_response.success:
+                    grok_take = grok_response.content[:200]
+            except Exception:
+                grok_take = ""
+
             prompt = f"""Write an Ethereum/DeFi focused tweet.
 
 ETH: ~${eth_price:,.0f} (estimate)
 Topic to mention: {topic}
+{f"Analysis: {grok_take}" if grok_take else ""}
 
 Focus on Ethereum ecosystem, not Solana.
 Examples:
@@ -2724,6 +2737,7 @@ Examples:
         """Generate a stocks/macro focused tweet (TradFi content)."""
         try:
             voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
 
             from core.data.market_data_api import get_market_api
             market = get_market_api()
@@ -2745,10 +2759,22 @@ Examples:
             market_data = " | ".join(parts)
             fear_greed = overview.fear_greed or "neutral"
 
+            grok_take = ""
+            try:
+                grok_response = await grok.analyze_sentiment(
+                    {"macro": market_data, "fear_greed": fear_greed},
+                    context_type="macro"
+                )
+                if grok_response and grok_response.success:
+                    grok_take = grok_response.content[:200]
+            except Exception:
+                grok_take = ""
+
             prompt = f"""Write a stocks/macro focused tweet. NOT about crypto.
 
 Market Data: {market_data}
 Fear/Greed: {fear_greed}
+{f"Analysis: {grok_take}" if grok_take else ""}
 
 Talk about traditional markets, not crypto.
 Examples:
@@ -2820,6 +2846,7 @@ Examples:
         """Generate a tweet about non-Solana chains (diversify from SOL dominance)."""
         try:
             voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
 
             from core.data.market_data_api import get_market_api
             market = get_market_api()
@@ -2857,10 +2884,22 @@ Examples:
             chain = random.choice(chains)
             change_str = f"+{chain['change_24h']:.1f}%" if chain['change_24h'] > 0 else f"{chain['change_24h']:.1f}%"
 
+            grok_take = ""
+            try:
+                grok_response = await grok.analyze_sentiment(
+                    {"asset": chain['symbol'], "price": chain['price'], "change": chain['change_24h']},
+                    context_type="market"
+                )
+                if grok_response and grok_response.success:
+                    grok_take = grok_response.content[:180]
+            except Exception:
+                grok_take = ""
+
             prompt = f"""Write a tweet about ${chain['symbol']} ({chain['name']}).
 
 Current price: ${chain['price']:.4f}
 24h change: {change_str}
+{f"Analysis: {grok_take}" if grok_take else ""}
 
 Focus on this chain's ecosystem, NOT Solana. Talk about:
 - The chain's unique value prop
@@ -2892,6 +2931,7 @@ Examples:
         """Generate a commodities-focused tweet (gold, oil, metals)."""
         try:
             voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
 
             from core.data.market_data_api import get_market_api
             market = get_market_api()
@@ -2928,10 +2968,22 @@ Examples:
 
             market_data = " | ".join(parts)
 
+            grok_take = ""
+            try:
+                grok_response = await grok.analyze_sentiment(
+                    {"commodities": market_data, "focus": focus_asset[0] if focus_asset else "mixed"},
+                    context_type="macro"
+                )
+                if grok_response and grok_response.success:
+                    grok_take = grok_response.content[:200]
+            except Exception:
+                grok_take = ""
+
             prompt = f"""Write a tweet about commodities. NOT crypto.
 
 Market Data: {market_data}
 {f"Focus on {focus_asset[0]} ({'+' if focus_asset[2] > 0 else ''}{focus_asset[2]:.1f}%)" if focus_asset else ""}
+{f"Analysis: {grok_take}" if grok_take else ""}
 
 Talk about real-world commodities, inflation hedge, global demand.
 Examples:
@@ -2959,6 +3011,7 @@ Examples:
         """Generate a morning market briefing using JARVIS voice."""
         try:
             voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
 
             from core.data.free_price_api import get_sol_price
             from core.data.free_trending_api import get_free_trending_api
@@ -2980,11 +3033,23 @@ Examples:
 
             movers = ", ".join([f"${t.symbol} +{t.price_change_24h:.0f}%" for t in gainers[:3]]) if gainers else "quiet overnight"
 
+            grok_take = ""
+            try:
+                grok_response = await grok.analyze_sentiment(
+                    {"sol": sol_price, "btc": btc_price, "movers": movers},
+                    context_type="market"
+                )
+                if grok_response and grok_response.success:
+                    grok_take = grok_response.content[:160]
+            except Exception:
+                grok_take = ""
+
             content = await voice.generate_morning_briefing({
                 "sol_price": sol_price,
                 "btc_price": btc_price,
                 "movers": movers,
-                "sentiment": "mixed"
+                "sentiment": "mixed",
+                "grok_take": grok_take
             })
 
             if content:
@@ -3002,6 +3067,7 @@ Examples:
         """Generate an end-of-day market summary using JARVIS voice."""
         try:
             voice = await self._get_jarvis_voice()
+            grok = await self._get_grok()
 
             from core.data.free_price_api import get_sol_price
             from core.data.free_trending_api import get_free_trending_api
@@ -3035,13 +3101,25 @@ Examples:
             else:
                 highlight = "rotation day across altcoins"
 
+            grok_take = ""
+            try:
+                grok_response = await grok.analyze_sentiment(
+                    {"sol": sol_price, "sol_change": sol_change, "btc": btc_price, "btc_change": btc_change, "highlight": highlight},
+                    context_type="market"
+                )
+                if grok_response and grok_response.success:
+                    grok_take = grok_response.content[:160]
+            except Exception:
+                grok_take = ""
+
             content = await voice.generate_evening_wrap({
                 "sol_price": sol_price,
                 "sol_change": sol_change,
                 "btc_price": btc_price,
                 "btc_change": btc_change,
                 "highlight": highlight,
-                "take": "watching for continuation"
+                "take": "watching for continuation",
+                "grok_take": grok_take
             })
 
             if content:
