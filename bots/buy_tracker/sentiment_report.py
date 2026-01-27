@@ -90,6 +90,7 @@ import os
 import json
 import re
 import aiohttp
+from aiohttp import ClientTimeout
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field, asdict
@@ -797,7 +798,9 @@ class SentimentReportGenerator:
     async def start(self):
         """Start the sentiment report scheduler."""
         self._running = True
-        self._session = aiohttp.ClientSession()
+        # Configure timeouts: 60s total, 30s connect (for sentiment API calls)
+        timeout = ClientTimeout(total=60, connect=30)
+        self._session = aiohttp.ClientSession(timeout=timeout)
 
         logger.info(f"Starting sentiment report generator (every {self.interval_minutes} min)")
 
