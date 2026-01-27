@@ -275,12 +275,14 @@ class TwitterCredentials:
 
     def is_valid(self) -> bool:
         """Check if all required credentials are present"""
-        return all([
+        has_oauth1 = all([
             self.api_key,
             self.api_secret,
             self.access_token,
             self.access_token_secret
         ])
+        has_oauth2 = bool(self.oauth2_access_token)
+        return has_oauth1 or has_oauth2
 
     def has_oauth2(self) -> bool:
         """Check if OAuth 2.0 credentials are available"""
