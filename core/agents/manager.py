@@ -8,8 +8,14 @@ similar to Clawdbot's subagent tracking system.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 import uuid
+import os
+
+
+# Default agent logs directory
+AGENT_LOGS_DIR = Path(os.getenv("AGENT_LOGS_DIR", "/tmp/agent_logs"))
 
 
 class AgentStatus(Enum):
@@ -60,9 +66,15 @@ class SubAgent:
 class SubAgentManager:
     """Manages registration and tracking of sub-agents."""
 
-    def __init__(self):
-        """Initialize the SubAgentManager."""
+    def __init__(self, db=None):
+        """
+        Initialize the SubAgentManager.
+
+        Args:
+            db: Optional DatabaseManager instance for persistence
+        """
         self._agents: Dict[str, SubAgent] = {}
+        self._db = db
 
     def register_agent(
         self,
@@ -205,9 +217,12 @@ class SubAgentManager:
 
         if not agents:
             return {
-                "session_id": session_id,
-                "total_agents": 0,
-                "status_counts": {},
+                "total": 0,
+                "running": 0,
+                "completed": 0,
+                "failed": 0,
+                "pending": 0,
+                "stopped": 0,
                 "total_tokens": 0,
             }
 
@@ -218,12 +233,160 @@ class SubAgentManager:
         total_tokens = sum(a.tokens_used for a in agents)
 
         return {
-            "session_id": session_id,
-            "total_agents": len(agents),
-            "status_counts": status_counts,
+            "total": len(agents),
+            "running": status_counts.get("running", 0),
+            "completed": status_counts.get("completed", 0),
+            "failed": status_counts.get("failed", 0),
+            "pending": status_counts.get("pending", 0),
+            "stopped": status_counts.get("stopped", 0),
             "total_tokens": total_tokens,
-            "agent_types": list(set(a.subagent_type for a in agents)),
         }
+
+    def get_agent_output(self, agent_id: str) -> Optional[str]:
+        """
+        Retrieve agent output from file.
+
+        Args:
+            agent_id: Agent ID to retrieve output for
+
+        Returns:
+            Output file contents or None if no output file
+        """
+        agent = self.get_agent(agent_id)
+        if not agent or not agent.output_file:
+            return None
+
+        try:
+            output_path = Path(agent.output_file)
+            if output_path.exists():
+                return output_path.read_text(encoding="utf-8")
+        except Exception as e:
+            # Log error but don't raise
+            pass
+
+        return None
+
+    def stop_agent(self, agent_id: str) -> bool:
+        """
+        Stop a running agent.
+
+        Args:
+            agent_id: Agent ID to stop
+
+        Returns:
+            True if agent was stopped, False if not running
+        """
+        agent = self.get_agent(agent_id)
+        if not agent or agent.status != "running":
+            return False
+
+        self.update_status(agent_id, "stopped")
+        return True
+
+    def get_agent_log(self, agent_id: str) -> Optional[str]:
+        """
+        Retrieve agent execution log.
+
+        Args:
+            agent_id: Agent ID to retrieve log for
+
+        Returns:
+            Log file contents or None if no log file
+        """
+        # Check for log file in AGENT_LOGS_DIR
+        log_file = AGENT_LOGS_DIR / f"{agent_id}.log"
+
+        if log_file.exists():
+            try:
+                return log_file.read_text(encoding="utf-8")
+            except Exception:
+                pass
+
+        return None
+
+    def format_agent_list(self, session_id: str) -> str:
+        """
+        Format agent list for display.
+
+        Args:
+            session_id: Session ID to format agents for
+
+        Returns:
+            Formatted string with agent list
+        """
+        agents = self.list_agents(session_id=session_id)
+
+        if not agents:
+            return f"No active subagents for session {session_id}"
+
+        output = [f"Active Subagents for {session_id}:"]
+        output.append("")
+
+        # Group by status
+        running = [a for a in agents if a.status == "running"]
+        completed = [a for a in agents if a.status == "completed"]
+        failed = [a for a in agents if a.status == "failed"]
+        pending = [a for a in agents if a.status == "pending"]
+
+        if running:
+            output.append("RUNNING:")
+            for agent in running:
+                output.append(f"  {agent.id} - {agent.description}")
+            output.append("")
+
+        if completed:
+            output.append("COMPLETED:")
+            for agent in completed:
+                tokens_str = f"{agent.tokens_used // 1000}K" if agent.tokens_used >= 1000 else str(agent.tokens_used)
+                output.append(f"  {agent.id} - {agent.description} ({tokens_str} tokens)")
+            output.append("")
+
+        if failed:
+            output.append("FAILED:")
+            for agent in failed:
+                error_str = f" - {agent.error}" if agent.error else ""
+                output.append(f"  {agent.id} - {agent.description}{error_str}")
+            output.append("")
+
+        if pending:
+            output.append("PENDING:")
+            for agent in pending:
+                output.append(f"  {agent.id} - {agent.description}")
+
+        return "\n".join(output)
+
+    def format_agent_info(self, agent_id: str) -> str:
+        """
+        Format detailed agent info.
+
+        Args:
+            agent_id: Agent ID to format info for
+
+        Returns:
+            Formatted string with agent details
+        """
+        agent = self.get_agent(agent_id)
+        if not agent:
+            return f"Agent {agent_id} not found"
+
+        output = [f"Agent: {agent.id}"]
+        output.append(f"Type: {agent.subagent_type}")
+        output.append(f"Description: {agent.description}")
+        output.append(f"Status: {agent.status}")
+        output.append(f"Session: {agent.session_id}")
+
+        if agent.started_at:
+            output.append(f"Started: {agent.started_at.isoformat()}")
+        if agent.completed_at:
+            output.append(f"Completed: {agent.completed_at.isoformat()}")
+        if agent.tokens_used:
+            output.append(f"Tokens: {agent.tokens_used:,}")
+        if agent.error:
+            output.append(f"Error: {agent.error}")
+        if agent.output_file:
+            output.append(f"Output: {agent.output_file}")
+
+        return "\n".join(output)
 
 
 # Singleton instance for convenience
