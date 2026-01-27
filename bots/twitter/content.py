@@ -13,6 +13,7 @@ import json
 import logging
 import random
 import aiohttp
+from aiohttp import ClientTimeout
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -77,7 +78,9 @@ class ContentGenerator:
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session"""
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            # Configure timeouts: 60s total, 30s connect (for market data APIs)
+            timeout = ClientTimeout(total=60, connect=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def close(self):

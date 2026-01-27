@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import aiohttp
+from aiohttp import ClientTimeout
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
@@ -112,7 +113,9 @@ class TransactionMonitor:
     async def start(self):
         """Start monitoring transactions."""
         self._running = True
-        self._session = aiohttp.ClientSession()
+        # Configure timeouts: 60s total, 30s connect (for Helius RPC calls)
+        timeout = ClientTimeout(total=60, connect=30)
+        self._session = aiohttp.ClientSession(timeout=timeout)
 
         # Log what we're monitoring
         if self.pair_address:
@@ -423,7 +426,9 @@ class HeliusWebSocketMonitor(TransactionMonitor):
     async def start(self):
         """Start WebSocket monitoring."""
         self._running = True
-        self._session = aiohttp.ClientSession()
+        # Configure timeouts: 60s total, 30s connect (for Helius WebSocket)
+        timeout = ClientTimeout(total=60, connect=30)
+        self._session = aiohttp.ClientSession(timeout=timeout)
         self._reconnect_attempts = 0
 
         logger.info(f"Starting Helius WebSocket monitor for {self.token_address}")
