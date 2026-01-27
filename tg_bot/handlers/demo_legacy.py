@@ -3963,7 +3963,7 @@ Reply with a Solana token address to buy.
                 "",
                 f"🔥 *HIGH CONVICTION ({len(picks)})*",
             ])
-            for pick in picks[:3]:
+            for pick in picks[:10]:  # Show all 10 picks instead of just 3
                 symbol = pick.get("symbol", "???")
                 conviction = pick.get("conviction", "MEDIUM")
                 thesis = pick.get("thesis", "")[:40]
