@@ -26,6 +26,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 import tempfile
 import time
 from collections import defaultdict
@@ -1014,6 +1015,8 @@ Include @{author} at the start. MUST be under 270 characters."""
             if redacted:
                 logger.info(f"Scrubbed {len(set(redacted))} sensitive items before Claude CLI")
 
+            await self._maybe_run_skill_autodiscovery(scrubbed_command)
+
             sandbox_dir = None
             sandbox_root = None
             before_stats: Dict[str, Tuple[float, int]] = {}
@@ -1103,6 +1106,49 @@ Include @{author} at the start. MUST be under 270 characters."""
             logger.error(f"CLI execution error: {e}")
             self.record_execution(False, time.time() - start_time, username)
             return False, f"Error: {str(e)[:50]}", str(e)
+
+    async def _maybe_run_skill_autodiscovery(self, prompt: str) -> None:
+        """Run skill auto-discovery before execution (best-effort)."""
+        enabled = os.getenv("SKILL_AUTODISCOVERY", "").lower() in ("1", "true", "yes", "on")
+        if not enabled:
+            return
+
+        script_path = Path(__file__).resolve().parents[2] / "scripts" / "skill_autodiscovery.py"
+        if not script_path.exists():
+            logger.warning("Skill auto-discovery script not found: %s", script_path)
+            return
+
+        limit_raw = os.getenv("SKILL_AUTODISCOVERY_LIMIT", "5").strip()
+        try:
+            limit = max(1, int(limit_raw))
+        except ValueError:
+            limit = 5
+
+        install = os.getenv("SKILL_AUTODISCOVERY_INSTALL", "").lower() in ("1", "true", "yes", "on")
+
+        cmd = [sys.executable, str(script_path), prompt, "--limit", str(limit)]
+        if install:
+            cmd.append("--install")
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+            except asyncio.TimeoutError:
+                proc.kill()
+                logger.warning("Skill auto-discovery timed out")
+                return
+
+            out_text = (stdout or b"").decode("utf-8", errors="replace")
+            suggestions = [line.strip() for line in out_text.splitlines() if "@" in line]
+            if suggestions:
+                logger.info("Skill auto-discovery suggestions: %s", ", ".join(suggestions))
+        except Exception as exc:
+            logger.warning("Skill auto-discovery failed: %s", exc)
     
     async def answer_question(self, question: str, author: str) -> Optional[str]:
         """Generate a Jarvis-style answer to a question using Grok/Claude."""
