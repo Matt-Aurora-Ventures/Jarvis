@@ -128,7 +128,7 @@ class DatabaseMigrator:
                 cursor.execute("SELECT DISTINCT user_id FROM trades WHERE user_id IS NOT NULL")
                 trade_user_ids = {row[0] for row in cursor.fetchall()}
                 user_ids.update(trade_user_ids)
-            except:
+            except Exception as e:
                 pass # Trades might not have user_id in old schema
             
             # Also check bot_config if it exists
@@ -136,7 +136,7 @@ class DatabaseMigrator:
                 cursor.execute("SELECT DISTINCT user_id FROM bot_config")
                 config_user_ids = {row[0] for row in cursor.fetchall()}
                 user_ids.update(config_user_ids)
-            except:
+            except Exception as e:
                 pass
 
             logger.info(f"Found {len(user_ids)} unique users to migrate")
@@ -369,7 +369,7 @@ class DatabaseMigrator:
                     try:
                         target_cursor.execute(f"SELECT COUNT(*) FROM {table}")
                         target_count = target_cursor.fetchone()[0]
-                    except:
+                    except Exception as e:
                         target_count = 0
                     
                     if source_count != target_count:
