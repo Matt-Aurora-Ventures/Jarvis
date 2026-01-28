@@ -1,4 +1,7 @@
-# JARVIS
+# JARVIS (Archived)
+
+> **Historical note:** This README was archived from the repository root on 2026-02-01.
+> The canonical README now lives at [`README.md`](../../README.md).
 
 **A Persistent, Personal Context Engine**
 
