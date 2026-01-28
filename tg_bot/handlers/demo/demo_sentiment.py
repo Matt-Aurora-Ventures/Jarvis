@@ -444,11 +444,16 @@ async def get_conviction_picks() -> List[Dict[str, Any]]:
 # =============================================================================
 
 async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, Any]]:
-    """
+    """\
     Get Bags.fm top tokens by volume with sentiment overlay.
 
-    Returns:
-        List of token dictionaries with sentiment data
+    IMPORTANT: For the /demo "BAGS Top 15" menu, we only want tokens launched on bags.fm.
+    That means:
+      - Prefer the official bags.fm API (/tokens/top via BagsClient)
+      - Do NOT "guess" using name/symbol suffixes like "bags" or address patterns
+
+    If the Bags API is unavailable, we return an empty list rather than mixing in generic
+    trending tokens from other sources (which can include non-bags launches).
     """
     from tg_bot.handlers.demo.demo_trading import get_bags_client
 
@@ -457,97 +462,54 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
             return token.get(key, default)
         return getattr(token, key, default)
 
-    def _matches_bags_suffix(token: Any) -> bool:
-        """
-        Filter for Bags.fm tokens.
-        Bags.fm tokens typically have:
-        1. Name/symbol ending with 'bags'
-        2. Contract address ending with 'pump' (bags.fm uses pump.fun)
-        3. Source/platform field indicating bags.fm
-        """
-        name = (_field(token, "name") or "").strip().lower()
-        symbol = (_field(token, "symbol") or "").strip().lower()
-        address = (_field(token, "address") or "").strip().lower()
-        platform = (_field(token, "platform") or "").strip().lower()
-        source = (_field(token, "source") or "").strip().lower()
-
-        # Check multiple indicators
-        return (
-            name.endswith("bags") or
-            symbol.endswith("bags") or
-            address.endswith("pump") or  # Bags.fm uses pump.fun contracts
-            "bags" in platform or
-            "bags" in source
-        )
-
     def _coerce_volume(token: Any) -> float:
         return float(_field(token, "volume_24h", _field(token, "volume", 0)) or 0)
 
-    async def _fallback_from_trending() -> List[Dict[str, Any]]:
-        trending = await get_trending_with_sentiment(limit=max(limit * 4, 50))
-        if not trending:
-            return []
-        filtered = [t for t in trending if _matches_bags_suffix(t)]
-        filtered = sorted(filtered, key=_coerce_volume, reverse=True)
-        result = []
-        for t in filtered[:limit]:
-            result.append({
-                "symbol": t.get("symbol", ""),
-                "name": t.get("name", ""),
-                "address": t.get("address", ""),
-                "price_usd": t.get("price_usd", 0),
-                "change_24h": t.get("change_24h", 0),
-                "volume_24h": t.get("volume_24h", t.get("volume", 0)),
-                "liquidity": t.get("liquidity", t.get("liquidity_usd", 0)),
-                "holders": t.get("holders", 0),
-                "market_cap": t.get("market_cap", 0),
-                "sentiment": t.get("sentiment", "neutral"),
-                "sentiment_score": t.get("sentiment_score", 0.5),
-                "signal": t.get("signal", "NEUTRAL"),
-            })
-        return result
-
     try:
         bags_client = get_bags_client()
-        if bags_client:
-            fetch_limit = max(limit * 4, 50)
-            tokens = await bags_client.get_top_tokens_by_volume(limit=fetch_limit, allow_public=True)
-            if not tokens:
-                tokens = await bags_client.get_trending_tokens(limit=fetch_limit, allow_public=True)
+        if not bags_client:
+            return []
 
-            if tokens:
-                tokens = [t for t in tokens if _matches_bags_suffix(t)]
-                tokens = sorted(tokens, key=_coerce_volume, reverse=True)
-                if tokens:
-                    result = []
-                    for t in tokens[:limit]:
-                        address = _field(t, "address", "")
-                        # Get sentiment for each token
-                        try:
-                            sentiment = await get_ai_sentiment_for_token(address)
-                        except Exception:
-                            sentiment = {"sentiment": "neutral", "score": 0.5, "signal": "NEUTRAL"}
+        # BagsClient.get_top_tokens_by_volume() already returns bags.fm launches.
+        fetch_limit = max(limit * 2, limit)
+        tokens = await bags_client.get_top_tokens_by_volume(limit=fetch_limit, allow_public=True)
 
-                        change_24h = _field(t, "price_change_24h", None)
-                        if change_24h is None:
-                            change_24h = sentiment.get("change_24h", 0)
+        if not tokens:
+            return []
 
-                        result.append({
-                            "symbol": _field(t, "symbol", "") or address[:6],
-                            "name": _field(t, "name", ""),
-                            "address": address,
-                            "price_usd": _field(t, "price_usd", 0),
-                            "change_24h": change_24h or 0,
-                            "volume_24h": _coerce_volume(t),
-                            "liquidity": _field(t, "liquidity", 0),
-                            "holders": _field(t, "holders", 0),
-                            "market_cap": _field(t, "market_cap", 0),
-                            "sentiment": sentiment.get("sentiment", "neutral"),
-                            "sentiment_score": sentiment.get("score", 0.5),
-                            "signal": sentiment.get("signal", "NEUTRAL"),
-                        })
-                    return result
+        tokens = sorted(tokens, key=_coerce_volume, reverse=True)
+
+        result: List[Dict[str, Any]] = []
+        for t in tokens[:limit]:
+            address = _field(t, "address", "")
+            # Get sentiment for each token
+            try:
+                sentiment = await get_ai_sentiment_for_token(address)
+            except Exception:
+                sentiment = {"sentiment": "neutral", "score": 0.5, "signal": "NEUTRAL"}
+
+            change_24h = _field(t, "price_change_24h", None)
+            if change_24h is None:
+                change_24h = sentiment.get("change_24h", 0)
+
+            result.append({
+                "symbol": _field(t, "symbol", "") or address[:6],
+                "name": _field(t, "name", ""),
+                "address": address,
+                "price_usd": _field(t, "price_usd", 0),
+                "change_24h": change_24h or 0,
+                "volume_24h": _coerce_volume(t),
+                "liquidity": _field(t, "liquidity", 0),
+                "holders": _field(t, "holders", 0),
+                "market_cap": _field(t, "market_cap", 0),
+                "sentiment": sentiment.get("sentiment", "neutral"),
+                "sentiment_score": sentiment.get("score", 0.5),
+                "signal": sentiment.get("signal", "NEUTRAL"),
+            })
+
+        return result
+
     except Exception as e:
         logger.warning(f"Could not get Bags top tokens: {e}")
+        return []
 
-    return await _fallback_from_trending()
