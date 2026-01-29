@@ -2049,11 +2049,11 @@ Be specific about price targets and key levels to watch."""
 
             # Add reasoning for ALL tokens
             if t.grok_reasoning:
-                entry += f"\n   <i>Why: {t.grok_reasoning}</i>"
+                entry += f"\n   <i>Why: {html.escape(t.grok_reasoning)}</i>"
 
             # Add price targets for bullish tokens
             if t.grok_verdict == "BULLISH" and t.grok_analysis:
-                entry += f"\n   <b>Targets:</b> <i>{t.grok_analysis}</i>"
+                entry += f"\n   <b>Targets:</b> <i>{html.escape(t.grok_analysis)}</i>"
 
             lines.append(entry)
             lines.append("")

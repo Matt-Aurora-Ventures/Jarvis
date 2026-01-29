@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  jarvis-telegram:
+    image: python:3.12-slim
+    container_name: jarvis-telegram
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - jarvis-code:/app
+      - jarvis-secrets:/app/secrets:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      sh -c "
+      git clone https://github.com/Matt-Aurora-Ventures/Jarvis.git /tmp/jarvis &&
+      cp -r /tmp/jarvis/* /app/ &&
+      pip install --no-cache-dir -r requirements.txt &&
+      python -m tg_bot.bot
+      "
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  jarvis-supervisor:
+    image: python:3.12-slim
+    container_name: jarvis-supervisor
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - jarvis-code:/app
+      - jarvis-secrets:/app/secrets:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      sh -c "
+      if [ ! -f /app/bots/supervisor.py ]; then
+        git clone https://github.com/Matt-Aurora-Ventures/Jarvis.git /tmp/jarvis &&
+        cp -r /tmp/jarvis/* /app/;
+      fi &&
+      pip install --no-cache-dir -r requirements.txt &&
+      python bots/supervisor.py
+      "
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  jarvis-twitter:
+    image: python:3.12-slim
+    container_name: jarvis-twitter
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - jarvis-code:/app
+      - jarvis-secrets:/app/secrets:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      sh -c "
+      if [ ! -f /app/bots/twitter/run_autonomous.py ]; then
+        git clone https://github.com/Matt-Aurora-Ventures/Jarvis.git /tmp/jarvis &&
+        cp -r /tmp/jarvis/* /app/;
+      fi &&
+      pip install --no-cache-dir -r requirements.txt &&
+      python -m bots.twitter.run_autonomous
+      "
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1G
+
+volumes:
+  jarvis-code:
+    driver: local
+  jarvis-secrets:
+    driver: local
