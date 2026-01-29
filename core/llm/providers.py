@@ -646,10 +646,17 @@ def get_default_configs() -> List[LLMConfig]:
     configs = []
 
     # Ollama (local, highest priority)
+    ollama_url = (
+        os.getenv("OLLAMA_URL")
+        or os.getenv("OLLAMA_HOST")
+        or os.getenv("OLLAMA_BASE_URL")
+        or "http://localhost:11434"
+    )
+
     configs.append(LLMConfig(
         provider=LLMProvider.OLLAMA,
         model=os.getenv("OLLAMA_MODEL", "llama3.2"),
-        base_url=os.getenv("OLLAMA_URL", "http://localhost:11434"),
+        base_url=ollama_url,
         priority=0,
         enabled=True,  # Always try, will fail gracefully if not running
     ))
