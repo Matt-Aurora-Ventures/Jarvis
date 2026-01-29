@@ -9730,19 +9730,25 @@ def validate_buy_amount(amount: float) -> tuple:
 @error_handler
 async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages when awaiting token input or watchlist add."""
-    text = update.message.text.strip()
+    # PTB can invoke handlers for updates where `update.message` is None (e.g., edited messages,
+    # service updates, etc.). Guard so we don't crash on `.text`.
+    msg = update.effective_message or update.message
+    if not msg or not getattr(msg, "text", None):
+        return
+
+    text = msg.text.strip()
 
     # Enforce admin-only demo access
     try:
         config = get_config()
-        user_id = update.message.from_user.id if update.message and update.message.from_user else 0
-        username = update.message.from_user.username if update.message and update.message.from_user else None
+        user_id = msg.from_user.id if msg and msg.from_user else 0
+        username = msg.from_user.username if msg and msg.from_user else None
         try:
             is_admin = config.is_admin(user_id, username)
         except TypeError:
             is_admin = config.is_admin(user_id)
         if not is_admin:
-            await update.message.reply_text("Unauthorized: Demo is admin-only.")
+            await msg.reply_text("Unauthorized: Demo is admin-only.")
             logger.warning(f"Unauthorized demo message by user {user_id} (@{username})")
             return
     except Exception as exc:
