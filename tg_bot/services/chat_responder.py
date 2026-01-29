@@ -1120,9 +1120,14 @@ Never mention Claude or Anthropic.
         if self_reflection:
             context_hint += f"\n\n(Internal state: {self_reflection})"
 
-        # Use Claude CLI for chat replies (JARVIS voice) - CLI ONLY, no API
-        reply = await self._generate_with_claude(
-            text + context_hint, username, chat_title, is_private, is_admin,
+        # Primary: Ecosystem LLM router (Ollama/Groq/OpenRouter) for conversational intelligence
+        # This keeps Jarvis aligned with the same Llama-centric runtime as the rest of the ecosystem.
+        reply = await self._generate_with_ecosystem_llm(
+            text + context_hint,
+            username,
+            chat_title,
+            is_private,
+            is_admin,
             engagement_topic=engagement_topic,
             conversation_mood=conversation_mood,
             active_participants=active_participants,
@@ -1216,7 +1221,58 @@ Never mention Claude or Anthropic.
 
                 return reply
 
-        return "Claude CLI unavailable. Check CLI installation on server."
+        return "No LLM backend available. Configure OLLAMA_URL/OLLAMA_HOST or GROQ_API_KEY (preferred), or set XAI_API_KEY as fallback."
+
+    async def _generate_with_ecosystem_llm(
+        self,
+        text: str,
+        username: str,
+        chat_title: str,
+        is_private: bool,
+        is_admin: bool = False,
+        engagement_topic: Optional[str] = None,
+        conversation_mood: str = "neutral",
+        active_participants: Optional[List[str]] = None,
+        recent_context: Optional[List[Dict]] = None,
+        moderation_context: str = "",
+    ) -> str:
+        """Generate a reply using the ecosystem LLM router (Ollama/Groq/OpenRouter).
+
+        This is the preferred path for "intelligent + conversational" behavior.
+        """
+        try:
+            # Lazy import to keep startup light + avoid circular imports
+            from core.llm.providers import get_llm, Message
+
+            llm = await get_llm()
+
+            system_prompt = self._system_prompt(
+                chat_title,
+                is_private,
+                is_admin,
+                engagement_topic,
+                conversation_mood=conversation_mood,
+                active_participants=active_participants,
+                recent_context=recent_context,
+                moderation_context=moderation_context,
+            )
+            user_prompt = self._user_prompt(text, username)
+
+            max_tokens = int(os.getenv("TG_REPLY_MAX_TOKENS", "240"))
+            temperature = float(os.getenv("TG_REPLY_TEMPERATURE", "0.6"))
+
+            resp = await llm.generate(
+                [
+                    Message("system", system_prompt),
+                    Message("user", user_prompt),
+                ],
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            return self._clean_reply(getattr(resp, "content", ""))
+        except Exception as exc:
+            logger.warning("Ecosystem LLM reply error: %s", exc)
+            return ""
 
     async def _generate_with_xai(
         self,
