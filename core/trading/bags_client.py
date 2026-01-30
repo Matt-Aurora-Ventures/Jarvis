@@ -234,6 +234,51 @@ class BagsAPIClient:
             logger.error(f"Failed to get quote: {e}")
             return None
 
+    async def get_quote_raw(
+        self,
+        from_token: str,
+        to_token: str,
+        amount: float,
+        slippage_bps: int = 100
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get raw quote response from bags.fm API.
+        Returns the full response object needed for swap execution.
+        """
+        if not self.client:
+            return None
+
+        await self._check_rate_limit()
+
+        try:
+            # Convert SOL to lamports
+            amount_lamports = int(amount * 1_000_000_000)
+
+            response = await self.client.get(
+                f"{self.BASE_URL}/trade/quote",
+                params={
+                    "inputMint": from_token,
+                    "outputMint": to_token,
+                    "amount": str(amount_lamports),
+                    "slippageMode": "manual",
+                    "slippageBps": slippage_bps
+                },
+                headers=self._get_headers()
+            )
+
+            response.raise_for_status()
+            result = response.json()
+
+            if not result.get("success"):
+                logger.error(f"Quote API returned error: {result.get('error')}")
+                return None
+
+            return result.get("response")
+
+        except Exception as e:
+            logger.error(f"Failed to get raw quote: {e}")
+            return None
+
     async def swap(
         self,
         from_token: str,
@@ -241,15 +286,25 @@ class BagsAPIClient:
         amount: float,
         wallet_address: str,
         slippage_bps: int = 100,
-        signed_transaction: Optional[bytes] = None
+        keypair_path: Optional[str] = None
     ) -> SwapResult:
         """
-        Execute a swap
+        Execute a swap via bags.fm API.
 
-        NOTE: For security, transaction should be signed client-side.
-        Never send private keys to the API.
+        Flow:
+        1. Get quote with full response
+        2. Request swap transaction from API
+        3. Sign transaction with treasury keypair
+        4. Send to Solana RPC
+
+        Args:
+            from_token: Input token mint (SOL = So11111111111111111111111111111111111111112)
+            to_token: Output token mint
+            amount: Amount in SOL (e.g., 0.01 for 0.01 SOL)
+            wallet_address: Treasury wallet public key
+            slippage_bps: Slippage in basis points (100 = 1%)
+            keypair_path: Path to treasury keypair JSON (encrypted)
         """
-
         if not self.client:
             return SwapResult(
                 success=False,
@@ -259,62 +314,89 @@ class BagsAPIClient:
         await self._check_rate_limit()
 
         try:
-            # Get quote first
-            quote = await self.get_quote(from_token, to_token, amount, slippage_bps)
+            # Step 1: Get raw quote response
+            quote_response = await self.get_quote_raw(from_token, to_token, amount, slippage_bps)
 
-            if not quote:
+            if not quote_response:
                 return SwapResult(
                     success=False,
                     from_token=from_token,
                     to_token=to_token,
                     from_amount=amount,
-                    error="Failed to get quote"
+                    error="Failed to get quote from bags.fm"
                 )
 
-            # Build swap request
-            swap_data = {
-                "from": from_token,
-                "to": to_token,
-                "amount": str(amount),
-                "slippageBps": slippage_bps,
-                "wallet": wallet_address,
+            logger.info(f"Got quote: {amount} SOL -> {int(quote_response.get('outAmount', 0)) / 1e9:.6f} tokens")
+
+            # Step 2: Request swap transaction from API
+            swap_request = {
+                "userPublicKey": wallet_address,
+                "quoteResponse": quote_response
             }
 
-            # Add partner key for fee sharing
-            if self.partner_key:
-                swap_data["partnerKey"] = self.partner_key
-
-            # Add signed transaction if provided
-            if signed_transaction:
-                import base64
-                swap_data["signedTransaction"] = base64.b64encode(signed_transaction).decode()
-
             response = await self.client.post(
-                f"{self.BASE_URL}/swap",
-                json=swap_data,
+                f"{self.BASE_URL}/trade/swap",
+                json=swap_request,
                 headers=self._get_headers()
             )
 
             response.raise_for_status()
-            result = response.json()
+            swap_result = response.json()
+
+            if not swap_result.get("success"):
+                return SwapResult(
+                    success=False,
+                    from_token=from_token,
+                    to_token=to_token,
+                    from_amount=amount,
+                    error=f"Swap API error: {swap_result.get('response', 'Unknown')}"
+                )
+
+            swap_tx_base58 = swap_result.get("response", {}).get("swapTransaction")
+            if not swap_tx_base58:
+                return SwapResult(
+                    success=False,
+                    from_token=from_token,
+                    to_token=to_token,
+                    from_amount=amount,
+                    error="No swap transaction returned from API"
+                )
+
+            logger.info(f"Got swap transaction from bags.fm API")
+
+            # Step 3: Sign and send transaction
+            tx_signature = await self._sign_and_send_transaction(
+                swap_tx_base58,
+                keypair_path or os.path.join(os.path.dirname(__file__), "../../data/treasury_keypair.json")
+            )
+
+            if not tx_signature:
+                return SwapResult(
+                    success=False,
+                    from_token=from_token,
+                    to_token=to_token,
+                    from_amount=amount,
+                    error="Failed to sign/send transaction"
+                )
 
             # Track success
             self.successful_swaps += 1
             self.total_volume += amount
-            partner_fee = float(result.get("partnerFee", 0))
-            self.total_partner_fees += partner_fee
+            out_amount = int(quote_response.get("outAmount", 0)) / 1_000_000_000
+
+            logger.info(f"Swap successful! TX: {tx_signature}")
 
             return SwapResult(
                 success=True,
-                tx_hash=result.get("txHash"),
+                tx_hash=tx_signature,
                 from_token=from_token,
                 to_token=to_token,
                 from_amount=amount,
-                to_amount=float(result.get("toAmount", 0)),
-                price=float(result.get("price", 0)),
-                fee_paid=float(result.get("fee", 0)),
-                partner_fee=partner_fee,
-                slippage=float(result.get("slippage", 0)),
+                to_amount=out_amount,
+                price=out_amount / amount if amount > 0 else 0,
+                fee_paid=float(quote_response.get("platformFee", {}).get("amount", 0)) / 1e9,
+                partner_fee=0,  # Will be tracked separately
+                slippage=float(quote_response.get("slippageBps", 0)) / 100,
                 status=SwapStatus.CONFIRMED
             )
 
@@ -330,6 +412,127 @@ class BagsAPIClient:
                 error=str(e),
                 status=SwapStatus.FAILED
             )
+
+    async def _sign_and_send_transaction(
+        self,
+        tx_base58: str,
+        keypair_path: str
+    ) -> Optional[str]:
+        """
+        Sign a base58-encoded transaction and send to Solana.
+
+        Args:
+            tx_base58: Base58-encoded serialized transaction
+            keypair_path: Path to encrypted treasury keypair
+
+        Returns:
+            Transaction signature or None on failure
+        """
+        try:
+            import base58
+            from solders.transaction import VersionedTransaction
+            from solders.keypair import Keypair
+            from solders.signature import Signature
+
+            # Load and decrypt keypair
+            keypair = await self._load_keypair(keypair_path)
+            if not keypair:
+                logger.error("Failed to load treasury keypair")
+                return None
+
+            # Decode and deserialize transaction
+            tx_bytes = base58.b58decode(tx_base58)
+            tx = VersionedTransaction.from_bytes(tx_bytes)
+
+            # Sign transaction
+            tx.sign([keypair])
+
+            # Serialize signed transaction
+            signed_tx_bytes = bytes(tx)
+
+            # Send to Solana RPC
+            helius_key = os.getenv("HELIUS_API_KEY")
+            if helius_key:
+                rpc_url = f"https://mainnet.helius-rpc.com/?api-key={helius_key}"
+            else:
+                rpc_url = "https://api.mainnet-beta.solana.com"
+
+            import base64
+            payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "sendTransaction",
+                "params": [
+                    base64.b64encode(signed_tx_bytes).decode(),
+                    {"encoding": "base64", "skipPreflight": False, "maxRetries": 3}
+                ]
+            }
+
+            response = await self.client.post(rpc_url, json=payload)
+            result = response.json()
+
+            if "error" in result:
+                logger.error(f"RPC error: {result['error']}")
+                return None
+
+            signature = result.get("result")
+            logger.info(f"Transaction sent: {signature}")
+            return signature
+
+        except ImportError as e:
+            logger.error(f"Missing dependency for signing: {e}. Install: pip install solders base58")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to sign/send transaction: {e}")
+            return None
+
+    async def _load_keypair(self, keypair_path: str):
+        """
+        Load and decrypt treasury keypair.
+
+        The keypair is encrypted with a password stored in TREASURY_PASSWORD env var.
+        """
+        try:
+            import json
+            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+            import base64
+            import hashlib
+
+            with open(keypair_path, 'r') as f:
+                data = json.load(f)
+
+            # Check if encrypted
+            if "encrypted_key" in data:
+                password = os.getenv("TREASURY_PASSWORD")
+                if not password:
+                    logger.error("TREASURY_PASSWORD not set - cannot decrypt keypair")
+                    return None
+
+                # Derive key from password
+                salt = base64.b64decode(data["salt"])
+                key = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000, 32)
+
+                # Decrypt
+                nonce = base64.b64decode(data["nonce"])
+                encrypted = base64.b64decode(data["encrypted_key"])
+                aesgcm = AESGCM(key)
+                secret_key = aesgcm.decrypt(nonce, encrypted, None)
+
+                from solders.keypair import Keypair
+                return Keypair.from_bytes(secret_key)
+
+            # Unencrypted (legacy format - array of bytes)
+            elif isinstance(data, list):
+                from solders.keypair import Keypair
+                return Keypair.from_bytes(bytes(data))
+
+            else:
+                logger.error(f"Unknown keypair format in {keypair_path}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Failed to load keypair: {e}")
+            return None
 
     async def get_token_info(self, mint: str) -> Optional[TokenInfo]:
         """Get token information via Helius RPC

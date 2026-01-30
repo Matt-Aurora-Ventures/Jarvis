@@ -2,11 +2,16 @@
 Demo Bot - TP/SL Order Management Module
 
 Contains:
-- Background TP/SL monitoring
+- Background TP/SL monitoring (with Redis backup)
 - Exit trigger checking
 - Auto-exit execution
 - Trailing stop management
 - Alert formatting
+
+BULLETPROOF ARCHITECTURE:
+- Layer 1: This module (primary monitor, 30s interval)
+- Layer 2: backup-tpsl-monitor.py via cron (2 min interval)
+- Redis: Position persistence + execution locks + heartbeats
 """
 
 import asyncio
@@ -21,6 +26,58 @@ from telegram import Update
 from telegram.constants import ParseMode
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Redis Integration (Bulletproof Persistence)
+# =============================================================================
+
+def _sync_to_redis(user_id: int, positions: List[Dict], trailing_stops: List[Dict]) -> bool:
+    """Sync positions to Redis for backup monitor access."""
+    try:
+        from tg_bot.core.position_store import sync_from_memory
+        return sync_from_memory(user_id, positions, trailing_stops)
+    except ImportError:
+        logger.debug("position_store not available, skipping Redis sync")
+        return False
+    except Exception as e:
+        logger.warning(f"Redis sync failed: {e}")
+        return False
+
+
+def _update_primary_heartbeat() -> bool:
+    """Update primary monitor heartbeat in Redis."""
+    try:
+        from tg_bot.core.position_store import update_monitor_heartbeat
+        return update_monitor_heartbeat("primary")
+    except ImportError:
+        return False
+    except Exception as e:
+        logger.warning(f"Heartbeat update failed: {e}")
+        return False
+
+
+def _acquire_execution_lock(position_id: str) -> bool:
+    """Try to acquire execution lock to prevent double-sells."""
+    try:
+        from tg_bot.core.position_store import acquire_execution_lock
+        return acquire_execution_lock(position_id, source="primary")
+    except ImportError:
+        return True  # No lock system = always proceed
+    except Exception as e:
+        logger.warning(f"Lock acquire failed: {e}")
+        return True
+
+
+def _release_execution_lock(position_id: str) -> bool:
+    """Release execution lock after trade."""
+    try:
+        from tg_bot.core.position_store import release_execution_lock
+        return release_execution_lock(position_id)
+    except ImportError:
+        return True
+    except Exception as e:
+        logger.warning(f"Lock release failed: {e}")
+        return True
 
 
 # =============================================================================
@@ -271,15 +328,18 @@ def _format_exit_alert_message(alert: Dict[str, Any], auto_executed: bool) -> st
 
 
 # =============================================================================
-# Background Monitoring
+# Background Monitoring (LAYER 1 - Primary)
 # =============================================================================
 
 async def _background_tp_sl_monitor(context: Any) -> None:
     """
     Background job to monitor TP/SL triggers for all users.
 
-    This runs every 5 minutes to check if any positions have hit
-    their take-profit or stop-loss levels and auto-executes exits.
+    BULLETPROOF ARCHITECTURE:
+    - Updates heartbeat in Redis so backup monitor knows we're alive
+    - Syncs all positions to Redis for backup monitor access
+    - Uses execution locks to prevent double-sells
+    - Runs every 30s (backup runs every 2min as failsafe)
 
     Note: Individual callbacks also run exit checks for real-time responsiveness.
     """
@@ -287,15 +347,26 @@ async def _background_tp_sl_monitor(context: Any) -> None:
         if not context or not hasattr(context, 'application'):
             return
 
+        # ===== HEARTBEAT: Tell backup monitor we're alive =====
+        _update_primary_heartbeat()
+
         user_data_dict = getattr(context.application, 'user_data', {})
         if not user_data_dict:
             return
 
         checked_count = 0
         triggered_count = 0
+        synced_count = 0
 
         for user_id, user_data in user_data_dict.items():
             positions = user_data.get("positions", [])
+            trailing_stops = user_data.get("trailing_stops", [])
+            
+            # ===== REDIS SYNC: Backup monitor can see positions =====
+            if positions or trailing_stops:
+                if _sync_to_redis(user_id, positions, trailing_stops):
+                    synced_count += 1
+            
             if not positions:
                 continue
 
@@ -317,6 +388,14 @@ async def _background_tp_sl_monitor(context: Any) -> None:
             closed_ids: List[str] = []
 
             for alert in alerts:
+                position = alert.get("position", {})
+                pos_id = position.get("id", "")
+                
+                # ===== EXECUTION LOCK: Prevent double-sells =====
+                if pos_id and not _acquire_execution_lock(pos_id):
+                    logger.info(f"Position {pos_id} locked by backup monitor, skipping")
+                    continue
+                
                 try:
                     # Create a mock context-like object for _maybe_execute_exit
                     class MockContext:
@@ -330,14 +409,21 @@ async def _background_tp_sl_monitor(context: Any) -> None:
                     )
                 except asyncio.TimeoutError:
                     logger.warning(f"TP/SL auto-exit timed out for user {user_id}")
+                    if pos_id:
+                        _release_execution_lock(pos_id)
                     continue
                 except Exception as exc:
                     logger.warning(f"TP/SL auto-exit failed for user {user_id}: {exc}")
+                    if pos_id:
+                        _release_execution_lock(pos_id)
                     continue
 
-                position = alert.get("position", {})
-                if executed and position.get("id"):
-                    closed_ids.append(position.get("id"))
+                if executed and pos_id:
+                    closed_ids.append(pos_id)
+                
+                # Release lock after execution
+                if pos_id:
+                    _release_execution_lock(pos_id)
 
                 # Send alert to user
                 try:
@@ -360,9 +446,11 @@ async def _background_tp_sl_monitor(context: Any) -> None:
                     user_data["trailing_stops"] = [
                         s for s in trailing_stops if s.get("position_id") not in closed_ids
                     ]
+                # Sync updated positions to Redis
+                _sync_to_redis(user_id, user_data["positions"], user_data.get("trailing_stops", []))
 
-        if checked_count > 0:
-            logger.info(f"TP/SL monitor: checked {checked_count} users, {triggered_count} triggers")
+        if checked_count > 0 or synced_count > 0:
+            logger.info(f"TP/SL monitor [PRIMARY]: {checked_count} users, {triggered_count} triggers, {synced_count} synced to Redis")
 
     except Exception as exc:
         logger.warning(f"Background TP/SL monitor failed: {exc}")
