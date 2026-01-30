@@ -314,6 +314,7 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     # Import modular handlers
     from .input_handlers import (
         handle_custom_buy_amount,
+        handle_custom_hub_amount,
         handle_watchlist_token,
         handle_wallet_import,
         handle_token_input,
@@ -322,6 +323,7 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     # Delegate to appropriate handler (first match wins)
     handlers = [
         handle_custom_buy_amount,
+        handle_custom_hub_amount,
         handle_watchlist_token,
         handle_wallet_import,
         handle_token_input,
