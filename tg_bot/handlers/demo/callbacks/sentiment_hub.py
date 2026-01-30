@@ -344,12 +344,55 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                 for t in trending_tokens[:10]
             ]
         elif section == "bluechips":
-            # Hardcoded blue chips (these are stable assets, not dynamic)
-            picks = [
-                {"symbol": "SOL", "address": "So11111111111111111111111111111111111111112", "price": 225.50, "change_24h": 2.5, "conviction": "HIGH", "tp_percent": 20, "sl_percent": 10, "score": 85},
-                {"symbol": "JUP", "address": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", "price": 1.25, "change_24h": 5.2, "conviction": "HIGH", "tp_percent": 25, "sl_percent": 12, "score": 82},
-                {"symbol": "RAY", "address": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R", "price": 8.45, "change_24h": 1.8, "conviction": "MEDIUM", "tp_percent": 15, "sl_percent": 10, "score": 78},
-            ]
+            # Fetch real blue chip data sorted by volume
+            try:
+                from services.token_data import TokenDataService
+                import os
+                import json
+                
+                # Get Birdeye API key
+                birdeye_key = os.environ.get("BIRDEYE_API_KEY")
+                if not birdeye_key:
+                    try:
+                        with open("/root/clawd/secrets/keys.json", "r") as f:
+                            keys = json.load(f)
+                            birdeye_key = keys.get("birdeye_api_key")
+                    except Exception:
+                        pass
+                
+                token_service = TokenDataService(birdeye_key=birdeye_key)
+                blue_chips = await token_service.get_blue_chips(limit=15)
+                await token_service.close()
+                
+                picks = [
+                    {
+                        "symbol": bc.get("symbol", "???"),
+                        "address": bc.get("address", ""),
+                        "price": bc.get("price", 0),
+                        "change_24h": bc.get("change_24h", 0),
+                        "volume_24h": bc.get("volume_24h", 0),
+                        "market_cap": bc.get("market_cap", 0),
+                        "liquidity": bc.get("liquidity", 0),
+                        "conviction": "HIGH" if bc.get("volume_24h", 0) > 10_000_000 else "MEDIUM",
+                        "tp_percent": 20,
+                        "sl_percent": 10,
+                        "score": min(95, 70 + int(bc.get("volume_24h", 0) / 5_000_000)),
+                    }
+                    for bc in blue_chips
+                ]
+            except Exception as e:
+                logger.warning(f"Failed to fetch blue chips: {e}")
+                # Fallback to hardcoded data
+                picks = [
+                    {"symbol": "SOL", "address": "So11111111111111111111111111111111111111112", "price": 225.50, "change_24h": 2.5, "conviction": "HIGH", "tp_percent": 20, "sl_percent": 10, "score": 85, "volume_24h": 500_000_000, "market_cap": 100_000_000_000},
+                    {"symbol": "JUP", "address": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", "price": 1.25, "change_24h": 5.2, "conviction": "HIGH", "tp_percent": 25, "sl_percent": 12, "score": 82, "volume_24h": 50_000_000, "market_cap": 1_500_000_000},
+                    {"symbol": "RAY", "address": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R", "price": 8.45, "change_24h": 1.8, "conviction": "MEDIUM", "tp_percent": 15, "sl_percent": 10, "score": 78, "volume_24h": 25_000_000, "market_cap": 500_000_000},
+                    {"symbol": "BONK", "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "price": 0.00003, "change_24h": 3.5, "conviction": "MEDIUM", "tp_percent": 30, "sl_percent": 15, "score": 75, "volume_24h": 80_000_000, "market_cap": 2_000_000_000},
+                    {"symbol": "WIF", "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", "price": 2.50, "change_24h": 8.0, "conviction": "HIGH", "tp_percent": 25, "sl_percent": 12, "score": 80, "volume_24h": 150_000_000, "market_cap": 2_500_000_000},
+                    {"symbol": "PYTH", "address": "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3", "price": 0.45, "change_24h": 2.0, "conviction": "MEDIUM", "tp_percent": 20, "sl_percent": 10, "score": 76, "volume_24h": 30_000_000, "market_cap": 800_000_000},
+                    {"symbol": "JTO", "address": "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL", "price": 3.20, "change_24h": 4.5, "conviction": "MEDIUM", "tp_percent": 20, "sl_percent": 10, "score": 77, "volume_24h": 40_000_000, "market_cap": 400_000_000},
+                    {"symbol": "ORCA", "address": "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE", "price": 4.80, "change_24h": 1.5, "conviction": "MEDIUM", "tp_percent": 15, "sl_percent": 10, "score": 74, "volume_24h": 15_000_000, "market_cap": 250_000_000},
+                ]
         elif section in ("xstocks", "prestocks", "indexes"):
             picks = []  # Will be populated below
 

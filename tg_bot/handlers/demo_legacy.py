@@ -4279,19 +4279,25 @@ Reply with a Solana token address to buy.
                 lines.append("_No picks available in this category_")
                 lines.append("_Check back after next report refresh_")
         else:
-            for i, pick in enumerate(picks[:8]):
+            # Show up to 15 tokens for blue chips, 10 for others
+            max_tokens = 15 if section == "bluechips" else 10
+            
+            for i, pick in enumerate(picks[:max_tokens]):
                 symbol = pick.get("symbol", "???")
                 price = pick.get("price", 0)
                 change_24h = pick.get("change_24h", 0)
                 sentiment = pick.get("sentiment", "NEUTRAL")
                 score = pick.get("score", 0)
-                tp = pick.get("tp", 0)
-                sl = pick.get("sl", 0)
+                tp = pick.get("tp", 0) or pick.get("tp_percent", 0)
+                sl = pick.get("sl", 0) or pick.get("sl_percent", 0)
                 token_ref = pick.get("token_id") or pick.get("address", "")
+                address = pick.get("address", "")
                 conviction = pick.get("conviction", "")
+                volume_24h = pick.get("volume_24h", 0)
+                market_cap = pick.get("market_cap", 0)
 
                 # Sentiment emoji
-                sent_emoji = {"BULLISH": "🟢", "BEARISH": "🔴", "VERY_BULLISH": "🚀"}.get(sentiment, "⚪")
+                sent_emoji = {"BULLISH": "🟢", "BEARISH": "🔴", "VERY_BULLISH": "🚀", "HIGH": "🟢", "MEDIUM": "🟡"}.get(sentiment or conviction, "⚪")
                 change_emoji = "📈" if change_24h >= 0 else "📉"
 
                 # Format price nicely
@@ -4302,8 +4308,29 @@ Reply with a Solana token address to buy.
                 else:
                     price_str = f"${price:.2f}"
 
+                # Format market cap
+                def format_number(n):
+                    if n >= 1_000_000_000:
+                        return f"${n/1_000_000_000:.2f}B"
+                    elif n >= 1_000_000:
+                        return f"${n/1_000_000:.2f}M"
+                    elif n >= 1_000:
+                        return f"${n/1_000:.1f}K"
+                    return f"${n:.0f}"
+
                 lines.append(f"{sent_emoji} *{symbol}* {price_str}")
                 lines.append(f"   {change_emoji} {change_24h:+.1f}% | Score: {score:.0f}/100")
+                
+                # Show market cap and volume for blue chips
+                if section == "bluechips" and (market_cap or volume_24h):
+                    mc_str = format_number(market_cap) if market_cap else "N/A"
+                    vol_str = format_number(volume_24h) if volume_24h else "N/A"
+                    lines.append(f"   💰 MCap: {mc_str} | Vol: {vol_str}")
+                
+                # Show contract address (shortened, clickable via Solscan)
+                if address and section == "bluechips":
+                    short_addr = f"{address[:6]}...{address[-4:]}"
+                    lines.append(f"   📋 `{short_addr}`")
 
                 if tp or sl:
                     targets = []
@@ -4313,15 +4340,17 @@ Reply with a Solana token address to buy.
                         targets.append(f"SL: -{sl}%")
                     lines.append(f"   🎯 {' | '.join(targets)}")
 
-                if conviction:
+                if conviction and section != "bluechips":
                     lines.append(f"   _{conviction}_")
 
                 lines.append("")
 
-                # Buy button with auto stop-loss
+                # Buy and Details buttons with Dextools link
                 if token_ref:
                     sl_percent = sl if sl else 15  # Default 15% SL
-                    keyboard.append([
+                    dextools_url = f"https://www.dextools.io/app/en/solana/pair-explorer/{address}" if address else ""
+                    
+                    row = [
                         InlineKeyboardButton(
                             f"🛒 Buy {symbol}",
                             callback_data=f"demo:hub_buy:{token_ref}:{sl_percent}"
@@ -4330,7 +4359,17 @@ Reply with a Solana token address to buy.
                             f"📊 Details",
                             callback_data=f"demo:hub_detail:{token_ref}"
                         ),
-                    ])
+                    ]
+                    keyboard.append(row)
+                    
+                    # Add Dextools link row for blue chips
+                    if section == "bluechips" and address:
+                        keyboard.append([
+                            InlineKeyboardButton(
+                                f"🔗 {symbol} on Dextools",
+                                url=f"https://www.dextools.io/app/en/solana/pair-explorer/{address}"
+                            ),
+                        ])
 
         text = "\n".join(lines)
 

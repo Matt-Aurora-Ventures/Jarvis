@@ -642,6 +642,13 @@ class ClaudeCLIHandler:
                     cwd=cwd or self.working_dir,
                     env=exec_env,
                 )
+                
+                # Track process for zombie prevention
+                try:
+                    from tg_bot.process_manager import track_async_process
+                    track_async_process(self._active_process)
+                except ImportError:
+                    pass
 
                 try:
                     stdout, stderr = await asyncio.wait_for(

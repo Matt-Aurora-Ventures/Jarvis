@@ -262,18 +262,15 @@ async def generate_jarvis_response(
                 logger.warning(f"Enhanced memory error (non-fatal): {e}")
                 enhanced_context = ""
 
-        # Use XAI/Grok for response generation
+        # LLM Provider: Grok (primary) → Anthropic (fallback)
         import os
         from openai import OpenAI
 
         xai_key = os.getenv("XAI_API_KEY")
-        if not xai_key:
-            return "⚠️ XAI API key not configured. Unable to respond."
-
-        client = OpenAI(
-            api_key=xai_key,
-            base_url="https://api.x.ai/v1"
-        )
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        
+        if not xai_key and not anthropic_key:
+            return "⚠️ No LLM API keys configured. Unable to respond."
 
         # Build context-aware prompt with enhanced memory
         tone_instruction = ""
@@ -310,15 +307,60 @@ Respond to the user's query following the Jarvis brand voice guidelines above.
 Be helpful, data-driven, and concise.
 """
 
-        response = client.chat.completions.create(
-            model="grok-3",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message}
-            ],
-            temperature=0.7,
-            max_tokens=500
-        )
+        response = None
+        provider_used = None
+        
+        # Try Grok (primary)
+        if xai_key:
+            try:
+                client = OpenAI(
+                    api_key=xai_key,
+                    base_url="https://api.x.ai/v1"
+                )
+                response = client.chat.completions.create(
+                    model="grok-3-fast",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": message}
+                    ],
+                    temperature=0.7,
+                    max_tokens=500
+                )
+                provider_used = "grok"
+                logger.info("Jarvis response generated via Grok (primary)")
+            except Exception as grok_error:
+                logger.warning(f"Grok failed, trying Anthropic fallback: {grok_error}")
+                response = None
+        
+        # Fallback to Anthropic
+        if response is None and anthropic_key:
+            try:
+                import anthropic
+                client = anthropic.Anthropic(api_key=anthropic_key)
+                anthropic_response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=500,
+                    system=system_prompt,
+                    messages=[
+                        {"role": "user", "content": message}
+                    ]
+                )
+                # Wrap in compatible format
+                class MockChoice:
+                    def __init__(self, content):
+                        self.message = type('obj', (object,), {'content': content})()
+                class MockResponse:
+                    def __init__(self, content):
+                        self.choices = [MockChoice(content)]
+                response = MockResponse(anthropic_response.content[0].text)
+                provider_used = "anthropic"
+                logger.info("Jarvis response generated via Anthropic (fallback)")
+            except Exception as anthropic_error:
+                logger.error(f"Anthropic fallback also failed: {anthropic_error}")
+                return f"⚠️ Both Grok and Anthropic failed. Try again later."
+        
+        if response is None:
+            return "⚠️ No LLM provider available."
 
         jarvis_response = response.choices[0].message.content
         

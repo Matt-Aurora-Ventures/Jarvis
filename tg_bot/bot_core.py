@@ -1757,20 +1757,66 @@ async def solprice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"SOL price error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 
+# Common token symbol -> address mappings
+KNOWN_TOKENS = {
+    "SOL": "So11111111111111111111111111111111111111112",
+    "WSOL": "So11111111111111111111111111111111111111112",
+    "USDC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "USDT": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    "BONK": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+    "WIF": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+    "JUP": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+    "RAY": "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
+    "PYTH": "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3",
+    "JTO": "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL",
+    "ORCA": "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE",
+    "RENDER": "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof",
+    "HNT": "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux",
+    "MOBILE": "mb1eu7TzEc71KxDpsmsKoucSSuuoGLv1drys1oP2jh6",
+}
+
+
+async def resolve_token_symbol(symbol: str) -> str | None:
+    """Resolve token symbol to address via Jupiter strict list."""
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://token.jup.ag/strict", timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                if resp.status == 200:
+                    tokens = await resp.json()
+                    for token in tokens:
+                        if token.get("symbol", "").upper() == symbol.upper():
+                            return token.get("address")
+    except Exception:
+        pass
+    return None
+
+
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /price command - get token price (public)."""
+    """Handle /price command - get token price (public). Supports symbols (SOL, BONK) or addresses."""
     try:
         if not context.args:
-            await update.message.reply_text("Usage: /price <token_address>", parse_mode=ParseMode.HTML)
+            await update.message.reply_text("Usage: /price <token> (symbol like SOL or address)", parse_mode=ParseMode.HTML)
             return
         
-        token_address = context.args[0].strip()
+        token_input = context.args[0].strip()
+        
+        # Check if it's a known symbol
+        token_address = KNOWN_TOKENS.get(token_input.upper())
+        
+        # If not in known tokens and doesn't look like an address, try Jupiter lookup
+        if not token_address and len(token_input) < 32:
+            token_address = await resolve_token_symbol(token_input)
+        
+        # If still no match, assume it's an address
+        if not token_address:
+            token_address = token_input
         
         from core.data.free_price_api import get_token_price
         price_data = await get_token_price(token_address)
         
         if not price_data:
-            await update.message.reply_text("Token not found or no price data.", parse_mode=ParseMode.HTML)
+            await update.message.reply_text(f"Token '{token_input}' not found.", parse_mode=ParseMode.HTML)
             return
         
         change_emoji = "📈" if price_data.price_change_24h and price_data.price_change_24h > 0 else "📉"

@@ -243,3 +243,83 @@ class TokenDataService:
         # Sort by 24h volume
         results.sort(key=lambda x: x.volume_24h, reverse=True)
         return results[:limit]
+
+    async def get_blue_chips(self, limit: int = 15) -> List[Dict[str, Any]]:
+        """
+        Get established Solana blue chip tokens sorted by 24h volume.
+        Returns full token data including market cap and addresses.
+        """
+        # Expanded list of established Solana blue chips
+        BLUE_CHIP_TOKENS = [
+            ("SOL", "So11111111111111111111111111111111111111112"),
+            ("JUP", "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"),
+            ("RAY", "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R"),
+            ("BONK", "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"),
+            ("WIF", "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"),
+            ("PYTH", "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3"),
+            ("JTO", "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL"),
+            ("ORCA", "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE"),
+            ("MNGO", "MangoCzJ36AjZyKwVj3VnYU4GTonjfVEnJmvvWaxLac"),
+            ("FIDA", "EchesyfXePKdLtoiZSL8pBe8Myagyy8ZRqsACNCFGnvp"),
+            ("SAMO", "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"),
+            ("STEP", "StepAscQoEioFxxWGnh2sLBDFp9d8rvKz2Yp39iDpyT"),
+            ("SRM", "SRMuApVNdxXokk5GT7XD5cUUgXMBCoAz2LHeuAoKWRt"),
+            ("MSOL", "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So"),
+            ("STSOL", "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj"),
+        ]
+
+        results = []
+        
+        # Try to fetch real data from Birdeye trending endpoint first
+        if self.birdeye_key:
+            try:
+                session = await self._get_session()
+                headers = {"X-API-KEY": self.birdeye_key}
+                
+                # Fetch trending tokens by volume
+                url = "https://public-api.birdeye.so/defi/token_trending?sort_by=volume24hUSD&sort_type=desc&offset=0&limit=30"
+                async with session.get(url, headers=headers, timeout=15) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get("success") and data.get("data", {}).get("items"):
+                            for item in data["data"]["items"][:limit]:
+                                results.append({
+                                    "symbol": item.get("symbol", "???"),
+                                    "address": item.get("address", ""),
+                                    "price": float(item.get("price", 0)),
+                                    "change_24h": float(item.get("priceChange24hPercent", 0)),
+                                    "volume_24h": float(item.get("v24hUSD", 0)),
+                                    "market_cap": float(item.get("mc", 0)),
+                                    "liquidity": float(item.get("liquidity", 0)),
+                                    "holder_count": int(item.get("holder", 0)),
+                                })
+            except Exception as e:
+                logger.warning(f"Birdeye trending fetch error: {e}")
+
+        # If we didn't get enough from trending, supplement with known blue chips
+        if len(results) < limit:
+            existing_addresses = {r["address"] for r in results}
+            
+            for symbol, address in BLUE_CHIP_TOKENS:
+                if address in existing_addresses:
+                    continue
+                    
+                data = await self.get_token_data(symbol)
+                if data:
+                    results.append({
+                        "symbol": data.symbol,
+                        "address": data.address,
+                        "price": data.price_usd,
+                        "change_24h": data.price_change_24h,
+                        "volume_24h": data.volume_24h,
+                        "market_cap": data.volume_24h * 10,  # Estimate if not available
+                        "liquidity": data.liquidity,
+                        "holder_count": data.holder_count,
+                    })
+                    
+                if len(results) >= limit:
+                    break
+
+        # Sort by 24h volume (highest first)
+        results.sort(key=lambda x: x.get("volume_24h", 0), reverse=True)
+        return results[:limit]

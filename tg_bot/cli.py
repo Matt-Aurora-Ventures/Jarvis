@@ -209,7 +209,7 @@ def cmd_test(args):
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-3-mini",
+                    "model": "grok-4",
                     "messages": [{"role": "user", "content": "Say 'test ok' in 2 words"}],
                     "max_tokens": 10,
                 },
