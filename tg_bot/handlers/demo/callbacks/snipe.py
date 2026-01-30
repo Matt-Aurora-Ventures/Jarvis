@@ -260,11 +260,24 @@ async def handle_snipe(
                     )
 
                     if success and position:
+                        # Extract real tx hash from message or position
+                        # Message format: "Position opened: <signature>" or "[DRY RUN] Position opened"
+                        real_tx_hash = None
+                        if msg and ":" in msg and not msg.startswith("[DRY"):
+                            # Extract signature from "Position opened: 5xYz..."
+                            real_tx_hash = msg.split(":")[-1].strip()
+                        
+                        # Fallback to position attributes if available
+                        if not real_tx_hash:
+                            real_tx_hash = getattr(position, 'tx_signature_entry', None) or \
+                                           getattr(position, 'tx_hash', None) or \
+                                           f"pending_{position.id[:8]}"
+                        
                         return DemoMenuBuilder.snipe_result(
                             success=True,
                             symbol=token_symbol,
                             amount=amount,
-                            tx_hash=f"pending_{position.id[:8]}",
+                            tx_hash=real_tx_hash,
                             error=None,
                             sl_set=True,
                             tp_set=True,

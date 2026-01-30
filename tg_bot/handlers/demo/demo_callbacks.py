@@ -465,10 +465,22 @@ class DemoContextLoader:
         return _resolve_token_ref(context, token_ref)
 
     @staticmethod
+    def get_token_address(context, token_id: str) -> str:
+        """Alias for resolve_token_ref for backwards compatibility."""
+        from tg_bot.handlers.demo.demo_trading import _resolve_token_ref
+        return _resolve_token_ref(context, token_id)
+
+    @staticmethod
     async def execute_swap_with_fallback(**kwargs):
         """Execute swap via Bags.fm with Jupiter fallback."""
         from tg_bot.handlers.demo.demo_trading import _execute_swap_with_fallback
         return await _execute_swap_with_fallback(**kwargs)
+
+    @staticmethod
+    async def execute_buy_with_tpsl(**kwargs):
+        """Execute buy with mandatory TP/SL via Bags.fm with Jupiter fallback."""
+        from tg_bot.handlers.demo.demo_trading import execute_buy_with_tpsl
+        return await execute_buy_with_tpsl(**kwargs)
 
     @staticmethod
     def get_demo_slippage_bps() -> int:
