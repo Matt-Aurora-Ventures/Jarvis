@@ -4316,12 +4316,11 @@ Reply with a Solana token address to buy.
                         return f"${n/1_000:.1f}K"
                     return f"${n:.0f}"
 
-                # Get address for display
+                # Get address for display (full address for easy copying)
                 address = pick.get("address", "")
-                short_addr = f"{address[:6]}...{address[-4:]}" if len(address) > 10 else address
                 
                 lines.append(f"{sent_emoji} *{symbol}* {price_str}")
-                lines.append(f"   📋 `{short_addr}`")
+                lines.append(f"   📋 `{address}`")
                 
                 # Market cap and volume on same line
                 mc_str = format_large_num(market_cap) if market_cap else "N/A"
@@ -4343,10 +4342,21 @@ Reply with a Solana token address to buy.
 
                 lines.append("")
 
-                # Variable sizing buy buttons + DexTools link
+                # Token buy section with clear labeling
                 if token_ref:
                     sl_percent = sl if sl else 15  # Default 15% SL
-                    # Row 1: Variable size buy buttons
+                    address = pick.get("address", "")
+                    dexscreener_url = f"https://dexscreener.com/solana/{address}" if address else ""
+                    
+                    # Row 1: Token header button (shows which token these buttons are for)
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"━━━ {sent_emoji} {symbol} {price_str} ━━━",
+                            callback_data=f"demo:hub_detail:{token_ref}"
+                        ),
+                    ])
+                    
+                    # Row 2: Variable size buy buttons
                     keyboard.append([
                         InlineKeyboardButton(
                             f"0.1 SOL",
@@ -4365,23 +4375,25 @@ Reply with a Solana token address to buy.
                             callback_data=f"demo:hub_buy:{token_ref}:{sl_percent}:2"
                         ),
                     ])
-                    # Row 2: DexScreener + DexTools links
-                    address = pick.get("address", "")
-                    dexscreener_url = f"https://dexscreener.com/solana/{address}" if address else ""
                     
-                    row2 = []
+                    # Row 3: Custom amount + DexScreener + DexTools
+                    row3 = [
+                        InlineKeyboardButton(
+                            f"📝 Custom",
+                            callback_data=f"demo:hub_custom:{token_ref}:{sl_percent}"
+                        ),
+                    ]
                     if dexscreener_url:
-                        row2.append(InlineKeyboardButton(
+                        row3.append(InlineKeyboardButton(
                             f"📈 DexScreener",
                             url=dexscreener_url
                         ))
                     if dextools:
-                        row2.append(InlineKeyboardButton(
+                        row3.append(InlineKeyboardButton(
                             f"🔗 DexTools",
                             url=dextools
                         ))
-                    if row2:
-                        keyboard.append(row2)
+                    keyboard.append(row3)
 
         text = "\n".join(lines)
 
@@ -8062,10 +8074,24 @@ _Reply with token address or symbol:_
                 )
 
         # ========== SENTIMENT HUB HANDLERS ==========
-        elif action == "hub":
+        elif action == "hub" or action == "sentiment_hub":
             # Main Sentiment Hub Dashboard
             try:
-                last_report_time = context.user_data.get("hub_last_report", datetime.now(timezone.utc))
+                # Initialize report timestamp if not set, or reset if expired (>15min)
+                now = datetime.now(timezone.utc)
+                last_report_time = context.user_data.get("hub_last_report")
+                
+                if last_report_time is None:
+                    # First time opening hub - set initial timestamp
+                    context.user_data["hub_last_report"] = now
+                    last_report_time = now
+                else:
+                    # Check if 15 minutes elapsed - reset for new "report cycle"
+                    elapsed = (now - last_report_time).total_seconds()
+                    if elapsed >= 15 * 60:  # 15 minutes
+                        context.user_data["hub_last_report"] = now
+                        last_report_time = now
+                
                 wallet_connected = bool(context.user_data.get("wallet_address"))
 
                 text, keyboard = DemoMenuBuilder.sentiment_hub_main(

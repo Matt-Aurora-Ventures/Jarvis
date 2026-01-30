@@ -160,6 +160,54 @@ async def handle_sentiment_hub(
                 context_hint="hub_buy",
             )
 
+    elif data.startswith("demo:hub_custom:"):
+        # Custom amount buy - prompt user for SOL amount
+        try:
+            parts = data.split(":")
+            token_ref = parts[2] if len(parts) > 2 else ""
+            sl_percent = float(parts[3]) if len(parts) > 3 else 15.0
+            address = ctx.resolve_token_ref(context, token_ref)
+            
+            # Set awaiting state for custom amount input
+            context.user_data["awaiting_custom_hub_amount"] = True
+            context.user_data["custom_hub_token_ref"] = token_ref
+            context.user_data["custom_hub_sl_percent"] = sl_percent
+            context.user_data["custom_hub_address"] = address
+            
+            # Get token symbol if possible
+            symbol = "TOKEN"
+            try:
+                sentiment_data = await ctx.get_ai_sentiment_for_token(address)
+                symbol = sentiment_data.get("symbol", "TOKEN")
+            except:
+                pass
+            
+            text = f"""
+{theme.MONEY} *CUSTOM AMOUNT*
+{'=' * 20}
+
+*Token:* {symbol}
+*Address:* `{address[:8]}...{address[-6:]}`
+
+📝 *Enter the SOL amount you want to buy:*
+
+_Example: 0.25, 0.5, 1.5, etc._
+_Min: 0.01 SOL | Max: 10 SOL_
+"""
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(f"{theme.BACK} Cancel", callback_data="demo:hub_bluechips"),
+                ],
+            ])
+            return text, keyboard
+        except Exception as e:
+            logger.error(f"Hub custom amount error: {e}")
+            return DemoMenuBuilder.error_message(
+                error=str(e),
+                retry_action="demo:hub",
+                context_hint="hub_custom",
+            )
+
     elif data.startswith("demo:hub_detail:"):
         try:
             parts = data.split(":")
