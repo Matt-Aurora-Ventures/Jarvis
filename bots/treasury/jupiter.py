@@ -297,6 +297,56 @@ class JupiterClient:
             logger.warning(f"CoinGecko failed for {asset_id}: {e}")
         return 0.0
 
+    async def _fetch_birdeye_price(self, mint: str) -> float:
+        """Fetch USD price from Birdeye API (fallback for Jupiter)."""
+        api_key = os.environ.get("BIRDEYE_API_KEY")
+        if not api_key:
+            return 0.0
+        
+        session = await self._get_session()
+        try:
+            async with session.get(
+                f"https://public-api.birdeye.so/defi/price",
+                params={"address": mint},
+                headers={"X-API-KEY": api_key},
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get("success") and data.get("data"):
+                        return float(data["data"].get("value", 0) or 0)
+        except Exception as e:
+            logger.warning(f"Birdeye price failed for {mint[:8]}...: {e}")
+        return 0.0
+
+    async def _fetch_birdeye_token_info(self, mint: str) -> Optional[TokenInfo]:
+        """Fetch complete token info from Birdeye API (fallback for Jupiter)."""
+        api_key = os.environ.get("BIRDEYE_API_KEY")
+        if not api_key:
+            return None
+        
+        session = await self._get_session()
+        try:
+            async with session.get(
+                f"https://public-api.birdeye.so/defi/token_overview",
+                params={"address": mint},
+                headers={"X-API-KEY": api_key},
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get("success") and data.get("data"):
+                        token_data = data["data"]
+                        return TokenInfo(
+                            address=mint,
+                            symbol=token_data.get("symbol", "UNKNOWN"),
+                            name=token_data.get("name", ""),
+                            decimals=token_data.get("decimals", 9),
+                            price_usd=float(token_data.get("price", 0) or 0),
+                            logo_uri=token_data.get("logoURI", ""),
+                        )
+        except Exception as e:
+            logger.warning(f"Birdeye token info failed for {mint[:8]}...: {e}")
+        return None
+
     async def get_token_info(self, mint: str) -> Optional[TokenInfo]:
         """Get token information by mint address."""
         cached = self._token_cache.get(mint)
@@ -352,6 +402,15 @@ class JupiterClient:
                         return token
         except Exception as e:
             logger.warning(f"Jupiter price API failed for {mint[:8]}...: {e}")
+
+        # Fallback: Birdeye API (reliable, has API key)
+        try:
+            birdeye_token = await self._fetch_birdeye_token_info(mint)
+            if birdeye_token and birdeye_token.price_usd > 0:
+                self._token_cache.set(mint, birdeye_token)
+                return birdeye_token
+        except Exception as e:
+            logger.warning(f"Birdeye fallback failed for {mint[:8]}...: {e}")
 
         # Fallback: Bags.fm token data
         try:
