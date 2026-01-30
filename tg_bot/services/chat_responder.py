@@ -1185,9 +1185,9 @@ Never mention Claude or Anthropic.
         if self_reflection:
             context_hint += f"\n\n(Internal state: {self_reflection})"
 
-        # Primary: Ecosystem LLM router (Ollama/Groq/OpenRouter) for conversational intelligence
-        # This keeps Jarvis aligned with the same Llama-centric runtime as the rest of the ecosystem.
-        reply = await self._generate_with_ecosystem_llm(
+        # Primary: Grok (XAI) for all conversational intelligence
+        # Matt directive: Jarvis runs completely on Grok API
+        reply = await self._generate_with_grok(
             text + context_hint,
             username,
             chat_title,
@@ -1254,41 +1254,14 @@ Never mention Claude or Anthropic.
 
             return reply
 
-        # Fallback to xAI (Grok) if CLI unavailable
-        if self.xai_api_key:
-            reply = await self._generate_with_xai(text, username, chat_title, is_private, is_admin)
-            if reply:
-                # VOICE BIBLE VALIDATION: Ensure response adheres to Jarvis personality
-                is_valid, issues = validate_jarvis_response(reply)
-                if not is_valid:
-                    logger.warning(f"xAI response failed voice bible validation: {issues}")
+        # Grok is the only backend - no fallback chain
+        # Matt directive: Jarvis runs completely on Grok API
+        if not self.xai_api_key:
+            return "Grok API key not configured. Set XAI_API_KEY in environment."
+        
+        return "failed to generate response. grok might be having a moment."
 
-                # MEMORY: Personalize response based on user preferences
-                if TELEGRAM_MEMORY_ENABLED and user_id:
-                    try:
-                        reply = await personalize_response(
-                            base_response=reply,
-                            user_id=str(user_id)
-                        )
-                    except Exception as e:
-                        logger.debug(f"Failed to personalize response: {e}")
-
-                    # MEMORY: Store conversation for context (fire-and-forget)
-                    fire_and_forget(
-                        store_conversation_fact(
-                            user_id=str(user_id),
-                            message_text=text,
-                            response_text=reply,
-                            topic=engagement_topic
-                        ),
-                        name="store_conversation"
-                    )
-
-                return reply
-
-        return "No LLM backend available. Configure OLLAMA_URL/OLLAMA_HOST or GROQ_API_KEY (preferred), or set XAI_API_KEY as fallback."
-
-    async def _generate_with_ecosystem_llm(
+    async def _generate_with_grok(
         self,
         text: str,
         username: str,
@@ -1301,15 +1274,17 @@ Never mention Claude or Anthropic.
         recent_context: Optional[List[Dict]] = None,
         moderation_context: str = "",
     ) -> str:
-        """Generate a reply using the ecosystem LLM router (Ollama/Groq/OpenRouter).
+        """Generate a reply using Grok (XAI) exclusively.
 
-        This is the preferred path for "intelligent + conversational" behavior.
+        Matt directive: Jarvis runs completely on Grok API.
+        Voice validated against JARVIS_VOICE_BIBLE.
         """
-        try:
-            # Lazy import to keep startup light + avoid circular imports
-            from core.llm.providers import get_llm, Message
+        if not self.xai_api_key:
+            logger.warning("XAI_API_KEY not configured - cannot generate Grok response")
+            return ""
 
-            llm = await get_llm()
+        try:
+            session = await self._get_session()
 
             system_prompt = self._system_prompt(
                 chat_title,
@@ -1326,18 +1301,52 @@ Never mention Claude or Anthropic.
             max_tokens = int(os.getenv("TG_REPLY_MAX_TOKENS", "240"))
             temperature = float(os.getenv("TG_REPLY_TEMPERATURE", "0.6"))
 
-            resp = await llm.generate(
-                [
-                    Message("system", system_prompt),
-                    Message("user", user_prompt),
+            payload = {
+                "model": self.model,  # grok-3 by default
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
                 ],
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
-            return self._clean_reply(getattr(resp, "content", ""))
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+
+            async with session.post(f"{self.BASE_URL}/chat/completions", json=payload) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    logger.warning("Grok reply failed (%s): %s", resp.status, body[:200])
+                    return ""
+                data = await resp.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                return self._clean_reply(content)
+
         except Exception as exc:
-            logger.warning("Ecosystem LLM reply error: %s", exc)
+            logger.warning("Grok reply error: %s", exc)
             return ""
+
+    async def _generate_with_ecosystem_llm(
+        self,
+        text: str,
+        username: str,
+        chat_title: str,
+        is_private: bool,
+        is_admin: bool = False,
+        engagement_topic: Optional[str] = None,
+        conversation_mood: str = "neutral",
+        active_participants: Optional[List[str]] = None,
+        recent_context: Optional[List[Dict]] = None,
+        moderation_context: str = "",
+    ) -> str:
+        """Generate a reply using the ecosystem LLM router (Ollama/Groq/OpenRouter).
+
+        DEPRECATED: Now using Grok exclusively per Matt's directive.
+        Kept for backward compatibility but routes to Grok.
+        """
+        return await self._generate_with_grok(
+            text, username, chat_title, is_private, is_admin,
+            engagement_topic, conversation_mood, active_participants,
+            recent_context, moderation_context
+        )
 
     async def _generate_with_xai(
         self,
