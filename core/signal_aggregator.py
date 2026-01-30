@@ -44,8 +44,8 @@ class SignalStrength(Enum):
 class TokenSignal:
     """Comprehensive token trading signal."""
     address: str
-    symbol: str
-    name: str
+    symbol: str = ""
+    name: str = ""
     chain: str = "solana"
     
     # Price data
