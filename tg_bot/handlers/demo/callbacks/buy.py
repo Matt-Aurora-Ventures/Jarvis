@@ -186,7 +186,7 @@ _Send a number like "0.5" or "2.5"_
                     context.user_data["positions"] = positions
 
                     tx_hash = position.get("tx_hash")
-                    tx_display = f"{tx_hash[:8]}...{tx_hash[-8:]}" if tx_hash else "N/A"
+                    tx_link = f"[View TX](https://solscan.io/tx/{tx_hash})" if tx_hash else "N/A"
                     token_symbol = position.get("symbol", "TOKEN")
                     tokens_received = position.get("amount", 0)
                     token_price = position.get("entry_price", 0)
@@ -205,7 +205,7 @@ _Send a number like "0.5" or "2.5"_
                             f"Entry: ${token_price:.8f}\n"
                             f"TP: ${tp_price:.8f} (+{tp_percent}%)\n"
                             f"SL: ${sl_price:.8f} (-{sl_percent}%)\n"
-                            f"TX: {tx_display}\n\n"
+                            f"{tx_link}\n\n"
                             "✅ TP/SL monitoring active\n"
                             "Check /positions to monitor."
                         ),

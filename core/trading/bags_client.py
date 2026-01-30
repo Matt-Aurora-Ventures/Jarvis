@@ -286,7 +286,8 @@ class BagsAPIClient:
         amount: float,
         wallet_address: str,
         slippage_bps: int = 100,
-        keypair_path: Optional[str] = None
+        keypair_path: Optional[str] = None,
+        keypair: Optional[Any] = None  # Solders Keypair object for user wallets
     ) -> SwapResult:
         """
         Execute a swap via bags.fm API.
@@ -294,16 +295,17 @@ class BagsAPIClient:
         Flow:
         1. Get quote with full response
         2. Request swap transaction from API
-        3. Sign transaction with treasury keypair
+        3. Sign transaction with keypair
         4. Send to Solana RPC
 
         Args:
             from_token: Input token mint (SOL = So11111111111111111111111111111111111111112)
             to_token: Output token mint
             amount: Amount in SOL (e.g., 0.01 for 0.01 SOL)
-            wallet_address: Treasury wallet public key
+            wallet_address: Wallet public key (user's or treasury)
             slippage_bps: Slippage in basis points (100 = 1%)
-            keypair_path: Path to treasury keypair JSON (encrypted)
+            keypair_path: Path to keypair JSON (encrypted) - used if keypair not provided
+            keypair: Solders Keypair object - preferred for user wallets
         """
         if not self.client:
             return SwapResult(
@@ -367,7 +369,8 @@ class BagsAPIClient:
             # Step 3: Sign and send transaction
             tx_signature = await self._sign_and_send_transaction(
                 swap_tx_base58,
-                keypair_path or os.path.join(os.path.dirname(__file__), "../../data/treasury_keypair.json")
+                keypair_path or os.path.join(os.path.dirname(__file__), "../../data/treasury_keypair.json"),
+                keypair=keypair  # Pass user keypair if provided
             )
 
             if not tx_signature:
@@ -416,110 +419,221 @@ class BagsAPIClient:
     async def _sign_and_send_transaction(
         self,
         tx_base58: str,
-        keypair_path: str
+        keypair_path: str,
+        keypair: Optional[Any] = None  # Solders Keypair object
     ) -> Optional[str]:
         """
-        Sign a base58-encoded transaction and send to Solana.
+        Sign a base58-encoded transaction and send to Solana via Jito for guaranteed inclusion.
 
         Args:
             tx_base58: Base58-encoded serialized transaction
-            keypair_path: Path to encrypted treasury keypair
+            keypair_path: Path to encrypted treasury keypair (fallback if keypair not provided)
+            keypair: Solders Keypair object (preferred for user wallets)
 
         Returns:
             Transaction signature or None on failure
         """
         try:
             import base58
+            import base64
             from solders.transaction import VersionedTransaction
-            from solders.keypair import Keypair
-            from solders.signature import Signature
+            from solders.keypair import Keypair as SoldersKeypair
 
-            # Load and decrypt keypair
-            keypair = await self._load_keypair(keypair_path)
-            if not keypair:
-                logger.error("Failed to load treasury keypair")
-                return None
+            # Use provided keypair or load from path
+            if keypair is None:
+                keypair = await self._load_keypair(keypair_path)
+                if not keypair:
+                    logger.error("Failed to load keypair")
+                    return None
 
             # Decode and deserialize transaction
             tx_bytes = base58.b58decode(tx_base58)
             tx = VersionedTransaction.from_bytes(tx_bytes)
 
-            # Sign transaction
-            tx.sign([keypair])
-
-            # Serialize signed transaction
-            signed_tx_bytes = bytes(tx)
-
-            # Send to Solana RPC
+            # Sign the transaction
+            signed_tx = VersionedTransaction(tx.message, [keypair])
+            signed_tx_bytes = bytes(signed_tx)
+            
+            # Get RPC endpoints
             helius_key = os.getenv("HELIUS_API_KEY")
-            if helius_key:
-                rpc_url = f"https://mainnet.helius-rpc.com/?api-key={helius_key}"
-            else:
-                rpc_url = "https://api.mainnet-beta.solana.com"
-
-            import base64
-            payload = {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "sendTransaction",
-                "params": [
-                    base64.b64encode(signed_tx_bytes).decode(),
-                    {"encoding": "base64", "skipPreflight": False, "maxRetries": 3}
-                ]
-            }
-
-            response = await self.client.post(rpc_url, json=payload)
-            result = response.json()
-
-            if "error" in result:
-                logger.error(f"RPC error: {result['error']}")
+            helius_rpc = f"https://mainnet.helius-rpc.com/?api-key={helius_key}" if helius_key else None
+            jito_rpc = "https://mainnet.block-engine.jito.wtf/api/v1/transactions"
+            
+            # Try Jito first for guaranteed inclusion (with automatic priority fee)
+            signature = None
+            
+            # Method 1: Jito block engine (best for landing transactions)
+            try:
+                jito_payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "sendTransaction",
+                    "params": [
+                        base64.b64encode(signed_tx_bytes).decode(),
+                        {"encoding": "base64", "skipPreflight": True}
+                    ]
+                }
+                
+                jito_response = await self.client.post(jito_rpc, json=jito_payload, timeout=10.0)
+                jito_result = jito_response.json()
+                
+                if "result" in jito_result:
+                    signature = jito_result["result"]
+                    logger.info(f"Transaction sent via Jito: {signature}")
+                elif "error" in jito_result:
+                    logger.warning(f"Jito rejected transaction: {jito_result['error']}")
+            except Exception as jito_err:
+                logger.warning(f"Jito submission failed: {jito_err}")
+            
+            # Method 2: Helius RPC with retry (fallback)
+            if not signature and helius_rpc:
+                try:
+                    helius_payload = {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "sendTransaction",
+                        "params": [
+                            base64.b64encode(signed_tx_bytes).decode(),
+                            {"encoding": "base64", "skipPreflight": True, "maxRetries": 5}
+                        ]
+                    }
+                    
+                    helius_response = await self.client.post(helius_rpc, json=helius_payload)
+                    helius_result = helius_response.json()
+                    
+                    if "result" in helius_result:
+                        signature = helius_result["result"]
+                        logger.info(f"Transaction sent via Helius: {signature}")
+                    elif "error" in helius_result:
+                        logger.error(f"Helius RPC error: {helius_result['error']}")
+                        return None
+                except Exception as helius_err:
+                    logger.error(f"Helius submission failed: {helius_err}")
+                    return None
+            
+            if not signature:
+                logger.error("Failed to send transaction to any RPC")
                 return None
 
-            signature = result.get("result")
-            logger.info(f"Transaction sent: {signature}")
-            return signature
+            # Poll for confirmation (max 45 seconds for Jito landing)
+            confirmation_rpc = helius_rpc or "https://api.mainnet-beta.solana.com"
+            
+            for attempt in range(45):
+                try:
+                    status_payload = {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "getSignatureStatuses",
+                        "params": [[signature], {"searchTransactionHistory": True}]
+                    }
+                    status_response = await self.client.post(confirmation_rpc, json=status_payload)
+                    status_result = status_response.json()
+                    
+                    statuses = status_result.get("result", {}).get("value", [])
+                    if statuses and statuses[0] is not None:
+                        status = statuses[0]
+                        if status.get("err"):
+                            err_msg = str(status['err'])
+                            logger.error(f"Transaction failed on-chain: {err_msg}")
+                            # Check for common errors
+                            if "InsufficientFunds" in err_msg:
+                                logger.error("Insufficient SOL for transaction fees")
+                            elif "SlippageToleranceExceeded" in err_msg:
+                                logger.error("Price moved too much - slippage exceeded")
+                            return None
+                        confirmation = status.get("confirmationStatus")
+                        if confirmation in ["confirmed", "finalized"]:
+                            logger.info(f"Transaction confirmed ({confirmation}): {signature}")
+                            return signature
+                except Exception as poll_err:
+                    logger.warning(f"Confirmation poll error (attempt {attempt+1}): {poll_err}")
+                
+                await asyncio.sleep(1)
+            
+            # Check one more time with transaction history search
+            try:
+                final_check = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "getTransaction",
+                    "params": [signature, {"encoding": "json", "maxSupportedTransactionVersion": 0}]
+                }
+                final_response = await self.client.post(confirmation_rpc, json=final_check)
+                final_result = final_response.json()
+                
+                if final_result.get("result"):
+                    if final_result["result"].get("meta", {}).get("err") is None:
+                        logger.info(f"Transaction landed (late confirmation): {signature}")
+                        return signature
+            except Exception:
+                pass
+            
+            logger.error(f"Transaction not confirmed after 45s: {signature}")
+            return None
 
         except ImportError as e:
             logger.error(f"Missing dependency for signing: {e}. Install: pip install solders base58")
             return None
         except Exception as e:
             logger.error(f"Failed to sign/send transaction: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
 
     async def _load_keypair(self, keypair_path: str):
         """
         Load and decrypt treasury keypair.
 
-        The keypair is encrypted with a password stored in TREASURY_PASSWORD env var.
+        The keypair is encrypted with PyNaCl Argon2id.
+        Password is loaded from TREASURY_PASSWORD or JARVIS_WALLET_PASSWORD env var.
         """
+        def pad_base64(s):
+            """Add padding to base64 string if needed."""
+            return s + '=' * (4 - len(s) % 4) if len(s) % 4 else s
+
         try:
             import json
-            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
             import base64
-            import hashlib
 
             with open(keypair_path, 'r') as f:
                 data = json.load(f)
 
-            # Check if encrypted
-            if "encrypted_key" in data:
-                password = os.getenv("TREASURY_PASSWORD")
+            # Check if encrypted (PyNaCl Argon2id format)
+            if "encrypted_key" in data and "salt" in data and "nonce" in data:
+                # Try multiple password env vars
+                password = os.getenv("TREASURY_PASSWORD") or os.getenv("JARVIS_WALLET_PASSWORD")
                 if not password:
-                    logger.error("TREASURY_PASSWORD not set - cannot decrypt keypair")
+                    logger.error("TREASURY_PASSWORD or JARVIS_WALLET_PASSWORD not set - cannot decrypt keypair")
                     return None
 
-                # Derive key from password
-                salt = base64.b64decode(data["salt"])
-                key = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000, 32)
+                salt = base64.b64decode(pad_base64(data["salt"]))
+                nonce = base64.b64decode(pad_base64(data["nonce"]))
+                encrypted_key = base64.b64decode(pad_base64(data["encrypted_key"]))
 
-                # Decrypt
-                nonce = base64.b64decode(data["nonce"])
-                encrypted = base64.b64decode(data["encrypted_key"])
-                aesgcm = AESGCM(key)
-                secret_key = aesgcm.decrypt(nonce, encrypted, None)
+                # Use PyNaCl Argon2id for decryption (matches run_treasury.py)
+                try:
+                    import nacl.secret
+                    import nacl.pwhash
 
-                from solders.keypair import Keypair
-                return Keypair.from_bytes(secret_key)
+                    key = nacl.pwhash.argon2id.kdf(
+                        nacl.secret.SecretBox.KEY_SIZE,
+                        password.encode(),
+                        salt,
+                        opslimit=nacl.pwhash.argon2id.OPSLIMIT_MODERATE,
+                        memlimit=nacl.pwhash.argon2id.MEMLIMIT_MODERATE,
+                    )
+
+                    box = nacl.secret.SecretBox(key)
+                    decrypted = box.decrypt(encrypted_key, nonce)
+
+                    from solders.keypair import Keypair
+                    kp = Keypair.from_bytes(decrypted)
+                    logger.info(f"Loaded treasury keypair: {str(kp.pubkey())[:8]}...")
+                    return kp
+
+                except ImportError:
+                    logger.error("PyNaCl not installed. Install with: pip install pynacl")
+                    return None
 
             # Unencrypted (legacy format - array of bytes)
             elif isinstance(data, list):

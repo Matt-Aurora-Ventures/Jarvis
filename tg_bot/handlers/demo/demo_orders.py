@@ -318,9 +318,9 @@ def _format_exit_alert_message(alert: Dict[str, Any], auto_executed: bool) -> st
     if auto_executed:
         source = position.get("exit_source", "swap")
         tx_hash = position.get("exit_tx")
-        tx_display = f"{tx_hash[:8]}...{tx_hash[-8:]}" if tx_hash else "N/A"
+        tx_link = f"[View TX](https://solscan.io/tx/{tx_hash})" if tx_hash else "N/A"
         lines.append(f"Auto-exit: {source}")
-        lines.append(f"TX: {tx_display}")
+        lines.append(tx_link)
     else:
         lines.append("_Auto-exit disabled - review position._")
 
