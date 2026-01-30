@@ -6,6 +6,10 @@ import sys
 import time
 from datetime import datetime, timezone, timedelta
 
+# Initialize process manager EARLY to prevent zombie accumulation
+from tg_bot.process_manager import setup_process_manager, cleanup_processes
+setup_process_manager()
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -277,6 +281,25 @@ def register_handlers(app: Application, config) -> None:
     else:
         print("Anti-scam protection: DISABLED (no antiscam module or admin IDs)")
 
+    # DEBUG: Log ALL incoming updates to diagnose forum topic issues
+    async def _debug_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Debug handler to log all incoming updates."""
+        import sys
+        msg = update.message
+        if msg:
+            chat_id = msg.chat.id if msg.chat else "N/A"
+            thread_id = getattr(msg, 'message_thread_id', None)
+            is_topic = getattr(msg, 'is_topic_message', False)
+            text_preview = (msg.text or "")[:50] if msg.text else "[no text]"
+            print(f"[DEBUG UPDATE] chat={chat_id} thread={thread_id} is_topic={is_topic} text={text_preview}", flush=True)
+        elif update.edited_message:
+            print(f"[DEBUG UPDATE] edited_message received", flush=True)
+        else:
+            print(f"[DEBUG UPDATE] update_id={update.update_id} type=unknown", flush=True)
+    
+    # Add debug handler at group -2 (runs before everything)
+    app.add_handler(MessageHandler(filters.ALL, _debug_all_updates), group=-2)
+    
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Media handler - blocks GIFs/animations when restricted mode is active
@@ -539,6 +562,14 @@ def main():
         # Exit with code 1 so supervisor knows there was an error
         sys.exit(1)
     finally:
+        # Clean up any remaining subprocesses to prevent zombies
+        print("Cleaning up subprocesses...")
+        try:
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(cleanup_processes())
+        except Exception as e:
+            print(f"Process cleanup error: {e}")
+        
         # Only close lock if we acquired it (not when supervisor holds it)
         if lock:
             try:

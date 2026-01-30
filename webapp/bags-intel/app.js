@@ -38,13 +38,20 @@ class BagsIntelFeed {
 
     async loadEvents() {
         try {
-            const response = await fetch('/api/bags-intel/graduations');
+            // Load from static data.json (updated periodically)
+            const response = await fetch('data.json?t=' + Date.now());
             const data = await response.json();
 
             if (data.success) {
                 this.events = data.events || [];
                 this.filterAndRender();
                 this.updateTrackedCount();
+                
+                // Update last updated timestamp
+                if (data.lastUpdated) {
+                    const lastUpdated = new Date(data.lastUpdated);
+                    console.log('Data last updated:', lastUpdated.toLocaleString());
+                }
             }
         } catch (error) {
             console.error('Failed to load events:', error);

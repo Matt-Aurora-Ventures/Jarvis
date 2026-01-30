@@ -288,7 +288,17 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
     text = msg.text.strip()
 
-    # Enforce admin-only demo access
+    # Check if we're awaiting any input FIRST - don't process random messages
+    if not any([
+        context.user_data.get("awaiting_custom_buy_amount"),
+        context.user_data.get("awaiting_watchlist_token"),
+        context.user_data.get("awaiting_wallet_import"),
+        context.user_data.get("awaiting_token"),
+        context.user_data.get("awaiting_token_search"),
+    ]):
+        return
+
+    # Only enforce admin check if we're actually awaiting demo input
     try:
         config = get_config()
         user_id = msg.from_user.id if msg and msg.from_user else 0
@@ -306,16 +316,6 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # Run TP/SL/trailing stop checks for demo positions (throttled)
     await _process_demo_exit_checks(update, context)
-
-    # Check if we're awaiting any input
-    if not any([
-        context.user_data.get("awaiting_custom_buy_amount"),
-        context.user_data.get("awaiting_watchlist_token"),
-        context.user_data.get("awaiting_wallet_import"),
-        context.user_data.get("awaiting_token"),
-        context.user_data.get("awaiting_token_search"),
-    ]):
-        return
 
     # Import modular handlers
     from .input_handlers import (

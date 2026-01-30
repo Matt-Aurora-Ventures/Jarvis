@@ -34,6 +34,21 @@ from tg_bot.services.memory_service import (
 )
 from core.async_utils import fire_and_forget
 
+# Multi-model intelligent core (Claude + Grok)
+_intelligent_core = None
+
+def get_intelligent_core_instance():
+    """Get the intelligent core singleton (lazy load)."""
+    global _intelligent_core
+    if _intelligent_core is None:
+        try:
+            from tg_bot.services.intelligent_core import get_intelligent_core
+            _intelligent_core = get_intelligent_core()
+            logger.info("Intelligent Core loaded (Claude + Grok multi-model)")
+        except Exception as e:
+            logger.warning(f"Could not load Intelligent Core: {e}")
+    return _intelligent_core
+
 # Voice bible - canonical brand guide (lazy-loaded to avoid circular imports)
 try:
     from core.jarvis_voice_bible import validate_jarvis_response, JARVIS_VOICE_BIBLE
@@ -319,7 +334,7 @@ class ChatResponder:
     ) -> None:
         self.xai_api_key = xai_api_key or os.getenv("XAI_API_KEY", "")
         # NOTE: Anthropic API removed - CLI only (per user requirement)
-        self.model = model or os.getenv("TG_REPLY_MODEL", "grok-3")
+        self.model = model or os.getenv("TG_REPLY_MODEL", "grok-4")
         self._session: Optional[aiohttp.ClientSession] = None
         self._memory = None
         self._jarvis_admin = None
@@ -1185,20 +1200,56 @@ Never mention Claude or Anthropic.
         if self_reflection:
             context_hint += f"\n\n(Internal state: {self_reflection})"
 
-        # Primary: Grok (XAI) for all conversational intelligence
-        # Matt directive: Jarvis runs completely on Grok API
-        reply = await self._generate_with_grok(
-            text + context_hint,
-            username,
-            chat_title,
-            is_private,
-            is_admin,
-            engagement_topic=engagement_topic,
-            conversation_mood=conversation_mood,
-            active_participants=active_participants,
-            recent_context=recent_context,
-            moderation_context=moderation_ctx,
+        # =====================================================================
+        # MULTI-MODEL AI RESPONSE GENERATION
+        # Tier 0: Intelligent Core (Claude + context files + skills) for complex queries
+        # Tier 1: Grok for fast conversational responses
+        # =====================================================================
+        
+        reply = None
+        
+        # Determine if this is a complex query that benefits from Claude
+        is_complex_query = (
+            is_admin or  # Always use full intelligence for admin
+            engagement_topic in ("tech_question", "bot_capability") or
+            len(text) > 200 or  # Longer messages often need more reasoning
+            any(kw in text.lower() for kw in ["explain", "how do", "why does", "analyze", "help me"])
         )
+        
+        # Tier 0: Try Intelligent Core (Claude + Grok with full context)
+        if is_complex_query:
+            try:
+                intelligent_core = get_intelligent_core_instance()
+                if intelligent_core and intelligent_core.is_claude_available():
+                    logger.info("Using Intelligent Core (Claude) for complex query")
+                    reply = await intelligent_core.generate_response(
+                        message=text,
+                        user_id=user_id,
+                        username=username,
+                        chat_context=recent_context,
+                        use_claude=True,
+                        use_skills=True,
+                    )
+                    if reply:
+                        logger.info("Intelligent Core (Claude) response generated")
+            except Exception as e:
+                logger.warning(f"Intelligent Core failed (falling back to Grok): {e}")
+                reply = None
+        
+        # Tier 1: Grok (XAI) for conversational intelligence
+        if not reply:
+            reply = await self._generate_with_grok(
+                text + context_hint,
+                username,
+                chat_title,
+                is_private,
+                is_admin,
+                engagement_topic=engagement_topic,
+                conversation_mood=conversation_mood,
+                active_participants=active_participants,
+                recent_context=recent_context,
+                moderation_context=moderation_ctx,
+            )
         if reply:
             # VOICE BIBLE VALIDATION: Ensure response adheres to Jarvis personality
             is_valid, issues = validate_jarvis_response(reply)
@@ -1302,7 +1353,7 @@ Never mention Claude or Anthropic.
             temperature = float(os.getenv("TG_REPLY_TEMPERATURE", "0.6"))
 
             payload = {
-                "model": self.model,  # grok-3 by default
+                "model": self.model,  # grok-4 by default
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},

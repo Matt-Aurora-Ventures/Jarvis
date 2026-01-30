@@ -74,7 +74,7 @@ class BotConfig:
     daily_cost_limit_usd: float = 10.00  # Stop if daily cost exceeds this
 
     # === MODEL SETTINGS ===
-    grok_model: str = "grok-3-mini"  # cheapest: grok-3-mini, best: grok-4
+    grok_model: str = "grok-4"  # grok-4 is the latest reasoning model
     claude_model: str = "claude-sonnet-4-20250514"
     claude_max_tokens: int = 1024
 

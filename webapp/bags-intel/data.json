@@ -1,0 +1,611 @@
+{
+  "success": true,
+  "events": [
+    {
+      "token": {
+        "name": "Crustafarianism",
+        "symbol": "CRUST",
+        "mint": "6anLMo7b6pC2fqfFJnsT2PBCknjgh8VzRvmMk9xBAGS",
+        "image_url": null
+      },
+      "timestamp": "2026-01-30T07:12:34.759Z",
+      "scores": {
+        "overall": 27,
+        "quality": "weak",
+        "risk": "high",
+        "bonding": 0,
+        "creator": 50,
+        "social": 47,
+        "market": 12
+      },
+      "market": {
+        "mcap_usd": 12804.18,
+        "liquidity_usd": 0,
+        "volume_24h": 11868.2,
+        "price_usd": 0.0000128
+      },
+      "bonding_curve": {
+        "duration_seconds": 23906,
+        "unique_buyers": 102
+      },
+      "flags": {
+        "green": [
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "Early-stage token still building momentum. Monitor for increased activity."
+      }
+    },
+    {
+      "token": {
+        "name": "Crustafarianism",
+        "symbol": "CRUST",
+        "mint": "Gs8EgRG1811ext8dk2BXLFdGsQasBKsuKyCgSqyxBAGS",
+        "image_url": null
+      },
+      "timestamp": "2026-01-30T06:12:34.759Z",
+      "scores": {
+        "overall": 34,
+        "quality": "weak",
+        "risk": "high",
+        "bonding": 0,
+        "creator": 55,
+        "social": 46,
+        "market": 36
+      },
+      "market": {
+        "mcap_usd": 16826.13,
+        "liquidity_usd": 0,
+        "volume_24h": 35760.6,
+        "price_usd": 0.00001682
+      },
+      "bonding_curve": {
+        "duration_seconds": 68374,
+        "unique_buyers": 265
+      },
+      "flags": {
+        "green": [
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "Early-stage token still building momentum. Monitor for increased activity."
+      }
+    },
+    {
+      "token": {
+        "name": "Quest to Everest",
+        "symbol": "EVEREST",
+        "mint": "EWjoRehdQ4PyWycCuq7Jn2SS4xcuzTBDAg3A3KzYBAGS",
+        "image_url": "https://cdn.dexscreener.com/cms/images/5268f0d8c76afbd8fe40141fb1851100cc84eb2fd7c2d6496d8300b29b30ae6a?width=800&height=800&quality=90"
+      },
+      "timestamp": "2026-01-30T05:12:34.759Z",
+      "scores": {
+        "overall": 51,
+        "quality": "average",
+        "risk": "medium",
+        "bonding": 0,
+        "creator": 59,
+        "social": 46,
+        "market": 100
+      },
+      "market": {
+        "mcap_usd": 18574.98,
+        "liquidity_usd": 0,
+        "volume_24h": 205297.65,
+        "price_usd": 0.00001857
+      },
+      "bonding_curve": {
+        "duration_seconds": 5304,
+        "unique_buyers": 2057
+      },
+      "flags": {
+        "green": [
+          "High trading volume",
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "High-volume token with solid market activity. Worth monitoring for graduation potential."
+      }
+    },
+    {
+      "token": {
+        "name": "ALEXA WEB3",
+        "symbol": "ALEXA",
+        "mint": "GBuLcWkWS4qPyj5UrSt9nYAny6AjuHhTGxoW7UohBAGS",
+        "image_url": "https://cdn.dexscreener.com/cms/images/a8c031a19400c723329b3efceb8d2c933426208a098b1597d28af1cdcda8f418?width=800&height=800&quality=90"
+      },
+      "timestamp": "2026-01-30T04:12:34.759Z",
+      "scores": {
+        "overall": 58,
+        "quality": "strong",
+        "risk": "low",
+        "bonding": 0,
+        "creator": 54,
+        "social": 79,
+        "market": 100
+      },
+      "market": {
+        "mcap_usd": 20833.09,
+        "liquidity_usd": 0,
+        "volume_24h": 171265.17,
+        "price_usd": 0.00002083
+      },
+      "bonding_curve": {
+        "duration_seconds": 20223,
+        "unique_buyers": 1513
+      },
+      "flags": {
+        "green": [
+          "High trading volume",
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "High-volume token with solid market activity. Worth monitoring for graduation potential."
+      }
+    },
+    {
+      "token": {
+        "name": "Openclaw",
+        "symbol": "OPENCLAW",
+        "mint": "7aZnsvZYeF7RoJTAz9rBob3nawdBday6CgezqqP8BAGS",
+        "image_url": null
+      },
+      "timestamp": "2026-01-30T03:12:34.759Z",
+      "scores": {
+        "overall": 39,
+        "quality": "average",
+        "risk": "medium",
+        "bonding": 0,
+        "creator": 54,
+        "social": 44,
+        "market": 57
+      },
+      "market": {
+        "mcap_usd": 12852.5,
+        "liquidity_usd": 0,
+        "volume_24h": 57019.82,
+        "price_usd": 0.00001285
+      },
+      "bonding_curve": {
+        "duration_seconds": 87332,
+        "unique_buyers": 545
+      },
+      "flags": {
+        "green": [
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "High-volume token with solid market activity. Worth monitoring for graduation potential."
+      }
+    },
+    {
+      "token": {
+        "name": "Babylon",
+        "symbol": "BABYLON",
+        "mint": "7Xjtszwj2sfkp9H7s1mejzqkKvGfaffqERTiLKxBAGS",
+        "image_url": null
+      },
+      "timestamp": "2026-01-30T02:12:34.759Z",
+      "scores": {
+        "overall": 53,
+        "quality": "average",
+        "risk": "medium",
+        "bonding": 0,
+        "creator": 68,
+        "social": 43,
+        "market": 100
+      },
+      "market": {
+        "mcap_usd": 15834.5,
+        "liquidity_usd": 0,
+        "volume_24h": 145893.85,
+        "price_usd": 0.00001583
+      },
+      "bonding_curve": {
+        "duration_seconds": 17627,
+        "unique_buyers": 1152
+      },
+      "flags": {
+        "green": [
+          "High trading volume",
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "High-volume token with solid market activity. Worth monitoring for graduation potential."
+      }
+    },
+    {
+      "token": {
+        "name": "GEOINT.WORLD",
+        "symbol": "GEOINT",
+        "mint": "AahajxcefUQy6eYHoJaqUF7SRcSfAsrtcTCjT2PJBAGS",
+        "image_url": "https://cdn.dexscreener.com/cms/images/e2cfaa1a4477f35987daa85aa84e6be339099d47226e89b579e11e1a0a18def2?width=800&height=800&quality=90"
+      },
+      "timestamp": "2026-01-30T01:12:34.759Z",
+      "scores": {
+        "overall": 63,
+        "quality": "strong",
+        "risk": "low",
+        "bonding": 0,
+        "creator": 85,
+        "social": 65,
+        "market": 100
+      },
+      "market": {
+        "mcap_usd": 12461.31,
+        "liquidity_usd": 0,
+        "volume_24h": 103373.75,
+        "price_usd": 0.00001246
+      },
+      "bonding_curve": {
+        "duration_seconds": 42730,
+        "unique_buyers": 1148
+      },
+      "flags": {
+        "green": [
+          "High trading volume",
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "High-volume token with solid market activity. Worth monitoring for graduation potential."
+      }
+    },
+    {
+      "token": {
+        "name": "Writers Cramp",
+        "symbol": "CRAMP",
+        "mint": "8HsZJM5i7nmUrWkyKTSWDESueYM4xiZthoNdeW2TBAGS",
+        "image_url": "https://cdn.dexscreener.com/cms/images/3d64361588d18c003f99817028cbac5076f59bc489cb422fefc2f5888864f1bb?width=800&height=800&quality=90"
+      },
+      "timestamp": "2026-01-30T00:12:34.759Z",
+      "scores": {
+        "overall": 50,
+        "quality": "average",
+        "risk": "medium",
+        "bonding": 0,
+        "creator": 56,
+        "social": 42,
+        "market": 100
+      },
+      "market": {
+        "mcap_usd": 9273.89,
+        "liquidity_usd": 0,
+        "volume_24h": 181712.44,
+        "price_usd": 0.000009273
+      },
+      "bonding_curve": {
+        "duration_seconds": 22695,
+        "unique_buyers": 1690
+      },
+      "flags": {
+        "green": [
+          "High trading volume",
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "High-volume token with solid market activity. Worth monitoring for graduation potential."
+      }
+    },
+    {
+      "token": {
+        "name": "Deloitte",
+        "symbol": "DELOITTE",
+        "mint": "ABNXRDTUu6scN3xALBfocGnPvU8QUqcsv3q5NsjwBAGS",
+        "image_url": "https://cdn.dexscreener.com/cms/images/7553bd7381e24377dfbdf6c8456477e41898b550eb8cf9d3d9152e6636bf31c3?width=800&height=800&quality=90"
+      },
+      "timestamp": "2026-01-29T23:12:34.759Z",
+      "scores": {
+        "overall": 45,
+        "quality": "average",
+        "risk": "medium",
+        "bonding": 0,
+        "creator": 89,
+        "social": 60,
+        "market": 31
+      },
+      "market": {
+        "mcap_usd": 12735.78,
+        "liquidity_usd": 0,
+        "volume_24h": 31373.36,
+        "price_usd": 0.00001273
+      },
+      "bonding_curve": {
+        "duration_seconds": 8691,
+        "unique_buyers": 308
+      },
+      "flags": {
+        "green": [
+          "Large buyer base"
+        ],
+        "red": [
+          "Low liquidity",
+          "Sharp price decline"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "Early-stage token still building momentum. Monitor for increased activity."
+      }
+    },
+    {
+      "token": {
+        "name": "Stickiers",
+        "symbol": "STICKIER",
+        "mint": "FksUzZWWFkGsQJPK9vuhaZJysAfXAJ3X4cxpfj6iBAGS",
+        "image_url": null
+      },
+      "timestamp": "2026-01-29T22:12:34.761Z",
+      "scores": {
+        "overall": 36,
+        "quality": "average",
+        "risk": "medium",
+        "bonding": 0,
+        "creator": 87,
+        "social": 31,
+        "market": 26
+      },
+      "market": {
+        "mcap_usd": 9363.76,
+        "liquidity_usd": 0,
+        "volume_24h": 26294.4,
+        "price_usd": 0.000009363
+      },
+      "bonding_curve": {
+        "duration_seconds": 21432,
+        "unique_buyers": 175
+      },
+      "flags": {
+        "green": [
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "Early-stage token still building momentum. Monitor for increased activity."
+      }
+    },
+    {
+      "token": {
+        "name": "OFFICIAL BARRON",
+        "symbol": "BARRON",
+        "mint": "Bc6EKn1CMfaL6UMZEKUEEHRSQAAw2ac5YBTVF4i3BAGS",
+        "image_url": null
+      },
+      "timestamp": "2026-01-29T21:12:34.761Z",
+      "scores": {
+        "overall": 34,
+        "quality": "weak",
+        "risk": "high",
+        "bonding": 0,
+        "creator": 81,
+        "social": 45,
+        "market": 11
+      },
+      "market": {
+        "mcap_usd": 43145.05,
+        "liquidity_usd": 0,
+        "volume_24h": 10720.6,
+        "price_usd": 0.00004314
+      },
+      "bonding_curve": {
+        "duration_seconds": 34241,
+        "unique_buyers": 9913
+      },
+      "flags": {
+        "green": [
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "Early-stage token still building momentum. Monitor for increased activity."
+      }
+    },
+    {
+      "token": {
+        "name": "BrainPro",
+        "symbol": "BRAINPRO",
+        "mint": "Ax91wCnQu9sHxrc5HqE6cgSYJ4dnkZjVy9U3dSgYBAGS",
+        "image_url": null
+      },
+      "timestamp": "2026-01-29T20:12:34.761Z",
+      "scores": {
+        "overall": 54,
+        "quality": "average",
+        "risk": "medium",
+        "bonding": 0,
+        "creator": 60,
+        "social": 57,
+        "market": 100
+      },
+      "market": {
+        "mcap_usd": 9262.71,
+        "liquidity_usd": 0,
+        "volume_24h": 208028.12,
+        "price_usd": 0.000009262
+      },
+      "bonding_curve": {
+        "duration_seconds": 9688,
+        "unique_buyers": 1685
+      },
+      "flags": {
+        "green": [
+          "High trading volume",
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "High-volume token with solid market activity. Worth monitoring for graduation potential."
+      }
+    },
+    {
+      "token": {
+        "name": "Lobster General Intelligence",
+        "symbol": "LGI",
+        "mint": "Ce6aZQcGQsyGepTrekg7h3pKQK7gbpFR5mXu8U8ABAGS",
+        "image_url": null
+      },
+      "timestamp": "2026-01-29T19:12:34.761Z",
+      "scores": {
+        "overall": 46,
+        "quality": "average",
+        "risk": "medium",
+        "bonding": 0,
+        "creator": 80,
+        "social": 43,
+        "market": 63
+      },
+      "market": {
+        "mcap_usd": 9458.93,
+        "liquidity_usd": 0,
+        "volume_24h": 62543.52,
+        "price_usd": 0.000009458
+      },
+      "bonding_curve": {
+        "duration_seconds": 71380,
+        "unique_buyers": 396
+      },
+      "flags": {
+        "green": [
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "High-volume token with solid market activity. Worth monitoring for graduation potential."
+      }
+    },
+    {
+      "token": {
+        "name": "Zo Computer",
+        "symbol": "ZO",
+        "mint": "3H5Y8MvFVFGuyGrELfbVmNd5RuMUUAWDZ3UvvizMBAGS",
+        "image_url": null
+      },
+      "timestamp": "2026-01-29T18:12:34.761Z",
+      "scores": {
+        "overall": 51,
+        "quality": "average",
+        "risk": "medium",
+        "bonding": 0,
+        "creator": 75,
+        "social": 49,
+        "market": 79
+      },
+      "market": {
+        "mcap_usd": 7759.73,
+        "liquidity_usd": 0,
+        "volume_24h": 79264.05,
+        "price_usd": 0.000007759
+      },
+      "bonding_curve": {
+        "duration_seconds": 69023,
+        "unique_buyers": 496
+      },
+      "flags": {
+        "green": [
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "High-volume token with solid market activity. Worth monitoring for graduation potential."
+      }
+    },
+    {
+      "token": {
+        "name": "Run by Clawd",
+        "symbol": "RUN",
+        "mint": "GKimKDfu5hCWzg1ioAPnvFrahDeJVDKj2zPxozZ4BAGS",
+        "image_url": null
+      },
+      "timestamp": "2026-01-29T17:12:34.761Z",
+      "scores": {
+        "overall": 58,
+        "quality": "strong",
+        "risk": "low",
+        "bonding": 0,
+        "creator": 54,
+        "social": 78,
+        "market": 100
+      },
+      "market": {
+        "mcap_usd": 6718.63,
+        "liquidity_usd": 0,
+        "volume_24h": 131741.8,
+        "price_usd": 0.000006718
+      },
+      "bonding_curve": {
+        "duration_seconds": 86390,
+        "unique_buyers": 936
+      },
+      "flags": {
+        "green": [
+          "High trading volume",
+          "Large buyer base",
+          "Positive price momentum"
+        ],
+        "red": [
+          "Low liquidity"
+        ]
+      },
+      "ai_analysis": {
+        "summary": "High-volume token with solid market activity. Worth monitoring for graduation potential."
+      }
+    }
+  ],
+  "lastUpdated": "2026-01-30T07:12:34.761Z"
+}
