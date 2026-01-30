@@ -52,26 +52,35 @@ async def handle_buy(
             return DemoMenuBuilder.token_input_prompt()
 
     elif data.startswith("demo:buy_custom:"):
-        # Show custom amount input prompt
+        # Show custom amount selection buttons (replaces text input for group chat reliability)
         parts = data.split(":")
         token_ref = parts[2] if len(parts) > 2 else ""
-
-        context.user_data["awaiting_custom_buy_amount"] = True
-        context.user_data["custom_buy_token_ref"] = token_ref
+        
+        # Resolve the full token address for display
+        token_addr = ctx.resolve_token_ref(context, token_ref)
+        
+        logger.info(f"[BUY CUSTOM] Showing amount buttons for user {user_id}, token_ref={token_ref}")
 
         text = f"""
-{theme.BUY} *CUSTOM BUY AMOUNT*
+{theme.BUY} *SELECT BUY AMOUNT*
 
-Enter the amount of SOL you want to spend:
+*Token:* `{token_addr}`
 
-*Limits:*
-- Minimum: 0.01 SOL
-- Maximum: 50 SOL
-
-_Send a number like "0.5" or "2.5"_
+Choose how much SOL to spend:
 """
+        # Preset amount buttons - works reliably in groups
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:main")],
+            [
+                InlineKeyboardButton("0.05 SOL", callback_data=f"demo:execute_buy:{token_ref}:0.05"),
+                InlineKeyboardButton("0.1 SOL", callback_data=f"demo:execute_buy:{token_ref}:0.1"),
+                InlineKeyboardButton("0.25 SOL", callback_data=f"demo:execute_buy:{token_ref}:0.25"),
+            ],
+            [
+                InlineKeyboardButton("0.5 SOL", callback_data=f"demo:execute_buy:{token_ref}:0.5"),
+                InlineKeyboardButton("1 SOL", callback_data=f"demo:execute_buy:{token_ref}:1"),
+                InlineKeyboardButton("2 SOL", callback_data=f"demo:execute_buy:{token_ref}:2"),
+            ],
+            [InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:bluechips")],
         ])
         return text, keyboard
 

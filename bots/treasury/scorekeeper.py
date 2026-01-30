@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Persistence paths
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
-DB_PATH = DATA_DIR / "jarvis.db"  # Kept for compatibility
+DB_PATH = DATA_DIR / "jarvis_core.db"  # Updated to use core DB
 SCOREKEEPER_FILE = DATA_DIR / "treasury_scorekeeper.json"
 ORDERS_FILE = DATA_DIR / "treasury_orders.json"
 
@@ -294,7 +294,7 @@ class Scorekeeper:
                     FROM scorecard WHERE id = 1
                 """).fetchone()
                 order_rows = conn.execute("""
-                    SELECT order_id, position_id, type, price, status, placed_at, filled_at
+                    SELECT order_id, order_json
                     FROM treasury_orders
                 """).fetchall()
 
