@@ -1540,6 +1540,7 @@ class JarvisTheme:
     SOL = "◎"
     USD = "💵"
     COIN = "🪙"
+    MONEY = "💰"
     ROCKET = "🚀"
     FIRE = "🔥"
     GEM = "💎"
