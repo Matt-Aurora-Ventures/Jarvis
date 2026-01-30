@@ -376,11 +376,19 @@ def _is_message_for_jarvis(text: str, update: Update) -> bool:
         return _looks_like_request(text_lower)
 
     # Direct mentions of Jarvis by name (not just "j" which is too generic)
-    # Must include "jarvis" explicitly somewhere in the message
+    # Greetings always get a response - no need to "look like a request"
+    greeting_patterns = [
+        "hi jarvis", "hey jarvis", "hello jarvis", "yo jarvis",
+        "sup jarvis", "jarvis hi", "jarvis hello", "morning jarvis",
+        "good morning jarvis", "gm jarvis",
+    ]
+    for pattern in greeting_patterns:
+        if pattern in text_lower:
+            return True  # Always respond to greetings
+    
+    # Other Jarvis mentions need to look like a request
     jarvis_patterns = [
         "jarvis",
-        "hey jarvis",
-        "yo jarvis",
         "@jarvis",
     ]
     for pattern in jarvis_patterns:
