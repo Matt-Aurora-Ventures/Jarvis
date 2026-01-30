@@ -164,8 +164,8 @@ class PublicBotHandler:
 
     def _risk_warning_block(self) -> str:
         return (
-            "âš ï¸ V1 Early Access - Bugs may exist\n"
-            "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n"
+            "⚠️ V1 Early Access - Bugs may exist\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
             "Only trade what you can afford to lose."
         )
 
@@ -173,7 +173,7 @@ class PublicBotHandler:
         if amount_sol <= 0.5:
             return ""
         return (
-            "\n\nâš ï¸ LARGER TRADE\n"
+            "\n\n⚠️ LARGER TRADE\n"
             "You're trading a large amount for early V1 software.\n"
             "Consider reducing size while testing."
         )

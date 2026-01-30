@@ -518,7 +518,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "chart:", "holders:", "holders_page:", "holders_top100:",
             "trades:", "trades_whales:", "trades_100:",
             "signal:", "signal_details:", "signal_remind:",
-            "details:", "analyze_back:", "ui_close:",
+            "details:", "copy_ca:", "analyze_back:", "ui_close:",
             "chart_1h:", "chart_4h:", "chart_1d:", "chart_1w:",
             "watch_view:", "watch_remove:", "watch_add", "watch_clear", "watch_refresh",
             "compare_sort:", "compare_details:",

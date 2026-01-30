@@ -563,6 +563,10 @@ async def route_interactive_callback(
             await _handle_details_callback(query, context, payload, user_id)
             return True
 
+        elif action == "copy_ca":
+            await _handle_copy_ca(query, context, payload, user_id)
+            return True
+
         elif action == "analyze_back":
             await _handle_back_callback(query, context, payload, user_id)
             return True
@@ -706,6 +710,9 @@ async def _handle_details_callback(query, context, token_address: str, user_id: 
     message = await format_details_view(token_address)
     keyboard = InlineKeyboardMarkup([
         [
+            InlineKeyboardButton("Copy CA", callback_data=f"copy_ca:{token_address}"),
+        ],
+        [
             InlineKeyboardButton("Back", callback_data=f"analyze_back:{token_address}"),
             InlineKeyboardButton("Close", callback_data=f"ui_close:{token_address}"),
         ]
@@ -720,6 +727,20 @@ async def _handle_details_callback(query, context, token_address: str, user_id: 
         )
     except Exception as e:
         logger.warning(f"Failed to edit message: {e}")
+
+
+async def _handle_copy_ca(query, context, token_address: str, user_id: int):
+    """Send the contract address in a copy-friendly message."""
+    try:
+        await query.answer("CA sent")
+    except Exception:
+        pass
+
+    # Telegram can't programmatically copy to clipboard; we send the CA as monospace.
+    try:
+        await query.message.reply_text(f"`{token_address}`", parse_mode="Markdown")
+    except Exception as e:
+        logger.warning(f"Failed to send copy CA message: {e}")
 
 
 async def _handle_back_callback(query, context, token_address: str, user_id: int):

@@ -333,14 +333,23 @@ class PublicTradingService:
             )
         )
 
-        async with AsyncClient(self.rpc_url) as client:
-            blockhash = (await client.get_latest_blockhash()).value.blockhash
-            tx = Transaction()
-            tx.recent_blockhash = blockhash
-            tx.add(transfer_ix)
-            tx.sign(keypair)
-            result = await client.send_transaction(tx)
-            return str(result.value)
+        # Always route through Jito bundle + tip tx (non-negotiable)
+        from core import solana_execution
+
+        endpoints = solana_execution.load_solana_rpc_endpoints()
+        tx = Transaction()
+        tx.add(transfer_ix)
+
+        res = await solana_execution.send_legacy_transaction_via_jito(
+            tx,
+            endpoints,
+            keypair=keypair,
+            tip_lamports=int(os.getenv("JITO_TIP_LAMPORTS", "10000")),
+            commitment="confirmed",
+        )
+        if not res.success:
+            raise RuntimeError(res.error or "transfer_failed")
+        return res.signature
 
     async def _rpc_call(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         session = await self._get_session()

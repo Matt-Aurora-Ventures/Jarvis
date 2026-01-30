@@ -278,13 +278,13 @@ async def format_signal_view(token_address: str) -> str:
         lines.append("")
 
         # Signal components
-        lines.append("Sentiment: ", end="")
         if signal.sentiment == "positive":
-            lines.append(f"{int(signal.sentiment_confidence * 100)}/100 ")
+            sentiment_str = f"{int(signal.sentiment_confidence * 100)}/100"
         elif signal.sentiment == "negative":
-            lines.append(f"{int(signal.sentiment_confidence * 100)}/100 ")
+            sentiment_str = f"{int(signal.sentiment_confidence * 100)}/100"
         else:
-            lines.append("Neutral")
+            sentiment_str = "Neutral"
+        lines.append(f"Sentiment: {sentiment_str}")
 
         # Security
         if signal.risk_level == "low":
