@@ -4302,7 +4302,27 @@ Reply with a Solana token address to buy.
                 else:
                     price_str = f"${price:.2f}"
 
+                # Market cap formatting
+                market_cap = pick.get("market_cap", 0)
+                volume_24h = pick.get("volume_24h", 0)
+                dextools = pick.get("dextools", "")
+                
+                def format_large_num(n):
+                    if n >= 1_000_000_000:
+                        return f"${n/1_000_000_000:.1f}B"
+                    elif n >= 1_000_000:
+                        return f"${n/1_000_000:.1f}M"
+                    elif n >= 1_000:
+                        return f"${n/1_000:.1f}K"
+                    return f"${n:.0f}"
+
                 lines.append(f"{sent_emoji} *{symbol}* {price_str}")
+                
+                # Market cap and volume on same line
+                mc_str = format_large_num(market_cap) if market_cap else "N/A"
+                vol_str = format_large_num(volume_24h) if volume_24h else "N/A"
+                lines.append(f"   💰 MCap: {mc_str} | Vol: {vol_str}")
+                
                 lines.append(f"   {change_emoji} {change_24h:+.1f}% | Score: {score:.0f}/100")
 
                 if tp or sl:
@@ -4318,19 +4338,41 @@ Reply with a Solana token address to buy.
 
                 lines.append("")
 
-                # Buy button with auto stop-loss
+                # Variable sizing buy buttons + DexTools link
                 if token_ref:
                     sl_percent = sl if sl else 15  # Default 15% SL
+                    # Row 1: Variable size buy buttons
                     keyboard.append([
                         InlineKeyboardButton(
-                            f"🛒 Buy {symbol}",
-                            callback_data=f"demo:hub_buy:{token_ref}:{sl_percent}"
+                            f"0.1 SOL",
+                            callback_data=f"demo:hub_buy:{token_ref}:{sl_percent}:0.1"
                         ),
                         InlineKeyboardButton(
-                            f"📊 Details",
-                            callback_data=f"demo:hub_detail:{token_ref}"
+                            f"0.5 SOL",
+                            callback_data=f"demo:hub_buy:{token_ref}:{sl_percent}:0.5"
+                        ),
+                        InlineKeyboardButton(
+                            f"1 SOL",
+                            callback_data=f"demo:hub_buy:{token_ref}:{sl_percent}:1"
+                        ),
+                        InlineKeyboardButton(
+                            f"2 SOL",
+                            callback_data=f"demo:hub_buy:{token_ref}:{sl_percent}:2"
                         ),
                     ])
+                    # Row 2: Details + DexTools
+                    row2 = [
+                        InlineKeyboardButton(
+                            f"📊 {symbol}",
+                            callback_data=f"demo:hub_detail:{token_ref}"
+                        ),
+                    ]
+                    if dextools:
+                        row2.append(InlineKeyboardButton(
+                            f"🔗 DexTools",
+                            url=dextools
+                        ))
+                    keyboard.append(row2)
 
         text = "\n".join(lines)
 
