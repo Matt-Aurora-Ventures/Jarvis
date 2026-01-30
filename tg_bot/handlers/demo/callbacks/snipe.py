@@ -227,7 +227,7 @@ async def handle_snipe(
                 except Exception as e:
                     logger.warning(f"Flow validation error (continuing): {e}")
 
-                # Execute via treasury engine
+                # Execute REAL swap via bags.fm API
                 try:
                     engine = await ctx.get_demo_engine()
                     portfolio = await engine.get_portfolio_value()
@@ -236,6 +236,8 @@ async def handle_snipe(
                     balance_sol, balance_usd = portfolio
                     if balance_sol <= 0:
                         return DemoMenuBuilder.error_message("Treasury balance is zero.")
+                    if amount > balance_sol:
+                        return DemoMenuBuilder.error_message(f"Insufficient balance. Have {balance_sol:.4f} SOL, need {amount} SOL.")
 
                     sol_usd = balance_usd / balance_sol if balance_sol > 0 else 0
                     amount_usd = amount * sol_usd
@@ -246,51 +248,164 @@ async def handle_snipe(
                     grade = ctx.grade_for_signal_name(signal_name)
                     sentiment_score = sentiment_data.get("score", 0) or 0
 
-                    from bots.treasury.trading import TradeDirection
-                    success, msg, position = await engine.open_position(
-                        token_mint=address,
-                        token_symbol=token_symbol,
-                        direction=TradeDirection.LONG,
-                        amount_usd=amount_usd,
-                        sentiment_grade=grade,
-                        sentiment_score=sentiment_score,
-                        custom_tp=15.0,
-                        custom_sl=15.0,
-                        user_id=user_id,
-                    )
+                    # ============================================================
+                    # REAL BAGS.FM SWAP EXECUTION (USER WALLET)
+                    # ============================================================
+                    from core.trading.bags_client import BagsAPIClient
+                    from tg_bot.core.wallet_manager import get_wallet_manager
+                    import uuid
 
-                    if success and position:
-                        # Extract real tx hash from message or position
-                        # Message format: "Position opened: <signature>" or "[DRY RUN] Position opened"
-                        real_tx_hash = None
-                        if msg and ":" in msg and not msg.startswith("[DRY"):
-                            # Extract signature from "Position opened: 5xYz..."
-                            real_tx_hash = msg.split(":")[-1].strip()
+                    SOL_MINT = "So11111111111111111111111111111111111111112"
+
+                    # Get user's wallet (or create one)
+                    wallet_manager = get_wallet_manager()
+                    user_wallet = await wallet_manager.get_wallet(user_id)
+                    
+                    if not user_wallet:
+                        # Auto-create wallet for user
+                        user_wallet, private_key = await wallet_manager.create_wallet(user_id)
+                        logger.info(f"Auto-created wallet for user {user_id}: {user_wallet.public_key}")
                         
-                        # Fallback to position attributes if available
-                        if not real_tx_hash:
-                            real_tx_hash = getattr(position, 'tx_signature_entry', None) or \
-                                           getattr(position, 'tx_hash', None) or \
-                                           f"pending_{position.id[:8]}"
-                        
-                        return DemoMenuBuilder.snipe_result(
-                            success=True,
-                            symbol=token_symbol,
-                            amount=amount,
-                            tx_hash=real_tx_hash,
-                            error=None,
-                            sl_set=True,
-                            tp_set=True,
-                        )
-                    else:
+                        # Try to DM them their private key
+                        try:
+                            dm_text = (
+                                "🔐 *WALLET CREATED FOR TRADING*\n"
+                                "━━━━━━━━━━━━━━━━━━━━━\n\n"
+                                f"*Address:*\n`{user_wallet.public_key}`\n\n"
+                                "⚠️ *SAVE YOUR PRIVATE KEY*\n\n"
+                                f"`{private_key}`\n\n"
+                                "━━━━━━━━━━━━━━━━━━━━━\n"
+                                "🛡️ Store safely! Use /wallet to manage."
+                            )
+                            await context.bot.send_message(
+                                chat_id=user_id,
+                                text=dm_text,
+                                parse_mode="Markdown"
+                            )
+                        except Exception as dm_err:
+                            logger.warning(f"Couldn't DM user {user_id}: {dm_err}")
+
+                    USER_WALLET = user_wallet.public_key
+
+                    # Check user wallet balance before trading
+                    user_balance = await wallet_manager.get_balance_sol(user_id)
+                    if user_balance is None or user_balance < amount:
                         return DemoMenuBuilder.snipe_result(
                             success=False,
                             symbol=token_symbol,
                             amount=amount,
-                            error=msg or "Trade failed",
+                            error=f"Insufficient balance. You have {user_balance or 0:.4f} SOL, need {amount} SOL. Fund your wallet: {USER_WALLET}",
                         )
+
+                    # Get user's keypair for signing
+                    user_keypair = await wallet_manager.get_keypair(user_id)
+                    if not user_keypair:
+                        return DemoMenuBuilder.snipe_result(
+                            success=False,
+                            symbol=token_symbol,
+                            amount=amount,
+                            error="Failed to load wallet keypair. Try /wallet to recreate.",
+                        )
+
+                    # Initialize bags client
+                    bags_client = BagsAPIClient()
+
+                    # Execute the swap using USER's wallet and keypair
+                    logger.info(f"Executing bags.fm swap for user {user_id}: {amount} SOL -> {token_symbol} ({address})")
+                    
+                    swap_result = await bags_client.swap(
+                        from_token=SOL_MINT,
+                        to_token=address,
+                        amount=amount,
+                        wallet_address=USER_WALLET,
+                        slippage_bps=200,  # 2% slippage for volatile tokens
+                        keypair=user_keypair,  # User's keypair for signing
+                    )
+
+                    if not swap_result.success:
+                        logger.error(f"Bags.fm swap failed: {swap_result.error}")
+                        return DemoMenuBuilder.snipe_result(
+                            success=False,
+                            symbol=token_symbol,
+                            amount=amount,
+                            error=swap_result.error or "Swap failed",
+                        )
+
+                    # Real transaction hash from bags.fm
+                    real_tx_hash = swap_result.tx_hash
+                    logger.info(f"Bags.fm swap successful! TX: {real_tx_hash}")
+
+                    # Now record the position in the engine for tracking
+                    from bots.treasury.trading import TradeDirection, Position, TradeStatus
+
+                    # Get current token price for position tracking
+                    current_price = await engine.jupiter.get_token_price(address)
+                    if current_price <= 0:
+                        current_price = swap_result.price if swap_result.price > 0 else 0.001
+
+                    # Calculate TP/SL prices
+                    tp_pct = 15.0 / 100.0
+                    sl_pct = 15.0 / 100.0
+                    tp_price = current_price * (1 + tp_pct)
+                    sl_price = current_price * (1 - sl_pct)
+
+                    # Create position record
+                    position_id = str(uuid.uuid4())[:8]
+                    token_amount = swap_result.to_amount if swap_result.to_amount > 0 else (amount_usd / current_price)
+
+                    position = Position(
+                        id=position_id,
+                        token_mint=address,
+                        token_symbol=token_symbol,
+                        direction=TradeDirection.LONG,
+                        entry_price=current_price,
+                        current_price=current_price,
+                        amount=token_amount,
+                        amount_usd=amount_usd,
+                        take_profit_price=tp_price,
+                        stop_loss_price=sl_price,
+                        status=TradeStatus.OPEN,
+                        opened_at=datetime.now(timezone.utc).isoformat(),
+                        sentiment_grade=grade,
+                        sentiment_score=sentiment_score,
+                        peak_price=current_price,
+                    )
+
+                    # Add to engine tracking
+                    engine.positions[position_id] = position
+                    engine._save_state()
+
+                    # Track in scorekeeper
+                    try:
+                        from bots.treasury.scorekeeper import get_scorekeeper
+                        scorekeeper = get_scorekeeper()
+                        scorekeeper.open_position(
+                            position_id=position_id,
+                            symbol=token_symbol,
+                            token_mint=address,
+                            entry_price=current_price,
+                            entry_amount_sol=amount,
+                            entry_amount_tokens=token_amount,
+                            take_profit_price=tp_price,
+                            stop_loss_price=sl_price,
+                            tx_signature=real_tx_hash,
+                            user_id=user_id or 0,
+                        )
+                    except Exception as sk_err:
+                        logger.warning(f"Failed to track in scorekeeper: {sk_err}")
+
+                    return DemoMenuBuilder.snipe_result(
+                        success=True,
+                        symbol=token_symbol,
+                        amount=amount,
+                        tx_hash=real_tx_hash,
+                        error=None,
+                        sl_set=True,
+                        tp_set=True,
+                    )
+
                 except Exception as e:
-                    logger.error(f"Snipe confirm error: {e}")
+                    logger.error(f"Snipe confirm error: {e}", exc_info=True)
                     return DemoMenuBuilder.snipe_result(
                         success=False,
                         symbol="TOKEN",

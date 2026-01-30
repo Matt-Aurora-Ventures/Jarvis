@@ -687,9 +687,9 @@ def _format_exit_alert_message(alert: Dict[str, Any], auto_executed: bool) -> st
     if auto_executed:
         source = position.get("exit_source", "swap")
         tx_hash = position.get("exit_tx")
-        tx_display = f"{tx_hash[:8]}...{tx_hash[-8:]}" if tx_hash else "N/A"
+        tx_link = f"[View TX](https://solscan.io/tx/{tx_hash})" if tx_hash else "N/A"
         lines.append(f"Auto-exit: {source}")
-        lines.append(f"TX: {tx_display}")
+        lines.append(tx_link)
     else:
         lines.append("_Auto-exit disabled — review position._")
 
@@ -5309,9 +5309,8 @@ Reply with a Solana token address to buy.
                 "",
             ]
             if tx_hash:
-                short_hash = f"{tx_hash[:8]}...{tx_hash[-8:]}" if len(tx_hash) > 16 else tx_hash
                 lines.extend([
-                    f"*TX:* `{short_hash}`",
+                    f"[View TX on Solscan](https://solscan.io/tx/{tx_hash})",
                     "",
                 ])
             lines.extend([
@@ -5409,10 +5408,9 @@ Reply with a Solana token address to buy.
                 ])
 
             if tx_hash:
-                short_hash = f"{tx_hash[:8]}...{tx_hash[-8:]}" if len(tx_hash) > 16 else tx_hash
                 lines.extend([
                     "",
-                    f"*TX:* `{short_hash}`",
+                    f"[View TX on Solscan](https://solscan.io/tx/{tx_hash})",
                 ])
 
             lines.extend([
@@ -9451,7 +9449,7 @@ Coming soon in V2!
                         context.user_data["positions"] = positions
 
                         tx_hash = swap.get("tx_hash")
-                        tx_display = f"{tx_hash[:8]}...{tx_hash[-8:]}" if tx_hash else "N/A"
+                        tx_link = f"[View TX](https://solscan.io/tx/{tx_hash})" if tx_hash else "N/A"
 
                         text, keyboard = DemoMenuBuilder.success_message(
                             action=(
@@ -9463,7 +9461,7 @@ Coming soon in V2!
                                 f"Bought {token_symbol} with {amount:.2f} SOL\n"
                                 f"Received: {tokens_received:,.0f} {token_symbol}\n"
                                 f"Entry: ${token_price:.8f}\n"
-                                f"TX: {tx_display}\n\n"
+                                f"{tx_link}\n\n"
                                 "Check /positions to monitor."
                             ),
                         )

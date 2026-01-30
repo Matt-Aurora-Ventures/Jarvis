@@ -241,32 +241,16 @@ async def positions(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @error_handler
 @admin_only
 async def wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /wallet command - show treasury wallet info (admin only)."""
-    try:
-        from core.security.key_manager import get_key_manager
-        km = get_key_manager()
-
-        address = km.get_treasury_address()
-        status = km.get_status_report()
-
-        # JARVIS voice
-        lines = ["<b>wallet</b>", ""]
-
-        if address:
-            lines.append(f"address: <code>{address[:8]}...{address[-6:]}</code>")
-            lines.append(f"full: <code>{address}</code>")
-            lines.append("")
-            lines.append(f"<a href='https://solscan.io/account/{address}'>view on solscan</a>")
-        else:
-            lines.append("wallet not set up yet")
-
-        lines.append("")
-        lines.append(f"status: {status.get('status', 'unknown')}")
-
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
-    except Exception as e:
-        from tg_bot.bot_core import safe_error_text
-        await update.message.reply_text(f"Wallet error: {safe_error_text(e)}", parse_mode=ParseMode.MARKDOWN)
+    """
+    Handle /wallet command - user wallet management.
+    
+    - /wallet - Show balance + address (auto-creates if no wallet)
+    - /wallet export - Show private key (DM only)
+    - /wallet import <key> - Import existing wallet
+    - /wallet treasury - Show treasury wallet (admin only)
+    """
+    from tg_bot.handlers.wallet import wallet_command
+    await wallet_command(update, context)
 
 
 @error_handler
