@@ -9,7 +9,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ForceReply
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -161,18 +161,12 @@ async def handle_sentiment_hub(
             )
 
     elif data.startswith("demo:hub_custom:"):
-        # Custom amount buy - prompt user for SOL amount
+        # Custom amount buy - show inline button grid (NO ForceReply)
         try:
             parts = data.split(":")
             token_ref = parts[2] if len(parts) > 2 else ""
             sl_percent = float(parts[3]) if len(parts) > 3 else 15.0
             address = ctx.resolve_token_ref(context, token_ref)
-            
-            # Set awaiting state for custom amount input
-            context.user_data["awaiting_custom_hub_amount"] = True
-            context.user_data["custom_hub_token_ref"] = token_ref
-            context.user_data["custom_hub_sl_percent"] = sl_percent
-            context.user_data["custom_hub_address"] = address
             
             # Get token symbol if possible
             symbol = "TOKEN"
@@ -182,23 +176,38 @@ async def handle_sentiment_hub(
             except:
                 pass
             
+            # Escape special markdown characters in symbol
+            safe_symbol = symbol.replace("*", "\\*").replace("_", "\\_").replace("`", "\\`")
+            
             text = f"""
-{theme.MONEY} *CUSTOM AMOUNT*
-{'=' * 20}
+{theme.COIN} *SELECT BUY AMOUNT*
+{'=' * 24}
 
-*Token:* {symbol}
-*Address:* `{address[:8]}...{address[-6:]}`
+*Token:* {safe_symbol}
+*Address:*
+`{address}`
 
-📝 *Enter the SOL amount you want to buy:*
-
-_Example: 0.25, 0.5, 1.5, etc._
-_Min: 0.01 SOL | Max: 10 SOL_
+💰 *Choose SOL amount to buy:*
 """
+            # Inline button grid for preset amounts - NO ForceReply
             keyboard = InlineKeyboardMarkup([
                 [
-                    InlineKeyboardButton(f"{theme.BACK} Cancel", callback_data="demo:hub_bluechips"),
+                    InlineKeyboardButton("0.05 SOL", callback_data=f"demo:hub_exec_buy:{token_ref}:0.05:{sl_percent}"),
+                    InlineKeyboardButton("0.1 SOL", callback_data=f"demo:hub_exec_buy:{token_ref}:0.1:{sl_percent}"),
+                ],
+                [
+                    InlineKeyboardButton("0.25 SOL", callback_data=f"demo:hub_exec_buy:{token_ref}:0.25:{sl_percent}"),
+                    InlineKeyboardButton("0.5 SOL", callback_data=f"demo:hub_exec_buy:{token_ref}:0.5:{sl_percent}"),
+                ],
+                [
+                    InlineKeyboardButton("1 SOL", callback_data=f"demo:hub_exec_buy:{token_ref}:1:{sl_percent}"),
+                    InlineKeyboardButton("2 SOL", callback_data=f"demo:hub_exec_buy:{token_ref}:2:{sl_percent}"),
+                ],
+                [
+                    InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:hub_bluechips"),
                 ],
             ])
+            
             return text, keyboard
         except Exception as e:
             logger.error(f"Hub custom amount error: {e}")
@@ -302,33 +311,108 @@ for this trade:
             custom_tp = tp_percent / 100.0
             custom_sl = sl_percent / 100.0
 
-            from bots.treasury.trading import TradeDirection
-            success, msg, position = await engine.open_position(
+            # ========== REAL BAGS.FM SWAP (not fake engine.open_position) ==========
+            import uuid
+            from core.trading.bags_client import BagsAPIClient
+            from core.wallets.wallet_manager import get_treasury_keypair
+            from bots.treasury.trading import TradeDirection, Position, TradeStatus
+
+            SOL_MINT = "So11111111111111111111111111111111111111112"
+            USER_WALLET = "BFhTj4TGKC77C7s3HLnLbCiVd6dXQSqGvtD8sJY5egVR"
+
+            # Get keypair for signing
+            user_keypair = get_treasury_keypair()
+            if not user_keypair:
+                return DemoMenuBuilder.error_message(
+                    error="Treasury keypair not configured",
+                    retry_action="demo:hub",
+                )
+
+            # Execute real swap via bags.fm
+            bags = BagsAPIClient()
+            swap_result = await bags.swap(
+                from_token=SOL_MINT,
+                to_token=address,
+                amount=amount_sol,  # in SOL, not lamports
+                wallet_address=USER_WALLET,
+                slippage_bps=200,  # 2% slippage
+                keypair=user_keypair,
+            )
+
+            if not swap_result.success:
+                logger.error(f"Hub trade bags.fm swap failed: {swap_result.error}")
+                return DemoMenuBuilder.error_message(
+                    error=swap_result.error or "Swap failed",
+                    retry_action="demo:hub",
+                )
+
+            # Real transaction hash from bags.fm
+            real_tx_hash = swap_result.tx_hash
+            logger.info(f"Hub trade bags.fm swap successful! TX: {real_tx_hash}")
+
+            # Get current token price for position tracking
+            current_price = await engine.jupiter.get_token_price(address)
+            if current_price <= 0:
+                current_price = swap_result.price if swap_result.price > 0 else 0.001
+
+            # Calculate TP/SL prices
+            tp_price = current_price * (1 + custom_tp)
+            sl_price = current_price * (1 - custom_sl)
+
+            # Create position record for tracking
+            position_id = str(uuid.uuid4())[:8]
+            token_amount = swap_result.to_amount if swap_result.to_amount > 0 else (amount_usd / current_price)
+
+            position = Position(
+                id=position_id,
                 token_mint=address,
                 token_symbol=token_symbol,
                 direction=TradeDirection.LONG,
+                entry_price=current_price,
+                current_price=current_price,
+                amount=token_amount,
                 amount_usd=amount_usd,
+                take_profit_price=tp_price,
+                stop_loss_price=sl_price,
+                status=TradeStatus.OPEN,
+                opened_at=datetime.now(timezone.utc).isoformat(),
                 sentiment_grade=grade,
                 sentiment_score=sentiment_score,
-                custom_tp=custom_tp,
-                custom_sl=custom_sl,
-                user_id=user_id,
+                peak_price=current_price,
             )
 
-            if success and position:
-                return DemoMenuBuilder.success_message(
-                    action="Hub Trade Executed",
-                    details=(
-                        f"Bought {token_symbol} with {amount_sol:.2f} SOL\n"
-                        f"TP: +{tp_percent:.0f}% | SL: -{sl_percent:.0f}%\n"
-                        f"Position ID: {position.id}"
-                    ),
+            # Add to engine tracking
+            engine.positions[position_id] = position
+            engine._save_state()
+
+            # Track in scorekeeper
+            try:
+                from bots.treasury.scorekeeper import get_scorekeeper
+                scorekeeper = get_scorekeeper()
+                scorekeeper.open_position(
+                    position_id=position_id,
+                    symbol=token_symbol,
+                    token_mint=address,
+                    entry_price=current_price,
+                    entry_amount_sol=amount_sol,
+                    entry_amount_tokens=token_amount,
+                    take_profit_price=tp_price,
+                    stop_loss_price=sl_price,
+                    tx_signature=real_tx_hash,
+                    user_id=user_id or 0,
                 )
-            else:
-                return DemoMenuBuilder.error_message(
-                    error=msg or "Trade failed",
-                    retry_action="demo:hub",
-                )
+            except Exception as sk_err:
+                logger.warning(f"Failed to track in scorekeeper: {sk_err}")
+
+            # SUCCESS with REAL TX hash
+            return DemoMenuBuilder.success_message(
+                action="Hub Trade Executed",
+                details=(
+                    f"✅ Bought {token_symbol} with {amount_sol:.2f} SOL\n"
+                    f"TP: +{tp_percent:.0f}% | SL: -{sl_percent:.0f}%\n"
+                    f"TX: https://solscan.io/tx/{real_tx_hash}"
+                ),
+            )
         except Exception as e:
             logger.error(f"Hub exec buy error: {e}")
             return DemoMenuBuilder.error_message(

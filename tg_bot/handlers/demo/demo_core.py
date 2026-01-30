@@ -226,6 +226,11 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         text, keyboard = await router.route(action, data, update, context, shared_state)
+        
+        # Handler returned (None, None) = it already sent its own response
+        if text is None and keyboard is None:
+            return
+        
         try:
             await query.message.edit_text(
                 text,
@@ -280,7 +285,21 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     
     This is a router that delegates to specialized input handlers.
     """
+    # Null check - exit early if no message or text
+    if not update.message or not update.message.text:
+        return
     text = update.message.text.strip()
+    
+    # Debug logging
+    user_id = update.message.from_user.id if update.message and update.message.from_user else 0
+    awaiting_states = {
+        "awaiting_custom_buy_amount": context.user_data.get("awaiting_custom_buy_amount"),
+        "awaiting_watchlist_token": context.user_data.get("awaiting_watchlist_token"),
+        "awaiting_wallet_import": context.user_data.get("awaiting_wallet_import"),
+        "awaiting_token": context.user_data.get("awaiting_token"),
+        "awaiting_token_search": context.user_data.get("awaiting_token_search"),
+    }
+    logger.info(f"[DEMO MSG] user={user_id} text='{text[:30]}...' awaiting={awaiting_states}")
 
     # Enforce admin-only demo access
     try:
