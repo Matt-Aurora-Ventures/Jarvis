@@ -277,3 +277,5 @@ thoughts/shared/handoffs/kraken-health-monitoring-20260118/current.md
 # === LOCAL OUTPUTS ===
 jarvis_audit_data.md
 archive/
+.env.local
+*.env.local
