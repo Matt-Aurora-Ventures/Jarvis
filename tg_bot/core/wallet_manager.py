@@ -97,16 +97,9 @@ class WalletManager:
         keypair = Keypair()
         public_key = str(keypair.pubkey())
         private_key_bytes = bytes(keypair)
-        private_key_b58 = base64.b58encode(private_key_bytes).decode() if hasattr(base64, 'b58encode') else keypair.to_base58_string()
-        
-        # Actually use solders' built-in base58 encoding
-        try:
-            # Get the secret key bytes (64 bytes: 32 secret + 32 public)
-            private_key_b58 = str(keypair)
-        except:
-            # Fallback
-            import base58
-            private_key_b58 = base58.b58encode(private_key_bytes).decode()
+        # Convert private key to base58 using the base58 library
+        import base58
+        private_key_b58 = base58.b58encode(private_key_bytes).decode()
         
         # Encrypt private key
         encrypted_pk = self._encrypt(private_key_b58, user_id)
