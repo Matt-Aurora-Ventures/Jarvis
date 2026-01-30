@@ -1,6 +1,13 @@
 """
 Memory System
-Remember users, conversations, and context over time
+Remember users, conversations, and context over time.
+
+Enhanced with video game AI-inspired features:
+- Richer world model (time awareness, user context)
+- Emotional memory (sentiment tagging on entries)
+- Quest/goal management (long-term objectives)
+- Adaptive learning (complexity preferences)
+- Memory pruning (importance tagging, archival)
 """
 
 import json
@@ -9,11 +16,54 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field, asdict
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data" / "memory"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+class MemoryImportance(str, Enum):
+    """Importance level for memory entries (for pruning)"""
+    CORE = "core"          # Never prune - fundamental facts
+    IMPORTANT = "important" # Keep long-term
+    NORMAL = "normal"       # Standard retention
+    TEMPORARY = "temporary" # Archive after completion
+    ARCHIVED = "archived"   # Historical only
+
+
+class GoalStatus(str, Enum):
+    """Status for user goals/quests"""
+    ACTIVE = "active"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    ABANDONED = "abandoned"
+    PAUSED = "paused"
+
+
+@dataclass
+class EmotionalContext:
+    """Emotional metadata for memory entries"""
+    sentiment: str = "neutral"  # positive, neutral, negative, frustrated, excited
+    intensity: float = 0.5      # 0.0-1.0
+    trigger: str = ""           # What caused this emotion
+    timestamp: str = ""
+
+
+@dataclass
+class UserGoal:
+    """A user's long-term goal (quest)"""
+    goal_id: str
+    title: str
+    description: str
+    status: str = GoalStatus.ACTIVE
+    created_at: str = ""
+    updated_at: str = ""
+    target_date: Optional[str] = None
+    progress_notes: List[str] = field(default_factory=list)
+    milestones: List[Dict[str, Any]] = field(default_factory=list)
+    priority: int = 1  # 1=highest, 5=lowest
 
 
 @dataclass
@@ -32,6 +82,30 @@ class UserMemory:
     engagement_quality: str = "normal"  # high, normal, low, spam
     notes: List[str] = field(default_factory=list)
     last_interaction_summary: str = ""
+    
+    # === NEW: Video Game AI-Inspired Fields ===
+    
+    # Emotional memory - track emotional patterns over time
+    emotional_history: List[Dict[str, Any]] = field(default_factory=list)
+    current_emotional_state: str = "neutral"
+    
+    # Adaptive learning - communication preferences
+    preferred_complexity: str = "normal"  # simple, normal, detailed, technical
+    response_length_pref: str = "normal"  # brief, normal, detailed
+    successful_approaches: List[str] = field(default_factory=list)
+    unsuccessful_approaches: List[str] = field(default_factory=list)
+    
+    # Goals/quests
+    active_goals: List[Dict[str, Any]] = field(default_factory=list)
+    completed_goals: List[Dict[str, Any]] = field(default_factory=list)
+    
+    # World model - broader context
+    timezone: Optional[str] = None
+    typical_active_hours: List[int] = field(default_factory=list)
+    known_context: Dict[str, Any] = field(default_factory=dict)  # job, interests, etc.
+    
+    # Memory importance
+    importance: str = MemoryImportance.NORMAL
 
 
 @dataclass
@@ -276,6 +350,309 @@ class MemorySystem:
         if to_remove:
             self._save_data()
             logger.info(f"Cleaned up {len(to_remove)} old conversations")
+
+    # =========================================================================
+    # VIDEO GAME AI-INSPIRED ENHANCEMENTS
+    # =========================================================================
+
+    # --- Emotional Memory ---
+    
+    def record_emotional_event(
+        self,
+        user_id: str,
+        sentiment: str,
+        intensity: float = 0.5,
+        trigger: str = ""
+    ):
+        """Record an emotional event for a user (like an NPC remembering how you treated them)"""
+        if user_id not in self.users:
+            return
+        
+        user = self.users[user_id]
+        event = {
+            "sentiment": sentiment,
+            "intensity": min(1.0, max(0.0, intensity)),
+            "trigger": trigger,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        user.emotional_history.append(event)
+        user.emotional_history = user.emotional_history[-20:]  # Keep last 20
+        user.current_emotional_state = sentiment
+        self._save_data()
+        logger.debug(f"Recorded emotional event for {user_id}: {sentiment}")
+
+    def get_emotional_trend(self, user_id: str) -> Dict[str, Any]:
+        """Get emotional trend analysis for a user"""
+        user = self.users.get(user_id)
+        if not user or not user.emotional_history:
+            return {"trend": "neutral", "recent": [], "dominant": "neutral"}
+        
+        recent = user.emotional_history[-5:]
+        sentiment_counts = {}
+        for event in user.emotional_history:
+            s = event.get("sentiment", "neutral")
+            sentiment_counts[s] = sentiment_counts.get(s, 0) + 1
+        
+        dominant = max(sentiment_counts, key=sentiment_counts.get) if sentiment_counts else "neutral"
+        
+        return {
+            "trend": user.current_emotional_state,
+            "recent": recent,
+            "dominant": dominant,
+            "history_length": len(user.emotional_history)
+        }
+
+    # --- Goal/Quest Management ---
+    
+    def add_user_goal(
+        self,
+        user_id: str,
+        title: str,
+        description: str = "",
+        target_date: Optional[str] = None,
+        priority: int = 1
+    ) -> Optional[str]:
+        """Add a goal (quest) for a user - like an RPG quest log"""
+        if user_id not in self.users:
+            return None
+        
+        user = self.users[user_id]
+        goal_id = f"goal_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{len(user.active_goals)}"
+        now = datetime.utcnow().isoformat()
+        
+        goal = {
+            "goal_id": goal_id,
+            "title": title,
+            "description": description,
+            "status": GoalStatus.ACTIVE,
+            "created_at": now,
+            "updated_at": now,
+            "target_date": target_date,
+            "progress_notes": [],
+            "milestones": [],
+            "priority": priority
+        }
+        user.active_goals.append(goal)
+        self._save_data()
+        logger.info(f"Added goal '{title}' for user {user_id}")
+        return goal_id
+
+    def update_goal_progress(
+        self,
+        user_id: str,
+        goal_id: str,
+        note: str,
+        new_status: Optional[str] = None
+    ):
+        """Update progress on a user's goal"""
+        if user_id not in self.users:
+            return
+        
+        user = self.users[user_id]
+        for goal in user.active_goals:
+            if goal.get("goal_id") == goal_id:
+                goal["progress_notes"].append({
+                    "note": note,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                goal["updated_at"] = datetime.utcnow().isoformat()
+                if new_status:
+                    goal["status"] = new_status
+                    if new_status == GoalStatus.COMPLETED:
+                        user.active_goals.remove(goal)
+                        user.completed_goals.append(goal)
+                        logger.info(f"Goal '{goal['title']}' completed for user {user_id}")
+                self._save_data()
+                return
+    
+    def get_active_goals(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get a user's active goals (quest log)"""
+        user = self.users.get(user_id)
+        if not user:
+            return []
+        return sorted(user.active_goals, key=lambda g: g.get("priority", 5))
+
+    def get_goal_reminder_text(self, user_id: str) -> Optional[str]:
+        """Generate a reminder about pending goals (like an NPC reminding about quests)"""
+        goals = self.get_active_goals(user_id)
+        if not goals:
+            return None
+        
+        high_priority = [g for g in goals if g.get("priority", 5) <= 2]
+        if not high_priority:
+            return None
+        
+        reminders = []
+        for goal in high_priority[:3]:
+            title = goal.get("title", "Unknown")
+            target = goal.get("target_date")
+            if target:
+                reminders.append(f"• {title} (target: {target})")
+            else:
+                reminders.append(f"• {title}")
+        
+        return "Active goals:\n" + "\n".join(reminders)
+
+    # --- Adaptive Learning ---
+    
+    def record_approach_outcome(
+        self,
+        user_id: str,
+        approach: str,
+        successful: bool
+    ):
+        """Record whether an approach worked (like a game AI learning what tactics work)"""
+        if user_id not in self.users:
+            return
+        
+        user = self.users[user_id]
+        if successful:
+            if approach not in user.successful_approaches:
+                user.successful_approaches.append(approach)
+                user.successful_approaches = user.successful_approaches[-10:]
+            # Remove from unsuccessful if it was there
+            if approach in user.unsuccessful_approaches:
+                user.unsuccessful_approaches.remove(approach)
+        else:
+            if approach not in user.unsuccessful_approaches:
+                user.unsuccessful_approaches.append(approach)
+                user.unsuccessful_approaches = user.unsuccessful_approaches[-10:]
+        
+        self._save_data()
+
+    def set_user_complexity_preference(self, user_id: str, complexity: str):
+        """Set user's preferred communication complexity (adaptive difficulty)"""
+        if user_id in self.users:
+            self.users[user_id].preferred_complexity = complexity
+            self._save_data()
+
+    def get_communication_style(self, user_id: str) -> Dict[str, str]:
+        """Get recommended communication style for a user"""
+        user = self.users.get(user_id)
+        if not user:
+            return {"complexity": "normal", "length": "normal", "avoid": []}
+        
+        return {
+            "complexity": user.preferred_complexity,
+            "length": user.response_length_pref,
+            "avoid": user.unsuccessful_approaches[:3],
+            "prefer": user.successful_approaches[:3]
+        }
+
+    # --- World Model ---
+    
+    def update_user_context(self, user_id: str, key: str, value: Any):
+        """Update broader context about a user (job, interests, timezone, etc.)"""
+        if user_id not in self.users:
+            return
+        
+        user = self.users[user_id]
+        user.known_context[key] = value
+        self._save_data()
+
+    def get_time_aware_greeting(self, user_id: str) -> str:
+        """Get a time-aware greeting based on user's timezone"""
+        user = self.users.get(user_id)
+        now = datetime.utcnow()
+        
+        # If we know their timezone, adjust
+        hour = now.hour
+        if user and user.timezone:
+            # Simple timezone offset handling (could be enhanced)
+            try:
+                offset = int(user.timezone.replace("UTC", "").replace("+", ""))
+                hour = (now.hour + offset) % 24
+            except (ValueError, AttributeError):
+                pass
+        
+        if 5 <= hour < 12:
+            return "Good morning"
+        elif 12 <= hour < 17:
+            return "Good afternoon"
+        elif 17 <= hour < 21:
+            return "Good evening"
+        else:
+            return "Hey"
+
+    def record_active_hour(self, user_id: str):
+        """Record when a user is active (to learn patterns)"""
+        if user_id not in self.users:
+            return
+        
+        hour = datetime.utcnow().hour
+        user = self.users[user_id]
+        if hour not in user.typical_active_hours:
+            user.typical_active_hours.append(hour)
+            user.typical_active_hours = sorted(set(user.typical_active_hours))[-10:]
+        self._save_data()
+
+    # --- Memory Pruning ---
+    
+    def set_memory_importance(self, user_id: str, importance: str):
+        """Set importance level for a user's memory (affects pruning)"""
+        if user_id in self.users:
+            self.users[user_id].importance = importance
+            self._save_data()
+
+    def prune_low_importance_memories(self, days_threshold: int = 30):
+        """Archive or remove low-importance memories older than threshold"""
+        cutoff = datetime.utcnow() - timedelta(days=days_threshold)
+        archived_count = 0
+        
+        for user_id, user in list(self.users.items()):
+            if user.importance in [MemoryImportance.TEMPORARY, MemoryImportance.ARCHIVED]:
+                try:
+                    last_seen = datetime.fromisoformat(user.last_seen)
+                    if last_seen < cutoff:
+                        user.importance = MemoryImportance.ARCHIVED
+                        archived_count += 1
+                except Exception:
+                    pass
+        
+        if archived_count > 0:
+            self._save_data()
+            logger.info(f"Archived {archived_count} low-importance user memories")
+
+    def get_enhanced_user_context(self, user_id: str) -> Optional[str]:
+        """Get comprehensive context for reply generation (enhanced version)"""
+        user = self.users.get(user_id)
+        if not user:
+            return None
+        
+        parts = []
+        
+        # Basic info
+        if user.interaction_count > 1:
+            parts.append(f"Returning user ({user.interaction_count} interactions)")
+        if user.is_influencer:
+            parts.append(f"Influencer ({user.follower_count} followers)")
+        
+        # Emotional context
+        if user.current_emotional_state != "neutral":
+            parts.append(f"Currently {user.current_emotional_state}")
+        
+        # Communication preferences
+        if user.preferred_complexity != "normal":
+            parts.append(f"Prefers {user.preferred_complexity} explanations")
+        
+        # Active goals
+        active = self.get_active_goals(user_id)
+        if active:
+            top_goal = active[0].get("title", "")
+            parts.append(f"Working on: {top_goal}")
+        
+        # Topics and sentiment
+        if user.sentiment_toward_us != "neutral":
+            parts.append(f"Generally {user.sentiment_toward_us} toward us")
+        if user.topics_discussed:
+            parts.append(f"Interests: {', '.join(user.topics_discussed[:3])}")
+        
+        # Known context
+        if user.known_context:
+            for key, val in list(user.known_context.items())[:2]:
+                parts.append(f"{key}: {val}")
+        
+        return " | ".join(parts) if parts else None
 
 
 # Singleton
