@@ -81,6 +81,52 @@ def get_persistent_memory():
             logger.warning(f"Could not load persistent memory: {e}")
     return _persistent_memory
 
+
+# Skills knowledge integration (lazy-loaded)
+_skills_knowledge = None
+
+
+def get_skills_knowledge():
+    """Get skills knowledge instance (lazy load)."""
+    global _skills_knowledge
+    if _skills_knowledge is None:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                'skills_knowledge',
+                '/root/clawd/Jarvis/core/skills_knowledge.py'
+            )
+            sk_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(sk_module)
+            _skills_knowledge = sk_module.get_skills_knowledge()
+            logger.info(f"Skills knowledge loaded: {len(_skills_knowledge.list_skills())} skills")
+        except Exception as e:
+            logger.debug(f"Could not load skills knowledge: {e}")
+    return _skills_knowledge
+
+
+def get_relevant_skills(query: str, limit: int = 3) -> str:
+    """Get relevant skill context for a query."""
+    sk = get_skills_knowledge()
+    if not sk:
+        return ""
+    
+    try:
+        results = sk.search_skills(query, limit=limit)
+        if not results:
+            return ""
+        
+        skill_hints = []
+        for skill in results:
+            # Just include name and brief description
+            desc = skill.description[:150] if skill.description else ""
+            skill_hints.append(f"- {skill.name}: {desc}")
+        
+        return "\n\nRELEVANT KNOWLEDGE (from skills):\n" + "\n".join(skill_hints)
+    except Exception as e:
+        logger.debug(f"Error getting relevant skills: {e}")
+        return ""
+
 # Conversation context storage (in-memory for fast access)
 # Maps chat_id -> list of (timestamp, user_id, username, message)
 _CHAT_HISTORY: Dict[int, deque] = {}
@@ -911,6 +957,25 @@ Respond briefly (under 200 words) in character as JARVIS:"""
                 "Don't say 'I can't access X' when you clearly can.\n"
             )
 
+        # Skills knowledge injection for tech questions
+        skills_note = ""
+        if engagement_topic in ("tech_question", "bot_capability") or is_admin:
+            try:
+                # Get skill categories summary for general awareness
+                sk = get_skills_knowledge()
+                if sk:
+                    skill_list = sk.list_skills()
+                    if skill_list:
+                        skills_note = (
+                            f"\n\n## SKILLS KNOWLEDGE ({len(skill_list)} skills loaded):\n"
+                            "You have access to detailed knowledge about: "
+                            "Solana development, Jupiter swaps, Jito bundles, token analysis, "
+                            "Telegram bots, browser automation, UI/UX design, DevOps, and more. "
+                            "Use /skills command to list all, /skill <name> for details."
+                        )
+            except Exception as e:
+                logger.debug(f"Skills note generation failed: {e}")
+
         # Use canonical JARVIS voice bible as foundation, then add Telegram-specific context
         base_prompt = f"""{JARVIS_VOICE_BIBLE}
 
@@ -929,7 +994,7 @@ IDENTITY:
 You are JARVIS - Matt's personal AI assistant. You are NOT Claude, NOT ChatGPT, NOT any other AI.
 When asked who you are: "I'm JARVIS, built by Matt."
 Never mention Claude or Anthropic.
-{capabilities_note}{admin_note}{engagement_note}{mood_guidance}{participant_note}{context_note}"""
+{capabilities_note}{skills_note}{admin_note}{engagement_note}{mood_guidance}{participant_note}{context_note}"""
         if moderation_context:
             base_prompt += f"\n{moderation_context}"
         return base_prompt

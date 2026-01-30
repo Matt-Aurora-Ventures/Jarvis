@@ -846,6 +846,7 @@ def execute_action(
         return await solana_execution.execute_swap_transaction(
             signed_tx,
             endpoints,
+            keypair=keypair,
             simulate=True,
             commitment="confirmed",
         )

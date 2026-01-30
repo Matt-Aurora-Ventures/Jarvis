@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -22,12 +23,22 @@ except Exception:
     HAS_AIOHTTP = False
 
 try:
-    from solders.transaction import VersionedTransaction
+    from solders.keypair import Keypair
+    from solders.pubkey import Pubkey
+    from solders.signature import Signature
+    from solders.system_program import TransferParams, transfer
+    from solders.transaction import Transaction, VersionedTransaction
     from solana.rpc.async_api import AsyncClient
     from solana.rpc.types import TxOpts
     HAS_SOLANA = True
 except Exception:
     HAS_SOLANA = False
+    Keypair = None
+    Pubkey = None
+    Signature = None
+    TransferParams = None
+    transfer = None
+    Transaction = None
     VersionedTransaction = None
     AsyncClient = None
     TxOpts = None
@@ -37,11 +48,25 @@ logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[1]
 RPC_CONFIG = ROOT / "config" / "rpc_providers.json"
 
-# Jupiter API endpoints - public.jupiterapi.com is the only one that works from this machine
-JUPITER_QUOTE_API = "https://public.jupiterapi.com/quote"
-JUPITER_SWAP_API = "https://public.jupiterapi.com/swap"
+# Jupiter V6 endpoints (required)
+JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6/quote"
+JUPITER_SWAP_API = "https://quote-api.jup.ag/v6/swap"
 SOL_MINT = "So11111111111111111111111111111111111111112"
 USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+
+# Jito bundle routing (required for all writes)
+JITO_BLOCK_ENGINE_URL = os.getenv("JITO_BLOCK_ENGINE", "https://mainnet.block-engine.jito.wtf")
+# Tip accounts (fallback list; prefer live /tip_accounts when available)
+JITO_TIP_ACCOUNTS = [
+    "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
+    "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
+    "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
+    "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49",
+    "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh",
+    "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt",
+    "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
+    "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT",
+]
 
 # Circuit breaker settings
 CIRCUIT_BREAKER_FAILURE_THRESHOLD = 3  # failures before marking endpoint as unhealthy
@@ -64,6 +89,56 @@ def _backoff_delay(base: float, attempt: int, max_delay: float = 30.0) -> float:
 def _is_rate_limited(status: int) -> bool:
     """Check if response indicates rate limiting."""
     return status in (429, 503, 502)
+
+
+async def _fetch_jito_tip_accounts() -> List[str]:
+    """Fetch current Jito tip accounts (fallback to static list)."""
+    if not HAS_AIOHTTP:
+        return JITO_TIP_ACCOUNTS
+
+    try:
+        async with aiohttp.ClientSession(headers={"Content-Type": "application/json"}) as session:
+            async with session.get(f"{JITO_BLOCK_ENGINE_URL}/api/v1/bundles/tip_accounts", timeout=5) as resp:
+                if resp.status != 200:
+                    return JITO_TIP_ACCOUNTS
+                data = await resp.json()
+                return data.get("result", JITO_TIP_ACCOUNTS) or JITO_TIP_ACCOUNTS
+    except Exception:
+        return JITO_TIP_ACCOUNTS
+
+
+async def _send_jito_bundle(transactions: List[bytes]) -> Dict[str, Any]:
+    """Send a bundle to Jito block engine."""
+    if not HAS_AIOHTTP:
+        return {"success": False, "error": "aiohttp_missing"}
+
+    encoded = [base64.b64encode(tx).decode() for tx in transactions]
+    payload = {"jsonrpc": "2.0", "id": 1, "method": "sendBundle", "params": [encoded]}
+
+    try:
+        async with aiohttp.ClientSession(headers={"Content-Type": "application/json"}) as session:
+            async with session.post(f"{JITO_BLOCK_ENGINE_URL}/api/v1/bundles", json=payload, timeout=10) as resp:
+                data = await resp.json()
+                if "error" in data:
+                    return {"success": False, "error": data["error"].get("message", str(data["error"]))}
+                return {"success": True, "bundle_id": data.get("result")}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def _build_jito_tip_tx_bytes(*, payer: "Keypair", recent_blockhash: str, tip_lamports: int, tip_account: str) -> bytes:
+    """Build a legacy tip transfer transaction (solders) and return serialized bytes."""
+    if not HAS_SOLANA or Transaction is None or transfer is None:
+        raise RuntimeError("solana_sdk_missing")
+
+    tip_pubkey = Pubkey.from_string(tip_account)
+    ix = transfer(TransferParams(from_pubkey=payer.pubkey(), to_pubkey=tip_pubkey, lamports=int(tip_lamports)))
+
+    tx = Transaction()
+    tx.recent_blockhash = recent_blockhash
+    tx.add(ix)
+    tx.sign(payer)
+    return bytes(tx)
 
 
 def _mark_endpoint_failure(endpoint_url: str) -> None:
@@ -489,7 +564,7 @@ async def get_recent_blockhash(endpoints: List[RpcEndpoint]) -> Optional[Tuple[s
     return None
 
 
-async def execute_swap_transaction(
+async def _execute_signed_swap_transaction_rpc(
     signed_tx: "VersionedTransaction",
     endpoints: List[RpcEndpoint],
     *,
@@ -740,3 +815,215 @@ async def get_endpoint_status() -> Dict[str, Any]:
         "healthy": sum(1 for s in statuses if s["healthy"]),
         "available": sum(1 for s in statuses if s["available"]),
     }
+
+
+async def _execute_signed_swap_transaction_jito(
+    signed_tx: "VersionedTransaction",
+    endpoints: List[RpcEndpoint],
+    *,
+    keypair: "Keypair",
+    tip_lamports: int = 10_000,
+    simulate: bool = True,
+    commitment: str = "confirmed",
+) -> SwapExecutionResult:
+    """Execute a signed transaction via Jito bundle + tip tx, then confirm via RPC."""
+    if not HAS_SOLANA:
+        return SwapExecutionResult(success=False, error="solana_sdk_missing", retryable=False)
+    if not HAS_AIOHTTP:
+        return SwapExecutionResult(success=False, error="aiohttp_missing", retryable=False)
+
+    ok, error = require_poly_gnosis_safe("solana_swap_execute_jito")
+    if not ok:
+        return SwapExecutionResult(success=False, error=error, retryable=False)
+
+    healthy = await get_healthy_endpoints(endpoints)
+    if not healthy:
+        return SwapExecutionResult(success=False, error="no_healthy_endpoints", retryable=True)
+
+    # Optional simulation against first healthy endpoint
+    if simulate:
+        try:
+            async with AsyncClient(healthy[0].url, timeout=healthy[0].timeout_ms / 1000) as client:
+                sim = await client.simulate_transaction(signed_tx)
+                if sim.value and sim.value.err:
+                    sim_error = str(sim.value.err)
+                    hint = describe_simulation_error(sim_error)
+                    return SwapExecutionResult(
+                        success=False,
+                        error="simulation_failed",
+                        simulation_error=sim_error,
+                        error_hint=hint,
+                        endpoint=healthy[0].name,
+                        retryable=is_retryable_error(sim_error),
+                    )
+        except Exception as exc:
+            return SwapExecutionResult(success=False, error=f"simulation_exception:{exc}", retryable=True)
+
+    # Get recent blockhash for tip tx
+    blockhash_info = await get_recent_blockhash(healthy)
+    if not blockhash_info:
+        return SwapExecutionResult(success=False, error="blockhash_unavailable", retryable=True)
+    recent_blockhash, _last_valid = blockhash_info
+
+    tip_accounts = await _fetch_jito_tip_accounts()
+    tip_account = random.choice(tip_accounts) if tip_accounts else random.choice(JITO_TIP_ACCOUNTS)
+    tip_tx_bytes = _build_jito_tip_tx_bytes(
+        payer=keypair,
+        recent_blockhash=recent_blockhash,
+        tip_lamports=tip_lamports,
+        tip_account=tip_account,
+    )
+
+    # Submit bundle: [swap_tx, tip_tx]
+    swap_tx_bytes = bytes(signed_tx)
+    bundle_resp = await _send_jito_bundle([swap_tx_bytes, tip_tx_bytes])
+    if not bundle_resp.get("success"):
+        return SwapExecutionResult(success=False, error=f"jito_bundle_failed:{bundle_resp.get('error')}", retryable=True)
+
+    # Confirm on-chain via RPC using tx signature
+    try:
+        sig = str(signed_tx.signatures[0])
+    except Exception:
+        sig = ""
+
+    for ep in healthy:
+        try:
+            async with AsyncClient(ep.url, timeout=ep.timeout_ms / 1000) as client:
+                confirmed, confirm_err = await _confirm_signature(client, sig, commitment=commitment, timeout_seconds=30)
+                if confirmed:
+                    _mark_endpoint_success(ep.url)
+                    return SwapExecutionResult(success=True, signature=sig, endpoint=ep.name, retryable=False)
+                _mark_endpoint_failure(ep.url)
+                last_error = confirm_err
+        except Exception as exc:
+            _mark_endpoint_failure(ep.url)
+            last_error = str(exc)
+            continue
+
+    return SwapExecutionResult(success=False, error=last_error or "confirmation_failed", retryable=True)
+
+
+async def execute_swap_transaction(*args, **kwargs) -> SwapExecutionResult:
+    """Back-compat entrypoint.
+
+    Supports:
+      1) execute_swap_transaction(signed_tx, endpoints, keypair=...)
+      2) execute_swap_transaction(input_mint=..., output_mint=..., amount=..., slippage_bps=...)
+
+    All transactions are sent via Jito bundle + tip tx (non-negotiable).
+    """
+
+    # Pattern 1: (signed_tx, endpoints, ...)
+    if args and isinstance(args[0], VersionedTransaction):
+        signed_tx = args[0]
+        endpoints = args[1] if len(args) > 1 else kwargs.get("endpoints")
+        keypair = kwargs.get("keypair")
+        if not keypair:
+            return SwapExecutionResult(success=False, error="missing_keypair_for_jito", retryable=False)
+        return await _execute_signed_swap_transaction_jito(
+            signed_tx,
+            endpoints,
+            keypair=keypair,
+            tip_lamports=int(kwargs.get("tip_lamports", 10_000)),
+            simulate=bool(kwargs.get("simulate", True)),
+            commitment=str(kwargs.get("commitment", "confirmed")),
+        )
+
+    # Pattern 2: keyword-based swap build
+    input_mint = kwargs.get("input_mint")
+    output_mint = kwargs.get("output_mint")
+    amount = kwargs.get("amount")
+    slippage_bps = int(kwargs.get("slippage_bps", 100))
+
+    if not (input_mint and output_mint and amount is not None):
+        return SwapExecutionResult(success=False, error="invalid_arguments", retryable=False)
+
+    if not HAS_SOLANA:
+        return SwapExecutionResult(success=False, error="solana_sdk_missing", retryable=False)
+
+    # Load keypair
+    try:
+        from core import solana_wallet
+        keypair = solana_wallet.load_keypair()
+    except Exception as exc:
+        return SwapExecutionResult(success=False, error=f"keypair_load_failed:{exc}", retryable=False)
+    if not keypair:
+        return SwapExecutionResult(success=False, error="no_keypair", retryable=False)
+
+    endpoints = load_solana_rpc_endpoints()
+
+    quote = await get_swap_quote(input_mint, output_mint, int(amount), slippage_bps=slippage_bps)
+    if not quote:
+        return SwapExecutionResult(success=False, error="quote_failed", retryable=True)
+
+    swap_tx_b64 = await get_swap_transaction(quote, str(keypair.pubkey()))
+    if not swap_tx_b64:
+        return SwapExecutionResult(success=False, error="swap_tx_failed", retryable=True)
+
+    try:
+        unsigned = VersionedTransaction.from_bytes(base64.b64decode(swap_tx_b64))
+        signed_tx = VersionedTransaction(unsigned.message, [keypair])
+    except Exception as exc:
+        return SwapExecutionResult(success=False, error=f"sign_failed:{exc}", retryable=False)
+
+    return await _execute_signed_swap_transaction_jito(
+        signed_tx,
+        endpoints,
+        keypair=keypair,
+        tip_lamports=int(kwargs.get("tip_lamports", 10_000)),
+        simulate=bool(kwargs.get("simulate", True)),
+        commitment=str(kwargs.get("commitment", "confirmed")),
+    )
+
+
+async def send_legacy_transaction_via_jito(
+    tx: "Transaction",
+    endpoints: List[RpcEndpoint],
+    *,
+    keypair: "Keypair",
+    tip_lamports: int = 10_000,
+    commitment: str = "confirmed",
+) -> SwapExecutionResult:
+    """Send a legacy (non-versioned) Transaction via Jito bundle + tip tx."""
+    if not HAS_SOLANA:
+        return SwapExecutionResult(success=False, error="solana_sdk_missing", retryable=False)
+
+    blockhash_info = await get_recent_blockhash(endpoints)
+    if not blockhash_info:
+        return SwapExecutionResult(success=False, error="blockhash_unavailable", retryable=True)
+    recent_blockhash, _ = blockhash_info
+
+    tx.recent_blockhash = recent_blockhash
+    tx.sign(keypair)
+
+    tip_accounts = await _fetch_jito_tip_accounts()
+    tip_account = random.choice(tip_accounts) if tip_accounts else random.choice(JITO_TIP_ACCOUNTS)
+    tip_tx_bytes = _build_jito_tip_tx_bytes(
+        payer=keypair,
+        recent_blockhash=recent_blockhash,
+        tip_lamports=tip_lamports,
+        tip_account=tip_account,
+    )
+
+    bundle_resp = await _send_jito_bundle([bytes(tx), tip_tx_bytes])
+    if not bundle_resp.get("success"):
+        return SwapExecutionResult(success=False, error=f"jito_bundle_failed:{bundle_resp.get('error')}", retryable=True)
+
+    try:
+        sig = str(tx.signatures[0])
+    except Exception:
+        sig = ""
+
+    healthy = await get_healthy_endpoints(endpoints)
+    for ep in healthy:
+        try:
+            async with AsyncClient(ep.url, timeout=ep.timeout_ms / 1000) as client:
+                confirmed, confirm_err = await _confirm_signature(client, sig, commitment=commitment, timeout_seconds=30)
+                if confirmed:
+                    return SwapExecutionResult(success=True, signature=sig, endpoint=ep.name, retryable=False)
+                last_error = confirm_err
+        except Exception as exc:
+            last_error = str(exc)
+            continue
+
+    return SwapExecutionResult(success=False, error=last_error or "confirmation_failed", retryable=True)

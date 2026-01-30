@@ -47,6 +47,15 @@ from tg_bot.handlers.demo import register_demo_handlers
 # Raid Bot (v6.1.0 - Twitter engagement campaigns)
 from tg_bot.handlers.raid import register_raid_handlers
 
+# Skills Knowledge (v7.1.0 - ClawdMatt skill integration)
+from tg_bot.handlers.commands.skills_command import skills_command, skill_command, skillsearch_command
+
+# Enhanced Memory & Goal Management (v7.2.0 - Video Game AI patterns)
+from tg_bot.handlers.jarvis_chat import (
+    jarvis_goal, jarvis_goals, jarvis_milestone, jarvis_complete,
+    jarvis_feedback, jarvis_memory_stats, jarvis_status, jarvis_speak,
+)
+
 # FSM Session Management (v7.0.0 - Redis-backed state persistence)
 try:
     from tg_bot.fsm import get_fsm_storage, FSMMiddleware
@@ -163,6 +172,11 @@ def register_handlers(app: Application, config) -> None:
     app.add_handler(CommandHandler("xbot", xbot))
     app.add_handler(CommandHandler("paper", paper))
 
+    # Dexter news (headlines/events)
+    from tg_bot.handlers.commands.news_command import news_command
+    app.add_handler(CommandHandler("news", news_command))
+    app.add_handler(CommandHandler("dexter", news_command))  # alias
+
     # Demo UI - Beautiful Trojan-style trading interface (v6.0.0)
     register_demo_handlers(app)
 
@@ -227,6 +241,24 @@ def register_handlers(app: Application, config) -> None:
     app.add_handler(CommandHandler("warn", warn))
     app.add_handler(CommandHandler("flag", report_spam))
     app.add_handler(CommandHandler("togglemedia", toggle_media))
+
+    # Skills Knowledge Commands (v7.1.0)
+    app.add_handler(CommandHandler("skills", skills_command))
+    app.add_handler(CommandHandler("skill", skill_command))
+    app.add_handler(CommandHandler("skillsearch", skillsearch_command))
+
+    # Enhanced Memory & Goal Management Commands (v7.2.0)
+    # Quest/Goal tracking (like video game quests)
+    app.add_handler(CommandHandler("goal", jarvis_goal))
+    app.add_handler(CommandHandler("goals", jarvis_goals))
+    app.add_handler(CommandHandler("milestone", jarvis_milestone))
+    app.add_handler(CommandHandler("complete", jarvis_complete))
+    # Adaptive learning feedback
+    app.add_handler(CommandHandler("feedback", jarvis_feedback))
+    app.add_handler(CommandHandler("memorystats", jarvis_memory_stats))
+    # Jarvis system commands
+    app.add_handler(CommandHandler("jarvisstatus", jarvis_status))
+    app.add_handler(CommandHandler("speak", jarvis_speak))
 
     app.add_handler(CallbackQueryHandler(button_callback))
 
