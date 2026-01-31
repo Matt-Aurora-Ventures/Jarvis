@@ -329,8 +329,6 @@ for this trade:
             from bots.treasury.trading import TradeDirection, Position, TradeStatus
 
             SOL_MINT = "So11111111111111111111111111111111111111112"
-            USER_WALLET = "BFhTj4TGKC77C7s3HLnLbCiVd6dXQSqGvtD8sJY5egVR"
-
             # Get keypair for signing
             user_keypair = load_treasury_keypair()
             if not user_keypair:
@@ -340,12 +338,16 @@ for this trade:
                 )
 
             # Execute real swap via bags.fm
+            # IMPORTANT: wallet_address MUST match the signing keypair pubkey, or solders will throw
+            # `SignerError: keypair-pubkey mismatch`.
+            wallet_address = str(user_keypair.pubkey())
+
             bags = BagsAPIClient()
             swap_result = await bags.swap(
                 from_token=SOL_MINT,
                 to_token=address,
-                amount=amount_sol,  # in SOL, not lamports
-                wallet_address=USER_WALLET,
+                amount=amount_sol,  # in SOL
+                wallet_address=wallet_address,
                 slippage_bps=200,  # 2% slippage
                 keypair=user_keypair,
             )
