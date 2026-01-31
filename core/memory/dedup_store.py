@@ -17,6 +17,7 @@ Provides single interface for:
 
 import sqlite3
 import logging
+import json
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, List, Any, Tuple
 from dataclasses import dataclass, asdict, field
@@ -314,7 +315,7 @@ class SQLiteMemoryStore(MemoryStore):
                         topic_hash=row["topic_hash"],
                         created_at=row["created_at"],
                         expires_at=row["expires_at"],
-                        metadata=eval(row["metadata"]) if row["metadata"] else {}
+                        metadata=json.loads(row["metadata"]) if row["metadata"] else {}
                     )
                     memories.append(entry)
 
