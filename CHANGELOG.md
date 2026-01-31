@@ -4,6 +4,29 @@ All notable changes to Jarvis (LifeOS) will be documented in this file.
 
 ---
 
+# [4.6.5] - 2026-01-21
+
+### Fixed
+- Resolved Telegram bot infinite lock loop on Windows by removing the duplicate `acquire_instance_lock()` call.
+- Persisted sentiment state before Telegram posting to prevent re-runs on restart.
+- Corrected `DEFAULT_ADMIN_USER_ID` forward reference in `tg_bot/bot_core.py`.
+
+### Added
+- Error tracking integration for Telegram handlers and supervisor errors.
+- Bags.fm trade adapter + Bags Intel monitoring service.
+- Dexter sentiment CLI interface.
+
+---
+
+# [4.6.4] - 2026-01-17
+
+### Added
+- 18 MCP integrations (ast-grep, nia, firecrawl, postgres, perplexity, and more).
+- Automated memory import pipeline from Postgres to local SQLite + JSONL for MCP access.
+- Documentation and tooling: `MEMORY_QUERY_GUIDE.md`, `MCP_SETUP_SUMMARY.md`, and `scripts/verify_mcp_setup.py`.
+
+---
+
 # [4.6.1] - 2026-01-20
 
 ### Added

@@ -16,7 +16,7 @@
 
 general:
   name: "Jarvis"
-  version: "4.6.3"
+  version: "4.6.5"
   debug: ${DEBUG:false}
   log_level: ${LOG_LEVEL:INFO}
   data_dir: ${LIFEOS_HOME:~/.lifeos}
