@@ -470,23 +470,36 @@ class QueryAnalyzer:
         self.db_path = db_path
 
     def analyze(self, query: str, params: tuple = None) -> QueryAnalysis:
-        """Analyze a query and provide optimization recommendations."""
+        """Analyze a query and provide optimization recommendations.
+
+        Note: Only SELECT queries are allowed for security reasons.
+        Other query types will be analyzed for patterns but not executed.
+        """
         warnings = []
         suggestions = []
         uses_index = False
         rows_affected = 0
 
+        # Security: Only allow SELECT queries to be analyzed/executed
+        query_stripped = query.strip()
+        query_upper = query_stripped.upper()
+        is_select = query_upper.startswith("SELECT")
+
+        if not is_select:
+            warnings.append("Only SELECT queries can be fully analyzed for security reasons")
+
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
 
         try:
-            # Get EXPLAIN QUERY PLAN
+            # Get EXPLAIN QUERY PLAN - only for SELECT queries
             explain_results = []
-            try:
-                cursor = conn.execute(f"EXPLAIN QUERY PLAN {query}")
-                explain_results = [dict(row) for row in cursor.fetchall()]
-            except sqlite3.Error:
-                pass
+            if is_select:
+                try:
+                    cursor = conn.execute(f"EXPLAIN QUERY PLAN {query_stripped}")
+                    explain_results = [dict(row) for row in cursor.fetchall()]
+                except sqlite3.Error:
+                    pass
 
             # Check for index usage
             explain_str = str(explain_results)
@@ -496,9 +509,7 @@ class QueryAnalyzer:
             if has_scan and not uses_index:
                 warnings.append("Query performs full table scan - no index used")
 
-            # Analyze query pattern
-            query_upper = query.upper()
-
+            # Analyze query pattern (query_upper already set above)
             if "SELECT *" in query_upper:
                 warnings.append("Avoid SELECT * - specify only needed columns")
 
@@ -511,18 +522,19 @@ class QueryAnalyzer:
             if "LIKE '%" in query or "LIKE '%'" in query_upper:
                 warnings.append("Leading wildcard in LIKE prevents index usage")
 
-            # Execute and time
+            # Execute and time - only for SELECT queries
             start = time.perf_counter()
-            try:
-                if params:
-                    cursor = conn.execute(query, params)
-                else:
-                    cursor = conn.execute(query)
-                rows = cursor.fetchall()
-                rows_affected = len(rows)
-            except sqlite3.Error as e:
-                warnings.append(f"Query error: {e}")
-                rows_affected = 0
+            if is_select:
+                try:
+                    if params:
+                        cursor = conn.execute(query_stripped, params)
+                    else:
+                        cursor = conn.execute(query_stripped)
+                    rows = cursor.fetchall()
+                    rows_affected = len(rows)
+                except sqlite3.Error as e:
+                    warnings.append(f"Query error: {e}")
+                    rows_affected = 0
 
             execution_time = (time.perf_counter() - start) * 1000
 
