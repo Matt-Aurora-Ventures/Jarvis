@@ -7,10 +7,10 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 
 # Security
-python-jose[cryptography]==3.4.0  # CVE-2024-33663 fix: algorithm confusion with ECDSA keys
+python-jose[cryptography]>=3.5.0  # FIXED: CVE-2024-33663 algorithm confusion with ECDSA keys (GitHub Dependabot #28)
 passlib[bcrypt]==1.7.4
 bcrypt==4.1.2
-python-multipart==0.0.22
+python-multipart>=0.0.9  # FIXED: ReDoS vulnerability (GitHub Dependabot #16)
 slowapi==0.1.9  # Rate limiting
 
 # Database
@@ -20,7 +20,7 @@ alembic==1.13.1  # Migrations
 redis==5.0.1  # Cache and sessions
 
 # HTTP & Networking
-aiohttp==3.13.3
+aiohttp>=3.11.7  # FIXED: Multiple vulnerabilities (directory traversal #15, DoS #22, #36, #37, etc.)
 httpx==0.26.0
 websockets==12.0
 
@@ -34,11 +34,11 @@ openai==1.10.0  # For OpenAI-compatible APIs (Grok, Ollama)
 
 # Charts & Visualization
 matplotlib==3.8.2
-pillow==10.3.0
+pillow>=10.4.0  # FIXED: Buffer overflow vulnerability (GitHub Dependabot #20)
 
 # Utilities
 python-dotenv==1.0.0
-cryptography==44.0.1
+cryptography>=44.0.2  # FIXED: NULL pointer dereference (GitHub Dependabot #18)
 argon2-cffi==23.1.0
 tenacity==8.2.3  # Retry logic
 
