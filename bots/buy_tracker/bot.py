@@ -266,7 +266,8 @@ class JarvisBuyBot:
             if not self._polling_lock:
                 logger.warning("Buy bot polling disabled: lock held for token")
             else:
-                await self.app.updater.start_polling(allowed_updates=["callback_query"])
+                # Need message updates too so admin @mentions work in group
+                await self.app.updater.start_polling(allowed_updates=["message", "callback_query"])
                 logger.info("Buy bot started (polling enabled)")
         elif self.app.updater:
             logger.info("Buy bot started (polling disabled to avoid token conflicts)")
