@@ -476,12 +476,19 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
 
             picks = []
             for p in conviction_picks[:10]:
-                score = int(p.get("score", 0))
+                score = int(p.get("score", 0) or 0)
                 signal = p.get("signal", "NEUTRAL")
                 conviction = p.get("conviction") or _conviction_from_score(score)
 
                 # Lightweight, explainable breakdown (until we have real feature outputs exposed)
-                volume_trend = "Rising" if float(p.get("volume_ratio", 0) or 0) >= 2 else "Stable"
+                vol_24h = float(p.get("volume_24h", 0) or 0)
+                if vol_24h >= 1_000_000:
+                    volume_trend = "Surging"
+                elif vol_24h >= 200_000:
+                    volume_trend = "High"
+                else:
+                    volume_trend = "Normal"
+
                 social_momentum = _social_from_signal(signal)
                 whale_activity = "Accumulating" if conviction in ("HIGH", "MEDIUM") else "Inactive"
 
@@ -490,7 +497,7 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                         "symbol": p.get("symbol", "???"),
                         "address": p.get("address", ""),
                         "price": p.get("entry_price", 0),
-                        "change_24h": 0,  # Not available in conviction picks
+                        "change_24h": float(p.get("change_24h", 0) or 0),
                         "conviction": conviction,
                         "conviction_reason": f"Volume: {volume_trend} | Social: {social_momentum} | Whales: {whale_activity}",
                         "tp_percent": p.get("tp_percent", 25),

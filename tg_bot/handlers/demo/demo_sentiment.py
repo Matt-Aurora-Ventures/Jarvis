@@ -295,10 +295,16 @@ async def get_trending_with_sentiment(limit: int = 15) -> List[Dict[str, Any]]:
 # =============================================================================
 
 def _conviction_label(score: float) -> str:
-    """Convert score to conviction label."""
-    if score >= 80:
+    """Convert score to conviction label.
+
+    NOTE: Conviction thresholds are aligned to demo UX:
+      - HIGH: 85+
+      - MEDIUM: 70–84
+      - LOW: <70
+    """
+    if score >= 85:
         return "HIGH"
-    if score >= 60:
+    if score >= 70:
         return "MEDIUM"
     return "LOW"
 
@@ -439,48 +445,50 @@ async def get_conviction_picks() -> List[Dict[str, Any]]:
     if picks:
         return picks[:10]  # Limit to 10 picks
 
-    # Fallback: always show something (never blank)
+    # Fallback: REAL ranked data only (no placeholders)
+    #
+    # Spec:
+    #  1) Use get_bags_top_tokens_with_sentiment()
+    #  2) Sort by score desc
+    #  3) Take top 5
+    #  4) Group handled at render time (HIGH 85+ / MED 70–84 / LOW <70)
     try:
-        bags_tokens = await get_bags_top_tokens_with_sentiment(limit=10)
+        bags_tokens = await get_bags_top_tokens_with_sentiment(limit=25)
     except Exception:
         bags_tokens = []
 
-    for t in bags_tokens:
+    for t in (bags_tokens or []):
         sentiment_score = float(t.get("sentiment_score", 0.5) or 0.5)
         score = int(round(sentiment_score * 100))
-        conviction = "HIGH" if score >= 85 else "MEDIUM" if score >= 70 else "LOW"
+        conviction = _conviction_label(score)
         tp_pct, sl_pct = _default_tp_sl(conviction)
+        price = float(t.get("price_usd", 0) or 0)
+
         picks.append({
             "symbol": t.get("symbol", "???"),
             "address": t.get("address", ""),
             "conviction": conviction,
-            "thesis": f"fallback pick (volume leader) | sentiment: {t.get('sentiment','neutral')}",
-            "entry_price": t.get("price_usd", 0),
-            "target_price": (t.get("price_usd", 0) or 0) * (1 + tp_pct / 100) if (t.get("price_usd", 0) or 0) else 0,
-            "stop_loss": (t.get("price_usd", 0) or 0) * (1 - sl_pct / 100) if (t.get("price_usd", 0) or 0) else 0,
+            # No demo placeholder thesis
+            "thesis": "",
+            "entry_price": price,
+            "target_price": price * (1 + tp_pct / 100) if price else 0,
+            "stop_loss": price * (1 - sl_pct / 100) if price else 0,
             "tp_percent": tp_pct,
             "sl_percent": sl_pct,
             "score": score,
             "signal": t.get("signal", "NEUTRAL"),
+            "sentiment": t.get("sentiment", "neutral"),
+            "change_24h": float(t.get("change_24h", 0) or 0),
+            "volume_24h": float(t.get("volume_24h", t.get("volume", 0)) or 0),
+            "chart_url": t.get("chart_url"),
         })
 
     if picks:
-        return picks[:10]
+        picks = sorted(picks, key=lambda p: float(p.get("score", 0) or 0), reverse=True)
+        return picks[:5]
 
-    # Final safety net
-    return [
-        {
-            "symbol": "BONK",
-            "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
-            "conviction": "HIGH",
-            "thesis": "fallback pick (demo) — avoids blank UI",
-            "entry_price": 0,
-            "tp_percent": 25,
-            "sl_percent": 10,
-            "score": 90,
-            "signal": "BUY",
-        }
-    ]
+    # If we have no real data sources, return empty (UI should show 'no picks')
+    return []
 
 
 # =============================================================================
