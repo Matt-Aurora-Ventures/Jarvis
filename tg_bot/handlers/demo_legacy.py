@@ -4402,23 +4402,23 @@ Reply with a Solana token address to buy.
                         ),
                     ])
                     
-                    # Row 3: Custom amount + DexScreener + DexTools
+                    # Row 3: Custom + links + copy
                     row3 = [
                         InlineKeyboardButton(
-                            f"📝 Custom",
+                            "📝 Custom",
                             callback_data=f"demo:hub_custom:{token_ref}:{sl_percent}"
+                        ),
+                        InlineKeyboardButton(
+                            "📋 Copy CA",
+                            callback_data=f"demo:copy_ca:{token_ref}"
                         ),
                     ]
                     if dexscreener_url:
-                        row3.append(InlineKeyboardButton(
-                            f"📈 DexScreener",
-                            url=dexscreener_url
-                        ))
+                        row3.append(InlineKeyboardButton("📈 DexScreener", url=dexscreener_url))
+                    if address:
+                        row3.append(InlineKeyboardButton("🔗 Solscan", url=f"https://solscan.io/token/{address}"))
                     if dextools:
-                        row3.append(InlineKeyboardButton(
-                            f"🔗 DexTools",
-                            url=dextools
-                        ))
+                        row3.append(InlineKeyboardButton("🔗 DexTools", url=dextools))
                     keyboard.append(row3)
 
         text = "\n".join(lines)
@@ -6302,21 +6302,29 @@ Start trading to build your history!
             for i, token in enumerate(trending_tokens[:3]):
                 symbol = token.get("symbol", "???")
                 change = token.get("change_24h", 0)
-                token_ref = token.get("token_id") or token.get("address", "")
+                address = token.get("address", "")
+                token_ref = token.get("token_id") or address
                 emoji = "🟢" if change >= 0 else "🔴"
-                lines.append(f"  {emoji} {symbol} ({'+' if change >= 0 else ''}{change:.1f}%)")
+                short = f"{address[:6]}...{address[-4:]}" if address else ""
+                lines.append(f"  {emoji} {symbol} ({'+' if change >= 0 else ''}{change:.1f}%) {('— ' + short) if short else ''}")
 
                 if token_ref:
                     keyboard.append([
                         InlineKeyboardButton(
-                            f"{theme.BUY} Buy {symbol} (0.1 SOL)",
+                            f"{theme.BUY} Buy 0.1 {symbol}",
                             callback_data=f"demo:quick_buy:{token_ref}:0.1"
                         ),
                         InlineKeyboardButton(
-                            f"{theme.BUY} (0.5 SOL)",
-                            callback_data=f"demo:quick_buy:{token_ref}:0.5"
+                            f"{theme.BUY} Buy…",
+                            callback_data=f"demo:buy_custom:{token_ref}"
                         ),
                     ])
+                    row2 = [
+                        InlineKeyboardButton("📋 Copy CA", callback_data=f"demo:copy_ca:{token_ref}"),
+                        InlineKeyboardButton("📈 DexScreener", url=f"https://dexscreener.com/solana/{address}" if address else "https://dexscreener.com/solana"),
+                        InlineKeyboardButton("🔗 Solscan", url=f"https://solscan.io/token/{address}" if address else "https://solscan.io"),
+                    ]
+                    keyboard.append(row2)
             lines.append("")
 
         # Quick sell all button
