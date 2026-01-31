@@ -67,8 +67,42 @@ def _load_env_file(path: str) -> None:
 _load_env_file(os.path.join(os.path.dirname(__file__), "..", "tg_bot", ".env"))
 _load_env_file(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-ADMIN_CHAT_ID = os.environ.get("TELEGRAM_ADMIN_IDS", "8527130908")
+def _load_telegram_token_from_secrets() -> str:
+    """Best-effort load Telegram bot token from secrets files (do not log value)."""
+    for p in (
+        "/root/clawd/secrets/keys.json",
+        "/root/clawd/secrets/jarvis-keys.json",
+    ):
+        try:
+            if not os.path.exists(p):
+                continue
+            with open(p, "r") as f:
+                data = json.load(f)
+            # keys.json format: { telegram: { bot_token: "..." } }
+            tg = data.get("telegram") if isinstance(data, dict) else None
+            if isinstance(tg, dict) and tg.get("bot_token"):
+                return str(tg.get("bot_token"))
+            # jarvis-keys.json format: { telegram_bots: { jarvistrades_bot: "..." } }
+            tgb = data.get("telegram_bots") if isinstance(data, dict) else None
+            if isinstance(tgb, dict):
+                # prefer main trading bot if present
+                for k in ("jarvistrades", "jarvistrades_bot", "public_bot", "treasury_bot"):
+                    if tgb.get(k):
+                        return str(tgb.get(k))
+        except Exception:
+            continue
+    return ""
+
+
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "") or _load_telegram_token_from_secrets()
+
+# Alerts should go to the main group by default
+ALERT_CHAT_ID = (
+    os.environ.get("TELEGRAM_ALERT_CHAT_ID")
+    or os.environ.get("TELEGRAM_BUY_BOT_CHAT_ID")
+    or os.environ.get("BROADCAST_CHAT_ID")
+    or ""
+)
 
 # Primary TP/SL job runs on a 5-minute interval. Treat it as dead only if we
 # miss >1 full cycle (plus buffer) to avoid false "dead" flaps.
@@ -212,18 +246,23 @@ class BackupTPSLMonitor:
             return {"success": False, "error": str(e)}
 
     async def send_alert(self, message: str, chat_id: str = None):
-        """Send alert via Telegram."""
-        if not TELEGRAM_BOT_TOKEN:
-            logger.warning("No Telegram token, skipping alert")
+        """Send alert via Telegram (best-effort)."""
+        if not TELEGRAM_BOT_TOKEN or ":" not in TELEGRAM_BOT_TOKEN:
+            logger.warning("Backup couldn't send its own alert because TELEGRAM_BOT_TOKEN is currently empty/invalid")
             return
-            
-        target = chat_id or ADMIN_CHAT_ID
+
+        target = chat_id or ALERT_CHAT_ID
+        if not target:
+            logger.warning("Backup TP/SL alert skipped: no ALERT_CHAT_ID configured")
+            return
+
         try:
             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            # Use plain text (no parse_mode) to avoid Telegram entity parse failures.
             await self.http.post(url, json={
                 "chat_id": target,
                 "text": message,
-                "parse_mode": "Markdown",
+                "disable_web_page_preview": True,
             })
         except Exception as e:
             logger.error(f"Alert send failed: {e}")
