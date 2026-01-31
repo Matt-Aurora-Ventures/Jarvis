@@ -246,6 +246,19 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.debug(f"[DEMO_CALLBACK] Message edited successfully for action={action}")
         except BadRequest as exc:
             logger.warning(f"[DEMO_CALLBACK] BadRequest editing message for action={action}: {exc}")
+            # Markdown can fail on dynamic content (unescaped _,*,`, etc). Fallback to plain text.
+            if "can\u0027t parse entities" in str(exc).lower() or "can't parse entities" in str(exc).lower():
+                try:
+                    await query.message.edit_text(
+                        text,
+                        reply_markup=keyboard,
+                        disable_web_page_preview=True,
+                    )
+                    logger.info(f"[DEMO_CALLBACK] Fallback edit_text without parse_mode succeeded for action={action}")
+                    return
+                except Exception as exc2:
+                    logger.error(f"[DEMO_CALLBACK] Fallback edit_text failed for action={action}: {exc2}")
+                    raise
             if "Message is not modified" not in str(exc):
                 raise
 
@@ -278,6 +291,19 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=keyboard,
             )
+        except BadRequest as exc:
+            # If even the error UI fails markdown, fall back to plain text
+            if "can't parse entities" in str(exc).lower():
+                try:
+                    await query.message.edit_text(
+                        text,
+                        reply_markup=keyboard,
+                        disable_web_page_preview=True,
+                    )
+                    return
+                except Exception as edit_err:
+                    logger.error(f"Failed to edit message after markdown error fallback: {edit_err}")
+            logger.error(f"Failed to edit message after error: {exc}")
         except Exception as edit_err:
             logger.error(f"Failed to edit message after error: {edit_err}")
 
