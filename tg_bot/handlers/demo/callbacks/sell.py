@@ -114,7 +114,13 @@ You are about to sell *{position_count} positions*
             logger.warning(f"Flow validation error (continuing): {e}")
 
         try:
-            wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+            wallet_address = await ctx.resolve_wallet_address(context)
+            if not wallet_address:
+                return DemoMenuBuilder.error_message(
+                    "❌ No treasury wallet configured\n\n"
+                    "This chat should be using the treasury wallet, but none was found.\n"
+                    "(Missing treasury keypair / wallet config.)"
+                )
             slippage_bps = ctx.get_demo_slippage_bps()
 
             closed_count = 0
@@ -230,7 +236,13 @@ You are about to sell *{position_count} positions*
                     pnl_pct = pos_data.get("pnl_pct", 0)
                     pnl_usd = pos_data.get("pnl_usd", 0) * (pct / 100)
 
-                    wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+                    wallet_address = await ctx.resolve_wallet_address(context)
+                    if not wallet_address:
+                        return DemoMenuBuilder.error_message(
+                            "❌ No treasury wallet configured\n\n"
+                            "This chat should be using the treasury wallet, but none was found.\n"
+                            "(Missing treasury keypair / wallet config.)"
+                        )
                     slippage_bps = ctx.get_demo_slippage_bps()
 
                     swap = await ctx.execute_swap_with_fallback(

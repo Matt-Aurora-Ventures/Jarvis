@@ -247,7 +247,7 @@ async def _maybe_execute_exit(
         True if position was closed, False otherwise
     """
     # Import here to avoid circular imports
-    from tg_bot.handlers.demo.demo_trading import _execute_swap_with_fallback, _get_demo_slippage_bps
+    from tg_bot.handlers.demo.demo_trading import _execute_swap_with_fallback, _get_demo_slippage_bps, _resolve_wallet_address
 
     if not _auto_exit_enabled(context):
         return False
@@ -255,7 +255,12 @@ async def _maybe_execute_exit(
     position = alert.get("position", {})
     token_mint = position.get("address")
     token_amount = position.get("amount", 0)
-    wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+
+    wallet_address = await _resolve_wallet_address(context)
+    if not wallet_address:
+        logger.warning("Auto-exit skipped: no treasury wallet configured")
+        return False
+
     slippage_bps = _get_demo_slippage_bps()
 
     swap = await _execute_swap_with_fallback(

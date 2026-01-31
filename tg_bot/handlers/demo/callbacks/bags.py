@@ -128,7 +128,13 @@ async def handle_bags(
             price = token.get("price_usd", 0)
 
             try:
-                wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+                wallet_address = await ctx.resolve_wallet_address(context)
+                if not wallet_address:
+                    return DemoMenuBuilder.error_message(
+                        "❌ No treasury wallet configured\n\n"
+                        "This chat should be using the treasury wallet, but none was found.\n"
+                        "(Missing treasury keypair / wallet config.)"
+                    )
                 slippage_bps = ctx.get_demo_slippage_bps()
                 swap = await ctx.execute_swap_with_fallback(
                     from_token="So11111111111111111111111111111111111111112",
