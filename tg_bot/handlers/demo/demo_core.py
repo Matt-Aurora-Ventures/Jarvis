@@ -115,6 +115,9 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle all demo:* callbacks via the modular callback router."""
     query = update.callback_query
     data = query.data if query else ""
+    
+    # CRITICAL: Entry logging to verify callbacks are reaching this handler
+    logger.info(f"[DEMO_CALLBACK_ENTRY] data='{data}' user={query.from_user.id if query and query.from_user else 'N/A'}")
 
     # Enforce admin-only demo access (callbacks can be clicked by anyone)
     try:

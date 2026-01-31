@@ -61,35 +61,14 @@ async def _handle_show_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Auto-create wallet for new users
         wallet, private_key = await manager.create_wallet(user_id)
         
-        # Send DM with private key (one-time on creation)
-        try:
-            dm_text = (
-                "🔐 *YOUR NEW WALLET CREATED*\n"
-                "━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"*Address:*\n`{wallet.public_key}`\n\n"
-                "⚠️ *SAVE YOUR PRIVATE KEY NOW*\n"
-                "This is shown ONCE. Export again with /wallet export\n\n"
-                f"*Private Key:*\n`{private_key}`\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━\n"
-                "🛡️ Store this safely offline!\n"
-                "❌ NEVER share with anyone\n"
-                "✅ You need this to recover funds"
-            )
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=dm_text,
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            logger.warning(f"Couldn't DM user {user_id} their private key: {e}")
-        
-        # Public response
+        # SECURITY: Do NOT auto-send private keys (even via DM).
+        # Users can explicitly export in a private chat with /wallet export.
         await update.message.reply_text(
             "🔑 *NEW WALLET CREATED!*\n"
             "━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"*Address:*\n`{wallet.public_key}`\n\n"
-            "📬 *Private key sent to your DM*\n"
-            "_(Check your messages from this bot)_\n\n"
+            "🔐 *Private key is NOT shown automatically.*\n"
+            "To export it, open a DM with this bot and run: `\/wallet export`\n\n"
             "💰 Fund this wallet to start trading!\n\n"
             "━━━━━━━━━━━━━━━━━━━━━\n"
             "Commands:\n"

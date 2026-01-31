@@ -42,7 +42,9 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 BAGS_API_BASE = "https://api.bags.fm"
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 ADMIN_CHAT_ID = os.environ.get("TELEGRAM_ADMIN_IDS", "8527130908")
-PRIMARY_DEAD_THRESHOLD_SECONDS = 120  # Consider primary dead if no heartbeat for 2 min
+# Primary TP/SL job runs on a 5-minute interval. Treat it as dead only if we
+# miss >1 full cycle (plus buffer) to avoid false "dead" flaps.
+PRIMARY_DEAD_THRESHOLD_SECONDS = 420  # 7 min
 
 
 class BackupTPSLMonitor:
