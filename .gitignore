@@ -280,3 +280,10 @@ archive/
 
 # Secrets
 tg_bot/data/treasury_keypair.json
+
+# Security - Exposed keys and data dumps
+treasury_keypair*.json
+**/*EXPOSED*.json
+*.rdb
+dump.rdb
+

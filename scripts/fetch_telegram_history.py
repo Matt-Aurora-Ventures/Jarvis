@@ -1,243 +1,142 @@
 #!/usr/bin/env python3
 """
-Fetch Telegram message history and analyze AI picks for 15% win / 15% stop loss strategy.
+Fetch Telegram message history from @ClawdMatt_bot conversations
+Extracts incomplete tasks including voice messages
 """
 
-import asyncio
 import os
-import re
+import sys
+import asyncio
 import json
 from datetime import datetime, timedelta
+from pathlib import Path
+
+# Add project root
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from telegram import Bot
-from dotenv import load_dotenv
-from typing import List, Dict, Optional
-from dataclasses import dataclass, asdict
+from telegram.error import TelegramError
 
-load_dotenv()
+# Load secrets
+SECRETS_FILE = Path(__file__).parent.parent / "secrets" / "keys.json"
+with open(SECRETS_FILE) as f:
+    secrets = json.load(f)
 
-@dataclass
-class TokenPick:
-    """Represents an AI pick from Telegram."""
-    date: str
-    token_symbol: str
-    token_name: Optional[str]
-    entry_price: Optional[float]
-    sentiment: Optional[str]
-    score: Optional[float]
-    message_text: str
-    message_id: int
+BOT_TOKEN = secrets["telegram"]["bot_token"]
+ADMIN_USER_ID = 8527130908  # From config
 
-async def fetch_messages_via_export(chat_id: int):
-    """
-    Note: Bot API can't read message history for groups.
-    We need to either:
-    1. Export chat history manually from Telegram desktop
-    2. Use MTProto client (Telethon/Pyrogram) with user credentials
-    3. Parse from bot's own sent messages if we have message IDs
+async def fetch_messages():
+    """Fetch recent messages from bot conversations"""
+    bot = Bot(token=BOT_TOKEN)
 
-    For now, let's try to use the bot to get its own sent messages.
-    """
-    bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-    bot = Bot(token=bot_token)
+    print("=" * 80)
+    print("TELEGRAM MESSAGE HISTORY AUDIT")
+    print("=" * 80)
+    print(f"Bot: @ClawdMatt_bot")
+    print(f"Admin User ID: {ADMIN_USER_ID}")
+    print(f"Date Range: Last 5 days")
+    print("=" * 80 + "\n")
 
-    me = await bot.get_me()
-    print(f"Bot: @{me.username} (ID: {me.id})")
-    print(f"Chat ID: {chat_id}")
-    print()
-
-    # Bot API limitation: can't read message history without message IDs
-    # Let's try to get chat info at least
     try:
-        chat = await bot.get_chat(chat_id)
-        print(f"Chat info:")
-        print(f"  Title: {chat.title}")
-        print(f"  Type: {chat.type}")
-        print(f"  Description: {chat.description[:100] if chat.description else 'None'}...")
-        print()
+        # Get bot info
+        me = await bot.get_me()
+        print(f"✓ Connected as: @{me.username}")
+
+        # Get recent updates (last 100)
+        print("\n📥 Fetching recent updates...")
+        updates = await bot.get_updates(limit=100)
+
+        print(f"✓ Found {len(updates)} recent updates\n")
+
+        # Filter for messages from admin in last 5 days
+        five_days_ago = datetime.now() - timedelta(days=5)
+        messages = []
+        voice_messages = []
+
+        for update in updates:
+            if update.message:
+                msg = update.message
+                if msg.from_user.id == ADMIN_USER_ID:
+                    if msg.date >= five_days_ago:
+                        messages.append({
+                            'date': msg.date.isoformat(),
+                            'text': msg.text or msg.caption or '[No text]',
+                            'type': 'voice' if msg.voice else 'text',
+                            'message_id': msg.message_id,
+                            'chat_id': msg.chat_id
+                        })
+
+                        if msg.voice:
+                            voice_messages.append({
+                                'date': msg.date.isoformat(),
+                                'file_id': msg.voice.file_id,
+                                'duration': msg.voice.duration,
+                                'message_id': msg.message_id
+                            })
+
+        print(f"📊 Summary:")
+        print(f"  Total messages from admin (last 5 days): {len(messages)}")
+        print(f"  Voice messages: {len(voice_messages)}")
+        print("\n" + "=" * 80)
+
+        # Display messages
+        print("\n📝 RECENT MESSAGES:")
+        print("=" * 80)
+        for i, msg in enumerate(sorted(messages, key=lambda x: x['date']), 1):
+            print(f"\n[{i}] {msg['date']}")
+            print(f"Type: {msg['type']}")
+            print(f"Message: {msg['text'][:200]}")
+            if msg['type'] == 'voice':
+                print("⚠️  VOICE MESSAGE - Needs transcription")
+            print("-" * 80)
+
+        # Save to file
+        output_file = Path(__file__).parent.parent / "docs" / f"telegram_audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(output_file, 'w') as f:
+            json.dump({
+                'bot_username': me.username,
+                'admin_user_id': ADMIN_USER_ID,
+                'audit_date': datetime.now().isoformat(),
+                'messages': messages,
+                'voice_messages': voice_messages
+            }, f, indent=2)
+
+        print(f"\n✓ Audit saved to: {output_file}")
+
+        # Extract tasks
+        print("\n" + "=" * 80)
+        print("🎯 TASK EXTRACTION:")
+        print("=" * 80)
+
+        task_keywords = ['todo', 'task', 'fix', 'implement', 'add', 'create', 'update',
+                        'deploy', 'check', 'test', 'voice', 'translation', 'translate',
+                        'incomplete', 'pending', 'broken', 'error', 'issue']
+
+        potential_tasks = []
+        for msg in messages:
+            text_lower = msg['text'].lower()
+            if any(keyword in text_lower for keyword in task_keywords):
+                potential_tasks.append(msg)
+
+        print(f"\nFound {len(potential_tasks)} messages with task-related keywords:\n")
+        for i, task in enumerate(potential_tasks, 1):
+            print(f"[{i}] {task['date']}")
+            print(f"    {task['text'][:150]}")
+            print()
+
+        print("=" * 80)
+        print(f"\n✓ Voice messages to transcribe: {len(voice_messages)}")
+        if voice_messages:
+            print("\n⚠️  ACTION REQUIRED: Voice messages need manual transcription")
+            print("   Voice message transcription requires downloading audio files")
+            print("   and processing through speech-to-text API\n")
+
+    except TelegramError as e:
+        print(f"❌ Telegram API Error: {e}")
     except Exception as e:
-        print(f"Could not get chat info: {e}")
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
 
-    return None
-
-def parse_message_for_pick(text: str, message_id: int, date: str) -> Optional[TokenPick]:
-    """Extract token pick information from message text."""
-    if not text:
-        return None
-
-    # Look for bullish sentiment indicators
-    if not any(word in text.upper() for word in ['BULLISH', 'BUY', 'LONG', 'ENTRY', '🎯', '📈']):
-        return None
-
-    # Extract token symbol
-    # Common patterns: $SYMBOL, SYMBOL/USD, Token: SYMBOL, etc.
-    symbol_patterns = [
-        r'\$([A-Z0-9]{2,10})',  # $TOKEN
-        r'Token:\s*([A-Z0-9]{2,10})',  # Token: SYMBOL
-        r'Symbol:\s*([A-Z0-9]{2,10})',  # Symbol: SYMBOL
-        r'^([A-Z0-9]{2,10})\s*[-:]',  # SYMBOL: or SYMBOL -
-    ]
-
-    symbol = None
-    for pattern in symbol_patterns:
-        match = re.search(pattern, text, re.MULTILINE)
-        if match:
-            symbol = match.group(1)
-            break
-
-    if not symbol:
-        return None
-
-    # Extract entry price
-    price = None
-    price_patterns = [
-        r'Entry[:\s]*\$?([0-9]+\.?[0-9]*)',
-        r'Price[:\s]*\$?([0-9]+\.?[0-9]*)',
-        r'\$([0-9]+\.?[0-9]+)',
-    ]
-
-    for pattern in price_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            try:
-                price = float(match.group(1))
-                break
-            except ValueError:
-                pass
-
-    # Extract sentiment
-    sentiment = None
-    if 'BULLISH' in text.upper():
-        sentiment = 'BULLISH'
-    elif 'SLIGHTLY BULLISH' in text.upper():
-        sentiment = 'SLIGHTLY BULLISH'
-
-    # Extract score
-    score = None
-    score_match = re.search(r'Score[:\s]*([0-9\.]+)', text, re.IGNORECASE)
-    if score_match:
-        try:
-            score = float(score_match.group(1))
-        except ValueError:
-            pass
-
-    if symbol and (price or sentiment):
-        return TokenPick(
-            date=date,
-            token_symbol=symbol,
-            token_name=None,  # Extract if available
-            entry_price=price,
-            sentiment=sentiment,
-            score=score,
-            message_text=text[:500],  # First 500 chars
-            message_id=message_id
-        )
-
-    return None
-
-async def analyze_exported_json(json_file: str):
-    """
-    Analyze Telegram export JSON file.
-
-    To export chat history:
-    1. Open Telegram Desktop
-    2. Go to the chat
-    3. Click ⋮ (menu) → Export chat history
-    4. Choose JSON format
-    5. Save and provide the path here
-    """
-    if not os.path.exists(json_file):
-        print(f"Export file not found: {json_file}")
-        print()
-        print("TO EXPORT TELEGRAM CHAT HISTORY:")
-        print("1. Open Telegram Desktop")
-        print("2. Go to your Jarvis bot chat")
-        print("3. Click ⋮ (three dots menu)")
-        print("4. Select 'Export chat history'")
-        print("5. Choose 'Machine-readable JSON' format")
-        print("6. Export and save to:", json_file)
-        return None
-
-    with open(json_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-
-    print(f"Loaded {len(data.get('messages', []))} messages from export")
-
-    picks = []
-    for msg in data.get('messages', []):
-        text = msg.get('text', '')
-        if isinstance(text, list):
-            # Text can be array of objects in exports
-            text = ' '.join(t.get('text', '') if isinstance(t, dict) else str(t) for t in text)
-
-        date = msg.get('date', '')
-        msg_id = msg.get('id', 0)
-
-        pick = parse_message_for_pick(text, msg_id, date)
-        if pick:
-            picks.append(pick)
-
-    print(f"Found {len(picks)} AI picks")
-    print()
-
-    # Print picks
-    for i, pick in enumerate(picks[:20], 1):
-        print(f"{i}. {pick.token_symbol}")
-        print(f"   Date: {pick.date}")
-        print(f"   Entry: ${pick.entry_price}" if pick.entry_price else "   Entry: Unknown")
-        print(f"   Sentiment: {pick.sentiment}")
-        print(f"   Score: {pick.score}" if pick.score else "")
-        print()
-
-    # Save picks to JSON
-    picks_file = 'ai_picks_analysis.json'
-    with open(picks_file, 'w') as f:
-        json.dump([asdict(p) for p in picks], f, indent=2)
-
-    print(f"✓ Saved {len(picks)} picks to {picks_file}")
-    print()
-    print("NEXT STEPS:")
-    print("1. For each pick, we need the subsequent price data")
-    print("2. Check if price hit +15% (win) or -15% (stop loss) first")
-    print("3. Calculate win rate and expected value of the strategy")
-
-    return picks
-
-async def main():
-    """Main entry point."""
-    chat_id = -1003408655098
-
-    print("TELEGRAM AI PICKS ANALYZER")
-    print("=" * 60)
-    print()
-
-    # Try bot API first (won't work for reading history)
-    await fetch_messages_via_export(chat_id)
-
-    # Check for exported JSON
-    export_file = 'telegram_export.json'
-    if os.path.exists(export_file):
-        await analyze_exported_json(export_file)
-    else:
-        print("=" * 60)
-        print("IMPORTANT: Bot API cannot read message history")
-        print("=" * 60)
-        print()
-        print("Please export your Telegram chat history:")
-        print()
-        print("1. Open Telegram Desktop")
-        print("2. Open the Jarvis bot chat")
-        print("3. Click the menu (three dots)")
-        print("4. Select 'Export chat history'")
-        print("5. Choose 'Machine-readable JSON'")
-        print("6. Save as 'telegram_export.json' in this directory")
-        print()
-        print(f"Then run this script again!")
-        print()
-        print(f"Alternatively, you can manually:")
-        print("- Scroll through your Telegram chat")
-        print("- Find messages with 🏆 Top Picks or BULLISH sentiment")
-        print("- Check if those tokens hit +15% or -15% first")
-        print("- Count wins vs losses")
-
-if __name__ == '__main__':
-    asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(fetch_messages())
