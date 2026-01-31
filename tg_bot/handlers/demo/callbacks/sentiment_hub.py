@@ -674,27 +674,39 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
             try:
                 from core.enhanced_market_data import fetch_backed_stocks, fetch_backed_indexes
 
+                # Matt requirement: surface the treasury-backed xStocks set in /demo
+                # Treasury list: SPYx, QQQx, VTIx, TQQQx, GLDx, TBLLx
+                desired = {"SPYx", "QQQx", "VTIx", "TQQQx", "GLDx", "TBLLx"}
+
                 if section == "xstocks":
-                    assets, warnings = await asyncio.to_thread(fetch_backed_stocks)
+                    # These are categorized as index/commodity/bond in the registry, so pull from indexes feed
+                    assets, warnings = await asyncio.to_thread(fetch_backed_indexes)
+                    assets = [a for a in assets if getattr(a, "symbol", "") in desired]
                 else:
                     assets, warnings = await asyncio.to_thread(fetch_backed_indexes)
 
                 if warnings:
                     logger.warning(f"Backed asset warnings: {warnings[:3]}")
 
-                picks = [
-                    {
-                        "symbol": asset.symbol,
-                        "address": asset.mint_address,
-                        "price": asset.price_usd,
-                        "change_24h": 0.0,
-                        "conviction": "MEDIUM",
-                        "tp_percent": 12,
-                        "sl_percent": 8,
-                        "score": 70,
-                    }
-                    for asset in assets
-                ]
+                picks = []
+                for asset in assets:
+                    symbol = asset.symbol
+                    conviction = "MEDIUM"
+                    tp_percent = 8 if symbol in ("SPYx", "QQQx", "VTIx") else 12
+                    sl_percent = 5 if symbol in ("SPYx", "QQQx", "VTIx") else 8
+                    picks.append(
+                        {
+                            "symbol": symbol,
+                            "address": asset.mint_address,
+                            "price": asset.price_usd,
+                            "change_24h": 0.0,
+                            "conviction": conviction,
+                            "conviction_reason": "Volume: Stable | Social: Neutral | Whales: Inactive",
+                            "tp_percent": tp_percent,
+                            "sl_percent": sl_percent,
+                            "score": 75,
+                        }
+                    )
             except Exception as exc:
                 logger.warning(f"Backed asset fetch failed for {section}: {exc}")
 
