@@ -1208,6 +1208,6 @@ if __name__ == "__main__":
         await client.close()
 
     asyncio.run(test())
--e 
+
 # Backwards compatibility alias
 BagsClient = BagsAPIClient

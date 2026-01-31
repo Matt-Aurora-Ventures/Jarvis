@@ -266,16 +266,17 @@ async def handle_snipe(
                         user_wallet, private_key = await wallet_manager.create_wallet(user_id)
                         logger.info(f"Auto-created wallet for user {user_id}: {user_wallet.public_key}")
                         
-                        # Try to DM them their private key
+                        # SECURITY: Do NOT auto-send private keys.
+                        # Users can explicitly export in a DM with /wallet export.
                         try:
                             dm_text = (
                                 "🔐 *WALLET CREATED FOR TRADING*\n"
                                 "━━━━━━━━━━━━━━━━━━━━━\n\n"
                                 f"*Address:*\n`{user_wallet.public_key}`\n\n"
-                                "⚠️ *SAVE YOUR PRIVATE KEY*\n\n"
-                                f"`{private_key}`\n\n"
+                                "🔐 *Private key is NOT shown automatically.*\n"
+                                "To export it, open a DM with this bot and run: `\/wallet export`\n\n"
                                 "━━━━━━━━━━━━━━━━━━━━━\n"
-                                "🛡️ Store safely! Use /wallet to manage."
+                                "🛡️ Store safely. Use /wallet to manage."
                             )
                             await context.bot.send_message(
                                 chat_id=user_id,
