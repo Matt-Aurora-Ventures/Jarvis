@@ -140,10 +140,21 @@ async def handle_sentiment_hub(
                 token_ref = parts[2]
                 address = ctx.resolve_token_ref(context, token_ref)
                 auto_sl_percent = float(parts[3]) if len(parts) > 3 else 15.0
+
+                # Fetch symbol/price for the confirmation screen (fix: token name not shown)
+                symbol = "TOKEN"
+                price = 0.0
+                try:
+                    sentiment_data = await ctx.get_ai_sentiment_for_token(address)
+                    symbol = sentiment_data.get("symbol", symbol) or symbol
+                    price = float(sentiment_data.get("price", 0) or sentiment_data.get("price_usd", 0) or 0)
+                except Exception:
+                    pass
+
                 return DemoMenuBuilder.sentiment_hub_buy_confirm(
-                    symbol="TOKEN",
+                    symbol=symbol,
                     address=address,
-                    price=0.001,
+                    price=price or 0.001,
                     auto_sl_percent=auto_sl_percent,
                     token_ref=token_ref,
                 )
