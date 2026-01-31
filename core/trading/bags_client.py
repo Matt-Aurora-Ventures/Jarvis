@@ -336,6 +336,16 @@ class BagsAPIClient:
 
         await self._check_rate_limit()
 
+        # Guard: bags.fm quote/swap will 5xx if inputMint == outputMint
+        if from_token == to_token:
+            return SwapResult(
+                success=False,
+                from_token=from_token,
+                to_token=to_token,
+                from_amount=amount,
+                error="Invalid swap: input and output mints are the same",
+            )
+
         try:
             # Step 1: Get raw quote response
             quote_response = await self.get_quote_raw(from_token, to_token, amount, slippage_bps)
