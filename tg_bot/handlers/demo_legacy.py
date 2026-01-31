@@ -5680,6 +5680,7 @@ _Updated: {datetime.now(timezone.utc).strftime('%H:%M UTC')}_
     ) -> Tuple[str, InlineKeyboardMarkup]:
         """
         Show detailed AI analysis for a specific token.
+        Standard format: CA + MC/Vol/Liq + AI Why + Copy CA + DexScreener + Solscan
         """
         theme = JarvisTheme
 
@@ -5689,6 +5690,7 @@ _Updated: {datetime.now(timezone.utc).strftime('%H:%M UTC')}_
         change_24h = token_data.get("change_24h", 0)
         volume = token_data.get("volume", 0)
         liquidity = token_data.get("liquidity", 0)
+        market_cap = token_data.get("market_cap", 0)
 
         # Sentiment data
         sentiment = token_data.get("sentiment", "neutral")
@@ -5706,21 +5708,26 @@ _Updated: {datetime.now(timezone.utc).strftime('%H:%M UTC')}_
         sig_emoji = {"STRONG_BUY": "🔥", "BUY": "🟢", "SELL": "🔴", "STRONG_SELL": "💀"}.get(signal, "🟡")
 
         token_ref = token_data.get("token_id") or address
-        short_addr = f"{address[:6]}...{address[-4:]}" if address else "N/A"
         change_emoji = "📈" if change_24h >= 0 else "📉"
+
+        # Format market data
+        mc_str = f"${market_cap/1_000_000:.2f}M" if market_cap >= 1_000_000 else f"${market_cap/1000:.0f}K" if market_cap > 0 else "N/A"
+        vol_str = f"${volume/1_000_000:.2f}M" if volume >= 1_000_000 else f"${volume/1000:.0f}K" if volume > 0 else "N/A"
+        liq_str = f"${liquidity/1_000_000:.2f}M" if liquidity >= 1_000_000 else f"${liquidity/1000:.0f}K" if liquidity > 0 else "N/A"
 
         lines = [
             f"{theme.AUTO} *AI TOKEN ANALYSIS*",
             "━━━━━━━━━━━━━━━━━━━━━",
             "",
             f"*{symbol}*",
-            f"Address: `{short_addr}`",
+            f"CA: `{address}`" if address else "CA: N/A",
             "",
-            f"{change_emoji} *Price Data*",
+            f"{change_emoji} *Market Data*",
             f"├ Price: ${price:.8f}",
             f"├ 24h: {change_24h:+.1f}%",
-            f"├ Volume: ${volume/1000:.0f}K",
-            f"└ Liquidity: ${liquidity/1000:.0f}K",
+            f"├ MC: {mc_str}",
+            f"├ Vol: {vol_str}",
+            f"└ Liq: {liq_str}",
             "",
             f"{sent_emoji} *AI Sentiment*",
             f"├ Verdict: *{sentiment.upper()}*",
@@ -5732,29 +5739,28 @@ _Updated: {datetime.now(timezone.utc).strftime('%H:%M UTC')}_
 
         if reasons:
             lines.append("")
-            lines.append("_Reasons:_")
+            lines.append("💡 *Why:*")
             for reason in reasons[:3]:
                 lines.append(f"• {reason}")
 
         text = "\n".join(lines)
 
-        # DexScreener chart link
-        chart_url = token_data.get("chart_url", f"https://dexscreener.com/solana/{address}")
+        # URLs
+        dexscreener_url = f"https://dexscreener.com/solana/{address}" if address else "https://dexscreener.com/solana"
+        solscan_url = f"https://solscan.io/token/{address}" if address else "https://solscan.io"
 
         keyboard = [
             [
-                InlineKeyboardButton(f"{theme.BUY} Buy 0.1 SOL", callback_data=f"demo:quick_buy:{token_ref}:0.1"),
-                InlineKeyboardButton(f"{theme.BUY} Buy 0.5 SOL", callback_data=f"demo:quick_buy:{token_ref}:0.5"),
+                InlineKeyboardButton(f"{theme.BUY} Buy 0.1", callback_data=f"demo:quick_buy:{token_ref}:0.1"),
+                InlineKeyboardButton(f"{theme.BUY} Buy…", callback_data=f"demo:buy_custom:{token_ref}"),
             ],
             [
-                InlineKeyboardButton(f"{theme.BUY} Buy 1 SOL", callback_data=f"demo:quick_buy:{token_ref}:1"),
-                InlineKeyboardButton(f"{theme.BUY} Buy 5 SOL", callback_data=f"demo:quick_buy:{token_ref}:5"),
+                InlineKeyboardButton("📋 Copy CA", callback_data=f"demo:copy_ca:{token_ref}"),
+                InlineKeyboardButton("📈 DexScreener", url=dexscreener_url),
+                InlineKeyboardButton("🔗 Solscan", url=solscan_url),
             ],
             [
-                InlineKeyboardButton(f"{theme.CHART} Chart", url=chart_url),
-                InlineKeyboardButton(f"{theme.REFRESH} Refresh Analysis", callback_data=f"demo:analyze:{token_ref}"),
-            ],
-            [
+                InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data=f"demo:analyze:{token_ref}"),
                 InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
             ],
         ]

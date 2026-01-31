@@ -279,8 +279,11 @@ class BackupTPSLMonitor:
     async def process_alert(self, alert: Dict) -> bool:
         """Process a triggered alert.
 
-        Today this is an alert-only layer unless the primary monitor is dead.
-        (Execution requires signing + routing; handled by primary monitor.)
+        SAFE EXECUTE MODE:
+        - If primary monitor is alive → alert only (no execution)
+        - If primary monitor is DEAD → attempt to execute sell
+        
+        Guarded with Redis locks to prevent double-sells.
         """
         position = alert["position"]
         pos_id = position.get("id", "unknown")
@@ -299,7 +302,35 @@ class BackupTPSLMonitor:
             pnl_pct = ((current_price - entry_price) / entry_price * 100) if entry_price else 0
 
             primary_alive = self.is_primary_alive()
-            status_line = "✅ Primary monitor alive (alert-only)" if primary_alive else "⚠️ Primary monitor DEAD (manual check)"
+            
+            # SAFE EXECUTE: Only execute if primary is dead
+            executed = False
+            tx_hash = None
+            
+            if not primary_alive:
+                logger.warning(f"⚠️ Primary DEAD - attempting safe execute for position {pos_id}")
+                
+                # Get user wallet from position or fallback
+                user_wallet = position.get("wallet_address")
+                
+                if user_wallet:
+                    result = await self.execute_sell(position, user_wallet)
+                    if result.get("success"):
+                        executed = True
+                        tx_hash = result.get("tx_hash")
+                        logger.info(f"✅ Safe execute SUCCESS for {pos_id}: {tx_hash}")
+                    else:
+                        logger.error(f"❌ Safe execute FAILED for {pos_id}: {result.get('error')}")
+                else:
+                    logger.warning(f"No wallet found for position {pos_id}, cannot execute")
+            
+            # Build alert message
+            if executed:
+                status_line = f"✅ EXECUTED via backup monitor\nTX: `{tx_hash[:16]}...`" if tx_hash else "✅ EXECUTED via backup monitor"
+            elif primary_alive:
+                status_line = "✅ Primary monitor alive (alert-only)"
+            else:
+                status_line = "⚠️ Primary DEAD - execution failed (check wallet config)"
 
             message = (
                 "🚨 *TP/SL ALERT (Backup Monitor)*\n\n"
@@ -323,6 +354,13 @@ class BackupTPSLMonitor:
             else:
                 position[f"{alert['type']}_triggered"] = True
             
+            # If executed, also mark as closed
+            if executed:
+                position["status"] = "closed"
+                position["closed_at"] = datetime.now(timezone.utc).isoformat()
+                position["close_tx"] = tx_hash
+                position["close_source"] = "backup_monitor"
+            
             # Update in Redis
             all_positions = json.loads(self.redis.get(f"jarvis:positions:{user_id}") or "[]")
             for p in all_positions:
@@ -335,6 +373,11 @@ class BackupTPSLMonitor:
                         p["sl_triggered"] = True
                     else:
                         p[f"{alert['type']}_triggered"] = True
+                    if executed:
+                        p["status"] = "closed"
+                        p["closed_at"] = datetime.now(timezone.utc).isoformat()
+                        p["close_tx"] = tx_hash
+                        p["close_source"] = "backup_monitor"
                     break
             self.redis.set(f"jarvis:positions:{user_id}", json.dumps(all_positions))
             

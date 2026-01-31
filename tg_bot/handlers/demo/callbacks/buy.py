@@ -69,10 +69,15 @@ async def handle_buy(
         
         logger.info(f"[BUY CUSTOM] Showing amount buttons for user {user_id}, token_ref={token_ref}")
 
+        # Build standard format: CA + amount buttons + links
+        dexscreener_url = f"https://dexscreener.com/solana/{token_addr}"
+        solscan_url = f"https://solscan.io/token/{token_addr}"
+
         text = f"""
 {theme.BUY} *SELECT BUY AMOUNT*
+━━━━━━━━━━━━━━━━━━━━━
 
-*Token:* `{token_addr}`
+CA: `{token_addr}`
 
 Choose how much SOL to spend:
 """
@@ -87,6 +92,11 @@ Choose how much SOL to spend:
                 InlineKeyboardButton("0.5 SOL", callback_data=f"demo:execute_buy:{token_ref}:0.5"),
                 InlineKeyboardButton("1 SOL", callback_data=f"demo:execute_buy:{token_ref}:1"),
                 InlineKeyboardButton("2 SOL", callback_data=f"demo:execute_buy:{token_ref}:2"),
+            ],
+            [
+                InlineKeyboardButton("📋 Copy CA", callback_data=f"demo:copy_ca:{token_ref}"),
+                InlineKeyboardButton("📈 DexScreener", url=dexscreener_url),
+                InlineKeyboardButton("🔗 Solscan", url=solscan_url),
             ],
             [InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:bluechips")],
         ])
@@ -115,34 +125,44 @@ Choose how much SOL to spend:
             sentiment = sentiment_data.get("sentiment", "neutral")
             score = sentiment_data.get("score", 0)
             signal = sentiment_data.get("signal", "NEUTRAL")
-
-            short_addr = f"{token_addr[:6]}...{token_addr[-4:]}"
+            symbol = sentiment_data.get("symbol", "TOKEN")
 
             # Sentiment emoji
-            sent_emoji = {"bullish": "{green}", "bearish": "{red}", "very_bullish": "{rocket}"}.get(
-                sentiment.lower(), "{yellow}"
+            sent_emoji = {"bullish": "🟢", "bearish": "🔴", "very_bullish": "🚀", "very_bearish": "💀"}.get(
+                sentiment.lower(), "🟡"
             )
-            sig_emoji = {"STRONG_BUY": "{fire}", "BUY": "{green}", "SELL": "{red}"}.get(signal, "{yellow}")
+            sig_emoji = {"STRONG_BUY": "🔥", "BUY": "🟢", "SELL": "🔴", "STRONG_SELL": "💀"}.get(signal, "🟡")
+
+            # URLs
+            dexscreener_url = f"https://dexscreener.com/solana/{token_addr}"
+            solscan_url = f"https://solscan.io/token/{token_addr}"
 
             text = f"""
 {theme.BUY} *CONFIRM BUY*
-{'=' * 20}
+━━━━━━━━━━━━━━━━━━━━━
 
-*Address:* `{short_addr}`
-*Amount:* {amount} SOL
+*{symbol}*
+CA: `{token_addr}`
+Amount: *{amount} SOL*
 
 {theme.AUTO} *AI Analysis*
-| Sentiment: {sent_emoji} *{sentiment.upper()}*
-| Score: *{score:.2f}*
-| Signal: {sig_emoji} *{signal}*
+├ Sentiment: {sent_emoji} *{sentiment.upper()}*
+├ Score: *{score:.2f}*
+└ Signal: {sig_emoji} *{signal}*
 
-{'=' * 20}
-{theme.WARNING} _AI recommends: {signal}_
+💡 _AI recommends: {signal}_
 """
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"{theme.SUCCESS} Confirm Buy", callback_data=f"demo:execute_buy:{token_ref}:{amount}")],
-                [InlineKeyboardButton(f"{theme.CHART} More Analysis", callback_data=f"demo:analyze:{token_ref}")],
-                [InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:main")],
+                [InlineKeyboardButton(f"{theme.SUCCESS} ✅ Confirm Buy", callback_data=f"demo:execute_buy:{token_ref}:{amount}")],
+                [
+                    InlineKeyboardButton("📋 Copy CA", callback_data=f"demo:copy_ca:{token_ref}"),
+                    InlineKeyboardButton("📈 DexScreener", url=dexscreener_url),
+                    InlineKeyboardButton("🔗 Solscan", url=solscan_url),
+                ],
+                [
+                    InlineKeyboardButton(f"{theme.CHART} More Analysis", callback_data=f"demo:analyze:{token_ref}"),
+                    InlineKeyboardButton(f"{theme.CLOSE} Cancel", callback_data="demo:main"),
+                ],
             ])
             return text, keyboard
 
