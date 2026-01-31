@@ -142,8 +142,12 @@ class TradingUI:
         logger.info("Position monitor started")
         while self._running:
             try:
+                logger.debug("Position monitor iteration starting...")
+
                 # Monitor and close any breached positions
                 closed = await self.engine.monitor_stop_losses()
+
+                logger.debug(f"Position monitor checked: {len(closed) if closed else 0} positions closed")
 
                 # Notify admins of any closed positions
                 if closed and self.admin_ids:
@@ -171,11 +175,21 @@ class TradingUI:
                             except Exception as e:
                                 logger.warning(f"Failed to notify admin {admin_id}: {e}")
 
+            except asyncio.CancelledError:
+                logger.info("Position monitor cancelled, shutting down...")
+                break
             except Exception as e:
-                logger.error(f"Position monitor error: {e}")
+                logger.error(f"Position monitor error: {e}", exc_info=True)
+                # Continue running despite errors
 
             # Wait 60 seconds before next check
-            await asyncio.sleep(60)
+            try:
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                logger.info("Position monitor sleep cancelled, shutting down...")
+                break
+
+        logger.info("Position monitor stopped")
 
     async def stop(self):
         """Stop the trading bot."""
