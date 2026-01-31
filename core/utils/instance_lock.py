@@ -67,7 +67,13 @@ def cleanup_stale_lock(token: str, name: str) -> bool:
                 return True
 
             pid = int(content)
-    except (OSError, ValueError) as exc:
+
+            # Sanity check: PIDs should be reasonable (< 10 million on most systems)
+            if pid < 0 or pid > 10_000_000:
+                logger.warning(f"Invalid PID {pid} in lock file {lock_path}, cleaning up")
+                lock_path.unlink()
+                return True
+    except (OSError, ValueError, OverflowError) as exc:
         # Can't read/parse lock file - try to clean it up
         logger.warning(f"Invalid lock file {lock_path}, cleaning up: {exc}")
         try:
