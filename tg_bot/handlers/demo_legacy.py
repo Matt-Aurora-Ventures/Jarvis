@@ -4862,19 +4862,31 @@ Reply with a Solana token address to buy.
                 # DexScreener chart link
                 chart_url = token.get("chart_url", f"https://dexscreener.com/solana/{address}")
 
+                solscan_url = f"https://solscan.io/token/{address}" if address else None
+
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"💰 Buy 0.1 SOL of {symbol}",
+                        f"💰 Buy 0.1 {symbol}",
                         callback_data=f"demo:bags_exec:{token_ref}:0.1:{default_tp_percent}:{default_sl_percent}"
                     ),
                     InlineKeyboardButton(
-                        f"{theme.CHART} Chart",
-                        url=chart_url
+                        f"💰 Buy…",
+                        callback_data=f"demo:buy_custom:{token_ref}"
                     ),
                 ])
+
+                row2 = []
+                if solscan_url:
+                    row2.append(InlineKeyboardButton("🔗 Solscan", url=solscan_url))
+                row2.extend([
+                    InlineKeyboardButton("📋 Copy CA", callback_data=f"demo:copy_ca:{token_ref}"),
+                    InlineKeyboardButton(f"{theme.CHART} Chart", url=chart_url),
+                ])
+                keyboard.append(row2)
+
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"🔍 View {symbol} Details",
+                        f"🔍 Details",
                         callback_data=f"demo:bags_info:{token_ref}"
                     ),
                 ])
@@ -4986,7 +4998,7 @@ Reply with a Solana token address to buy.
             f"🎯 TP (+{default_tp_percent:.0f}%): {tp_str}",
             f"🛑 SL (-{default_sl_percent:.0f}%): {sl_str}",
             "",
-            f"📋 *Contract:*",
+            f"📋 *Contract Address (tap+hold to copy):*",
             f"`{address}`",
             "",
             f"🔗 *Links:*",
@@ -5010,6 +5022,10 @@ Reply with a Solana token address to buy.
             [
                 InlineKeyboardButton(f"🟢 Buy 2 SOL", callback_data=f"demo:bags_exec:{token_ref}:2:{default_tp_percent}:{default_sl_percent}"),
                 InlineKeyboardButton(f"🟢 Buy 5 SOL", callback_data=f"demo:bags_exec:{token_ref}:5:{default_tp_percent}:{default_sl_percent}"),
+            ],
+            [
+                InlineKeyboardButton("📋 Copy CA", callback_data=f"demo:copy_ca:{token_ref}"),
+                InlineKeyboardButton(f"{theme.CHART} Chart", url=f"https://dexscreener.com/solana/{address}"),
             ],
             [
                 InlineKeyboardButton(f"✏️ Custom TP/SL", callback_data=f"demo:bags_custom_tpsl:{token_ref}"),

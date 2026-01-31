@@ -118,6 +118,7 @@ class CallbackRouter:
             "execute_sell_all": self.handle_sell,
             "token_input": self.handle_trading,
             "token_search": self.handle_trading,
+            "copy_ca": self.handle_trading,
             "snipe_mode": self.handle_snipe,
             "snipe_disable": self.handle_snipe,
 

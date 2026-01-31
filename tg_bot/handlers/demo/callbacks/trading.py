@@ -147,6 +147,24 @@ _Reply with token address or symbol:_
         context.user_data["awaiting_token_search"] = True
         return text, keyboard
 
+    elif action == "copy_ca":
+        # Send a copy-friendly contract address message (Telegram users can tap+hold to copy)
+        try:
+            parts = data.split(":")
+            token_ref = parts[2] if len(parts) > 2 else ""
+            addr = ctx.resolve_token_ref(context, token_ref)
+            query = update.callback_query
+            if query and query.message:
+                await query.message.reply_text(
+                    f"📋 *Contract Address*\n`{addr}`\n\n"
+                    f"🔗 Solscan: https://solscan.io/token/{addr}",
+                    parse_mode="Markdown",
+                )
+                return None, None
+        except Exception as e:
+            logger.warning(f"copy_ca failed: {e}")
+            return DemoMenuBuilder.error_message("Failed to copy contract address")
+
     # Default
     return DemoMenuBuilder.main_menu(
         wallet_address=state.get("wallet_address", "Not configured"),
