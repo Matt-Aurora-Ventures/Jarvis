@@ -3970,77 +3970,108 @@ Reply with a Solana token address to buy.
 
         keyboard = []
 
-        # High Conviction Picks
+        # AI Conviction Picks (ranked top 5, grouped)
         if picks:
-            lines.extend([
-                "",
-                f"🔥 *HIGH CONVICTION ({len(picks)})*",
-            ])
-            for pick in picks[:10]:  # Show all 10 picks instead of just 3
-                symbol = pick.get("symbol", "???")
-                conviction = pick.get("conviction", "MEDIUM")
-                thesis = pick.get("thesis", "")[:40]
-                address = pick.get("address", "")
-                token_ref = pick.get("token_id") or address
-                tp = pick.get("tp_target", 0)
-                sl = pick.get("sl_target", 0)
-                ai_confidence = pick.get("ai_confidence", 0)
-                change = pick.get("change_24h", 0)
-                volume = pick.get("volume_24h", 0)
+            def _score(p: Dict[str, Any]) -> float:
+                try:
+                    return float(p.get("score", 0) or 0)
+                except Exception:
+                    return 0.0
 
-                conv_emoji = {"HIGH": "🔥", "MEDIUM": "📊", "LOW": "📉"}.get(conviction, "📊")
-                change_emoji = "🟢" if change >= 0 else "🔴"
+            def _conv_from_score(score: float) -> str:
+                if score >= 85:
+                    return "HIGH"
+                if score >= 70:
+                    return "MEDIUM"
+                return "LOW"
 
-                lines.append(f"{conv_emoji} *{symbol}* | {change_emoji} {change:+.1f}%")
-                if thesis:
-                    lines.append(f"   _{thesis}_")
-                if address:
-                    lines.append(f"   CA: `{address}`")
+            def _social_from_signal(signal: str) -> str:
+                s = (signal or "").upper()
+                if "STRONG_BUY" in s or "VERY_BULL" in s or s == "BULLISH":
+                    return "Bullish"
+                if "BUY" in s:
+                    return "Positive"
+                if "BEAR" in s or "SELL" in s:
+                    return "Bearish"
+                return "Neutral"
 
-                details = []
-                if tp:
-                    details.append(f"TP +{tp}%")
-                if sl:
-                    details.append(f"SL -{sl}%")
-                if ai_confidence > 0:
-                    conf_pct = int(ai_confidence * 100)
-                    details.append(f"AI {conf_pct}%")
-                if volume > 0:
-                    vol_k = volume / 1000
-                    details.append(f"Vol ${vol_k:.0f}K")
+            def _volume_label(vol_24h: float) -> str:
+                if vol_24h >= 1_000_000:
+                    return "Surging"
+                if vol_24h >= 200_000:
+                    return "High"
+                if vol_24h > 0:
+                    return "Normal"
+                return "Unknown"
 
-                if details:
-                    lines.append(f"   {' | '.join(details)}")
-                lines.append("")
+            ranked = sorted(picks, key=_score, reverse=True)[:5]
+            high, med, low = [], [], []
+            for p in ranked:
+                s = _score(p)
+                conv = (p.get("conviction") or _conv_from_score(s)).upper()
+                if conv == "HIGH":
+                    high.append(p)
+                elif conv == "MEDIUM":
+                    med.append(p)
+                else:
+                    low.append(p)
 
-                if token_ref:
-                    chart_addr = address or token_ref
-                    chart_url = pick.get("chart_url", f"https://dexscreener.com/solana/{chart_addr}")
-                    solscan_url = f"https://solscan.io/token/{chart_addr}" if chart_addr else None
+            def _render_group(title: str, group: list, emoji: str):
+                if not group:
+                    return
+                lines.extend(["", f"{emoji} *{title} ({len(group)})*"])
+                for idx, pick in enumerate(group, start=1):
+                    symbol = pick.get("symbol", "???")
+                    address = pick.get("address", "")
+                    token_ref = pick.get("token_id") or address
+                    score = int(round(_score(pick)))
+                    change = float(pick.get("change_24h", 0) or 0)
+                    change_emoji = "🟢" if change >= 0 else "🔴"
 
-                    keyboard.append([
-                        InlineKeyboardButton(
-                            f"{theme.BUY} Buy 0.1 {symbol}",
-                            callback_data=f"demo:quick_buy:{token_ref}:0.1"
-                        ),
-                        InlineKeyboardButton(
-                            f"{theme.BUY} Buy…",
-                            callback_data=f"demo:buy_custom:{token_ref}"
-                        ),
-                    ])
+                    signal = pick.get("signal", "NEUTRAL")
+                    social = _social_from_signal(signal)
+                    vol = float(pick.get("volume_24h", 0) or 0)
+                    vol_label = _volume_label(vol)
+                    whales = "Accumulating" if score >= 70 else "Mixed"
 
-                    row2 = []
-                    if solscan_url:
-                        row2.append(InlineKeyboardButton("🔗 Solscan", url=solscan_url))
-                    row2.extend([
-                        InlineKeyboardButton(f"{theme.CHART} Chart", url=chart_url),
-                        InlineKeyboardButton("🔍 Analyze", callback_data=f"demo:analyze:{token_ref}"),
-                    ])
-                    keyboard.append(row2)
+                    lines.append(f"{symbol} | {change_emoji} {change:+.1f}% | Score: {score}/100")
+                    lines.append(f"└ Volume: {vol_label} | Social: {social} | Whales: {whales}")
+
+                    # Buttons (keep existing quick buy + links)
+                    if token_ref:
+                        chart_addr = address or token_ref
+                        chart_url = pick.get("chart_url", f"https://dexscreener.com/solana/{chart_addr}")
+                        solscan_url = f"https://solscan.io/token/{chart_addr}" if chart_addr else None
+
+                        keyboard.append([
+                            InlineKeyboardButton(
+                                f"{theme.BUY} Buy 0.1 {symbol}",
+                                callback_data=f"demo:quick_buy:{token_ref}:0.1"
+                            ),
+                            InlineKeyboardButton(
+                                f"{theme.BUY} Buy…",
+                                callback_data=f"demo:buy_custom:{token_ref}"
+                            ),
+                        ])
+
+                        row2 = []
+                        if solscan_url:
+                            row2.append(InlineKeyboardButton("🔗 Solscan", url=solscan_url))
+                        row2.extend([
+                            InlineKeyboardButton(f"{theme.CHART} Chart", url=chart_url),
+                            InlineKeyboardButton("🔍 Analyze", callback_data=f"demo:analyze:{token_ref}"),
+                        ])
+                        keyboard.append(row2)
+
+            _render_group("🔥 HIGH CONVICTION", high, "🔥")
+            _render_group("🟡 MEDIUM CONVICTION", med, "🟡")
+            _render_group("🔴 LOW CONVICTION", low, "🔴")
+
+            lines.append("")
         else:
             lines.extend([
                 "",
-                f"🔥 *HIGH CONVICTION*",
+                "🔥 *HIGH CONVICTION*",
                 "_No picks qualify right now._",
                 "_AI is monitoring for setups..._",
                 "",
