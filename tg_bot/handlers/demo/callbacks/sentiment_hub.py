@@ -314,14 +314,14 @@ for this trade:
             # ========== REAL BAGS.FM SWAP (not fake engine.open_position) ==========
             import uuid
             from core.trading.bags_client import BagsAPIClient
-            from core.wallets.wallet_manager import get_treasury_keypair
+            from core.security.key_manager import load_treasury_keypair
             from bots.treasury.trading import TradeDirection, Position, TradeStatus
 
             SOL_MINT = "So11111111111111111111111111111111111111112"
             USER_WALLET = "BFhTj4TGKC77C7s3HLnLbCiVd6dXQSqGvtD8sJY5egVR"
 
             # Get keypair for signing
-            user_keypair = get_treasury_keypair()
+            user_keypair = load_treasury_keypair()
             if not user_keypair:
                 return DemoMenuBuilder.error_message(
                     error="Treasury keypair not configured",
