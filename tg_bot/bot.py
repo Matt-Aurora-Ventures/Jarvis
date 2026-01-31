@@ -471,16 +471,18 @@ def main():
 
     # Clear any existing webhook before starting polling
     # This is CRITICAL to prevent "Conflict: terminated by other getUpdates request" errors
+    # TEMP FIX: Skip webhook clearing due to event loop issues - will be cleared by run_polling
     try:
-        print("Clearing webhook before polling...")
-        asyncio.get_event_loop().run_until_complete(_clear_webhook_before_polling(app))
+        print("Clearing webhook before polling... (skipped - will clear on first poll)")
+        # asyncio.get_event_loop().run_until_complete(_clear_webhook_before_polling(app))
     except Exception as e:
         print(f"Webhook cleanup failed: {e} - continuing anyway")
 
     # Pre-warm Dexter to eliminate cold start latency
+    # TEMP FIX: Skip pre-warming due to event loop issues - will warm on first use
     try:
-        print("Pre-warming Dexter AI integration...")
-        asyncio.get_event_loop().run_until_complete(_pre_warm_dexter())
+        print("Pre-warming Dexter AI integration... (skipped - will warm on first use)")
+        # asyncio.get_event_loop().run_until_complete(_pre_warm_dexter())
     except Exception as e:
         print(f"Dexter pre-warming failed: {e} - continuing anyway")
 
