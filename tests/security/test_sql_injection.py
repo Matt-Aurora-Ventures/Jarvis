@@ -205,23 +205,31 @@ class TestLeaderboardSQLInjection:
         """Verify get_rankings uses allowlist for order columns."""
         from core.community.leaderboard import Leaderboard
         import tempfile
-
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        lb = Leaderboard(db_path=db_path)
-
-        # Valid order columns should work
-        for metric in ["profit", "win_rate", "trades", "consistency"]:
-            result = lb.get_rankings(by=metric, period="overall", limit=5)
-            assert isinstance(result, list)
-
-        # Invalid metric should default to safe value (not SQL injection)
-        result = lb.get_rankings(by="'; DROP TABLE user_stats--", limit=5)
-        assert isinstance(result, list)  # Should not crash
-
         import os
-        os.unlink(db_path)
+
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+
+        try:
+            lb = Leaderboard(db_path=db_path)
+
+            # Valid order columns should work
+            for metric in ["profit", "win_rate", "trades", "consistency"]:
+                result = lb.get_rankings(by=metric, period="overall", limit=5)
+                assert isinstance(result, list)
+
+            # Invalid metric should default to safe value (not SQL injection)
+            result = lb.get_rankings(by="'; DROP TABLE user_stats--", limit=5)
+            assert isinstance(result, list)  # Should not crash
+
+            # Close connection before cleanup
+            if hasattr(lb, '_conn') and lb._conn:
+                lb._conn.close()
+        finally:
+            try:
+                os.unlink(db_path)
+            except (PermissionError, OSError):
+                pass  # Windows file locking - will be cleaned up
 
 
 class TestChallengesSQLInjection:
@@ -231,26 +239,33 @@ class TestChallengesSQLInjection:
         """Verify _update_ranks uses safe ORDER BY."""
         from core.community.challenges import ChallengeManager
         import tempfile
+        import os
         from datetime import datetime, timedelta
 
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
 
-        manager = ChallengeManager(db_path=db_path)
+        try:
+            manager = ChallengeManager(db_path=db_path)
 
-        # Create a challenge with valid metric
-        challenge = manager.create_challenge(
-            title="Test Challenge",
-            metric="percent_gain",
-            start_date=datetime.now(),
-            end_date=datetime.now() + timedelta(days=30)
-        )
+            # Create a challenge with valid metric
+            challenge = manager.create_challenge(
+                title="Test Challenge",
+                metric="percent_gain",
+                start_date=datetime.now(),
+                end_date=datetime.now() + timedelta(days=30)
+            )
 
-        # This should work without SQL injection
-        manager._update_ranks(challenge["challenge_id"])
+            # This should work without SQL injection
+            manager._update_ranks(challenge["challenge_id"])
 
-        import os
-        os.unlink(db_path)
+            if hasattr(manager, '_conn') and manager._conn:
+                manager._conn.close()
+        finally:
+            try:
+                os.unlink(db_path)
+            except (PermissionError, OSError):
+                pass
 
 
 class TestNewsFeedSQLInjection:
@@ -260,22 +275,29 @@ class TestNewsFeedSQLInjection:
         """Verify set_preferences builds SQL safely."""
         from core.community.news_feed import NewsFeed
         import tempfile
-
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        feed = NewsFeed(db_path=db_path)
-
-        # Valid preferences should work
-        result = feed.set_preferences(
-            user_id="test_user",
-            show_achievements=True,
-            daily_digest=False
-        )
-        assert isinstance(result, dict)
-
         import os
-        os.unlink(db_path)
+
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+
+        try:
+            feed = NewsFeed(db_path=db_path)
+
+            # Valid preferences should work
+            result = feed.set_preferences(
+                user_id="test_user",
+                show_achievements=True,
+                daily_digest=False
+            )
+            assert isinstance(result, dict)
+
+            if hasattr(feed, '_conn') and feed._conn:
+                feed._conn.close()
+        finally:
+            try:
+                os.unlink(db_path)
+            except (PermissionError, OSError):
+                pass
 
 
 class TestUserProfileSQLInjection:
@@ -285,48 +307,62 @@ class TestUserProfileSQLInjection:
         """Verify update_profile builds SQL safely."""
         from core.community.user_profile import UserProfileManager
         import tempfile
-
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        manager = UserProfileManager(db_path=db_path)
-
-        # Create a profile first
-        manager.create_profile(user_id="test_user", username="tester")
-
-        # Valid updates should work
-        result = manager.update_profile(
-            user_id="test_user",
-            username="new_name",
-            bio="Hello world"
-        )
-        assert result is not None
-        assert result["username"] == "new_name"
-
         import os
-        os.unlink(db_path)
+
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+
+        try:
+            manager = UserProfileManager(db_path=db_path)
+
+            # Create a profile first
+            manager.create_profile(user_id="test_user", username="tester")
+
+            # Valid updates should work
+            result = manager.update_profile(
+                user_id="test_user",
+                username="new_name",
+                bio="Hello world"
+            )
+            assert result is not None
+            assert result["username"] == "new_name"
+
+            if hasattr(manager, '_conn') and manager._conn:
+                manager._conn.close()
+        finally:
+            try:
+                os.unlink(db_path)
+            except (PermissionError, OSError):
+                pass
 
     def test_update_stats_validates_columns(self):
         """Verify update_stats builds SQL safely."""
         from core.community.user_profile import UserProfileManager
         import tempfile
-
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        manager = UserProfileManager(db_path=db_path)
-        manager.create_profile(user_id="test_user", username="tester")
-
-        # Valid stats should work
-        result = manager.update_stats(
-            user_id="test_user",
-            total_pnl=1000.0,
-            win_rate=0.75
-        )
-        assert result is not None
-
         import os
-        os.unlink(db_path)
+
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+
+        try:
+            manager = UserProfileManager(db_path=db_path)
+            manager.create_profile(user_id="test_user", username="tester")
+
+            # Valid stats should work
+            result = manager.update_stats(
+                user_id="test_user",
+                total_pnl=1000.0,
+                win_rate=0.75
+            )
+            assert result is not None
+
+            if hasattr(manager, '_conn') and manager._conn:
+                manager._conn.close()
+        finally:
+            try:
+                os.unlink(db_path)
+            except (PermissionError, OSError):
+                pass
 
 
 class TestAchievementsSQLInjection:
@@ -336,21 +372,28 @@ class TestAchievementsSQLInjection:
         """Verify _update_progress builds SQL safely."""
         from core.community.achievements import AchievementManager
         import tempfile
-
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        manager = AchievementManager(db_path=db_path)
-
-        # Valid stats should work - column names are from internal map
-        manager._update_progress(
-            user_id="test_user",
-            trade_count=10,
-            total_pnl=500.0
-        )
-
         import os
-        os.unlink(db_path)
+
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+
+        try:
+            manager = AchievementManager(db_path=db_path)
+
+            # Valid stats should work - column names are from internal map
+            manager._update_progress(
+                user_id="test_user",
+                trade_count=10,
+                total_pnl=500.0
+            )
+
+            if hasattr(manager, '_conn') and manager._conn:
+                manager._conn.close()
+        finally:
+            try:
+                os.unlink(db_path)
+            except (PermissionError, OSError):
+                pass
 
 
 class TestMigrationSQLInjection:
