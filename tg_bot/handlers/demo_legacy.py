@@ -4851,10 +4851,25 @@ Reply with a Solana token address to buy.
             # Contract address (shortened)
             contract_short = f"`{address[:8]}...{address[-6:]}`" if address else "N/A"
 
+            # Core lines
             lines.append(f"{rank} *{safe_symbol}* {price_str} {change_str}")
-            lines.append(f"   Vol: {vol_str} | Liq: ${liquidity/1_000:.0f}K")
-            lines.append(f"   {sent_emoji} {sent_label} | {signal_emoji} {signal}")
-            lines.append(f"   📝 {contract_short}")
+            lines.append(f"   MC: ${mcap/1_000_000:.2f}M | Vol: {vol_str} | Liq: ${liquidity/1_000:.0f}K")
+            lines.append(f"   {sent_emoji} {sent_label} | {signal_emoji} {signal} | AI: {score_bar} ({sentiment_score:.0%})")
+
+            # "Why" (compact reasoning)
+            vol_liq = (volume / liquidity) if liquidity else 0
+            why_bits = []
+            if vol_liq:
+                why_bits.append(f"Vol/Liq {vol_liq:.2f}x")
+            if change_24h:
+                why_bits.append(f"24h {change_24h:+.1f}%")
+            if holders:
+                why_bits.append(f"Holders {holders:,}")
+            if why_bits:
+                lines.append(f"   🧠 Why: {' | '.join(why_bits[:3])}")
+
+            # Contract
+            lines.append(f"   📋 CA: {contract_short}")
             lines.append("")
 
             # Add buy/sell buttons for each token with CLEAR LABELS
@@ -4984,17 +4999,21 @@ Reply with a Solana token address to buy.
             "━━━━━━━━━━━━━━━━━━━━━",
             "",
             f"💰 *Price:* {price_str} {change_str}",
+            f"📈 *Market Cap:* ${mcap/1_000_000:.2f}M",
             f"📊 *24h Volume:* ${volume/1_000_000:.2f}M",
             f"💧 *Liquidity:* ${liquidity/1_000:.0f}K",
-            f"📈 *Market Cap:* ${mcap/1_000_000:.2f}M",
             f"👥 *Holders:* {holders:,}",
             "",
-            f"{sent_emoji} *AI Sentiment:* {sentiment.upper()}",
+            f"{sent_emoji} *AI Sentiment:* {sentiment.upper()} | *{signal}*",
             f"   Score: {score_bar} ({sentiment_score:.0%})",
-            f"   Signal: *{signal}*",
+            "",
+            "🧠 *Why Jarvis surfaced this*",
+            "• Ranked by 24h volume on bags.fm",
+            "• AI sentiment + signal are used for confirmation",
+            "• Liquidity + volume help avoid thin rugs",
             "",
             "━━━━━━━━━━━━━━━━━━━━━",
-            f"*Trading Setup:*",
+            f"*Trading Setup (auto-enforced):*",
             f"🎯 TP (+{default_tp_percent:.0f}%): {tp_str}",
             f"🛑 SL (-{default_sl_percent:.0f}%): {sl_str}",
             "",
