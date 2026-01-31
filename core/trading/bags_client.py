@@ -266,7 +266,23 @@ class BagsAPIClient:
                 headers=self._get_headers()
             )
 
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except Exception as http_exc:
+                body = None
+                try:
+                    body = response.text
+                except Exception:
+                    body = None
+                if body and len(body) > 1200:
+                    body = body[:1200] + "…"
+                logger.error(
+                    "Bags quote HTTP %s: %s",
+                    getattr(response, "status_code", "?"),
+                    body or str(http_exc),
+                )
+                raise
+
             result = response.json()
 
             if not result.get("success"):
@@ -342,7 +358,24 @@ class BagsAPIClient:
                 headers=self._get_headers()
             )
 
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except Exception as http_exc:
+                # Surface the body for debugging (bags.fm often returns a helpful JSON error).
+                body = None
+                try:
+                    body = response.text
+                except Exception:
+                    body = None
+                if body and len(body) > 1200:
+                    body = body[:1200] + "…"
+                logger.error(
+                    "Bags swap HTTP %s: %s",
+                    getattr(response, "status_code", "?"),
+                    body or str(http_exc),
+                )
+                raise
+
             swap_result = response.json()
 
             if not swap_result.get("success"):
