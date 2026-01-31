@@ -10,9 +10,11 @@ import threading
 import webbrowser
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Set
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
+
+from core.security.safe_pickle import safe_pickle_load
 
 ROOT = Path(__file__).resolve().parents[1]
 GOOGLE_CREDENTIALS_PATH = ROOT / "secrets" / "google_credentials.json"
@@ -241,19 +243,35 @@ class GoogleIntegration:
         """Load existing Google credentials."""
         if not GOOGLE_TOKEN_PATH.exists():
             return False
-        
+
         try:
             from google.auth.transport.requests import Request
-            
-            with open(GOOGLE_TOKEN_PATH, "rb") as f:
-                self.credentials = pickle.load(f)
-            
+
+            # Define allowlist for Google OAuth classes
+            google_oauth_modules: Set[str] = {
+                "google.oauth2.credentials",
+                "google.auth.credentials",
+                "datetime",
+            }
+            google_oauth_classes: Set[str] = {
+                "Credentials",
+                "datetime",
+                "timedelta",
+            }
+
+            # Use safe pickle load to prevent code execution
+            self.credentials = safe_pickle_load(
+                GOOGLE_TOKEN_PATH,
+                allowed_modules=google_oauth_modules,
+                allowed_classes=google_oauth_classes
+            )
+
             # Refresh if expired
             if self.credentials.expired and self.credentials.refresh_token:
                 self.credentials.refresh(Request())
                 with open(GOOGLE_TOKEN_PATH, "wb") as f:
                     pickle.dump(self.credentials, f)
-            
+
             self.authenticated = True
             return True
             
