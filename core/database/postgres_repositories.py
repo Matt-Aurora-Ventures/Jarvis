@@ -144,6 +144,9 @@ class PostgresBaseRepository(ABC, Generic[T]):
         NOTE: This generic implementation uses SELECT * which is inefficient.
         Child classes should override this with explicit column lists for hot paths.
         """
+        # table_name is validated in __init__, but sanitize again for safety
+        safe_table = sanitize_sql_identifier(self.table_name)
+
         # Get column list dynamically for optimization
         columns_query = """
             SELECT column_name FROM information_schema.columns
@@ -151,10 +154,12 @@ class PostgresBaseRepository(ABC, Generic[T]):
             ORDER BY ordinal_position
         """
         columns_rows = await self._client.fetch(columns_query, self.table_name)
-        columns = ", ".join([row['column_name'] for row in columns_rows])
+        # Sanitize each column name from schema to prevent injection
+        safe_columns = [sanitize_sql_identifier(row['column_name']) for row in columns_rows]
+        columns = ", ".join(safe_columns)
 
         row = await self._client.fetchrow(
-            f"SELECT {columns} FROM {self.table_name} WHERE id = $1",
+            f"SELECT {columns} FROM {safe_table} WHERE id = $1",
             id
         )
         return self._row_to_entity(row) if row else None
@@ -166,6 +171,9 @@ class PostgresBaseRepository(ABC, Generic[T]):
         NOTE: This generic implementation dynamically builds column list.
         Child classes should override with explicit column lists for maximum performance.
         """
+        # table_name is validated in __init__, but sanitize again for safety
+        safe_table = sanitize_sql_identifier(self.table_name)
+
         # Get column list dynamically (cached in query planner)
         columns_query = """
             SELECT column_name FROM information_schema.columns
@@ -173,10 +181,12 @@ class PostgresBaseRepository(ABC, Generic[T]):
             ORDER BY ordinal_position
         """
         columns_rows = await self._client.fetch(columns_query, self.table_name)
-        columns = ", ".join([row['column_name'] for row in columns_rows])
+        # Sanitize each column name from schema to prevent injection
+        safe_columns = [sanitize_sql_identifier(row['column_name']) for row in columns_rows]
+        columns = ", ".join(safe_columns)
 
         rows = await self._client.fetch(
-            f"SELECT {columns} FROM {self.table_name} ORDER BY id DESC LIMIT $1 OFFSET $2",
+            f"SELECT {columns} FROM {safe_table} ORDER BY id DESC LIMIT $1 OFFSET $2",
             limit,
             offset
         )
@@ -184,14 +194,16 @@ class PostgresBaseRepository(ABC, Generic[T]):
 
     async def count(self) -> int:
         """Count all entities."""
+        safe_table = sanitize_sql_identifier(self.table_name)
         return await self._client.fetchval(
-            f"SELECT COUNT(*) FROM {self.table_name}"
+            f"SELECT COUNT(*) FROM {safe_table}"
         )
 
     async def delete(self, id: Any) -> bool:
         """Delete entity by ID."""
+        safe_table = sanitize_sql_identifier(self.table_name)
         result = await self._client.execute(
-            f"DELETE FROM {self.table_name} WHERE id = $1",
+            f"DELETE FROM {safe_table} WHERE id = $1",
             id
         )
         return "DELETE" in result
@@ -220,20 +232,22 @@ class PostgresUserRepository(PostgresBaseRepository[User]):
 
     async def get_by_telegram_id(self, telegram_id: int) -> Optional[User]:
         """Get user by Telegram ID - optimized."""
+        safe_table = sanitize_sql_identifier(self.table_name)
         row = await self._client.fetchrow(
             f"""SELECT id, telegram_user_id, telegram_username, first_name,
                       is_admin, is_active, created_at, updated_at
-               FROM {self.table_name} WHERE telegram_user_id = $1""",
+               FROM {safe_table} WHERE telegram_user_id = $1""",
             telegram_id
         )
         return self._row_to_entity(row) if row else None
 
     async def get_admins(self) -> List[User]:
         """Get all admin users - optimized."""
+        safe_table = sanitize_sql_identifier(self.table_name)
         rows = await self._client.fetch(
             f"""SELECT id, telegram_user_id, telegram_username, first_name,
                       is_admin, is_active, created_at, updated_at
-               FROM {self.table_name} WHERE is_admin = true"""
+               FROM {safe_table} WHERE is_admin = true"""
         )
         return [self._row_to_entity(row) for row in rows]
 
@@ -280,44 +294,49 @@ class PostgresPositionRepository(PostgresBaseRepository[Position]):
 
     async def get_open_positions(self, user_id: Optional[int] = None) -> List[Position]:
         """Get all open positions, optionally filtered by user - HOT PATH optimized."""
+        # Hardcoded safe column names
         columns = """id, user_id, token_mint, symbol, entry_price, current_price,
                     quantity, entry_amount_tokens, cost_basis, entry_amount_sol,
                     unrealized_pnl, pnl_sol, unrealized_pnl_pct, pnl_pct,
                     take_profit_pct, stop_loss_pct, status, opened_at, closed_at"""
+        safe_table = sanitize_sql_identifier(self.table_name)
         if user_id is not None:
             rows = await self._client.fetch(
-                f"SELECT {columns} FROM {self.table_name} WHERE status = 'open' AND user_id = $1",
+                f"SELECT {columns} FROM {safe_table} WHERE status = 'open' AND user_id = $1",
                 user_id
             )
         else:
             rows = await self._client.fetch(
-                f"SELECT {columns} FROM {self.table_name} WHERE status = 'open'"
+                f"SELECT {columns} FROM {safe_table} WHERE status = 'open'"
             )
         return [self._row_to_entity(row) for row in rows]
 
     async def get_by_token_mint(self, token_mint: str, user_id: Optional[int] = None) -> List[Position]:
         """Get positions for a specific token - optimized."""
+        # Hardcoded safe column names
         columns = """id, user_id, token_mint, symbol, entry_price, current_price,
                     quantity, entry_amount_tokens, cost_basis, entry_amount_sol,
                     unrealized_pnl, pnl_sol, unrealized_pnl_pct, pnl_pct,
                     take_profit_pct, stop_loss_pct, status, opened_at, closed_at"""
+        safe_table = sanitize_sql_identifier(self.table_name)
         if user_id is not None:
             rows = await self._client.fetch(
-                f"SELECT {columns} FROM {self.table_name} WHERE token_mint = $1 AND user_id = $2",
+                f"SELECT {columns} FROM {safe_table} WHERE token_mint = $1 AND user_id = $2",
                 token_mint,
                 user_id
             )
         else:
             rows = await self._client.fetch(
-                f"SELECT {columns} FROM {self.table_name} WHERE token_mint = $1",
+                f"SELECT {columns} FROM {safe_table} WHERE token_mint = $1",
                 token_mint
             )
         return [self._row_to_entity(row) for row in rows]
 
     async def close_position(self, position_id: str) -> bool:
         """Mark a position as closed."""
+        safe_table = sanitize_sql_identifier(self.table_name)
         result = await self._client.execute(
-            f"UPDATE {self.table_name} SET status = 'closed', closed_at = $1 WHERE id = $2",
+            f"UPDATE {safe_table} SET status = 'closed', closed_at = $1 WHERE id = $2",
             datetime.utcnow(),
             position_id
         )
@@ -348,29 +367,33 @@ class PostgresTradeRepository(PostgresBaseRepository[Trade]):
 
     async def get_recent_trades(self, user_id: Optional[int] = None, limit: int = 50) -> List[Trade]:
         """Get recent trades - optimized."""
+        # Hardcoded safe column names
         columns = """id, user_id, position_id, token_mint, symbol, side, price,
                     quantity, amount_tokens, total_value, amount_sol, fee,
                     tx_signature, status, executed_at, timestamp"""
+        safe_table = sanitize_sql_identifier(self.table_name)
         if user_id is not None:
             rows = await self._client.fetch(
-                f"SELECT {columns} FROM {self.table_name} WHERE user_id = $1 ORDER BY timestamp DESC LIMIT $2",
+                f"SELECT {columns} FROM {safe_table} WHERE user_id = $1 ORDER BY timestamp DESC LIMIT $2",
                 user_id,
                 limit
             )
         else:
             rows = await self._client.fetch(
-                f"SELECT {columns} FROM {self.table_name} ORDER BY timestamp DESC LIMIT $1",
+                f"SELECT {columns} FROM {safe_table} ORDER BY timestamp DESC LIMIT $1",
                 limit
             )
         return [self._row_to_entity(row) for row in rows]
 
     async def get_by_tx_signature(self, tx_signature: str) -> Optional[Trade]:
         """Get trade by transaction signature - optimized."""
+        # Hardcoded safe column names
         columns = """id, user_id, position_id, token_mint, symbol, side, price,
                     quantity, amount_tokens, total_value, amount_sol, fee,
                     tx_signature, status, executed_at, timestamp"""
+        safe_table = sanitize_sql_identifier(self.table_name)
         row = await self._client.fetchrow(
-            f"SELECT {columns} FROM {self.table_name} WHERE tx_signature = $1",
+            f"SELECT {columns} FROM {safe_table} WHERE tx_signature = $1",
             tx_signature
         )
         return self._row_to_entity(row) if row else None
@@ -392,8 +415,9 @@ class PostgresConfigRepository(PostgresBaseRepository[BotConfig]):
 
     async def get_value(self, key: str, default: str = "") -> str:
         """Get config value by key."""
+        safe_table = sanitize_sql_identifier(self.table_name)
         row = await self._client.fetchrow(
-            f"SELECT value FROM {self.table_name} WHERE key = $1",
+            f"SELECT value FROM {safe_table} WHERE key = $1",
             key
         )
         return row['value'] if row else default
