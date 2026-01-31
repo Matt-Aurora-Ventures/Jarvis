@@ -250,7 +250,8 @@ class BackupTPSLMonitor:
         tp_pct = position.get("tp_percent", position.get("take_profit"))
         if tp_pct is not None:
             tp_price = entry_price * (1 + float(tp_pct) / 100)
-            if current_price >= tp_price and not position.get("tp_triggered"):
+            already = bool(position.get("tp_triggered") or position.get("take_profit_triggered"))
+            if current_price >= tp_price and not already:
                 return {
                     "type": "take_profit",
                     "position": position,
@@ -263,7 +264,8 @@ class BackupTPSLMonitor:
         sl_pct = position.get("sl_percent", position.get("stop_loss"))
         if sl_pct is not None:
             sl_price = entry_price * (1 - float(sl_pct) / 100)
-            if current_price <= sl_price and not position.get("sl_triggered"):
+            already = bool(position.get("sl_triggered") or position.get("stop_loss_triggered"))
+            if current_price <= sl_price and not already:
                 return {
                     "type": "stop_loss",
                     "position": position,
@@ -311,14 +313,28 @@ class BackupTPSLMonitor:
 
             await self.send_alert(message)
             
-            # Mark as triggered to prevent repeat alerts
-            position[f"{alert['type']}_triggered"] = True
+            # Mark as triggered to prevent repeat alerts (support both legacy and new field names)
+            if alert["type"] == "take_profit":
+                position["take_profit_triggered"] = True
+                position["tp_triggered"] = True
+            elif alert["type"] == "stop_loss":
+                position["stop_loss_triggered"] = True
+                position["sl_triggered"] = True
+            else:
+                position[f"{alert['type']}_triggered"] = True
             
             # Update in Redis
             all_positions = json.loads(self.redis.get(f"jarvis:positions:{user_id}") or "[]")
             for p in all_positions:
                 if p.get("id") == pos_id:
-                    p[f"{alert['type']}_triggered"] = True
+                    if alert["type"] == "take_profit":
+                        p["take_profit_triggered"] = True
+                        p["tp_triggered"] = True
+                    elif alert["type"] == "stop_loss":
+                        p["stop_loss_triggered"] = True
+                        p["sl_triggered"] = True
+                    else:
+                        p[f"{alert['type']}_triggered"] = True
                     break
             self.redis.set(f"jarvis:positions:{user_id}", json.dumps(all_positions))
             
