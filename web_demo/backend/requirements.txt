@@ -34,7 +34,7 @@ openai==1.10.0  # For OpenAI-compatible APIs (Grok, Ollama)
 
 # Charts & Visualization
 matplotlib==3.8.2
-pillow==10.2.0
+pillow==10.3.0
 
 # Utilities
 python-dotenv==1.0.0
