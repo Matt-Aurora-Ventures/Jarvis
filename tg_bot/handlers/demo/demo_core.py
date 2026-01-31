@@ -232,7 +232,10 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Handler returned (None, None) = it already sent its own response
         if text is None and keyboard is None:
+            logger.debug(f"[DEMO_CALLBACK] Handler returned None, None for action={action}")
             return
+        
+        logger.info(f"[DEMO_CALLBACK] Got response for action={action}, text_len={len(text) if text else 0}, has_keyboard={keyboard is not None}")
         
         try:
             await query.message.edit_text(
@@ -240,7 +243,9 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=keyboard,
             )
+            logger.debug(f"[DEMO_CALLBACK] Message edited successfully for action={action}")
         except BadRequest as exc:
+            logger.warning(f"[DEMO_CALLBACK] BadRequest editing message for action={action}: {exc}")
             if "Message is not modified" not in str(exc):
                 raise
 
