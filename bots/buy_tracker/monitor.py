@@ -89,6 +89,10 @@ class TransactionMonitor:
         self._ws = None
         self._session: Optional[aiohttp.ClientSession] = None
 
+        # Background task references for proper exception handling
+        self._price_task: Optional[asyncio.Task] = None
+        self._poll_task: Optional[asyncio.Task] = None
+
         # Cache for token data
         self._token_supply: float = 0
         self._sol_price_usd: float = 0
@@ -134,18 +138,50 @@ class TransactionMonitor:
         # Initial data fetch
         await self._update_prices()
 
-        # Start monitoring loops
-        asyncio.create_task(self._price_update_loop())
-        asyncio.create_task(self._transaction_poll_loop())
+        # Start monitoring loops with exception handling
+        self._price_task = asyncio.create_task(self._price_update_loop())
+        self._price_task.add_done_callback(self._handle_task_exception)
+
+        self._poll_task = asyncio.create_task(self._transaction_poll_loop())
+        self._poll_task.add_done_callback(self._handle_task_exception)
 
     async def stop(self):
         """Stop monitoring."""
         self._running = False
+
+        # Cancel background tasks
+        if self._price_task and not self._price_task.done():
+            logger.info("Cancelling price update task...")
+            self._price_task.cancel()
+            try:
+                await self._price_task
+            except asyncio.CancelledError:
+                logger.debug("Price update task cancelled successfully")
+
+        if self._poll_task and not self._poll_task.done():
+            logger.info("Cancelling transaction poll task...")
+            self._poll_task.cancel()
+            try:
+                await self._poll_task
+            except asyncio.CancelledError:
+                logger.debug("Transaction poll task cancelled successfully")
+
         if self._ws:
             await self._ws.close()
         if self._session:
             await self._session.close()
         logger.info("Transaction monitor stopped")
+
+    def _handle_task_exception(self, task: asyncio.Task):
+        """Handle exceptions from background tasks."""
+        try:
+            exc = task.exception()
+            if exc:
+                logger.error(f"Monitor background task crashed with exception: {exc}", exc_info=exc)
+        except asyncio.CancelledError:
+            logger.debug("Monitor task was cancelled")
+        except Exception as e:
+            logger.error(f"Error retrieving monitor task exception: {e}", exc_info=True)
 
     async def _price_update_loop(self):
         """Periodically update price data."""
