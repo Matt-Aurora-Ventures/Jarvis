@@ -669,6 +669,50 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
         elif section in ("xstocks", "prestocks", "indexes"):
             picks = []  # Will be populated below
 
+        # PreStocks (tokenized pre-IPO equities)
+        if section == "prestocks":
+            try:
+                from core.tokenized_equities_universe import fetch_prestocks_universe
+
+                items, warnings = await asyncio.to_thread(fetch_prestocks_universe, force_refresh=False)
+                if warnings:
+                    logger.warning(f"PreStocks universe warnings: {warnings[:3]}")
+
+                picks = []
+                # Limit for UI + API calls
+                for item in items[:8]:
+                    address = getattr(item, "mint_address", "")
+                    symbol = getattr(item, "symbol", "") or (address[:6] if address else "PRE")
+
+                    # Pull live-ish price via existing sentiment pipeline (DexScreener/Birdeye/etc)
+                    try:
+                        s = await ctx.get_ai_sentiment_for_token(address)
+                    except Exception:
+                        s = {}
+
+                    price = s.get("price", 0) or s.get("price_usd", 0) or 0
+                    change_24h = s.get("change_24h", 0) or 0
+                    sentiment = (s.get("sentiment") or "NEUTRAL").upper()
+                    score = float(s.get("score", 0.5) or 0.5) * 100
+
+                    picks.append(
+                        {
+                            "symbol": symbol,
+                            "address": address,
+                            "price": price,
+                            "change_24h": change_24h,
+                            "conviction": "MEDIUM",
+                            "conviction_reason": "PreStocks universe | Price via DEX aggregators",
+                            "tp": 12,
+                            "sl": 8,
+                            "score": score,
+                            "sentiment": sentiment,
+                        }
+                    )
+            except Exception as exc:
+                logger.warning(f"PreStocks fetch failed: {exc}")
+                picks = []
+
         # Try to fetch backed assets for xstocks/indexes
         if section in ("xstocks", "indexes"):
             try:
