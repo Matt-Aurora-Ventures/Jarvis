@@ -264,6 +264,37 @@ def _resolve_token_ref(context, token_ref: str) -> str:
 
 
 # =============================================================================
+# Wallet Resolution
+# =============================================================================
+
+async def _resolve_wallet_address(context) -> Optional[str]:
+    """Resolve the wallet address to use for demo trading.
+
+    Priority:
+    1) context.user_data['wallet_address'] if valid
+    2) treasury wallet from the demo engine (fallback profile may be 'treasury')
+
+    Returns None if no valid address can be found.
+    """
+    try:
+        w = (context.user_data or {}).get("wallet_address")
+        if w and isinstance(w, str) and len(w) >= 32:
+            return w
+    except Exception:
+        pass
+
+    try:
+        engine = await _get_demo_engine()
+        treasury = engine.wallet.get_treasury()
+        if treasury and getattr(treasury, "address", None):
+            return treasury.address
+    except Exception as exc:
+        logger.warning(f"Could not resolve treasury wallet address: {exc}")
+
+    return None
+
+
+# =============================================================================
 # Slippage Configuration
 # =============================================================================
 

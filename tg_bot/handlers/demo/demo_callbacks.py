@@ -483,6 +483,12 @@ class DemoContextLoader:
         return await execute_buy_with_tpsl(**kwargs)
 
     @staticmethod
+    async def resolve_wallet_address(context) -> Optional[str]:
+        """Resolve the wallet address to use for demo trading (treasury fallback)."""
+        from tg_bot.handlers.demo.demo_trading import _resolve_wallet_address
+        return await _resolve_wallet_address(context)
+
+    @staticmethod
     def get_demo_slippage_bps() -> int:
         """Get demo slippage in basis points."""
         from tg_bot.handlers.demo.demo_trading import _get_demo_slippage_bps
