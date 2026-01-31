@@ -178,10 +178,25 @@ You are about to sell *{position_count} positions*
                 details += f"\n{theme.COIN} Net Profit: +${net_profit:.2f}"
 
             logger.info(f"Sell all: {closed_count} sold, {failed_count} failed | PnL: ${total_pnl:.2f} | Fees: ${total_fees:.4f}")
-            return DemoMenuBuilder.success_message(
+
+            success_text, success_kb = DemoMenuBuilder.success_message(
                 action="Sell All Executed",
                 details=details,
             )
+
+            # Prefer sending a new message for confirmations (edit_text can be flaky)
+            try:
+                if query and query.message:
+                    await query.message.reply_text(
+                        success_text,
+                        parse_mode=ParseMode.MARKDOWN,
+                        reply_markup=success_kb,
+                    )
+                    return None, None
+            except Exception as send_err:
+                logger.warning(f"[SELL] Failed to send success reply_text (falling back to edit): {send_err}")
+
+            return success_text, success_kb
         except Exception as e:
             logger.error(f"Sell all error: {e}")
             return DemoMenuBuilder.error_message(f"Sell all failed: {str(e)[:50]}")
