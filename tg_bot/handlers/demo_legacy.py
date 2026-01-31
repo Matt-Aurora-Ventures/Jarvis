@@ -3814,7 +3814,8 @@ Reply with a Solana token address to buy.
             change_24h = token.get("change_24h", 0)
             volume = token.get("volume", 0)
             liquidity = token.get("liquidity", 0)
-            token_ref = token.get("token_id") or token.get("address", "")
+            address = token.get("address", "")
+            token_ref = token.get("token_id") or address
 
             # AI sentiment overlay
             sentiment = token.get("sentiment", "neutral")
@@ -3838,25 +3839,36 @@ Reply with a Solana token address to buy.
 
             lines.append(f"{change_emoji} *{symbol}* {sign}{change_24h:.1f}%")
             lines.append(f"   {sent_emoji} AI: {score_bar} | Vol: ${volume/1000:.0f}K")
+            if address:
+                lines.append(f"   CA: `{address}`")
             lines.append("")
 
             if token_ref:
-                # Build button row with chart URL if available
-                chart_url = token.get("chart_url", f"https://dexscreener.com/solana/{token_ref}")
+                chart_addr = address or token_ref
+                chart_url = token.get("chart_url", f"https://dexscreener.com/solana/{chart_addr}")
+                solscan_url = f"https://solscan.io/token/{chart_addr}" if chart_addr else None
+
+                # Row 1: buy controls (always show quick + custom)
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"{theme.BUY} Buy",
-                        callback_data=f"demo:quick_buy:{token_ref}"
+                        f"{theme.BUY} Buy 0.1 {symbol}",
+                        callback_data=f"demo:quick_buy:{token_ref}:0.1"
                     ),
                     InlineKeyboardButton(
-                        f"{theme.CHART} Chart",
-                        url=chart_url
-                    ),
-                    InlineKeyboardButton(
-                        f"🔍 Analyze",
-                        callback_data=f"demo:analyze:{token_ref}"
+                        f"{theme.BUY} Buy…",
+                        callback_data=f"demo:buy_custom:{token_ref}"
                     ),
                 ])
+
+                # Row 2: research links
+                row2 = []
+                if solscan_url:
+                    row2.append(InlineKeyboardButton("🔗 Solscan", url=solscan_url))
+                row2.extend([
+                    InlineKeyboardButton(f"{theme.CHART} Chart", url=chart_url),
+                    InlineKeyboardButton("🔍 Analyze", callback_data=f"demo:analyze:{token_ref}"),
+                ])
+                keyboard.append(row2)
 
         text = "\n".join(lines)
 
@@ -3968,7 +3980,8 @@ Reply with a Solana token address to buy.
                 symbol = pick.get("symbol", "???")
                 conviction = pick.get("conviction", "MEDIUM")
                 thesis = pick.get("thesis", "")[:40]
-                token_ref = pick.get("token_id") or pick.get("address", "")
+                address = pick.get("address", "")
+                token_ref = pick.get("token_id") or address
                 tp = pick.get("tp_target", 0)
                 sl = pick.get("sl_target", 0)
                 ai_confidence = pick.get("ai_confidence", 0)
@@ -3981,6 +3994,8 @@ Reply with a Solana token address to buy.
                 lines.append(f"{conv_emoji} *{symbol}* | {change_emoji} {change:+.1f}%")
                 if thesis:
                     lines.append(f"   _{thesis}_")
+                if address:
+                    lines.append(f"   CA: `{address}`")
 
                 details = []
                 if tp:
@@ -3999,19 +4014,29 @@ Reply with a Solana token address to buy.
                 lines.append("")
 
                 if token_ref:
-                    # DexScreener chart link
-                    chart_url = pick.get("chart_url", f"https://dexscreener.com/solana/{token_ref}")
+                    chart_addr = address or token_ref
+                    chart_url = pick.get("chart_url", f"https://dexscreener.com/solana/{chart_addr}")
+                    solscan_url = f"https://solscan.io/token/{chart_addr}" if chart_addr else None
 
                     keyboard.append([
                         InlineKeyboardButton(
-                            f"{theme.BUY} Buy {symbol}",
-                            callback_data=f"demo:quick_buy:{token_ref}"
+                            f"{theme.BUY} Buy 0.1 {symbol}",
+                            callback_data=f"demo:quick_buy:{token_ref}:0.1"
                         ),
                         InlineKeyboardButton(
-                            f"{theme.CHART} Chart",
-                            url=chart_url
+                            f"{theme.BUY} Buy…",
+                            callback_data=f"demo:buy_custom:{token_ref}"
                         ),
                     ])
+
+                    row2 = []
+                    if solscan_url:
+                        row2.append(InlineKeyboardButton("🔗 Solscan", url=solscan_url))
+                    row2.extend([
+                        InlineKeyboardButton(f"{theme.CHART} Chart", url=chart_url),
+                        InlineKeyboardButton("🔍 Analyze", callback_data=f"demo:analyze:{token_ref}"),
+                    ])
+                    keyboard.append(row2)
         else:
             lines.extend([
                 "",
