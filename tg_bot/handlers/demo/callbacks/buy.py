@@ -290,25 +290,61 @@ Amount: *{amount} SOL*
                         ),
                     )
 
-                    # IMPORTANT: In group chats and high-load scenarios, edit_text can be flaky
-                    # (message can get overwritten by subsequent menu renders). To guarantee
-                    # the user sees the result, send a new message for trade confirmations.
+                    # UX: update the existing "Processing" message in-place (no second message)
                     try:
-                        query = update.callback_query
                         if query and query.message:
-                            await query.message.reply_text(
+                            await query.message.edit_text(
                                 success_text,
                                 parse_mode=ParseMode.MARKDOWN,
                                 reply_markup=success_kb,
+                                disable_web_page_preview=True,
                             )
                             return None, None
-                    except Exception as send_err:
-                        logger.warning(f"[BUY] Failed to send success reply_text (falling back to edit): {send_err}")
+                    except Exception as edit_err:
+                        # Best-effort fallback to editing by ids (still no new messages)
+                        logger.warning(f"[BUY] Failed to edit success message: {edit_err}")
+                        try:
+                            await context.bot.edit_message_text(
+                                chat_id=query.message.chat_id,
+                                message_id=query.message.message_id,
+                                text=success_text,
+                                parse_mode=ParseMode.MARKDOWN,
+                                reply_markup=success_kb,
+                                disable_web_page_preview=True,
+                            )
+                            return None, None
+                        except Exception as edit_err2:
+                            logger.error(f"[BUY] Failed to edit success message by id: {edit_err2}")
+                            return None, None
 
-                    return success_text, success_kb
+                    return None, None
                 else:
                     error_msg = result.get("error", "Unknown error")
-                    return DemoMenuBuilder.error_message(f"Buy failed: {error_msg}")
+                    err_text, err_kb = DemoMenuBuilder.error_message(f"Buy failed: {error_msg}")
+                    # Edit in place (no second message)
+                    try:
+                        if query and query.message:
+                            await query.message.edit_text(
+                                err_text,
+                                parse_mode=ParseMode.MARKDOWN,
+                                reply_markup=err_kb,
+                                disable_web_page_preview=True,
+                            )
+                            return None, None
+                    except Exception as edit_err:
+                        logger.warning(f"[BUY] Failed to edit error message: {edit_err}")
+                        try:
+                            await context.bot.edit_message_text(
+                                chat_id=query.message.chat_id,
+                                message_id=query.message.message_id,
+                                text=err_text,
+                                parse_mode=ParseMode.MARKDOWN,
+                                reply_markup=err_kb,
+                                disable_web_page_preview=True,
+                            )
+                        except Exception as edit_err2:
+                            logger.error(f"[BUY] Failed to edit error message by id: {edit_err2}")
+                    return None, None
 
             except Exception as e:
                 # Import error classes for checking
@@ -317,19 +353,55 @@ Amount: *{amount} SOL*
                 # Check for our custom user-friendly errors
                 if isinstance(e, (ctx.TPSLValidationError, ctx.BagsAPIError, ctx.TradingError)):
                     logger.warning(f"Trading error: {e.message}")
-                    return DemoMenuBuilder.error_message(e.format_telegram())
+                    err_text, err_kb = DemoMenuBuilder.error_message(e.format_telegram())
+                    try:
+                        if query and query.message:
+                            await query.message.edit_text(
+                                err_text,
+                                parse_mode=ParseMode.MARKDOWN,
+                                reply_markup=err_kb,
+                                disable_web_page_preview=True,
+                            )
+                            return None, None
+                    except Exception:
+                        pass
+                    return err_text, err_kb
                 elif isinstance(e, ValueError):
                     # Legacy validation errors
                     logger.warning(f"Validation error: {e}")
-                    return DemoMenuBuilder.error_message(f"❌ {str(e)}")
+                    err_text, err_kb = DemoMenuBuilder.error_message(f"❌ {str(e)}")
+                    try:
+                        if query and query.message:
+                            await query.message.edit_text(
+                                err_text,
+                                parse_mode=ParseMode.MARKDOWN,
+                                reply_markup=err_kb,
+                                disable_web_page_preview=True,
+                            )
+                            return None, None
+                    except Exception:
+                        pass
+                    return err_text, err_kb
                 else:
                     # Unexpected error
                     logger.error(f"Buy execution failed unexpectedly: {e}", exc_info=True)
-                    return DemoMenuBuilder.error_message(
+                    err_text, err_kb = DemoMenuBuilder.error_message(
                         "❌ Trade execution failed\n\n"
                         f"💡 Hint: {str(e)[:100] if str(e) else 'Unknown error'}. "
                         "Please try again or contact support if the issue persists."
                     )
+                    try:
+                        if query and query.message:
+                            await query.message.edit_text(
+                                err_text,
+                                parse_mode=ParseMode.MARKDOWN,
+                                reply_markup=err_kb,
+                                disable_web_page_preview=True,
+                            )
+                            return None, None
+                    except Exception:
+                        pass
+                    return err_text, err_kb
 
     # Default
     return DemoMenuBuilder.token_input_prompt()
