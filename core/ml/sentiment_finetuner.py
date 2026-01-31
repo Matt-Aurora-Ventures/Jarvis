@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from core.security.safe_pickle import safe_pickle_load
 
 logger = logging.getLogger(__name__)
 
@@ -162,8 +163,8 @@ class SentimentFineTuner:
         model_path = self.model_dir / "sentiment_model.pkl"
         if model_path.exists() and HAS_SKLEARN:
             try:
-                with open(model_path, "rb") as f:
-                    saved = pickle.load(f)
+                # Use safe pickle loader to prevent code execution attacks
+                saved = safe_pickle_load(model_path)
                 self._vectorizer = saved.get("vectorizer")
                 self._classifier = saved.get("classifier")
                 self._is_trained = True

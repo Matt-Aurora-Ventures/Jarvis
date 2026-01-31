@@ -26,6 +26,8 @@ import logging
 import math
 import pickle
 import time
+
+from core.security.safe_pickle import safe_pickle_load
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -628,21 +630,21 @@ class VolatilityRegimeDetector:
         if not path.exists():
             logger.warning(f"Model file not found: {path}")
             return False
-        
+
         try:
-            with open(path, "rb") as f:
-                save_data = pickle.load(f)
-            
+            # Use safe pickle loader to prevent code execution attacks
+            save_data = safe_pickle_load(path)
+
             self._model = save_data["model"]
             self._scaler = save_data["scaler"]
             self._feature_names = save_data["feature_names"]
             self.model_type = save_data.get("model_type", "random_forest")
             self.lookback = save_data.get("lookback", 20)
             self._is_fitted = True
-            
+
             logger.info(f"Model loaded from {path}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
             return False

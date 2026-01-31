@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from core.security.safe_pickle import safe_pickle_load
 
 logger = logging.getLogger(__name__)
 
@@ -286,8 +287,9 @@ class ModelRegistry:
 
         # Load model file
         try:
-            with open(version.file_path, "rb") as f:
-                model = pickle.load(f)
+            # Use safe pickle loader to prevent code execution attacks
+            from pathlib import Path
+            model = safe_pickle_load(Path(version.file_path))
             logger.info(f"Loaded model {model_name} version {version_id}")
             return model
         except Exception as e:
