@@ -38,6 +38,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
+from core.security_validation import sanitize_sql_identifier
+
 logger = logging.getLogger(__name__)
 
 
@@ -544,14 +546,17 @@ class QueryAnalyzer:
         """Suggest indexes for a table."""
         suggestions = []
 
+        # Sanitize table name to prevent SQL injection
+        safe_table = sanitize_sql_identifier(table)
+
         conn = sqlite3.connect(self.db_path)
         try:
             # Get existing indexes
-            cursor = conn.execute(f"PRAGMA index_list({table})")
+            cursor = conn.execute(f"PRAGMA index_list({safe_table})")
             existing = {row[1] for row in cursor.fetchall()}
 
             # Get columns
-            cursor = conn.execute(f"PRAGMA table_info({table})")
+            cursor = conn.execute(f"PRAGMA table_info({safe_table})")
             columns = [row[1] for row in cursor.fetchall()]
 
             # Common patterns to index

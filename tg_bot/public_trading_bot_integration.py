@@ -170,18 +170,28 @@ class PublicTradingBotIntegration:
 
             # Single-instance lock to avoid Telegram polling conflicts
             try:
-                from core.utils.instance_lock import acquire_instance_lock
+                from core.utils.instance_lock import acquire_instance_lock, cleanup_stale_lock
+
+                # Clean up any stale locks first
+                cleanup_stale_lock(self.bot_token, name="telegram_polling")
+
                 self._polling_lock = acquire_instance_lock(
                     self.bot_token,
                     name="telegram_polling",
                     max_wait_seconds=0,
+                    validate_pid=True,
                 )
             except Exception as exc:
                 logger.warning(f"Polling lock helper unavailable: {exc}")
                 self._polling_lock = None
 
             if not self._polling_lock:
-                logger.warning("Telegram polling lock held by another process; skipping startup")
+                logger.error(
+                    "Telegram polling lock held by another process.\n"
+                    "SOLUTION: Ensure this bot uses a unique TELEGRAM_BOT_TOKEN.\n"
+                    "Current token starts with: " + self.bot_token[:10] + "...\n"
+                    "Check .env files for duplicate token usage."
+                )
                 return False
 
             logger.info("Starting Telegram polling...")
