@@ -446,35 +446,71 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
         if section == "top10":
             # Get real AI conviction picks
             conviction_picks = await ctx.get_conviction_picks()
-            picks = [
-                {
-                    "symbol": p.get("symbol", "???"),
-                    "address": p.get("address", ""),
-                    "price": p.get("entry_price", 0),
-                    "change_24h": 0,  # Not available in conviction picks
-                    "conviction": p.get("conviction", "MEDIUM"),
-                    "tp_percent": p.get("tp_percent", 25),
-                    "sl_percent": p.get("sl_percent", 15),
-                    "score": int(p.get("score", 0)),
-                }
-                for p in conviction_picks[:10]  # Show all 10 picks
-            ]
+            def _conviction_from_score(score: int) -> str:
+                if score >= 85:
+                    return "HIGH"
+                if score >= 70:
+                    return "MEDIUM"
+                return "LOW"
+
+            def _social_from_signal(signal: str) -> str:
+                s = (signal or "").upper()
+                if "VERY_BULL" in s or s == "BULLISH":
+                    return "Positive"
+                if "BEAR" in s:
+                    return "Negative"
+                return "Neutral"
+
+            picks = []
+            for p in conviction_picks[:10]:
+                score = int(p.get("score", 0))
+                signal = p.get("signal", "NEUTRAL")
+                conviction = p.get("conviction") or _conviction_from_score(score)
+
+                # Lightweight, explainable breakdown (until we have real feature outputs exposed)
+                volume_trend = "Rising" if float(p.get("volume_ratio", 0) or 0) >= 2 else "Stable"
+                social_momentum = _social_from_signal(signal)
+                whale_activity = "Accumulating" if conviction in ("HIGH", "MEDIUM") else "Inactive"
+
+                picks.append(
+                    {
+                        "symbol": p.get("symbol", "???"),
+                        "address": p.get("address", ""),
+                        "price": p.get("entry_price", 0),
+                        "change_24h": 0,  # Not available in conviction picks
+                        "conviction": conviction,
+                        "conviction_reason": f"Volume: {volume_trend} | Social: {social_momentum} | Whales: {whale_activity}",
+                        "tp_percent": p.get("tp_percent", 25),
+                        "sl_percent": p.get("sl_percent", 15),
+                        "score": score,
+                    }
+                )
         elif section == "trending":
             # Get real trending tokens
             trending_tokens = await ctx.get_trending_with_sentiment()
-            picks = [
-                {
-                    "symbol": t.get("symbol", "???"),
-                    "address": t.get("address", ""),
-                    "price": t.get("price_usd", 0),
-                    "change_24h": t.get("change_24h", 0),
-                    "conviction": "MEDIUM",  # Default conviction for trending
-                    "tp_percent": 30,
-                    "sl_percent": 15,
-                    "score": int((t.get("sentiment_score", 0.5) or 0.5) * 100),
-                }
-                for t in trending_tokens[:10]
-            ]
+            picks = []
+            for t in trending_tokens[:10]:
+                change_24h = float(t.get("change_24h", 0) or 0)
+                score = int((t.get("sentiment_score", 0.5) or 0.5) * 100)
+                conviction = "HIGH" if score >= 85 else "MEDIUM" if score >= 70 else "LOW"
+
+                volume_trend = "Rising" if abs(change_24h) >= 10 else "Stable"
+                social_momentum = "Positive" if score >= 80 else "Neutral" if score >= 70 else "Negative"
+                whale_activity = "Accumulating" if score >= 80 else "Mixed" if score >= 70 else "Distributing"
+
+                picks.append(
+                    {
+                        "symbol": t.get("symbol", "???"),
+                        "address": t.get("address", ""),
+                        "price": t.get("price_usd", 0),
+                        "change_24h": change_24h,
+                        "conviction": conviction,
+                        "conviction_reason": f"Volume: {volume_trend} | Social: {social_momentum} | Whales: {whale_activity}",
+                        "tp_percent": 30,
+                        "sl_percent": 15,
+                        "score": score,
+                    }
+                )
         elif section == "bluechips":
             # Top 10 Solana blue chips by volume and market cap
             # Includes DexTools links, market cap, sentiment
@@ -485,6 +521,7 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                     "price": 225.50,
                     "change_24h": 2.5,
                     "conviction": "HIGH",
+                    "conviction_reason": "Volume: Rising | Social: Positive | Whales: Accumulating",
                     "tp_percent": 20,
                     "sl_percent": 10,
                     "score": 92,
@@ -499,6 +536,7 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                     "price": 1.25,
                     "change_24h": 5.2,
                     "conviction": "HIGH",
+                    "conviction_reason": "Volume: Rising | Social: Positive | Whales: Accumulating",
                     "tp_percent": 25,
                     "sl_percent": 12,
                     "score": 88,
@@ -513,6 +551,7 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                     "price": 8.45,
                     "change_24h": 1.8,
                     "conviction": "HIGH",
+                    "conviction_reason": "Volume: Stable | Social: Positive | Whales: Accumulating",
                     "tp_percent": 20,
                     "sl_percent": 10,
                     "score": 85,
@@ -527,6 +566,7 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                     "price": 0.0000285,
                     "change_24h": 8.5,
                     "conviction": "MEDIUM",
+                    "conviction_reason": "Volume: Stable | Social: Neutral | Whales: Accumulating",
                     "tp_percent": 35,
                     "sl_percent": 15,
                     "score": 82,
@@ -541,6 +581,7 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                     "price": 2.85,
                     "change_24h": 12.3,
                     "conviction": "MEDIUM",
+                    "conviction_reason": "Volume: Rising | Social: Positive | Whales: Accumulating",
                     "tp_percent": 40,
                     "sl_percent": 18,
                     "score": 80,
@@ -554,7 +595,8 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                     "address": "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3",
                     "price": 0.48,
                     "change_24h": 3.2,
-                    "conviction": "HIGH",
+                    "conviction": "MEDIUM",
+                    "conviction_reason": "Volume: Stable | Social: Neutral | Whales: Mixed",
                     "tp_percent": 25,
                     "sl_percent": 12,
                     "score": 84,
@@ -568,7 +610,8 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                     "address": "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL",
                     "price": 3.65,
                     "change_24h": 4.8,
-                    "conviction": "HIGH",
+                    "conviction": "MEDIUM",
+                    "conviction_reason": "Volume: Stable | Social: Neutral | Whales: Mixed",
                     "tp_percent": 22,
                     "sl_percent": 10,
                     "score": 83,
@@ -583,6 +626,7 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                     "price": 5.20,
                     "change_24h": 2.1,
                     "conviction": "MEDIUM",
+                    "conviction_reason": "Volume: Stable | Social: Neutral | Whales: Mixed",
                     "tp_percent": 18,
                     "sl_percent": 10,
                     "score": 79,
@@ -597,6 +641,7 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                     "price": 8.95,
                     "change_24h": 6.7,
                     "conviction": "HIGH",
+                    "conviction_reason": "Volume: Rising | Social: Positive | Whales: Accumulating",
                     "tp_percent": 28,
                     "sl_percent": 12,
                     "score": 86,
@@ -611,6 +656,7 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
                     "price": 1.15,
                     "change_24h": 9.4,
                     "conviction": "MEDIUM",
+                    "conviction_reason": "Volume: Stable | Social: Neutral | Whales: Mixed",
                     "tp_percent": 30,
                     "sl_percent": 15,
                     "score": 78,

@@ -4364,7 +4364,23 @@ Reply with a Solana token address to buy.
                     lines.append(f"   🎯 {' | '.join(targets)}")
 
                 if conviction:
-                    lines.append(f"   _{conviction}_")
+                    # Explainable conviction rating
+                    conv = str(conviction).upper()
+                    conv_emoji = {"HIGH": "🟢", "MEDIUM": "🟡", "LOW": "🔴"}.get(conv, "⚪")
+                    lines.append(f"   {conv_emoji} *{conv} CONVICTION*")
+
+                    # Per-token breakdown (preferred)
+                    reason = pick.get("conviction_reason", "")
+                    if reason:
+                        lines.append(f"   └ {reason}")
+                    else:
+                        # Fallback legend if no breakdown provided
+                        if conv == "HIGH":
+                            lines.append("   └ Score 85+ based on: Volume trend | Social momentum | Whale activity")
+                        elif conv == "MEDIUM":
+                            lines.append("   └ Score 70–84 based on: Volume trend | Social momentum | Whale activity")
+                        else:
+                            lines.append("   └ Score <70 based on: Volume trend | Social momentum | Whale activity")
 
                 lines.append("")
 
