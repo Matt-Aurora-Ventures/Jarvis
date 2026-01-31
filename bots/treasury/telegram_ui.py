@@ -89,6 +89,7 @@ class TradingUI:
         self._polling_lock = None
         self._running = False
         self._dashboard_messages: Dict[int, int] = {}  # user_id -> message_id
+        self._monitor_task: Optional[asyncio.Task] = None
 
     def is_admin(self, user_id: int) -> bool:
         """Check if user is admin."""
@@ -128,8 +129,9 @@ class TradingUI:
         else:
             logger.warning("Trading UI polling disabled: updater unavailable")
 
-        # Start background position monitor
-        asyncio.create_task(self._position_monitor_loop())
+        # Start background position monitor with exception handling
+        self._monitor_task = asyncio.create_task(self._position_monitor_loop())
+        self._monitor_task.add_done_callback(self._handle_monitor_exception)
 
         logger.info("Trading UI started")
 
@@ -191,9 +193,33 @@ class TradingUI:
 
         logger.info("Position monitor stopped")
 
+    def _handle_monitor_exception(self, task: asyncio.Task):
+        """Handle exceptions from position monitor task."""
+        try:
+            # This will raise the exception if task failed
+            exc = task.exception()
+            if exc:
+                logger.error(f"Position monitor task crashed with exception: {exc}", exc_info=exc)
+        except asyncio.CancelledError:
+            logger.debug("Position monitor task was cancelled")
+        except Exception as e:
+            logger.error(f"Error retrieving monitor task exception: {e}", exc_info=True)
+
     async def stop(self):
         """Stop the trading bot."""
         self._running = False
+
+        # Cancel position monitor task if running
+        if self._monitor_task and not self._monitor_task.done():
+            logger.info("Cancelling position monitor task...")
+            self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except asyncio.CancelledError:
+                logger.debug("Position monitor task cancelled successfully")
+            except Exception as e:
+                logger.error(f"Error while cancelling monitor task: {e}", exc_info=True)
+
         if self.app:
             await self.app.updater.stop()
             await self.app.stop()
