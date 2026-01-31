@@ -1,0 +1,47 @@
+[Unit]
+Description=JARVIS Telegram Bot Gateway
+Documentation=https://github.com/lucid/jarvis
+After=network-online.target
+Wants=network-online.target
+PartOf=jarvis.target
+ReloadPropagatedFrom=jarvis.target
+
+[Service]
+Type=notify
+User=jarvis
+Group=jarvis
+WorkingDirectory=/opt/jarvis
+ExecStart=/usr/bin/python3 -m tg_bot.bot
+Restart=always
+RestartSec=10
+TimeoutStartSec=90
+TimeoutStopSec=30
+
+# Environment
+EnvironmentFile=/opt/jarvis/.env
+Environment="BOT_COMPONENT=telegram"
+Environment="SKIP_SUPERVISOR=1"
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/jarvis/data /opt/jarvis/logs /opt/jarvis/.lifeos
+PrivateTmp=true
+
+# Resource limits
+MemoryMax=1G
+CPUQuota=50%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jarvis-telegram
+
+# Watchdog - systemd will restart if no ping in 5 minutes
+WatchdogSec=300
+NotifyAccess=all
+
+[Install]
+WantedBy=jarvis.target
+WantedBy=multi-user.target

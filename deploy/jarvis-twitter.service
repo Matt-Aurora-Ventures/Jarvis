@@ -1,0 +1,46 @@
+[Unit]
+Description=JARVIS Autonomous Twitter/X Poster
+Documentation=https://github.com/lucid/jarvis
+After=network-online.target
+Wants=network-online.target
+PartOf=jarvis.target
+ReloadPropagatedFrom=jarvis.target
+
+[Service]
+Type=simple
+User=jarvis
+Group=jarvis
+WorkingDirectory=/opt/jarvis
+ExecStart=/usr/bin/python3 bots/twitter/autonomous_engine.py
+Restart=always
+RestartSec=20
+TimeoutStopSec=30
+
+# Environment
+EnvironmentFile=/opt/jarvis/.env
+Environment="BOT_COMPONENT=twitter"
+Environment="SKIP_SUPERVISOR=1"
+Environment="X_BOT_ENABLED=true"
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/jarvis/data /opt/jarvis/logs /opt/jarvis/.lifeos /opt/jarvis/bots/twitter
+PrivateTmp=true
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=30%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jarvis-twitter
+
+# Watchdog
+WatchdogSec=3600
+
+[Install]
+WantedBy=jarvis.target
+WantedBy=multi-user.target

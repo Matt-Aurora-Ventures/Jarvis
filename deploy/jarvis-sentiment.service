@@ -1,0 +1,45 @@
+[Unit]
+Description=JARVIS Sentiment Reporter
+Documentation=https://github.com/lucid/jarvis
+After=network-online.target
+Wants=network-online.target
+PartOf=jarvis.target
+ReloadPropagatedFrom=jarvis.target
+
+[Service]
+Type=simple
+User=jarvis
+Group=jarvis
+WorkingDirectory=/opt/jarvis
+ExecStart=/usr/bin/python3 bots/buy_tracker/sentiment_report.py
+Restart=always
+RestartSec=15
+TimeoutStopSec=30
+
+# Environment
+EnvironmentFile=/opt/jarvis/.env
+Environment="BOT_COMPONENT=sentiment"
+Environment="SKIP_SUPERVISOR=1"
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/jarvis/data /opt/jarvis/logs /opt/jarvis/.lifeos
+PrivateTmp=true
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=30%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jarvis-sentiment
+
+# Watchdog
+WatchdogSec=3600
+
+[Install]
+WantedBy=jarvis.target
+WantedBy=multi-user.target
