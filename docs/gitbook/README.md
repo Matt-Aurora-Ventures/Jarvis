@@ -4,6 +4,10 @@
 
 Welcome to the complete documentation for Jarvis LifeOS - the AI system that starts with crypto trading and expands into a universal personal operating system.
 
+> **Canonical docs:** The root [`README.md`](../../README.md) is the authoritative source
+> for product narrative, system overview, and deployment guidance. Legacy README variants
+> are archived under [`docs/history`](../history).
+
 ## What is Jarvis?
 
 Jarvis is not just an app, a bot, or a trading system.
