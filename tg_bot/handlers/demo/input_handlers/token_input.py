@@ -5,8 +5,10 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
+import time
+
 from ..demo_ui import DemoMenuBuilder
-from .utils import register_token_id
+from tg_bot.handlers.demo.demo_trading import _register_token_id
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +46,15 @@ async def handle_token_input(
         )
         return True
 
+    # Store pending token context for follow-up actions (buy buttons, etc.)
+    context.user_data["pending_token"] = text
+    context.user_data["pending_token_time"] = time.time()
+
     amount = context.user_data.get("buy_amount", 0.1)
-    token_ref = register_token_id(context, text)
+
+    # IMPORTANT: Use the same token-ref registry as the trading callbacks
+    # (demo_trading._resolve_token_ref expects token_id_map)
+    token_ref = _register_token_id(context, text)
 
     confirm_text, keyboard = DemoMenuBuilder.buy_confirmation(
         token_symbol="TOKEN",

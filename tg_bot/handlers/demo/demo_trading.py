@@ -17,6 +17,7 @@ import asyncio
 import hashlib
 import logging
 import random
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone
@@ -256,10 +257,23 @@ def _resolve_token_ref(context, token_ref: str) -> str:
     if resolved and len(resolved) >= 32:
         return resolved
     
+    # Fallback: if user just pasted a token address (ENTER TOKEN flow), use it for a few minutes.
+    try:
+        pending = context.user_data.get("pending_token")
+        pending_time = float(context.user_data.get("pending_token_time") or 0)
+        if pending and len(pending) >= 32 and (time.time() - pending_time) <= 300:
+            # Also register it so subsequent callbacks are stable
+            _register_token_id(context, pending)
+            return pending
+    except Exception:
+        pass
+
     # Resolution failed - don't pass garbage to APIs
-    logger.warning(f"Token ref '{token_ref}' not found in session map (may have expired). User should re-select token.")
+    logger.warning(
+        f"Token ref '{token_ref}' not found in session map (may have expired). User should re-select token."
+    )
     raise ValueError(
-        f"Token session expired. Please go back to Trending or AI Picks and select the token again."
+        "Token session expired. Please go back to Trending or AI Picks and select the token again."
     )
 
 

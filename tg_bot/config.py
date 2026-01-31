@@ -32,6 +32,38 @@ if _env_path.exists():
                         os.environ[key] = value
 
 
+def _hydrate_env_from_keys_json() -> None:
+    """Populate os.environ from secrets/keys.json (if env vars are missing).
+
+    This keeps secrets out of the repo and avoids needing them in tg_bot/.env.
+    """
+    keys = _load_keys_json()
+    if not keys:
+        return
+
+    def _set_if_missing(env_name: str, value: str):
+        if not os.getenv(env_name) and value:
+            os.environ[env_name] = value
+
+    # Top-level simple keys
+    _set_if_missing("BIRDEYE_API_KEY", (keys.get("birdeye_api_key") or "").strip())
+    _set_if_missing("BAGS_API_KEY", (keys.get("bags_api_key") or "").strip())
+    _set_if_missing("BAGS_PARTNER_KEY", (keys.get("bags_partner_key") or "").strip())
+    _set_if_missing("GROQ_API_KEY", (keys.get("groq_api_key") or "").strip())
+    _set_if_missing("ANTHROPIC_API_KEY", (keys.get("anthropic_api_key") or "").strip())
+
+    # Nested keys
+    xai = (keys.get("xai") or {})
+    _set_if_missing("XAI_API_KEY", (xai.get("api_key") or "").strip())
+
+    helius = (keys.get("helius") or {})
+    _set_if_missing("HELIUS_API_KEY", (helius.get("api_key") or "").strip())
+
+    # Telegram handled via _get_telegram_token(), but hydrate for compatibility
+    tg = (keys.get("telegram") or {})
+    _set_if_missing("TELEGRAM_BOT_TOKEN", (tg.get("jarvis_cloudbot_token") or tg.get("clawdjarvis_token") or tg.get("bot_token") or "").strip())
+
+
 # Resolve Anthropic key (local Ollama uses placeholder).
 def _get_anthropic_key() -> str:
     try:
@@ -51,12 +83,55 @@ API_COSTS = {
 }
 
 
+def _load_keys_json() -> dict:
+    """Load /root/clawd/secrets/keys.json safely.
+
+    Never print this content; caller must treat values as secrets.
+    """
+    try:
+        import json
+        p = Path("/root/clawd/secrets/keys.json")
+        if not p.exists():
+            return {}
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+# Populate env vars from keys.json (so tg_bot/.env can stay blank)
+_hydrate_env_from_keys_json()
+
+
+def _get_telegram_token() -> str:
+    """Resolve Telegram bot token.
+
+    Priority:
+    1) TELEGRAM_BOT_TOKEN env var (legacy)
+    2) secrets/keys.json: telegram.jarvis_cloudbot_token (new)
+    3) secrets/keys.json: telegram.clawdjarvis_token (fallback)
+    4) secrets/keys.json: telegram.bot_token (last resort)
+    """
+    env = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if env:
+        return env
+
+    keys = _load_keys_json()
+    tg = (keys or {}).get("telegram") or {}
+
+    for k in ("jarvis_cloudbot_token", "clawdjarvis_token", "bot_token"):
+        v = (tg.get(k) or "").strip()
+        if v:
+            return v
+
+    return ""
+
+
 @dataclass
 class BotConfig:
     """Secure Telegram bot configuration."""
 
-    # === REQUIRED (from environment only) ===
-    telegram_token: str = field(default_factory=lambda: os.getenv("TELEGRAM_BOT_TOKEN", ""))
+    # === REQUIRED ===
+    telegram_token: str = field(default_factory=_get_telegram_token)
 
     # === API KEYS (from environment only) ===
     grok_api_key: str = field(default_factory=lambda: os.getenv("XAI_API_KEY", ""))
