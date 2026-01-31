@@ -7,7 +7,7 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 
 # Security
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.4.0  # CVE-2024-33663 fix: algorithm confusion with ECDSA keys
 passlib[bcrypt]==1.7.4
 bcrypt==4.1.2
 python-multipart==0.0.22
