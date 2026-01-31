@@ -954,15 +954,27 @@ async def create_ai_supervisor():
     try:
         from core.ai_runtime.integration import get_ai_runtime_manager
     except Exception as exc:
-        logger.warning(f"AI runtime unavailable: {exc}")
+        logger.warning(f"AI runtime unavailable: {exc}", exc_info=True)
         # Run forever but idle to avoid restart churn
         while True:
             await asyncio.sleep(60)
 
-    manager = get_ai_runtime_manager()
-    started = await manager.start()
-    if not started:
-        logger.info("AI runtime disabled or unavailable; supervisor idle")
+    try:
+        manager = get_ai_runtime_manager()
+        started = await manager.start()
+        if not started:
+            logger.info("AI runtime disabled or unavailable; supervisor idle")
+            # Keep running to prevent supervisor restart loop
+            while True:
+                await asyncio.sleep(60)
+        else:
+            logger.info("AI runtime started successfully, entering idle loop")
+            # Keep the task alive while AI runtime runs
+            while True:
+                await asyncio.sleep(60)
+    except Exception as exc:
+        logger.error(f"AI supervisor error: {exc}", exc_info=True)
+        # Don't crash - just idle
         while True:
             await asyncio.sleep(60)
 
@@ -1134,6 +1146,20 @@ async def main():
 
     # Ensure logs directory exists
     (project_root / "logs").mkdir(exist_ok=True)
+
+    # ==========================================================
+    # SINGLE INSTANCE ENFORCEMENT: Prevent dual supervisor race
+    # ==========================================================
+    try:
+        lock = ensure_single_instance("jarvis-supervisor")
+        logger.info("Single instance lock acquired")
+    except RuntimeError as e:
+        print("=" * 60)
+        print("  ERROR: Another supervisor instance is already running!")
+        print(f"  {e}")
+        print("  Kill the other instance or wait for it to exit.")
+        print("=" * 60)
+        sys.exit(1)
 
     load_env()
 
