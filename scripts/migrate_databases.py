@@ -28,6 +28,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
+# Add parent directory to path for core imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.security_validation import sanitize_sql_identifier
+
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = Path.home() / ".lifeos" / "data"
@@ -185,8 +189,11 @@ class DatabaseMigrator:
             columns = [row[1] for row in source_cursor.fetchall()]
             columns_str = ", ".join(columns)
 
+            # Sanitize table name for SQL (defense-in-depth)
+            safe_table = sanitize_sql_identifier(table_name)
+
             # Count rows
-            source_cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+            source_cursor.execute(f"SELECT COUNT(*) FROM {safe_table}")
             row_count = source_cursor.fetchone()[0]
 
             if row_count == 0:
@@ -195,7 +202,7 @@ class DatabaseMigrator:
                 return 0, True
 
             # Fetch all data
-            source_cursor.execute(f"SELECT {columns_str} FROM {table_name}")
+            source_cursor.execute(f"SELECT {columns_str} FROM {safe_table}")
             rows = source_cursor.fetchall()
 
             # Insert into target
