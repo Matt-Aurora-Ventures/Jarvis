@@ -330,8 +330,17 @@ def _should_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         return True
 
     # Mentions or replies in group chats (only respond to direct requests).
+    # Additional guardrail (2026-01-31): in group chats, ONLY respond to admin (Matt)
+    # even if other users @mention the bot.
     text = update.message.text or ""
     text_lower = text.lower().strip()
+
+    config = get_config()
+    user_id = update.effective_user.id if update.effective_user else 0
+    username = update.effective_user.username if update.effective_user else None
+    if not config.is_admin(user_id, username):
+        return False
+
     bot_username = getattr(context.bot, "username", "")
     if bot_username and f"@{bot_username.lower()}" in text_lower:
         return _looks_like_request(text_lower)
