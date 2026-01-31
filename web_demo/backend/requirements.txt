@@ -20,7 +20,7 @@ alembic==1.13.1  # Migrations
 redis==5.0.1  # Cache and sessions
 
 # HTTP & Networking
-aiohttp==3.9.1
+aiohttp==3.13.3
 httpx==0.26.0
 websockets==12.0
 
