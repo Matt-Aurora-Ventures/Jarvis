@@ -35,6 +35,11 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [BACKUP-TPSL] %(levelname)s: %(message)s"
 )
+
+# Prevent HTTP client libraries from logging URLs that may contain secrets
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 # Configuration
