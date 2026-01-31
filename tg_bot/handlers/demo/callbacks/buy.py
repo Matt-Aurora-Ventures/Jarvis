@@ -57,7 +57,15 @@ async def handle_buy(
         token_ref = parts[2] if len(parts) > 2 else ""
         
         # Resolve the full token address for display
-        token_addr = ctx.resolve_token_ref(context, token_ref)
+        try:
+            token_addr = ctx.resolve_token_ref(context, token_ref)
+        except ValueError as e:
+            logger.warning(f"Token resolution failed for {token_ref}: {e}")
+            return DemoMenuBuilder.error_message(
+                "❌ Token session expired\n\n"
+                "💡 The token reference is no longer valid.\n\n"
+                "Please go back to **Trending** or **AI Picks** and select the token again."
+            )
         
         logger.info(f"[BUY CUSTOM] Showing amount buttons for user {user_id}, token_ref={token_ref}")
 
@@ -89,8 +97,18 @@ Choose how much SOL to spend:
         parts = data.split(":")
         if len(parts) >= 3:
             token_ref = parts[2]
-            token_addr = ctx.resolve_token_ref(context, token_ref)
             amount = float(parts[3]) if len(parts) >= 4 else context.user_data.get("buy_amount", 0.1)
+            
+            # Resolve token address with error handling for expired sessions
+            try:
+                token_addr = ctx.resolve_token_ref(context, token_ref)
+            except ValueError as e:
+                logger.warning(f"Token resolution failed for {token_ref}: {e}")
+                return DemoMenuBuilder.error_message(
+                    "❌ Token session expired\n\n"
+                    "💡 The token reference is no longer valid.\n\n"
+                    "Please go back to **Trending** or **AI Picks** and select the token again."
+                )
 
             # Get AI sentiment before showing buy confirmation
             sentiment_data = await ctx.get_ai_sentiment_for_token(token_addr)
@@ -133,8 +151,18 @@ Choose how much SOL to spend:
         parts = data.split(":")
         if len(parts) >= 4:
             token_ref = parts[2]
-            token_addr = ctx.resolve_token_ref(context, token_ref)
             amount = float(parts[3])
+            
+            # Resolve token address with error handling for expired sessions
+            try:
+                token_addr = ctx.resolve_token_ref(context, token_ref)
+            except ValueError as e:
+                logger.warning(f"Token resolution failed for {token_ref}: {e}")
+                return DemoMenuBuilder.error_message(
+                    "❌ Token session expired\n\n"
+                    "💡 The token reference is no longer valid (bot may have restarted).\n\n"
+                    "Please go back to **Trending** or **AI Picks** and select the token again."
+                )
 
             # Show loading state
             try:
