@@ -54,7 +54,7 @@
 
 **4. Deploy Treasury Fix to VPS**
 - VPS: 72.61.7.126 (root)
-- Password: POsb.&ku48r1PBEml/G3
+- Password: [REDACTED - stored securely, not in git]
 - Actions: SSH, git pull, add TREASURY_BOT_TOKEN, restart
 - Source: TREASURY_BOT_FIX_VERIFIED.md
 
