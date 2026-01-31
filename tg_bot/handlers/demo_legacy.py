@@ -9973,7 +9973,7 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         except TypeError:
             is_admin = config.is_admin(user_id)
         if not is_admin:
-            await update.message.reply_text("Unauthorized: Demo is admin-only.")
+            # Silent ignore for non-admins (prevents spam in group chats)
             logger.warning(f"Unauthorized demo message by user {user_id} (@{username})")
             return
     except Exception as exc:
