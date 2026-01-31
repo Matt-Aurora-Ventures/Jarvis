@@ -120,6 +120,11 @@ class BagsAPIClient:
         self.successful_swaps = 0
         self.failed_swaps = 0
 
+        # Lightweight caches (avoid empty UI when Bags public endpoints hiccup)
+        self._top_tokens_cache: List[TokenInfo] = []
+        self._top_tokens_cache_ts: Optional[datetime] = None
+        self._top_tokens_cache_ttl_sec: int = 15 * 60  # 15 minutes
+
     def _initialize_client(self):
         """Initialize HTTP client"""
         try:
@@ -806,6 +811,9 @@ class BagsAPIClient:
                     ))
 
                 if tokens:
+                    # Cache successful result for resilience
+                    self._top_tokens_cache = tokens
+                    self._top_tokens_cache_ts = datetime.now()
                     return tokens
             except Exception as e:
                 last_error = e
@@ -815,7 +823,21 @@ class BagsAPIClient:
                 else:
                     logger.error(f"Failed to get top tokens by volume: {e}")
 
-        # Fallback: reuse trending tokens when the top endpoint is unavailable.
+        # Fallback 1: serve cached top tokens if recent
+        try:
+            if self._top_tokens_cache and self._top_tokens_cache_ts:
+                age = (datetime.now() - self._top_tokens_cache_ts).total_seconds()
+                if age <= self._top_tokens_cache_ttl_sec:
+                    logger.warning(
+                        "Bags top tokens endpoint failing (%s). Serving cached results (age=%.0fs).",
+                        getattr(getattr(last_error, "response", None), "status_code", None) or "unknown",
+                        age,
+                    )
+                    return self._top_tokens_cache[:limit]
+        except Exception:
+            pass
+
+        # Fallback 2: reuse trending tokens when the top endpoint is unavailable.
         try:
             trending = await self.get_trending_tokens(limit=limit)
             if trending:

@@ -44,6 +44,17 @@ async def handle_bags(
     if action == "bags_fm":
         try:
             bags_tokens = await ctx.get_bags_top_tokens_with_sentiment(limit=15)
+
+            if not bags_tokens:
+                return DemoMenuBuilder.error_message(
+                    error=(
+                        "Bags Top 15 is temporarily unavailable (bags.fm public API is returning errors).\n\n"
+                        "Try again in ~1-2 minutes."
+                    ),
+                    retry_action="demo:bags_fm",
+                    context_hint="bags_fm",
+                )
+
             for token in bags_tokens:
                 token["token_id"] = ctx.register_token_id(context, token.get("address"))
 
