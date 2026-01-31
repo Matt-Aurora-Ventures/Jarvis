@@ -83,7 +83,7 @@
 - VPS IP: 72.61.7.126
 - User: root
 - SSH Key: ~/.ssh/id_ed25519
-- Password: POsb.&ku48r1PBEml/G3 (secured, not committed)
+- Password: [REDACTED - stored securely, not in git]
 - Config: C:\Users\lucid\.ssh\config (verified)
 
 ---
@@ -296,7 +296,7 @@
 
 **3. VPS Needs Password Auth**
 - SSH key may not be authorized
-- Password: POsb.&ku48r1PBEml/G3
+- Password: [REDACTED - stored securely, not in git]
 - Can try sshpass or manual connection
 
 ### Next Steps for VPS Deployment
