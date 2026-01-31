@@ -40,8 +40,31 @@ logger = logging.getLogger(__name__)
 # Configuration
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 BAGS_API_BASE = "https://api.bags.fm"
+
+# Load bot env if cron didn't source it (common)
+def _load_env_file(path: str) -> None:
+    try:
+        if not os.path.exists(path):
+            return
+        with open(path, "r") as f:
+            for line in f.read().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                os.environ.setdefault(k, v)
+    except Exception as e:
+        logger.warning(f"Failed to load env file {path}: {e}")
+
+# Try common locations
+_load_env_file(os.path.join(os.path.dirname(__file__), "..", "tg_bot", ".env"))
+_load_env_file(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 ADMIN_CHAT_ID = os.environ.get("TELEGRAM_ADMIN_IDS", "8527130908")
+
 # Primary TP/SL job runs on a 5-minute interval. Treat it as dead only if we
 # miss >1 full cycle (plus buffer) to avoid false "dead" flaps.
 PRIMARY_DEAD_THRESHOLD_SECONDS = 420  # 7 min
@@ -247,11 +270,15 @@ class BackupTPSLMonitor:
         return None
 
     async def process_alert(self, alert: Dict) -> bool:
-        """Process a triggered alert - execute sell if auto-exit enabled."""
+        """Process a triggered alert.
+
+        Today this is an alert-only layer unless the primary monitor is dead.
+        (Execution requires signing + routing; handled by primary monitor.)
+        """
         position = alert["position"]
         pos_id = position.get("id", "unknown")
         user_id = alert["user_id"]
-        
+
         # Try to acquire lock
         if not self.acquire_lock(pos_id):
             logger.info(f"Position {pos_id} already locked, skipping")
@@ -261,23 +288,22 @@ class BackupTPSLMonitor:
             symbol = position.get("symbol", "TOKEN")
             alert_type = alert["type"].replace("_", " ").title()
             current_price = alert["price"]
-            entry_price = position.get("entry_price", 0)
+            entry_price = float(position.get("entry_price", 0) or 0)
             pnl_pct = ((current_price - entry_price) / entry_price * 100) if entry_price else 0
-            
-            # For now, just alert - don't auto-execute without wallet
-            # Real execution would need wallet access
-            message = f"""
-🚨 *BACKUP MONITOR ALERT*
 
-{alert_type} triggered for *{symbol}*!
+            primary_alive = self.is_primary_alive()
+            status_line = "✅ Primary monitor alive (alert-only)" if primary_alive else "⚠️ Primary monitor DEAD (manual check)"
 
-Entry: ${entry_price:.6f}
-Current: ${current_price:.6f}
-P&L: {pnl_pct:+.1f}%
+            message = (
+                "🚨 *TP/SL ALERT (Backup Monitor)*\n\n"
+                f"{alert_type} triggered for *{symbol}*\n\n"
+                f"Entry: ${entry_price:.6f}\n"
+                f"Current: ${current_price:.6f}\n"
+                f"P&L: {pnl_pct:+.1f}%\n\n"
+                f"{status_line}\n"
+                f"Position ID: `{pos_id}`"
+            )
 
-⚠️ Primary monitor appears offline.
-Position ID: `{pos_id}`
-"""
             await self.send_alert(message)
             
             # Mark as triggered to prevent repeat alerts
