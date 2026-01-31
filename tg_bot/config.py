@@ -150,7 +150,7 @@ class BotConfig:
 
     # === MODEL SETTINGS ===
     grok_model: str = "grok-3-mini"  # cheapest: grok-3-mini, best: grok-4
-    claude_model: str = "claude-sonnet-4-20250514"
+    claude_model: str = "claude-opus-4-5-20251101"  # Opus 4.5 (best reasoning)
     claude_max_tokens: int = 1024
 
     # === DATABASE ===
