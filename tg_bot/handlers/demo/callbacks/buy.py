@@ -232,6 +232,8 @@ Choose how much SOL to spend:
                     sl_percent=sl_percent,
                 )
 
+                logger.info(f"[BUY] execute_buy_with_tpsl returned: success={result.get('success')}, tx={result.get('tx_hash', 'N/A')[:16] if result.get('tx_hash') else 'N/A'}...")
+                
                 if result.get("success"):
                     position = result.get("position", {})
 
@@ -242,6 +244,8 @@ Choose how much SOL to spend:
 
                     tx_hash = position.get("tx_hash")
                     tx_link = f"[View TX](https://solscan.io/tx/{tx_hash})" if tx_hash else "N/A"
+                    
+                    logger.info(f"[BUY] Returning success message for position {position.get('id')}")
                     token_symbol = position.get("symbol", "TOKEN")
                     tokens_received = position.get("amount", 0)
                     token_price = position.get("entry_price", 0)
