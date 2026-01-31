@@ -103,15 +103,41 @@ class BackupTPSLMonitor:
         self.redis.delete(f"jarvis:exec_lock:{position_id}")
 
     async def get_token_price(self, mint: str) -> Optional[float]:
-        """Get current token price from Jupiter."""
+        """Get current token price.
+
+        Jupiter's public endpoint can 401; prefer lite-api and fallback.
+        """
+        endpoints = [
+            f"https://lite-api.jup.ag/price/v2?ids={mint}",
+            f"https://api.jup.ag/price/v2?ids={mint}",
+        ]
+        for url in endpoints:
+            try:
+                resp = await self.http.get(url)
+                logger.info(f"HTTP Request: GET {url} \"HTTP/1.1 {resp.status_code} {resp.reason_phrase}\"")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    price = float(data.get("data", {}).get(mint, {}).get("price", 0) or 0)
+                    if price > 0:
+                        return price
+            except Exception as e:
+                logger.warning(f"Price fetch failed for {mint} via {url}: {e}")
+
+        # Final fallback: DexScreener public API
         try:
-            url = f"https://api.jup.ag/price/v2?ids={mint}"
-            resp = await self.http.get(url)
-            if resp.status_code == 200:
-                data = resp.json()
-                return float(data.get("data", {}).get(mint, {}).get("price", 0))
+            ds = await self.http.get(f"https://api.dexscreener.com/latest/dex/tokens/{mint}")
+            if ds.status_code == 200:
+                j = ds.json()
+                pairs = j.get("pairs") or []
+                if pairs:
+                    # take highest liquidity
+                    best = max(pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
+                    price = float(best.get("priceUsd", 0) or 0)
+                    if price > 0:
+                        return price
         except Exception as e:
-            logger.warning(f"Price fetch failed for {mint}: {e}")
+            logger.warning(f"DexScreener price fallback failed for {mint}: {e}")
+
         return None
 
     async def execute_sell(self, position: Dict, user_wallet: str) -> Dict:
