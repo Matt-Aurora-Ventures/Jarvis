@@ -3833,14 +3833,36 @@ Reply with a Solana token address to buy.
                 "very_bearish": "💀",
             }.get(sentiment.lower() if isinstance(sentiment, str) else "neutral", "🟡")
 
-            # Signal strength bar
-            score_bars = int(sentiment_score * 5) if sentiment_score else 0
-            score_bar = "▰" * score_bars + "▱" * (5 - score_bars)
+            # Explainable breakdown (simple + consistent with Hub)
+            score_int = int(round((sentiment_score or 0) * 100))
+            conviction = "HIGH" if score_int >= 85 else "MEDIUM" if score_int >= 70 else "LOW"
+
+            if volume >= 1_000_000:
+                volume_trend = "Surging"
+            elif volume >= 200_000:
+                volume_trend = "High"
+            else:
+                volume_trend = "Normal"
+
+            sig = (signal or "NEUTRAL").upper()
+            if "BUY" in sig or "BULL" in sig:
+                social = "Positive"
+            elif "SELL" in sig or "BEAR" in sig:
+                social = "Negative"
+            else:
+                social = "Neutral"
+
+            whales = "Accumulating" if score_int >= 70 else "Inactive"
+
+            ca_short = ""
+            if address:
+                ca_short = f"{address[:6]}...{address[-4:]}"
 
             lines.append(f"{change_emoji} *{symbol}* {sign}{change_24h:.1f}%")
-            lines.append(f"   {sent_emoji} AI: {score_bar} | Vol: ${volume/1000:.0f}K")
-            if address:
-                lines.append(f"   CA: `{address}`")
+            lines.append(f"   {sent_emoji} AI Score: {score_int}/100 ({conviction})")
+            lines.append(f"   ├ Volume: {volume_trend} | Social: {social} | Whales: {whales}")
+            if ca_short:
+                lines.append(f"   📋 CA: `{ca_short}`")
             lines.append("")
 
             if token_ref:
@@ -5804,7 +5826,10 @@ _Updated: {datetime.now(timezone.utc).strftime('%H:%M UTC')}_
             ],
             [
                 InlineKeyboardButton(f"{theme.REFRESH} Refresh", callback_data=f"demo:analyze:{token_ref}"),
-                InlineKeyboardButton(f"{theme.BACK} Back", callback_data="demo:main"),
+                InlineKeyboardButton(
+                    f"{theme.BACK} Back",
+                    callback_data=token_data.get("back_action", "demo:main"),
+                ),
             ],
         ]
 

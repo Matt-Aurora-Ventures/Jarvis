@@ -234,6 +234,9 @@ async def handle_sentiment_hub(
             token_ref = parts[2] if len(parts) > 2 else ""
             address = ctx.resolve_token_ref(context, token_ref)
             sentiment_data = await ctx.get_ai_sentiment_for_token(address)
+            back_section = context.user_data.get("hub_last_section") if hasattr(context, "user_data") else None
+            back_action = f"demo:hub_{back_section}" if back_section else "demo:sentiment_hub"
+
             token_data = {
                 "symbol": sentiment_data.get("symbol", "TOKEN"),
                 "address": address,
@@ -247,6 +250,7 @@ async def handle_sentiment_hub(
                 "confidence": sentiment_data.get("confidence", 0),
                 "signal": sentiment_data.get("signal", "NEUTRAL"),
                 "reasons": sentiment_data.get("reasons", []),
+                "back_action": back_action,
             }
             return DemoMenuBuilder.token_analysis_menu(token_data)
         except Exception as e:
@@ -453,6 +457,10 @@ async def _handle_hub_section(ctx, section: str, context, market_regime: dict):
     DemoMenuBuilder = ctx.DemoMenuBuilder
 
     try:
+        # Track navigation so "Back" buttons go one level up
+        if hasattr(context, "user_data"):
+            context.user_data["hub_last_section"] = section
+
         # Fetch real data instead of using hardcoded mock data
         picks = []
 
