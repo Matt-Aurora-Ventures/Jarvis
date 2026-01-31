@@ -10,7 +10,7 @@ from typing import Optional
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
-from telegram.ext import Application, CallbackQueryHandler, ContextTypes
+from telegram.ext import Application, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
 from bots.buy_tracker.config import BuyBotConfig, load_config
 from bots.buy_tracker.monitor import BuyTransaction, TransactionMonitor
@@ -123,6 +123,8 @@ class JarvisBuyBot:
     - MP4 video with each notification
     - Customizable minimum buy threshold
     - Position percentage display
+
+    Guardrail (2026-01-31): In group chats, only respond when @mentioned AND sender is admin.
     """
 
     def __init__(self, config: Optional[BuyBotConfig] = None):
@@ -132,6 +134,7 @@ class JarvisBuyBot:
         self.monitor: Optional[TransactionMonitor] = None
         self._running = False
         self._polling_lock = None
+        self._bot_username: str = ""
         # Store original messages for FAQ expand/collapse {message_id: original_text}
         self._message_cache: dict[int, str] = {}
         # Counter for emoji credit attribution
@@ -207,6 +210,11 @@ class JarvisBuyBot:
         # Add callback handlers
         # Ape button handler (pattern: starts with "ape:")
         self.app.add_handler(CallbackQueryHandler(self._handle_ape_callback, pattern="^ape:"))
+
+        # Mention handler (admin-only): respond when Matt @mentions this bot in group
+        self.app.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_mentions)
+        )
         # Confirm/cancel trade handler
         self.app.add_handler(CallbackQueryHandler(self._handle_confirm_callback, pattern="^confirm:"))
         self.app.add_handler(CallbackQueryHandler(self._handle_confirm_callback, pattern="^cancel_trade$"))
@@ -220,6 +228,7 @@ class JarvisBuyBot:
         # Test bot connection
         try:
             me = await self.bot.get_me()
+            self._bot_username = (me.username or "").lower()
             logger.info(f"Bot connected: @{me.username}")
         except Exception as e:
             raise RuntimeError(f"Failed to connect bot: {e}")
@@ -471,6 +480,38 @@ class JarvisBuyBot:
                     retry_delay *= 2  # Exponential backoff
                 else:
                     logger.error(f"Failed to send buy notification after {max_retries} attempts: {e}")
+
+    async def _handle_mentions(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Admin-only: respond to @mentions in group chats so Matt can confirm it's alive."""
+        try:
+            if not update.message or not update.message.text:
+                return
+            if not update.effective_user or update.effective_user.is_bot:
+                return
+
+            user_id = update.effective_user.id
+            if not _is_admin(user_id):
+                return
+
+            text = update.message.text.strip()
+            text_lower = text.lower()
+
+            # Only respond if explicitly @mentioned
+            if not self._bot_username:
+                # Best-effort fetch (should already be set in start())
+                me = await context.bot.get_me()
+                self._bot_username = (me.username or "").lower()
+
+            if self._bot_username and f"@{self._bot_username}" not in text_lower:
+                return
+
+            await update.message.reply_text(
+                "✅ I’m here.\n\nUse /demo on @jarvistrades_bot for the trading UI.",
+                disable_web_page_preview=True,
+            )
+        except Exception as exc:
+            logger.warning(f"Mention handler error: {exc}")
+
 
     async def _handle_faq_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle FAQ expand/collapse button clicks."""
@@ -1226,6 +1267,10 @@ async def run_buy_bot():
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+
+    # SECURITY: prevent HTTP client libraries from logging full request URLs (can include bot tokens)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("telegram").setLevel(logging.INFO)
 
     # Start metrics server (best-effort)
     try:
