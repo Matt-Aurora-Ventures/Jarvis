@@ -459,6 +459,11 @@ class HeliusWebSocketMonitor(TransactionMonitor):
     MAX_BACKOFF_SECONDS = 60
     BACKOFF_MULTIPLIER = 2
 
+    def __init__(self, *args, **kwargs):
+        """Initialize HeliusWebSocketMonitor with WebSocket task reference."""
+        super().__init__(*args, **kwargs)
+        self._ws_task: Optional[asyncio.Task] = None
+
     async def start(self):
         """Start WebSocket monitoring."""
         self._running = True
@@ -471,9 +476,28 @@ class HeliusWebSocketMonitor(TransactionMonitor):
 
         await self._update_prices()
 
-        # Start monitoring
-        asyncio.create_task(self._price_update_loop())
-        asyncio.create_task(self._websocket_loop())
+        # Start monitoring with exception handlers
+        self._price_task = asyncio.create_task(self._price_update_loop())
+        self._price_task.add_done_callback(self._handle_task_exception)
+
+        self._ws_task = asyncio.create_task(self._websocket_loop())
+        self._ws_task.add_done_callback(self._handle_task_exception)
+
+    async def stop(self):
+        """Stop WebSocket monitoring."""
+        self._running = False
+
+        # Cancel WebSocket task
+        if self._ws_task and not self._ws_task.done():
+            logger.info("Cancelling WebSocket task...")
+            self._ws_task.cancel()
+            try:
+                await self._ws_task
+            except asyncio.CancelledError:
+                logger.debug("WebSocket task cancelled successfully")
+
+        # Call parent stop() for price task and session cleanup
+        await super().stop()
 
     def _calculate_backoff(self) -> float:
         """Calculate exponential backoff delay."""

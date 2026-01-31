@@ -1129,6 +1129,87 @@ class TestHeliusWebSocketMonitor:
         assert monitor._reconnect_attempts == 0
 
     @pytest.mark.asyncio
+    async def test_start_registers_exception_handlers(self):
+        """Test start registers exception handlers for background tasks."""
+        monitor = HeliusWebSocketMonitor(
+            token_address="TOKEN",
+            helius_api_key="key",
+        )
+
+        mock_task = MagicMock()
+        mock_task.add_done_callback = MagicMock()
+
+        with patch.object(monitor, '_update_prices', new_callable=AsyncMock):
+            with patch('asyncio.create_task', return_value=mock_task) as mock_create:
+                await monitor.start()
+
+        # Should have called add_done_callback for both tasks
+        assert mock_task.add_done_callback.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_start_stores_task_references(self):
+        """Test start stores task references for proper cancellation."""
+        monitor = HeliusWebSocketMonitor(
+            token_address="TOKEN",
+            helius_api_key="key",
+        )
+
+        mock_task = MagicMock()
+
+        with patch.object(monitor, '_update_prices', new_callable=AsyncMock):
+            with patch('asyncio.create_task', return_value=mock_task):
+                await monitor.start()
+
+        # Should store task references
+        assert monitor._price_task is not None
+        assert monitor._ws_task is not None
+
+    @pytest.mark.asyncio
+    async def test_stop_cancels_websocket_task(self):
+        """Test stop cancels WebSocket task properly."""
+        monitor = HeliusWebSocketMonitor(
+            token_address="TOKEN",
+            helius_api_key="key",
+        )
+        monitor._running = True
+        monitor._session = AsyncMock()
+        monitor._ws = AsyncMock()
+
+        # Track cancel calls
+        ws_cancel_called = []
+        price_cancel_called = []
+
+        # Create a proper awaitable mock task class
+        class MockTask:
+            def __init__(self, cancel_tracker):
+                self._done = False
+                self._cancel_tracker = cancel_tracker
+
+            def done(self):
+                return self._done
+
+            def cancel(self):
+                self._cancel_tracker.append(True)
+                self._done = True
+
+            def __await__(self):
+                async def _raise_cancelled():
+                    raise asyncio.CancelledError()
+                return _raise_cancelled().__await__()
+
+        mock_ws_task = MockTask(ws_cancel_called)
+        monitor._ws_task = mock_ws_task
+
+        mock_price_task = MockTask(price_cancel_called)
+        monitor._price_task = mock_price_task
+
+        await monitor.stop()
+
+        # Both tasks should be cancelled
+        assert len(ws_cancel_called) == 1, "WebSocket task cancel should be called"
+        assert len(price_cancel_called) == 1, "Price task cancel should be called"
+
+    @pytest.mark.asyncio
     async def test_handle_ws_message_subscription_confirmation(self):
         """Test handles subscription confirmation message."""
         monitor = HeliusWebSocketMonitor(
