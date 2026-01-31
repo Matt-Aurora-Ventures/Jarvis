@@ -4298,12 +4298,8 @@ Reply with a Solana token address to buy.
         keyboard = []
 
         if not picks:
-            if section == "prestocks":
-                lines.append("_PreStocks data is not live yet._")
-                lines.append("_Check back soon for private market listings._")
-            else:
-                lines.append("_No picks available in this category_")
-                lines.append("_Check back after next report refresh_")
+            lines.append("_No picks available in this category_")
+            lines.append("_Check back after next report refresh_")
         else:
             for i, pick in enumerate(picks[:8]):
                 symbol = pick.get("symbol", "???")
