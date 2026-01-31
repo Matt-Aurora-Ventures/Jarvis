@@ -14,6 +14,8 @@ from pathlib import Path
 from enum import Enum
 import json
 
+from core.security_validation import sanitize_sql_identifier
+
 logger = logging.getLogger(__name__)
 
 
@@ -217,9 +219,11 @@ class RetentionManager:
         cursor = conn.cursor()
 
         # Get count of records to process
+        safe_table = sanitize_sql_identifier(table_name)
+        safe_timestamp_col = sanitize_sql_identifier(policy.timestamp_column)
         cursor.execute(f"""
-            SELECT COUNT(*) FROM {table_name}
-            WHERE {policy.timestamp_column} < ?
+            SELECT COUNT(*) FROM {safe_table}
+            WHERE {safe_timestamp_col} < ?
         """, (cutoff_date,))
         record_count = cursor.fetchone()[0]
 
@@ -238,8 +242,8 @@ class RetentionManager:
 
             elif policy.action == RetentionAction.DELETE:
                 cursor.execute(f"""
-                    DELETE FROM {table_name}
-                    WHERE {policy.timestamp_column} < ?
+                    DELETE FROM {safe_table}
+                    WHERE {safe_timestamp_col} < ?
                 """, (cutoff_date,))
                 records_deleted = cursor.rowcount
                 conn.commit()
@@ -280,9 +284,12 @@ class RetentionManager:
         """Archive SQLite records to JSON file."""
         cursor = conn.cursor()
 
+        safe_table = sanitize_sql_identifier(table_name)
+        safe_timestamp_col = sanitize_sql_identifier(timestamp_col)
+
         cursor.execute(f"""
-            SELECT * FROM {table_name}
-            WHERE {timestamp_col} < ?
+            SELECT * FROM {safe_table}
+            WHERE {safe_timestamp_col} < ?
         """, (cutoff_date,))
 
         columns = [description[0] for description in cursor.description]
@@ -300,8 +307,8 @@ class RetentionManager:
 
         # Delete archived records
         cursor.execute(f"""
-            DELETE FROM {table_name}
-            WHERE {timestamp_col} < ?
+            DELETE FROM {safe_table}
+            WHERE {safe_timestamp_col} < ?
         """, (cutoff_date,))
         conn.commit()
 
@@ -317,6 +324,9 @@ class RetentionManager:
         """Anonymize old records instead of deleting."""
         cursor = conn.cursor()
 
+        safe_table = sanitize_sql_identifier(table_name)
+        safe_timestamp_col = sanitize_sql_identifier(timestamp_col)
+
         # Common sensitive columns to anonymize
         sensitive_columns = [
             'wallet_address', 'buyer_wallet', 'user_id', 'email',
@@ -324,21 +334,25 @@ class RetentionManager:
         ]
 
         # Get actual columns in table
-        cursor.execute(f"PRAGMA table_info({table_name})")
+        cursor.execute(f"PRAGMA table_info({safe_table})")
         table_columns = {row[1] for row in cursor.fetchall()}
 
-        # Find columns to anonymize
-        columns_to_anon = [c for c in sensitive_columns if c in table_columns]
+        # Find columns to anonymize (sanitize each column name)
+        columns_to_anon = [
+            sanitize_sql_identifier(c)
+            for c in sensitive_columns
+            if c in table_columns
+        ]
 
         if not columns_to_anon:
             return 0
 
-        # Build update query
+        # Build update query (columns already sanitized)
         set_clauses = [f"{col} = '[REDACTED]'" for col in columns_to_anon]
         cursor.execute(f"""
-            UPDATE {table_name}
+            UPDATE {safe_table}
             SET {', '.join(set_clauses)}
-            WHERE {timestamp_col} < ?
+            WHERE {safe_timestamp_col} < ?
         """, (cutoff_date,))
         conn.commit()
 
