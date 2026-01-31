@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from core.security.safe_pickle import safe_pickle_load
 
 logger = logging.getLogger(__name__)
 
@@ -132,8 +133,8 @@ class PricePredictor:
             model_path = self.model_dir / f"price_model_{horizon}.pkl"
             if model_path.exists() and HAS_SKLEARN:
                 try:
-                    with open(model_path, "rb") as f:
-                        saved = pickle.load(f)
+                    # Use safe pickle loader to prevent code execution attacks
+                    saved = safe_pickle_load(model_path)
                     self._models[horizon] = saved.get("model")
                     self._scalers[horizon] = saved.get("scaler")
                     self._is_trained[horizon] = True

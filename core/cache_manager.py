@@ -7,6 +7,8 @@ import hashlib
 import pickle
 import sqlite3
 import threading
+
+from core.security.safe_pickle import safe_pickle_loads
 import time
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -217,8 +219,12 @@ class CacheManager:
         return pickle.dumps(value)
 
     def _deserialize(self, data: bytes) -> Any:
-        """Deserialize value from storage."""
-        return pickle.loads(data)
+        """Deserialize value from storage.
+
+        WARNING: Cache poisoning could lead to code execution.
+        Consider switching to JSON for non-ML data.
+        """
+        return safe_pickle_loads(data)
 
     def _cache_key(self, key: str, namespace: Optional[str] = None) -> str:
         """Generate cache key with optional namespace."""
