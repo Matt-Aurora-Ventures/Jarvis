@@ -37,13 +37,17 @@ class QueryBuilder:
     
     def where_in(self, column: str, values: list) -> "QueryBuilder":
         if values:
+            safe_column = sanitize_sql_identifier(column)
             placeholders = ",".join("?" * len(values))
-            self._where.append(f"{column} IN ({placeholders})")
+            self._where.append(f"{safe_column} IN ({placeholders})")
             self._params.extend(values)
         return self
     
     def order_by(self, column: str, direction: str = "ASC") -> "QueryBuilder":
-        self._order_by.append(f"{column} {direction.upper()}")
+        safe_column = sanitize_sql_identifier(column)
+        # Only allow ASC or DESC
+        safe_direction = "DESC" if direction.upper() == "DESC" else "ASC"
+        self._order_by.append(f"{safe_column} {safe_direction}")
         return self
     
     def limit(self, limit: int) -> "QueryBuilder":
@@ -55,7 +59,12 @@ class QueryBuilder:
         return self
     
     def join(self, table: str, condition: str, join_type: str = "INNER") -> "QueryBuilder":
-        self._joins.append(f"{join_type} JOIN {table} ON {condition}")
+        safe_table = sanitize_sql_identifier(table)
+        # Only allow valid join types
+        valid_joins = {"INNER", "LEFT", "RIGHT", "FULL", "CROSS"}
+        safe_join_type = join_type.upper() if join_type.upper() in valid_joins else "INNER"
+        # Note: condition is more complex to sanitize safely - ensure callers use safe patterns
+        self._joins.append(f"{safe_join_type} JOIN {safe_table} ON {condition}")
         return self
     
     def paginate(self, page: int, page_size: int) -> "QueryBuilder":

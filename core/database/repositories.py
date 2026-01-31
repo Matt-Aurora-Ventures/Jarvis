@@ -82,11 +82,14 @@ class BaseRepository(ABC, Generic[T]):
         # Fallback implementation - child classes should override with explicit columns
         with self.pool.cursor() as cursor:
             # Get column list from table schema for optimization
-            cursor.execute(f"PRAGMA table_info({self.table_name})")
-            column_names = [col[1] for col in cursor.fetchall()]
+            # table_name is validated in __init__, but sanitize again for safety
+            safe_table = sanitize_sql_identifier(self.table_name)
+            cursor.execute(f"PRAGMA table_info({safe_table})")
+            # Sanitize each column name from schema to prevent injection
+            column_names = [sanitize_sql_identifier(col[1]) for col in cursor.fetchall()]
             columns = ", ".join(column_names)
 
-            cursor.execute(f"SELECT {columns} FROM {self.table_name} WHERE id = ?", (id,))
+            cursor.execute(f"SELECT {columns} FROM {safe_table} WHERE id = ?", (id,))
             row = cursor.fetchone()
             return self._row_to_entity(row) if row else None
     
@@ -99,12 +102,15 @@ class BaseRepository(ABC, Generic[T]):
         """
         with self.pool.cursor() as cursor:
             # Get column list from table schema (cached per table)
-            cursor.execute(f"PRAGMA table_info({self.table_name})")
-            column_names = [col[1] for col in cursor.fetchall()]
+            # table_name is validated in __init__, but sanitize again for safety
+            safe_table = sanitize_sql_identifier(self.table_name)
+            cursor.execute(f"PRAGMA table_info({safe_table})")
+            # Sanitize each column name from schema to prevent injection
+            column_names = [sanitize_sql_identifier(col[1]) for col in cursor.fetchall()]
             columns = ", ".join(column_names)
 
             cursor.execute(
-                f"SELECT {columns} FROM {self.table_name} ORDER BY id DESC LIMIT ? OFFSET ?",
+                f"SELECT {columns} FROM {safe_table} ORDER BY id DESC LIMIT ? OFFSET ?",
                 (limit, offset)
             )
             return [self._row_to_entity(row) for row in cursor.fetchall()]
@@ -112,13 +118,15 @@ class BaseRepository(ABC, Generic[T]):
     def count(self) -> int:
         """Count all entities."""
         with self.pool.cursor() as cursor:
-            cursor.execute(f"SELECT COUNT(*) FROM {self.table_name}")
+            safe_table = sanitize_sql_identifier(self.table_name)
+            cursor.execute(f"SELECT COUNT(*) FROM {safe_table}")
             return cursor.fetchone()[0]
     
     def delete(self, id: int) -> bool:
         """Delete entity by ID."""
         with self.pool.cursor() as cursor:
-            cursor.execute(f"DELETE FROM {self.table_name} WHERE id = ?", (id,))
+            safe_table = sanitize_sql_identifier(self.table_name)
+            cursor.execute(f"DELETE FROM {safe_table} WHERE id = ?", (id,))
             return cursor.rowcount > 0
 
 
@@ -223,11 +231,12 @@ class UserRepository(BaseRepository[User]):
     
     def get_by_telegram_id(self, telegram_id: int) -> Optional[User]:
         """Get user by Telegram ID."""
-        # Optimized: Only fetch needed columns
+        # Optimized: Only fetch needed columns (hardcoded safe column names)
         columns = "id, telegram_id, username, first_name, is_admin, is_active, created_at, updated_at"
+        safe_table = sanitize_sql_identifier(self.table_name)
         with self.pool.cursor() as cursor:
             cursor.execute(
-                f"SELECT {columns} FROM {self.table_name} WHERE telegram_id = ?",
+                f"SELECT {columns} FROM {safe_table} WHERE telegram_id = ?",
                 (telegram_id,)
             )
             row = cursor.fetchone()
@@ -235,11 +244,12 @@ class UserRepository(BaseRepository[User]):
     
     def get_admins(self) -> List[User]:
         """Get all admin users."""
-        # Optimized: Only fetch needed columns
+        # Optimized: Only fetch needed columns (hardcoded safe column names)
         columns = "id, telegram_id, username, first_name, is_admin, is_active, created_at, updated_at"
+        safe_table = sanitize_sql_identifier(self.table_name)
         with self.pool.cursor() as cursor:
             cursor.execute(
-                f"SELECT {columns} FROM {self.table_name} WHERE is_admin = 1"
+                f"SELECT {columns} FROM {safe_table} WHERE is_admin = 1"
             )
             return [self._row_to_entity(row) for row in cursor.fetchall()]
     
@@ -249,10 +259,14 @@ class UserRepository(BaseRepository[User]):
         cols = list(data.keys())
         vals = list(data.values())
         placeholders = ','.join(['?' for _ in cols])
-        
+
+        # Sanitize table and column names
+        safe_table = sanitize_sql_identifier(self.table_name)
+        safe_cols = [sanitize_sql_identifier(col) for col in cols]
+
         with self.pool.cursor() as cursor:
             cursor.execute(
-                f"INSERT INTO {self.table_name} ({','.join(cols)}) VALUES ({placeholders})",
+                f"INSERT INTO {safe_table} ({','.join(safe_cols)}) VALUES ({placeholders})",
                 vals
             )
             user.id = cursor.lastrowid
@@ -302,42 +316,45 @@ class PositionRepository(BaseRepository[Position]):
     
     def get_open_positions(self, user_id: Optional[int] = None) -> List[Position]:
         """Get all open positions, optionally filtered by user."""
-        # Optimized: Only fetch needed columns for trading hot path
+        # Optimized: Only fetch needed columns for trading hot path (hardcoded safe column names)
         columns = "id, user_id, token_mint, token_symbol, entry_price, current_price, quantity, cost_basis, unrealized_pnl, unrealized_pnl_pct, take_profit_pct, stop_loss_pct, status, opened_at, closed_at"
+        safe_table = sanitize_sql_identifier(self.table_name)
         with self.pool.cursor() as cursor:
             if user_id:
                 cursor.execute(
-                    f"SELECT {columns} FROM {self.table_name} WHERE status = 'open' AND user_id = ?",
+                    f"SELECT {columns} FROM {safe_table} WHERE status = 'open' AND user_id = ?",
                     (user_id,)
                 )
             else:
                 cursor.execute(
-                    f"SELECT {columns} FROM {self.table_name} WHERE status = 'open'"
+                    f"SELECT {columns} FROM {safe_table} WHERE status = 'open'"
                 )
             return [self._row_to_entity(row) for row in cursor.fetchall()]
     
     def get_by_token(self, token_mint: str, user_id: Optional[int] = None) -> List[Position]:
         """Get positions for a specific token."""
-        # Optimized: Only fetch needed columns
+        # Optimized: Only fetch needed columns (hardcoded safe column names)
         columns = "id, user_id, token_mint, token_symbol, entry_price, current_price, quantity, cost_basis, unrealized_pnl, unrealized_pnl_pct, take_profit_pct, stop_loss_pct, status, opened_at, closed_at"
+        safe_table = sanitize_sql_identifier(self.table_name)
         with self.pool.cursor() as cursor:
             if user_id:
                 cursor.execute(
-                    f"SELECT {columns} FROM {self.table_name} WHERE token_mint = ? AND user_id = ?",
+                    f"SELECT {columns} FROM {safe_table} WHERE token_mint = ? AND user_id = ?",
                     (token_mint, user_id)
                 )
             else:
                 cursor.execute(
-                    f"SELECT {columns} FROM {self.table_name} WHERE token_mint = ?",
+                    f"SELECT {columns} FROM {safe_table} WHERE token_mint = ?",
                     (token_mint,)
                 )
             return [self._row_to_entity(row) for row in cursor.fetchall()]
     
     def close_position(self, position_id: int) -> bool:
         """Mark a position as closed."""
+        safe_table = sanitize_sql_identifier(self.table_name)
         with self.pool.cursor() as cursor:
             cursor.execute(
-                f"UPDATE {self.table_name} SET status = 'closed', closed_at = ? WHERE id = ?",
+                f"UPDATE {safe_table} SET status = 'closed', closed_at = ? WHERE id = ?",
                 (datetime.now().isoformat(), position_id)
             )
             return cursor.rowcount > 0
@@ -386,28 +403,30 @@ class TradeRepository(BaseRepository[Trade]):
     
     def get_recent_trades(self, user_id: Optional[int] = None, limit: int = 50) -> List[Trade]:
         """Get recent trades."""
-        # Optimized: Only fetch needed columns for trade history
+        # Optimized: Only fetch needed columns for trade history (hardcoded safe column names)
         columns = "id, user_id, position_id, token_mint, token_symbol, side, price, quantity, total_value, fee, tx_signature, status, executed_at"
+        safe_table = sanitize_sql_identifier(self.table_name)
         with self.pool.cursor() as cursor:
             if user_id:
                 cursor.execute(
-                    f"SELECT {columns} FROM {self.table_name} WHERE user_id = ? ORDER BY executed_at DESC LIMIT ?",
+                    f"SELECT {columns} FROM {safe_table} WHERE user_id = ? ORDER BY executed_at DESC LIMIT ?",
                     (user_id, limit)
                 )
             else:
                 cursor.execute(
-                    f"SELECT {columns} FROM {self.table_name} ORDER BY executed_at DESC LIMIT ?",
+                    f"SELECT {columns} FROM {safe_table} ORDER BY executed_at DESC LIMIT ?",
                     (limit,)
                 )
             return [self._row_to_entity(row) for row in cursor.fetchall()]
     
     def get_by_tx_signature(self, tx_signature: str) -> Optional[Trade]:
         """Get trade by transaction signature."""
-        # Optimized: Only fetch needed columns
+        # Optimized: Only fetch needed columns (hardcoded safe column names)
         columns = "id, user_id, position_id, token_mint, token_symbol, side, price, quantity, total_value, fee, tx_signature, status, executed_at"
+        safe_table = sanitize_sql_identifier(self.table_name)
         with self.pool.cursor() as cursor:
             cursor.execute(
-                f"SELECT {columns} FROM {self.table_name} WHERE tx_signature = ?",
+                f"SELECT {columns} FROM {safe_table} WHERE tx_signature = ?",
                 (tx_signature,)
             )
             row = cursor.fetchone()
@@ -441,9 +460,10 @@ class ConfigRepository(BaseRepository[BotConfig]):
     
     def get_value(self, key: str, default: str = "") -> str:
         """Get config value by key."""
+        safe_table = sanitize_sql_identifier(self.table_name)
         with self.pool.cursor() as cursor:
             cursor.execute(
-                f"SELECT value FROM {self.table_name} WHERE key = ?",
+                f"SELECT value FROM {safe_table} WHERE key = ?",
                 (key,)
             )
             row = cursor.fetchone()
@@ -451,9 +471,10 @@ class ConfigRepository(BaseRepository[BotConfig]):
     
     def set_value(self, key: str, value: str, description: Optional[str] = None) -> None:
         """Set config value (upsert)."""
+        safe_table = sanitize_sql_identifier(self.table_name)
         with self.pool.cursor() as cursor:
             cursor.execute(
-                f"""INSERT INTO {self.table_name} (key, value, description, updated_at) 
+                f"""INSERT INTO {safe_table} (key, value, description, updated_at)
                     VALUES (?, ?, ?, ?)
                     ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?""",
                 (key, value, description, datetime.now().isoformat(), value, datetime.now().isoformat())

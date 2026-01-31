@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .postgres_client import PostgresClient
+from core.security_validation import sanitize_sql_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,8 @@ class DataMigrator:
         cursor = conn.cursor()
 
         try:
-            cursor.execute(f"SELECT * FROM {table_name}")
+            safe_table = sanitize_sql_identifier(table_name)
+            cursor.execute(f"SELECT * FROM {safe_table}")
             columns = [desc[0] for desc in cursor.description]
             rows = []
 
@@ -172,9 +174,10 @@ class DataMigrator:
         """Get row count from SQLite table."""
         conn = self._get_sqlite_connection()
         cursor = conn.cursor()
+        safe_table = sanitize_sql_identifier(table_name)
 
         try:
-            cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+            cursor.execute(f"SELECT COUNT(*) FROM {safe_table}")
             return cursor.fetchone()[0]
         except sqlite3.OperationalError:
             return 0
@@ -185,9 +188,10 @@ class DataMigrator:
         """Get column names and types from SQLite table."""
         conn = self._get_sqlite_connection()
         cursor = conn.cursor()
+        safe_table = sanitize_sql_identifier(table_name)
 
         try:
-            cursor.execute(f"PRAGMA table_info({table_name})")
+            cursor.execute(f"PRAGMA table_info({safe_table})")
             return [(row[1], row[2]) for row in cursor.fetchall()]
         finally:
             conn.close()
@@ -216,14 +220,18 @@ class DataMigrator:
             logger.info(f"Table {table_name} is empty, skipping")
             return 0
 
-        # Get columns from first row
-        columns = list(rows[0].keys())
-        placeholders = ", ".join(f"${i+1}" for i in range(len(columns)))
-        columns_str = ", ".join(columns)
+        # Sanitize table and column names to prevent SQL injection
+        safe_table = sanitize_sql_identifier(table_name)
 
-        # Build INSERT query
+        # Get columns from first row and sanitize each
+        columns = list(rows[0].keys())
+        safe_columns = [sanitize_sql_identifier(col) for col in columns]
+        placeholders = ", ".join(f"${i+1}" for i in range(len(columns)))
+        columns_str = ", ".join(safe_columns)
+
+        # Build INSERT query with sanitized identifiers
         insert_query = f"""
-            INSERT INTO {table_name} ({columns_str})
+            INSERT INTO {safe_table} ({columns_str})
             VALUES ({placeholders})
             ON CONFLICT DO NOTHING
         """
@@ -264,9 +272,10 @@ class DataMigrator:
         Returns:
             True if counts match, False otherwise
         """
+        safe_table = sanitize_sql_identifier(table_name)
         sqlite_count = self._get_sqlite_count(table_name)
         pg_count = await self._pg_client.fetchval(
-            f"SELECT COUNT(*) FROM {table_name}"
+            f"SELECT COUNT(*) FROM {safe_table}"
         )
 
         is_valid = sqlite_count == pg_count
