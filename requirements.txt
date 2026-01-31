@@ -8,7 +8,7 @@ openwakeword>=0.6.0; sys_platform == 'win32'
 pyautogui>=0.9.53
 pygetwindow>=0.0.9
 pytesseract>=0.3.10
-Pillow>=10.0.0
+Pillow>=10.4.0  # FIXED: Buffer overflow vulnerability (GitHub Dependabot #20)
 opencv-python>=4.8.0
 numpy>=1.24.0
 matplotlib>=3.8.0
@@ -19,7 +19,7 @@ python-xlib>=0.33; sys_platform == 'linux'
 pywin32>=300; sys_platform == 'win32'
 pynput>=1.7.6
 requests>=2.31.0
-aiohttp>=3.9.0
+aiohttp>=3.11.7  # FIXED: Multiple vulnerabilities (directory traversal #15, DoS #22, #36, #37, etc.)
 python-dotenv>=1.0.1
 tweepy>=4.14.0
 anthropic>=0.32.0
