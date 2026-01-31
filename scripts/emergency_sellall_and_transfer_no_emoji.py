@@ -29,10 +29,10 @@ POSITIONS_FILE = Path(__file__).parent.parent / "bots" / "treasury" / ".position
 
 async def sell_all_positions():
     """Sell all non-SOL positions"""
-    print("🔥 Loading positions...")
+    print(" Loading positions...")
 
     if not POSITIONS_FILE.exists():
-        print("❌ No positions file found")
+        print(" No positions file found")
         return
 
     with open(POSITIONS_FILE, 'r') as f:
@@ -42,10 +42,10 @@ async def sell_all_positions():
     open_positions = [p for p in positions if p['status'] == 'OPEN' and p['token_symbol'] != 'SOL']
 
     if not open_positions:
-        print("✅ No open positions to sell")
+        print(" No open positions to sell")
         return
 
-    print(f"📊 Found {len(open_positions)} positions to sell:")
+    print(f" Found {len(open_positions)} positions to sell:")
     for pos in open_positions:
         print(f"  - {pos['token_symbol']}: ${pos['amount_usd']:.2f}")
 
@@ -61,7 +61,7 @@ async def sell_all_positions():
         amount = pos['amount']
         symbol = pos['token_symbol']
 
-        print(f"\n💰 Selling {symbol} (amount: {amount})...")
+        print(f"\n Selling {symbol} (amount: {amount})...")
 
         try:
             # Swap to SOL
@@ -74,17 +74,17 @@ async def sell_all_positions():
             )
 
             if result.get('success'):
-                print(f"✅ Sold {symbol}: {result.get('signature', 'N/A')}")
+                print(f" Sold {symbol}: {result.get('signature', 'N/A')}")
             else:
-                print(f"❌ Failed to sell {symbol}: {result.get('error', 'Unknown error')}")
+                print(f" Failed to sell {symbol}: {result.get('error', 'Unknown error')}")
         except Exception as e:
-            print(f"❌ Error selling {symbol}: {e}")
+            print(f" Error selling {symbol}: {e}")
 
-    print("\n✅ All positions sold")
+    print("\n All positions sold")
 
 async def transfer_all_sol():
     """Transfer all SOL to target wallet"""
-    print("\n🚀 Transferring all SOL...")
+    print("\n Transferring all SOL...")
 
     # Load wallet
     treasury_keypair = load_treasury_keypair()
@@ -97,10 +97,10 @@ async def transfer_all_sol():
         balance_lamports = balance_resp.value
         balance_sol = balance_lamports / 1e9
 
-        print(f"💵 Current balance: {balance_sol:.4f} SOL ({balance_lamports} lamports)")
+        print(f" Current balance: {balance_sol:.4f} SOL ({balance_lamports} lamports)")
 
         if balance_lamports < 5000:  # Less than 0.000005 SOL
-            print("❌ Insufficient balance to transfer")
+            print(" Insufficient balance to transfer")
             return
 
         # Reserve 0.001 SOL for transaction fee
@@ -108,10 +108,10 @@ async def transfer_all_sol():
         transfer_amount = balance_lamports - fee_lamports
 
         if transfer_amount <= 0:
-            print("❌ Not enough SOL after fee reservation")
+            print(" Not enough SOL after fee reservation")
             return
 
-        print(f"📤 Transferring {transfer_amount / 1e9:.4f} SOL to {TARGET_WALLET}...")
+        print(f" Transferring {transfer_amount / 1e9:.4f} SOL to {TARGET_WALLET}...")
 
         # Create transfer instruction
         target_pubkey = Pubkey.from_string(TARGET_WALLET)
@@ -136,32 +136,32 @@ async def transfer_all_sol():
         result = await rpc_client.send_transaction(tx)
         signature = str(result.value)
 
-        print(f"✅ Transfer complete!")
-        print(f"📝 Signature: {signature}")
-        print(f"🔗 https://solscan.io/tx/{signature}")
+        print(f" Transfer complete!")
+        print(f" Signature: {signature}")
+        print(f" https://solscan.io/tx/{signature}")
 
     except Exception as e:
-        print(f"❌ Transfer failed: {e}")
+        print(f" Transfer failed: {e}")
     finally:
         await rpc_client.close()
 
 async def main():
     print("=" * 60)
-    print("🔥 EMERGENCY TREASURY SELLALL & TRANSFER")
+    print(" EMERGENCY TREASURY SELLALL & TRANSFER")
     print("=" * 60)
 
     # Step 1: Sell all positions
     await sell_all_positions()
 
     # Wait a bit for swaps to settle
-    print("\n⏳ Waiting 5 seconds for swaps to settle...")
+    print("\n Waiting 5 seconds for swaps to settle...")
     await asyncio.sleep(5)
 
     # Step 2: Transfer all SOL
     await transfer_all_sol()
 
     print("\n" + "=" * 60)
-    print("✅ OPERATION COMPLETE")
+    print(" OPERATION COMPLETE")
     print("=" * 60)
 
 if __name__ == "__main__":

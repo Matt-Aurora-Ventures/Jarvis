@@ -438,31 +438,46 @@ def main():
     print("=" * 50 + "\n")
 
     # Start background services (TP/SL monitoring, health checks)
+    import sys
     async def startup_tasks(app):
+        import sys
+        print("[DEBUG] startup_tasks: ENTERED", flush=True)
+        sys.stdout.flush()
         try:
             # Initialize health monitoring
+            print("[DEBUG] startup_tasks: Importing health_monitor...")
             from core.health_monitor import get_health_monitor
+            print("[DEBUG] startup_tasks: Getting health monitor instance...")
             monitor = get_health_monitor()
+            print("[DEBUG] startup_tasks: Starting health monitoring...")
             await monitor.start_monitoring()
             print("Health monitoring: STARTED")
         except Exception as e:
             print(f"Health monitoring: FAILED - {e}")
 
+        print("[DEBUG] startup_tasks: Health monitor done, checking FSM...")
         # Initialize FSM storage and recover active sessions
         if FSM_AVAILABLE:
             try:
+                print("[DEBUG] startup_tasks: Getting FSM storage...")
                 storage = get_fsm_storage()
+                print("[DEBUG] startup_tasks: Running FSM health check...")
                 health = await storage.health_check()
+                print(f"[DEBUG] startup_tasks: FSM health check returned: {health}")
                 if health.get("redis_connected"):
                     print("FSM Storage: REDIS CONNECTED")
                     # Recover active sessions from Redis
+                    print("[DEBUG] startup_tasks: Getting active sessions...")
                     sessions = await storage.get_active_sessions()
+                    print(f"[DEBUG] startup_tasks: Got {len(sessions) if sessions else 0} sessions")
                     if sessions:
                         print(f"FSM Storage: Recovered {len(sessions)} active sessions")
                 else:
                     print("FSM Storage: MEMORY FALLBACK (Redis unavailable)")
             except Exception as e:
                 print(f"FSM Storage: FAILED - {e}")
+
+        print("[DEBUG] startup_tasks: COMPLETED")
 
     app.post_init = startup_tasks
 
