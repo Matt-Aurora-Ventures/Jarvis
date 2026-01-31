@@ -478,23 +478,28 @@ class PnLTracker:
         with self.db._get_connection() as conn:
             cursor = conn.cursor()
 
-            # Determine date filter
-            date_filter = ""
+            # Build parameterized date filter
+            date_condition = ""
+            params_positions = []
+            params_trades = []
+
             if period == "1d":
-                date_filter = "AND datetime(opened_at) > datetime('now', '-1 day')"
+                date_condition = "AND datetime(opened_at) > datetime('now', '-1 day')"
             elif period == "7d":
-                date_filter = "AND datetime(opened_at) > datetime('now', '-7 days')"
+                date_condition = "AND datetime(opened_at) > datetime('now', '-7 days')"
             elif period == "30d":
-                date_filter = "AND datetime(opened_at) > datetime('now', '-30 days')"
+                date_condition = "AND datetime(opened_at) > datetime('now', '-30 days')"
             elif period == "ytd":
                 year_start = datetime.now().replace(month=1, day=1).strftime('%Y-%m-%d')
-                date_filter = f"AND opened_at >= '{year_start}'"
+                date_condition = "AND opened_at >= ?"
+                params_positions = [year_start]
+                params_trades = [year_start]
 
             # Get closed positions
             cursor.execute(f"""
                 SELECT * FROM positions
-                WHERE status = 'closed' {date_filter}
-            """)
+                WHERE status = 'closed' {date_condition}
+            """, params_positions)
 
             closed_positions = cursor.fetchall()
 
@@ -520,11 +525,12 @@ class PnLTracker:
             gross_loss = abs(sum(losses))
             profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
 
-            # Total volume
+            # Total volume (use timestamp column for trades table)
+            trades_date_condition = date_condition.replace('opened_at', 'timestamp')
             cursor.execute(f"""
                 SELECT SUM(value) as total_volume FROM trades
-                WHERE 1=1 {date_filter.replace('opened_at', 'timestamp')}
-            """)
+                WHERE 1=1 {trades_date_condition}
+            """, params_trades)
             result = cursor.fetchone()
             total_volume = result['total_volume'] or 0
 
