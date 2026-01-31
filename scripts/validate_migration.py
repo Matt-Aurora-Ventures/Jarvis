@@ -18,6 +18,10 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+# Add parent directory to path for core imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.security_validation import sanitize_sql_identifier
+
 # Paths
 DATA_DIR = Path.home() / ".lifeos" / "data"
 BACKUP_DIR = DATA_DIR / "backup"
@@ -95,7 +99,8 @@ class MigrationValidator:
         # Count rows in each table
         print(f"\n  Table row counts ({db_name}):")
         for table in sorted(actual_tables):
-            cursor.execute(f"SELECT COUNT(*) FROM {table}")
+            safe_table = sanitize_sql_identifier(table)
+            cursor.execute(f"SELECT COUNT(*) FROM {safe_table}")
             count = cursor.fetchone()[0]
             status = "OK" if count > 0 else "EMPTY"
             print(f"    {table:30} {count:6} rows [{status}]")
@@ -256,9 +261,10 @@ class MigrationValidator:
             target_conn = sqlite3.connect(TARGET_DBS["jarvis_core"])
 
             for table in ["positions", "trades", "scorecard"]:
-                source_count = source_conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                safe_table = sanitize_sql_identifier(table)
+                source_count = source_conn.execute(f"SELECT COUNT(*) FROM {safe_table}").fetchone()[0]
                 try:
-                    target_count = target_conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                    target_count = target_conn.execute(f"SELECT COUNT(*) FROM {safe_table}").fetchone()[0]
                     match = "✓" if source_count == target_count else "✗ MISMATCH"
                     print(f"    {table:20} {source_count:6} → {target_count:6} [{match}]")
                     if source_count != target_count:
