@@ -252,7 +252,7 @@ Choose how much SOL to spend:
                     tp_price = position.get("tp_price", 0)
                     sl_price = position.get("sl_price", 0)
 
-                    return DemoMenuBuilder.success_message(
+                    success_text, success_kb = DemoMenuBuilder.success_message(
                         action=(
                             "Buy Order Executed via Bags.fm"
                             if position.get("source") == "bags_fm"
@@ -269,6 +269,23 @@ Choose how much SOL to spend:
                             "Check /positions to monitor."
                         ),
                     )
+
+                    # IMPORTANT: In group chats and high-load scenarios, edit_text can be flaky
+                    # (message can get overwritten by subsequent menu renders). To guarantee
+                    # the user sees the result, send a new message for trade confirmations.
+                    try:
+                        query = update.callback_query
+                        if query and query.message:
+                            await query.message.reply_text(
+                                success_text,
+                                parse_mode=ParseMode.MARKDOWN,
+                                reply_markup=success_kb,
+                            )
+                            return None, None
+                    except Exception as send_err:
+                        logger.warning(f"[BUY] Failed to send success reply_text (falling back to edit): {send_err}")
+
+                    return success_text, success_kb
                 else:
                     error_msg = result.get("error", "Unknown error")
                     return DemoMenuBuilder.error_message(f"Buy failed: {error_msg}")
