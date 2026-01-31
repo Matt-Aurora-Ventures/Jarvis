@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 
 from .postgres_client import PostgresClient, get_postgres_client
+from core.security_validation import sanitize_sql_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,18 @@ class PostgresBaseRepository(ABC, Generic[T]):
             self._client = PostgresClient(connection_url=connection_url)
         else:
             self._client = get_postgres_client()
+
+        # Validate table_name to prevent SQL injection
+        # table_name should be a string literal from class definition, not dynamic
+        if self.table_name:
+            try:
+                # This will raise ValidationError if table_name contains forbidden characters
+                sanitize_sql_identifier(self.table_name)
+            except Exception as e:
+                raise ValueError(
+                    f"Invalid table_name '{self.table_name}' for {self.__class__.__name__}: {e}. "
+                    "table_name must be a valid SQL identifier (alphanumeric + underscore only)."
+                )
 
     @abstractmethod
     def _row_to_entity(self, row: Dict[str, Any]) -> T:
