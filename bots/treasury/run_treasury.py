@@ -99,25 +99,37 @@ class TreasuryBot:
         env_path = Path(__file__).parent.parent.parent / 'tg_bot' / '.env'
         load_dotenv(env_path)
 
-        # Get configuration
+        # Get configuration - MUST have unique token to avoid polling conflicts!
         bot_token = os.environ.get('TREASURY_BOT_TOKEN') or os.environ.get('TREASURY_BOT_TELEGRAM_TOKEN')
-        token_source = "TREASURY_BOT_TOKEN"
+
         if not bot_token:
-            bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
-            token_source = "TELEGRAM_BOT_TOKEN"
-            if bot_token:
-                logger.warning(
-                    "TREASURY_BOT_TOKEN not set; falling back to TELEGRAM_BOT_TOKEN "
-                    "(may conflict with other bots)."
-                )
+            logger.error(
+                "\n" + "="*80 + "\n"
+                "CRITICAL ERROR: TREASURY_BOT_TOKEN not set!\n"
+                "="*80 + "\n"
+                "Treasury bot MUST have its own unique Telegram bot token.\n"
+                "DO NOT share TELEGRAM_BOT_TOKEN - this causes polling conflicts!\n"
+                "\n"
+                "Exit code 4294967295 = Telegram polling conflict = multiple bots using same token\n"
+                "\n"
+                "TO FIX:\n"
+                "1. Open Telegram and search for @BotFather\n"
+                "2. Send: /newbot\n"
+                "3. Name: 'JARVIS Treasury Bot'\n"
+                "4. Username: jarvis_treasury_bot (must end in 'bot')\n"
+                "5. Copy the token @BotFather sends you\n"
+                "6. Add to lifeos/config/.env: TREASURY_BOT_TOKEN=<your_token>\n"
+                "7. Restart supervisor: python bots/supervisor.py\n"
+                "\n"
+                "See: TELEGRAM_BOT_TOKEN_GENERATION_GUIDE.md\n"
+                "="*80 + "\n"
+            )
+            raise ValueError("TREASURY_BOT_TOKEN not set - polling conflict will occur!")
+
+        logger.info(f"Using unique treasury bot token (TREASURY_BOT_TOKEN)")
         admin_ids_str = os.environ.get('TREASURY_ADMIN_IDS', '')
         wallet_password = os.environ.get('JARVIS_WALLET_PASSWORD')
         rpc_url = os.environ.get('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com')
-
-        if not bot_token:
-            raise ValueError("TREASURY_BOT_TOKEN not set")
-        else:
-            logger.info(f"Using treasury bot token from {token_source}")
 
         # Parse admin IDs
         admin_ids = []
