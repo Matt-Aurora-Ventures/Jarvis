@@ -333,10 +333,10 @@ def api_market_regime():
 
 if __name__ == "__main__":
     from core.logging_utils import configure_component_logger
-    configure_component_logger("web.trading", level=logging.INFO)
+    configure_component_logger("web.trading", prefix="TRADE_WEB", level=logging.INFO)
 
     templates_dir = ROOT / "web" / "templates"
     templates_dir.mkdir(parents=True, exist_ok=True)
 
-    print("🚀 Jarvis Trading Web Interface starting on http://127.0.0.1:5001")
+    print(" Jarvis Trading Web Interface starting on http://127.0.0.1:5001")
     app.run(host="127.0.0.1", port=5001, debug=True)
