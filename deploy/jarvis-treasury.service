@@ -1,0 +1,46 @@
+[Unit]
+Description=JARVIS Treasury Trading Bot
+Documentation=https://github.com/lucid/jarvis
+After=network-online.target
+Wants=network-online.target
+PartOf=jarvis.target
+ReloadPropagatedFrom=jarvis.target
+
+[Service]
+Type=simple
+User=jarvis
+Group=jarvis
+WorkingDirectory=/opt/jarvis
+ExecStart=/usr/bin/python3 bots/treasury/trading.py
+Restart=always
+RestartSec=15
+TimeoutStopSec=30
+
+# Environment
+EnvironmentFile=/opt/jarvis/.env
+Environment="BOT_COMPONENT=treasury"
+Environment="SKIP_SUPERVISOR=1"
+Environment="TREASURY_LIVE_MODE=true"
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/jarvis/data /opt/jarvis/logs /opt/jarvis/.lifeos /opt/jarvis/bots/treasury
+PrivateTmp=true
+
+# Resource limits
+MemoryMax=1G
+CPUQuota=50%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jarvis-treasury
+
+# Watchdog
+WatchdogSec=600
+
+[Install]
+WantedBy=jarvis.target
+WantedBy=multi-user.target

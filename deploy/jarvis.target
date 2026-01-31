@@ -1,0 +1,15 @@
+[Unit]
+Description=JARVIS Autonomous Trading & AI System
+Documentation=https://github.com/lucid/jarvis
+After=network-online.target
+Wants=network-online.target
+
+# All bot services should be part of this target
+Wants=jarvis-telegram.service
+Wants=jarvis-sentiment.service
+Wants=jarvis-twitter.service
+Wants=jarvis-buytracker.service
+Wants=jarvis-treasury.service
+
+[Install]
+WantedBy=multi-user.target
