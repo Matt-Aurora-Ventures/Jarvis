@@ -240,12 +240,27 @@ def _register_token_id(context, token_address: str) -> str:
 
 
 def _resolve_token_ref(context, token_ref: str) -> str:
-    """Resolve short token id back to full address (fallback to ref)."""
+    """Resolve short token id back to full address.
+    
+    Raises ValueError if resolution fails (prevents sending garbage to APIs).
+    """
     if not token_ref:
-        return token_ref
+        raise ValueError("Empty token reference")
+    
+    # Already a full Solana address (32-44 base58 chars)
     if len(token_ref) >= 32:
         return token_ref
-    return context.user_data.get("token_id_map", {}).get(token_ref, token_ref)
+    
+    # Try to resolve from session map
+    resolved = context.user_data.get("token_id_map", {}).get(token_ref)
+    if resolved and len(resolved) >= 32:
+        return resolved
+    
+    # Resolution failed - don't pass garbage to APIs
+    logger.warning(f"Token ref '{token_ref}' not found in session map (may have expired). User should re-select token.")
+    raise ValueError(
+        f"Token session expired. Please go back to Trending or AI Picks and select the token again."
+    )
 
 
 # =============================================================================
