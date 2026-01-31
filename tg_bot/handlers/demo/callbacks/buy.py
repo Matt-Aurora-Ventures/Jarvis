@@ -198,7 +198,25 @@ Choose how much SOL to spend:
 
             # Execute via execute_buy_with_tpsl (centralized TP/SL enforcement)
             try:
-                wallet_address = context.user_data.get("wallet_address", "demo_wallet")
+                # Get wallet address - prefer user wallet, fallback to treasury
+                wallet_address = context.user_data.get("wallet_address")
+                if not wallet_address or len(wallet_address) < 32:
+                    # Try to get treasury wallet address
+                    try:
+                        engine = await ctx.get_demo_engine()
+                        treasury = engine.wallet.get_treasury()
+                        if treasury:
+                            wallet_address = treasury.address
+                    except Exception as wallet_err:
+                        logger.warning(f"Could not get treasury wallet: {wallet_err}")
+                
+                if not wallet_address or len(wallet_address) < 32:
+                    return DemoMenuBuilder.error_message(
+                        "❌ No wallet configured\n\n"
+                        "💡 Please set up a wallet first:\n"
+                        "• Use `/wallet` to create or import a wallet\n"
+                        "• Or fund the treasury wallet"
+                    )
 
                 # Get TP/SL from user data or use defaults
                 # TODO: Add UI for user customization
