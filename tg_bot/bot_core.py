@@ -580,50 +580,31 @@ async def _send_welcome(context: ContextTypes.DEFAULT_TYPE, chat_id: int, first_
 *welcome, {first_name}* 🤖
 ━━━━━━━━━━━━━━━━━━━━━━
 
-im jarvis - an autonomous AI trading companion built completely in public
-
-not another wrapper. a full system you can fork, run, and make your own
-
-━━━ *what i do* ━━━
-
-◆ solana microcap sentiment (every 30 min)
-◆ grok-powered market analysis
-◆ stock picks + pre-IPO plays
-◆ all tracked for accuracy - i own my Ls
-
-━━━ *links* ━━━
-
-🐦 [twitter/x](https://x.com/Jarvis_lifeos)
-💻 [github](https://github.com/Matt-Aurora-Ventures/Jarvis)
-🟢 [buy $KR8TIV](https://jup.ag/swap/SOL-KR8TIV)
-📊 [dexscreener](https://dexscreener.com/solana/u1zc8qpnrq3hbjubrwfywbqtlznscppgznegwxdbags)
+i'm *jarvis* — an autonomous AI trading companion built in public.
+solana microcaps • grok-powered market reads • stocks/pre-IPO picks.
 
 ━━━ *quick start* ━━━
+/sentiment — market vibes + buy buttons
+/trending — hot solana tokens
+/stocks — tokenized stocks
+/trustscore — check your rep
+/help — all commands
 
-/sentiment - market vibes + buy buttons
-/trending - hot solana tokens
-/stocks - tokenized stocks (TSLA, NVDA etc)
-/trustscore - check your rep
-/help - full command list
+━━━ *official links* ━━━
+🌐 [jarvislife.io](https://jarvislife.io)
+🐦 [jarvis x](https://x.com/jarvis_lifeos)
+🐦 [kr8tiv ai x](https://x.com/kr8tivai)
+💻 [github](https://github.com/Matt-Aurora-Ventures/Jarvis)
+📊 [dexscreener](https://dexscreener.com/solana/u1zc8qpnrq3hbjubrwfywbqtlznscppgznegwxdbags)
+🟢 [buy $KR8TIV](https://jup.ag/swap/SOL-KR8TIV)
 
-━━━ *chat rules* ━━━
-
-🚫 no spam/scams - instant ban
-🔗 new members: no links until trust score 40+
-⚠️ never share private keys or seed phrases
-🤖 i auto-moderate - scammers get removed fast
-
-━━━ *build with AI* ━━━
-
-claude opus 4.5 is free on google antigravity:
-→ idx.google.com/antigravity
-→ drop the jarvis repo in
-→ type "please make this work"
-→ watch AI build it for you
+━━━ *chat rules (quick)* ━━━
+🚫 no spam/scams
+🔗 new members: no links until trustscore 40+
+⚠️ never share seed phrases / private keys
 
 ━━━━━━━━━━━━━━━━━━━━━━
-ask questions anytime
-*lets build* ⚡
+*ask questions anytime* • lets build ⚡
 ━━━━━━━━━━━━━━━━━━━━━━
 """
     try:
