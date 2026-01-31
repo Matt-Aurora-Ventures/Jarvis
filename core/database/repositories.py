@@ -21,6 +21,7 @@ from datetime import datetime
 import logging
 
 from . import get_core_db, get_analytics_db, get_cache_db, ConnectionPool
+from core.security_validation import sanitize_sql_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +43,21 @@ class BaseRepository(ABC, Generic[T]):
     """
     
     table_name: str = ""
-    
+
     def __init__(self, pool: ConnectionPool):
         self.pool = pool
+
+        # Validate table_name to prevent SQL injection
+        # table_name should be a string literal from class definition, not dynamic
+        if self.table_name:
+            try:
+                # This will raise ValidationError if table_name contains forbidden characters
+                sanitize_sql_identifier(self.table_name)
+            except Exception as e:
+                raise ValueError(
+                    f"Invalid table_name '{self.table_name}' for {self.__class__.__name__}: {e}. "
+                    "table_name must be a valid SQL identifier (alphanumeric + underscore only)."
+                )
     
     @abstractmethod
     def _row_to_entity(self, row) -> T:
