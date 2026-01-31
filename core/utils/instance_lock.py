@@ -1,10 +1,12 @@
-"""Simple cross-platform file lock for single-instance polling.
+"""
+Simple cross-platform file lock for single-instance polling.
 
 Enhanced with stale PID detection to handle:
 - Crashed processes that left lock files behind
 - Zombie processes that shouldn't hold locks
 - Supervisor-level lock acquisition for subprocess coordination
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -29,13 +31,8 @@ def is_pid_alive(pid: int) -> bool:
     Returns:
         True if process exists and is running (not zombie), False otherwise
     """
-    # Guard against corrupted PID values that overflow C long
-    if pid <= 0 or pid > 2**31 - 1:
-        return False
-
     if not psutil.pid_exists(pid):
         return False
-
     try:
         proc = psutil.Process(pid)
         return proc.status() != psutil.STATUS_ZOMBIE
@@ -63,7 +60,6 @@ def cleanup_stale_lock(token: str, name: str) -> bool:
         # Read PID from lock file
         with open(lock_path, "r") as f:
             content = f.read().strip()
-
             if not content:
                 # Empty lock file - clean it up
                 logger.info(f"Cleaning up empty lock file: {lock_path}")
@@ -71,7 +67,6 @@ def cleanup_stale_lock(token: str, name: str) -> bool:
                 return True
 
             pid = int(content)
-
     except (OSError, ValueError) as exc:
         # Can't read/parse lock file - try to clean it up
         logger.warning(f"Invalid lock file {lock_path}, cleaning up: {exc}")
@@ -123,6 +118,7 @@ def _lock_path(token: str, name: str) -> Path:
 def _lock_file(handle: TextIO) -> None:
     if os.name == "nt":
         import msvcrt
+
         handle.seek(0)
         handle.write("0")
         handle.flush()
@@ -130,6 +126,7 @@ def _lock_file(handle: TextIO) -> None:
         msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
     else:
         import fcntl
+
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
