@@ -1,10 +1,10 @@
 # MASTER GSD - SINGLE SOURCE OF TRUTH
 
-**Last Updated**: 2026-02-01 06:55 UTC (CLAWDBOT MULTI-AGENT DEPLOYMENT)
+**Last Updated**: 2026-02-01 07:15 UTC (CRITICAL SECURITY FINDING)
 **Status**: ACTIVE (Ralph Wiggum Loop)
-**Total Tasks**: 215 unique (consolidated from 15+ documents + git history + ClawdBot deployment)
-**Completion**: 84 done (39%), 115 pending (53%), 8 blocked (4%), 8 backlog (4%)
-**Latest**: ClawdBot 3-agent system deployed, Supermemory integrated, SOUL files created
+**Total Tasks**: 216 unique (consolidated from 15+ documents + git history + ClawdBot deployment + Security Analysis)
+**Completion**: 84 done (39%), 116 pending (54%), 8 blocked (4%), 8 backlog (4%)
+**Latest**: 🔴 CRITICAL P0 added - ClawdBot Security Governance (Cisco Skill Scanner required)
 
 ## TOKEN VALIDATION RESULTS (2026-01-31 23:45 UTC)
 
@@ -29,7 +29,69 @@
 
 ## 🚨 EMERGENCY TASKS (P0 - DO IMMEDIATELY)
 
-### 0. Deploy X_BOT_TELEGRAM_TOKEN ⏳ CREATED, NEEDS VPS DEPLOYMENT
+### 0. ClawdBot Security Governance ⏳ CRITICAL - BLOCKS ALL SKILL INSTALLATIONS
+**Date Identified**: 2026-02-01 07:10 UTC (Enterprise Best Practices Analysis)
+**Priority**: P0 EXTINCTION-LEVEL - Must complete BEFORE installing ANY skills
+
+**Problem**: NO security vetting process for third-party skills
+**Risk**: Supply chain attacks, data exfiltration, credential leakage
+**Reference**: Enterprise AI Guide Section 3.3 "The Security Nightmare"
+
+**Threats Identified**:
+1. 🔴 CRITICAL: Arbitrary code execution via malicious skills
+2. 🔴 CRITICAL: Covert data-leak channels (bypass DLP)
+3. 🔴 HIGH: Prompt injection attacks
+4. 🔴 HIGH: Supply chain risk (manufactured popularity)
+5. 🟡 MEDIUM: Untrusted local files loaded from disk
+
+**Current Exposure**: UNACCEPTABLE
+- Skills installation attempted but BLOCKED (dependency issue)
+- **FORTUNATE**: Blocker prevented installing unvetted skills
+- **IF UNBLOCKED**: Would have high risk of malicious skill installation
+
+**Immediate Actions Required**:
+```bash
+# 1. Install Cisco Skill Scanner (open-source security tool)
+npm install -g @cisco/skill-scanner
+
+# 2. Create mandatory vetting script
+cat > /root/clawdbots/vet_skill.sh << 'EOF'
+#!/bin/bash
+SKILL=$1
+echo "[*] Vetting skill: $SKILL"
+skill-scanner scan $SKILL --output json > /tmp/skill_scan.json
+if grep -q "high\|critical" /tmp/skill_scan.json; then
+  echo "[!] BLOCKED: High/Critical security issues found"
+  cat /tmp/skill_scan.json
+  exit 1
+fi
+echo "[+] APPROVED: Skill passed security scan"
+EOF
+chmod +x /root/clawdbots/vet_skill.sh
+
+# 3. NO SKILL INSTALLATIONS until vetting script deployed
+```
+
+**Deliverables**:
+- [ ] Cisco Skill Scanner installed on VPS
+- [ ] Security vetting script created & tested
+- [ ] Security protocol documented
+- [ ] Update SOUL files with explicit guardrails (Never Execute Without Approval)
+- [ ] Add audit trail logging to all bot scripts
+- [ ] Test vetting with first skill before allowing any installations
+
+**Dependencies**: None - this is the first step
+**Blockers**: None
+**Status**: IDENTIFIED, NOT STARTED
+**Owner**: CTO/Security Officer (TBD)
+**Estimated Time**: 4-8 hours
+**Impact**: Protects entire ClawdBot ecosystem from malicious skills
+
+**Related**: ClawdBot Multi-Agent Deployment (task #6), Enterprise Best Practices Analysis
+
+---
+
+### 1. Deploy X_BOT_TELEGRAM_TOKEN ⏳ CREATED, NEEDS VPS DEPLOYMENT
 - **Bot**: @Jarvis_lifeos (autonomous_x engine)
 - **Status**: Code fixed (commit 4a43e27), token created locally, NOT on VPS
 - **Token**: X_BOT_TELEGRAM_TOKEN=[REDACTED - See secrets/bot_tokens_DEPLOY_ONLY.txt]
