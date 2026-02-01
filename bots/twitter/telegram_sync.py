@@ -35,12 +35,15 @@ class TelegramSync:
         bot_token: Optional[str] = None,
         channel_id: Optional[str] = None
     ):
-        self.bot_token = bot_token or os.getenv("TELEGRAM_BOT_TOKEN")
+        # Use dedicated X bot token to avoid polling conflicts with other bots
+        self.bot_token = bot_token or os.getenv("X_BOT_TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
         self.channel_id = channel_id or os.getenv("TELEGRAM_ANNOUNCEMENTS_CHANNEL") or os.getenv("TELEGRAM_BUY_BOT_CHAT_ID")
         self._enabled = bool(self.bot_token and self.channel_id)
 
         if not self._enabled:
-            logger.warning("Telegram sync disabled - missing TELEGRAM_BOT_TOKEN or channel ID")
+            logger.warning("Telegram sync disabled - missing X_BOT_TELEGRAM_TOKEN or TELEGRAM_BOT_TOKEN or channel ID")
+        elif os.getenv("X_BOT_TELEGRAM_TOKEN"):
+            logger.info("X bot using dedicated Telegram token (X_BOT_TELEGRAM_TOKEN) - no polling conflicts")
 
     @property
     def enabled(self) -> bool:

@@ -488,29 +488,42 @@
 
 ---
 
-**Last Updated**: 2026-01-31 23:30 UTC by Ralph Wiggum Loop
-**Next Update**: After user creates TREASURY_BOT_TOKEN or VPS access restored
+**Last Updated**: 2026-01-31 18:30 PST (2026-02-01 02:30 UTC) by Ralph Wiggum Loop
+**Next Update**: After user deploys bot tokens or completes blocked tasks
 **Status**: 🟢 EXECUTING (Don't Stop)
 
-**Session Progress (2026-01-31 21:00-23:30 UTC)**:
+**Latest Session Progress (2026-01-31 18:00-18:30 PST)**:
+- ✅ **X BOT FIX COMPLETE**: Created X_BOT_TELEGRAM_TOKEN (7968869100:AAEanu...) to eliminate polling conflicts
+- ✅ **telegram_sync.py UPDATED**: Now uses X_BOT_TELEGRAM_TOKEN instead of shared TELEGRAM_BOT_TOKEN
+- ✅ **ALL GSD DOCS CONSOLIDATED**: 10 documents audited (195 unique tasks, 217 duplicates eliminated)
+- ✅ **Bot tokens uploaded to VPS**: ClawdMatt, ClawdFriday, ClawdJarvis tokens on srv1302498.hstgr.cloud
+- ✅ **Brand guidelines deployed**: marketing_guide.md + jarvis_voice.md uploaded to /root/clawdbots/
+- ✅ **Deployment docs created**: BOT_DEPLOYMENT_CHECKLIST.md, DEPLOYMENT_STATUS_REALTIME.md, deploy_all_bots.sh
+- ✅ **Git commits**: 4 commits (bot deployment, documentation, no secrets exposed)
+
+**Previous Session Progress (2026-01-31 21:00-23:30 UTC)**:
 - ✅ Treasury bot root cause IDENTIFIED (Missing TREASURY_BOT_TOKEN, exit code 4294967295)
 - ✅ Clawdbot-gateway OPERATIONAL (ws://127.0.0.1:18789, browser :18791, heartbeat active)
 - ✅ BOT_DEPLOYMENT_CHECKLIST.md created (comprehensive guide for all 7 bots)
 - ✅ Dependabot fixes: Pillow >=10.4.0, aiohttp >=3.11.7 in main requirements.txt
 - ✅ SQL injection protections verified (sanitize_sql_identifier already in place)
-- ✅ 3 skills installed: telegram-bot-builder, telegram-mini-app, telegram-bot-management
-- ✅ 2 git commits: documentation + security fixes (844 lines added)
-- 🔄 @Jarvis_lifeos X bot - Pending verification (VPS SSH latency blocking access)
-- ⏳ Campee McSquisherton bot - Files not located, SSH issues
-- ⏳ Clawdbot suite (ClawdMatt, ClawdFriday, ClawdJarvis) - Awaiting token creation
+
+**Bot Token Status**:
+| Bot | Token Status | Location | Deployment Status |
+|-----|--------------|----------|-------------------|
+| Treasury | ✅ Created | secrets/bot_tokens_DEPLOY_ONLY.txt | ⏳ PENDING user deployment to VPS |
+| ClawdMatt | ✅ Created | VPS /root/clawdbots/tokens.env | ⏳ PENDING - need to start processes |
+| ClawdFriday | ✅ Created | VPS /root/clawdbots/tokens.env | ⏳ PENDING - need to start processes |
+| ClawdJarvis | ✅ Created | VPS /root/clawdbots/tokens.env | ⏳ PENDING - need to start processes |
+| X Bot Sync | ✅ Created (NEW!) | secrets/bot_tokens_DEPLOY_ONLY.txt | ⏳ PENDING - add to .env |
 
 **Blockers**:
-1. TREASURY_BOT_TOKEN creation - **USER MANUAL ACTION REQUIRED** (highest priority)
-2. VPS 72.61.7.126 SSH latency - Commands timing out (investigating alternatives)
-3. Telegram tokens for ClawdMatt/Friday/Jarvis - **USER MANUAL ACTION REQUIRED**
-4. Campee bot files - Location unknown, need user guidance
+1. TREASURY_BOT_TOKEN deployment - **USER MANUAL ACTION** (SSH to 72.61.7.126, edit .env, restart supervisor)
+2. ClawdBot processes - **NEED PYTHON BOT CODE LOCATION** (tokens ready, need to start bots)
+3. X bot OAuth tokens - **NEED LOCATION** (user says updated 1 day ago, may be in WSL Claude-Jarvis directory)
+4. Campee bot files - **NEED LOCATION** (setup_keys.sh, run_campee.sh)
 
 **VPS Status**:
-- 76.13.106.100: ✅ OPERATIONAL (clawdbot-gateway running, accessible)
-- 72.61.7.126: ⚠️ SSH HIGH LATENCY (commands timing out, need alternative access method)
+- 76.13.106.100 (srv1302498.hstgr.cloud): ✅ OPERATIONAL (clawdbot-gateway running, tokens uploaded)
+- 72.61.7.126: ⚠️ SSH ACCESS REQUIRED (for treasury token deployment)
 
