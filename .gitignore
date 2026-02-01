@@ -18,6 +18,12 @@ credentials*.json
 *_credentials.json
 oauth*.json
 token*.json
+# ClawdBot boot files & scripts (contain API keys)
+*BOOT*.md
+*boot*.md
+supermemory-*.mjs
+supermemory-*.js
+*SOUL*.md
 # Local keys / proofs (never commit)
 keypair.json
 ownership_proof.json

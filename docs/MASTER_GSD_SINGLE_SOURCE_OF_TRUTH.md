@@ -1,9 +1,10 @@
 # MASTER GSD - SINGLE SOURCE OF TRUTH
 
-**Last Updated**: 2026-01-31 23:45 UTC (TOKEN VALIDATION COMPLETE)
+**Last Updated**: 2026-02-01 06:55 UTC (CLAWDBOT MULTI-AGENT DEPLOYMENT)
 **Status**: ACTIVE (Ralph Wiggum Loop)
-**Total Tasks**: 208 unique (consolidated from 15+ documents + git history)
-**Completion**: 77 done (37%), 110 pending (53%), 8 blocked (4%), 13 backlog (6%)
+**Total Tasks**: 215 unique (consolidated from 15+ documents + git history + ClawdBot deployment)
+**Completion**: 84 done (39%), 115 pending (53%), 8 blocked (4%), 8 backlog (4%)
+**Latest**: ClawdBot 3-agent system deployed, Supermemory integrated, SOUL files created
 
 ## TOKEN VALIDATION RESULTS (2026-01-31 23:45 UTC)
 
@@ -31,7 +32,7 @@
 ### 0. Deploy X_BOT_TELEGRAM_TOKEN ⏳ CREATED, NEEDS VPS DEPLOYMENT
 - **Bot**: @Jarvis_lifeos (autonomous_x engine)
 - **Status**: Code fixed (commit 4a43e27), token created locally, NOT on VPS
-- **Token**: X_BOT_TELEGRAM_TOKEN=7968869100:AAEanuTRjH4eHTOGvssn8BV71ChsuPrz6Hc
+- **Token**: X_BOT_TELEGRAM_TOKEN=[REDACTED - See secrets/bot_tokens_DEPLOY_ONLY.txt]
 - **Local**: ✅ In lifeos/config/.env
 - **VPS**: ❌ NOT DEPLOYED to 72.61.7.126
 - **Impact**: X bot still using shared TELEGRAM_BOT_TOKEN, polling conflicts with Main Jarvis
@@ -63,7 +64,7 @@
 - **Status**: CODE COMPLETE, BLOCKED ON MANUAL TOKEN DEPLOYMENT
 
 ### 2. Deploy TREASURY_BOT_TOKEN ✅ TOKEN VALID, ⏳ NEEDS VPS DEPLOYMENT
-- **Token**: TREASURY_BOT_TOKEN=8504068106:AAHoS0GKxl79nPE_2wFjkkmX_T7iXEwOyao
+- **Token**: TREASURY_BOT_TOKEN=[REDACTED - See secrets/bot_tokens_DEPLOY_ONLY.txt]
 - **Bot**: @jarvis_treasury_bot (VERIFIED WORKING via API)
 - **Local**: ✅ In tg_bot/.env (valid)
 - **VPS**: ⏳ NEEDS DEPLOYMENT to 72.61.7.126
@@ -72,7 +73,7 @@
   ```bash
   ssh root@72.61.7.126
   nano /home/jarvis/Jarvis/lifeos/config/.env
-  # Add: TREASURY_BOT_TOKEN=8504068106:AAHoS0GKxl79nPE_2wFjkkmX_T7iXEwOyao
+  # Add: TREASURY_BOT_TOKEN=[See secrets file]
   pkill -f supervisor.py && cd /home/jarvis/Jarvis && nohup python bots/supervisor.py > logs/supervisor.log 2>&1 &
   tail -f logs/supervisor.log  # Look for "Using unique treasury bot token"
   ```
@@ -103,6 +104,138 @@
 ---
 
 ## 🟠 HIGH PRIORITY TASKS (P1)
+
+### 6. ClawdBot Multi-Agent Deployment ✅ BOTS RUNNING, 🔄 CONFIGURATION IN PROGRESS
+**Date**: 2026-02-01
+**VPS**: 76.13.106.100 (srv1302498)
+**Status**: 3/3 bots operational, Supermemory integrated, SOUL files created
+
+#### ✅ COMPLETED:
+- **All 3 Telegram Bots Running**:
+  - ClawdMatt (@ClawdMatt_bot): ✅ RUNNING (PID varies, token updated)
+  - ClawdFriday (@ClawdFriday_bot): ✅ RUNNING
+  - ClawdJarvis (@ClawdJarvis_87772_bot): ✅ RUNNING
+
+- **Spam Fixes Applied**:
+  - ClawdJarvis: Removed "I heard:" auto-responses (line 194)
+  - ClawdFriday: Removed email assistant auto-responses
+  - ClawdMatt: Removed PR review auto-responses
+  - All bots now only respond to commands, not every message
+
+- **Token Management**:
+  - ClawdMatt token regenerated: `[REDACTED]` (stored in tokens.env)
+  - All tokens stored in `/root/clawdbots/tokens.env`
+  - Bot scripts deployed to `/root/clawdbots/`
+
+- **Supermemory Integration**:
+  - SDK installed in Docker container (`clawdbot-gateway`)
+  - Scripts deployed: `/root/supermemory_scripts/supermemory-search.mjs`, `supermemory-add.mjs`
+  - API Key configured: `sm_[REDACTED]` (embedded in supermemory scripts)
+  - Connection verified: Successfully querying documents
+  - Memory partitions planned: `operations_exec`, `marketing_ops`, `technical_stack`, `company_core`
+
+- **SOUL Files Created**:
+  - ClawdMatt SOUL: `/root/clawdbots/CLAWDMATT_SOUL.md` (COO personality, Matt Haynes mirroring)
+  - ClawdFriday SOUL: `/root/clawdbots/CLAWDFRIDAY_SOUL.md` (CMO personality, witty Irish cypherpunk)
+  - ClawdJarvis SOUL: Copy from `C:\Users\lucid\OneDrive\Desktop\Projects\Jarvis\.agent\SOUL.md` (CTO/CFO)
+
+#### 🔄 IN PROGRESS:
+- **Best Practices Integration**: Analyzing 9 scenarios from user guidance
+  - Scenario 1: Multi-agent architecture (separate containers vs hybrid)
+  - Scenario 2: LLM provider switching (GPT for Matt, Claude for Friday/Jarvis)
+  - Scenario 3: Telegram configuration (group privacy, heartbeat)
+  - Scenario 4: Heartbeat trigger configuration
+  - Scenario 5: Supermemory memory partitioning
+  - Scenario 6: Skills installation
+  - Scenario 7: Browser & computer access
+  - Scenario 8: Email & social media accounts
+  - Scenario 9: Full audit prompt for Opus 4.5
+
+- **Model Configuration**:
+  - ClawdMatt: Switch to GPT CLI
+  - ClawdFriday: Switch to Claude CLI
+  - ClawdJarvis: Switch to Claude CLI
+
+- **SOUL Deployment to VPS**:
+  - Copy all 3 SOUL files to `/root/clawdbots/`
+  - Integrate with bot startup scripts
+
+#### ⏳ PENDING:
+- **Docker Multi-Agent Setup**:
+  - Decision needed: Separate containers vs shared gateway
+  - Current: Hybrid (Python bots + Docker gateway)
+  - Recommended: Evaluate Scenario 1 options
+
+- **Telegram Group Setup**:
+  - Disable Group Privacy for all 3 bots (via @BotFather)
+  - Create "KR8TIV AI Operations" private group
+  - Add all bots as admins
+  - Record group ID for config
+
+- **Heartbeat Configuration**:
+  - Enable 5-minute heartbeat cycle
+  - Configure trigger phrases per agent
+  - Implement anti-loop protection (60s cooldown, max 3 msg/min)
+
+- **Skills Installation**:
+  - ClawdMatt: `google-ads`, `hubspot`, `tavily`
+  - ClawdFriday: `gmail`, `google-calendar`, `notion`, `email-composer`
+  - ClawdJarvis: `github`, `sysadmin-toolbox`, `solana-dev`, `jupiter-swap-integration`
+  - Security audit before install: `npx @anthropics/skill-scanner scan <skill>`
+
+- **Memory Configuration** (BLOCKED - Config keys not recognized):
+  - Attempted: `clawdbot config set compaction.memoryFlush.enabled true`
+  - Error: "Unrecognized key: 'compaction'"
+  - Attempted: `clawdbot config set memorySearch.experimental.sessionMemory true`
+  - Error: "Unrecognized key: 'memorySearch'"
+  - Action: Research correct ClawdBot config schema
+
+- **Boot File Creation**: ✅ COMPLETE
+  - File: `CLAWDBOT_BOOT_2026-02-01.md`
+  - Contents: Stable configuration, recovery instructions, command reference
+  - Location: Desktop + updated in GSD
+
+#### 📝 FILES CREATED:
+- `C:\Users\lucid\Desktop\CLAWDBOT_DEPLOYMENT_STATUS.md` - Deployment summary
+- `C:\Users\lucid\Desktop\CLAWDMATT_SOUL.md` - ClawdMatt personality (COO, Matt mirror)
+- `C:\Users\lucid\Desktop\CLAWDFRIDAY_SOUL.md` - ClawdFriday personality (CMO, witty cypherpunk)
+- `C:\Users\lucid\Desktop\supermemory-search.mjs` - Supermemory search script
+- `C:\Users\lucid\Desktop\supermemory-add.mjs` - Supermemory add script
+- `C:\Users\lucid\Desktop\CLAWDBOT_BOOT_2026-02-01.md` - Boot file with recovery instructions
+- `C:\Users\lucid\Desktop\CLAWDFRIDAY_SOUL.md` - ClawdFriday personality
+- `C:\Users\lucid\Desktop\supermemory-search.mjs` - Supermemory search script
+- `C:\Users\lucid\Desktop\supermemory-add.mjs` - Supermemory add script
+
+#### 🎯 NEXT ACTIONS:
+1. ✅ Deploy all 3 SOUL files to VPS - COMPLETE
+2. 🔄 Integrate model switching - Config created (`clawdbot_providers.json`)
+3. ⏳ Research and fix memory configuration keys - BLOCKED (unsupported keys)
+4. ⏳ Install skills for each agent - BLOCKED (clawdhub dependency issue: undici)
+5. ⏳ Set up Telegram group (disable privacy, add bots, record group ID)
+6. ⏳ Configure heartbeat & anti-loop (5min cycle, trigger phrases)
+7. ✅ Create boot file - COMPLETE
+8. ✅ Redact secrets from GSD - COMPLETE
+9. ✅ Update gitignore - COMPLETE
+
+**Current Session Progress** (2026-02-01 07:00 UTC):
+- All 3 bots operational on VPS
+- Supermemory integrated and tested
+- SOUL files deployed
+- Secrets redacted from docs
+- Provider config created (GPT/Claude/XAI)
+- Boot file with recovery instructions
+- GSD updated continuously
+
+**Blockers**:
+- Skills installation: clawdhub needs 'undici' dependency
+- Memory features: Config keys not recognized by ClawdBot 2026.1.24-3
+
+**Priority**: P1 HIGH (Multi-agent system foundational infrastructure)
+**Owner**: ClawdMatt (Ralph Wiggum Loop)
+**Last Updated**: 2026-02-01 07:00 UTC
+
+---
+
 
 ### Security & Vulnerabilities (28 tasks)
 
