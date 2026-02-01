@@ -1,9 +1,28 @@
 # MASTER GSD - SINGLE SOURCE OF TRUTH
 
-**Last Updated**: 2026-01-31 Evening (BOT POLLING AUDIT COMPLETE)
+**Last Updated**: 2026-01-31 23:45 UTC (TOKEN VALIDATION COMPLETE)
 **Status**: ACTIVE (Ralph Wiggum Loop)
 **Total Tasks**: 208 unique (consolidated from 15+ documents + git history)
-**Completion**: 76 done (37%), 111 pending (53%), 8 blocked (4%), 13 backlog (6%)
+**Completion**: 77 done (37%), 110 pending (53%), 8 blocked (4%), 13 backlog (6%)
+
+## TOKEN VALIDATION RESULTS (2026-01-31 23:45 UTC)
+
+**Validation Script**: `python scripts/validate_bot_tokens.py`
+
+| Token | Status | Bot | Issue |
+|-------|--------|-----|-------|
+| TELEGRAM_BOT_TOKEN | VALID | @jarvistrades_bot | Main bot working |
+| TREASURY_BOT_TOKEN | VALID | @jarvis_treasury_bot | Ready for VPS deployment |
+| TELEGRAM_BUY_BOT_TOKEN | VALID | @Javistreasury_bot | Working |
+| TREASURY_BOT_TELEGRAM_TOKEN | VALID | @Javistreasury_bot | Working |
+| PUBLIC_BOT_TELEGRAM_TOKEN | VALID | @jarvistrades_bot | Duplicate of main |
+| CLAWDMATT_BOT_TOKEN | INVALID | - | Unauthorized - needs regeneration |
+| CLAWDFRIDAY_BOT_TOKEN | INVALID | - | 'H' in Bot ID (7864180H73) |
+| CLAWDJARVIS_BOT_TOKEN | INVALID | - | 'H' in Bot ID (8434H11668) |
+| X_BOT_TELEGRAM_TOKEN | INVALID | - | Unauthorized - needs regeneration |
+
+**CRITICAL**: 4 ClawdBot tokens need regeneration via @BotFather.
+**Guide**: docs/CLAWDBOT_TOKEN_REGENERATION_GUIDE.md
 
 ---
 
@@ -43,29 +62,22 @@
 - **Investigated**: 2026-01-31 22:30 UTC - 23:00 UTC
 - **Status**: CODE COMPLETE, BLOCKED ON MANUAL TOKEN DEPLOYMENT
 
-### 2. Deploy TREASURY_BOT_TOKEN 🔴 MANUAL ACTION REQUIRED (ROOT CAUSE FIX)
-- **Blocker**: User must create via @BotFather
-- **Impact**: Blocks treasury bot deployment (causing all 35 crashes)
-- **Step 1**: Create bot via @BotFather
-  1. Open Telegram → search @BotFather
-  2. Send: /newbot
-  3. Name: "Treasury Bot"
-  4. Username: "jarvis_treasury_bot"
-  5. Copy token from response
-- **Step 2**: Deploy to VPS 72.61.7.126
+### 2. Deploy TREASURY_BOT_TOKEN ✅ TOKEN VALID, ⏳ NEEDS VPS DEPLOYMENT
+- **Token**: TREASURY_BOT_TOKEN=***TREASURY_BOT_TOKEN_REDACTED***
+- **Bot**: @jarvis_treasury_bot (VERIFIED WORKING via API)
+- **Local**: ✅ In tg_bot/.env (valid)
+- **VPS**: ⏳ NEEDS DEPLOYMENT to 72.61.7.126
+- **Impact**: Will fix 35+ treasury bot crashes
+- **Deploy Command**:
   ```bash
   ssh root@72.61.7.126
   nano /home/jarvis/Jarvis/lifeos/config/.env
-  # Add: TREASURY_BOT_TOKEN=<paste_token_here>
+  # Add: TREASURY_BOT_TOKEN=***TREASURY_BOT_TOKEN_REDACTED***
   pkill -f supervisor.py && cd /home/jarvis/Jarvis && nohup python bots/supervisor.py > logs/supervisor.log 2>&1 &
-  tail -f logs/supervisor.log  # Verify "Using unique treasury bot token"
+  tail -f logs/supervisor.log  # Look for "Using unique treasury bot token"
   ```
-- **Alternative**: Use automated script: `./scripts/deploy_all_bots.sh`
-- **Guide**: docs/BOT_TOKEN_DEPLOYMENT_COMPLETE_GUIDE.md
-- **Deploy Script**: scripts/deploy_fix_to_vps.sh (automated version available)
-- **Verification**: Look for "Using unique treasury bot token (TREASURY_BOT_TOKEN)" in logs
-- **Success Criteria**: No more exit code 4294967295, no polling conflicts for 10+ minutes
-- **Priority**: P0 CRITICAL
+- **Automated**: `python scripts/deploy_with_password.py`
+- **Priority**: P0 CRITICAL - TOKEN READY, JUST NEEDS DEPLOYMENT
 
 ### 3. X Bot Telegram Sync Token Deployment ✅ CREATED, ⏳ NEEDS DEPLOYMENT
 - **Token**: X_BOT_TELEGRAM_TOKEN created (7968869100:AAEanu...)

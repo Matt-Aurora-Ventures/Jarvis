@@ -287,3 +287,4 @@ treasury_keypair*.json
 *.rdb
 dump.rdb
 
+secrets/bot_tokens_DEPLOY_ONLY.txt
