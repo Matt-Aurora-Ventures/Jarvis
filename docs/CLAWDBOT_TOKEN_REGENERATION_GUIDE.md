@@ -1,32 +1,31 @@
-# ClawdBot Token Regeneration Guide
+# ClawdBot Token Reference Guide
 
-**Created**: 2026-01-31
-**Issue**: 4 of 5 ClawdBot tokens are INVALID (corrupted or expired)
-**Validation Tool**: `python scripts/validate_bot_tokens.py`
+**Updated**: 2026-02-01
+**Status**: ✅ ALL TOKENS VERIFIED VALID
+**Validation**: Direct Telegram Bot API `getMe` calls
 
 ---
 
-## Problem Summary
+## VERIFIED TOKENS (from BotFather transcript)
 
-The token validation script detected the following issues:
+All tokens verified via Telegram API on 2026-02-01:
 
-| Bot | Token | Issue | Status |
-|-----|-------|-------|--------|
-| Treasury | 8504068106:... | None | VALID |
-| ClawdMatt | 8288859637:... | Unauthorized | NEEDS REGENERATION |
-| ClawdFriday | 7864180**H**73:... | 'H' in numeric ID | NEEDS REGENERATION |
-| ClawdJarvis | 8434**H**11668:... | 'H' in numeric ID | NEEDS REGENERATION |
-| X Bot Sync | 7968869100:... | Unauthorized | NEEDS REGENERATION |
+| Env Var | Bot Username | Token | Created |
+|---------|--------------|-------|---------|
+| TELEGRAM_BOT_TOKEN | @Jarviskr8tivbot | `***TELEGRAM_TOKEN_REDACTED***` | Jan 26 |
+| PUBLIC_BOT_TELEGRAM_TOKEN | @jarvistrades_bot | `***MAIN_BOT_TOKEN_REDACTED***` | Jan 22 |
+| TREASURY_BOT_TOKEN | @Javistreasury_bot | `8295840687:AAEp3jr77vfCL-t7fskn_ToIG5faJ8d_5n8` | Jan 22 |
+| CLAWDMATT_BOT_TOKEN | @ClawdMatt_bot | `8288059637:AAHbcATe1mgMBGKuf5ceYFpyVpO2rzXYFq4` | Jan 25 |
+| CLAWDJARVIS_BOT_TOKEN | @Clawdjarvishelper_bot | `8380303424:AAEEDpNT1Oo0DqDj4wi5uykcZ8vKgJBzOos` | Jan 26 |
+| CLAWDFRIDAY_BOT_TOKEN | @ClawdFriday_bot | `7864180473:AAHN9ROzOdtHRr5JXw1iTDpMYQitGEh-Bu4` | Jan 27 |
+| X_BOT_TELEGRAM_TOKEN | @X_KR8TIV_TELEGRAM_BOT | `8451209415:AAFuXgze9Ekz3_02UIqC0poIK5LKARymoq0` | Jan 31 |
 
-### What Went Wrong
+### Previous False Positives
 
-The tokens with 'H' characters in the Bot ID (7864180H73, 8434H11668) are **invalid**.
-Telegram Bot IDs are always **numeric only** (e.g., 8504068106).
-
-Possible causes:
-1. Copy-paste error when recording tokens
-2. OCR misread '4' or '0' as 'H'
-3. Token was corrupted during transfer
+Earlier validation script reported tokens as INVALID due to:
+1. **Typos in documentation** - tokens were recorded incorrectly
+2. **Stale env files** - old tokens cached on VPS
+3. **BotFather transcript is source of truth** - actual tokens work fine
 
 ---
 

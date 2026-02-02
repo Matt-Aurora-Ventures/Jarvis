@@ -28,13 +28,14 @@ if ssh -o ConnectTimeout=5 root@72.61.7.126 "echo 'SSH OK'" 2>/dev/null; then
     ssh root@72.61.7.126 "cp /home/jarvis/Jarvis/lifeos/config/.env /home/jarvis/Jarvis/lifeos/config/.env.backup-$(date +%Y%m%d_%H%M%S)"
 
     # Add TREASURY_BOT_TOKEN if not present
+    # CORRECT TOKEN: 8504068106 (not 850H068106 - 'H' was a typo)
     if ssh root@72.61.7.126 "grep -q 'TREASURY_BOT_TOKEN' /home/jarvis/Jarvis/lifeos/config/.env" 2>/dev/null; then
         echo "  ⚠ TREASURY_BOT_TOKEN already exists in .env"
         echo "  Updating existing token..."
-        ssh root@72.61.7.126 "sed -i 's/^TREASURY_BOT_TOKEN=.*/TREASURY_BOT_TOKEN=850H068106:AAHoS0GKxl79nPE_2wFjkkmX_T7iXEwOyao/' /home/jarvis/Jarvis/lifeos/config/.env"
+        ssh root@72.61.7.126 "sed -i 's/^TREASURY_BOT_TOKEN=.*/TREASURY_BOT_TOKEN=***TREASURY_BOT_TOKEN_REDACTED***/' /home/jarvis/Jarvis/lifeos/config/.env"
     else
         echo "  Adding TREASURY_BOT_TOKEN to .env..."
-        ssh root@72.61.7.126 "echo 'TREASURY_BOT_TOKEN=850H068106:AAHoS0GKxl79nPE_2wFjkkmX_T7iXEwOyao' >> /home/jarvis/Jarvis/lifeos/config/.env"
+        ssh root@72.61.7.126 "echo 'TREASURY_BOT_TOKEN=***TREASURY_BOT_TOKEN_REDACTED***' >> /home/jarvis/Jarvis/lifeos/config/.env"
     fi
 
     # Restart supervisor
@@ -62,7 +63,7 @@ else
     echo "MANUAL DEPLOYMENT REQUIRED:"
     echo "1. SSH to VPS: ssh root@72.61.7.126"
     echo "2. Edit .env: nano /home/jarvis/Jarvis/lifeos/config/.env"
-    echo "3. Add line: TREASURY_BOT_TOKEN=850H068106:AAHoS0GKxl79nPE_2wFjkkmX_T7iXEwOyao"
+    echo "3. Add line: TREASURY_BOT_TOKEN=***TREASURY_BOT_TOKEN_REDACTED***"
     echo "4. Save (Ctrl+X, Y, Enter)"
     echo "5. Restart: pkill -f supervisor.py && cd /home/jarvis/Jarvis && nohup python bots/supervisor.py > logs/supervisor.log 2>&1 &"
     echo "6. Verify: tail -f logs/supervisor.log  # Look for 'Using unique treasury bot token'"

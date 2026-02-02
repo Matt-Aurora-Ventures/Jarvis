@@ -1,0 +1,52 @@
+[Unit]
+Description=Jarvis LifeOS Supervisor - Autonomous Trading & Social AI
+Documentation=https://github.com/lucid/jarvis
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=all
+User=jarvis
+Group=jarvis
+WorkingDirectory=/home/jarvis/Jarvis
+
+# Environment
+EnvironmentFile=/home/jarvis/Jarvis/.env
+
+# Execution
+ExecStart=/usr/bin/python3 bots/supervisor.py
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=600
+StartLimitBurst=10
+
+# Timeouts
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+# Watchdog - supervisor.py sends WATCHDOG=1 every 60s
+# If no ping for 300s (5 min), systemd restarts
+WatchdogSec=300
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/home/jarvis/Jarvis/logs /home/jarvis/Jarvis/data /home/jarvis/Jarvis/.lifeos /tmp
+
+# Resource limits
+MemoryMax=4G
+CPUQuota=90%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jarvis-supervisor
+
+[Install]
+WantedBy=multi-user.target

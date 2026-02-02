@@ -27,6 +27,10 @@ supermemory-*.js
 # Local keys / proofs (never commit)
 keypair.json
 ownership_proof.json
+*PRIVATE_KEY*.json
+*_PRIVATE_KEY.json
+OLD_TREASURY_PRIVATE_KEY.json
+NEW_TREASURY_PRIVATE_KEY.json
 # Twitter/X OAuth tokens (explicit)
 bots/twitter/.oauth2_tokens.json
 bots/twitter/*_tokens.json

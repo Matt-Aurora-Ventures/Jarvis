@@ -1,0 +1,74 @@
+# MANUAL BOT DEPLOYMENT - COPY-PASTE READY
+# Generated: 2026-01-31 23:55 UTC
+# SSH to 72.61.7.126 is timing out from local machine
+# User must deploy manually from a terminal that can reach the VPS
+
+# ============================================================
+# STEP 1: TREASURY BOT TOKEN (P0 CRITICAL - Fixes 35+ crashes)
+# ============================================================
+
+# SSH to VPS:
+ssh root@72.61.7.126
+
+# Backup current .env:
+cp /home/jarvis/Jarvis/lifeos/config/.env /home/jarvis/Jarvis/lifeos/config/.env.backup
+
+# Add Treasury token (copy this ENTIRE line):
+echo 'TREASURY_BOT_TOKEN=***TREASURY_BOT_TOKEN_REDACTED***' >> /home/jarvis/Jarvis/lifeos/config/.env
+
+# Restart supervisor:
+pkill -f supervisor.py
+sleep 2
+cd /home/jarvis/Jarvis && nohup python bots/supervisor.py > logs/supervisor.log 2>&1 &
+
+# Verify (look for "Using unique treasury bot token"):
+tail -50 /home/jarvis/Jarvis/logs/supervisor.log | grep -i treasury
+
+# ============================================================
+# STEP 2: X BOT TELEGRAM TOKEN (P0 - Fixes X bot posting)
+# ============================================================
+
+# NOTE: This token needs REGENERATION first via @BotFather
+# Current token (7968869100:AAEanuTRjH4eHTOGvssn8BV71ChsuPrz6Hc) returns Unauthorized
+
+# After regenerating via @BotFather, add to VPS:
+# echo 'X_BOT_TELEGRAM_TOKEN=<NEW_TOKEN_HERE>' >> /home/jarvis/Jarvis/lifeos/config/.env
+
+# ============================================================
+# TOKENS THAT NEED REGENERATION VIA @BOTFATHER
+# ============================================================
+
+# 1. X_BOT_TELEGRAM_TOKEN (@X_TELEGRAM_KR8TIV_BOT)
+#    - Status: Unauthorized
+#    - Action: /mybots -> @X_TELEGRAM_KR8TIV_BOT -> API Token
+
+# 2. CLAWDMATT_BOT_TOKEN (@ClawdMatt_bot)
+#    - Status: Unauthorized
+#    - Action: /mybots -> @ClawdMatt_bot -> API Token
+
+# 3. CLAWDFRIDAY_BOT_TOKEN (@ClawdFriday_bot)
+#    - Status: Invalid format (H in bot ID)
+#    - Action: /mybots -> @ClawdFriday_bot -> API Token
+
+# 4. CLAWDJARVIS_BOT_TOKEN (@ClawdJarvis_87772_bot)
+#    - Status: Invalid format (H in bot ID)
+#    - Action: /mybots -> @ClawdJarvis_87772_bot -> API Token
+
+# ============================================================
+# VERIFICATION CHECKLIST
+# ============================================================
+
+# [ ] Treasury bot no longer crashes (exit code 4294967295)
+# [ ] Logs show "Using unique treasury bot token"
+# [ ] No Telegram polling conflicts for 10+ minutes
+# [ ] After X token regeneration: X bot posts to Twitter
+# [ ] After ClawdBot token regeneration: All ClawdBots respond
+
+# ============================================================
+# VALID TOKENS (Already Working)
+# ============================================================
+
+# TELEGRAM_BOT_TOKEN - @jarvistrades_bot (main bot)
+# TELEGRAM_BUY_BOT_TOKEN - @Javistreasury_bot (buy notifications)
+# TREASURY_BOT_TOKEN - @jarvis_treasury_bot (READY - deploy above)
+# TREASURY_BOT_TELEGRAM_TOKEN - @Javistreasury_bot (working)
