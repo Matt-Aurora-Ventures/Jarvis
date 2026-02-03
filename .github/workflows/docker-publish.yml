@@ -1,0 +1,110 @@
+# ============================================================================
+# Jarvis Docker CI/CD Pipeline
+# ============================================================================
+# Triggers:
+#   - Push to main branch
+#   - New version tags (v*)
+#   - Manual dispatch
+#
+# Outputs:
+#   - ghcr.io/lucid-labs/jarvis:latest
+#   - ghcr.io/lucid-labs/jarvis:v4.6.6 (on tag)
+#   - ghcr.io/lucid-labs/jarvis:sha-abc123 (on push)
+# ============================================================================
+
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.planning/**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v4.6.7)'
+        required: false
+        default: ''
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Set up Docker Buildx for multi-platform builds
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Login to GitHub Container Registry
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Extract metadata for tags
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ github.event.inputs.version }},enable=${{ github.event.inputs.version != '' }}
+
+      # Build and push Docker image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      # Output image digest
+      - name: Output image digest
+        run: |
+          echo "Image pushed with tags:"
+          echo "${{ steps.meta.outputs.tags }}"
+
+  # Notify on completion (optional - configure webhook)
+  notify:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Send notification
+        run: |
+          if [ "${{ needs.build-and-push.result }}" == "success" ]; then
+            echo "✅ Docker build succeeded"
+            # Uncomment to enable Telegram notification:
+            # curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            #   -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            #   -d text="✅ Jarvis Docker image built and pushed: ${{ github.sha }}"
+          else
+            echo "❌ Docker build failed"
+          fi

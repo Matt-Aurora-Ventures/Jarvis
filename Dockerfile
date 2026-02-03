@@ -1,97 +1,87 @@
 # ============================================================================
-# JARVIS Docker Image
+# Jarvis LifeOS - Production Dockerfile
 # ============================================================================
-# Multi-stage build for optimized production image
+# Multi-stage build for optimized image size
+# Base: Python 3.11 slim + Debian bookworm
 # ============================================================================
 
-# -----------------------------------------------------------------------------
-# Stage 1: Build frontend
-# -----------------------------------------------------------------------------
-FROM node:20-alpine AS frontend-builder
+# Stage 1: Builder - Install dependencies
+FROM python:3.11-slim-bookworm AS builder
 
-WORKDIR /app/frontend
-
-# Install dependencies
-COPY frontend/package*.json ./
-RUN npm ci --production=false
-
-# Build frontend
-COPY frontend/ ./
-RUN npm run build
-
-# -----------------------------------------------------------------------------
-# Stage 2: Python dependencies
-# -----------------------------------------------------------------------------
-FROM python:3.11-slim AS python-deps
-
-WORKDIR /app
+WORKDIR /build
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     gcc \
     libffi-dev \
-    portaudio19-dev \
-    libgl1-mesa-glx \
-    tesseract-ocr \
+    libssl-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Create virtual environment
+# Copy requirements first for layer caching
+COPY requirements.txt .
+
+# Create virtual environment and install dependencies
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Python dependencies
-COPY requirements.txt ./
-RUN pip install --no-cache-dir --upgrade pip && \
+# Install Python packages
+RUN pip install --no-cache-dir --upgrade pip wheel && \
     pip install --no-cache-dir -r requirements.txt
 
-# Install additional dependencies for production
-RUN pip install --no-cache-dir \
-    gunicorn \
-    uvicorn[standard] \
-    python-multipart
+# Stage 2: Runtime - Minimal production image
+FROM python:3.11-slim-bookworm AS runtime
 
-# -----------------------------------------------------------------------------
-# Stage 3: Production image
-# -----------------------------------------------------------------------------
-FROM python:3.11-slim AS production
+LABEL maintainer="Jarvis LifeOS <jarvis@lifeos.ai>"
+LABEL version="4.6.6"
+LABEL description="Jarvis LifeOS - Autonomous Trading & AI Assistant"
 
-WORKDIR /app
-
-# Install runtime dependencies
+# Runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    redis-tools \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -s /bin/bash jarvis
 
 # Copy virtual environment from builder
-COPY --from=python-deps /opt/venv /opt/venv
+COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
-# Copy built frontend
-COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
+# Create directory structure
+WORKDIR /home/jarvis/Jarvis
+RUN mkdir -p \
+    logs \
+    data \
+    backups \
+    bots/treasury \
+    bots/twitter \
+    bots/data \
+    && chown -R jarvis:jarvis /home/jarvis
 
 # Copy application code
-COPY api/ /app/api/
-COPY core/ /app/core/
-COPY integrations/ /app/integrations/
-COPY scripts/ /app/scripts/
+COPY --chown=jarvis:jarvis . .
 
-# Create data directory
-RUN mkdir -p /app/data /app/logs
+# Health check endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import requests; r = requests.get('http://localhost:8080/health', timeout=5); exit(0 if r.status_code == 200 else 1)" || exit 1
 
-# Environment variables
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
-ENV DATA_DIR=/app/data
+# Switch to non-root user
+USER jarvis
+
+# Default environment variables
+ENV JARVIS_HOME=/home/jarvis/Jarvis
 ENV LOG_LEVEL=INFO
-ENV API_HOST=0.0.0.0
-ENV API_PORT=8766
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${API_PORT}/api/health || exit 1
+ENV PYTHONPATH=/home/jarvis/Jarvis
 
 # Expose ports
-EXPOSE 8766
+# 8080: Health check API
+# 5000: System Control Deck
+# 5001: Trading Web UI
+EXPOSE 8080 5000 5001
 
 # Default command
-CMD ["python", "-m", "uvicorn", "api.fastapi_app:app", "--host", "0.0.0.0", "--port", "8766"]
+CMD ["python", "bots/supervisor.py"]

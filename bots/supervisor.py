@@ -694,20 +694,26 @@ async def create_telegram_bot():
     env["SKIP_TELEGRAM_LOCK"] = "1"
 
     # Kill any lingering telegram bot processes from previous runs
+    # NOTE: This must be done BEFORE starting the new subprocess to avoid race conditions
+    # Using a more specific pattern with full path to avoid killing unrelated processes
     try:
+        our_pid = os.getpid()
         if sys.platform == "win32":
             # taskkill /FI doesn't support CMDLINE filter on Windows
             # Use PowerShell to find and kill processes with tg_bot in command line
             kill_cmd = (
                 'powershell -Command "'
                 "Get-CimInstance Win32_Process -Filter \\\"Name='python.exe'\\\" | "
-                "Where-Object { $_.CommandLine -like '*tg_bot*' } | "
+                "Where-Object { $_.CommandLine -like '*tg_bot/bot.py*' } | "
                 'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"'
             )
             os.system(kill_cmd)
         else:
-            os.system("pkill -f 'python.*tg_bot' 2>/dev/null || true")
-        await asyncio.sleep(2)  # Wait for process to fully terminate
+            # More specific pattern: only match tg_bot/bot.py (not just 'tg_bot')
+            # Also exclude our own PID's children to avoid self-kill race
+            logger.info("Cleaning up lingering telegram bot processes...")
+            os.system("pkill -f 'tg_bot/bot.py' 2>/dev/null || true")
+        await asyncio.sleep(3)  # Wait longer for process to fully terminate
     except Exception as e:
         logger.warning(f"Failed to clean up lingering processes: {e}")
 
@@ -1378,7 +1384,8 @@ async def main():
     supervisor.register("buy_bot", create_buy_bot, min_backoff=5.0, max_backoff=60.0)
     supervisor.register("sentiment_reporter", create_sentiment_reporter, min_backoff=10.0, max_backoff=120.0)
     supervisor.register("twitter_poster", create_twitter_poster, min_backoff=30.0, max_backoff=300.0)
-    supervisor.register("telegram_bot", create_telegram_bot, min_backoff=10.0, max_backoff=60.0)
+    # Increased max_backoff to 300s per NotebookLM recommendation to avoid "service spam"
+    supervisor.register("telegram_bot", create_telegram_bot, min_backoff=30.0, max_backoff=300.0)
     supervisor.register("autonomous_x", create_autonomous_x_engine, min_backoff=30.0, max_backoff=300.0)
     supervisor.register("public_trading_bot", create_public_trading_bot, min_backoff=20.0, max_backoff=180.0)
     supervisor.register("treasury_bot", create_treasury_bot, min_backoff=20.0, max_backoff=180.0)

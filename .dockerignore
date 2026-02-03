@@ -1,7 +1,5 @@
 # ============================================================================
-# JARVIS Docker Ignore File
-# ============================================================================
-# Excludes files from Docker build context for faster builds
+# Jarvis Docker Build Exclusions
 # ============================================================================
 
 # Git
@@ -15,126 +13,79 @@ __pycache__
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
+.eggs/
 *.egg
-
-# Virtual environments
-.venv/
-venv/
-ENV/
-env/
-.env.local
-.env.*.local
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.project
-.pydevproject
-.settings/
-*.sublime-project
-*.sublime-workspace
-
-# Testing
+.mypy_cache/
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 .nox/
-coverage.xml
-*.cover
-.hypothesis/
+venv/
+.venv/
+ENV/
+env/
 
-# Documentation
-docs/_build/
-*.md
-!README.md
-!CLAUDE.md
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Logs (will be mounted as volume)
-logs/
-*.log
-
-# Data directories (will be mounted as volume)
-data/
-*.db
-*.sqlite
-
-# Secrets (mounted separately)
-secrets/
-*.pem
-*.key
-*.crt
-
-# Node modules (for frontend builds)
-node_modules/
-npm-debug.log
-
-# Frontend build artifacts
-frontend/dist/
-frontend/node_modules/
-
-# Temporary files
-*.tmp
-*.temp
-.cache/
-.claude/
-
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
-# Local development
-*.local
-.envrc
-docker-compose.override.yml
+# Logs (don't include in build, mount as volume)
+logs/
+*.log
 
-# Test fixtures and mocks
+# Local data (mount as volumes)
+data/
+backups/
+bots/treasury/.positions.json
+bots/twitter/.grok_state.json
+bots/data/context_state.json
+
+# Secrets (never include)
+.env
+*.env
+lifeos/config/.env
+*.pem
+*.key
+*.crt
+secrets/
+.secrets/
+
+# Documentation (not needed in runtime)
+docs/
+*.md
+!README.md
+
+# Tests (not needed in runtime)
 tests/
 test_*.py
 *_test.py
 conftest.py
 
-# Jupyter notebooks
-*.ipynb
-.ipynb_checkpoints/
+# Development files
+thoughts/
+.planning/
+.claude/
+.msw/
 
-# Archive files
+# Node (if any)
+node_modules/
+
+# Docker (prevent recursive copy)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Large files
 *.tar
 *.tar.gz
 *.zip
-*.rar
-
-# Large model files
-*.onnx
-*.pt
-*.pth
-*.bin
-*.h5
-*.safetensors
-
-# Web demo (separate deployment)
-web_demo/
-
-# Thoughts and handoffs (internal)
-thoughts/
-
-# Playwright state
-*.json.bak
-playwright-state/
+*.7z

@@ -311,3 +311,28 @@ secrets/bot_tokens_DEPLOY_ONLY.txt
 **/telegram_*.session
 **/.telegram_dl/
 **/bot_tokens*.txt
+
+# === DEPLOYMENT SCRIPTS WITH HARDCODED SECRETS ===
+# These contain API tokens/credentials - DO NOT COMMIT
+deploy-docker-api.py
+deploy_with_password.py
+scripts/deploy_with_password.py
+**/allowlist*.json
+allowlist.vps.json
+
+# === ENVIRONMENT FILES (explicit) ===
+lifeos/config/.env
+tg_bot/.env
+bots/twitter/.env
+docker/clawdbot-gateway/.env
+web_demo/.env
+kea-research/.env
+config/environments/*.env
+!config/environments/*.env.example
+!*.env.example
+
+# === LOCAL SESSIONS/MEMORY ===
+.msw/
+.agent/
+*.session
+*.session-journal
