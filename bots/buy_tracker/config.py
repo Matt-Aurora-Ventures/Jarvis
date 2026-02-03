@@ -92,7 +92,10 @@ def load_config() -> BuyBotConfig:
         except Exception:
             pass
 
-    buy_bot_token = os.environ.get("TELEGRAM_BUY_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    buy_bot_token = os.environ.get("TELEGRAM_BUY_BOT_TOKEN", "")
+    if not buy_bot_token:
+        import logging
+        logging.getLogger(__name__).error("TELEGRAM_BUY_BOT_TOKEN not set - buy bot will not start. Do NOT fall back to main bot token to avoid polling conflicts.")
 
     # Load additional LP pairs from config dict
     # These are gracefully handled - if any are invalid, they're just skipped

@@ -369,12 +369,10 @@ class TwitterClient:
     def connect(self) -> bool:
         """Initialize the X API connection - Use OAuth 1.0a (tweepy) as primary"""
         if not self.credentials.is_valid():
-            _log_twitter_error(
-                RuntimeError("Invalid X credentials - check environment variables"),
-                "connect_invalid_credentials"
-            )
-            logger.error("Invalid X credentials - check environment variables")
-            return False
+            err = RuntimeError("Invalid X credentials - check environment variables")
+            _log_twitter_error(err, "connect_invalid_credentials")
+            logger.error(str(err))
+            raise err
 
         try:
             expected = self._get_expected_username()
@@ -468,16 +466,16 @@ class TwitterClient:
                 self._user_id = tweepy_user_id
                 return True
 
-            logger.error("Failed to connect to X with available credentials")
-            _log_twitter_error(
-                RuntimeError("Failed to connect to X with available credentials"),
-                "connect_failed"
-            )
-            return False
+            err = RuntimeError("Failed to connect to X with available credentials")
+            logger.error(str(err))
+            _log_twitter_error(err, "connect_failed")
+            raise err
 
+        except RuntimeError:
+            raise  # Let auth failures propagate
         except Exception as e:
             _log_twitter_error(e, "connect")
-            return False
+            raise RuntimeError(f"X connection failed: {e}") from e
 
     def _refresh_oauth2_token(self) -> bool:
         """Refresh the OAuth 2.0 access token"""
@@ -652,12 +650,10 @@ class TwitterClient:
                     if self._refresh_oauth2_token():
                         return await self.post_tweet(text, media_ids, reply_to, quote_tweet_id)
                     else:
-                        _log_twitter_error(
-                            RuntimeError("Token refresh failed during post"),
-                            "post_tweet_refresh_failed"
-                        )
-                        logger.error("Token refresh failed - cannot post (will not fallback to wrong account)")
-                        return TweetResult(success=False, error="OAuth 2.0 token refresh failed")
+                        err = RuntimeError("Token refresh failed during post - X bot must restart")
+                        _log_twitter_error(err, "post_tweet_refresh_failed")
+                        logger.critical("Token refresh failed - crashing to trigger supervisor restart")
+                        raise err
                 else:
                     error_msg = f"OAuth 2.0 post failed ({status}): {resp_text}"
                     _log_twitter_error(
@@ -898,9 +894,64 @@ class TwitterClient:
                             for tweet in mentions.data
                         ]
                 except Exception as e:
-                    logger.warning(f"xdk get_mentions failed: {e}, trying tweepy")
+                    logger.warning(f"xdk get_mentions failed: {e}, trying OAuth2")
 
-            # Use bearer token client for reading (OAuth 1.0a has limited access on free tier)
+            # Try OAuth2 user token (preferred for user context)
+            if self._use_oauth2 and self.credentials.oauth2_access_token and self._user_id:
+                try:
+                    import requests as req
+                    headers = {"Authorization": f"Bearer {self.credentials.oauth2_access_token}"}
+                    params = {
+                        "max_results": max(5, min(100, max_results)),  # API requires 5-100
+                        "expansions": "author_id",
+                        "user.fields": "username",
+                        "tweet.fields": "created_at,conversation_id"
+                    }
+                    if since_id:
+                        params["since_id"] = since_id
+
+                    resp = await loop.run_in_executor(
+                        None,
+                        lambda: req.get(
+                            f"https://api.twitter.com/2/users/{self._user_id}/mentions",
+                            headers=headers,
+                            params=params,
+                            timeout=15
+                        )
+                    )
+
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if not data.get("data"):
+                            return []
+
+                        # Build user lookup
+                        users = {}
+                        for user in data.get("includes", {}).get("users", []):
+                            users[user.get("id")] = user.get("username", "unknown")
+
+                        return [
+                            {
+                                "id": tweet.get("id"),
+                                "text": tweet.get("text"),
+                                "author_id": tweet.get("author_id"),
+                                "author_username": users.get(tweet.get("author_id"), "unknown"),
+                                "created_at": tweet.get("created_at"),
+                                "conversation_id": tweet.get("conversation_id")
+                            }
+                            for tweet in data["data"]
+                        ]
+                    elif resp.status_code == 401:
+                        # Try refreshing token
+                        if self._refresh_oauth2_token():
+                            return await self.get_mentions(since_id, max_results)
+                        logger.warning(f"OAuth2 mentions failed: {resp.status_code}")
+                    else:
+                        logger.warning(f"OAuth2 mentions returned {resp.status_code}: {resp.text[:200]}")
+                except Exception as e:
+                    logger.warning(f"OAuth2 get_mentions failed: {e}, trying tweepy")
+
+            # Fallback: Use bearer token client for reading (OAuth 1.0a has limited access on free tier)
             read_client = self._bearer_client or self._tweepy_client
             if read_client and self._user_id:
                 mentions = await loop.run_in_executor(

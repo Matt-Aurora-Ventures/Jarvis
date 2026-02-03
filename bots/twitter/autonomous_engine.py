@@ -38,6 +38,19 @@ from bots.twitter.telegram_sync import sync_tweet_to_telegram
 from core.context_engine import context
 from core.async_utils import fire_and_forget
 
+# Import 2026 agent architecture components (xbot.md)
+try:
+    from bots.twitter.health_monitor import get_health_monitor, HealthStatus
+    from bots.twitter.ingress_guardian import get_ingress_guardian, filter_input, InputClass
+    from bots.twitter.self_improver import get_self_improver
+    AGENT_2026_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"2026 agent components not available: {e}")
+    AGENT_2026_AVAILABLE = False
+    get_health_monitor = None
+    get_ingress_guardian = None
+    get_self_improver = None
+
 # Import self-correcting AI system for learning and optimization
 try:
     from core.self_correcting import (
@@ -1448,6 +1461,58 @@ class XMemory:
 
         return insights
 
+    # =========================================================================
+    # MENTION TRACKING - For responding to @Jarvis_lifeos pings (xbot.md)
+    # =========================================================================
+
+    def get_last_mention_id(self) -> Optional[str]:
+        """Get the last processed mention ID."""
+        with self._lock:
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                # Ensure table exists
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS mention_state (
+                        key TEXT PRIMARY KEY,
+                        value TEXT,
+                        updated_at TEXT
+                    )
+                """)
+                cursor.execute("SELECT value FROM mention_state WHERE key = 'last_mention_id'")
+                row = cursor.fetchone()
+                return row[0] if row else None
+            finally:
+                if conn:
+                    conn.close()
+
+    def set_last_mention_id(self, mention_id: str):
+        """Store the last processed mention ID."""
+        with self._lock:
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                now = datetime.now(timezone.utc).isoformat()
+                # Ensure table exists
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS mention_state (
+                        key TEXT PRIMARY KEY,
+                        value TEXT,
+                        updated_at TEXT
+                    )
+                """)
+                cursor.execute("""
+                    INSERT OR REPLACE INTO mention_state (key, value, updated_at)
+                    VALUES ('last_mention_id', ?, ?)
+                """, (mention_id, now))
+                conn.commit()
+            finally:
+                if conn:
+                    conn.close()
+
+
 class AutonomousEngine:
     """
     Main autonomous Twitter engine for Jarvis.
@@ -1678,9 +1743,8 @@ class AutonomousEngine:
         if self._twitter_client is None:
             from bots.twitter.twitter_client import TwitterClient
             self._twitter_client = TwitterClient()
-            # Connect to X API
-            if not self._twitter_client.connect():
-                logger.error("Failed to connect to X API")
+            # Connect to X API - raises RuntimeError on auth failure
+            self._twitter_client.connect()
         return self._twitter_client
     
     def set_image_params(self, **kwargs):
@@ -1817,6 +1881,23 @@ class AutonomousEngine:
                     common = max(set(patterns), key=patterns.count)
                     logger.info(f"Self-learning: Top tweets tend to have '{common}' pattern")
 
+            # 5. Run daily reflection via self-improver (xbot.md)
+            if AGENT_2026_AVAILABLE and get_self_improver:
+                improver = get_self_improver()
+                # Only run daily reflection once per day
+                current_hour = datetime.now().hour
+                if current_hour == 6:  # Run at 6 AM
+                    result = await improver.run_daily_reflection()
+                    if result.get("status") == "success":
+                        logger.info(f"Daily reflection complete: Style guide v{result.get('version')}")
+
+            # 6. Run health check (xbot.md)
+            if AGENT_2026_AVAILABLE and get_health_monitor:
+                health = get_health_monitor()
+                metrics = await health.run_health_check()
+                if metrics.status != HealthStatus.HEALTHY:
+                    logger.warning(f"Health check: {metrics.status.value} - {metrics.warnings}")
+
         except Exception as e:
             logger.error(f"Self-learning cycle error: {e}")
 
@@ -1877,9 +1958,11 @@ class AutonomousEngine:
         self._last_report_time = time.time()
         self._last_learning_time = time.time()
         self._last_spam_scan_time = time.time()
+        self._last_mention_check_time = time.time()
         self._report_interval = 3600  # Send activity report every hour
         self._learning_interval = 1800  # Run self-learning every 30 min
         self._spam_scan_interval = 300  # Scan for spam bots every 5 min
+        self._mention_check_interval = 300  # Check mentions every 5 min
         logger.info("Starting autonomous posting loop")
 
         # Startup notification disabled per user request (no restart reports)
@@ -1917,11 +2000,25 @@ class AutonomousEngine:
                     await self.run_spam_protection()
                     self._last_spam_scan_time = time.time()
 
+                # Periodic mention check and response (every 5 min)
+                if time.time() - self._last_mention_check_time > self._mention_check_interval:
+                    try:
+                        replies_sent = await self.check_mentions_and_respond()
+                        if replies_sent > 0:
+                            logger.info(f"Mention check: responded to {replies_sent} mentions")
+                    except Exception as e:
+                        logger.error(f"Mention check error: {e}")
+                    self._last_mention_check_time = time.time()
+
                 # Sleep before next check
                 await asyncio.sleep(60)  # Check every minute
 
+            except RuntimeError as e:
+                # Auth failures must crash the loop so supervisor can restart
+                logger.critical(f"Fatal X bot error (will crash): {e}")
+                raise
             except Exception as e:
-                logger.error(f"Run loop error: {e}")
+                logger.error(f"Run loop error (recoverable): {e}")
                 await asyncio.sleep(60)
 
         # Shutdown notification disabled per user request (no restart reports)
@@ -3533,6 +3630,226 @@ Write a brief news commentary. 1-2 sentences. Sound informed but cautious. Inclu
         "token launch OR airdrop lang:en -is:retweet",
     ]
 
+    # =========================================================================
+    # MENTION MONITORING - Respond when people ping @Jarvis_lifeos (xbot.md)
+    # =========================================================================
+
+    async def check_mentions_and_respond(self) -> int:
+        """
+        Check for new mentions and respond to relevant ones.
+
+        Per xbot.md: "If someone replies to @jarvis_lifeos, the agent should
+        be able to draft a relevant, non-advice response."
+
+        Returns:
+            Number of replies sent
+        """
+        replies_sent = 0
+
+        try:
+            twitter = await self._get_twitter()
+            if not twitter:
+                return 0
+
+            # Check health monitor rate limits
+            if AGENT_2026_AVAILABLE and get_health_monitor:
+                health = get_health_monitor()
+                can_reply, reason = health.can_reply()
+                if not can_reply:
+                    logger.debug(f"Mention check skipped: {reason}")
+                    return 0
+
+            # Get recent mentions
+            last_mention_id = self.memory.get_last_mention_id()
+            mentions = await twitter.get_mentions(
+                since_id=last_mention_id,
+                max_results=10
+            )
+
+            if not mentions:
+                logger.debug("No new mentions")
+                return 0
+
+            logger.info(f"Found {len(mentions)} new mentions")
+
+            # Update last mention ID
+            newest_id = max(str(m.get("id", "0")) for m in mentions)
+            self.memory.set_last_mention_id(newest_id)
+
+            for mention in mentions:
+                try:
+                    mention_id = mention.get("id")
+                    author = mention.get("author_username", "") or mention.get("author", {}).get("username", "")
+                    content = mention.get("text", "")
+
+                    # Skip if we already replied
+                    if self.memory.was_externally_replied(mention_id):
+                        continue
+
+                    # Skip if we replied to this author recently (6 hours)
+                    if self.memory.was_author_replied_recently(author, hours=6):
+                        logger.debug(f"Skipping mention from @{author} - replied recently")
+                        continue
+
+                    # Security check via Ingress Guardian (xbot.md)
+                    if AGENT_2026_AVAILABLE and get_ingress_guardian:
+                        from bots.twitter.ingress_guardian import filter_input, InputClass
+                        guard_result = await filter_input(content, use_llm=False)
+
+                        if not guard_result.allowed:
+                            logger.warning(f"Mention blocked by guardian: {guard_result.reason}")
+                            continue
+
+                        # Only respond to market questions or safe content
+                        if guard_result.classification == InputClass.SPAM:
+                            continue
+
+                    # Generate reply via Grok
+                    reply_content = await self._generate_mention_reply(content, author)
+
+                    if not reply_content:
+                        continue
+
+                    # Post reply
+                    result = await twitter.reply_to_tweet(mention_id, reply_content)
+
+                    if result.success:
+                        replies_sent += 1
+                        self.memory.record_external_reply(
+                            original_tweet_id=mention_id,
+                            author=author,
+                            original_content=content,
+                            our_reply=reply_content,
+                            our_tweet_id=str(result.tweet_id) if hasattr(result, 'tweet_id') else "",
+                            reply_type="mention_reply"
+                        )
+
+                        # Record in health monitor
+                        if AGENT_2026_AVAILABLE and get_health_monitor:
+                            get_health_monitor().record_reply()
+
+                        logger.info(f"Replied to @{author}: {result.url}")
+
+                        # Sync to Telegram
+                        try:
+                            from bots.twitter.telegram_sync import sync_tweet_to_telegram
+                            await sync_tweet_to_telegram(
+                                f"Reply to @{author}: {reply_content}",
+                                result.url,
+                                "Jarvis_lifeos"
+                            )
+                        except Exception:
+                            pass
+
+                    # Rate limit between replies
+                    await asyncio.sleep(5)
+
+                except Exception as e:
+                    logger.error(f"Error processing mention: {e}")
+                    continue
+
+        except Exception as e:
+            logger.error(f"Mention check error: {e}")
+
+        return replies_sent
+
+    async def _generate_mention_reply(self, mention_content: str, author: str) -> Optional[str]:
+        """
+        Generate a contextual reply to a mention using Grok.
+
+        Per xbot.md: "Use Grok to generate contextual replies" and
+        "Never give financial advice."
+        """
+        try:
+            grok = await self._get_grok()
+            voice = await self._get_jarvis_voice()
+
+            if not grok or not voice:
+                return None
+
+            # Analyze the mention
+            analysis_prompt = f"""Analyze this mention to @Jarvis_lifeos:
+
+From: @{author}
+Content: "{mention_content}"
+
+Classify:
+1. Is this a question about crypto/markets? (worth a detailed reply)
+2. Is this positive feedback? (thank briefly)
+3. Is this criticism? (acknowledge politely)
+4. Is this spam/irrelevant? (skip)
+
+Output JSON:
+{{"type": "question|positive|criticism|skip", "topic": "brief topic", "key_points": ["point1"]}}"""
+
+            analysis_response = await grok.generate_tweet(analysis_prompt, max_tokens=150)
+
+            if not analysis_response.success:
+                return None
+
+            # Parse analysis
+            import re
+            json_match = re.search(r'\{[^}]+\}', analysis_response.content)
+            if not json_match:
+                return None
+
+            analysis = json.loads(json_match.group())
+            mention_type = analysis.get("type", "skip")
+
+            if mention_type == "skip":
+                return None
+
+            # Generate appropriate reply based on type
+            if mention_type == "question":
+                reply_prompt = f"""@{author} asked about {analysis.get('topic', 'crypto')}:
+"{mention_content}"
+
+Generate a helpful reply as Jarvis (smart, slightly sarcastic financial AI).
+- Answer the question with market insight
+- Include relevant data if applicable
+- End with "nfa" (not financial advice)
+- Keep under 280 characters
+- NO emojis"""
+
+            elif mention_type == "positive":
+                reply_prompt = f"""@{author} sent positive feedback:
+"{mention_content}"
+
+Generate a brief thank you as Jarvis (smart, slightly sarcastic).
+- Be genuine but not overly enthusiastic
+- Maybe add a witty observation
+- Keep under 200 characters
+- NO emojis"""
+
+            elif mention_type == "criticism":
+                reply_prompt = f"""@{author} criticized:
+"{mention_content}"
+
+Generate a polite response as Jarvis (smart, slightly sarcastic).
+- Acknowledge their point if valid
+- Defend position if warranted, but respectfully
+- Don't be defensive or aggressive
+- Keep under 250 characters
+- NO emojis"""
+
+            else:
+                return None
+
+            # Generate the reply
+            reply = await voice.generate_tweet(reply_prompt)
+
+            if reply and len(reply) > 10:
+                # Ensure it starts with @mention
+                if not reply.startswith(f"@{author}"):
+                    reply = f"@{author} {reply}"
+                return reply[:280]  # Ensure within limit
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Reply generation error: {e}")
+            return None
+
     async def find_interesting_tweets(self, max_results: int = 10) -> List[Dict[str, Any]]:
         """
         Find interesting tweets to potentially reply to.
@@ -3604,7 +3921,7 @@ Respond with JSON:
     "key_points": ["point1", "point2"]
 }}"""
 
-            response = await grok.generate_text(sentiment_prompt)
+            response = await grok.generate_tweet(sentiment_prompt)
 
             if response and response.success:
                 # Parse Grok's response
@@ -3836,6 +4153,16 @@ Reply type guidance:
         """Post a tweet, optionally with an image."""
         try:
             # =====================================================================
+            # HEALTH MONITOR - Velocity limits & shadowban protection (xbot.md)
+            # =====================================================================
+            if AGENT_2026_AVAILABLE and get_health_monitor:
+                health = get_health_monitor()
+                can_post, reason = health.can_post()
+                if not can_post:
+                    logger.info(f"HEALTH GATE: {reason}")
+                    return None
+
+            # =====================================================================
             # DECISION ENGINE - Institution-grade decision making
             # Makes HOLD a first-class intelligent choice with full audit trail
             # =====================================================================
@@ -4010,6 +4337,14 @@ Reply type guidance:
 
                 # Record fingerprint for persistent duplicate detection
                 await self.memory.record_content_fingerprint(content, result.tweet_id)
+
+                # Record in health monitor (xbot.md velocity tracking)
+                if AGENT_2026_AVAILABLE and get_health_monitor:
+                    get_health_monitor().record_post()
+
+                # Record in self-improver (xbot.md feedback loop)
+                if AGENT_2026_AVAILABLE and get_self_improver:
+                    get_self_improver().record_tweet(result.tweet_id, content, draft.category)
 
                 # Record for spam protection scanning
                 try:
