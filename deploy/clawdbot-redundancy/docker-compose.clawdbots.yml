@@ -1,0 +1,139 @@
+# ClawdBot Docker Compose Configuration
+# Complete setup with Tailscale support and volume persistence
+#
+# Usage:
+#   docker-compose -f docker-compose.clawdbots.yml up -d
+#   docker-compose -f docker-compose.clawdbots.yml logs -f friday
+#
+# Prerequisites:
+#   - Build clawdbot-ready:latest image first
+#   - Set TAILSCALE_AUTHKEY in environment (optional)
+#   - Create config directories with clawdbot.json and auth-profiles.json
+
+version: "3.8"
+
+x-clawdbot-common: &clawdbot-common
+  image: clawdbot-ready:latest
+  restart: always
+  cap_add:
+    - NET_ADMIN
+    - NET_RAW
+  devices:
+    - /dev/net/tun:/dev/net/tun
+  environment:
+    - TAILSCALE_STATE_DIR=/root/.clawdbot/tailscale
+    - NODE_OPTIONS=--max-old-space-size=1536
+  deploy:
+    resources:
+      limits:
+        memory: 2G
+      reservations:
+        memory: 512M
+
+services:
+  friday:
+    <<: *clawdbot-common
+    container_name: clawdbot-friday
+    hostname: clawdbot-friday
+    ports:
+      - "18789:18789"
+    environment:
+      - BOT_NAME=friday
+      - PROFILE=friday
+      - GATEWAY_PORT=18789
+      - DOCKER_API_VERSION=1.44
+      - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}
+    volumes:
+      # Config (read-write for Tailscale state persistence)
+      - /root/.clawdbot:/root/.clawdbot
+      # Memory and skills
+      - /root/clawd/data/friday/memory:/root/.clawdbot/memory
+      - /root/clawd/data/friday/skills:/root/.clawdbot/skills
+      # SSH keys
+      - /root/.ssh:/root/.ssh:ro
+      # Shared memory database
+      - /root/clawdbots/data:/root/clawdbots/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/__clawdbot__/canvas/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  matt:
+    <<: *clawdbot-common
+    container_name: clawdbot-matt
+    hostname: clawdbot-matt
+    ports:
+      - "18800:18800"
+    environment:
+      - BOT_NAME=matt
+      - PROFILE=matt
+      - GATEWAY_PORT=18800
+      - DOCKER_API_VERSION=1.44
+      - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}
+    volumes:
+      # Config (read-write for Tailscale state persistence)
+      - /docker/clawdbot-gateway/config-matt:/root/.clawdbot
+      # Memory and skills
+      - /root/clawd/data/matt/memory:/root/.clawdbot/memory
+      - /root/clawd/data/matt/skills:/root/.clawdbot/skills
+      # SSH keys
+      - /root/.ssh:/root/.ssh:ro
+      # Shared memory database
+      - /root/clawdbots/data:/root/clawdbots/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18800/__clawdbot__/canvas/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  jarvis:
+    <<: *clawdbot-common
+    container_name: clawdbot-jarvis
+    hostname: clawdbot-jarvis
+    ports:
+      - "18801:18801"
+    environment:
+      - BOT_NAME=jarvis
+      - PROFILE=jarvis
+      - GATEWAY_PORT=18801
+      - DOCKER_API_VERSION=1.44
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}
+    volumes:
+      # Config (read-write for Tailscale state persistence)
+      - /root/.clawdbot-jarvis:/root/.clawdbot
+      # Memory and skills
+      - /root/clawd/data/jarvis/memory:/root/.clawdbot/memory
+      - /root/clawd/data/jarvis/skills:/root/.clawdbot/skills
+      # SSH keys
+      - /root/.ssh:/root/.ssh:ro
+      # Shared memory database
+      - /root/clawdbots/data:/root/clawdbots/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18801/__clawdbot__/canvas/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Health API (external monitoring endpoint)
+  health-api:
+    image: alpine:latest
+    container_name: clawdbot-health-api
+    restart: always
+    ports:
+      - "18888:18888"
+    volumes:
+      - /root/clawd/infra:/infra:ro
+    command: >
+      sh -c "apk add --no-cache socat curl jq &&
+             socat TCP-LISTEN:18888,reuseaddr,fork EXEC:/infra/health-api-handler.sh"
+    depends_on:
+      - friday
+      - matt
+      - jarvis
+
+# No separate tailscale volumes needed - state persists in /root/.clawdbot/tailscale/

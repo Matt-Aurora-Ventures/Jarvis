@@ -1,0 +1,108 @@
+# Akash Network Deployment Manifest for ClawdBot
+# Deploy GPU-enabled bots on decentralized compute
+#
+# Usage:
+#   akash tx deployment create deploy.yaml --from wallet --chain-id akashnet-2
+#
+# Prerequisites:
+#   - Akash CLI installed (https://docs.akash.network/guides/cli)
+#   - AKT tokens for deployment funding
+#   - Wallet configured with akash keys
+#
+# Cost estimate: ~$0.50-1.50/hr depending on GPU requirements
+
+---
+version: "2.0"
+
+services:
+  clawdbot-gpu:
+    image: clawdbot-ready:latest
+    expose:
+      - port: 18789
+        as: 18789
+        to:
+          - global: true
+      - port: 18888
+        as: 18888
+        to:
+          - global: true
+    env:
+      - BOT_NAME=friday-akash
+      - PROFILE=friday
+      - GATEWAY_PORT=18789
+      - DOCKER_API_VERSION=1.44
+      # Secrets should be passed via Akash secrets or environment
+      - TAILSCALE_AUTHKEY=
+    args:
+      - /root/scripts/entrypoint.sh
+
+  # Optional: Local Ollama for inference
+  ollama:
+    image: ollama/ollama:latest
+    expose:
+      - port: 11434
+        as: 11434
+        to:
+          - service: clawdbot-gpu
+    env:
+      - OLLAMA_HOST=0.0.0.0
+
+profiles:
+  compute:
+    clawdbot-gpu:
+      resources:
+        cpu:
+          units: 4
+        memory:
+          size: 8Gi
+        storage:
+          - size: 20Gi
+        gpu:
+          units: 1
+          attributes:
+            vendor:
+              nvidia:
+                - model: rtx4090
+                - model: a100
+                - model: h100
+
+    ollama:
+      resources:
+        cpu:
+          units: 2
+        memory:
+          size: 16Gi
+        storage:
+          - size: 50Gi
+        gpu:
+          units: 1
+          attributes:
+            vendor:
+              nvidia:
+                - model: rtx4090
+                - model: a100
+
+  placement:
+    akash:
+      attributes:
+        region: us-west
+      signedBy:
+        anyOf:
+          - akash1365yvmc4s7awdyj3n2sav7xfx76adc6dnmlx63
+      pricing:
+        clawdbot-gpu:
+          denom: uakt
+          amount: 10000  # ~$1.50/hr with GPU
+        ollama:
+          denom: uakt
+          amount: 8000   # ~$1.20/hr with GPU
+
+deployment:
+  clawdbot-gpu:
+    akash:
+      profile: clawdbot-gpu
+      count: 1
+  ollama:
+    akash:
+      profile: ollama
+      count: 1
