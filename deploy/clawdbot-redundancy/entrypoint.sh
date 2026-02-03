@@ -87,4 +87,4 @@ log "  Port: $GATEWAY_PORT"
 export GATEWAY_PORT
 
 # Start the gateway (exec replaces shell, so signals propagate correctly)
-exec clawdbot gateway --profile "$PROFILE" --bind lan
+exec clawdbot gateway --profile "$PROFILE" --port "$GATEWAY_PORT" --bind lan
