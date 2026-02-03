@@ -1,0 +1,27 @@
+{
+  "successful_actions": 0,
+  "major_errors": 0,
+  "level": 0,
+  "level_name": "Supervised",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "milestones": {
+    "level_1_assisted": {
+      "required": 10,
+      "achieved": false
+    },
+    "level_2_monitored": {
+      "required": 50,
+      "achieved": false
+    },
+    "level_3_autonomous": {
+      "required": 200,
+      "achieved": false
+    },
+    "level_4_trusted": {
+      "required": 1000,
+      "achieved": false
+    }
+  },
+  "action_log": []
+}
