@@ -30,6 +30,7 @@ RUN apt-get update -qq && \
     jq \
     # Process management
     procps \
+    cron \
     # Network/firewall (required for Tailscale)
     iptables \
     # Editors
@@ -46,6 +47,8 @@ RUN apt-get update -qq && \
     python3-pip \
     # Media processing
     ffmpeg \
+    # Docker CLI for peer-to-peer healing
+    docker.io \
     && \
     # Install Tailscale
     curl -fsSL https://tailscale.com/install.sh | sh && \
@@ -67,7 +70,18 @@ RUN mkdir -p /root/.clawdbot/tailscale \
 # Copy startup scripts
 COPY tailscale-start.sh /root/scripts/tailscale-start.sh
 COPY entrypoint.sh /root/scripts/entrypoint.sh
+COPY scripts/peer-health-monitor.sh /root/scripts/peer-health-monitor.sh
+COPY scripts/solana-wallet-init.sh /root/scripts/solana-wallet-init.sh
 RUN chmod +x /root/scripts/*.sh
+
+# Pre-install Solana CLI for trading capabilities
+RUN sh -c "$(curl -sSfL https://release.solana.com/stable/install)" 2>/dev/null && \
+    echo 'export PATH="/root/.local/share/solana/install/active_release/bin:$PATH"' >> /root/.bashrc
+
+# Set up peer health monitoring cron job (runs every 2 minutes)
+RUN echo "*/2 * * * * /root/scripts/peer-health-monitor.sh >> /var/log/peer-monitor.log 2>&1" > /etc/cron.d/peer-monitor && \
+    chmod 0644 /etc/cron.d/peer-monitor && \
+    crontab /etc/cron.d/peer-monitor
 
 # Docker-native health check (pings gateway canvas endpoint)
 # Retries every 30s, 3 failures = unhealthy, 60s startup grace

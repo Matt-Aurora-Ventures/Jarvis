@@ -23,12 +23,17 @@ x-clawdbot-common: &clawdbot-common
   environment:
     - TAILSCALE_STATE_DIR=/root/.clawdbot/tailscale
     - NODE_OPTIONS=--max-old-space-size=1536
+    - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+    - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
   deploy:
     resources:
       limits:
         memory: 2G
       reservations:
         memory: 512M
+  # Enable peer-to-peer healing via docker socket
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
 
 services:
   friday:

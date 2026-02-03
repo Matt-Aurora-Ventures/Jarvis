@@ -19,9 +19,11 @@ CHAT_ID="${TELEGRAM_CHAT_ID:-}"
 # Recovery settings - UPDATED FOR PRE-BUILT IMAGE
 RECOVERY_COOLDOWN=180           # 3 minutes between recovery attempts per bot
 MAX_FAILURES_BEFORE_REBUILD=3   # After 3 failed recoveries, do full rebuild
+MAX_REBUILDS_BEFORE_PAUSE=2     # After 2 failed rebuilds, pause for manual review
 STARTUP_GRACE_PERIOD=240        # 4 minutes grace after start (increased from 120)
 POST_RESTART_WAIT=90            # Wait 90s after restart before health check (increased from 45)
 HEALTH_CHECK_TIMEOUT=15         # HTTP timeout for health checks
+PAUSE_DURATION=3600             # 1 hour pause after max rebuilds (manual intervention expected)
 
 # Pre-built image (instant startup)
 PREBUILT_IMAGE="clawdbot-ready:latest"
@@ -80,6 +82,51 @@ set_cooldown() {
     date +%s > "/tmp/.clawdbot-${bot}_cooldown"
 }
 
+get_rebuild_count() {
+    local bot="$1"
+    local file="/tmp/.clawdbot-${bot}_rebuilds"
+    [ -f "$file" ] && cat "$file" || echo 0
+}
+
+increment_rebuild() {
+    local bot="$1"
+    local file="/tmp/.clawdbot-${bot}_rebuilds"
+    local count=$(get_rebuild_count "$bot")
+    echo $((count + 1)) > "$file"
+}
+
+reset_rebuilds() {
+    local bot="$1"
+    rm -f "/tmp/.clawdbot-${bot}_rebuilds"
+}
+
+is_paused() {
+    local bot="$1"
+    local pause_file="/tmp/.clawdbot-${bot}_paused"
+    if [ -f "$pause_file" ]; then
+        local paused_at=$(cat "$pause_file")
+        local now=$(date +%s)
+        if [ $((now - paused_at)) -lt $PAUSE_DURATION ]; then
+            return 0  # Still paused
+        else
+            rm -f "$pause_file"  # Pause expired
+            reset_rebuilds "$bot"
+            return 1
+        fi
+    fi
+    return 1
+}
+
+set_paused() {
+    local bot="$1"
+    date +%s > "/tmp/.clawdbot-${bot}_paused"
+    send_telegram "<b>$bot PAUSED FOR MANUAL REVIEW</b>
+Too many rebuild failures. Bot will remain paused for 1 hour.
+
+To unpause early:
+<code>rm /tmp/.clawdbot-${bot}_paused</code>" "critical"
+}
+
 # Calculate exponential backoff (5s, 10s, 20s, 40s, 80s, 160s, max 300s)
 get_backoff() {
     local failures="$1"
@@ -102,7 +149,16 @@ full_rebuild() {
     local bot="$1"
     local container="clawdbot-$bot"
 
-    log "$container: FULL REBUILD triggered"
+    # Check if we've exceeded rebuild attempts
+    local rebuild_count=$(get_rebuild_count "$bot")
+    if [ "$rebuild_count" -ge $MAX_REBUILDS_BEFORE_PAUSE ]; then
+        log "$container: MAX REBUILDS EXCEEDED ($rebuild_count) - pausing for manual review"
+        set_paused "$bot"
+        return 1
+    fi
+
+    increment_rebuild "$bot"
+    log "$container: FULL REBUILD triggered (attempt $((rebuild_count + 1)) of $MAX_REBUILDS_BEFORE_PAUSE)"
     send_telegram "<b>$container FULL REBUILD</b>
 Using pre-built image for fast recovery..." "critical"
 
@@ -210,6 +266,7 @@ Using pre-built image for fast recovery..." "critical"
         log "$container: REBUILD SUCCESS"
         send_telegram "$container rebuilt and healthy! (${POST_RESTART_WAIT}s startup)" "success"
         reset_failures "$bot"
+        reset_rebuilds "$bot"
         return 0
     else
         log "$container: REBUILD FAILED - gateway not responding"
@@ -225,6 +282,12 @@ docker logs $container --tail 50</code>" "critical"
 check_and_recover() {
     local bot="$1"
     local container="clawdbot-$bot"
+
+    # Check if bot is paused for manual review
+    if is_paused "$bot"; then
+        log "$container: PAUSED - skipping (manual intervention required)"
+        return 1
+    fi
 
     # Determine port
     local port=""
