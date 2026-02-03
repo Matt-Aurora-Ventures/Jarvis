@@ -127,10 +127,8 @@ class JarvisTwitterBot:
         logger.info("JARVIS Twitter Bot Starting")
         logger.info("=" * 50)
 
-        # Connect to Twitter
-        if not self.twitter.connect():
-            logger.error("Failed to connect to Twitter - check credentials")
-            return False
+        # Connect to Twitter - raises RuntimeError on auth failure
+        self.twitter.connect()
 
         logger.info(f"Connected as @{self.twitter.username}")
 

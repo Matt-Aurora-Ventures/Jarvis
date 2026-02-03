@@ -29,8 +29,13 @@ keypair.json
 ownership_proof.json
 *PRIVATE_KEY*.json
 *_PRIVATE_KEY.json
+*PRIVATE_KEY*.txt
+*_PRIVATE_KEY*.txt
 OLD_TREASURY_PRIVATE_KEY.json
+OLD_TREASURY_KEY_IMPORT.txt
 NEW_TREASURY_PRIVATE_KEY.json
+NEW_TREASURY_KEY_IMPORT.txt
+**/TREASURY_KEY_INFO.md
 # Twitter/X OAuth tokens (explicit)
 bots/twitter/.oauth2_tokens.json
 bots/twitter/*_tokens.json

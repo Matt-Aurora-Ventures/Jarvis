@@ -438,11 +438,12 @@ class TwitterClient:
                         oauth2_username = user.get("username")
                         oauth2_user_id = user.get("id")
                         if expected and not self._username_matches(oauth2_username, expected):
-                            logger.error(
+                            err = RuntimeError(
                                 f"OAuth 2.0 authenticated as @{oauth2_username}, "
-                                f"but expected @{expected}."
+                                f"but expected @{expected}. Refusing to post as wrong account."
                             )
-                            return False
+                            logger.error(str(err))
+                            raise err
                         self._username = oauth2_username
                         self._user_id = str(oauth2_user_id) if oauth2_user_id else None
                         self._use_oauth2 = True
