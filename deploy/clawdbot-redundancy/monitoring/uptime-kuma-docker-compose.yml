@@ -1,0 +1,24 @@
+# Uptime Kuma Monitoring Stack
+# Deploy on VPS for 24/7 bot health monitoring
+#
+# Usage:
+#   docker-compose -f uptime-kuma-docker-compose.yml up -d
+#
+# Access: http://localhost:3001
+
+version: "3.8"
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: always
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime-kuma-data:/app/data
+    environment:
+      - TZ=UTC
+
+volumes:
+  uptime-kuma-data:

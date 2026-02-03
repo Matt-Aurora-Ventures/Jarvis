@@ -1,0 +1,54 @@
+# Prometheus Configuration for ClawdBot Metrics
+# Scrapes metrics from bot gateways and health endpoints
+#
+# Deploy with: docker run -d -p 9090:9090 -v $(pwd)/prometheus-config.yml:/etc/prometheus/prometheus.yml prom/prometheus
+
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # ClawdBot Gateway Metrics
+  - job_name: 'clawdbot-friday'
+    static_configs:
+      - targets: ['76.13.106.100:18789']
+    metrics_path: '/metrics'
+    scrape_timeout: 10s
+
+  - job_name: 'clawdbot-matt'
+    static_configs:
+      - targets: ['76.13.106.100:18800']
+    metrics_path: '/metrics'
+    scrape_timeout: 10s
+
+  - job_name: 'clawdbot-jarvis'
+    static_configs:
+      - targets: ['76.13.106.100:18801']
+    metrics_path: '/metrics'
+    scrape_timeout: 10s
+
+  # Health API
+  - job_name: 'health-api'
+    static_configs:
+      - targets: ['76.13.106.100:18888']
+    metrics_path: '/metrics'
+    scrape_timeout: 10s
+
+  # Node Exporter (if installed on VPS)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['76.13.106.100:9100']
+    scrape_timeout: 10s
+
+  # Docker metrics (if cAdvisor installed)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['76.13.106.100:8080']
+    scrape_timeout: 10s

@@ -1,0 +1,13 @@
+[Unit]
+Description=ClawdBot Health API
+After=docker.service network.target
+Wants=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/socat TCP-LISTEN:18888,reuseaddr,fork SYSTEM:'/root/clawd/infra/health-api-handler.sh'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

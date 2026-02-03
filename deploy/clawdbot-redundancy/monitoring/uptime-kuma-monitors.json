@@ -1,0 +1,101 @@
+{
+    "version": "1.0",
+    "description": "Uptime Kuma monitor configuration for ClawdBot infrastructure",
+    "monitors": [
+        {
+            "name": "ClawdBot Friday Gateway",
+            "type": "http",
+            "url": "http://76.13.106.100:18789/__clawdbot__/canvas/",
+            "interval": 20,
+            "retryInterval": 60,
+            "maxretries": 3,
+            "timeout": 10,
+            "notificationIDList": ["telegram"],
+            "tags": ["clawdbot", "friday", "gateway"]
+        },
+        {
+            "name": "ClawdBot Matt Gateway",
+            "type": "http",
+            "url": "http://76.13.106.100:18800/__clawdbot__/canvas/",
+            "interval": 20,
+            "retryInterval": 60,
+            "maxretries": 3,
+            "timeout": 10,
+            "notificationIDList": ["telegram"],
+            "tags": ["clawdbot", "matt", "gateway"]
+        },
+        {
+            "name": "ClawdBot Jarvis Gateway",
+            "type": "http",
+            "url": "http://76.13.106.100:18801/__clawdbot__/canvas/",
+            "interval": 20,
+            "retryInterval": 60,
+            "maxretries": 3,
+            "timeout": 10,
+            "notificationIDList": ["telegram"],
+            "tags": ["clawdbot", "jarvis", "gateway"]
+        },
+        {
+            "name": "Health API",
+            "type": "http",
+            "url": "http://76.13.106.100:18888/health",
+            "interval": 60,
+            "retryInterval": 120,
+            "maxretries": 2,
+            "timeout": 15,
+            "notificationIDList": ["telegram"],
+            "tags": ["infrastructure", "health-api"]
+        },
+        {
+            "name": "VPS KVM2 Ping",
+            "type": "ping",
+            "hostname": "76.13.106.100",
+            "interval": 60,
+            "retryInterval": 30,
+            "maxretries": 5,
+            "notificationIDList": ["telegram"],
+            "tags": ["infrastructure", "vps"]
+        },
+        {
+            "name": "Tailscale Mesh (Friday)",
+            "type": "ping",
+            "hostname": "100.92.6.38",
+            "interval": 120,
+            "retryInterval": 60,
+            "maxretries": 3,
+            "notificationIDList": ["telegram"],
+            "tags": ["tailscale", "mesh"]
+        }
+    ],
+    "notifications": [
+        {
+            "id": "telegram",
+            "name": "Telegram Alerts",
+            "type": "telegram",
+            "config": {
+                "botToken": "${TELEGRAM_BOT_TOKEN}",
+                "chatID": "${TELEGRAM_CHAT_ID}"
+            }
+        }
+    ],
+    "statusPages": [
+        {
+            "name": "ClawdBot Status",
+            "slug": "clawdbot-status",
+            "description": "Real-time status of ClawdBot infrastructure",
+            "monitors": [
+                "ClawdBot Friday Gateway",
+                "ClawdBot Matt Gateway",
+                "ClawdBot Jarvis Gateway",
+                "Health API"
+            ]
+        }
+    ],
+    "setup_instructions": [
+        "1. Deploy Uptime Kuma: docker-compose up -d",
+        "2. Access http://localhost:3001 and create admin account",
+        "3. Go to Settings > Notifications > Add Telegram",
+        "4. Create monitors manually using config above",
+        "5. (Optional) Import via Uptime Kuma API or manual setup"
+    ]
+}
