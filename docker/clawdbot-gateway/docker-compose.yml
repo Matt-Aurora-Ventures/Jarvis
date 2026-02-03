@@ -1,0 +1,372 @@
+# ============================================================================
+# ClawdBot Gateway - 3-Agent Multi-Container Setup with Supermemory
+# ============================================================================
+# Friday (CMO) - Claude Opus 4.5 - Port 18789
+# Matt (COO)   - Codex CLI Driver - Port 18790
+# Jarvis (CTO) - Grok            - Port 18791
+# ============================================================================
+#
+# Supermemory Integration:
+#   - Each bot has separate short/mid-term memory (bot-scoped user_id)
+#   - All bots share long-term constructive memory (shared user_id)
+#   - No OpenAI key required - Supermemory handles embeddings
+#
+# Usage:
+#   docker compose up -d              # Start all 3
+#   docker compose up -d friday       # Start only Friday
+#   docker compose logs -f matt       # Tail Matt's logs
+#   docker compose restart jarvis     # Restart Jarvis
+# ============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Friday (CMO) - Claude Opus 4.5
+  # ---------------------------------------------------------------------------
+  friday:
+    image: node:22-slim
+    container_name: clawdbot-friday
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - friday-config:/root/.clawdbot
+      - friday-workspace:/root/clawd
+    environment:
+      - CLAWDBOT_PROFILE=friday
+      - GATEWAY_PORT=18789
+      - SUPERMEMORY_API_KEY=${SUPERMEMORY_API_KEY}
+      - SUPERMEMORY_USER_ID=jarvis_friday
+    command: >
+      bash -c '
+        set -e
+
+        # Install clawdbot
+        if ! command -v clawdbot &>/dev/null; then
+          npm install -g clawdbot@latest 2>/dev/null || npm install -g clawdbot 2>/dev/null
+        fi
+
+        # Write config
+        mkdir -p /root/.clawdbot
+        cat > /root/.clawdbot/clawdbot.json << CONF
+        {
+          "gateway": {
+            "port": 18789,
+            "mode": "local",
+            "auth": {
+              "mode": "token",
+              "token": "${FRIDAY_AUTH_TOKEN}"
+            }
+          },
+          "agents": {
+            "defaults": {
+              "model": {
+                "primary": "anthropic/claude-opus-4-5-20251101",
+                "fallback": ["anthropic/claude-sonnet-4-20250514"]
+              },
+              "workspace": "/root/clawd"
+            }
+          },
+          "channels": {
+            "telegram": {
+              "enabled": true,
+              "botToken": "${FRIDAY_TELEGRAM_TOKEN}",
+              "allowFrom": ["@matthaynes88"],
+              "ignoreUsers": ["ClawdMatt_bot", "ClawdJarvis_bot"]
+            }
+          },
+          "memory": {
+            "enabled": true,
+            "provider": "supermemory",
+            "apiKey": "${SUPERMEMORY_API_KEY}",
+            "userId": "jarvis_friday",
+            "sharedUserId": "jarvis_shared",
+            "autoCapture": true,
+            "contextInjection": true
+          },
+          "skills": {
+            "entries": {
+              "supermemory": {
+                "enabled": true,
+                "apiKey": "${SUPERMEMORY_API_KEY}",
+                "userId": "jarvis_friday",
+                "features": ["search", "add", "context"]
+              },
+              "grok-xai": {
+                "apiKey": "${XAI_API_KEY}"
+              },
+              "google-ai": {
+                "apiKey": "${GOOGLE_AI_KEY}"
+              }
+            }
+          },
+          "auth": {
+            "anthropic": {
+              "oauthAccessToken": "${ANTHROPIC_OAUTH_ACCESS}",
+              "oauthRefreshToken": "${ANTHROPIC_OAUTH_REFRESH}"
+            }
+          }
+        }
+      CONF
+
+        echo "[Friday] Starting gateway on port 18789..."
+        exec clawdbot gateway --profile friday --bind 0.0.0.0
+      '
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # Matt (COO) - Codex CLI Driver
+  # ---------------------------------------------------------------------------
+  matt:
+    image: node:22-slim
+    container_name: clawdbot-matt
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - matt-config:/root/.clawdbot
+      - matt-workspace:/root/clawd
+    environment:
+      - CLAWDBOT_PROFILE=matt
+      - GATEWAY_PORT=18790
+      - SUPERMEMORY_API_KEY=${SUPERMEMORY_API_KEY}
+      - SUPERMEMORY_USER_ID=jarvis_matt
+    command: >
+      bash -c '
+        set -e
+
+        # Install clawdbot + codex CLI
+        if ! command -v clawdbot &>/dev/null; then
+          npm install -g clawdbot@latest 2>/dev/null || npm install -g clawdbot 2>/dev/null
+        fi
+        if ! command -v codex &>/dev/null; then
+          npm install -g @openai/codex 2>/dev/null || true
+        fi
+
+        # Write config
+        mkdir -p /root/.clawdbot
+        cat > /root/.clawdbot/clawdbot.json << CONF
+        {
+          "gateway": {
+            "port": 18790,
+            "mode": "local",
+            "auth": {
+              "mode": "token",
+              "token": "${MATT_AUTH_TOKEN}"
+            }
+          },
+          "agents": {
+            "defaults": {
+              "model": {
+                "primary": "anthropic/claude-sonnet-4-20250514",
+                "fallback": ["xai/grok-3"]
+              },
+              "workspace": "/root/clawd",
+              "tools": {
+                "codex": {
+                  "enabled": true,
+                  "command": "codex",
+                  "description": "OpenAI Codex CLI for code generation and editing"
+                }
+              }
+            }
+          },
+          "channels": {
+            "telegram": {
+              "enabled": true,
+              "botToken": "${MATT_TELEGRAM_TOKEN}",
+              "allowFrom": ["@matthaynes88"],
+              "ignoreUsers": ["ClawdFriday_bot", "ClawdJarvis_bot"]
+            }
+          },
+          "memory": {
+            "enabled": true,
+            "provider": "supermemory",
+            "apiKey": "${SUPERMEMORY_API_KEY}",
+            "userId": "jarvis_matt",
+            "sharedUserId": "jarvis_shared",
+            "autoCapture": true,
+            "contextInjection": true
+          },
+          "skills": {
+            "entries": {
+              "supermemory": {
+                "enabled": true,
+                "apiKey": "${SUPERMEMORY_API_KEY}",
+                "userId": "jarvis_matt",
+                "features": ["search", "add", "context"]
+              },
+              "coding-agent": {
+                "enabled": true,
+                "driver": "codex-cli",
+                "description": "Offload coding tasks to Codex CLI"
+              },
+              "grok-xai": {
+                "apiKey": "${XAI_API_KEY}"
+              },
+              "google-ai": {
+                "apiKey": "${GOOGLE_AI_KEY}"
+              }
+            }
+          }
+        }
+      CONF
+
+        echo "[Matt] Starting gateway on port 18790..."
+        exec clawdbot gateway --profile matt --bind 0.0.0.0
+      '
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18790/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # Jarvis (CTO) - Grok (XAI)
+  # ---------------------------------------------------------------------------
+  jarvis:
+    image: node:22-slim
+    container_name: clawdbot-jarvis
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - jarvis-config:/root/.clawdbot
+      - jarvis-workspace:/root/clawd
+    environment:
+      - CLAWDBOT_PROFILE=jarvis
+      - GATEWAY_PORT=18791
+      - XAI_API_KEY=${XAI_API_KEY}
+      - SUPERMEMORY_API_KEY=${SUPERMEMORY_API_KEY}
+      - SUPERMEMORY_USER_ID=jarvis_jarvis
+    command: >
+      bash -c '
+        set -e
+
+        # Install clawdbot
+        if ! command -v clawdbot &>/dev/null; then
+          npm install -g clawdbot@latest 2>/dev/null || npm install -g clawdbot 2>/dev/null
+        fi
+
+        # Write config
+        mkdir -p /root/.clawdbot
+        cat > /root/.clawdbot/clawdbot.json << CONF
+        {
+          "gateway": {
+            "port": 18791,
+            "mode": "local",
+            "auth": {
+              "mode": "token",
+              "token": "${JARVIS_AUTH_TOKEN}"
+            }
+          },
+          "agents": {
+            "defaults": {
+              "model": {
+                "primary": "xai/grok-3",
+                "fallback": ["xai/grok-2"]
+              },
+              "workspace": "/root/clawd"
+            }
+          },
+          "channels": {
+            "telegram": {
+              "enabled": true,
+              "botToken": "${JARVIS_TELEGRAM_TOKEN}",
+              "allowFrom": ["@matthaynes88"],
+              "ignoreUsers": ["ClawdFriday_bot", "ClawdMatt_bot"]
+            }
+          },
+          "memory": {
+            "enabled": true,
+            "provider": "supermemory",
+            "apiKey": "${SUPERMEMORY_API_KEY}",
+            "userId": "jarvis_jarvis",
+            "sharedUserId": "jarvis_shared",
+            "autoCapture": true,
+            "contextInjection": true
+          },
+          "skills": {
+            "entries": {
+              "supermemory": {
+                "enabled": true,
+                "apiKey": "${SUPERMEMORY_API_KEY}",
+                "userId": "jarvis_jarvis",
+                "features": ["search", "add", "context"]
+              },
+              "grok-xai": {
+                "apiKey": "${XAI_API_KEY}"
+              },
+              "google-ai": {
+                "apiKey": "${GOOGLE_AI_KEY}"
+              }
+            }
+          }
+        }
+      CONF
+
+        echo "[Jarvis] Starting gateway on port 18791..."
+        exec clawdbot gateway --profile jarvis --bind 0.0.0.0
+      '
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18791/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # Watchdog - Auto-recovery for all bots
+  # ---------------------------------------------------------------------------
+  watchdog:
+    image: alpine:3.19
+    container_name: clawdbot-watchdog
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TELEGRAM_BOT_TOKEN=${FRIDAY_TELEGRAM_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_ADMIN_CHAT_ID}
+    command: >
+      sh -c '
+        apk add --no-cache curl docker-cli
+
+        while true; do
+          sleep 60
+
+          # Check Friday
+          if ! curl -sf http://localhost:18789/health >/dev/null 2>&1; then
+            echo "[Watchdog] Friday unhealthy, restarting..."
+            docker restart clawdbot-friday 2>/dev/null || true
+          fi
+
+          # Check Matt
+          if ! curl -sf http://localhost:18790/health >/dev/null 2>&1; then
+            echo "[Watchdog] Matt unhealthy, restarting..."
+            docker restart clawdbot-matt 2>/dev/null || true
+          fi
+
+          # Check Jarvis
+          if ! curl -sf http://localhost:18791/health >/dev/null 2>&1; then
+            echo "[Watchdog] Jarvis unhealthy, restarting..."
+            docker restart clawdbot-jarvis 2>/dev/null || true
+          fi
+        done
+      '
+
+volumes:
+  friday-config:
+    driver: local
+  friday-workspace:
+    driver: local
+  matt-config:
+    driver: local
+  matt-workspace:
+    driver: local
+  jarvis-config:
+    driver: local
+  jarvis-workspace:
+    driver: local
