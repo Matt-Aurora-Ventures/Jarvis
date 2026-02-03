@@ -612,7 +612,7 @@ async def create_sentiment_reporter():
     from bots.buy_tracker.sentiment_report import SentimentReportGenerator
 
     reporter = SentimentReportGenerator(
-        bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", ""),
+        bot_token=os.environ.get("TELEGRAM_BUY_BOT_TOKEN", os.environ.get("TELEGRAM_BOT_TOKEN", "")),
         chat_id=os.environ.get("TELEGRAM_BUY_BOT_CHAT_ID", ""),
         xai_api_key=os.environ.get("XAI_API_KEY", ""),
         interval_minutes=60,  # Changed to 1 hour as requested
@@ -760,10 +760,12 @@ async def create_autonomous_x_engine():
     cli_handler = get_x_claude_cli_handler()
 
     # Run both the engine and CLI monitor concurrently
-    await asyncio.gather(
+    # Do NOT use return_exceptions=True - if X bot auth fails, we need to crash
+    # so the supervisor's retry logic can restart us with backoff
+    results = await asyncio.gather(
         engine.run(),
         cli_handler.run(),
-        return_exceptions=True
+        return_exceptions=False
     )
 
 
