@@ -80,3 +80,7 @@ protobuf>=4.25.0
 # Serialization
 base58>=2.1.0
 pyyaml>=6.0.0
+
+# Supermemory - Shared memory backend for all bots
+# No OpenAI key required - handles embeddings internally
+supermemory>=3.21.0
