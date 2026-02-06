@@ -1,0 +1,133 @@
+{
+  "_comment": "OpenClaw Configuration Template for ClawdBots",
+  "_usage": "Copy to /root/.clawdbot/openclaw-config.json and customize per bot",
+
+  "bot_name": "${BOT_NAME}",
+  "profile": "${PROFILE}",
+
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "bot_token": "${TELEGRAM_BOT_TOKEN}",
+      "admin_chat_id": "${TELEGRAM_ADMIN_CHAT_ID}"
+    },
+    "whatsapp": {
+      "enabled": false,
+      "phone_number": ""
+    },
+    "slack": {
+      "enabled": false,
+      "workspace_token": ""
+    },
+    "discord": {
+      "enabled": false,
+      "bot_token": ""
+    },
+    "signal": {
+      "enabled": false,
+      "phone_number": ""
+    },
+    "webchat": {
+      "enabled": true,
+      "port": "${GATEWAY_PORT:-18789}",
+      "bind": "0.0.0.0"
+    }
+  },
+
+  "_model_reference": {
+    "_comment": "Bot-specific models - set via environment variables",
+    "jarvis": "xai/grok-beta",
+    "matt": "anthropic/claude-sonnet-4-20250514",
+    "friday": "anthropic/claude-opus-4-20250514",
+    "yoda": "nvidia/moonshotai/kimi-k2.5",
+    "squishy": "google/gemini-2.5-pro-preview-05-06"
+  },
+
+  "ai_providers": {
+    "primary": {
+      "provider": "${AI_PROVIDER:-anthropic}",
+      "model": "${AI_MODEL:-claude-sonnet-4-20250514}",
+      "api_key": "${AI_API_KEY:-${ANTHROPIC_OAUTH_ACCESS}}"
+    },
+    "fallback": {
+      "provider": "nvidia",
+      "model": "nvidia/moonshotai/kimi-k2.5",
+      "api_key": "${NVIDIA_NIM_API_KEY}"
+    },
+    "providers": {
+      "anthropic": {
+        "oauth_access": "${ANTHROPIC_OAUTH_ACCESS}",
+        "oauth_refresh": "${ANTHROPIC_OAUTH_REFRESH}"
+      },
+      "xai": {
+        "api_key": "${XAI_API_KEY}"
+      },
+      "nvidia": {
+        "api_key": "${NVIDIA_NIM_API_KEY}",
+        "base_url": "https://integrate.api.nvidia.com/v1"
+      },
+      "google": {
+        "api_key": "${GOOGLE_AI_API_KEY}"
+      }
+    }
+  },
+
+  "features": {
+    "voice_wake": false,
+    "live_canvas": true,
+    "browser_control": true,
+    "device_nodes": false,
+    "sandbox": true
+  },
+
+  "memory": {
+    "supermemory": {
+      "enabled": true,
+      "api_key": "${SUPERMEMORY_API_KEY}",
+      "user_prefix": "${BOT_NAME}",
+      "db_path": "/root/clawdbots/data/supermemory.db"
+    },
+    "redis": {
+      "enabled": true,
+      "host": "${REDIS_HOST:-localhost}",
+      "port": 6379,
+      "key_prefix": "clawdbot:${BOT_NAME}"
+    }
+  },
+
+  "plugins": {
+    "supermemory": {
+      "autoRecall": true,
+      "autoCapture": true,
+      "maxRecallResults": 10,
+      "profileFrequency": "daily",
+      "captureMode": "smart",
+      "debug": false,
+      "containerTags": ["clawdbot_${BOT_NAME}", "clawdbot_shared"],
+      "sharedTag": "clawdbot_shared"
+    }
+  },
+
+  "skills": {
+    "enabled": true,
+    "skill_directory": "/root/.clawdbot/skills"
+  },
+
+  "workspace": {
+    "root": "/root/clawd",
+    "persist": true
+  },
+
+  "network": {
+    "tailscale": {
+      "enabled": true,
+      "state_dir": "/root/.clawdbot/tailscale"
+    }
+  },
+
+  "logging": {
+    "level": "info",
+    "file": "/var/log/openclaw-${BOT_NAME}.log",
+    "max_size": "10M"
+  }
+}

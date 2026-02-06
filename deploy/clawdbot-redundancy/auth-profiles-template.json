@@ -1,0 +1,69 @@
+{
+  "_comment": "Auth Profiles Template for OpenClaw ClawdBots",
+  "_usage": "Copy to /root/.clawdbot/auth-profiles.json and substitute env vars",
+  "_warning": "NEVER commit actual credentials - use environment variable substitution",
+
+  "profiles": {
+    "anthropic": {
+      "_comment": "Claude models (Friday: Opus 4, Matt: Sonnet 4.5)",
+      "type": "oauth",
+      "provider": "anthropic",
+      "oauth_access_token": "${ANTHROPIC_OAUTH_ACCESS}",
+      "oauth_refresh_token": "${ANTHROPIC_OAUTH_REFRESH}",
+      "oauth_expiry": "${ANTHROPIC_OAUTH_EXPIRY:-0}"
+    },
+    "xai": {
+      "_comment": "Jarvis: Grok 4.1 (grok-beta)",
+      "type": "api_key",
+      "provider": "xai",
+      "api_key": "${XAI_API_KEY}"
+    },
+    "nvidia": {
+      "_comment": "Yoda: Kimi 2.5 via NVIDIA NIM (FREE)",
+      "type": "api_key",
+      "provider": "nvidia",
+      "api_key": "${NVIDIA_NIM_API_KEY}",
+      "base_url": "https://integrate.api.nvidia.com/v1"
+    },
+    "google": {
+      "_comment": "Squishy: Gemini 3 (gemini-2.5-pro)",
+      "type": "api_key",
+      "provider": "google",
+      "api_key": "${GOOGLE_AI_API_KEY}"
+    },
+    "openai": {
+      "_comment": "Legacy/fallback - OpenAI models",
+      "type": "api_key",
+      "provider": "openai",
+      "api_key": "${OPENAI_API_KEY:-}"
+    }
+  },
+
+  "bot_assignments": {
+    "jarvis": {
+      "primary": "xai",
+      "fallback": "nvidia",
+      "model": "grok-beta"
+    },
+    "matt": {
+      "primary": "anthropic",
+      "fallback": "nvidia",
+      "model": "claude-sonnet-4-20250514"
+    },
+    "friday": {
+      "primary": "anthropic",
+      "fallback": "nvidia",
+      "model": "claude-opus-4-20250514"
+    },
+    "yoda": {
+      "primary": "nvidia",
+      "fallback": "google",
+      "model": "nvidia/moonshotai/kimi-k2.5"
+    },
+    "squishy": {
+      "primary": "google",
+      "fallback": "nvidia",
+      "model": "gemini-2.5-pro-preview-05-06"
+    }
+  }
+}
