@@ -17,121 +17,193 @@ import { AIConvictionPicks } from '@/components/features/AIConvictionPicks';
 import { BagsTop15 } from '@/components/features/BagsTop15';
 import { SentimentHubActions } from '@/components/features/SentimentHubActions';
 import { ModelSwitcher } from '@/components/features/ModelSwitcher';
+import { CollapsiblePanel } from '@/components/ui/CollapsiblePanel';
+import { GrokLiveBar } from '@/components/features/GrokLiveBar';
+import { useGrokLive } from '@/hooks/useGrokLive';
+import {
+  Brain,
+  BarChart3,
+  TrendingUp,
+  Zap,
+  Target,
+  Newspaper,
+  Activity,
+  Crosshair,
+  Rocket,
+  LineChart,
+} from 'lucide-react';
 
 export default function Home() {
   const { data: marketData, loading } = useMarketData();
   const { marketRegime, stats } = useSentimentData({ autoRefresh: true, refreshInterval: 5 * 60 * 1000 });
 
+  const {
+    scores: grokScores,
+    countdown,
+    isRefreshing,
+    lastRefreshed,
+    budgetStatus,
+    forceRefresh,
+  } = useGrokLive({ enabled: true });
+
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden font-sans">
       <NeuralLattice />
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col pt-24 gap-6 relative z-10 w-full">
+      <main className="flex-1 flex flex-col pt-[68px] pb-2 gap-3 relative z-10 w-full px-3 lg:px-4">
 
-        {/* Top: Metrics Dashboard */}
+        {/* Grok 4.1 Live Engine Bar */}
+        <GrokLiveBar
+          countdown={countdown}
+          isRefreshing={isRefreshing}
+          lastRefreshed={lastRefreshed}
+          budgetStatus={budgetStatus}
+          tokenCount={grokScores.size}
+          onRefresh={forceRefresh}
+        />
+
+        {/* Stats Row - Compact Metrics */}
         <section className="w-full">
           <DashboardGrid />
         </section>
 
-        {/* Middle: Main Trading Interface */}
-        <section className="grid grid-cols-1 xl:grid-cols-12 gap-6 w-full min-h-[600px]">
+        {/* Main 3-Column Trading Layout */}
+        <section className="grid grid-cols-1 xl:grid-cols-[280px_1fr_320px] gap-3 w-full flex-1">
 
-          {/* Left: Signal Feed + Sentiment */}
-          <div className="xl:col-span-3 flex flex-col gap-4 max-h-[800px] overflow-y-auto pr-2 custom-scrollbar">
-            {/* Trading Safety Status */}
-            <TradingGuard symbol="SOL" className="mb-2" />
+          {/* LEFT COLUMN: Signals + Market Overview */}
+          <div className="flex flex-col gap-3 max-h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar pr-1">
 
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-display font-bold text-lg text-text-primary">LIVE SIGNALS</h3>
-              <div className="flex gap-2 items-center">
-                <span className="w-2 h-2 rounded-full bg-accent-neon animate-pulse" />
-                <span className="text-xs font-mono text-text-muted">SCANNING</span>
-              </div>
-            </div>
-            <div className="space-y-4">
+            {/* Trading Guard */}
+            <TradingGuard symbol="SOL" />
+
+            {/* Live Signals */}
+            <CollapsiblePanel
+              title="LIVE SIGNALS"
+              icon={<Activity className="w-4 h-4" />}
+              badge="LIVE"
+              defaultExpanded={true}
+            >
               {loading ? (
-                <div className="text-center py-12 font-mono text-text-muted animate-pulse">
+                <div className="text-center py-8 font-mono text-text-muted animate-pulse text-sm">
                   INITIALIZING BAGS.FM UPLINK...
                 </div>
               ) : (
                 <SentimentHub data={marketData} />
               )}
-            </div>
+            </CollapsiblePanel>
 
-            {/* Sentiment Overview */}
-            <div className="card-glass p-4 mt-4">
-              <h4 className="text-xs font-mono text-text-muted mb-3 uppercase">Market Sentiment</h4>
+            {/* Market Sentiment */}
+            <CollapsiblePanel
+              title="SENTIMENT"
+              icon={<Brain className="w-4 h-4" />}
+              defaultExpanded={true}
+            >
               <SentimentDisplay
                 overall={Math.round(stats.avgBuySellRatio * 25)}
                 social={Math.min(100, stats.bullishCount * 10)}
                 market={marketRegime.solChange24h > 0 ? Math.min(100, 50 + marketRegime.solChange24h * 5) : Math.max(0, 50 + marketRegime.solChange24h * 5)}
                 technical={Math.round(stats.avgBuySellRatio * 20)}
               />
-            </div>
+            </CollapsiblePanel>
+
+            {/* Quick Buy */}
+            <CollapsiblePanel
+              title="QUICK BUY"
+              icon={<Zap className="w-4 h-4" />}
+              defaultExpanded={false}
+            >
+              <QuickBuyTable />
+            </CollapsiblePanel>
+
+            {/* Sentiment Actions */}
+            <CollapsiblePanel
+              title="ACTIONS"
+              icon={<Crosshair className="w-4 h-4" />}
+              defaultExpanded={false}
+            >
+              <SentimentHubActions />
+            </CollapsiblePanel>
           </div>
 
-          {/* Center: Charting Engine */}
-          <div className="xl:col-span-6 flex flex-col gap-4">
-            <div className="card-glass p-0 overflow-hidden h-full min-h-[500px] relative">
-              <div className="absolute top-4 left-4 z-10 flex gap-4 items-center">
+          {/* CENTER COLUMN: Chart + AI Intelligence */}
+          <div className="flex flex-col gap-3">
+            {/* Main Chart */}
+            <div className="card-glass p-0 overflow-hidden min-h-[420px] relative">
+              <div className="absolute top-3 left-3 z-10 flex gap-3 items-center">
                 <div className="flex flex-col">
-                  <span className="font-display font-bold text-2xl text-text-primary">SOL/USDC</span>
-                  <span className="font-mono text-xs text-text-muted">JUPITER AGGREGATOR</span>
+                  <span className="font-display font-bold text-xl text-text-primary">SOL/USDC</span>
+                  <span className="font-mono text-[10px] text-text-muted">JUPITER AGGREGATOR</span>
                 </div>
-                <div className="h-10 w-[1px] bg-border-primary" />
+                <div className="h-8 w-[1px] bg-border-primary" />
                 <div className="flex flex-col">
-                  <span className="font-mono font-bold text-accent-neon">
+                  <span className="font-mono font-bold text-accent-neon text-sm">
                     {marketRegime.solPrice > 0 ? `$${marketRegime.solPrice.toFixed(2)}` : '...'}
                   </span>
-                  <span className={`font-mono text-xs ${marketRegime.solChange24h >= 0 ? 'text-accent-success' : 'text-red-400'}`}>
+                  <span className={`font-mono text-[10px] ${marketRegime.solChange24h >= 0 ? 'text-accent-success' : 'text-accent-error'}`}>
                     {marketRegime.solChange24h >= 0 ? '+' : ''}{marketRegime.solChange24h.toFixed(1)}%
                   </span>
                 </div>
-                {/* Confidence Badge */}
                 <ConfidenceBadge symbol="SOL" />
               </div>
               <MarketChart />
             </div>
+
+            {/* AI Intelligence Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <CollapsiblePanel
+                title="AI MARKET REPORT"
+                icon={<Newspaper className="w-4 h-4" />}
+                badge="GROK"
+                defaultExpanded={true}
+              >
+                <AIMarketReport />
+              </CollapsiblePanel>
+
+              <CollapsiblePanel
+                title="CONVICTION PICKS"
+                icon={<Target className="w-4 h-4" />}
+                badge={`${grokScores.size}`}
+                defaultExpanded={true}
+              >
+                <AIConvictionPicks />
+              </CollapsiblePanel>
+            </div>
+
+            {/* Bags.fm + AI Picks Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <CollapsiblePanel
+                title="BAGS.FM TOP LAUNCHES"
+                icon={<Rocket className="w-4 h-4" />}
+                badge="LIVE"
+                defaultExpanded={false}
+              >
+                <BagsTop15 />
+              </CollapsiblePanel>
+
+              <CollapsiblePanel
+                title="AI PICKS"
+                icon={<LineChart className="w-4 h-4" />}
+                defaultExpanded={false}
+              >
+                <AIPicks />
+              </CollapsiblePanel>
+            </div>
           </div>
 
-          {/* Right: Execution Panel */}
-          <div className="xl:col-span-3 flex flex-col gap-4">
+          {/* RIGHT COLUMN: Trade Execution + Performance */}
+          <div className="flex flex-col gap-3 max-h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar pl-1">
             <TradePanel />
-
-            {/* Performance Summary */}
             <PerformanceTracker />
-          </div>
-
-        </section>
-
-        {/* AI Intelligence Section - Market Report + Conviction Picks */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
-          <AIMarketReport />
-          <AIConvictionPicks />
-        </section>
-
-        {/* Bags.fm Launches + Quick Buy Table */}
-        <section className="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full">
-          <BagsTop15 />
-          <div className="space-y-6">
-            <QuickBuyTable />
+            <CollapsiblePanel
+              title="AI MODEL"
+              icon={<Brain className="w-4 h-4" />}
+              defaultExpanded={false}
+            >
+              <ModelSwitcher />
+            </CollapsiblePanel>
           </div>
         </section>
-
-        {/* Sentiment Hub Actions - Full /demo Menu */}
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full pb-8">
-          <div className="lg:col-span-2">
-            <AIPicks />
-          </div>
-          <div className="space-y-6">
-            <SentimentHubActions />
-            <ModelSwitcher />
-          </div>
-        </section>
-
       </main>
     </div>
   );
 }
-

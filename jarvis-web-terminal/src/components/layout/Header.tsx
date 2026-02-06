@@ -44,7 +44,7 @@ export function Header() {
     const { theme, toggleTheme } = useTheme();
     const [scrolled, setScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const [notificationCount] = useState(3); // Demo notifications
+    const [notificationCount] = useState(0);
 
     // Track scroll for enhanced header blur
     useEffect(() => {
@@ -61,7 +61,7 @@ export function Header() {
                 : 'bg-bg-primary/80 backdrop-blur-xl border-b border-border-primary'}
         `}>
             <div className="max-w-[1920px] mx-auto px-4 lg:px-6">
-                <div className="flex items-center justify-between h-16 lg:h-20">
+                <div className="flex items-center justify-between h-14 lg:h-16">
                     {/* Left: Logo & Nav */}
                     <div className="flex items-center gap-6 lg:gap-8">
                         <Link href="/" className="flex items-center gap-3 group">

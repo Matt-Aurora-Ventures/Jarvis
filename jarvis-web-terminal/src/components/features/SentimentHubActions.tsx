@@ -161,7 +161,7 @@ export function SentimentHubActions() {
                 <ActionGridButton
                     icon={<BarChart3 className="w-4 h-4" />}
                     label="AI Report"
-                    color="text-purple-400"
+                    color="text-accent-neon"
                     href="/"
                 />
                 <ActionGridButton
@@ -234,7 +234,7 @@ export function SentimentHubActions() {
                 <ActionGridButton
                     icon={<Sparkles className="w-4 h-4" />}
                     label="AI Intel"
-                    color="text-purple-400"
+                    color="text-accent-neon"
                     badge="NEW"
                     href="/intel"
                 />
@@ -269,7 +269,7 @@ export function SentimentHubActions() {
                 <ActionGridButton
                     icon={<Wallet className="w-4 h-4" />}
                     label="Solscan"
-                    color="text-purple-400"
+                    color="text-accent-neon"
                     onClick={() => window.open('https://solscan.io', '_blank')}
                 />
             </div>

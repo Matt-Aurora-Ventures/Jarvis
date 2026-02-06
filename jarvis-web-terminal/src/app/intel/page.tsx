@@ -79,8 +79,8 @@ export default function IntelPage() {
                 {/* Header */}
                 <section className="text-center mb-8">
                     <div className="flex items-center justify-center gap-2 mb-2">
-                        <Brain className="w-6 h-6 text-purple-400" />
-                        <span className="text-sm text-purple-400 font-mono">DEXTER AI</span>
+                        <Brain className="w-6 h-6 text-accent-neon" />
+                        <span className="text-sm text-accent-neon font-mono">DEXTER AI</span>
                     </div>
                     <h1 className="font-display text-4xl md:text-5xl font-bold text-text-primary mb-4">
                         Market Intelligence
