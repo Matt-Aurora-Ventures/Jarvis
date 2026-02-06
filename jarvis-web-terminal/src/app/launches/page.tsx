@@ -149,13 +149,13 @@ export default function LaunchesPage() {
                         {/* Rewards Recipient Card */}
                         <div className="card-glass p-6">
                             <div className="flex items-center gap-2 mb-4">
-                                <Gift className="w-5 h-5 text-purple-400" />
+                                <Gift className="w-5 h-5 text-accent-neon" />
                                 <h3 className="font-display font-bold text-lg text-text-primary">
                                     Trading Rewards
                                 </h3>
                             </div>
 
-                            <div className="flex items-center gap-4 p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 mb-4">
+                            <div className="flex items-center gap-4 p-4 rounded-xl bg-accent-neon/10 border border-accent-neon/30 mb-4">
                                 <div className="w-12 h-12 rounded-full bg-theme-dark flex items-center justify-center overflow-hidden">
                                     <Twitter className="w-6 h-6 text-blue-400" />
                                 </div>

@@ -267,7 +267,7 @@ export function AIConvictionPicks() {
             {/* Selection Criteria */}
             <div className="p-3 rounded-lg bg-bg-tertiary/50 border border-border-primary">
                 <div className="flex items-center gap-2 mb-2">
-                    <Target className="w-4 h-4 text-purple-400" />
+                    <Target className="w-4 h-4 text-accent-neon" />
                     <span className="text-xs font-mono text-text-muted uppercase">Selection Criteria</span>
                 </div>
                 <div className="space-y-1 text-xs">

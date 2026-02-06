@@ -47,7 +47,7 @@ const CATEGORY_CONFIG: Record<AssetCategory, { label: string; icon: React.ReactN
     ai_picks: {
         label: 'AI Picks',
         icon: <Sparkles className="w-4 h-4" />,
-        color: 'text-purple-400',
+        color: 'text-accent-neon',
         description: 'High-conviction trades from sentiment analysis'
     },
     trending: {
@@ -230,9 +230,9 @@ function QuickBuyRow({ asset, onBuy, isLoading, connected }: QuickBuyRowProps) {
             {expanded && (
                 <div className="px-3 pb-3 border-t border-border-primary pt-3 space-y-3">
                     {asset.aiReason && (
-                        <div className="flex items-start gap-2 p-2 rounded bg-purple-500/10 border border-purple-500/20">
-                            <Sparkles className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
-                            <p className="text-xs text-purple-300">{asset.aiReason}</p>
+                        <div className="flex items-start gap-2 p-2 rounded bg-accent-neon/10 border border-accent-neon/20">
+                            <Sparkles className="w-4 h-4 text-accent-neon mt-0.5 flex-shrink-0" />
+                            <p className="text-xs text-accent-neon/80">{asset.aiReason}</p>
                         </div>
                     )}
 

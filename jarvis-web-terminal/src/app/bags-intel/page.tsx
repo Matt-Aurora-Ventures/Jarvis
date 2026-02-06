@@ -28,7 +28,7 @@ const HOW_WE_RATE = [
         title: 'Holder Distribution',
         description: 'Top holder concentration, wallet age, and distribution fairness are key indicators.',
         icon: Users,
-        color: 'text-cyan-400',
+        color: 'text-accent-neon',
     },
     {
         title: 'Liquidity Health',
@@ -40,7 +40,7 @@ const HOW_WE_RATE = [
         title: 'Social Signals',
         description: 'Community engagement, social presence, and founder verification contribute to trust.',
         icon: MessageCircle,
-        color: 'text-purple-400',
+        color: 'text-accent-neon',
     },
 ];
 

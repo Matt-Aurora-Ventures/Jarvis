@@ -527,8 +527,8 @@ export function GraduationFeed() {
             >
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                            <Rocket className="w-4 h-4 text-purple-400" />
+                        <div className="w-8 h-8 rounded-lg bg-accent-neon/20 flex items-center justify-center">
+                            <Rocket className="w-4 h-4 text-accent-neon" />
                         </div>
                         <div>
                             <h3 className="font-display font-bold text-lg text-text-primary">
