@@ -1,0 +1,9 @@
+{
+  "name": "hello_world",
+  "version": "1.0.0",
+  "description": "A sample plugin demonstrating the MCP plugin system.",
+  "author": "ClawdBots",
+  "permissions": [],
+  "entry_point": "plugin.py",
+  "enabled": true
+}
