@@ -1,0 +1,107 @@
+# Squishy (CRO) - Mac Deployment via Docker
+# Runs on Mac via Tailscale mesh network
+#
+# Prerequisites:
+#   - Docker Desktop on Mac
+#   - Tailscale installed and logged in
+#   - GOOGLE_AI_API_KEY set in environment
+#
+# Usage:
+#   docker compose -f docker-compose.squishy-mac.yml up -d
+#   docker compose -f docker-compose.squishy-mac.yml logs -f squishy
+
+services:
+  squishy:
+    image: clawdbot-golden:2026.2.4
+    container_name: clawdbot-squishy
+    hostname: clawdbot-squishy
+    restart: always
+    ports:
+      - "18793:18793"
+    environment:
+      # Bot Identity
+      - BOT_NAME=squishy
+      - PROFILE=squishy
+      - GATEWAY_PORT=18793
+
+      # Squishy: Gemini 3 (gemini-2.5-pro-preview-05-06)
+      - AI_PROVIDER=google
+      - AI_MODEL=gemini-2.5-pro-preview-05-06
+      - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY}
+
+      # Fallback provider (NVIDIA NIM)
+      - NVIDIA_NIM_API_KEY=${NVIDIA_NIM_API_KEY:-}
+
+      # Supermemory (shared with all ClawdBots)
+      - SUPERMEMORY_API_KEY=${SUPERMEMORY_API_KEY:-}
+      - SUPERMEMORY_OPENCLAW_API_KEY=${SUPERMEMORY_API_KEY:-}
+
+      # Infrastructure
+      - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}
+      - TAILSCALE_STATE_DIR=/root/.clawdbot/tailscale
+      - NODE_OPTIONS=--max-old-space-size=1536
+      - DOCKER_API_VERSION=1.44
+
+      # Telegram (optional - Squishy may not need Telegram)
+      - TELEGRAM_BOT_TOKEN=${SQUISHY_TELEGRAM_TOKEN:-}
+      - TELEGRAM_ADMIN_CHAT_ID=${TELEGRAM_ADMIN_CHAT_ID:-}
+
+    volumes:
+      # Config
+      - ~/.clawdbot-squishy:/root/.clawdbot
+      # Workspace persistence
+      - ~/clawd/workspaces/squishy:/root/clawd
+      # Memory and skills
+      - ~/clawd/data/squishy/memory:/root/.clawdbot/memory
+      - ~/clawd/data/squishy/skills:/root/.clawdbot/skills
+      # Shared memory database (sync with VPS bots via Supermemory API)
+      - ~/clawdbots/data:/root/clawdbots/data
+
+    # Mac doesn't need NET_ADMIN for Tailscale (host network handles it)
+    # But we include it for parity with VPS deployment
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18793/__clawdbot__/canvas/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+# =============================================================================
+# MAC DEPLOYMENT NOTES
+# =============================================================================
+#
+# 1. Build/Pull the golden image:
+#    docker pull clawdbot-golden:2026.2.4
+#    # OR build locally:
+#    docker build -f Dockerfile.clawdbot-full -t clawdbot-golden:2026.2.4 .
+#
+# 2. Create directories:
+#    mkdir -p ~/.clawdbot-squishy ~/clawd/workspaces/squishy ~/clawd/data/squishy/memory ~/clawd/data/squishy/skills ~/clawdbots/data
+#
+# 3. Set environment variables:
+#    export GOOGLE_AI_API_KEY="your-google-ai-key"
+#    export SUPERMEMORY_API_KEY="your-supermemory-key"
+#
+# 4. Start Squishy:
+#    docker compose -f docker-compose.squishy-mac.yml up -d
+#
+# 5. Verify on Tailscale:
+#    The Mac's Tailscale IP will be accessible to other ClawdBots
+#    They can reach Squishy at: http://<mac-tailscale-ip>:18793
+#
+# 6. Shared Memory:
+#    Squishy shares memory with all bots via:
+#    - clawdbot_shared (Supermemory tag)
+#    - clawdbot_squishy (private memories)
+# =============================================================================

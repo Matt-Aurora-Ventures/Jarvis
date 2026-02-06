@@ -1,0 +1,13 @@
+[Unit]
+Description=ClawdBots - All Telegram Bots
+Documentation=https://github.com/lucid/jarvis
+After=network-online.target
+Wants=network-online.target
+
+# Target to manage all three bots together
+# Start all: systemctl start clawdbots.target
+# Stop all: systemctl stop clawdbots.target
+# Status: systemctl status clawdbots.target
+
+[Install]
+WantedBy=multi-user.target

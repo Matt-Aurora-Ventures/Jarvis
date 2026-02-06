@@ -1,0 +1,890 @@
+@import "tailwindcss";
+
+/* ============================================
+   JARVIS TRADING TERMINAL - PREMIUM THEME SYSTEM
+   ============================================ */
+
+/* Light Theme (Default) */
+:root,
+[data-theme="light"] {
+  /* Backgrounds */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F8FAFC;
+  --bg-tertiary: #F1F5F9;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-card-hover: rgba(255, 255, 255, 1);
+
+  /* Text */
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+
+  /* Borders */
+  --border-primary: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(0, 0, 0, 0.15);
+
+  /* Accents */
+  --accent-neon: #22c55e;
+  --accent-neon-glow: rgba(34, 197, 94, 0.3);
+  --accent-error: #EF4444;
+  --accent-error-glow: rgba(239, 68, 68, 0.3);
+  --accent-success: #10B981;
+  --accent-warning: #F59E0B;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05), 0 4px 6px rgba(0, 0, 0, 0.03);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.08), 0 10px 10px rgba(0, 0, 0, 0.04);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.4);
+  --glass-blur: blur(20px);
+
+  /* Chart */
+  --chart-text: #475569;
+  --chart-grid: rgba(0, 0, 0, 0.05);
+
+  /* Neural Lattice */
+  --lattice-color: rgba(0, 0, 0, 0.03);
+  --lattice-node: rgba(34, 197, 94, 0.4);
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+  /* Backgrounds */
+  --bg-primary: #0B0C0D;
+  --bg-secondary: #111214;
+  --bg-tertiary: #1A1B1E;
+  --bg-card: rgba(17, 18, 20, 0.9);
+  --bg-card-hover: rgba(26, 27, 30, 1);
+
+  /* Text */
+  --text-primary: #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-muted: #64748B;
+
+  /* Borders */
+  --border-primary: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(34, 197, 94, 0.3);
+
+  /* Accents - Same as light, but glow more prominent */
+  --accent-neon: #22c55e;
+  --accent-neon-glow: rgba(34, 197, 94, 0.5);
+  --accent-error: #EF4444;
+  --accent-error-glow: rgba(239, 68, 68, 0.5);
+  --accent-success: #10B981;
+  --accent-warning: #F59E0B;
+
+  /* Shadows - Glow effects for dark mode */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4), 0 0 20px rgba(34, 197, 94, 0.05);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4), 0 0 30px rgba(34, 197, 94, 0.08);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.5), 0 0 40px rgba(34, 197, 94, 0.1);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(17, 18, 20, 0.8);
+  --glass-border: rgba(34, 197, 94, 0.1);
+  --glass-blur: blur(20px);
+
+  /* Chart */
+  --chart-text: #94A3B8;
+  --chart-grid: rgba(34, 197, 94, 0.05);
+
+  /* Neural Lattice */
+  --lattice-color: rgba(34, 197, 94, 0.08);
+  --lattice-node: rgba(34, 197, 94, 0.8);
+}
+
+/* ============================================
+   TAILWIND THEME MAPPINGS
+   ============================================ */
+
+@theme {
+  /* Colors */
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-bg-card: var(--bg-card);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --color-border-primary: var(--border-primary);
+  --color-border-hover: var(--border-hover);
+
+  --color-accent-neon: var(--accent-neon);
+  --color-accent-error: var(--accent-error);
+  --color-accent-success: var(--accent-success);
+  --color-accent-warning: var(--accent-warning);
+
+  /* Legacy mappings for existing components */
+  --color-theme-white: var(--bg-primary);
+  --color-theme-dark: var(--bg-secondary);
+  --color-theme-ink: var(--text-primary);
+  --color-theme-muted: var(--text-muted);
+  --color-theme-border: var(--border-primary);
+  --color-theme-cyan: var(--accent-neon);
+  --color-theme-green: var(--accent-success);
+  --color-theme-red: var(--accent-error);
+
+  /* Fonts */
+  --font-display: 'Clash Display', sans-serif;
+  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'Fira Code', monospace;
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+/* Premium Glassmorphism Card */
+@utility card-glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-primary);
+  border-radius: 16px;
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+/* Legacy utility for existing components */
+@utility card-glass-white {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-primary);
+  border-radius: 24px;
+  box-shadow: var(--shadow-md);
+}
+
+/* Neon Button */
+@utility btn-neon {
+  background: var(--accent-neon);
+  color: #000;
+  border-radius: 100px;
+  padding: 12px 28px;
+  font-weight: 600;
+  box-shadow: 0 4px 15px var(--accent-neon-glow);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: none;
+  cursor: pointer;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px var(--accent-neon-glow), 0 0 30px var(--accent-neon-glow);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+/* Secondary Button */
+@utility btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-radius: 100px;
+  padding: 12px 28px;
+  font-weight: 500;
+  border: 1px solid var(--border-primary);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-hover);
+  }
+}
+
+/* Score Badge Tiers */
+@utility badge-exceptional {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+@utility badge-strong {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22C55E;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+@utility badge-average {
+  background: rgba(234, 179, 8, 0.1);
+  color: #EAB308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+@utility badge-weak {
+  background: rgba(249, 115, 22, 0.1);
+  color: #F97316;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+@utility badge-poor {
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Custom Scrollbar */
+@utility custom-scrollbar {
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--border-primary);
+    border-radius: 3px;
+
+    &:hover {
+      background: var(--accent-neon);
+    }
+  }
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Selection */
+::selection {
+  background: var(--accent-neon);
+  color: #000;
+}
+
+/* Focus States */
+:focus-visible {
+  outline: 2px solid var(--accent-neon);
+  outline-offset: 2px;
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 5px var(--accent-neon-glow);
+  }
+
+  50% {
+    box-shadow: 0 0 20px var(--accent-neon-glow), 0 0 30px var(--accent-neon-glow);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+/* ============================================
+   TRADING GUARD COMPONENT
+   ============================================ */
+
+.trading-guard {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid;
+  transition: all 0.2s ease;
+}
+
+.trading-guard--safe {
+  background: rgba(34, 197, 94, 0.05);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.trading-guard--warning {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.trading-guard--critical {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  animation: pulse-critical 2s infinite;
+}
+
+.trading-guard--loading {
+  background: var(--bg-secondary);
+  border-color: var(--border-primary);
+  color: var(--text-muted);
+}
+
+.trading-guard__icon {
+  flex-shrink: 0;
+}
+
+.trading-guard--safe .trading-guard__icon {
+  color: var(--accent-neon);
+}
+
+.trading-guard--warning .trading-guard__icon {
+  color: var(--accent-warning);
+}
+
+.trading-guard--critical .trading-guard__icon {
+  color: var(--accent-error);
+}
+
+.trading-guard__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.trading-guard__title {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.trading-guard__details {
+  display: flex;
+  gap: 1rem;
+}
+
+.trading-guard__metric {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.trading-guard__reason {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.trading-guard__score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: 0.5rem;
+}
+
+.trading-guard__score--good {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+/* Confidence Badge */
+.confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--badge-color, var(--accent-neon)) 15%, transparent);
+  color: var(--badge-color, var(--accent-neon));
+  border: 1px solid color-mix(in srgb, var(--badge-color, var(--accent-neon)) 30%, transparent);
+}
+
+.confidence-badge--loading {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+@keyframes pulse-critical {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* ============================================
+   PRIORITY FEE SELECTOR
+   ============================================ */
+
+.priority-fee-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.priority-fee-selector__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shield-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--accent-neon);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.priority-fee-selector__options {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.priority-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.priority-option:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  border-color: var(--tier-color);
+}
+
+.priority-option--selected {
+  background: color-mix(in srgb, var(--tier-color) 10%, transparent);
+  border-color: var(--tier-color);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--tier-color) 20%, transparent);
+}
+
+.priority-option--locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.priority-option__icon {
+  color: var(--tier-color);
+}
+
+.priority-option__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  text-align: center;
+}
+
+.priority-option__label {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.priority-option__desc {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+}
+
+.priority-option__time {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.priority-fee-selector__note {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-radius: 0.5rem;
+}
+
+/* Fee Badge */
+.fee-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--tier-color) 15%, transparent);
+  color: var(--tier-color);
+  border: 1px solid color-mix(in srgb, var(--tier-color) 30%, transparent);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.fee-badge:hover {
+  background: color-mix(in srgb, var(--tier-color) 25%, transparent);
+}
+
+/* ============================================
+   STAT GLYPH (SENTIMENT RINGS)
+   ============================================ */
+
+.stat-glyph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stat-glyph__ring {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-glyph__center {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-glyph__value {
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.stat-glyph__label {
+  font-size: 0.625rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.stat-glyph--sm .stat-glyph__label {
+  font-size: 0.5rem;
+}
+
+.stat-glyph--lg .stat-glyph__label {
+  font-size: 0.75rem;
+}
+
+/* Sentiment Glyph Group */
+.sentiment-glyph-group {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Sentiment Display */
+.sentiment-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sentiment-display__main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sentiment-display__trend {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.sentiment-display__breakdown {
+  display: flex;
+  gap: 1.5rem;
+}
+
+/* Sentiment Badge */
+.sentiment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--sentiment-color) 15%, transparent);
+  color: var(--sentiment-color);
+  border: 1px solid color-mix(in srgb, var(--sentiment-color) 30%, transparent);
+}
+
+.sentiment-badge__value {
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.sentiment-badge__label {
+  margin-left: 0.25rem;
+  opacity: 0.8;
+}
+
+/* ============================================
+   SENTIMENT INTELLIGENCE DASHBOARD
+   ============================================ */
+
+/* Dashboard Container */
+.sentiment-dashboard {
+  padding: 1.5rem;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.sentiment-dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.5rem;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-primary);
+  border-radius: 1rem;
+}
+
+/* Dashboard Grid */
+.sentiment-dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .sentiment-dashboard-grid {
+    grid-template-columns: 1.5fr 1fr;
+  }
+}
+
+.sentiment-col-wide,
+.sentiment-col-narrow {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Sentiment Panel */
+.sentiment-panel {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-primary);
+  border-radius: 1rem;
+  padding: 1rem;
+  transition: all 0.3s ease;
+}
+
+.sentiment-panel:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.sentiment-panel-compact {
+  padding: 0.75rem;
+}
+
+.sentiment-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.sentiment-panel-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Token Row */
+.token-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.token-row:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-hover);
+}
+
+.token-rank {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-radius: 0.5rem;
+}
+
+/* Sentiment Grade Badge */
+.sentiment-grade {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  border-radius: 0.25rem;
+  border: 1px solid;
+}
+
+/* Conviction Pick Card */
+.conviction-pick-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.conviction-pick-card:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-neon);
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.1);
+}
+
+.conviction-rank {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--accent-neon);
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 0.5rem;
+}
+
+/* Perpetuals Buttons */
+.perps-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  border: 1px solid;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.perps-button-long {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #10B981;
+}
+
+.perps-button-long-hover,
+.perps-button-long:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10B981;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+.perps-button-short {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #EF4444;
+}
+
+.perps-button-short-hover,
+.perps-button-short:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #EF4444;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+}
+
+/* Accent Primary - Maps to neon green */
+:root,
+[data-theme="light"] {
+  --accent-primary: #22c55e;
+}
+
+[data-theme="dark"] {
+  --accent-primary: #22c55e;
+}
+
+@theme {
+  --color-accent-primary: var(--accent-primary);
+}

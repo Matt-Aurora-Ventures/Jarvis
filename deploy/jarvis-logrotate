@@ -1,0 +1,26 @@
+# Jarvis Log Rotation Configuration
+# Install to: /etc/logrotate.d/jarvis
+
+/home/jarvis/Jarvis/logs/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 640 jarvis jarvis
+    sharedscripts
+    postrotate
+        systemctl kill -s HUP jarvis-supervisor.service 2>/dev/null || true
+    endscript
+}
+
+/var/log/jarvis/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 640 jarvis jarvis
+}
