@@ -32,14 +32,14 @@ export function MacroEventsTimeline({ macro, isLoading }: MacroEventsTimelinePro
 
     const timeframes = [
         { label: '24h', title: 'Short Term', content: macro.shortTerm, icon: Clock, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-        { label: '3d', title: 'Medium Term', content: macro.mediumTerm, icon: TrendingUp, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+        { label: '3d', title: 'Medium Term', content: macro.mediumTerm, icon: TrendingUp, color: 'text-accent-neon', bg: 'bg-accent-neon/10' },
         { label: '1w+', title: 'Long Term', content: macro.longTerm, icon: Calendar, color: 'text-amber-400', bg: 'bg-amber-500/10' },
     ];
 
     return (
         <div className="sentiment-panel">
             <div className="sentiment-panel-header">
-                <Calendar className="w-5 h-5 text-purple-400" />
+                <Calendar className="w-5 h-5 text-accent-neon" />
                 <h3>📊 Macro Outlook</h3>
             </div>
 

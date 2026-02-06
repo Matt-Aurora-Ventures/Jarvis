@@ -50,7 +50,7 @@ const COST_PER_1K_TOKENS = 0.003; // Approximate Grok cost
 export class GrokSentimentClient {
     private apiKey: string;
     private baseUrl = 'https://api.x.ai/v1/chat/completions';
-    private model = 'grok-beta'; // or 'grok-4.1' when available
+    private model = 'grok-4';
     private cache = new Map<string, CacheEntry>();
     private budget: BudgetState;
 
@@ -269,18 +269,11 @@ Be concise but accurate. Score 50 = neutral. Above 70 = bullish. Below 30 = bear
     }
 
     private async callGrok(prompt: string): Promise<string | null> {
-        if (!this.apiKey) {
-            console.warn('Grok API key not configured');
-            return null;
-        }
-
         try {
-            const response = await fetch(this.baseUrl, {
+            // Route through Next.js API proxy to avoid CORS and hide key
+            const response = await fetch('/api/grok', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.apiKey}`,
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model: this.model,
                     messages: [
@@ -290,13 +283,14 @@ Be concise but accurate. Score 50 = neutral. Above 70 = bullish. Below 30 = bear
                         },
                         { role: 'user', content: prompt }
                     ],
-                    temperature: 0.3, // Low for consistency
+                    temperature: 0.3,
                     max_tokens: 2000,
                 }),
             });
 
             if (!response.ok) {
-                console.error('Grok API error:', response.status);
+                const errData = await response.json().catch(() => ({}));
+                console.error('Grok API error:', response.status, errData.details || '');
                 return null;
             }
 

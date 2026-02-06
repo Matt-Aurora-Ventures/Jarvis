@@ -183,7 +183,7 @@ export default function PositionsPage() {
                     {/* Win Rate */}
                     <div className="card-glass p-4">
                         <div className="flex items-center gap-2 mb-2">
-                            <Target className="w-4 h-4 text-purple-400" />
+                            <Target className="w-4 h-4 text-accent-neon" />
                             <span className="text-xs text-text-muted">Win Rate</span>
                         </div>
                         <p className={`font-mono font-bold text-xl ${

@@ -26,11 +26,16 @@ const SL_PRESETS = [
 ];
 
 type TradeStatus = 'idle' | 'quoting' | 'signing' | 'sending' | 'confirming' | 'success' | 'error';
+type TradeMode = 'spot' | 'perps';
 
 export function TradePanel() {
     const { addPosition, state } = useTradingData();
     const { connection } = useConnection();
     const { publicKey, signTransaction, connected } = useWallet();
+
+    // Trade mode
+    const [tradeMode, setTradeMode] = useState<TradeMode>('spot');
+    const [leverage, setLeverage] = useState<number>(1);
 
     // Trade inputs
     const [amount, setAmount] = useState<string>('0.1');
@@ -183,20 +188,80 @@ export function TradePanel() {
     const statusDisplay = getStatusDisplay();
 
     return (
-        <div className="card-glass p-6 space-y-6">
+        <div className="card-glass p-4 space-y-4">
             {/* Header */}
-            <div className="flex justify-between items-center border-b border-theme-border/30 pb-4">
-                <h3 className="font-display font-bold text-lg flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-theme-cyan" />
+            <div className="flex justify-between items-center border-b border-border-primary/30 pb-3">
+                <h3 className="font-display font-bold text-sm flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-accent-neon" />
                     EXECUTION
                 </h3>
                 <div className="flex items-center gap-2">
                     <FeeBadge level={feeLevel} onClick={() => setShowFeeSelector(!showFeeSelector)} />
-                    <span className="text-xs font-mono text-theme-muted">
+                    <span className="text-xs font-mono text-text-muted">
                         {state.solBalance.toFixed(2)} SOL
                     </span>
                 </div>
             </div>
+
+            {/* Spot / Perps Toggle */}
+            <div className="flex items-center gap-1 p-1 rounded-lg bg-bg-secondary/50 border border-border-primary/30">
+                <button
+                    onClick={() => { setTradeMode('spot'); setLeverage(1); }}
+                    className={`flex-1 py-1.5 text-xs font-mono font-bold rounded-md transition-all ${
+                        tradeMode === 'spot'
+                            ? 'bg-accent-neon text-black shadow-sm'
+                            : 'text-text-muted hover:text-text-primary'
+                    }`}
+                >
+                    SPOT
+                </button>
+                <button
+                    onClick={() => setTradeMode('perps')}
+                    className={`flex-1 py-1.5 text-xs font-mono font-bold rounded-md transition-all ${
+                        tradeMode === 'perps'
+                            ? 'bg-accent-neon text-black shadow-sm'
+                            : 'text-text-muted hover:text-text-primary'
+                    }`}
+                >
+                    PERPS
+                </button>
+            </div>
+
+            {/* Leverage Selector (Perps only) */}
+            {tradeMode === 'perps' && (
+                <div className="space-y-2">
+                    <div className="flex justify-between text-xs font-mono">
+                        <span className="text-text-muted">LEVERAGE</span>
+                        <span className="text-accent-neon font-bold">{leverage}x</span>
+                    </div>
+                    <div className="flex gap-1">
+                        {[2, 5, 10, 20, 50].map((lev) => (
+                            <button
+                                key={lev}
+                                onClick={() => setLeverage(lev)}
+                                className={`flex-1 py-1.5 text-xs font-mono rounded transition-all ${
+                                    leverage === lev
+                                        ? 'bg-accent-neon text-black font-bold'
+                                        : 'bg-bg-secondary/30 border border-border-primary/50 hover:border-accent-neon/50'
+                                }`}
+                            >
+                                {lev}x
+                            </button>
+                        ))}
+                    </div>
+                    <input
+                        type="range" min="1" max="100" value={leverage}
+                        onChange={(e) => setLeverage(parseInt(e.target.value))}
+                        className="w-full accent-accent-neon h-1 bg-bg-secondary/50 rounded-lg appearance-none cursor-pointer"
+                    />
+                    {leverage > 20 && (
+                        <div className="flex items-center gap-1 text-[10px] text-accent-error font-mono">
+                            <AlertTriangle className="w-3 h-3" />
+                            HIGH RISK - LIQUIDATION LIKELY
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Wallet Connection Warning */}
             {!connected && (
@@ -271,7 +336,7 @@ export function TradePanel() {
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         disabled={isTrading}
-                        className="w-full bg-theme-dark/50 border border-theme-border rounded-lg px-4 py-3 font-mono text-lg focus:border-theme-cyan outline-none transition-colors disabled:opacity-50"
+                        className="w-full bg-bg-secondary/50 border border-border-primary rounded-lg px-4 py-3 font-mono text-lg focus:border-accent-neon outline-none transition-colors disabled:opacity-50"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-theme-muted font-bold">SOL</span>
                 </div>
@@ -282,7 +347,7 @@ export function TradePanel() {
                             key={val}
                             onClick={() => setAmount(val.toString())}
                             disabled={isTrading}
-                            className="flex-1 py-1 text-xs font-mono bg-theme-dark/30 border border-theme-border/50 rounded hover:border-theme-cyan transition-colors disabled:opacity-50"
+                            className="flex-1 py-1 text-xs font-mono bg-theme-dark/30 border border-theme-border/50 rounded hover:border-accent-neon transition-colors disabled:opacity-50"
                         >
                             {val} SOL
                         </button>
@@ -356,19 +421,31 @@ export function TradePanel() {
             </div>
 
             {/* Price Preview */}
-            <div className="bg-theme-dark/30 rounded-lg p-3 space-y-1">
+            <div className="bg-bg-secondary/30 rounded-lg p-3 space-y-1">
                 <div className="flex justify-between text-xs font-mono">
-                    <span className="text-theme-muted">Entry Price</span>
+                    <span className="text-text-muted">Entry Price</span>
                     <span>${price.toFixed(4)}</span>
                 </div>
+                {tradeMode === 'perps' && (
+                    <div className="flex justify-between text-xs font-mono">
+                        <span className="text-accent-neon">Position Size</span>
+                        <span className="text-accent-neon">{(parseFloat(amount || '0') * leverage).toFixed(2)} SOL ({leverage}x)</span>
+                    </div>
+                )}
                 <div className="flex justify-between text-xs font-mono">
-                    <span className="text-theme-green">TP Target</span>
-                    <span className="text-theme-green">${(price * (1 + tp / 100)).toFixed(4)}</span>
+                    <span className="text-accent-success">TP Target</span>
+                    <span className="text-accent-success">${(price * (1 + tp / 100)).toFixed(4)}</span>
                 </div>
                 <div className="flex justify-between text-xs font-mono">
-                    <span className="text-theme-red">SL Target</span>
-                    <span className="text-theme-red">${(price * (1 - sl / 100)).toFixed(4)}</span>
+                    <span className="text-accent-error">SL Target</span>
+                    <span className="text-accent-error">${(price * (1 - sl / 100)).toFixed(4)}</span>
                 </div>
+                {tradeMode === 'perps' && leverage > 1 && (
+                    <div className="flex justify-between text-xs font-mono pt-1 border-t border-border-primary/20">
+                        <span className="text-accent-warning">Liq. Price</span>
+                        <span className="text-accent-warning">${(price * (1 - 100 / leverage / 100)).toFixed(4)}</span>
+                    </div>
+                )}
             </div>
 
             {/* Trade Status */}
@@ -377,7 +454,7 @@ export function TradePanel() {
                     flex items-center justify-center gap-2 p-3 rounded-lg
                     ${tradeStatus === 'success' ? 'bg-theme-green/10 text-theme-green' :
                         tradeStatus === 'error' ? 'bg-theme-red/10 text-theme-red' :
-                            'bg-theme-cyan/10 text-theme-cyan'}
+                            'bg-accent-neon/10 text-accent-neon'}
                 `}>
                     {statusDisplay.icon}
                     <span className="text-sm font-mono">{statusDisplay.text}</span>
@@ -436,7 +513,7 @@ export function TradePanel() {
                         href={`https://solscan.io/tx/${lastTxHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-theme-cyan hover:underline font-mono"
+                        className="text-xs text-accent-neon hover:underline font-mono"
                     >
                         View on Solscan →
                     </a>

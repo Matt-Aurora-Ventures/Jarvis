@@ -35,7 +35,7 @@ function getRegimeColor(regime: MarketRegimeType): string {
         case 'BULL': return 'text-green-400 bg-green-500/20';
         case 'BEAR': return 'text-red-400 bg-red-500/20';
         case 'NEUTRAL': return 'text-yellow-400 bg-yellow-500/20';
-        case 'VOLATILE': return 'text-purple-400 bg-purple-500/20';
+        case 'VOLATILE': return 'text-accent-neon bg-accent-neon/20';
     }
 }
 
@@ -201,8 +201,8 @@ export function AIMarketReport() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-purple-500/20">
-                        <Brain className="w-5 h-5 text-purple-400" />
+                    <div className="p-2 rounded-lg bg-accent-neon/20">
+                        <Brain className="w-5 h-5 text-accent-neon" />
                     </div>
                     <div>
                         <h2 className="font-display font-bold text-lg text-text-primary">AI MARKET REPORT</h2>

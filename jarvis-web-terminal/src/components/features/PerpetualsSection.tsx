@@ -49,7 +49,7 @@ export function PerpetualsSection({ tokenSymbol = 'SOL' }: PerpetualsSectionProp
 
             {/* Underlying Content (blurred) */}
             <div className="sentiment-panel-header">
-                <Zap className="w-5 h-5 text-purple-400" />
+                <Zap className="w-5 h-5 text-accent-neon" />
                 <h3>⚡ Perpetual Trading</h3>
             </div>
 

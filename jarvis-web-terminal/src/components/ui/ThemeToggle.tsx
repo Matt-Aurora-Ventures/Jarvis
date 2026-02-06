@@ -22,7 +22,7 @@ export function ThemeToggle() {
                 className={`
                     relative w-10 h-10 rounded-lg flex items-center justify-center
                     transition-all duration-300 overflow-hidden
-                    border border-theme-border/30 hover:border-theme-cyan/50
+                    border border-theme-border/30 hover:border-accent-neon/50
                     ${theme === 'dark' ? 'bg-theme-dark/50' : 'bg-white/10'}
                 `}
                 title={`Current: ${theme} mode`}
@@ -41,7 +41,7 @@ export function ThemeToggle() {
                     className={`
                         absolute w-5 h-5 transition-all duration-300
                         ${theme === 'dark'
-                            ? 'scale-100 rotate-0 text-theme-cyan'
+                            ? 'scale-100 rotate-0 text-accent-neon'
                             : 'scale-0 -rotate-90 text-theme-muted'}
                     `}
                 />
@@ -65,14 +65,14 @@ export function ThemeToggle() {
                             }}
                             className={`
                                 w-full px-4 py-2 flex items-center gap-3 text-left text-sm
-                                transition-colors hover:bg-theme-cyan/10
-                                ${theme === 'light' ? 'text-theme-cyan' : 'text-theme-muted'}
+                                transition-colors hover:bg-accent-neon/10
+                                ${theme === 'light' ? 'text-accent-neon' : 'text-theme-muted'}
                             `}
                         >
                             <Sun className="w-4 h-4" />
                             Light
                             {theme === 'light' && (
-                                <span className="ml-auto w-2 h-2 rounded-full bg-theme-cyan" />
+                                <span className="ml-auto w-2 h-2 rounded-full bg-accent-neon" />
                             )}
                         </button>
 
@@ -83,14 +83,14 @@ export function ThemeToggle() {
                             }}
                             className={`
                                 w-full px-4 py-2 flex items-center gap-3 text-left text-sm
-                                transition-colors hover:bg-theme-cyan/10
-                                ${theme === 'dark' ? 'text-theme-cyan' : 'text-theme-muted'}
+                                transition-colors hover:bg-accent-neon/10
+                                ${theme === 'dark' ? 'text-accent-neon' : 'text-theme-muted'}
                             `}
                         >
                             <Moon className="w-4 h-4" />
                             Dark
                             {theme === 'dark' && (
-                                <span className="ml-auto w-2 h-2 rounded-full bg-theme-cyan" />
+                                <span className="ml-auto w-2 h-2 rounded-full bg-accent-neon" />
                             )}
                         </button>
 
@@ -103,7 +103,7 @@ export function ThemeToggle() {
                                 setTheme(prefersDark ? 'dark' : 'light');
                                 setShowMenu(false);
                             }}
-                            className="w-full px-4 py-2 flex items-center gap-3 text-left text-sm text-theme-muted transition-colors hover:bg-theme-cyan/10"
+                            className="w-full px-4 py-2 flex items-center gap-3 text-left text-sm text-theme-muted transition-colors hover:bg-accent-neon/10"
                         >
                             <Monitor className="w-4 h-4" />
                             System
@@ -146,7 +146,7 @@ export function ThemeToggleInline() {
                 `}
             >
                 {theme === 'dark' ? (
-                    <Moon className="w-3.5 h-3.5 text-theme-cyan" />
+                    <Moon className="w-3.5 h-3.5 text-accent-neon" />
                 ) : (
                     <Sun className="w-3.5 h-3.5 text-amber-500" />
                 )}
