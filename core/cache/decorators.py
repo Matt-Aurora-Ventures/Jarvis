@@ -273,6 +273,7 @@ def cached(
     cache_name: Optional[str] = None,
     key_func: Optional[Callable[..., str]] = None,
     condition: Optional[Callable[[Any], bool]] = None,
+    cache_dir: Optional[str] = None,
 ) -> Callable:
     """
     Decorator to cache function results.
@@ -282,6 +283,7 @@ def cached(
         cache_name: Specific cache backend to use
         key_func: Custom function to generate cache key
         condition: Only cache if this returns True for the result
+        cache_dir: Directory for file-based caching (uses new CacheManager)
 
     Usage:
         @cached(ttl=300)
@@ -292,87 +294,167 @@ def cached(
         @cached(ttl=60, key_func=lambda mint: f"price:{mint}")
         async def get_price(mint: str) -> float:
             ...
+
+        # With cache_dir for file persistence
+        @cached(ttl=300, cache_dir="/path/to/cache")
+        def get_user(user_id: int) -> dict:
+            ...
     """
     def decorator(func: Callable) -> Callable:
         # Track function-specific invalidation
         cache_keys: set = set()
 
+        # Check for custom key function from @cache_key decorator
+        effective_key_func = key_func
+        if hasattr(func, '_cache_key_func'):
+            effective_key_func = func._cache_key_func
+
         @wraps(func)
         async def async_wrapper(*args, **kwargs) -> Any:
-            manager = get_cache_manager()
-            cache = manager.get_cache(cache_name)
+            # Use new CacheManager if cache_dir is specified
+            if cache_dir:
+                from core.cache.manager import CacheManager
+                cache = CacheManager(cache_dir=cache_dir)
 
-            # Generate key
-            if key_func:
-                key = key_func(*args, **kwargs)
+                # Generate key
+                if effective_key_func:
+                    key = effective_key_func(*args, **kwargs)
+                else:
+                    key = make_cache_key(func, args, kwargs)
+
+                cache_keys.add(key)
+
+                # Check cache
+                cached_value = cache.get(key)
+                if cached_value is not None:
+                    logger.debug(f"Cache hit: {key[:50]}...")
+                    return cached_value
+
+                # Execute function
+                result = await func(*args, **kwargs)
+
+                # Cache result if condition met
+                if condition is None or condition(result):
+                    cache.set(key, result, ttl_seconds=int(ttl) if ttl else 3600)
+                    logger.debug(f"Cached: {key[:50]}... (ttl={ttl})")
+
+                return result
             else:
-                key = make_cache_key(func, args, kwargs)
+                manager = get_cache_manager()
+                cache = manager.get_cache(cache_name)
 
-            cache_keys.add(key)
+                # Generate key
+                if effective_key_func:
+                    key = effective_key_func(*args, **kwargs)
+                else:
+                    key = make_cache_key(func, args, kwargs)
 
-            # Check cache
-            cached_value = cache.get(key) if cache else None
-            if cached_value is not None:
-                logger.debug(f"Cache hit: {key[:50]}...")
-                return cached_value
+                cache_keys.add(key)
 
-            # Execute function
-            result = await func(*args, **kwargs)
+                # Check cache
+                cached_value = cache.get(key) if cache else None
+                if cached_value is not None:
+                    logger.debug(f"Cache hit: {key[:50]}...")
+                    return cached_value
 
-            # Cache result if condition met
-            if cache and (condition is None or condition(result)):
-                cache.set(key, result, ttl)
-                logger.debug(f"Cached: {key[:50]}... (ttl={ttl})")
+                # Execute function
+                result = await func(*args, **kwargs)
 
-            return result
+                # Cache result if condition met
+                if cache and (condition is None or condition(result)):
+                    cache.set(key, result, ttl)
+                    logger.debug(f"Cached: {key[:50]}... (ttl={ttl})")
+
+                return result
 
         @wraps(func)
         def sync_wrapper(*args, **kwargs) -> Any:
-            manager = get_cache_manager()
-            cache = manager.get_cache(cache_name)
+            # Use new CacheManager if cache_dir is specified
+            if cache_dir:
+                from core.cache.manager import CacheManager
+                cache = CacheManager(cache_dir=cache_dir)
 
-            # Generate key
-            if key_func:
-                key = key_func(*args, **kwargs)
+                # Generate key
+                if effective_key_func:
+                    key = effective_key_func(*args, **kwargs)
+                else:
+                    key = make_cache_key(func, args, kwargs)
+
+                cache_keys.add(key)
+
+                # Check cache
+                cached_value = cache.get(key)
+                if cached_value is not None:
+                    logger.debug(f"Cache hit: {key[:50]}...")
+                    return cached_value
+
+                # Execute function
+                result = func(*args, **kwargs)
+
+                # Cache result if condition met
+                if condition is None or condition(result):
+                    cache.set(key, result, ttl_seconds=int(ttl) if ttl else 3600)
+                    logger.debug(f"Cached: {key[:50]}... (ttl={ttl})")
+
+                return result
             else:
-                key = make_cache_key(func, args, kwargs)
+                manager = get_cache_manager()
+                cache = manager.get_cache(cache_name)
 
-            cache_keys.add(key)
+                # Generate key
+                if effective_key_func:
+                    key = effective_key_func(*args, **kwargs)
+                else:
+                    key = make_cache_key(func, args, kwargs)
 
-            # Check cache
-            cached_value = cache.get(key) if cache else None
-            if cached_value is not None:
-                logger.debug(f"Cache hit: {key[:50]}...")
-                return cached_value
+                cache_keys.add(key)
 
-            # Execute function
-            result = func(*args, **kwargs)
+                # Check cache
+                cached_value = cache.get(key) if cache else None
+                if cached_value is not None:
+                    logger.debug(f"Cache hit: {key[:50]}...")
+                    return cached_value
 
-            # Cache result if condition met
-            if cache and (condition is None or condition(result)):
-                cache.set(key, result, ttl)
-                logger.debug(f"Cached: {key[:50]}... (ttl={ttl})")
+                # Execute function
+                result = func(*args, **kwargs)
 
-            return result
+                # Cache result if condition met
+                if cache and (condition is None or condition(result)):
+                    cache.set(key, result, ttl)
+                    logger.debug(f"Cached: {key[:50]}... (ttl={ttl})")
+
+                return result
 
         def cache_clear() -> None:
             """Clear all cached values for this function."""
-            manager = get_cache_manager()
-            cache = manager.get_cache(cache_name)
-            if cache:
+            if cache_dir:
+                from core.cache.manager import CacheManager
+                cache = CacheManager(cache_dir=cache_dir)
                 for key in cache_keys:
                     cache.delete(key)
+            else:
+                manager = get_cache_manager()
+                cache = manager.get_cache(cache_name)
+                if cache:
+                    for key in cache_keys:
+                        cache.delete(key)
             cache_keys.clear()
 
         def cache_delete(*args, **kwargs) -> bool:
             """Delete specific cached value."""
-            manager = get_cache_manager()
-            cache = manager.get_cache(cache_name)
-            if key_func:
-                key = key_func(*args, **kwargs)
+            if effective_key_func:
+                key = effective_key_func(*args, **kwargs)
             else:
                 key = make_cache_key(func, args, kwargs)
-            return cache.delete(key) if cache else False
+
+            if cache_dir:
+                from core.cache.manager import CacheManager
+                cache = CacheManager(cache_dir=cache_dir)
+                return cache.delete(key)
+            else:
+                manager = get_cache_manager()
+                cache = manager.get_cache(cache_name)
+                return cache.delete(key) if cache else False
 
         # Choose wrapper based on function type
         if asyncio.iscoroutinefunction(func):
@@ -384,10 +466,74 @@ def cached(
         wrapper.cache_clear = cache_clear
         wrapper.cache_delete = cache_delete
         wrapper.cache_keys = lambda: cache_keys.copy()
+        wrapper.__wrapped__ = func  # Store reference to original function
 
         return wrapper
 
     return decorator
+
+
+def cache_key(key_func: Callable[..., str]) -> Callable:
+    """
+    Decorator to customize cache key generation.
+
+    Use this as an inner decorator with @cached to customize how cache keys
+    are generated from function arguments.
+
+    Args:
+        key_func: Function that takes the same args as the decorated function
+                  and returns a string to use as the cache key.
+
+    Usage:
+        @cache_key(lambda user_id, **kwargs: f"user:{user_id}")
+        @cached(ttl=300)
+        def get_user_data(user_id, include_details=False):
+            ...
+
+    Note: Must be applied BEFORE @cached (closer to the function definition).
+    """
+    def decorator(func: Callable) -> Callable:
+        # Store the key function on the function for later use
+        func._cache_key_func = key_func
+        return func
+
+    return decorator
+
+
+def invalidate_cache(
+    pattern: str,
+    cache_name: Optional[str] = None,
+    cache_dir: Optional[str] = None
+) -> int:
+    """
+    Invalidate cache entries matching a pattern.
+
+    Uses fnmatch-style patterns:
+    - * matches everything
+    - ? matches any single character
+    - [seq] matches any character in seq
+
+    Args:
+        pattern: Pattern to match (e.g., "user:*", "llm:grok:*")
+        cache_name: Specific cache backend to invalidate (optional)
+        cache_dir: Cache directory override (optional)
+
+    Returns:
+        Number of entries invalidated
+
+    Usage:
+        from core.cache.decorators import invalidate_cache
+
+        # Invalidate all user cache entries
+        invalidate_cache("user:*")
+
+        # Invalidate specific pattern
+        invalidate_cache("llm:grok:*")
+    """
+    from core.cache.manager import CacheManager
+
+    manager = CacheManager(cache_dir=cache_dir) if cache_dir else get_cache_manager()
+    return manager.clear_pattern(pattern)
 
 
 def cache_aside(

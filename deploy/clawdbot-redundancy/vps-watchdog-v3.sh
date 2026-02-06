@@ -193,12 +193,16 @@ Using pre-built image for fast recovery..." "critical"
                 -e GATEWAY_PORT=18789 \
                 -e DOCKER_API_VERSION=1.44 \
                 -e NODE_OPTIONS='--max-old-space-size=1536' \
+                -e TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN}" \
+                -e TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID}" \
                 -v /root/.clawdbot:/root/.clawdbot:ro \
+                -v /root/clawd/workspaces/friday:/root/clawd \
                 -v /var/lib/tailscale-friday:/var/lib/tailscale \
                 -v /root/clawd/data/friday/memory:/root/.clawdbot/memory \
                 -v /root/clawd/data/friday/skills:/root/.clawdbot/skills \
                 -v /root/.ssh:/root/.ssh:ro \
                 -v /root/clawdbots/data:/root/clawdbots/data \
+                -v /var/run/docker.sock:/var/run/docker.sock \
                 "$PREBUILT_IMAGE"
             ;;
         matt)
@@ -217,12 +221,16 @@ Using pre-built image for fast recovery..." "critical"
                 -e GATEWAY_PORT=18800 \
                 -e DOCKER_API_VERSION=1.44 \
                 -e NODE_OPTIONS='--max-old-space-size=1536' \
+                -e TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN}" \
+                -e TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID}" \
                 -v /docker/clawdbot-gateway/config-matt:/root/.clawdbot:ro \
+                -v /root/clawd/workspaces/matt:/root/clawd \
                 -v /var/lib/tailscale-matt:/var/lib/tailscale \
                 -v /root/clawd/data/matt/memory:/root/.clawdbot/memory \
                 -v /root/clawd/data/matt/skills:/root/.clawdbot/skills \
                 -v /root/.ssh:/root/.ssh:ro \
                 -v /root/clawdbots/data:/root/clawdbots/data \
+                -v /var/run/docker.sock:/var/run/docker.sock \
                 "$PREBUILT_IMAGE"
             ;;
         jarvis)
@@ -242,12 +250,16 @@ Using pre-built image for fast recovery..." "critical"
                 -e DOCKER_API_VERSION=1.44 \
                 -e NODE_OPTIONS='--max-old-space-size=1536' \
                 -e XAI_API_KEY="${XAI_API_KEY}" \
+                -e TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN}" \
+                -e TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID}" \
                 -v /root/.clawdbot-jarvis:/root/.clawdbot:ro \
+                -v /root/clawd/workspaces/jarvis:/root/clawd \
                 -v /var/lib/tailscale-jarvis:/var/lib/tailscale \
                 -v /root/clawd/data/jarvis/memory:/root/.clawdbot/memory \
                 -v /root/clawd/data/jarvis/skills:/root/.clawdbot/skills \
                 -v /root/.ssh:/root/.ssh:ro \
                 -v /root/clawdbots/data:/root/clawdbots/data \
+                -v /var/run/docker.sock:/var/run/docker.sock \
                 "$PREBUILT_IMAGE"
             ;;
     esac

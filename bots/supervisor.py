@@ -134,6 +134,12 @@ def ensure_single_instance(name: str) -> SingleInstanceLock:
     lock.acquire()
     return lock
 
+# Ensure project root is on sys.path before importing local packages (core/, bots/, tg_bot/).
+# When running `python bots/supervisor.py`, Python adds `bots/` to sys.path, not the repo root.
+project_root = Path(__file__).resolve().parents[1]
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 # Import safe task tracking
 try:
     from core.async_utils import fire_and_forget, TaskTracker
@@ -210,10 +216,6 @@ if sys.platform == "win32":
     for stream in [sys.stdout, sys.stderr]:
         if hasattr(stream, 'reconfigure'):
             stream.reconfigure(encoding='utf-8', errors='replace')
-
-# Add project root to path
-project_root = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(project_root))
 
 logger = logging.getLogger("jarvis.supervisor")
 
@@ -448,12 +450,49 @@ class BotSupervisor:
         health_task = asyncio.create_task(self._health_monitor())
         tasks.append(health_task)
 
-        # Wait for shutdown signal or all tasks to complete
+        # Wait for shutdown signal (SIGTERM/SIGINT via ShutdownManager) or all tasks to complete.
+        #
+        # NOTE: We must *not* use FIRST_COMPLETED over individual component tasks,
+        # because disabled components can "exit cleanly" and complete early.
+        # We only want to stop when:
+        # - Shutdown signal is received, OR
+        # - ALL tasks have completed (unexpected; supervisor would otherwise run forever)
+        shutdown_wait_task = None
+        # asyncio.gather returns a Future (awaitable), not a coroutine, so don't wrap it in create_task.
+        tasks_gather = asyncio.gather(*tasks, return_exceptions=True)
         try:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            if SHUTDOWN_MANAGER_AVAILABLE and get_shutdown_manager is not None:
+                shutdown_wait_task = asyncio.create_task(get_shutdown_manager().wait_for_shutdown())
+                done, pending = await asyncio.wait(
+                    [shutdown_wait_task, tasks_gather],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+                if shutdown_wait_task in done:
+                    await self._graceful_shutdown()
+                    for t in tasks:
+                        if not t.done():
+                            t.cancel()
+
+                    # Don't hang forever waiting for cancellation to propagate.
+                    try:
+                        await asyncio.wait_for(tasks_gather, timeout=20.0)
+                    except asyncio.TimeoutError:
+                        logger.warning("Shutdown timeout: tasks still running after 20s; forcing exit")
+                else:
+                    # All tasks completed - stop waiting for shutdown.
+                    if shutdown_wait_task and not shutdown_wait_task.done():
+                        shutdown_wait_task.cancel()
+                    await tasks_gather
+            else:
+                await tasks_gather
         except asyncio.CancelledError:
             pass
         finally:
+            if shutdown_wait_task and not shutdown_wait_task.done():
+                shutdown_wait_task.cancel()
+            if not tasks_gather.done():
+                tasks_gather.cancel()
             self._running = False
             await self._cleanup()
 
@@ -463,23 +502,30 @@ class BotSupervisor:
         self._running = False
 
         # Signal all components to stop
+        pending: Dict[str, asyncio.Task] = {}
         for name, state in self.components.items():
             logger.info(f"  [{name}] Requesting shutdown...")
             if state.task and not state.task.done():
                 state.task.cancel()
+                pending[name] = state.task
 
-        # Wait for components to finish (with timeout per component)
-        for name, state in self.components.items():
-            if state.task and not state.task.done():
-                try:
-                    await asyncio.wait_for(state.task, timeout=5.0)
-                    logger.info(f"  [{name}] Stopped cleanly")
-                except asyncio.TimeoutError:
-                    logger.warning(f"  [{name}] Shutdown timeout (5s)")
-                except asyncio.CancelledError:
+        # Wait for all components concurrently (bounded total time).
+        if pending:
+            done, still_pending = await asyncio.wait(
+                list(pending.values()),
+                timeout=15.0,
+            )
+            for name, task in pending.items():
+                if task in still_pending:
+                    logger.warning(f"  [{name}] Still running after 15s (will be force-cancelled)")
+                elif task.cancelled():
                     logger.info(f"  [{name}] Cancelled")
-                except Exception as e:
-                    logger.error(f"  [{name}] Shutdown error: {e}")
+                else:
+                    exc = task.exception()
+                    if exc:
+                        logger.error(f"  [{name}] Shutdown error: {exc}")
+                    else:
+                        logger.info(f"  [{name}] Stopped cleanly")
 
     async def _cleanup(self):
         """Clean up all components."""

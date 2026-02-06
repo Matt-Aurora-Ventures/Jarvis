@@ -10,11 +10,28 @@ import logging
 import asyncio
 import shutil
 import subprocess
+import time
 import anthropic
 from typing import Optional, Dict, Any
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+
+def _env_flag(name: str, default: bool) -> bool:
+    """Parse a boolean-ish env var with a safe default.
+
+    - Unset or empty: default
+    - "1/true/yes/on": True
+    - everything else: False
+    """
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
 
 # Load env
 def _load_env():
@@ -37,9 +54,14 @@ class JarvisVoice:
     """Generate content in Jarvis's authentic voice using Claude."""
     
     def __init__(self):
-        # CLI ONLY - No Anthropic API (per user requirement)
-        self.cli_enabled = True  # Fallback when API mode is unavailable
+        # CLI is the primary path for production; allow explicit disable via env.
+        self.cli_enabled = _env_flag("CLAUDE_CLI_ENABLED", True)
         self.cli_path = os.getenv("CLAUDE_CLI_PATH", "claude")
+        self._resolved_cli_path: Optional[str] = None
+        # Backoff to avoid log spam / wasted cycles when CLI is misconfigured or out of credits.
+        self._cli_backoff_until: float = 0.0
+        self._cli_backoff_reason: str = ""
+        self._last_grok_fallback_log_ts: float = 0.0
         self.api_client = None
         self.api_model = "claude-sonnet-4-20250514"
         self.api_base_url = None
@@ -64,14 +86,26 @@ class JarvisVoice:
             logger.warning(f"Claude API client unavailable: {exc}")
 
     def _cli_available(self) -> bool:
+        if not self.cli_enabled:
+            return False
+        if time.time() < self._cli_backoff_until:
+            return False
         return bool(shutil.which(self.cli_path))
 
     def _get_cli_path(self) -> Optional[str]:
         """Get the resolved CLI path that actually works."""
+        # Cache to avoid repeated PATH scans and repeated "Found" logs in tight loops.
+        if self._resolved_cli_path and os.path.exists(self._resolved_cli_path):
+            return self._resolved_cli_path
+        if self._resolved_cli_path and not os.path.exists(self._resolved_cli_path):
+            self._resolved_cli_path = None
+
         # Try the configured path first
         resolved = shutil.which(self.cli_path)
         if resolved:
-            logger.info(f"Found Claude CLI via PATH: {resolved}")
+            if resolved != self._resolved_cli_path:
+                logger.info(f"Found Claude CLI via PATH: {resolved}")
+            self._resolved_cli_path = resolved
             return resolved
         # Try common Windows and Linux locations
         common_paths = [
@@ -87,10 +121,25 @@ class JarvisVoice:
         ]
         for path in common_paths:
             if os.path.exists(path):
-                logger.info(f"Found Claude CLI at: {path}")
+                if path != self._resolved_cli_path:
+                    logger.info(f"Found Claude CLI at: {path}")
+                self._resolved_cli_path = path
                 return path
         logger.warning("Claude CLI not found in any common location")
         return None
+
+    def _apply_cli_backoff(self, seconds: int, reason: str) -> None:
+        """Temporarily disable CLI usage to prevent repeated failures from spamming logs."""
+        if seconds <= 0:
+            return
+        now = time.time()
+        until = now + seconds
+        # Only extend, never shorten.
+        if until <= self._cli_backoff_until:
+            return
+        self._cli_backoff_until = until
+        self._cli_backoff_reason = reason
+        logger.warning("Claude CLI backoff %ss: %s", seconds, reason)
 
     def _run_cli(self, prompt: str) -> Optional[str]:
         cli_path = self._get_cli_path()
@@ -155,14 +204,34 @@ class JarvisVoice:
                 stderr_preview = completed.stderr[:200] if completed.stderr else 'no stderr'
                 stdout_preview = completed.stdout[:200] if completed.stdout else 'no stdout'
                 logger.warning(f"Claude CLI returned code {completed.returncode}: stderr={stderr_preview}, stdout={stdout_preview}")
+
+                combined = f"{completed.stdout or ''}\n{completed.stderr or ''}".lower()
+                if "credit balance is too low" in combined or "insufficient credit" in combined:
+                    self._apply_cli_backoff(6 * 60 * 60, "credit balance too low")
+                elif "not logged in" in combined or "please run" in combined and "login" in combined:
+                    self._apply_cli_backoff(60 * 60, "CLI not authenticated")
+                elif "rate limit" in combined or "too many requests" in combined:
+                    self._apply_cli_backoff(10 * 60, "CLI rate limited")
+                else:
+                    self._apply_cli_backoff(5 * 60, f"CLI exit code {completed.returncode}")
                 return None
             output = (completed.stdout or "").strip()
-            return output if output else None
+            if not output:
+                logger.warning("Claude CLI returned empty output")
+                self._apply_cli_backoff(5 * 60, "CLI empty output")
+                return None
+
+            # Success: clear any previous backoff.
+            self._cli_backoff_until = 0.0
+            self._cli_backoff_reason = ""
+            return output
         except subprocess.TimeoutExpired:
             logger.error("Claude CLI timed out after 60s")
+            self._apply_cli_backoff(10 * 60, "CLI timeout")
             return None
         except Exception as exc:
             logger.error(f"Claude CLI failed: {exc}")
+            self._apply_cli_backoff(5 * 60, f"CLI exception: {type(exc).__name__}")
             return None
 
     async def _generate_with_grok(
@@ -228,7 +297,17 @@ Respond with ONLY the tweet text. No quotes, no explanation, no markdown."""
             full_prompt += "\n\nGenerate a single tweet. Can be up to 4,000 characters (Premium X). Lowercase. Do NOT end with 'nfa' every time - only occasionally."
 
             if not self._cli_available() and not self.api_client:
-                logger.warning("Claude not available - falling back to Grok for voice")
+                now = time.time()
+                if now - self._last_grok_fallback_log_ts > 10 * 60:
+                    if not self.cli_enabled:
+                        logger.warning("Claude CLI disabled (CLAUDE_CLI_ENABLED=0); falling back to Grok")
+                    elif now < self._cli_backoff_until:
+                        remaining = int(self._cli_backoff_until - now)
+                        reason = self._cli_backoff_reason or "backoff active"
+                        logger.warning("Claude CLI in backoff (%ss remaining: %s); falling back to Grok", remaining, reason)
+                    else:
+                        logger.warning("Claude not available - falling back to Grok for voice")
+                    self._last_grok_fallback_log_ts = now
                 return await self._generate_with_grok(full_prompt, max_tokens, temperature)
 
             # Prefer local Anthropic-compatible API when configured
@@ -314,9 +393,11 @@ Respond with ONLY the tweet text. No quotes, no explanation, no markdown. Just t
                         logger.warning(f"Tweet validation issues: {issues}")
                     logger.info("Tweet generated via Claude CLI")
                     return tweet
-                logger.error("Claude CLI returned no output - unable to generate tweet")
 
-            logger.warning("Claude CLI unavailable or failed, falling back to Grok")
+            now = time.time()
+            if now - self._last_grok_fallback_log_ts > 10 * 60:
+                logger.warning("Claude CLI unavailable or failed, falling back to Grok")
+                self._last_grok_fallback_log_ts = now
             return await self._generate_with_grok(full_prompt, max_tokens, temperature)
                 
         except Exception as e:

@@ -329,7 +329,19 @@ class JarvisBuyBot:
             f"<i>Watching for buys on LP pairs...</i>"
         )
 
+        # Optional validation + fallback routing:
+        # If the buy bot is not a member of the target chat, Telegram returns
+        # `BadRequest: Chat not found`. In that case, route a concise alert to
+        # the admin chat (if configured) so the failure is visible.
+        fallback_chat = (os.getenv("TELEGRAM_ADMIN_CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID") or "").strip()
+        if fallback_chat and fallback_chat.lstrip("-").isdigit():
+            fallback_chat = int(fallback_chat)
+        validate_chat = os.getenv("BUY_BOT_VALIDATE_CHAT", "1").strip().lower() not in ("0", "false", "no", "off")
+
         try:
+            if validate_chat:
+                # Proactively verify access to the chat (will raise on "chat not found").
+                await self.bot.get_chat(chat_id=self.config.chat_id)
             await self.bot.send_message(
                 chat_id=self.config.chat_id,
                 text=message,
@@ -337,6 +349,21 @@ class JarvisBuyBot:
             )
         except Exception as e:
             logger.error(f"Failed to send startup message: {e}")
+            if fallback_chat and fallback_chat != self.config.chat_id:
+                try:
+                    await self.bot.send_message(
+                        chat_id=fallback_chat,
+                        text=(
+                            "⚠️ Buy bot startup notification failed.\n\n"
+                            f"Target chat: `{self.config.chat_id}`\n"
+                            f"Error: `{str(e)[:180]}`\n\n"
+                            "Fix: add the buy bot to the target group/channel, or update `TELEGRAM_BUY_BOT_CHAT_ID`."
+                        ),
+                        parse_mode=ParseMode.MARKDOWN,
+                        disable_web_page_preview=True,
+                    )
+                except Exception as e2:
+                    logger.error(f"Failed to send fallback startup alert: {e2}")
 
     async def _send_kr8tiv_sticker(self):
         """Send KR8TIV robot sticker as decoration before buy notification.

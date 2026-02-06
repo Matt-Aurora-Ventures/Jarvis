@@ -83,14 +83,44 @@ API_COSTS = {
 }
 
 
+def _get_secrets_path() -> Path:
+    """Get path to secrets/keys.json with environment variable override.
+
+    Priority:
+    1. JARVIS_SECRETS_PATH environment variable
+    2. Default: $HOME/.lifeos/secrets/keys.json (portable across systems)
+    3. Fallback: Project root/secrets/keys.json
+    """
+    # Allow override via environment variable
+    env_path = os.getenv("JARVIS_SECRETS_PATH", "").strip()
+    if env_path:
+        return Path(env_path)
+
+    # Default: Home directory .lifeos structure (portable)
+    default_path = Path.home() / ".lifeos" / "secrets" / "keys.json"
+    if default_path.exists():
+        return default_path
+
+    # Fallback: Project root (for development/backwards compatibility)
+    # Try to find project root by looking for lifeos/config directory
+    current = Path(__file__).resolve()
+    for parent in [current.parent.parent, current.parent.parent.parent]:
+        candidate = parent / "secrets" / "keys.json"
+        if candidate.exists():
+            return candidate
+
+    # Last resort: Return default path (even if doesn't exist yet)
+    return default_path
+
+
 def _load_keys_json() -> dict:
-    """Load /root/clawd/secrets/keys.json safely.
+    """Load secrets/keys.json safely from configurable location.
 
     Never print this content; caller must treat values as secrets.
     """
     try:
         import json
-        p = Path("/root/clawd/secrets/keys.json")
+        p = _get_secrets_path()
         if not p.exists():
             return {}
         return json.loads(p.read_text(encoding="utf-8"))
@@ -297,11 +327,4 @@ def get_config() -> BotConfig:
     global _config
     if _config is None:
         _config = BotConfig()
-    return _config
-
-
-def reload_config() -> BotConfig:
-    """Reload config from environment."""
-    global _config
-    _config = BotConfig()
     return _config

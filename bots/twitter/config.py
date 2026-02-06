@@ -92,7 +92,8 @@ class ScheduleConfig:
     timezone_offset: int = 0
 
     # Minimum time between tweets in seconds
-    min_tweet_interval: int = 1800  # 30 minutes
+    # Framework recommends 2.5-4 hours to avoid shadowban
+    min_tweet_interval: int = 10800  # 3 hours (shadowban safe)
 
 
 @dataclass

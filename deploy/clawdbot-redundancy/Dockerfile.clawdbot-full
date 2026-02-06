@@ -1,12 +1,20 @@
-# ClawdBot Pre-built Image with Full Tooling
-# "Friday-proof" image with all packages for production VPS deployment
+# ClawdBot Golden Image v2026.2.4
+# Complete multi-agent infrastructure with shared memory
 # Base: node:22-slim
 #
+# Agents supported:
+# - Friday (CMO): Claude Opus 4 - Port 18789
+# - Matt (COO): Claude Sonnet 4.5 - Port 18800
+# - Jarvis (CTO): Grok 4.1 - Port 18801
+# - Yoda (CIO): Kimi 2.5 - Port 18792 (Hetzner)
+# - Squishy (CRO): Gemini 3 - Port 18793 (Mac/Tailscale)
+#
 # Key features:
-# - Tailscale with persistent state in /root/.clawdbot/tailscale/
+# - Tailscale mesh networking for cross-node communication
+# - Supermemory shared memory (clawdbot_shared tag)
 # - All essential tools pre-installed (no apt-get on restart)
-# - Python3 for scripting flexibility
-# - tmux for session persistence
+# - MSW Protocol support (NotebookLM integration)
+# - Multi-provider AI (Anthropic, XAI, NVIDIA, Google)
 
 FROM node:22-slim
 
@@ -52,8 +60,29 @@ RUN apt-get update -qq && \
     && \
     # Install Tailscale
     curl -fsSL https://tailscale.com/install.sh | sh && \
-    # Install clawdbot globally
+    # Install clawdbot (the actual package name)
     npm install -g clawdbot@latest && \
+    # =========================================================================
+    # AI Provider SDKs - Multi-provider support
+    # =========================================================================
+    # Google AI SDK for Gemini (Squishy)
+    npm install -g @google/generative-ai@latest && \
+    # Install UI-TARS-desktop (native GUI agent for computer control)
+    npm install -g @agent-tars/cli@latest && \
+    # Install BrowserOS CLI tools (MCP server + automation)
+    npm install -g @browseros/cli@latest 2>/dev/null || \
+    npm install -g @browseros/mcp-server@latest 2>/dev/null || \
+    echo "BrowserOS: Desktop app available at https://browseros.ai/download" && \
+    # =========================================================================
+    # MCP Servers - Model Context Protocol for enhanced capabilities
+    # =========================================================================
+    npm install -g @modelcontextprotocol/server-filesystem@latest && \
+    npm install -g @modelcontextprotocol/server-memory@latest && \
+    npm install -g @modelcontextprotocol/server-github@latest && \
+    npm install -g @modelcontextprotocol/server-brave-search@latest && \
+    npm install -g @modelcontextprotocol/server-postgres@latest && \
+    npm install -g @modelcontextprotocol/server-sequential-thinking@latest && \
+    npm install -g @anthropics/claude-code-mcp-server@latest 2>/dev/null || true && \
     # Cleanup to reduce image size
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -67,11 +96,14 @@ RUN mkdir -p /root/.clawdbot/tailscale \
              /root/scripts \
              /var/run/tailscale
 
-# Copy startup scripts
+# Copy startup scripts and config templates
 COPY tailscale-start.sh /root/scripts/tailscale-start.sh
 COPY entrypoint.sh /root/scripts/entrypoint.sh
 COPY scripts/peer-health-monitor.sh /root/scripts/peer-health-monitor.sh
 COPY scripts/solana-wallet-init.sh /root/scripts/solana-wallet-init.sh
+COPY mcp-servers-template.json /root/.clawdbot/mcp-servers-template.json
+COPY auth-profiles-template.json /root/.clawdbot/auth-profiles-template.json
+COPY openclaw-config-template.json /root/.clawdbot/openclaw-config-template.json
 RUN chmod +x /root/scripts/*.sh
 
 # Pre-install Solana CLI for trading capabilities

@@ -9,6 +9,7 @@ import os
 import json
 import base64
 import logging
+import re
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
@@ -160,9 +161,19 @@ class KeyManager:
         
         # Check hardwired locations
         for name, config in KEY_LOCATIONS.items():
-            if config.path.exists() and config.path.is_file():
+            if not config.path.exists():
+                continue
+
+            if config.path.is_file():
                 logger.debug(f"Keypair found at {name}: {config.path}")
                 return config.path
+
+            # SecureWallet directory: resolve to the active treasury key file
+            if name == "secure_wallet_dir" and config.path.is_dir():
+                key_path = self._find_secure_wallet_treasury_key(config.path)
+                if key_path:
+                    logger.debug(f"Treasury key discovered in SecureWallet dir: {key_path}")
+                    return key_path
         
         # Search for any .json file with keypair structure in data/
         data_dir = PROJECT_ROOT / "data"
@@ -172,6 +183,46 @@ class KeyManager:
                     logger.debug(f"Keypair discovered: {json_file}")
                     return json_file
         
+        return None
+
+    def _find_secure_wallet_treasury_key(self, wallet_dir: Path) -> Optional[Path]:
+        """
+        Resolve a SecureWallet directory (bots/treasury/.wallets) to the treasury key file.
+
+        SecureWallet stores keys as <pubkey>.key and tracks public metadata in registry.json.
+        """
+        registry_path = wallet_dir / "registry.json"
+        if registry_path.exists():
+            try:
+                registry = json.loads(registry_path.read_text(encoding="utf-8"))
+                treasury_addr: Optional[str] = None
+
+                # Prefer the explicitly flagged treasury wallet
+                for addr, info in registry.items():
+                    if isinstance(info, dict) and info.get("is_treasury"):
+                        treasury_addr = (info.get("address") or addr)
+                        break
+
+                # Fallback: first entry
+                if not treasury_addr and registry:
+                    first_addr, info = next(iter(registry.items()))
+                    if isinstance(info, dict):
+                        treasury_addr = (info.get("address") or first_addr)
+                    else:
+                        treasury_addr = first_addr
+
+                if treasury_addr:
+                    key_path = wallet_dir / f"{treasury_addr}.key"
+                    if key_path.exists() and key_path.is_file():
+                        return key_path
+            except Exception as e:
+                logger.warning(f"Failed to read secure wallet registry {registry_path}: {e}")
+
+        # Last resort: if there's exactly one .key file, assume it is the treasury key
+        key_files = sorted(wallet_dir.glob("*.key"))
+        if len(key_files) == 1:
+            return key_files[0]
+
         return None
     
     def _decrypt_nacl(self, data: dict) -> Optional[bytes]:
@@ -206,7 +257,7 @@ class KeyManager:
             logger.error(f"NaCl decryption failed: {e}")
             return None
     
-    def _decrypt_fernet(self, encrypted_bytes: bytes) -> Optional[bytes]:
+    def _decrypt_fernet(self, encrypted_bytes: bytes, wallet_dir: Optional[Path] = None) -> Optional[bytes]:
         """Decrypt Fernet-encrypted keypair."""
         if not self._password:
             logger.error("No password available for decryption")
@@ -217,8 +268,9 @@ class KeyManager:
             from cryptography.hazmat.primitives import hashes
             from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
             
-            # Load salt from secure wallet directory
-            salt_path = KEY_LOCATIONS["secure_wallet_dir"].path / ".salt"
+            # Load salt from the SecureWallet directory. Prefer the key file's directory when available.
+            salt_root = wallet_dir or KEY_LOCATIONS["secure_wallet_dir"].path
+            salt_path = salt_root / ".salt"
             if not salt_path.exists():
                 logger.error("Fernet salt file not found")
                 return None
@@ -234,7 +286,8 @@ class KeyManager:
             
             key = base64.urlsafe_b64encode(kdf.derive(self._password.encode()))
             fernet = Fernet(key)
-            return fernet.decrypt(encrypted_bytes)
+            token = encrypted_bytes.strip()
+            return fernet.decrypt(token)
         
         except ImportError:
             logger.error("cryptography not installed: pip install cryptography")
@@ -262,26 +315,37 @@ class KeyManager:
             return None
         
         try:
-            with open(keypair_path) as f:
-                data = json.load(f)
-            
-            # Determine encryption type
-            decrypted = None
-            
-            if "encrypted_key" in data and "salt" in data and "nonce" in data:
-                # NaCl encrypted format
-                decrypted = self._decrypt_nacl(data)
-            elif isinstance(data, list):
-                # Raw keypair bytes (unencrypted)
-                decrypted = bytes(data)
-            elif "key" in data:
-                # Simple encrypted format
-                decrypted = self._decrypt_fernet(base64.b64decode(data["key"]))
-            
+            decrypted: Optional[bytes] = None
+
+            # SecureWallet stores Fernet tokens as raw bytes in <pubkey>.key
+            if keypair_path.suffix == ".key":
+                decrypted = self._decrypt_fernet(keypair_path.read_bytes(), wallet_dir=keypair_path.parent)
+            else:
+                with open(keypair_path, encoding="utf-8") as f:
+                    data = json.load(f)
+
+                # Determine encryption type
+                if isinstance(data, dict) and "encrypted_key" in data and "salt" in data and "nonce" in data:
+                    # NaCl encrypted format
+                    decrypted = self._decrypt_nacl(data)
+                elif isinstance(data, list):
+                    # Raw keypair bytes (unencrypted)
+                    decrypted = bytes(data)
+                elif isinstance(data, dict) and "key" in data:
+                    # Simple encrypted format stored as JSON
+                    decrypted = self._decrypt_fernet(base64.b64decode(data["key"]), wallet_dir=keypair_path.parent)
+
+            # If we couldn't parse JSON, but the file exists, try treating it as a raw Fernet token.
+            if not decrypted:
+                try:
+                    decrypted = self._decrypt_fernet(keypair_path.read_bytes(), wallet_dir=keypair_path.parent)
+                except Exception:
+                    decrypted = None
+
             if not decrypted:
                 logger.error("Failed to decrypt keypair")
                 return None
-            
+
             from solders.keypair import Keypair
             keypair = Keypair.from_bytes(decrypted)
             
@@ -302,6 +366,12 @@ class KeyManager:
         keypair_path = self._find_keypair_path()
         if not keypair_path:
             return None
+
+        # SecureWallet-style filenames embed the pubkey in the filename
+        if keypair_path.suffix == ".key":
+            stem = keypair_path.stem
+            if re.fullmatch(r"[1-9A-HJ-NP-Za-km-z]{32,64}", stem):
+                return stem
         
         try:
             with open(keypair_path) as f:

@@ -487,17 +487,25 @@ archived copies and defer to this README for current guidance.
 jarvis/
 ├── bots/
 │   ├── supervisor.py              # Main orchestrator
-│   ├── treasury/                  # Trading engine
-│   │   ├── trading.py             # Jupiter DEX integration
-│   │   └── position_manager.py    # Position tracking
-│   ├── twitter/                   # X/Twitter bot
-│   │   ├── autonomous_engine.py   # Autonomous posting
-│   │   └── x_claude_cli_handler.py # CLI command handler
-│   ├── buy_tracker/               # Transaction monitoring
-│   │   ├── bot.py                 # KR8TIV token tracking
-│   │   └── sentiment_report.py    # Hourly sentiment reports
-│   └── bags_intel/                # Bags.fm graduation monitoring
-│       └── bags_intel_bot.py      # Real-time intel reports
+│   ├── treasury/                  # Trading engine (Jupiter DEX)
+│   ├── twitter/                   # X/Twitter bot (autonomous posting)
+│   ├── buy_tracker/               # KR8TIV token tracking + sentiment
+│   ├── bags_intel/                # Bags.fm graduation monitoring
+│   ├── clawdmatt/                 # ClawdBot: Research & analysis agent
+│   ├── clawdjarvis/               # ClawdBot: Coordination & execution agent
+│   ├── clawdfriday/               # ClawdBot: Ops & maintenance agent
+│   ├── clawdyoda/                 # ClawdBot: Strategy & wisdom agent
+│   ├── clawdsquishy/              # ClawdBot: Monitoring & alerts agent
+│   └── shared/                    # 50+ shared modules for all bots
+│       ├── coordination.py        # Multi-bot coordination protocol
+│       ├── self_healing.py        # Auto-recovery from failures
+│       ├── heartbeat.py           # Health monitoring heartbeats
+│       ├── supermemory_client.py   # Supermemory knowledge graph
+│       ├── knowledge_graph.py     # Local knowledge graph
+│       ├── cost_tracker.py        # API cost tracking
+│       ├── feature_flags.py       # Runtime feature toggles
+│       ├── campaign_orchestrator.py # Cross-bot campaign management
+│       └── ...                    # 40+ more modules
 │
 ├── core/
 │   ├── context_loader.py          # Shared Jarvis context/capabilities
@@ -505,7 +513,22 @@ jarvis/
 │   ├── memory/                    # Learning & memory systems
 │   ├── security/                  # Key management, encryption
 │   ├── price/                     # Multi-source price fetching
-│   └── risk/                      # Risk management
+│   ├── risk/                      # Risk management
+│   ├── cache/                     # API caching with TTL & decorators
+│   ├── coordination/              # Task handoff & whiteboard
+│   ├── metrics/                   # Bot metrics & aggregation
+│   ├── health/                    # Health checker, monitor, reporter
+│   ├── recovery/                  # Auto-recovery strategies
+│   ├── scheduler/                 # Task scheduling
+│   ├── plugins/                   # Plugin system with hooks
+│   ├── di/                        # Dependency injection container
+│   ├── integrations/              # Telegram, X/Twitter integrations
+│   ├── observability/             # Monitoring & tracing
+│   ├── validation/                # Input validation & sanitization
+│   ├── notifications/             # Multi-channel notifications
+│   ├── conversation/              # Session management & context
+│   ├── audit/                     # Audit logging & retention
+│   └── moltbook/                  # Trading journal system
 │
 ├── tg_bot/
 │   ├── bot.py                     # Main Telegram bot
@@ -516,9 +539,28 @@ jarvis/
 │   ├── server.py                  # RESTful API server
 │   └── handlers/                  # API endpoints
 │
+├── jarvis-web-terminal/           # Next.js trading dashboard (NEW)
+│   ├── src/app/                   # App router pages
+│   └── src/components/            # React components
+│
 ├── frontend/
-│   ├── src/                       # React dashboard
+│   ├── src/                       # React dashboard (legacy)
 │   └── components/                # 70+ UI components
+│
+├── deploy/
+│   ├── clawdbot-redundancy/       # Multi-bot Docker orchestration
+│   │   ├── docker-compose.clawdbots.yml  # 5-bot stack
+│   │   ├── Dockerfile.clawdbot-full      # Production image
+│   │   ├── entrypoint.sh                 # Health-checked startup
+│   │   └── scripts/                      # Self-healing automation
+│   │       ├── peer-health-monitor.sh    # P2P health checks
+│   │       ├── circuit-breaker.sh        # Cascading failure prevention
+│   │       ├── nightly-backup.sh         # Automated backups
+│   │       ├── brain-export.sh           # Portable brain export
+│   │       ├── solana-wallet-init.sh     # Wallet initialization
+│   │       └── self-evolution-reflect.sh # Nightly self-improvement
+│   ├── *.service                  # systemd unit files
+│   └── install-vps.sh             # VPS setup script
 │
 ├── lifeos/
 │   ├── config/                    # Configuration files
@@ -526,11 +568,17 @@ jarvis/
 │
 ├── scripts/
 │   ├── init_db.py                 # Database initialization
-│   ├── validate_autonomous_system.py # System validation
+│   ├── health_check.py            # System health checks
+│   ├── hetzner_api.ps1            # Hetzner Cloud management
 │   └── db/migrate.py              # Schema versioning
 │
+├── tests/
+│   ├── unit/                      # 200+ unit test files
+│   ├── integration/               # Integration tests
+│   └── framework/                 # Test utilities
+│
 ├── deploy.sh                       # VPS deployment + systemd generator
-└── deployment/                     # Deployment resources & guides
+└── kea-research/                   # Research workspace
 ```
 
 ---
@@ -577,6 +625,49 @@ This means:
 - Backup your AI's knowledge of you
 - Share context with other AI systems (future)
 - Never lose your personalization
+
+---
+
+## 🤖 ClawdBots Multi-Agent Mesh
+
+Jarvis v4.7 introduces **ClawdBots** — a distributed multi-agent system where specialized AI bots collaborate as a team.
+
+### The Agents
+
+| Bot | Role | Specialization |
+|-----|------|----------------|
+| **ClawdMatt** | Research & Analysis | Deep research, data analysis, pattern recognition |
+| **ClawdJarvis** | Coordination & Execution | Task coordination, command execution, system ops |
+| **ClawdFriday** | Ops & Maintenance | Infrastructure monitoring, deployments, fixes |
+| **ClawdYoda** | Strategy & Wisdom | Long-term strategy, risk assessment, market wisdom |
+| **ClawdSquishy** | Monitoring & Alerts | Real-time monitoring, anomaly detection, alerting |
+
+### Shared Infrastructure
+
+All ClawdBots share 50+ modules in `bots/shared/`:
+- **Coordination**: Multi-bot task handoff, inter-agent protocol, whiteboard
+- **Self-Healing**: Auto-recovery from failures, circuit breakers, health monitoring
+- **Memory**: Supermemory knowledge graph, conversation memory, knowledge graph
+- **Observability**: Heartbeats, cost tracking, logging, metrics
+- **Security**: Allowlists, command blocklists, anti-hallucination guards
+
+### Deployment
+
+```bash
+# Docker: Deploy all 5 bots
+docker compose -f deploy/clawdbot-redundancy/docker-compose.clawdbots.yml up -d
+
+# systemd: Install as services on VPS
+sudo bash deploy/install-clawdbots.sh
+```
+
+### P2P Self-Healing
+
+Bots monitor each other via peer health checks. If one bot goes down, others detect it and trigger recovery:
+- `peer-health-monitor.sh` — Cross-bot health verification
+- `circuit-breaker.sh` — Prevent cascading failures
+- `nightly-backup.sh` — Automated state backups
+- `brain-export.sh` / `brain-import.sh` — Portable brain transfer
 
 ---
 
@@ -1844,6 +1935,8 @@ Full changelog: [CHANGELOG.md](CHANGELOG.md)
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **4.7.0** | Feb 5, 2026 | ClawdBots multi-agent mesh, P2P self-healing, Supermemory integration, Docker orchestration, 50+ shared modules, web terminal |
+| **4.6.6** | Jan 27, 2026 | Provider chain failover, model routing improvements |
 | **4.6.5** | Jan 21, 2026 | V1 stabilization, critical bug fixes |
 | **4.6.4** | Jan 17, 2026 | 18 MCPs, semantic memory system |
 | **4.6.2** | Jan 2026 | Async performance, SQLite management |
@@ -1865,6 +1958,13 @@ Full changelog: [CHANGELOG.md](CHANGELOG.md)
 - ✅ 18 MCP integrations
 - ✅ Bags.fm graduation monitoring
 - ✅ Self-evolution system with trust ladder
+- ✅ **ClawdBots multi-agent mesh** (5 specialized bots)
+- ✅ **Peer-to-peer self-healing infrastructure**
+- ✅ **Docker orchestration** for multi-bot deployment
+- ✅ **Supermemory knowledge graph** integration
+- ✅ **50+ shared modules** (coordination, self-healing, cost tracking)
+- ✅ **Next.js trading terminal** (jarvis-web-terminal)
+- ✅ **Solana wallet initialization** scripts
 
 ### Q2 2026 (In Progress)
 

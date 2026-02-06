@@ -35,13 +35,18 @@ services:
       - GATEWAY_PORT=18789
       - SUPERMEMORY_API_KEY=${SUPERMEMORY_API_KEY}
       - SUPERMEMORY_USER_ID=jarvis_friday
+      - NVIDIA_NIM_API_KEY=${NVIDIA_NIM_API_KEY}
     command: >
       bash -c '
         set -e
 
-        # Install clawdbot
-        if ! command -v clawdbot &>/dev/null; then
-          npm install -g clawdbot@latest 2>/dev/null || npm install -g clawdbot 2>/dev/null
+        # Install openclaw 2026.2.3
+        if ! command -v openclaw &>/dev/null; then
+          npm install -g openclaw@2026.2.3 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
+        fi
+        # Keep clawdbot alias for compatibility
+        if ! command -v clawdbot &>/dev/null && command -v openclaw &>/dev/null; then
+          ln -sf "$(which openclaw)" /usr/local/bin/clawdbot
         fi
 
         # Write config
@@ -133,13 +138,18 @@ services:
       - GATEWAY_PORT=18790
       - SUPERMEMORY_API_KEY=${SUPERMEMORY_API_KEY}
       - SUPERMEMORY_USER_ID=jarvis_matt
+      - NVIDIA_NIM_API_KEY=${NVIDIA_NIM_API_KEY}
     command: >
       bash -c '
         set -e
 
-        # Install clawdbot + codex CLI
-        if ! command -v clawdbot &>/dev/null; then
-          npm install -g clawdbot@latest 2>/dev/null || npm install -g clawdbot 2>/dev/null
+        # Install openclaw 2026.2.3 + codex CLI
+        if ! command -v openclaw &>/dev/null; then
+          npm install -g openclaw@2026.2.3 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
+        fi
+        # Keep clawdbot alias for compatibility
+        if ! command -v clawdbot &>/dev/null && command -v openclaw &>/dev/null; then
+          ln -sf "$(which openclaw)" /usr/local/bin/clawdbot
         fi
         if ! command -v codex &>/dev/null; then
           npm install -g @openai/codex 2>/dev/null || true
@@ -241,13 +251,18 @@ services:
       - XAI_API_KEY=${XAI_API_KEY}
       - SUPERMEMORY_API_KEY=${SUPERMEMORY_API_KEY}
       - SUPERMEMORY_USER_ID=jarvis_jarvis
+      - NVIDIA_NIM_API_KEY=${NVIDIA_NIM_API_KEY}
     command: >
       bash -c '
         set -e
 
-        # Install clawdbot
-        if ! command -v clawdbot &>/dev/null; then
-          npm install -g clawdbot@latest 2>/dev/null || npm install -g clawdbot 2>/dev/null
+        # Install openclaw 2026.2.3
+        if ! command -v openclaw &>/dev/null; then
+          npm install -g openclaw@2026.2.3 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
+        fi
+        # Keep clawdbot alias for compatibility
+        if ! command -v clawdbot &>/dev/null && command -v openclaw &>/dev/null; then
+          ln -sf "$(which openclaw)" /usr/local/bin/clawdbot
         fi
 
         # Write config
@@ -318,6 +333,109 @@ services:
       start_period: 60s
 
   # ---------------------------------------------------------------------------
+  # Master Yoda (Wise Sage) - Kimi (Moonshot AI via NVIDIA)
+  # ---------------------------------------------------------------------------
+  yoda:
+    image: node:22-slim
+    container_name: clawdbot-yoda
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - yoda-config:/root/.clawdbot
+      - yoda-workspace:/root/clawd
+    environment:
+      - CLAWDBOT_PROFILE=yoda
+      - GATEWAY_PORT=18792
+      - NVIDIA_NIM_API_KEY=${NVIDIA_NIM_API_KEY}
+      - SUPERMEMORY_API_KEY=${SUPERMEMORY_API_KEY}
+      - SUPERMEMORY_USER_ID=jarvis_yoda
+    command: >
+      bash -c '
+        set -e
+
+        # Install openclaw 2026.2.3
+        if ! command -v openclaw &>/dev/null; then
+          npm install -g openclaw@2026.2.3 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
+        fi
+        # Keep clawdbot alias for compatibility
+        if ! command -v clawdbot &>/dev/null && command -v openclaw &>/dev/null; then
+          ln -sf "$(which openclaw)" /usr/local/bin/clawdbot
+        fi
+
+        # Write config
+        mkdir -p /root/.clawdbot
+        cat > /root/.clawdbot/clawdbot.json << CONF
+        {
+          "gateway": {
+            "port": 18792,
+            "mode": "local",
+            "auth": {
+              "mode": "token",
+              "token": "${YODA_AUTH_TOKEN}"
+            }
+          },
+          "agents": {
+            "defaults": {
+              "model": {
+                "primary": "nvidia/moonshot-kimi",
+                "fallback": ["anthropic/claude-sonnet-4-20250514", "xai/grok-3"]
+              },
+              "workspace": "/root/clawd",
+              "systemPrompt": "You are Master Yoda, a wise AI sage. Speak with wisdom and insight, occasionally using Yoda-like speech patterns. You have deep knowledge and provide thoughtful, philosophical responses while remaining helpful and practical."
+            }
+          },
+          "channels": {
+            "telegram": {
+              "enabled": true,
+              "botToken": "${YODA_TELEGRAM_TOKEN}",
+              "allowFrom": ["@matthaynes88"],
+              "ignoreUsers": ["ClawdFriday_bot", "ClawdMatt_bot", "ClawdJarvis_bot"]
+            }
+          },
+          "memory": {
+            "enabled": true,
+            "provider": "supermemory",
+            "apiKey": "${SUPERMEMORY_API_KEY}",
+            "userId": "jarvis_yoda",
+            "sharedUserId": "jarvis_shared",
+            "autoCapture": true,
+            "contextInjection": true
+          },
+          "skills": {
+            "entries": {
+              "supermemory": {
+                "enabled": true,
+                "apiKey": "${SUPERMEMORY_API_KEY}",
+                "userId": "jarvis_yoda",
+                "features": ["search", "add", "context"]
+              },
+              "nvidia-nim": {
+                "enabled": true,
+                "apiKey": "${NVIDIA_NIM_API_KEY}",
+                "models": ["moonshot-kimi"]
+              },
+              "grok-xai": {
+                "apiKey": "${XAI_API_KEY}"
+              },
+              "google-ai": {
+                "apiKey": "${GOOGLE_AI_KEY}"
+              }
+            }
+          }
+        }
+      CONF
+
+        echo "[Master Yoda] Wisdom flows through port 18792, it does..."
+        exec clawdbot gateway --profile yoda --bind 0.0.0.0
+      '
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18792/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
   # Watchdog - Auto-recovery for all bots
   # ---------------------------------------------------------------------------
   watchdog:
@@ -369,4 +487,8 @@ volumes:
   jarvis-config:
     driver: local
   jarvis-workspace:
+    driver: local
+  yoda-config:
+    driver: local
+  yoda-workspace:
     driver: local

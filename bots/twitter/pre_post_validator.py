@@ -22,7 +22,9 @@ Usage:
 """
 
 import hashlib
+import json
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -31,6 +33,9 @@ from enum import Enum
 from typing import Dict, List, Optional, Any, Set
 
 logger = logging.getLogger(__name__)
+
+# LLM Judge feature flag
+LLM_JUDGE_ENABLED = os.getenv("LLM_JUDGE_ENABLED", "true").lower() == "true"
 
 # Singleton instance
 _validator: Optional["PrePostValidator"] = None
@@ -93,7 +98,28 @@ class PrePostValidator:
     3. Factuality Check (are claims accurate?)
     4. Policy Check (brand guidelines, banned patterns)
     5. Safety Check (no harmful content)
+    6. LLM-as-a-Judge (Grok validates content before posting)
     """
+
+    # LLM Judge prompt for content validation
+    LLM_JUDGE_PROMPT = """You are a content safety judge for an autonomous financial AI agent (@Jarvis_lifeos).
+
+Evaluate this tweet for posting:
+---
+{content}
+---
+
+Check for these issues and respond with JSON only:
+1. Contains financial advice that could cause harm (not just "nfa" disclaimer)
+2. Makes promises about returns, gains, or guarantees
+3. Could be interpreted as market manipulation
+4. Contains harmful, harassing, or inappropriate content
+5. Violates X/Twitter ToS or EU AI Act requirements
+6. Voice/tone inconsistent with Jarvis (smart, slightly sarcastic, but helpful)
+
+Respond ONLY with this JSON format:
+{{"approved": true/false, "reason": "brief explanation", "severity": "pass/warning/block"}}
+"""
 
     # Banned patterns that should never appear
     BANNED_PATTERNS = [
@@ -171,7 +197,10 @@ class PrePostValidator:
         # 6. Safety Check
         checks.append(await self._check_safety(content))
 
-        # 7. Category-specific check
+        # 7. LLM-as-a-Judge (secondary safety layer)
+        checks.append(await self._check_llm_judge(content))
+
+        # 8. Category-specific check
         if category:
             checks.append(await self._check_category_requirements(content, category))
 
@@ -409,6 +438,94 @@ class PrePostValidator:
             level=ValidationLevel.PASS,
             reason="No safety issues detected",
         )
+
+    async def _check_llm_judge(self, content: str) -> ValidationCheck:
+        """
+        LLM-as-a-Judge: Use Grok to validate content before posting.
+        This is a secondary safety layer per the strategic framework.
+        """
+        if not LLM_JUDGE_ENABLED:
+            return ValidationCheck(
+                name="llm_judge",
+                passed=True,
+                level=ValidationLevel.PASS,
+                reason="LLM Judge disabled",
+            )
+
+        try:
+            from bots.twitter.grok_client import GrokClient
+
+            grok = GrokClient()
+            prompt = self.LLM_JUDGE_PROMPT.format(content=content)
+
+            response = await grok.generate_text(prompt)
+
+            if not response.success:
+                logger.warning(f"LLM Judge failed to respond: {response.error}")
+                # Fail open - don't block if judge is unavailable
+                return ValidationCheck(
+                    name="llm_judge",
+                    passed=True,
+                    level=ValidationLevel.WARNING,
+                    reason="LLM Judge unavailable, proceeding with caution",
+                )
+
+            # Parse the JSON response
+            try:
+                # Extract JSON from response (handle potential text wrapping)
+                json_match = re.search(r'\{[^}]+\}', response.content)
+                if json_match:
+                    result = json.loads(json_match.group())
+                else:
+                    result = json.loads(response.content)
+
+                approved = result.get("approved", True)
+                reason = result.get("reason", "No reason provided")
+                severity = result.get("severity", "pass")
+
+                if not approved:
+                    level = ValidationLevel.BLOCK if severity == "block" else ValidationLevel.WARNING
+                    return ValidationCheck(
+                        name="llm_judge",
+                        passed=False,
+                        level=level,
+                        reason=f"LLM Judge: {reason}",
+                        details=result,
+                    )
+
+                return ValidationCheck(
+                    name="llm_judge",
+                    passed=True,
+                    level=ValidationLevel.PASS,
+                    reason="LLM Judge approved",
+                    details=result,
+                )
+
+            except json.JSONDecodeError as e:
+                logger.warning(f"LLM Judge returned invalid JSON: {e}")
+                return ValidationCheck(
+                    name="llm_judge",
+                    passed=True,
+                    level=ValidationLevel.WARNING,
+                    reason="LLM Judge response unparseable, proceeding",
+                )
+
+        except ImportError:
+            logger.warning("GrokClient not available for LLM Judge")
+            return ValidationCheck(
+                name="llm_judge",
+                passed=True,
+                level=ValidationLevel.PASS,
+                reason="LLM Judge not available",
+            )
+        except Exception as e:
+            logger.error(f"LLM Judge error: {e}")
+            return ValidationCheck(
+                name="llm_judge",
+                passed=True,
+                level=ValidationLevel.WARNING,
+                reason=f"LLM Judge error: {str(e)[:50]}",
+            )
 
     async def _check_category_requirements(
         self,
