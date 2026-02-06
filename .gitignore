@@ -379,6 +379,8 @@ scripts/vps_deep_search.py
 scripts/deploy_bot_tokens.sh
 scripts/deploy_bot_tokens.ps1
 scripts/deploy_treasury_token_manual.ps1
+scripts/ssh_yoda_check.py
+scripts/ssh_yoda_logs.py
 scripts/convert_treasury_key.py
 scripts/query_treasury_wallet.py
 scripts/query_new_treasury_history.py
