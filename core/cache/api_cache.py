@@ -626,6 +626,231 @@ async def parallel_fetch(**fetchers: Awaitable[Any]) -> Dict[str, Any]:
     return results
 
 
+@dataclass
+class LLMCacheStats:
+    """Statistics for LLM response caching."""
+    hits: int = 0
+    misses: int = 0
+    writes: int = 0
+    by_model: Dict[str, Dict[str, int]] = field(default_factory=dict)
+
+    @property
+    def hit_rate(self) -> float:
+        total = self.hits + self.misses
+        return self.hits / total if total > 0 else 0.0
+
+
+class LLMResponseCache:
+    """
+    Specialized cache for LLM API responses.
+
+    Provides caching for expensive LLM calls with:
+    - Per-model namespacing
+    - Prompt hash-based keys
+    - Optional metadata storage
+    - Statistics tracking
+
+    Args:
+        cache_dir: Directory for cache files
+        default_ttl: Default TTL in seconds (default: 7200 = 2 hours)
+        max_size: Maximum entries per model (default: 1000)
+
+    Usage:
+        from core.cache.api_cache import LLMResponseCache
+
+        cache = LLMResponseCache(cache_dir="bots/data/cache")
+
+        # Cache a response
+        cache.cache_llm_response(prompt, response, model="grok")
+
+        # Get cached response
+        cached = cache.get_cached_response(prompt, model="grok")
+    """
+
+    def __init__(
+        self,
+        cache_dir: Optional[str] = None,
+        default_ttl: int = 7200,
+        max_size: int = 1000
+    ):
+        self.cache_dir = cache_dir or "bots/data/cache"
+        self.default_ttl = default_ttl
+        self.max_size = max_size
+
+        # Ensure cache directory exists
+        from pathlib import Path
+        Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
+
+        # In-memory cache by model
+        self._cache: Dict[str, OrderedDict[str, CacheEntry]] = {}
+        self._stats = LLMCacheStats()
+        self._lock = threading.Lock()
+
+    def _get_model_cache(self, model: str) -> OrderedDict:
+        """Get or create cache for a model."""
+        if model not in self._cache:
+            self._cache[model] = OrderedDict()
+            self._stats.by_model[model] = {"hits": 0, "misses": 0, "writes": 0}
+        return self._cache[model]
+
+    def _hash_prompt(self, prompt: str) -> str:
+        """Generate a hash for a prompt."""
+        return hashlib.sha256(prompt.encode()).hexdigest()[:16]
+
+    def cache_llm_response(
+        self,
+        prompt_or_hash: str,
+        response: Any,
+        model: str = "grok",
+        ttl_seconds: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Cache an LLM response.
+
+        Args:
+            prompt_or_hash: The prompt text or a pre-computed hash
+            response: The LLM response to cache
+            model: Model name (grok, claude, etc.)
+            ttl_seconds: Optional TTL override
+            metadata: Optional metadata (tokens used, latency, etc.)
+        """
+        # Generate key (hash if it's a prompt, use directly if it's already a hash)
+        if len(prompt_or_hash) == 16 and prompt_or_hash.isalnum():
+            key = prompt_or_hash
+        else:
+            key = self._hash_prompt(prompt_or_hash)
+
+        effective_ttl = ttl_seconds if ttl_seconds is not None else self.default_ttl
+        now = time.time()
+
+        with self._lock:
+            model_cache = self._get_model_cache(model)
+
+            # Evict if at capacity
+            while len(model_cache) >= self.max_size:
+                model_cache.popitem(last=False)
+
+            entry = CacheEntry(
+                value=response,
+                created_at=now,
+                expires_at=now + effective_ttl,
+                api_name=model
+            )
+
+            # Store metadata as a separate field
+            if metadata:
+                entry.value = {
+                    "_response": response,
+                    "_metadata": metadata,
+                    "_has_metadata": True
+                }
+
+            model_cache[key] = entry
+            model_cache.move_to_end(key)
+
+            self._stats.writes += 1
+            self._stats.by_model[model]["writes"] += 1
+
+    def get_cached_response(
+        self,
+        prompt_or_hash: str,
+        model: str = "grok",
+        include_metadata: bool = False
+    ) -> Any:
+        """
+        Get a cached LLM response.
+
+        Args:
+            prompt_or_hash: The prompt text or a pre-computed hash
+            model: Model name
+            include_metadata: If True, returns (response, metadata) tuple
+
+        Returns:
+            Cached response, or None if not found/expired.
+            If include_metadata=True, returns (response, metadata) or (None, None)
+        """
+        # Generate key
+        if len(prompt_or_hash) == 16 and prompt_or_hash.isalnum():
+            key = prompt_or_hash
+        else:
+            key = self._hash_prompt(prompt_or_hash)
+
+        with self._lock:
+            if model not in self._cache:
+                self._stats.misses += 1
+                if model in self._stats.by_model:
+                    self._stats.by_model[model]["misses"] += 1
+                return (None, None) if include_metadata else None
+
+            model_cache = self._cache[model]
+            entry = model_cache.get(key)
+
+            if entry is None:
+                self._stats.misses += 1
+                self._stats.by_model[model]["misses"] += 1
+                return (None, None) if include_metadata else None
+
+            if entry.is_expired:
+                del model_cache[key]
+                self._stats.misses += 1
+                self._stats.by_model[model]["misses"] += 1
+                return (None, None) if include_metadata else None
+
+            # Move to end (most recently used)
+            model_cache.move_to_end(key)
+            entry.hits += 1
+            self._stats.hits += 1
+            self._stats.by_model[model]["hits"] += 1
+
+            # Check if response has metadata
+            value = entry.value
+            if isinstance(value, dict) and value.get("_has_metadata"):
+                response = value["_response"]
+                metadata = value["_metadata"]
+                return (response, metadata) if include_metadata else response
+
+            return (value, {}) if include_metadata else value
+
+    def get_stats(self) -> LLMCacheStats:
+        """Get cache statistics."""
+        return LLMCacheStats(
+            hits=self._stats.hits,
+            misses=self._stats.misses,
+            writes=self._stats.writes,
+            by_model=dict(self._stats.by_model)
+        )
+
+    def clear_model(self, model: str) -> int:
+        """Clear all cached responses for a model."""
+        with self._lock:
+            if model in self._cache:
+                count = len(self._cache[model])
+                self._cache[model].clear()
+                return count
+            return 0
+
+    def clear_all(self) -> int:
+        """Clear all cached responses."""
+        with self._lock:
+            total = sum(len(c) for c in self._cache.values())
+            for model_cache in self._cache.values():
+                model_cache.clear()
+            return total
+
+
+# Global LLM cache instance
+_llm_cache: Optional[LLMResponseCache] = None
+
+
+def get_llm_cache(cache_dir: Optional[str] = None) -> LLMResponseCache:
+    """Get the global LLM response cache instance."""
+    global _llm_cache
+    if _llm_cache is None or (cache_dir and cache_dir != _llm_cache.cache_dir):
+        _llm_cache = LLMResponseCache(cache_dir=cache_dir)
+    return _llm_cache
+
+
 if __name__ == "__main__":
     import asyncio
     logging.basicConfig(level=logging.DEBUG)

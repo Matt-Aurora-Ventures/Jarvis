@@ -81,6 +81,61 @@
                 "notebooklm-mcp@latest"
             ],
             "type": "stdio"
+        },
+        "fetch": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-fetch"
+            ],
+            "type": "stdio"
+        },
+        "youtube-transcript": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@sinco-lab/mcp-youtube-transcript"
+            ],
+            "type": "stdio"
+        },
+        "solana": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "solana-mcp"
+            ],
+            "env": {
+                "SOLANA_PRIVATE_KEY": "YOUR_SOLANA_PRIVATE_KEY",
+                "RPC_URL": "https://api.mainnet-beta.solana.com"
+            },
+            "type": "stdio"
+        },
+        "magic-ui": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@magicuidesign/mcp@latest"
+            ],
+            "type": "stdio"
+        },
+        "shadcn": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "shadcn-mcp"
+            ],
+            "type": "stdio"
+        },
+        "supermemory": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "supermemory-mcp"
+            ],
+            "env": {
+                "SUPERMEMORY_API_KEY": "YOUR_SUPERMEMORY_API_KEY"
+            },
+            "type": "stdio"
         }
     }
 }

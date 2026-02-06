@@ -685,6 +685,57 @@ class XMemory:
                     conn.close()
 
     # =========================================================================
+    # Mention Tracking (xbot.md - respond to @Jarvis_lifeos pings)
+    # =========================================================================
+
+    def get_last_mention_id(self) -> Optional[str]:
+        """Get the last processed mention ID."""
+        with self._lock:
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                # Ensure table exists
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS mention_state (
+                        key TEXT PRIMARY KEY,
+                        value TEXT,
+                        updated_at TEXT
+                    )
+                """)
+                cursor.execute("SELECT value FROM mention_state WHERE key = 'last_mention_id'")
+                row = cursor.fetchone()
+                return row[0] if row else None
+            finally:
+                if conn:
+                    conn.close()
+
+    def set_last_mention_id(self, mention_id: str):
+        """Store the last processed mention ID."""
+        with self._lock:
+            conn = None
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                cursor = conn.cursor()
+                now = datetime.now(timezone.utc).isoformat()
+                # Ensure table exists
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS mention_state (
+                        key TEXT PRIMARY KEY,
+                        value TEXT,
+                        updated_at TEXT
+                    )
+                """)
+                cursor.execute("""
+                    INSERT OR REPLACE INTO mention_state (key, value, updated_at)
+                    VALUES ('last_mention_id', ?, ?)
+                """, (mention_id, now))
+                conn.commit()
+            finally:
+                if conn:
+                    conn.close()
+
+    # =========================================================================
     # Topic Tracking
     # =========================================================================
 

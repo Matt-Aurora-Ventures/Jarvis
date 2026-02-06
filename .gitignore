@@ -336,3 +336,124 @@ config/environments/*.env
 .agent/
 *.session
 *.session-journal
+
+# === DEPLOYMENT DOCS WITH HARDCODED SECRETS ===
+# These contain real API tokens, bot tokens, passwords, VPS IPs
+DEPLOY_TREASURY_TOKEN.md
+DEPLOY_TREASURY_BOT.md
+DEPLOY_CLAWDBOTS.md
+DEPLOY_MASTER_YODA.md
+DEPLOY_COMMANDS.txt
+DEPLOY_YODA_READY.sh
+DEPLOY_YODA_HETZNER.sh
+DEPLOY_YODA_COMPLETE.sh
+DEPLOY_REMOTE_CONTROL.md
+DEPLOY_CLAWDBOTS.md
+DEPLOYMENT_INDEX.md
+TELEGRAM_DEPLOY_YODA.txt
+PASTE_INTO_VPS.txt
+MANUAL_DEPLOYMENT_READY.txt
+NOTEBOOKLM_CONTEXT.md
+deploy_all_bots.sh
+deploy_all_bots.ps1
+deploy_yoda_now.ps1
+EXECUTION_PLAN_CLAWDBOT_FIX.md
+
+# === SCRIPTS WITH HARDCODED PASSWORDS/CREDENTIALS ===
+scripts/ssh_emergency_mode.py
+scripts/ssh_via_tailscale.py
+scripts/ssh_vps_get_treasury.py
+scripts/decrypt_treasury_keys.py
+scripts/decrypt_age_file.py
+scripts/extract_new_treasury.py
+scripts/extract_new_treasury_from_vps.sh
+scripts/get_moltbook_claim.py
+scripts/get_moltbook_claim.ps1
+scripts/vps_decrypt_wallet.py
+scripts/vps_grab_keys.py
+scripts/vps_get_wallet.py
+scripts/vps_find_57w9.py
+scripts/vps_recovery_search*.py
+scripts/vps_search_sda.py
+scripts/vps_deep_search.py
+scripts/deploy_bot_tokens.sh
+scripts/deploy_bot_tokens.ps1
+scripts/deploy_treasury_token_manual.ps1
+scripts/convert_treasury_key.py
+scripts/query_treasury_wallet.py
+scripts/query_new_treasury_history.py
+
+# === TELEGRAM RAW DATA DUMPS (contain leaked tokens/keys) ===
+telegram_*_raw.json
+telegram_*.json
+tmp/
+reports/
+msw.md
+
+# === SCRIPTS WITH REAL API KEYS ===
+scripts/deploy_remote_control.sh
+scripts/run_remote_server.py
+scripts/run_server.bat
+scripts/start_remote_control.bat
+scripts/start_remote_control_silent.bat
+deploy/vps_remote_control_setup.md
+
+# === BACKUPS WITH WALLET DATA ===
+.backups/
+
+# === BUILD / CACHE ARTIFACTS ===
+.next/
+.venv-wsl/
+coverage_html*/
+htmlcov*/
+MagicMock/
+
+# === PLANNING DOCS WITH SECRETS ===
+.planning/milestones/
+.planning/temp/
+
+# === CLAWDBOT DEPLOY DOCS WITH TOKENS ===
+deploy/clawdbot-redundancy/OPENCLAW_UITARS_INTEGRATION.md
+deploy/clawdbot-redundancy/JARVIS_FALLBACK_CHAIN_CONFIG.md
+deploy/clawdbot-redundancy/KVM8_RECOVERY_GUIDE.md
+deploy/clawdbot-redundancy/PEER_HEALTH_MONITOR_DEPLOYMENT.md
+deploy/clawdbot-redundancy/VPS_DEPLOYMENT_CHECKLIST.md
+deploy/clawdbot-redundancy/clawdbot-golden-*.tar.gz
+deploy/clawdbot-redundancy/infra/
+docs/BOT_CAPABILITIES_REFERENCE.md
+scripts/kvm8-watchdog.sh
+scripts/kvm8_stabilize.sh
+
+# === LOCAL NOTES WITH SENSITIVE CONTENT ===
+INFRASTRUCTURE_STATUS_COMPLETE.md
+VPS_ACCESS_STATUS.md
+VPS_RECOVERY_MODE_GUIDE.md
+TREASURY_CONSOLIDATION_STATUS.md
+TREASURY_RECOVERY_FINAL_STATUS.md
+TREASURY_WALLET_STATUS.md
+NEW_TREASURY_SEARCH_STATUS.md
+OLD_TREASURY_RECOVERY_GUIDE.md
+ARCHITECTURAL_CONTEXT_INTEGRATION.md
+
+# === MISC LOCAL-ONLY FILES ===
+web app context*.txt
+.ralph-playbook
+.claudecacheagentsscout/
+.gsd-spec.md
+
+# === RUNTIME DATA DIRECTORIES ===
+bots/data/cache/
+bots/data/conversations/
+bots/data/costs/
+bots/data/memory/
+bots/data/moderation/
+bots/data/users/
+bots/twitter/data/
+bots/treasury/data/
+bots/treasury/.wallets-demo/
+tg_bot/data/
+web/data/
+
+# === ORPHAN DIRECTORIES (Unicode / path artifacts) ===
+C\357\200\272*/
+.planning/memory-integration/

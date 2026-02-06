@@ -184,7 +184,7 @@ class SupermemoryClient:
             # Add document with user context
             await client.memories.add(
                 content=content,
-                user_id=user_id,
+                container_tag=user_id,
                 metadata=meta,
             )
             logger.debug(f"[{self.bot_name}] Added {memory_type.value} memory")
@@ -262,9 +262,9 @@ class SupermemoryClient:
         # Search each tier
         for user_id in user_ids:
             try:
-                response = await client.search.execute(
+                response = await client.search.memories(
                     q=query,
-                    user_id=user_id,
+                    container_tag=user_id,
                     limit=limit,
                 )
 
@@ -281,12 +281,16 @@ class SupermemoryClient:
                         mtype = MemoryType.LONG_TERM
 
                     entry = MemoryEntry(
-                        content=getattr(item, 'content', str(item)),
+                        content=(
+                            getattr(item, 'memory', None)
+                            or getattr(item, 'chunk', None)
+                            or str(item)
+                        ),
                         memory_type=mtype,
                         bot_name=self.bot_name,
-                        timestamp=getattr(item, 'timestamp', ''),
+                        timestamp=getattr(item, 'updated_at', ''),
                         metadata=getattr(item, 'metadata', {}),
-                        score=getattr(item, 'score', 0.0),
+                        score=float(getattr(item, 'similarity', 0.0) or 0.0),
                     )
                     results.append(entry)
 
@@ -351,21 +355,27 @@ class SupermemoryClient:
         if not self.is_available:
             return False
 
-        client = self._get_async_client()
-        if not client:
-            return False
-
+        # The supermemory SDK has changed across versions and may not expose a
+        # dedicated "conversations" resource. We preserve the intent by storing
+        # the conversation as a mid-term memory entry.
         try:
-            await client.conversations.ingest(
-                messages=messages,
-                user_id=self.user_id_mid,  # Conversations go to mid-term
+            convo_text = "\n".join(
+                f\"{m.get('role','').strip()}: {m.get('content','').strip()}\"
+                for m in messages
+                if m.get("content")
+            )
+            if not convo_text.strip():
+                return False
+
+            return await self.add(
+                convo_text,
+                memory_type=MemoryType.MID_TERM,
                 metadata={
                     "bot_name": self.bot_name,
                     "conversation_id": conversation_id or datetime.now(timezone.utc).isoformat(),
+                    "source": "conversation_ingest",
                 },
             )
-            logger.debug(f"[{self.bot_name}] Ingested conversation with {len(messages)} messages")
-            return True
         except Exception as e:
             logger.warning(f"[{self.bot_name}] Failed to ingest conversation: {e}")
             return False
@@ -385,19 +395,23 @@ class SupermemoryClient:
 
         results = []
         try:
-            response = client.search.execute(
+            response = client.search.memories(
                 q=query,
-                user_id=self.user_id_long,
+                container_tag=self.user_id_long,
                 limit=limit,
             )
             for item in getattr(response, 'results', []):
                 entry = MemoryEntry(
-                    content=getattr(item, 'content', str(item)),
+                    content=(
+                        getattr(item, 'memory', None)
+                        or getattr(item, 'chunk', None)
+                        or str(item)
+                    ),
                     memory_type=MemoryType.LONG_TERM,
                     bot_name=self.bot_name,
-                    timestamp=getattr(item, 'timestamp', ''),
+                    timestamp=getattr(item, 'updated_at', ''),
                     metadata=getattr(item, 'metadata', {}),
-                    score=getattr(item, 'score', 0.0),
+                    score=float(getattr(item, 'similarity', 0.0) or 0.0),
                 )
                 results.append(entry)
         except Exception as e:

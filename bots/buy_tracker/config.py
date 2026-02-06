@@ -92,7 +92,7 @@ def load_config() -> BuyBotConfig:
         except Exception:
             pass
 
-    buy_bot_token = os.environ.get("TELEGRAM_BUY_BOT_TOKEN", "")
+    buy_bot_token = (os.environ.get("TELEGRAM_BUY_BOT_TOKEN", "") or "").strip()
     if not buy_bot_token:
         import logging
         logging.getLogger(__name__).error("TELEGRAM_BUY_BOT_TOKEN not set - buy bot will not start. Do NOT fall back to main bot token to avoid polling conflicts.")
@@ -104,9 +104,17 @@ def load_config() -> BuyBotConfig:
         if address and len(address) >= 32:  # Basic Solana address validation
             additional_pairs.append((name, address))
 
+    chat_id_raw = (os.environ.get("TELEGRAM_BUY_BOT_CHAT_ID", "") or "").strip()
+    # Prefer int chat IDs for python-telegram-bot. If non-numeric (e.g. @channel),
+    # keep the string.
+    if chat_id_raw and chat_id_raw.lstrip("-").isdigit():
+        chat_id: str | int = int(chat_id_raw)
+    else:
+        chat_id = chat_id_raw
+
     return BuyBotConfig(
         bot_token=buy_bot_token,
-        chat_id=os.environ.get("TELEGRAM_BUY_BOT_CHAT_ID", ""),
+        chat_id=chat_id,
         token_address=token_address,
         token_symbol=os.environ.get("BUY_BOT_TOKEN_SYMBOL", "KR8TIV"),
         token_name=os.environ.get("BUY_BOT_TOKEN_NAME", "Kr8Tiv"),

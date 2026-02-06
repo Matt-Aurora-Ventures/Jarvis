@@ -91,11 +91,14 @@ class CommandRegistry:
     - Execute commands with context
     - Generate help text
     - Filter by category
+    - Multi-bot command registration and management
     """
 
     def __init__(self):
         self._commands: Dict[str, Command] = {}
         self._aliases: Dict[str, str] = {}  # alias -> command name
+        self._bot_commands: Dict[str, Set[str]] = {}  # bot_name -> set of command names
+        self._command_to_bot: Dict[str, str] = {}  # command_name -> bot_name
 
     def register(self, cmd: Command) -> None:
         """

@@ -344,8 +344,11 @@ class TestGenerateTweet:
     async def test_generate_tweet_returns_none_when_no_claude(self, voice_instance):
         """Test generate_tweet returns None when no Claude available."""
         with patch.object(voice_instance, '_cli_available', return_value=False):
-            result = await voice_instance.generate_tweet("test prompt")
-            assert result is None
+            # Avoid calling the real Grok client / network in unit tests.
+            with patch.object(voice_instance, '_generate_with_grok', new_callable=AsyncMock) as mock_grok:
+                mock_grok.return_value = None
+                result = await voice_instance.generate_tweet("test prompt")
+                assert result is None
 
     @pytest.mark.asyncio
     async def test_generate_tweet_with_api_client(self, voice_instance):
@@ -505,8 +508,11 @@ class TestGenerateTweet:
 
         with patch.object(voice_instance, '_cli_available', return_value=True):
             with patch.object(voice_instance, '_run_cli', return_value=None):
-                result = await voice_instance.generate_tweet("test prompt")
-                assert result is None
+                # Avoid calling the real Grok client / network in unit tests.
+                with patch.object(voice_instance, '_generate_with_grok', new_callable=AsyncMock) as mock_grok:
+                    mock_grok.return_value = None
+                    result = await voice_instance.generate_tweet("test prompt")
+                    assert result is None
 
     @pytest.mark.asyncio
     async def test_generate_tweet_handles_exception(self, voice_instance):
@@ -516,8 +522,11 @@ class TestGenerateTweet:
         voice_instance.api_client = mock_client
 
         with patch.object(voice_instance, '_cli_available', return_value=False):
-            result = await voice_instance.generate_tweet("test prompt")
-            assert result is None
+            # Avoid calling the real Grok client / network in unit tests.
+            with patch.object(voice_instance, '_generate_with_grok', new_callable=AsyncMock) as mock_grok:
+                mock_grok.return_value = None
+                result = await voice_instance.generate_tweet("test prompt")
+                assert result is None
 
 
 # =============================================================================

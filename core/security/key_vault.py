@@ -53,8 +53,19 @@ class SecureStorage:
 
             password = os.environ.get("JARVIS_MASTER_KEY", "")
             if not password:
-                logger.warning("JARVIS_MASTER_KEY not set, using development key")
-                password = "development_key_not_for_production"
+                # SECURITY: Never use fallback in production
+                # Require explicit JARVIS_MASTER_KEY environment variable
+                raise ValueError(
+                    "JARVIS_MASTER_KEY environment variable must be set. "
+                    "Generate a secure key with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                )
+
+            # Validate minimum key length (32 characters = ~192 bits of entropy)
+            if len(password) < 32:
+                logger.warning(
+                    f"JARVIS_MASTER_KEY is only {len(password)} characters. "
+                    "Recommended minimum: 32 characters for production security."
+                )
 
             salt = os.environ.get("JARVIS_KEY_SALT", "jarvis_vault_salt").encode()
 
@@ -68,10 +79,11 @@ class SecureStorage:
             return kdf.derive(password.encode())
 
         except ImportError:
-            logger.warning("cryptography not installed, using weak key derivation")
-            return hashlib.sha256(
-                os.environ.get("JARVIS_MASTER_KEY", "dev").encode()
-            ).digest()
+            logger.error("cryptography package required for secure key derivation")
+            raise RuntimeError(
+                "Missing required package 'cryptography'. "
+                "Install with: pip install cryptography"
+            )
 
     def _encrypt(self, data: bytes) -> bytes:
         """Encrypt data"""
@@ -341,6 +353,11 @@ def get_key_vault() -> KeyVault:
 
 # Testing
 if __name__ == "__main__":
+    # Generate a secure test key for demonstration
+    import secrets
+    test_master_key = secrets.token_urlsafe(32)
+    os.environ["JARVIS_MASTER_KEY"] = test_master_key
+
     vault = KeyVault("test_vault.enc")
 
     # Store some test secrets

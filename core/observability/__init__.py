@@ -21,6 +21,9 @@ from core.observability.tracing import (
     generate_trace_id,
 )
 
+# Bot metrics
+from core.observability.metrics import BotMetrics
+
 __all__ = [
     # OpenTelemetry
     "setup_telemetry",
@@ -39,4 +42,6 @@ __all__ = [
     "get_traced_logger",
     "create_correlation_context",
     "generate_trace_id",
+    # Bot metrics
+    "BotMetrics",
 ]

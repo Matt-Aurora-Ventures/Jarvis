@@ -20,6 +20,7 @@ import logging
 import os
 import json
 import time
+import re
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone, timedelta
 from enum import Enum
@@ -450,14 +451,35 @@ class SupervisorHealthBus:
         if not uptime_str:
             return 0.0
         try:
-            # Format: "0:05:30" or timedelta string
-            parts = str(uptime_str).split(":")
+            s = str(uptime_str).strip()
+
+            # Handle timedelta-style strings like:
+            # - "1 day, 6:07:56.294536"
+            # - "2 days, 0:01:02"
+            days = 0
+            if "day" in s and "," in s:
+                prefix, rest = s.split(",", 1)
+                prefix = prefix.strip()
+                rest = rest.strip()
+                # "1 day" or "2 days"
+                m = re.match(r"^(\d+)\s+day", prefix)
+                if m:
+                    days = int(m.group(1))
+                    s = rest
+
+            # Format: "H:MM:SS(.micro)" or "MM:SS(.micro)"
+            parts = s.split(":")
             if len(parts) == 3:
                 hours = int(parts[0])
                 minutes = int(parts[1])
                 seconds = float(parts[2])
-                return hours * 3600 + minutes * 60 + seconds
-            return float(uptime_str)
+                return days * 86400 + hours * 3600 + minutes * 60 + seconds
+            if len(parts) == 2:
+                minutes = int(parts[0])
+                seconds = float(parts[1])
+                return days * 86400 + minutes * 60 + seconds
+
+            return float(s)
         except (ValueError, TypeError, AttributeError) as e:
             logger.warning(f"Failed to parse uptime '{uptime_str}': {e}")
             return 0.0

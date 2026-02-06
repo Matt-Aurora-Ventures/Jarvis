@@ -27,11 +27,26 @@ Usage:
     manager = SkillManager()
     manager.install_skill("/path/to/skill")
     manager.remove_skill("old_skill")
+
+    # Self-healing skill acquisition
+    from core.skills import SelfHealingSkillRegistry, execute_with_healing
+
+    registry = SelfHealingSkillRegistry()
+    result = await execute_with_healing(my_task, registry)
 """
 
 from core.skills.registry import SkillRegistry, DEFAULT_SKILLS_DIR
 from core.skills.executor import SkillExecutor, SkillExecutionResult
 from core.skills.manager import SkillManager, SkillInstallResult
+from core.skills.self_healing import (
+    SelfHealingSkillRegistry,
+    RiskLevel,
+    ToolNotFoundError,
+    SkillInstallError,
+    QuotaExhaustedError,
+    ApprovalRequiredError,
+    execute_with_healing,
+)
 
 __all__ = [
     "SkillRegistry",
@@ -40,4 +55,12 @@ __all__ = [
     "SkillManager",
     "SkillInstallResult",
     "DEFAULT_SKILLS_DIR",
+    # Self-healing
+    "SelfHealingSkillRegistry",
+    "RiskLevel",
+    "ToolNotFoundError",
+    "SkillInstallError",
+    "QuotaExhaustedError",
+    "ApprovalRequiredError",
+    "execute_with_healing",
 ]

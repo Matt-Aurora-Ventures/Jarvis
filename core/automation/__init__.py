@@ -1,63 +1,29 @@
 """
-Automation System - Multi-step action chains and scheduled tasks.
+Computer Automation System for Jarvis.
 
-Provides:
-- ActionChain: Sequential and parallel action execution with rollback
-- ActionScheduler: Cron-like scheduled task execution
-- ActionRecorder: Record and playback action sequences
+Provides comprehensive automation capabilities:
+- Browser automation via Chromium CDP
+- Password manager integration (1Password/Bitwarden)
+- Google OAuth multi-account management
+- LinkedIn automation
+- X (Twitter) multi-account management
+- Windows automation (PyAutoGUI, Task Scheduler, Services)
 """
 
-from core.automation.chains import (
-    ActionChain,
-    ChainStep,
-    ChainResult,
-    ChainExecutor,
-    StepStatus,
-    ExecutionMode,
-    get_chain_executor,
-)
-from core.automation.scheduler import (
-    ActionScheduler,
-    ScheduledJob,
-    JobExecution,
-    ScheduleType,
-    JobStatus,
-    CronParser,
-    get_scheduler,
-)
-from core.automation.recorder import (
-    ActionRecorder,
-    RecordedAction,
-    ActionRecording,
-    PlaybackResult,
-    ActionType,
-    RecordingStatus,
-    get_recorder,
+from core.automation.interfaces import (
+    Credential,
+    BrowserSession,
+    OAuthToken,
+    CredentialProvider,
+    BrowserAutomator,
+    OAuthManager,
 )
 
 __all__ = [
-    # Chains
-    "ActionChain",
-    "ChainStep",
-    "ChainResult",
-    "ChainExecutor",
-    "StepStatus",
-    "ExecutionMode",
-    "get_chain_executor",
-    # Scheduler
-    "ActionScheduler",
-    "ScheduledJob",
-    "JobExecution",
-    "ScheduleType",
-    "JobStatus",
-    "CronParser",
-    "get_scheduler",
-    # Recorder
-    "ActionRecorder",
-    "RecordedAction",
-    "ActionRecording",
-    "PlaybackResult",
-    "ActionType",
-    "RecordingStatus",
-    "get_recorder",
+    "Credential",
+    "BrowserSession", 
+    "OAuthToken",
+    "CredentialProvider",
+    "BrowserAutomator",
+    "OAuthManager",
 ]

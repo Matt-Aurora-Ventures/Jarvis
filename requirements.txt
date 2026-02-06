@@ -24,6 +24,8 @@ python-dotenv>=1.0.1
 tweepy>=4.14.0
 anthropic>=0.32.0
 python-telegram-bot>=20.7
+# ClawdBots Telegram agents use `telebot` (module) which is provided by this package.
+pyTelegramBotAPI>=4.20.0
 playwright>=1.42.0
 beautifulsoup4>=4.12.0
 readability-lxml>=0.8.1

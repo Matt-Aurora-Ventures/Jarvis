@@ -1,8 +1,21 @@
-"""Configuration validation with Pydantic."""
+"""
+Configuration validation with Pydantic and ConfigSchema.
+
+Provides:
+- Pydantic models for structured config validation
+- ConfigSchema class for dynamic validation rules
+- ValidationError dataclass for error reporting
+"""
+
 from pydantic import BaseModel, Field, validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable, Tuple, Union, Type
+from dataclasses import dataclass, field as dataclass_field
 from pathlib import Path
 import json
+import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderConfig(BaseModel):

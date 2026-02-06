@@ -16,7 +16,10 @@ import time
 from pathlib import Path
 from typing import Optional, TextIO
 
-import psutil
+try:
+    import psutil  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    psutil = None
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +34,24 @@ def is_pid_alive(pid: int) -> bool:
     Returns:
         True if process exists and is running (not zombie), False otherwise
     """
-    if not psutil.pid_exists(pid):
-        return False
+    # psutil gives the best results (zombie detection, cross-platform).
+    if psutil is not None:
+        if not psutil.pid_exists(pid):
+            return False
+        try:
+            proc = psutil.Process(pid)
+            return proc.status() != psutil.STATUS_ZOMBIE
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return False
+
+    # Fallback: this checks existence, but cannot reliably detect zombies.
     try:
-        proc = psutil.Process(pid)
-        return proc.status() != psutil.STATUS_ZOMBIE
-    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        os.kill(pid, 0)
+        return True
+    except PermissionError:
+        # Process exists but we can't signal it (different user).
+        return True
+    except OSError:
         return False
 
 

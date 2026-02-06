@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Telegram 5-Day History Audit
 Systematically reviews last 5 days of messages from specified groups/chats
@@ -13,6 +14,12 @@ Per user directive: Review these chats:
 import os
 import sys
 import asyncio
+
+# Fix Windows Unicode issues
+if sys.platform == 'win32':
+    import codecs
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
