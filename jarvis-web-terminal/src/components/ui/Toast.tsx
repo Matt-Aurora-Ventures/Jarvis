@@ -31,17 +31,17 @@ const ICONS: Record<ToastType, React.ReactNode> = {
 };
 
 const COLORS: Record<ToastType, string> = {
-    success: 'border-green-500/50 bg-green-500/10 text-green-400',
-    error: 'border-red-500/50 bg-red-500/10 text-red-400',
-    warning: 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400',
-    info: 'border-blue-500/50 bg-blue-500/10 text-blue-400',
+    success: 'border-accent-success/50 bg-accent-success/10 text-accent-success',
+    error: 'border-accent-error/50 bg-accent-error/10 text-accent-error',
+    warning: 'border-accent-warning/50 bg-accent-warning/10 text-text-muted',
+    info: 'border-accent-neon/50 bg-accent-neon/10 text-accent-neon',
 };
 
 const ICON_BG: Record<ToastType, string> = {
-    success: 'bg-green-500/20',
-    error: 'bg-red-500/20',
-    warning: 'bg-yellow-500/20',
-    info: 'bg-blue-500/20',
+    success: 'bg-accent-success/20',
+    error: 'bg-accent-error/20',
+    warning: 'bg-accent-warning/20',
+    info: 'bg-accent-neon/20',
 };
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {

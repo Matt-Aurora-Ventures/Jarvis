@@ -3,34 +3,22 @@
 import { SentimentHub } from '@/components/features/SentimentHub';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useSentimentData } from '@/hooks/useSentimentData';
-import { MarketChart } from '@/components/features/MarketChart';
+import { SolChart } from '@/components/features/SolChart';
 import { TradePanel } from '@/components/features/TradePanel';
 import { DashboardGrid } from '@/components/features/DashboardGrid';
 import { NeuralLattice } from '@/components/visuals/NeuralLattice';
 import { TradingGuard, ConfidenceBadge } from '@/components/features/TradingGuard';
 import { SentimentDisplay } from '@/components/features/StatGlyph';
-import { AIPicks } from '@/components/features/AIPicks';
 import { PerformanceTracker } from '@/components/features/PerformanceTracker';
-import { QuickBuyTable } from '@/components/features/QuickBuyTable';
 import { AIMarketReport } from '@/components/features/AIMarketReport';
 import { AIConvictionPicks } from '@/components/features/AIConvictionPicks';
 import { BagsTop15 } from '@/components/features/BagsTop15';
-import { SentimentHubActions } from '@/components/features/SentimentHubActions';
 import { ModelSwitcher } from '@/components/features/ModelSwitcher';
-import { CollapsiblePanel } from '@/components/ui/CollapsiblePanel';
 import { GrokLiveBar } from '@/components/features/GrokLiveBar';
 import { useGrokLive } from '@/hooks/useGrokLive';
 import {
   Brain,
-  BarChart3,
-  TrendingUp,
-  Zap,
-  Target,
-  Newspaper,
   Activity,
-  Crosshair,
-  Rocket,
-  LineChart,
 } from 'lucide-react';
 
 export default function Home() {
@@ -48,11 +36,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden font-sans">
-      <NeuralLattice />
+      <div className="opacity-[0.02]"><NeuralLattice /></div>
 
       <main className="flex-1 flex flex-col pt-[68px] pb-2 gap-3 relative z-10 w-full px-3 lg:px-4">
 
-        {/* Grok 4.1 Live Engine Bar */}
+        {/* Grok Live Engine Bar */}
         <GrokLiveBar
           countdown={countdown}
           isRefreshing={isRefreshing}
@@ -62,72 +50,57 @@ export default function Home() {
           onRefresh={forceRefresh}
         />
 
-        {/* Stats Row - Compact Metrics */}
+        {/* Stats Row */}
         <section className="w-full">
           <DashboardGrid />
         </section>
 
-        {/* Main 3-Column Trading Layout */}
+        {/* Main 3-Column Layout */}
         <section className="grid grid-cols-1 xl:grid-cols-[280px_1fr_320px] gap-3 w-full flex-1">
 
-          {/* LEFT COLUMN: Signals + Market Overview */}
-          <div className="flex flex-col gap-3 max-h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar pr-1">
-
-            {/* Trading Guard */}
+          {/* LEFT COLUMN — Always visible, no collapsibles */}
+          <div className="flex flex-col gap-3 max-h-[calc(100vh-200px)] overflow-y-auto custom-scrollbar pr-1">
             <TradingGuard symbol="SOL" />
 
-            {/* Live Signals */}
-            <CollapsiblePanel
-              title="LIVE SIGNALS"
-              icon={<Activity className="w-4 h-4" />}
-              badge="LIVE"
-              defaultExpanded={true}
-            >
-              {loading ? (
-                <div className="text-center py-8 font-mono text-text-muted animate-pulse text-sm">
-                  INITIALIZING BAGS.FM UPLINK...
-                </div>
-              ) : (
-                <SentimentHub data={marketData} />
-              )}
-            </CollapsiblePanel>
-
-            {/* Market Sentiment */}
-            <CollapsiblePanel
-              title="SENTIMENT"
-              icon={<Brain className="w-4 h-4" />}
-              defaultExpanded={true}
-            >
+            {/* Market Sentiment — INLINE */}
+            <div className="card-glass p-3">
+              <div className="flex items-center gap-2 mb-3">
+                <Brain className="w-4 h-4 text-accent-neon" />
+                <span className="text-xs font-mono uppercase tracking-wider text-text-muted">SENTIMENT</span>
+              </div>
               <SentimentDisplay
                 overall={Math.round(stats.avgBuySellRatio * 25)}
                 social={Math.min(100, stats.bullishCount * 10)}
                 market={marketRegime.solChange24h > 0 ? Math.min(100, 50 + marketRegime.solChange24h * 5) : Math.max(0, 50 + marketRegime.solChange24h * 5)}
                 technical={Math.round(stats.avgBuySellRatio * 20)}
               />
-            </CollapsiblePanel>
+            </div>
 
-            {/* Quick Buy */}
-            <CollapsiblePanel
-              title="QUICK BUY"
-              icon={<Zap className="w-4 h-4" />}
-              defaultExpanded={false}
-            >
-              <QuickBuyTable />
-            </CollapsiblePanel>
-
-            {/* Sentiment Actions */}
-            <CollapsiblePanel
-              title="ACTIONS"
-              icon={<Crosshair className="w-4 h-4" />}
-              defaultExpanded={false}
-            >
-              <SentimentHubActions />
-            </CollapsiblePanel>
+            {/* Live Signals — INLINE */}
+            <div className="card-glass p-3">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-accent-neon" />
+                  <span className="text-xs font-mono uppercase tracking-wider text-text-muted">LIVE SIGNALS</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent-neon animate-pulse" />
+                  <span className="text-[10px] font-mono text-text-muted">SCANNING</span>
+                </div>
+              </div>
+              {loading ? (
+                <div className="text-center py-6 font-mono text-text-muted animate-pulse text-xs">
+                  INITIALIZING BAGS.FM UPLINK...
+                </div>
+              ) : (
+                <SentimentHub data={marketData} />
+              )}
+            </div>
           </div>
 
-          {/* CENTER COLUMN: Chart + AI Intelligence */}
+          {/* CENTER COLUMN — Chart + AI Intelligence */}
           <div className="flex flex-col gap-3">
-            {/* Main Chart */}
+            {/* Chart Card */}
             <div className="card-glass p-0 overflow-hidden min-h-[420px] relative">
               <div className="absolute top-3 left-3 z-10 flex gap-3 items-center">
                 <div className="flex flex-col">
@@ -145,64 +118,39 @@ export default function Home() {
                 </div>
                 <ConfidenceBadge symbol="SOL" />
               </div>
-              <MarketChart />
+              <SolChart />
             </div>
 
-            {/* AI Intelligence Row */}
+            {/* AI Intelligence — 2 column, always visible */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <CollapsiblePanel
-                title="AI MARKET REPORT"
-                icon={<Newspaper className="w-4 h-4" />}
-                badge="GROK"
-                defaultExpanded={true}
-              >
-                <AIMarketReport />
-              </CollapsiblePanel>
-
-              <CollapsiblePanel
-                title="CONVICTION PICKS"
-                icon={<Target className="w-4 h-4" />}
-                badge={`${grokScores.size}`}
-                defaultExpanded={true}
-              >
-                <AIConvictionPicks />
-              </CollapsiblePanel>
+              <AIMarketReport />
+              <AIConvictionPicks />
             </div>
 
-            {/* Bags.fm + AI Picks Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <CollapsiblePanel
-                title="BAGS.FM TOP LAUNCHES"
-                icon={<Rocket className="w-4 h-4" />}
-                badge="LIVE"
-                defaultExpanded={false}
-              >
-                <BagsTop15 />
-              </CollapsiblePanel>
-
-              <CollapsiblePanel
-                title="AI PICKS"
-                icon={<LineChart className="w-4 h-4" />}
-                defaultExpanded={false}
-              >
-                <AIPicks />
-              </CollapsiblePanel>
-            </div>
+            {/* Bags Top */}
+            <BagsTop15 />
           </div>
 
-          {/* RIGHT COLUMN: Trade Execution + Performance */}
-          <div className="flex flex-col gap-3 max-h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar pl-1">
+          {/* RIGHT COLUMN — Execution + Performance */}
+          <div className="flex flex-col gap-3 max-h-[calc(100vh-200px)] overflow-y-auto custom-scrollbar pl-1">
             <TradePanel />
             <PerformanceTracker />
-            <CollapsiblePanel
-              title="AI MODEL"
-              icon={<Brain className="w-4 h-4" />}
-              defaultExpanded={false}
-            >
-              <ModelSwitcher />
-            </CollapsiblePanel>
           </div>
+
         </section>
+
+        {/* AI Model Footer Bar — Flat, compact */}
+        <div className="card-glass px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="w-2 h-2 rounded-full bg-accent-neon shadow-[0_0_6px_rgba(34,197,94,0.6)]" />
+            <Brain className="w-3.5 h-3.5 text-accent-neon" />
+            <span className="text-xs font-mono font-bold text-text-primary">AI Model</span>
+            <span className="text-xs text-text-muted">Grok 4</span>
+            <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase rounded bg-accent-neon/15 text-accent-neon border border-accent-neon/30">ACTIVE</span>
+          </div>
+          <ModelSwitcher />
+        </div>
+
       </main>
     </div>
   );

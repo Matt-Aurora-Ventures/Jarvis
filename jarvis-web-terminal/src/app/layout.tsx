@@ -49,7 +49,7 @@ export default function RootLayout({
           <WalletContextProvider>
             <TradingProvider>
               <ToastProvider>
-                <HolographicField />
+                <div className="opacity-[0.02]"><HolographicField /></div>
                 <div className="relative z-10 flex min-h-screen flex-col">
                   <Header />
                   <main className="flex-1 w-full max-w-[1920px] mx-auto px-2 sm:px-3 lg:px-4 py-2 relative">

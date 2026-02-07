@@ -8,6 +8,7 @@ import { WalletButton } from '@/components/ui/WalletButton';
 import { ThemeToggleInline } from '@/components/ui/ThemeToggle';
 import { useMarketRegime } from '@/hooks/useMarketRegime';
 import { useTheme } from '@/context/ThemeContext';
+import { useToast } from '@/components/ui/Toast';
 import {
     Sun,
     Moon,
@@ -42,6 +43,7 @@ const NAV_ITEMS: NavItem[] = [
 export function Header() {
     const { data } = useMarketRegime();
     const { theme, toggleTheme } = useTheme();
+    const { info } = useToast();
     const [scrolled, setScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [notificationCount] = useState(0);
@@ -134,7 +136,7 @@ export function Header() {
                         </button>
 
                         {/* Notifications */}
-                        <button className="relative p-2.5 rounded-full bg-bg-tertiary hover:bg-bg-secondary border border-border-primary hover:border-border-hover transition-all">
+                        <button onClick={() => info('Notifications coming soon')} className="relative p-2.5 rounded-full bg-bg-tertiary hover:bg-bg-secondary border border-border-primary hover:border-border-hover transition-all">
                             <Bell className="w-5 h-5 text-text-secondary" />
                             {notificationCount > 0 && (
                                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-accent-danger text-[10px] font-bold flex items-center justify-center text-white">
@@ -144,7 +146,7 @@ export function Header() {
                         </button>
 
                         {/* Settings */}
-                        <button className="hidden md:block p-2.5 rounded-full bg-bg-tertiary hover:bg-bg-secondary border border-border-primary hover:border-border-hover transition-all">
+                        <button onClick={() => info('Settings coming soon')} className="hidden md:block p-2.5 rounded-full bg-bg-tertiary hover:bg-bg-secondary border border-border-primary hover:border-border-hover transition-all">
                             <Settings className="w-5 h-5 text-text-secondary" />
                         </button>
 

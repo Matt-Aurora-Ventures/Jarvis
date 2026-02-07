@@ -194,175 +194,53 @@ export function PerformanceTracker() {
     }, [metrics]);
 
     return (
-        <div className="card-glass p-4">
+        <div className="card-glass p-3">
             {/* Header */}
-            <button
-                onClick={() => setExpanded(!expanded)}
-                className="w-full flex items-center justify-between pb-3 border-b border-theme-border/30"
-            >
-                <div className="flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-theme-cyan" />
-                    <span className="font-display font-bold">PERFORMANCE</span>
-                </div>
-                {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
+            <div className="flex items-center gap-2 mb-3">
+                <BarChart3 className="w-4 h-4 text-accent-neon" />
+                <span className="text-xs font-mono uppercase tracking-wider text-text-muted">PERFORMANCE</span>
+            </div>
 
-            {expanded && (
-                <div className="pt-4 space-y-4">
-                    {/* Time Filter */}
-                    <div className="flex gap-2">
-                        {(['all', '24h', '7d', '30d'] as const).map((filter) => (
-                            <button
-                                key={filter}
-                                onClick={() => setTimeFilter(filter)}
-                                className={`
-                                    px-3 py-1 text-xs font-mono rounded transition-all
-                                    ${timeFilter === filter
-                                        ? 'bg-theme-cyan text-black'
-                                        : 'bg-theme-dark/30 border border-theme-border/50 hover:border-theme-cyan'}
-                                `}
-                            >
-                                {filter.toUpperCase()}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Main Stats Grid */}
-                    <div className="grid grid-cols-2 gap-3">
-                        {/* Win Rate */}
-                        <div className="bg-theme-dark/30 rounded-lg p-3">
-                            <div className="flex items-center gap-1 text-xs text-theme-muted mb-1">
-                                <Target className="w-3 h-3" />
-                                WIN RATE
-                            </div>
-                            <div className={`text-xl font-bold ${
-                                metrics.winRate >= 50 ? 'text-theme-green' : 'text-theme-red'
-                            }`}>
-                                {metrics.winRate.toFixed(1)}%
-                            </div>
-                            <div className="text-xs text-theme-muted">
-                                {metrics.winCount}W / {metrics.lossCount}L
-                            </div>
-                        </div>
-
-                        {/* Total P&L */}
-                        <div className="bg-theme-dark/30 rounded-lg p-3">
-                            <div className="flex items-center gap-1 text-xs text-theme-muted mb-1">
-                                {metrics.totalPnL >= 0 ? (
-                                    <TrendingUp className="w-3 h-3 text-theme-green" />
-                                ) : (
-                                    <TrendingDown className="w-3 h-3 text-theme-red" />
-                                )}
-                                TOTAL P&L
-                            </div>
-                            <div className={`text-xl font-bold ${
-                                metrics.totalPnL >= 0 ? 'text-theme-green' : 'text-theme-red'
-                            }`}>
-                                {metrics.totalPnL >= 0 ? '+' : ''}{metrics.totalPnL.toFixed(4)} SOL
-                            </div>
-                            <div className="text-xs text-theme-muted">
-                                {metrics.totalTrades} trades
-                            </div>
-                        </div>
-
-                        {/* Profit Factor */}
-                        <div className="bg-theme-dark/30 rounded-lg p-3">
-                            <div className="flex items-center gap-1 text-xs text-theme-muted mb-1">
-                                <Activity className="w-3 h-3" />
-                                PROFIT FACTOR
-                            </div>
-                            <div className={`text-xl font-bold ${
-                                metrics.profitFactor >= 1 ? 'text-theme-green' : 'text-theme-red'
-                            }`}>
-                                {metrics.profitFactor === Infinity ? '∞' : metrics.profitFactor.toFixed(2)}
-                            </div>
-                            <div className="text-xs text-theme-muted">
-                                Avg Win: {metrics.avgWin.toFixed(4)}
-                            </div>
-                        </div>
-
-                        {/* Best/Worst */}
-                        <div className="bg-theme-dark/30 rounded-lg p-3">
-                            <div className="flex items-center gap-1 text-xs text-theme-muted mb-1">
-                                <AlertTriangle className="w-3 h-3" />
-                                EXTREMES
-                            </div>
-                            {metrics.bestTrade ? (
-                                <div className="text-sm">
-                                    <span className="text-theme-green">
-                                        Best: +{metrics.bestTrade.pnlPercent.toFixed(1)}%
-                                    </span>
-                                    <span className="text-theme-muted"> ({metrics.bestTrade.symbol})</span>
-                                </div>
-                            ) : (
-                                <div className="text-sm text-theme-muted">No winning trades</div>
-                            )}
-                            {metrics.worstTrade ? (
-                                <div className="text-sm">
-                                    <span className="text-theme-red">
-                                        Worst: {metrics.worstTrade.pnlPercent.toFixed(1)}%
-                                    </span>
-                                    <span className="text-theme-muted"> ({metrics.worstTrade.symbol})</span>
-                                </div>
-                            ) : (
-                                <div className="text-sm text-theme-muted">No losing trades</div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Sentiment Correlation */}
-                    <div className="bg-theme-dark/30 rounded-lg p-3">
-                        <div className="flex items-center gap-2 mb-3">
-                            <Brain className="w-4 h-4 text-theme-cyan" />
-                            <span className="text-xs font-mono text-theme-muted">SENTIMENT CORRELATION</span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <div className="text-xs text-theme-muted mb-1">High Sentiment (60+)</div>
-                                <div className={`text-lg font-bold ${
-                                    metrics.sentimentCorrelation.highSentimentWinRate >= 50
-                                        ? 'text-theme-green' : 'text-theme-red'
-                                }`}>
-                                    {metrics.sentimentCorrelation.highSentimentWinRate.toFixed(1)}% win
-                                </div>
-                            </div>
-                            <div>
-                                <div className="text-xs text-theme-muted mb-1">Low Sentiment (&lt;60)</div>
-                                <div className={`text-lg font-bold ${
-                                    metrics.sentimentCorrelation.lowSentimentWinRate >= 50
-                                        ? 'text-theme-green' : 'text-theme-red'
-                                }`}>
-                                    {metrics.sentimentCorrelation.lowSentimentWinRate.toFixed(1)}% win
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="mt-3 pt-3 border-t border-theme-border/30">
-                            <div className="text-xs text-theme-muted">Optimal Sentiment Range</div>
-                            <div className="text-sm font-bold text-theme-cyan">
-                                {metrics.sentimentCorrelation.optimalSentimentRange.min} - {metrics.sentimentCorrelation.optimalSentimentRange.max}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* AI Recommendations */}
-                    <div className="bg-gradient-to-r from-theme-cyan/10 to-accent-neon/10 rounded-lg p-3 border border-theme-cyan/30">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Lightbulb className="w-4 h-4 text-accent-neon" />
-                            <span className="text-xs font-mono text-accent-neon">AI RECOMMENDATIONS</span>
-                        </div>
-                        <ul className="space-y-1">
-                            {recommendations.map((rec, i) => (
-                                <li key={i} className="text-sm text-theme-muted flex items-start gap-2">
-                                    <span className="text-accent-neon">•</span>
-                                    {rec}
-                                </li>
-                            ))}
-                        </ul>
+            {/* Compact 2x2 Grid */}
+            <div className="grid grid-cols-2 gap-2">
+                {/* Win Rate */}
+                <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                    <div className="text-[10px] text-text-muted font-mono uppercase">Win Rate</div>
+                    <div className={`text-sm font-mono font-bold ${
+                        metrics.winRate >= 50 ? 'text-accent-success' : 'text-accent-error'
+                    }`}>
+                        {metrics.winRate.toFixed(1)}%
                     </div>
                 </div>
-            )}
+
+                {/* Total P&L */}
+                <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                    <div className="text-[10px] text-text-muted font-mono uppercase">Total P&L</div>
+                    <div className={`text-sm font-mono font-bold ${
+                        metrics.totalPnL >= 0 ? 'text-accent-success' : 'text-accent-error'
+                    }`}>
+                        {metrics.totalPnL >= 0 ? '+' : ''}{metrics.totalPnL.toFixed(4)}
+                    </div>
+                </div>
+
+                {/* Profit Factor */}
+                <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                    <div className="text-[10px] text-text-muted font-mono uppercase">Profit Factor</div>
+                    <div className={`text-sm font-mono font-bold ${
+                        metrics.profitFactor >= 1 ? 'text-accent-success' : 'text-accent-error'
+                    }`}>
+                        {metrics.profitFactor === Infinity ? '∞' : metrics.profitFactor.toFixed(2)}
+                    </div>
+                </div>
+
+                {/* Trades */}
+                <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                    <div className="text-[10px] text-text-muted font-mono uppercase">Trades</div>
+                    <div className="text-sm font-mono font-bold text-text-primary">
+                        {metrics.totalTrades}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

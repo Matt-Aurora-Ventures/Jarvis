@@ -31,6 +31,11 @@
   --accent-success: #10B981;
   --accent-warning: #F59E0B;
 
+  /* Chart */
+  --chart-stroke: #16a34a;
+  --chart-fill: #16a34a;
+  --text-dim: #94a3b8;
+
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.03);
@@ -41,6 +46,11 @@
   --glass-bg: rgba(255, 255, 255, 0.8);
   --glass-border: rgba(255, 255, 255, 0.4);
   --glass-blur: blur(20px);
+
+  /* Card tokens */
+  --card-bg: rgba(255, 255, 255, 0.85);
+  --card-border: rgba(0, 0, 0, 0.06);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 
   /* Chart */
   --chart-text: #475569;
@@ -77,6 +87,11 @@
   --accent-success: #10B981;
   --accent-warning: #F59E0B;
 
+  /* Chart */
+  --chart-stroke: #22c55e;
+  --chart-fill: #22c55e;
+  --text-dim: rgba(167, 243, 208, 0.55);
+
   /* Shadows - Glow effects for dark mode */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4), 0 0 20px rgba(34, 197, 94, 0.05);
@@ -87,6 +102,11 @@
   --glass-bg: rgba(17, 18, 20, 0.8);
   --glass-border: rgba(34, 197, 94, 0.1);
   --glass-blur: blur(20px);
+
+  /* Card tokens */
+  --card-bg: rgba(17, 18, 20, 0.85);
+  --card-border: rgba(255, 255, 255, 0.06);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 12px rgba(34, 197, 94, 0.04);
 
   /* Chart */
   --chart-text: #94A3B8;
@@ -142,13 +162,13 @@
 
 /* Premium Glassmorphism Card */
 @utility card-glass {
-  background: var(--glass-bg);
+  background: var(--card-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--border-primary);
-  border-radius: 16px;
-  box-shadow: var(--shadow-md);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
 
   &:hover {
     border-color: var(--border-hover);
@@ -263,6 +283,7 @@
 
 html {
   scroll-behavior: smooth;
+  transition: background-color 0.4s ease, color 0.3s ease;
 }
 
 body {
@@ -270,7 +291,7 @@ body {
   color: var(--text-primary);
   font-family: var(--font-dm-sans), system-ui, sans-serif;
   min-height: 100vh;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.4s ease, color 0.3s ease;
 }
 
 /* Selection */
