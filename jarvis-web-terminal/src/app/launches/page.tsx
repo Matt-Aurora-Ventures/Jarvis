@@ -134,7 +134,7 @@ export default function LaunchesPage() {
                     </div>
                     <div className="card-glass p-4 text-center">
                         <p className="text-[10px] text-text-muted uppercase mb-1">Strong</p>
-                        <p className="font-display font-bold text-2xl text-green-400">{stats.strong}</p>
+                        <p className="font-display font-bold text-2xl text-accent-success">{stats.strong}</p>
                     </div>
                     <div className="card-glass p-4 text-center">
                         <p className="text-[10px] text-text-muted uppercase mb-1">Avg Score</p>
@@ -156,8 +156,8 @@ export default function LaunchesPage() {
                             </div>
 
                             <div className="flex items-center gap-4 p-4 rounded-xl bg-accent-neon/10 border border-accent-neon/30 mb-4">
-                                <div className="w-12 h-12 rounded-full bg-theme-dark flex items-center justify-center overflow-hidden">
-                                    <Twitter className="w-6 h-6 text-blue-400" />
+                                <div className="w-12 h-12 rounded-full bg-bg-secondary flex items-center justify-center overflow-hidden">
+                                    <Twitter className="w-6 h-6 text-accent-neon" />
                                 </div>
                                 <div className="flex-1">
                                     <a
@@ -174,13 +174,13 @@ export default function LaunchesPage() {
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
-                                <div className="p-3 rounded-lg bg-theme-dark/50">
+                                <div className="p-3 rounded-lg bg-bg-secondary/50">
                                     <p className="text-[10px] text-text-muted">Total Earned</p>
                                     <p className="font-mono font-bold text-accent-success">
                                         ${REWARDS_RECIPIENT.totalRewards.toLocaleString()}
                                     </p>
                                 </div>
-                                <div className="p-3 rounded-lg bg-theme-dark/50">
+                                <div className="p-3 rounded-lg bg-bg-secondary/50">
                                     <p className="text-[10px] text-text-muted">This Week</p>
                                     <p className="font-mono font-bold text-accent-neon">
                                         ${REWARDS_RECIPIENT.weeklyRewards.toLocaleString()}
@@ -212,7 +212,7 @@ export default function LaunchesPage() {
                                         onChange={(e) => setSwapAmount(e.target.value)}
                                         step="0.1"
                                         min="0.01"
-                                        className="w-full px-4 py-3 rounded-lg bg-theme-dark/50 border border-theme-border/30 text-text-primary focus:border-accent-neon/50 focus:outline-none font-mono"
+                                        className="w-full px-4 py-3 rounded-lg bg-bg-secondary/50 border border-border-primary/30 text-text-primary focus:border-accent-neon/50 focus:outline-none font-mono"
                                         placeholder="0.1"
                                     />
                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
@@ -220,7 +220,7 @@ export default function LaunchesPage() {
                                             <button
                                                 key={amt}
                                                 onClick={() => setSwapAmount(String(amt))}
-                                                className="px-2 py-1 rounded bg-theme-dark text-text-muted text-xs hover:bg-accent-neon/20 hover:text-accent-neon"
+                                                className="px-2 py-1 rounded bg-bg-secondary text-text-muted text-xs hover:bg-accent-neon/20 hover:text-accent-neon"
                                             >
                                                 {amt}
                                             </button>
@@ -265,7 +265,7 @@ export default function LaunchesPage() {
                             </div>
 
                             {!connected && (
-                                <p className="text-xs text-yellow-400 text-center mt-3">
+                                <p className="text-xs text-text-muted text-center mt-3">
                                     Connect wallet to swap
                                 </p>
                             )}
@@ -275,12 +275,12 @@ export default function LaunchesPage() {
                         <div className="card-glass p-6">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="font-display font-bold text-text-primary flex items-center gap-2">
-                                    <Star className="w-4 h-4 text-yellow-400" />
+                                    <Star className="w-4 h-4 text-text-muted" />
                                     Top Launches
                                 </h3>
                                 <button
                                     onClick={refresh}
-                                    className="p-1 hover:bg-theme-dark/50 rounded"
+                                    className="p-1 hover:bg-bg-secondary/50 rounded"
                                 >
                                     <RefreshCw className="w-4 h-4 text-text-muted" />
                                 </button>

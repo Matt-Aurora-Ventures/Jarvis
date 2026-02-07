@@ -31,9 +31,9 @@ export function MacroEventsTimeline({ macro, isLoading }: MacroEventsTimelinePro
     }
 
     const timeframes = [
-        { label: '24h', title: 'Short Term', content: macro.shortTerm, icon: Clock, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+        { label: '24h', title: 'Short Term', content: macro.shortTerm, icon: Clock, color: 'text-accent-neon', bg: 'bg-accent-neon/10' },
         { label: '3d', title: 'Medium Term', content: macro.mediumTerm, icon: TrendingUp, color: 'text-accent-neon', bg: 'bg-accent-neon/10' },
-        { label: '1w+', title: 'Long Term', content: macro.longTerm, icon: Calendar, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+        { label: '1w+', title: 'Long Term', content: macro.longTerm, icon: Calendar, color: 'text-accent-neon', bg: 'bg-accent-neon/10' },
     ];
 
     return (
@@ -66,7 +66,7 @@ export function MacroEventsTimeline({ macro, isLoading }: MacroEventsTimelinePro
             {macro.keyEvents.length > 0 && (
                 <div>
                     <div className="flex items-center gap-2 mb-2">
-                        <AlertCircle className="w-4 h-4 text-yellow-400" />
+                        <AlertCircle className="w-4 h-4 text-text-muted" />
                         <span className="text-sm font-medium text-text-primary">Key Events</span>
                     </div>
                     <div className="flex flex-wrap gap-2">

@@ -51,10 +51,10 @@ export const getScoreTier = (score: number): ScoreTier => {
 
 export const TIER_COLORS: Record<ScoreTier, { bg: string; text: string; border: string }> = {
     exceptional: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/30' },
-    strong: { bg: 'bg-green-500/10', text: 'text-green-400', border: 'border-green-500/30' },
-    average: { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/30' },
-    weak: { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/30' },
-    poor: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/30' },
+    strong: { bg: 'bg-accent-success/10', text: 'text-accent-success', border: 'border-accent-success/30' },
+    average: { bg: 'bg-accent-warning/10', text: 'text-text-muted', border: 'border-accent-warning/30' },
+    weak: { bg: 'bg-accent-warning/10', text: 'text-accent-warning', border: 'border-accent-warning/30' },
+    poor: { bg: 'bg-accent-error/10', text: 'text-accent-error', border: 'border-accent-error/30' },
 };
 
 export class BagsClient {

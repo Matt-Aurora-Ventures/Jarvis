@@ -11,10 +11,10 @@ type FilterTier = 'all' | ScoreTier;
 
 const TIER_RANGES = {
     exceptional: { min: 85, max: 100, icon: Star, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-    strong: { min: 70, max: 84, icon: Check, color: 'text-green-400', bg: 'bg-green-500/10' },
-    average: { min: 50, max: 69, icon: Minus, color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
-    weak: { min: 30, max: 49, icon: AlertTriangle, color: 'text-orange-400', bg: 'bg-orange-500/10' },
-    poor: { min: 0, max: 29, icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10' },
+    strong: { min: 70, max: 84, icon: Check, color: 'text-accent-success', bg: 'bg-accent-success/10' },
+    average: { min: 50, max: 69, icon: Minus, color: 'text-text-muted', bg: 'bg-accent-warning/10' },
+    weak: { min: 30, max: 49, icon: AlertTriangle, color: 'text-accent-warning', bg: 'bg-accent-warning/10' },
+    poor: { min: 0, max: 29, icon: XCircle, color: 'text-accent-error', bg: 'bg-accent-error/10' },
 };
 
 const HOW_WE_RATE = [
@@ -34,7 +34,7 @@ const HOW_WE_RATE = [
         title: 'Liquidity Health',
         description: 'Market cap to liquidity ratio, burn status, and lock duration affect safety scores.',
         icon: Droplets,
-        color: 'text-blue-400',
+        color: 'text-accent-neon',
     },
     {
         title: 'Social Signals',
@@ -174,7 +174,7 @@ export default function BagsIntelPage() {
                 {/* Error Banner */}
                 {error && (
                     <div className="max-w-7xl mx-auto px-4 mb-6">
-                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-sm font-mono">
+                        <div className="bg-accent-neon/10 border border-accent-neon/30 rounded-xl p-4 text-accent-neon text-sm font-mono">
                             {error}
                         </div>
                     </div>

@@ -45,7 +45,7 @@ export default function TradePage() {
                                 p-2 rounded-lg transition-colors
                                 ${showAlgoConfig
                                     ? 'bg-accent-neon/20 text-accent-neon'
-                                    : 'bg-theme-dark/50 text-text-muted hover:bg-theme-dark'}
+                                    : 'bg-bg-secondary/50 text-text-muted hover:bg-bg-secondary'}
                             `}
                         >
                             <Settings2 className="w-5 h-5" />
@@ -80,7 +80,7 @@ export default function TradePage() {
                                     <span className="font-mono font-bold text-accent-neon">
                                         {marketRegime.solPrice > 0 ? `$${marketRegime.solPrice.toFixed(2)}` : '...'}
                                     </span>
-                                    <span className={`font-mono text-xs ${marketRegime.solChange24h >= 0 ? 'text-accent-success' : 'text-red-400'}`}>
+                                    <span className={`font-mono text-xs ${marketRegime.solChange24h >= 0 ? 'text-accent-success' : 'text-accent-error'}`}>
                                         {marketRegime.solChange24h >= 0 ? '+' : ''}{marketRegime.solChange24h.toFixed(1)}%
                                     </span>
                                 </div>

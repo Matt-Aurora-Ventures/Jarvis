@@ -59,7 +59,7 @@ function TokenRow({ token, rank }: { token: TokenSentiment; rank: number }) {
     const isNegative = token.change24h < 0;
 
     const TrendIcon = isPositive ? TrendingUp : isNegative ? TrendingDown : Minus;
-    const trendColor = isPositive ? 'text-emerald-400' : isNegative ? 'text-red-400' : 'text-yellow-400';
+    const trendColor = isPositive ? 'text-emerald-400' : isNegative ? 'text-accent-error' : 'text-text-muted';
 
     // Calculate buy/sell bar width
     const buySellTotal = token.buys24h + token.sells24h;
@@ -105,7 +105,7 @@ function TokenRow({ token, rank }: { token: TokenSentiment; rank: number }) {
                         style={{ width: `${buyPercent}%` }}
                     />
                     <div
-                        className="h-full bg-red-500 transition-all duration-300"
+                        className="h-full bg-accent-error transition-all duration-300"
                         style={{ width: `${100 - buyPercent}%` }}
                     />
                 </div>
@@ -141,10 +141,10 @@ function formatCompact(num: number): string {
 function getSentimentBg(label: string): string {
     switch (label) {
         case 'BULLISH': return 'bg-emerald-500/20 text-emerald-400';
-        case 'SLIGHTLY BULLISH': return 'bg-green-500/15 text-green-400';
-        case 'NEUTRAL': return 'bg-yellow-500/15 text-yellow-400';
-        case 'SLIGHTLY BEARISH': return 'bg-orange-500/15 text-orange-400';
-        case 'BEARISH': return 'bg-red-500/20 text-red-400';
+        case 'SLIGHTLY BULLISH': return 'bg-accent-success/15 text-accent-success';
+        case 'NEUTRAL': return 'bg-accent-warning/15 text-text-muted';
+        case 'SLIGHTLY BEARISH': return 'bg-accent-warning/15 text-accent-warning';
+        case 'BEARISH': return 'bg-accent-error/20 text-accent-error';
         default: return 'bg-bg-tertiary text-text-muted';
     }
 }

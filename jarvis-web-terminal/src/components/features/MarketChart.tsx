@@ -120,12 +120,12 @@ export const MarketChart = () => {
     return (
         <div className="relative w-full h-[400px]">
             {loading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-theme-dark/50 z-10 backdrop-blur-sm">
+                <div className="absolute inset-0 flex items-center justify-center bg-bg-secondary/50 z-10 backdrop-blur-sm">
                     <div className="text-accent-neon font-mono animate-pulse">LOADING MARKET DATA...</div>
                 </div>
             )}
             {error && !loading && (
-                <div className="absolute top-2 right-2 text-xs text-amber-400 font-mono bg-amber-900/20 px-2 py-1 rounded">
+                <div className="absolute top-2 right-2 text-xs text-accent-neon font-mono bg-accent-neon/20 px-2 py-1 rounded">
                     {error}
                 </div>
             )}

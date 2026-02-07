@@ -51,11 +51,11 @@ export function SentimentDashboard() {
                             <span className="text-sm text-text-secondary">{data.stats.bullishCount} Bullish</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-yellow-400" />
+                            <span className="w-2 h-2 rounded-full bg-accent-warning" />
                             <span className="text-sm text-text-secondary">{data.stats.neutralCount} Neutral</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-red-400" />
+                            <span className="w-2 h-2 rounded-full bg-accent-error" />
                             <span className="text-sm text-text-secondary">{data.stats.bearishCount} Bearish</span>
                         </div>
                     </div>
@@ -80,7 +80,7 @@ export function SentimentDashboard() {
 
             {/* Error Message */}
             {data.error && (
-                <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400">
+                <div className="mb-4 p-4 rounded-xl bg-accent-error/10 border border-accent-error/30 text-accent-error">
                     {data.error}
                 </div>
             )}

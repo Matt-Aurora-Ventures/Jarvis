@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const XAI_API_URL = 'https://api.x.ai/v1/chat/completions';
-const XAI_API_KEY = process.env.NEXT_PUBLIC_XAI_API_KEY || '';
+// Prefer server-only XAI_API_KEY; fall back to NEXT_PUBLIC_ for backwards compat
+const XAI_API_KEY = process.env.XAI_API_KEY || process.env.NEXT_PUBLIC_XAI_API_KEY || '';
 
 export async function POST(req: NextRequest) {
     if (!XAI_API_KEY) {
-        return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
+        return NextResponse.json(
+            { error: 'XAI_API_KEY not configured. Add it to .env.local' },
+            { status: 500 }
+        );
     }
 
     try {

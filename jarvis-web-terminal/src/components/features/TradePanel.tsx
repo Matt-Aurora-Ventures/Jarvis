@@ -9,6 +9,8 @@ import { getBagsTradingClient, SOL_MINT, USDC_MINT } from '@/lib/bags-trading';
 import { getGrokSentimentClient, TokenSentiment } from '@/lib/grok-sentiment';
 import { PriorityFeeSelector, FeeLevel, FeeBadge } from './PriorityFeeSelector';
 import { useConfidence } from '@/hooks/useConfidence';
+import { getPerpsDeepLink, PERPS_MARKETS, type PerpsMarket } from '@/lib/jupiter-perps';
+import { useToast } from '@/components/ui/Toast';
 
 // TP/SL Presets for easy selection
 const TP_PRESETS = [
@@ -36,6 +38,8 @@ export function TradePanel() {
     // Trade mode
     const [tradeMode, setTradeMode] = useState<TradeMode>('spot');
     const [leverage, setLeverage] = useState<number>(1);
+    const [perpsMarket, setPerpsMarket] = useState<PerpsMarket>('SOL');
+    const { info } = useToast();
 
     // Trade inputs
     const [amount, setAmount] = useState<string>('0.1');
@@ -227,9 +231,27 @@ export function TradePanel() {
                 </button>
             </div>
 
-            {/* Leverage Selector (Perps only) */}
+            {/* Perps Market Selector + Leverage */}
             {tradeMode === 'perps' && (
                 <div className="space-y-2">
+                    {/* Market Selector */}
+                    <div className="flex gap-1">
+                        {(Object.keys(PERPS_MARKETS) as PerpsMarket[]).map((m) => (
+                            <button
+                                key={m}
+                                onClick={() => setPerpsMarket(m)}
+                                className={`flex-1 py-1.5 text-xs font-mono font-bold rounded transition-all ${
+                                    perpsMarket === m
+                                        ? 'bg-accent-neon/20 text-accent-neon border border-accent-neon/40'
+                                        : 'bg-bg-secondary/30 border border-border-primary/50 text-text-muted hover:border-accent-neon/30'
+                                }`}
+                            >
+                                {PERPS_MARKETS[m].label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Leverage */}
                     <div className="flex justify-between text-xs font-mono">
                         <span className="text-text-muted">LEVERAGE</span>
                         <span className="text-accent-neon font-bold">{leverage}x</span>
@@ -265,13 +287,13 @@ export function TradePanel() {
 
             {/* Wallet Connection Warning */}
             {!connected && (
-                <div className="bg-theme-orange/10 border border-theme-orange/30 rounded-lg p-3 text-center">
-                    <span className="text-sm text-theme-orange">Connect wallet to trade</span>
+                <div className="bg-accent-warning/10 border border-accent-warning/30 rounded-lg p-3 text-center">
+                    <span className="text-sm text-accent-warning">Connect wallet to trade</span>
                 </div>
             )}
 
             {/* Shield Reactor Toggle (Jito MEV Protection) */}
-            <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-theme-dark/30 border border-theme-border/30">
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-bg-secondary/30 border border-border-primary/30">
                 <div className="flex items-center gap-2">
                     <Shield className={`w-4 h-4 ${shieldReactor ? 'text-accent-neon' : 'text-text-muted'}`} />
                     <span className="text-sm font-medium">Shield Reactor</span>
@@ -281,7 +303,7 @@ export function TradePanel() {
                     onClick={() => setShieldReactor(!shieldReactor)}
                     className={`
                         relative w-12 h-6 rounded-full transition-colors duration-200
-                        ${shieldReactor ? 'bg-accent-neon' : 'bg-theme-dark/50 border border-theme-border'}
+                        ${shieldReactor ? 'bg-accent-neon' : 'bg-bg-secondary/50 border border-border-primary'}
                     `}
                 >
                     <span
@@ -309,17 +331,17 @@ export function TradePanel() {
             {sentiment && (
                 <div className={`
                     flex items-center justify-between p-3 rounded-lg border
-                    ${sentiment.score >= 65 ? 'bg-theme-green/10 border-theme-green/30' :
-                        sentiment.score >= 35 ? 'bg-theme-orange/10 border-theme-orange/30' :
-                            'bg-theme-red/10 border-theme-red/30'}
+                    ${sentiment.score >= 65 ? 'bg-accent-success/10 border-accent-success/30' :
+                        sentiment.score >= 35 ? 'bg-accent-warning/10 border-accent-warning/30' :
+                            'bg-accent-error/10 border-accent-error/30'}
                 `}>
                     <span className="text-xs font-mono uppercase">AI SENTIMENT</span>
                     <div className="flex items-center gap-2">
                         <span className="font-bold">{sentiment.score}</span>
                         <span className={`text-xs px-2 py-0.5 rounded ${
-                            sentiment.signal === 'strong_buy' || sentiment.signal === 'buy' ? 'bg-theme-green/20 text-theme-green' :
-                                sentiment.signal === 'strong_sell' || sentiment.signal === 'sell' ? 'bg-theme-red/20 text-theme-red' :
-                                    'bg-theme-muted/20 text-theme-muted'
+                            sentiment.signal === 'strong_buy' || sentiment.signal === 'buy' ? 'bg-accent-success/20 text-accent-success' :
+                                sentiment.signal === 'strong_sell' || sentiment.signal === 'sell' ? 'bg-accent-error/20 text-accent-error' :
+                                    'bg-text-muted/20 text-text-muted'
                         }`}>
                             {sentiment.signal.toUpperCase().replace('_', ' ')}
                         </span>
@@ -329,7 +351,7 @@ export function TradePanel() {
 
             {/* Amount Input */}
             <div className="space-y-2">
-                <label className="text-xs font-mono text-theme-muted uppercase">Amount (SOL)</label>
+                <label className="text-xs font-mono text-text-muted uppercase">Amount (SOL)</label>
                 <div className="relative">
                     <input
                         type="number"
@@ -338,7 +360,7 @@ export function TradePanel() {
                         disabled={isTrading}
                         className="w-full bg-bg-secondary/50 border border-border-primary rounded-lg px-4 py-3 font-mono text-lg focus:border-accent-neon outline-none transition-colors disabled:opacity-50"
                     />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-theme-muted font-bold">SOL</span>
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-text-muted font-bold">SOL</span>
                 </div>
                 {/* Quick amount buttons */}
                 <div className="flex gap-2">
@@ -347,7 +369,7 @@ export function TradePanel() {
                             key={val}
                             onClick={() => setAmount(val.toString())}
                             disabled={isTrading}
-                            className="flex-1 py-1 text-xs font-mono bg-theme-dark/30 border border-theme-border/50 rounded hover:border-accent-neon transition-colors disabled:opacity-50"
+                            className="flex-1 py-1 text-xs font-mono bg-bg-secondary/30 border border-border-primary/50 rounded hover:border-accent-neon transition-colors disabled:opacity-50"
                         >
                             {val} SOL
                         </button>
@@ -360,7 +382,7 @@ export function TradePanel() {
                 {/* Take Profit */}
                 <div className="space-y-2">
                     <div className="flex justify-between text-xs font-mono">
-                        <span className="text-theme-green">TAKE PROFIT</span>
+                        <span className="text-accent-success">TAKE PROFIT</span>
                         <span>{tp}%</span>
                     </div>
                     <div className="flex gap-1">
@@ -372,8 +394,8 @@ export function TradePanel() {
                                 className={`
                                     flex-1 py-1.5 text-xs font-mono rounded transition-all
                                     ${tp === preset.value
-                                        ? 'bg-theme-green text-black'
-                                        : 'bg-theme-dark/30 border border-theme-border/50 hover:border-theme-green'}
+                                        ? 'bg-accent-success text-black'
+                                        : 'bg-bg-secondary/30 border border-border-primary/50 hover:border-accent-success'}
                                 `}
                             >
                                 {preset.label}
@@ -384,14 +406,14 @@ export function TradePanel() {
                         type="range" min="1" max="200" value={tp}
                         onChange={(e) => setTp(parseInt(e.target.value))}
                         disabled={isTrading}
-                        className="w-full accent-theme-green h-1 bg-theme-dark/50 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+                        className="w-full accent-accent-success h-1 bg-bg-secondary/50 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
                     />
                 </div>
 
                 {/* Stop Loss */}
                 <div className="space-y-2">
                     <div className="flex justify-between text-xs font-mono">
-                        <span className="text-theme-red">STOP LOSS</span>
+                        <span className="text-accent-error">STOP LOSS</span>
                         <span>{sl}%</span>
                     </div>
                     <div className="flex gap-1">
@@ -403,8 +425,8 @@ export function TradePanel() {
                                 className={`
                                     flex-1 py-1.5 text-xs font-mono rounded transition-all
                                     ${sl === preset.value
-                                        ? 'bg-theme-red text-black'
-                                        : 'bg-theme-dark/30 border border-theme-border/50 hover:border-theme-red'}
+                                        ? 'bg-accent-error text-black'
+                                        : 'bg-bg-secondary/30 border border-border-primary/50 hover:border-accent-error'}
                                 `}
                             >
                                 {preset.label}
@@ -415,7 +437,7 @@ export function TradePanel() {
                         type="range" min="1" max="50" value={sl}
                         onChange={(e) => setSl(parseInt(e.target.value))}
                         disabled={isTrading}
-                        className="w-full accent-theme-red h-1 bg-theme-dark/50 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+                        className="w-full accent-accent-error h-1 bg-bg-secondary/50 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
                     />
                 </div>
             </div>
@@ -452,8 +474,8 @@ export function TradePanel() {
             {statusDisplay && (
                 <div className={`
                     flex items-center justify-center gap-2 p-3 rounded-lg
-                    ${tradeStatus === 'success' ? 'bg-theme-green/10 text-theme-green' :
-                        tradeStatus === 'error' ? 'bg-theme-red/10 text-theme-red' :
+                    ${tradeStatus === 'success' ? 'bg-accent-success/10 text-accent-success' :
+                        tradeStatus === 'error' ? 'bg-accent-error/10 text-accent-error' :
                             'bg-accent-neon/10 text-accent-neon'}
                 `}>
                     {statusDisplay.icon}
@@ -462,42 +484,57 @@ export function TradePanel() {
             )}
 
             {/* Trade Buttons */}
-            <div className="grid grid-cols-2 gap-4">
-                <button
-                    onClick={() => executeTrade('buy')}
-                    disabled={isTrading || circuitBreaker.isTripped || !connected}
-                    className={`
-                        bg-theme-green/10 border border-theme-green text-theme-green py-4 rounded-lg font-bold
-                        hover:bg-theme-green/20 transition-all flex items-center justify-center gap-2 group
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                    `}
-                >
-                    {isTrading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                        <>
-                            LONG <ArrowUpRight className="group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
-                        </>
-                    )}
-                </button>
-                <button
-                    onClick={() => executeTrade('sell')}
-                    disabled={isTrading || circuitBreaker.isTripped || !connected}
-                    className={`
-                        bg-theme-red/10 border border-theme-red text-theme-red py-4 rounded-lg font-bold
-                        hover:bg-theme-red/20 transition-all flex items-center justify-center gap-2 group
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                    `}
-                >
-                    {isTrading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                        <>
-                            SHORT <ArrowDownRight className="group-hover:translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
-                        </>
-                    )}
-                </button>
-            </div>
+            {tradeMode === 'perps' ? (
+                <div className="grid grid-cols-2 gap-4">
+                    <button
+                        onClick={() => {
+                            info(`Opening Jupiter Perps for ${perpsMarket}...`);
+                            window.open(getPerpsDeepLink(perpsMarket), '_blank');
+                        }}
+                        className="bg-accent-success/10 border border-accent-success text-accent-success py-4 rounded-lg font-bold hover:bg-accent-success/20 transition-all flex items-center justify-center gap-2 group"
+                    >
+                        LONG <ArrowUpRight className="group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+                    <button
+                        onClick={() => {
+                            info(`Opening Jupiter Perps for ${perpsMarket}...`);
+                            window.open(getPerpsDeepLink(perpsMarket), '_blank');
+                        }}
+                        className="bg-accent-error/10 border border-accent-error text-accent-error py-4 rounded-lg font-bold hover:bg-accent-error/20 transition-all flex items-center justify-center gap-2 group"
+                    >
+                        SHORT <ArrowDownRight className="group-hover:translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+                </div>
+            ) : (
+                <div className="grid grid-cols-2 gap-4">
+                    <button
+                        onClick={() => executeTrade('buy')}
+                        disabled={isTrading || circuitBreaker.isTripped || !connected}
+                        className="bg-accent-success/10 border border-accent-success text-accent-success py-4 rounded-lg font-bold hover:bg-accent-success/20 transition-all flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isTrading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <>
+                                LONG <ArrowUpRight className="group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => executeTrade('sell')}
+                        disabled={isTrading || circuitBreaker.isTripped || !connected}
+                        className="bg-accent-error/10 border border-accent-error text-accent-error py-4 rounded-lg font-bold hover:bg-accent-error/20 transition-all flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isTrading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <>
+                                SHORT <ArrowDownRight className="group-hover:translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
+                            </>
+                        )}
+                    </button>
+                </div>
+            )}
 
             {/* Circuit Breaker Warning */}
             {circuitBreaker.isTripped && (

@@ -16,7 +16,7 @@ export function WalletButton() {
 
     return (
         <div className="wallet-adapter-wrapper">
-            <WalletMultiButton className="!bg-accent-neon !text-theme-dark !font-mono !font-bold !rounded-full !px-6 !py-2 !h-auto !text-sm hover:!bg-accent-neon/80 !transition-all" />
+            <WalletMultiButton className="!bg-accent-neon !text-black !font-mono !font-bold !rounded-full !px-6 !py-2 !h-auto !text-sm hover:!bg-accent-neon/80 !transition-all" />
         </div>
     );
 }

@@ -14,24 +14,24 @@ const TIER_STYLES: Record<ScoreTier, { ring: string; badge: string; glow: string
         glow: 'shadow-emerald-500/20',
     },
     strong: {
-        ring: 'ring-green-500',
-        badge: 'bg-green-500/10 text-green-400 border-green-500/30',
-        glow: 'shadow-green-500/20',
+        ring: 'ring-accent-success',
+        badge: 'bg-accent-success/10 text-accent-success border-accent-success/30',
+        glow: 'shadow-accent-success/20',
     },
     average: {
-        ring: 'ring-yellow-500',
-        badge: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
-        glow: 'shadow-yellow-500/20',
+        ring: 'ring-accent-warning',
+        badge: 'bg-accent-warning/10 text-text-muted border-accent-warning/30',
+        glow: 'shadow-accent-warning/20',
     },
     weak: {
-        ring: 'ring-orange-500',
-        badge: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
-        glow: 'shadow-orange-500/20',
+        ring: 'ring-accent-warning',
+        badge: 'bg-accent-warning/10 text-accent-warning border-accent-warning/30',
+        glow: 'shadow-accent-warning/20',
     },
     poor: {
-        ring: 'ring-red-500',
-        badge: 'bg-red-500/10 text-red-400 border-red-500/30',
-        glow: 'shadow-red-500/20',
+        ring: 'ring-accent-error',
+        badge: 'bg-accent-error/10 text-accent-error border-accent-error/30',
+        glow: 'shadow-accent-error/20',
     },
 };
 

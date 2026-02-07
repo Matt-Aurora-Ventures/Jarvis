@@ -118,10 +118,10 @@ function GraduationCard({ graduation, sentiment, onSnipe, algoParams }: Graduati
                         <img
                             src={graduation.logo_uri}
                             alt={graduation.symbol}
-                            className="w-10 h-10 rounded-full bg-theme-dark"
+                            className="w-10 h-10 rounded-full bg-bg-secondary"
                         />
                     ) : (
-                        <div className="w-10 h-10 rounded-full bg-theme-dark flex items-center justify-center">
+                        <div className="w-10 h-10 rounded-full bg-bg-secondary flex items-center justify-center">
                             <span className="text-lg font-bold">{graduation.symbol[0]}</span>
                         </div>
                     )}
@@ -153,7 +153,7 @@ function GraduationCard({ graduation, sentiment, onSnipe, algoParams }: Graduati
                     </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
-                    <Droplets className="w-3 h-3 text-theme-cyan" />
+                    <Droplets className="w-3 h-3 text-accent-neon" />
                     <span className="text-text-muted">
                         ${(graduation.market_cap / 1000).toFixed(0)}k
                     </span>
@@ -170,13 +170,13 @@ function GraduationCard({ graduation, sentiment, onSnipe, algoParams }: Graduati
 
             {/* Sentiment (if available) */}
             {sentiment && (
-                <div className="flex items-center justify-between py-2 border-t border-theme-border/30">
+                <div className="flex items-center justify-between py-2 border-t border-border-primary/30">
                     <span className="text-xs text-text-muted">AI Sentiment</span>
                     <div className="flex items-center gap-2">
                         <span className={`
                             text-sm font-mono font-bold
                             ${sentiment.score >= 65 ? 'text-accent-success' :
-                                sentiment.score >= 45 ? 'text-yellow-400' : 'text-accent-danger'}
+                                sentiment.score >= 45 ? 'text-text-muted' : 'text-accent-danger'}
                         `}>
                             {sentiment.score}
                         </span>
@@ -191,7 +191,7 @@ function GraduationCard({ graduation, sentiment, onSnipe, algoParams }: Graduati
 
             {/* Historical Performance */}
             {historicalPerf && (
-                <div className="py-2 border-t border-theme-border/30 text-xs">
+                <div className="py-2 border-t border-border-primary/30 text-xs">
                     <div className="flex items-center justify-between text-text-muted mb-1">
                         <span>Historical ({tier})</span>
                         <span>{historicalPerf.sampleSize} tokens</span>
@@ -220,14 +220,14 @@ function GraduationCard({ graduation, sentiment, onSnipe, algoParams }: Graduati
                         transition-all duration-200
                         ${meetsAlgoThreshold
                             ? 'bg-accent-neon text-black hover:brightness-110'
-                            : 'bg-theme-dark/50 text-text-muted hover:bg-theme-dark'}
+                            : 'bg-bg-secondary/50 text-text-muted hover:bg-bg-secondary'}
                     `}
                 >
                     <Zap className="w-4 h-4 inline mr-1" />
                     SNIPE
                 </button>
                 <button
-                    className="px-3 py-2 rounded-lg bg-theme-dark/50 text-text-muted hover:bg-theme-dark transition-colors"
+                    className="px-3 py-2 rounded-lg bg-bg-secondary/50 text-text-muted hover:bg-bg-secondary transition-colors"
                     title="View details"
                 >
                     <Activity className="w-4 h-4" />
@@ -239,13 +239,13 @@ function GraduationCard({ graduation, sentiment, onSnipe, algoParams }: Graduati
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
     const color = value >= 70 ? 'bg-accent-success' :
-        value >= 50 ? 'bg-yellow-400' :
-            value >= 30 ? 'bg-orange-400' : 'bg-accent-danger';
+        value >= 50 ? 'bg-accent-warning' :
+            value >= 30 ? 'bg-accent-warning' : 'bg-accent-danger';
 
     return (
         <div className="flex items-center gap-2">
             <span className="text-[10px] text-text-muted w-14">{label}</span>
-            <div className="flex-1 h-1.5 bg-theme-dark/50 rounded-full overflow-hidden">
+            <div className="flex-1 h-1.5 bg-bg-secondary/50 rounded-full overflow-hidden">
                 <div
                     className={`h-full ${color} transition-all duration-500`}
                     style={{ width: `${value}%` }}
@@ -272,7 +272,7 @@ function SnipeConfigPanel({ config, onChange, onClose }: SnipeConfigPanelProps) 
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-theme-dark border border-theme-border rounded-2xl p-6 max-w-md w-full">
+            <div className="bg-bg-secondary border border-border-primary rounded-2xl p-6 max-w-md w-full">
                 <div className="flex items-center justify-between mb-6">
                     <h3 className="font-display font-bold text-xl text-text-primary flex items-center gap-2">
                         <Rocket className="w-5 h-5 text-accent-neon" />
@@ -294,7 +294,7 @@ function SnipeConfigPanel({ config, onChange, onClose }: SnipeConfigPanelProps) 
                             onClick={() => setLocal(l => ({ ...l, enabled: !l.enabled }))}
                             className={`
                                 w-12 h-6 rounded-full transition-colors relative
-                                ${local.enabled ? 'bg-accent-neon' : 'bg-theme-dark/50 border border-theme-border'}
+                                ${local.enabled ? 'bg-accent-neon' : 'bg-bg-secondary/50 border border-border-primary'}
                             `}
                         >
                             <span className={`
@@ -389,16 +389,16 @@ function SnipeConfigPanel({ config, onChange, onClose }: SnipeConfigPanelProps) 
                     </div>
 
                     {/* Auto Buy */}
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-accent-warning/10 border border-accent-warning/30">
                         <div>
-                            <span className="text-sm text-yellow-400 font-bold">Auto-Buy</span>
+                            <span className="text-sm text-text-muted font-bold">Auto-Buy</span>
                             <p className="text-xs text-text-muted">Automatically buy matching tokens</p>
                         </div>
                         <button
                             onClick={() => setLocal(l => ({ ...l, autoBuy: !l.autoBuy }))}
                             className={`
                                 w-12 h-6 rounded-full transition-colors relative
-                                ${local.autoBuy ? 'bg-yellow-400' : 'bg-theme-dark/50 border border-theme-border'}
+                                ${local.autoBuy ? 'bg-accent-warning' : 'bg-bg-secondary/50 border border-border-primary'}
                             `}
                         >
                             <span className={`
@@ -412,7 +412,7 @@ function SnipeConfigPanel({ config, onChange, onClose }: SnipeConfigPanelProps) 
                 <div className="flex gap-3 mt-6">
                     <button
                         onClick={onClose}
-                        className="flex-1 py-3 rounded-lg border border-theme-border text-text-muted hover:bg-theme-dark/50 transition-colors"
+                        className="flex-1 py-3 rounded-lg border border-border-primary text-text-muted hover:bg-bg-secondary/50 transition-colors"
                     >
                         Cancel
                     </button>
@@ -522,7 +522,7 @@ export function GraduationFeed() {
         <div className="card-glass overflow-hidden">
             {/* Header */}
             <div
-                className="p-4 border-b border-theme-border/30 cursor-pointer"
+                className="p-4 border-b border-border-primary/30 cursor-pointer"
                 onClick={() => setExpanded(!expanded)}
             >
                 <div className="flex items-center justify-between">
@@ -559,7 +559,7 @@ export function GraduationFeed() {
                                 e.stopPropagation();
                                 setShowConfig(true);
                             }}
-                            className="p-2 rounded-lg hover:bg-theme-dark/50 transition-colors"
+                            className="p-2 rounded-lg hover:bg-bg-secondary/50 transition-colors"
                         >
                             <Settings2 className="w-4 h-4 text-text-muted" />
                         </button>
@@ -584,7 +584,7 @@ export function GraduationFeed() {
                                 px-3 py-1 rounded-full text-xs font-mono whitespace-nowrap transition-all
                                 ${filterTier === 'all'
                                     ? 'bg-accent-neon text-black'
-                                    : 'bg-theme-dark/50 text-text-muted hover:bg-theme-dark'}
+                                    : 'bg-bg-secondary/50 text-text-muted hover:bg-bg-secondary'}
                             `}
                         >
                             All ({graduations.length})
@@ -602,7 +602,7 @@ export function GraduationFeed() {
                                         px-3 py-1 rounded-full text-xs font-mono whitespace-nowrap transition-all
                                         ${filterTier === tier
                                             ? `${colors.bg} ${colors.text} border ${colors.border}`
-                                            : 'bg-theme-dark/50 text-text-muted hover:bg-theme-dark'}
+                                            : 'bg-bg-secondary/50 text-text-muted hover:bg-bg-secondary'}
                                     `}
                                 >
                                     {tier.charAt(0).toUpperCase() + tier.slice(1)} ({tierCounts[tier]})

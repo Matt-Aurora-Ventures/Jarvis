@@ -104,14 +104,14 @@ export function ModelSwitcher() {
             <div className="p-3 rounded-lg bg-bg-tertiary/50 border border-border-primary">
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-text-muted">Current Session</span>
-                    <span className="flex items-center gap-1 text-xs text-green-400">
+                    <span className="flex items-center gap-1 text-xs text-accent-success">
                         <Activity className="w-3 h-3 animate-pulse" />
                         ACTIVE
                     </span>
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-text-primary">{currentModel?.name}</span>
-                    <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 text-[10px] font-mono">
+                    <span className="px-2 py-0.5 rounded bg-accent-neon/20 text-accent-neon text-[10px] font-mono">
                         {currentModel?.alias}
                     </span>
                 </div>
@@ -140,7 +140,7 @@ export function ModelSwitcher() {
                             </code>
                             <button
                                 onClick={() => copyToClipboard('cd "c:\\Users\\lucid\\OneDrive\\Desktop\\Projects\\Jarvis" && claude --model opus', 'opus-cmd')}
-                                className="p-2 rounded-lg bg-accent-neon text-theme-dark hover:bg-accent-neon/80 transition-all"
+                                className="p-2 rounded-lg bg-accent-neon text-black hover:bg-accent-neon/80 transition-all"
                             >
                                 {copied === 'opus-cmd' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                             </button>
@@ -158,7 +158,7 @@ export function ModelSwitcher() {
                             key={model.id}
                             className={`p-3 rounded-lg border ${
                                 model.isCurrent
-                                    ? 'bg-blue-500/10 border-blue-500/30'
+                                    ? 'bg-accent-neon/10 border-accent-neon/30'
                                     : model.isNew
                                     ? 'bg-accent-neon/5 border-accent-neon/20'
                                     : 'bg-bg-tertiary/50 border-border-primary'
@@ -173,7 +173,7 @@ export function ModelSwitcher() {
                                         </span>
                                     )}
                                     {model.isCurrent && (
-                                        <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 text-[10px] font-mono">
+                                        <span className="px-1.5 py-0.5 rounded bg-accent-neon/20 text-accent-neon text-[10px] font-mono">
                                             CURRENT
                                         </span>
                                     )}
@@ -184,7 +184,7 @@ export function ModelSwitcher() {
                                     title="Copy CLI command"
                                 >
                                     {copied === model.id ? (
-                                        <Check className="w-3 h-3 text-green-400" />
+                                        <Check className="w-3 h-3 text-accent-success" />
                                     ) : (
                                         <Terminal className="w-3 h-3 text-text-muted" />
                                     )}
@@ -220,7 +220,7 @@ export function ModelSwitcher() {
                 </button>
                 <button
                     onClick={() => copyToClipboard('claude --model sonnet', 'quick-sonnet')}
-                    className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-blue-500/20 text-blue-400 text-xs font-mono hover:bg-blue-500/30 transition-all"
+                    className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-accent-neon/20 text-accent-neon text-xs font-mono hover:bg-accent-neon/30 transition-all"
                 >
                     {copied === 'quick-sonnet' ? <Check className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
                     Sonnet 4.5

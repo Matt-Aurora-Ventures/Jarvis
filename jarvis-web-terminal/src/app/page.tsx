@@ -3,11 +3,11 @@
 import { SentimentHub } from '@/components/features/SentimentHub';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useSentimentData } from '@/hooks/useSentimentData';
-import { SolChart } from '@/components/features/SolChart';
+import { PriceChart } from '@/components/features/PriceChart';
 import { TradePanel } from '@/components/features/TradePanel';
 import { DashboardGrid } from '@/components/features/DashboardGrid';
 import { NeuralLattice } from '@/components/visuals/NeuralLattice';
-import { TradingGuard, ConfidenceBadge } from '@/components/features/TradingGuard';
+import { TradingGuard } from '@/components/features/TradingGuard';
 import { SentimentDisplay } from '@/components/features/StatGlyph';
 import { PerformanceTracker } from '@/components/features/PerformanceTracker';
 import { AIMarketReport } from '@/components/features/AIMarketReport';
@@ -100,26 +100,8 @@ export default function Home() {
 
           {/* CENTER COLUMN — Chart + AI Intelligence */}
           <div className="flex flex-col gap-3">
-            {/* Chart Card */}
-            <div className="card-glass p-0 overflow-hidden min-h-[420px] relative">
-              <div className="absolute top-3 left-3 z-10 flex gap-3 items-center">
-                <div className="flex flex-col">
-                  <span className="font-display font-bold text-xl text-text-primary">SOL/USDC</span>
-                  <span className="font-mono text-[10px] text-text-muted">JUPITER AGGREGATOR</span>
-                </div>
-                <div className="h-8 w-[1px] bg-border-primary" />
-                <div className="flex flex-col">
-                  <span className="font-mono font-bold text-accent-neon text-sm">
-                    {marketRegime.solPrice > 0 ? `$${marketRegime.solPrice.toFixed(2)}` : '...'}
-                  </span>
-                  <span className={`font-mono text-[10px] ${marketRegime.solChange24h >= 0 ? 'text-accent-success' : 'text-accent-error'}`}>
-                    {marketRegime.solChange24h >= 0 ? '+' : ''}{marketRegime.solChange24h.toFixed(1)}%
-                  </span>
-                </div>
-                <ConfidenceBadge symbol="SOL" />
-              </div>
-              <SolChart />
-            </div>
+            {/* Chart Card — real OHLCV via GeckoTerminal */}
+            <PriceChart />
 
             {/* AI Intelligence — 2 column, always visible */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
