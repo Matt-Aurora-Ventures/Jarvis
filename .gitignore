@@ -456,6 +456,12 @@ bots/treasury/.wallets-demo/
 tg_bot/data/
 web/data/
 
+# === FILES WITH EXPOSED SECRETS (untracked from git) ===
+JARVIS_TELEGRAM_CONSOLE_FIX_SUMMARY.md
+request.md
+docs/TREASURY_BOT_FIX_VERIFIED.md
+scripts/get_moltbook_claim.ps1
+
 # === ORPHAN DIRECTORIES (Unicode / path artifacts) ===
 C\357\200\272*/
 .planning/memory-integration/

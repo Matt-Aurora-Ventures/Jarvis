@@ -277,7 +277,7 @@ ssh root@100.66.17.93 << 'EOF'
 echo "sk-ant-..." | docker secret create anthropic_api_key -
 
 # Example: Telegram bot token
-echo "***TELEGRAM_TOKEN_REDACTED***..." | docker secret create telegram_bot_token -
+echo "8047602125:AAF..." | docker secret create telegram_bot_token -
 EOF
 ```
 
