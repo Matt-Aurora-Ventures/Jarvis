@@ -393,7 +393,9 @@ const DEFAULT_CONFIG: SniperConfig = {
   maxPositionSol: 0.1,
   maxConcurrentPositions: 10,
   minScore: 0,          // Backtested: best configs use liq+momentum, not score
-  minLiquidityUsd: 50000,   // ↑ from $40K — filters more junk, INSIGHT-J uses $25K but we want quality
+  // Default lowered to $25K so the feed doesn't "skip everything" under normal meme-token conditions.
+  // Users can still raise this to $40K/$50K for higher-quality entries.
+  minLiquidityUsd: 25000,
   autoSnipe: false,
   useJito: true,
   slippageBps: 150,
