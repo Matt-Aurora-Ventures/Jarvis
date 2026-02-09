@@ -690,8 +690,9 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
       - Prefer the official bags.fm API (/tokens/top via BagsClient)
       - Do NOT "guess" using name/symbol suffixes like "bags" or address patterns
 
-    If the bags.fm leaderboard endpoint is unavailable, we fall back to DexScreener trending
-    filtered by the bags.fm pools allowlist. If that also fails, we return an empty list.
+    If the bags.fm leaderboard endpoint is unavailable, we return an empty list and the UI
+    shows a clear empty-state (this prevents DexScreener "trending" tokens, usually pump.fun,
+    from being mislabeled as bags.fm launches).
     """
     from tg_bot.handlers.demo.demo_trading import get_bags_client
 
@@ -713,22 +714,17 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
 
         tokens: List[Any] = []
         if bags_client:
-            tokens = await bags_client.get_top_tokens_by_volume(limit=fetch_limit, allow_public=True)
+            # Telegram callbacks are time-sensitive; cap total wait here to avoid handler timeouts.
+            tokens = await asyncio.wait_for(
+                bags_client.get_top_tokens_by_volume(limit=fetch_limit, allow_public=True),
+                timeout=7.0,
+            )
 
         # Filter to bags launch mints only (prevents pump.fun tokens in the Bags menu).
         tokens = [
             t for t in (tokens or [])
             if _looks_like_bags_launch_mint(_field(t, "address", ""))
         ]
-
-        # Endpoint can be unavailable; use DexScreener fallback filtered to bags launch mints.
-        if not tokens:
-            tokens = await _fallback_bags_top_tokens_via_dexscreener(limit=fetch_limit)
-            # Defense-in-depth: ensure patched/broken fallback can't leak non-bags tokens here.
-            tokens = [
-                t for t in (tokens or [])
-                if _looks_like_bags_launch_mint(_field(t, "address", ""))
-            ]
 
         if not tokens:
             return []

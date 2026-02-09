@@ -500,25 +500,12 @@ class TestBagsTopTokens:
         assert result[0]["sentiment"] == "bullish"
 
     @pytest.mark.asyncio
-    async def test_get_bags_top_tokens_fallback_to_dexscreener(self):
-        """Test falls back to DexScreener (bags-only filter) when Bags leaderboard is unavailable."""
-        fallback_token = {
-            "symbol": "TESTBAGS",
-            "name": "Test Bags Token",
-            "address": "AnotherMintBAGS",
-            "price_usd": 1.0,
-            "price_change_24h": 5.0,
-            "volume_24h": 50_000,
-            "liquidity": 25_000,
-        }
-
-        with patch("tg_bot.handlers.demo.demo_trading.get_bags_client", return_value=None), \
-             patch("tg_bot.handlers.demo.demo_sentiment._fallback_bags_top_tokens_via_dexscreener", new_callable=AsyncMock, return_value=[fallback_token]), \
-             patch("tg_bot.handlers.demo.demo_sentiment.get_ai_sentiment_for_token", new_callable=AsyncMock, return_value={"sentiment": "neutral", "score": 0.5, "signal": "NEUTRAL"}):
+    async def test_get_bags_top_tokens_returns_empty_when_bags_unavailable(self):
+        """If bags.fm top-tokens endpoint is down, return empty (no DexScreener mislabeling)."""
+        with patch("tg_bot.handlers.demo.demo_trading.get_bags_client", return_value=None):
             result = await demo_sentiment.get_bags_top_tokens_with_sentiment(limit=15)
 
-        assert len(result) == 1
-        assert result[0]["symbol"] == "TESTBAGS"
+        assert result == []
 
     @pytest.mark.asyncio
     async def test_get_bags_top_tokens_filters_out_pump_fun_mints(self):
