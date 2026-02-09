@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Sparkles, Clock, Droplets, BarChart3, ExternalLink, Crosshair, TrendingUp, TrendingDown, Shield, Target, Check, ArrowRightLeft, Timer, Zap } from 'lucide-react';
+import { Sparkles, Clock, Droplets, BarChart3, ExternalLink, Crosshair, TrendingUp, TrendingDown, Shield, Target, Check, ArrowRightLeft, Timer, Zap, Ban } from 'lucide-react';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { getScoreTier, TIER_CONFIG, type BagsGraduation } from '@/lib/bags-api';
 import { getRecommendedSlTp, getConvictionMultiplier } from '@/stores/useSniperStore';
@@ -97,12 +97,14 @@ export function GraduationFeed() {
         ) : (
           graduations.map((grad) => {
             const hybrid = computeHybridB(grad, config.minLiquidityUsd);
+            const meetsAll = grad.score >= config.minScore && hybrid.passesAll;
             return (
               <TokenCard
                 key={grad.mint}
                 grad={grad}
                 isNew={newMintsRef.current.has(grad.mint)}
-                meetsThreshold={grad.score >= config.minScore && hybrid.passesAll}
+                meetsThreshold={meetsAll}
+                rejectReason={meetsAll ? null : (hybrid.rejectReason || (grad.score < config.minScore ? `Score ${grad.score.toFixed(0)} < ${config.minScore}` : null))}
                 isSniped={snipedMints.has(grad.mint)}
                 onSnipe={() => snipe(grad as any)}
                 onChart={() => setSelectedMint(grad.mint)}
@@ -119,10 +121,11 @@ export function GraduationFeed() {
   );
 }
 
-function TokenCard({ grad, isNew, meetsThreshold, isSniped, onSnipe, onChart, budgetAuthorized, walletReady, minLiquidityUsd, strategyMode }: {
+function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnipe, onChart, budgetAuthorized, walletReady, minLiquidityUsd, strategyMode }: {
   grad: BagsGraduation;
   isNew: boolean;
   meetsThreshold: boolean;
+  rejectReason: string | null;
   isSniped: boolean;
   onSnipe: () => void;
   onChart: () => void;
@@ -169,9 +172,16 @@ function TokenCard({ grad, isNew, meetsThreshold, isSniped, onSnipe, onChart, bu
     <div className={`
       group relative rounded-lg border p-3 transition-all duration-300
       ${isNew ? 'animate-new-grad border-accent-neon/40 bg-accent-neon/[0.04]' : 'border-border-primary bg-bg-secondary/60 hover:border-border-hover hover:bg-bg-tertiary/60'}
-      ${meetsThreshold ? '' : 'opacity-40'}
+      ${!meetsThreshold ? 'opacity-50 border-accent-error/20' : ''}
       ${isSniped ? 'border-accent-neon/30 bg-accent-neon/[0.02]' : ''}
     `}>
+      {/* FILTERED banner — visible without hover */}
+      {!meetsThreshold && rejectReason && (
+        <div className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-accent-error/15 border border-accent-error/25">
+          <Ban className="w-2.5 h-2.5 text-accent-error" />
+          <span className="text-[8px] font-mono font-semibold text-accent-error uppercase tracking-wide">{rejectReason}</span>
+        </div>
+      )}
       {/* Header row */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
@@ -301,7 +311,7 @@ function TokenCard({ grad, isNew, meetsThreshold, isSniped, onSnipe, onChart, bu
   );
 }
 
-function computeHybridB(grad: BagsGraduation, minLiquidityUsd: number): { passesAll: boolean } {
+function computeHybridB(grad: BagsGraduation, minLiquidityUsd: number): { passesAll: boolean; rejectReason: string | null } {
   const liq = grad.liquidity || 0;
   const buys = grad.txn_buys_1h || 0;
   const sells = grad.txn_sells_1h || 0;
@@ -309,11 +319,14 @@ function computeHybridB(grad: BagsGraduation, minLiquidityUsd: number): { passes
   const bsRatio = grad.buy_sell_ratio ?? (sells > 0 ? buys / sells : buys);
   const ageH = grad.age_hours ?? 0;
   const change1h = grad.price_change_1h ?? 0;
+  const vol24h = grad.volume_24h || 0;
+  const volLiq = liq > 0 ? vol24h / liq : 0;
 
-  const passesLiq = liq >= minLiquidityUsd;
-  const passesBSRatio = totalTxns <= 10 ? true : (bsRatio >= 1.0 && bsRatio <= 3.0);
-  const passesAge = ageH <= 500;
-  const passesMomentum = change1h >= 0;
+  if (liq < minLiquidityUsd) return { passesAll: false, rejectReason: `Liq $${(liq / 1000).toFixed(0)}K < $${(minLiquidityUsd / 1000).toFixed(0)}K` };
+  if (totalTxns > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) return { passesAll: false, rejectReason: `B/S ${bsRatio.toFixed(1)} outside range` };
+  if (ageH > 500) return { passesAll: false, rejectReason: `Age ${Math.round(ageH)}h > 500h` };
+  if (change1h < 0) return { passesAll: false, rejectReason: `Momentum ${change1h.toFixed(1)}%` };
+  if (vol24h > 0 && volLiq < 0.5) return { passesAll: false, rejectReason: `Vol/Liq ${volLiq.toFixed(2)} < 0.5` };
 
-  return { passesAll: passesLiq && passesBSRatio && passesAge && passesMomentum };
+  return { passesAll: true, rejectReason: null };
 }
