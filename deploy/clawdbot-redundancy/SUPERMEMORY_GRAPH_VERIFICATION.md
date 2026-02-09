@@ -29,8 +29,8 @@ volumes:
 
 **Environment Variables** (from docker/clawdbot-gateway/.env):
 ```bash
-# Shared API key (already present)
-SUPERMEMORY_API_KEY=sm_9C4AwqczHUwJxjWfxjZiyu_MCsYawPgKFogZCSqLtpWYJFPOaFVeaejHPHFykCsjmRqPRXyOFGnsPJLhmryZAuI
+# Shared API key (set via env; do not commit secrets)
+SUPERMEMORY_API_KEY=sm_your_supermemory_api_key_here
 
 # Per-bot namespace (configured in ClawdBot startup)
 SUPERMEMORY_USER_PREFIX=friday   # For Friday
@@ -370,7 +370,7 @@ docker logs clawdbot-friday | grep -i supermemory
 # Check for Gemini API key
 docker exec clawdbot-friday env | grep GOOGLE_AI_KEY
 
-# Should show: GOOGLE_AI_KEY=AIzaSyBFlFo8BxbdZlqrWEb2c1HummW1ZkU3BVM
+# Should show: GOOGLE_AI_KEY=<REDACTED>
 ```
 
 ---
