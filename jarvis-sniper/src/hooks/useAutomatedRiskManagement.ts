@@ -80,9 +80,9 @@ export function useAutomatedRiskManagement() {
           const nearSl = quickPnl <= -(slThreshold * 0.8); // within 80% of SL
           const nearTp = quickPnl >= (tpThreshold * 0.8); // within 80% of TP
 
-          // Trailing stop: activated only when position has been in profit
-          // Triggers when P&L drops trailingStopPct from the high water mark
-          const trailActive = trailingStopPct > 0 && hwm > 0;
+          // Trailing stop: only arms after position reaches meaningful profit (HWM >= trail%).
+          // Prevents false triggers when a small HWM (+2%) drops through zero to negative PnL.
+          const trailActive = trailingStopPct > 0 && hwm >= trailingStopPct;
           const trailDrop = trailActive ? hwm - quickPnl : 0;
           const nearTrail = trailActive && trailDrop >= (trailingStopPct * 0.8);
 
@@ -161,8 +161,8 @@ export function useAutomatedRiskManagement() {
           const quickHwm = pos.highWaterMarkPct ?? 0;
           const quickHitSl = quickPnl <= -slThreshold;
           const quickHitTp = quickPnl >= tpThreshold;
-          const quickTrailDrop = trailingStopPct > 0 && quickHwm > 0 ? quickHwm - quickPnl : 0;
-          const quickHitTrail = trailingStopPct > 0 && quickHwm > 0 && quickTrailDrop >= trailingStopPct;
+          const quickTrailDrop = trailingStopPct > 0 && quickHwm >= trailingStopPct ? quickHwm - quickPnl : 0;
+          const quickHitTrail = trailingStopPct > 0 && quickHwm >= trailingStopPct && quickTrailDrop >= trailingStopPct;
           const maxAgeMs = (config.maxPositionAgeHours ?? 4) * 3600_000;
           const posAge = now - pos.entryTime;
           const quickHitExpiry = maxAgeMs > 0 && posAge >= maxAgeMs;
