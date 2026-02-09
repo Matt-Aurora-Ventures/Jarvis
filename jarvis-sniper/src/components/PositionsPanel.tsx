@@ -8,7 +8,7 @@ import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { executeSwapFromQuote, getSellQuote } from '@/lib/bags-trading';
 import { getOwnerTokenBalanceLamports, minLamportsString } from '@/lib/solana-tokens';
 import { computeTargetsFromEntryUsd, formatUsdPrice, isBlueChipLongConvictionSymbol } from '@/lib/trade-plan';
-import { loadSessionWalletFromStorage } from '@/lib/session-wallet';
+import { loadSessionWalletFromStorage, sweepExcessToMainWallet } from '@/lib/session-wallet';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
 
@@ -127,6 +127,33 @@ export function PositionsPanel() {
         highWaterMarkPct: Math.max(pos.highWaterMarkPct ?? 0, realPnlPct),
       });
       closePosition(id, status, result.txHash, exitValueSol);
+
+      // If this position lives in the session wallet, bank excess SOL back to the main wallet.
+      // Leaves remaining budget + fee buffer inside the session wallet.
+      if (canUseSession) {
+        try {
+          const s = useSniperStore.getState();
+          const remaining = typeof s.budgetRemaining === 'function'
+            ? s.budgetRemaining()
+            : Math.round((s.budget.budgetSol - s.budget.spent) * 1000) / 1000;
+          const reserve = Math.max(0.01, remaining + 0.002);
+          const sweepSig = await sweepExcessToMainWallet(session!.keypair, session!.mainWallet, reserve);
+          if (sweepSig) {
+            addExecution({
+              id: `sweep-${Date.now()}-${id.slice(-4)}`,
+              type: 'info',
+              symbol: pos.symbol,
+              mint: pos.mint,
+              amount: 0,
+              txHash: sweepSig,
+              reason: `Auto-swept excess SOL to main wallet (reserve ${reserve.toFixed(3)} SOL)`,
+              timestamp: Date.now(),
+            });
+          }
+        } catch {
+          // ignore sweep errors
+        }
+      }
     } catch (err) {
       setPositionClosing(id, false);
       const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -417,6 +444,8 @@ function PositionRow({ pos, isSelected, onClose, onWriteOff, onSelect }: {
       ? 'bg-accent-error/10 text-accent-error border-accent-error/25'
       : 'bg-accent-warning/10 text-accent-warning border-accent-warning/25';
 
+  const closeTitle = canAutoRetry ? 'Sell now (Session Wallet)' : 'Sell via Phantom';
+
   return (
     <div
       onClick={onSelect}
@@ -465,7 +494,7 @@ function PositionRow({ pos, isSelected, onClose, onWriteOff, onSelect }: {
                 ? 'bg-bg-tertiary text-text-muted cursor-not-allowed'
                 : 'bg-accent-error/10 text-accent-error hover:bg-accent-error/20'
             }`}
-            title="Sell via Phantom"
+            title={closeTitle}
           >
             {pos.isClosing ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
           </button>

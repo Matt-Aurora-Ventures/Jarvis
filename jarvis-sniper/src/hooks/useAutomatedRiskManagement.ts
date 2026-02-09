@@ -6,7 +6,7 @@ import { usePhantomWallet } from './usePhantomWallet';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { executeSwapFromQuote, getSellQuote } from '@/lib/bags-trading';
 import { getOwnerTokenBalanceLamports, minLamportsString } from '@/lib/solana-tokens';
-import { loadSessionWalletFromStorage } from '@/lib/session-wallet';
+import { loadSessionWalletFromStorage, sweepExcessToMainWallet } from '@/lib/session-wallet';
 import { isBlueChipLongConvictionSymbol } from '@/lib/trade-plan';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
@@ -40,6 +40,7 @@ export function useAutomatedRiskManagement() {
   const connectionRef = useRef<Connection | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const inFlightRef = useRef<Set<string>>(new Set());
+  const sweepInFlightRef = useRef<Promise<string | null> | null>(null);
   const handleTriggerRef = useRef<(id: string, trigger: TriggerType, pnlPct: number) => Promise<void>>(
     async () => {},
   );
@@ -264,6 +265,37 @@ export function useAutomatedRiskManagement() {
       if (!result.success) throw new Error(result.error || 'Sell failed');
 
       closePosition(id, trigger, result.txHash, exitValueSol);
+
+      // Auto-sweep profits back to the main wallet (banks gains, limits blast radius).
+      // We leave enough SOL behind for remaining budget + fees.
+      if (!sweepInFlightRef.current) {
+        const s = useSniperStore.getState();
+        const remaining = typeof s.budgetRemaining === 'function'
+          ? s.budgetRemaining()
+          : Math.round((s.budget.budgetSol - s.budget.spent) * 1000) / 1000;
+        const reserve = Math.max(0.01, remaining + 0.002);
+
+        sweepInFlightRef.current = sweepExcessToMainWallet(session!.keypair, session!.mainWallet, reserve)
+          .then((sig) => {
+            if (sig) {
+              addExecution({
+                id: `sweep-${Date.now()}-${id.slice(-4)}`,
+                type: 'info',
+                symbol: pos.symbol,
+                mint: pos.mint,
+                amount: 0,
+                reason: `Auto-swept excess SOL to main wallet (reserve ${reserve.toFixed(3)} SOL)`,
+                txHash: sig,
+                timestamp: Date.now(),
+              });
+            }
+            return sig;
+          })
+          .catch(() => null)
+          .finally(() => {
+            sweepInFlightRef.current = null;
+          });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       setPositionClosing(id, false);

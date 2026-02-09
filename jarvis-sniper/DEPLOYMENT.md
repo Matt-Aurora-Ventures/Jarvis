@@ -5,6 +5,7 @@ This project is a **non-custodial** Solana sniping UI:
 - **Buys and sells are executed via Bags** (server-side proxy routes under `/api/bags/*`).
 - **Automated SL/TP requires Session Wallet mode** (a temporary burner key stored in the browser tab).
   - If the tab/browser closes, automation stops (by design; no server custody of user keys).
+  - After exits, the app auto-sweeps excess SOL back to the user’s main wallet (banks profit, reduces blast radius).
 
 ## Environment Variables
 
@@ -60,4 +61,3 @@ Notes:
 
 - For a small beta (50–100 users), the built-in in-memory rate limiting is sufficient.
 - For larger scale or multiple instances, move rate limiting + caching to a shared store (Redis/Upstash).
-

@@ -19,7 +19,9 @@ export async function GET() {
         stopLossPct: 20,
         takeProfitPct: 60,
         trailingStopPct: 8,
-        minLiquidityUsd: 50000,
+        // Beta-friendly default: avoid skipping most real tokens due to $50K gate.
+        // Users can crank this back up in the UI for stricter filters.
+        minLiquidityUsd: 25000,
         minBuySellRatio: 1.5,
         minVolLiqRatio: 0.5,
         safetyScoreMin: 0,
@@ -29,7 +31,7 @@ export async function GET() {
       validationWinRate: 0.941,
       blendedWinRate: 0.941,
       strategy: 'HYBRID_B_v5',
-      description: 'Liq≥$50K + V/L≥0.5 + B/S 1-3 + Age<500h + 1h↑ + 8% trail + TOD | 20/60',
+      description: 'Liq≥$25K + V/L≥0.5 + B/S 1-3 + Age<500h + 1h↑ + 8% trail + TOD | 20/60',
       bestHoursUtc: [4, 8, 11, 21],
       badHoursUtc: [1, 3, 5, 9, 17, 23],
     });

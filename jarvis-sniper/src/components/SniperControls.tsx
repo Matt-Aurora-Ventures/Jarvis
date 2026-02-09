@@ -215,14 +215,14 @@ export function SniperControls() {
   const storedSession = sessionWalletPubkey ? loadSessionWalletFromStorage() : null;
   const sessionKeyOk = !!storedSession && storedSession.publicKey === sessionWalletPubkey;
   // "Ready" should not depend on the budget setting; we validate exact amounts in the activate modal.
-  const sessionReady = !!sessionWalletPubkey && sessionKeyOk && sessionBalanceSol != null && sessionBalanceSol > 0.005;
+  const sessionReady = !!sessionWalletPubkey && sessionKeyOk;
   const canTradeNow = budget.authorized && (usingSession ? sessionReady : connected);
   const autoWalletActive = usingSession && budget.authorized;
 
   function openActivate() {
     setActivateError(null);
     const bal = sessionBalanceSol ?? 0;
-    const defaultBudget = bal > 0 ? Math.max(0.01, Math.min(budget.budgetSol || 0.1, Math.max(0, bal - 0.005))) : budget.budgetSol || 0.1;
+    const defaultBudget = bal > 0 ? Math.max(0.01, Math.min(budget.budgetSol || 0.1, Math.max(0, bal - 0.002))) : budget.budgetSol || 0.1;
     setActivateBudget(String(defaultBudget));
     setActivateMaxTrades(String(config.maxConcurrentPositions));
     setActivatePerTrade(String(config.maxPositionSol));
@@ -249,8 +249,8 @@ export function SniperControls() {
       .reduce((acc, p) => acc + (p.solInvested || 0), 0);
   }
 
-  function commitSessionPlan() {
-    const bal = sessionBalanceSol ?? 0;
+  async function commitSessionPlan() {
+    let bal = sessionBalanceSol ?? 0;
     const budgetSol = Number.parseFloat(activateBudget);
     const maxTrades = Math.max(1, Math.floor(Number.parseFloat(activateMaxTrades)));
     const perTradeSol = Number.parseFloat(activatePerTrade);
@@ -280,9 +280,31 @@ export function SniperControls() {
       return;
     }
 
-    // Keep a tiny buffer for fees/ATA creation.
-    const feeBuffer = 0.005;
-    if (bal > 0 && budgetSol > Math.max(0.01, bal - feeBuffer)) {
+    // Ensure we have the freshest session balance (UI can be stale under RPC throttling).
+    let fetchedBal: number | null = null;
+    try {
+      if (sessionWalletPubkey) {
+        fetchedBal = await getSessionBalance(sessionWalletPubkey);
+        bal = fetchedBal;
+        setSessionBalanceSol(fetchedBal);
+      }
+    } catch {
+      fetchedBal = null;
+    }
+
+    // Fail-safe: if we can't read balance, don't "activate" a plan that can't execute.
+    if (fetchedBal == null) {
+      setActivateError('Could not fetch session wallet balance. Check your RPC / internet and try again.');
+      return;
+    }
+    if (bal < 0.002) {
+      setActivateError('Session wallet balance is too low. Fund it first (ex: 0.02 SOL)');
+      return;
+    }
+
+    // Keep a small buffer for fees/ATA creation. (We do NOT need 0.005 SOL.)
+    const feeBuffer = 0.002;
+    if (budgetSol > Math.max(0.01, bal - feeBuffer)) {
       setActivateError(`Budget too high for session balance. Balance=${bal.toFixed(4)} SOL. Leave ~${feeBuffer} SOL for fees.`);
       return;
     }
@@ -407,6 +429,11 @@ export function SniperControls() {
       // Refresh balance
       const bal = await getSessionBalance(sessionWalletPubkey);
       setSessionBalanceSol(bal);
+
+      // Make activation discoverable immediately after funding.
+      if (!activateOpen && !autoWalletActive) {
+        openActivate();
+      }
     } finally {
       setSessionBusy(false);
     }
@@ -694,7 +721,7 @@ export function SniperControls() {
 
         <p className="text-[10px] text-text-muted/70 leading-relaxed mb-3">
           Optional burner wallet that can auto-sign buys and sells (no Phantom popups). This is the only way SL/TP can execute automatically.
-          Fund it with a small amount you are willing to lose.
+          Fund it with a small amount you are willing to lose. After exits, Jarvis auto-sweeps excess SOL back to your main wallet (banks profit, reduces blast radius).
         </p>
 
         {!sessionWalletPubkey ? (
@@ -776,18 +803,18 @@ export function SniperControls() {
                   Set your budget + trade limits, then auto-snipe using the selected strategy.
                 </span>
               </div>
-              <button
-                onClick={openActivate}
-                disabled={!sessionReady || sessionBusy}
-                className={`px-3 py-2 rounded-lg text-[11px] font-bold transition-all border flex items-center gap-1.5 ${
-                  autoWalletActive
-                    ? 'bg-accent-warning/15 text-accent-warning border-accent-warning/30 hover:bg-accent-warning/20'
-                    : 'bg-accent-warning text-black border-accent-warning/30 hover:bg-accent-warning/90'
-                } ${(!sessionReady || sessionBusy) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
-                title={!sessionReady ? 'Fund the session wallet first' : autoWalletActive ? 'Adjust plan (budget / limits)' : 'Activate auto trading with session wallet'}
-              >
-                {autoWalletActive ? <><ShieldCheck className="w-3.5 h-3.5" /> Active</> : <><Flame className="w-3.5 h-3.5" /> Activate</>}
-              </button>
+                <button
+                  onClick={openActivate}
+                  disabled={!sessionReady || sessionBusy}
+                  className={`px-3 py-2 rounded-lg text-[11px] font-bold transition-all border flex items-center gap-1.5 ${
+                    autoWalletActive
+                      ? 'bg-accent-warning/15 text-accent-warning border-accent-warning/30 hover:bg-accent-warning/20'
+                      : 'bg-accent-warning text-black border-accent-warning/30 hover:bg-accent-warning/90'
+                  } ${(!sessionReady || sessionBusy) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                  title={!sessionReady ? 'Session key missing in this tab' : autoWalletActive ? 'Adjust plan (budget / limits)' : 'Activate auto trading with session wallet'}
+                >
+                  {autoWalletActive ? <><ShieldCheck className="w-3.5 h-3.5" /> Active</> : <><Flame className="w-3.5 h-3.5" /> Activate</>}
+                </button>
             </div>
 
             <div className="grid grid-cols-2 gap-2">

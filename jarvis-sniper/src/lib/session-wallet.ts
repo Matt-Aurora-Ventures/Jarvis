@@ -230,6 +230,52 @@ export async function sweepToMainWallet(
 }
 
 /**
+ * Sweep ONLY the excess SOL back to the main wallet, leaving a reserve behind
+ * for continued trading + fees.
+ *
+ * This is used to "bank profits" automatically while keeping the session wallet
+ * funded enough to continue auto-sniping.
+ */
+export async function sweepExcessToMainWallet(
+  sessionKeypair: Keypair,
+  mainWallet: string,
+  reserveSol: number,
+): Promise<string | null> {
+  const connection = new Connection(RPC_URL, 'confirmed');
+  const balance = await connection.getBalance(sessionKeypair.publicKey);
+
+  // Keep a reserve + tiny dust for fees.
+  const keepLamports = Math.floor(Math.max(0, reserveSol) * LAMPORTS_PER_SOL) + 5000;
+  const sweepAmount = balance - keepLamports;
+
+  // Avoid sweeping tiny amounts (keeps noise down, avoids edge-case fee issues).
+  if (sweepAmount < 0.001 * LAMPORTS_PER_SOL) return null;
+
+  const instruction = SystemProgram.transfer({
+    fromPubkey: sessionKeypair.publicKey,
+    toPubkey: new PublicKey(mainWallet),
+    lamports: sweepAmount,
+  });
+
+  const blockhash = await connection.getLatestBlockhash('confirmed');
+  const messageV0 = new TransactionMessage({
+    payerKey: sessionKeypair.publicKey,
+    recentBlockhash: blockhash.blockhash,
+    instructions: [instruction],
+  }).compileToV0Message();
+
+  const tx = new VersionedTransaction(messageV0);
+  tx.sign([sessionKeypair]);
+
+  const sig = await connection.sendRawTransaction(tx.serialize(), {
+    skipPreflight: false,
+    preflightCommitment: 'confirmed',
+  });
+
+  return sig;
+}
+
+/**
  * Sign a VersionedTransaction with the session keypair.
  * Used for auto-executing sells when SL/TP triggers.
  */

@@ -95,6 +95,18 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
       minVolLiqRatio: 0.5, tradingHoursGate: false, strategyMode: 'conservative',
     },
   },
+  {
+    id: 'genetic_best',
+    name: 'GENETIC BEST (83% WR)',
+    description: 'Genetic optimizer champion — SL35/TP200/Trail12, fresh tokens, $3K liq',
+    winRate: '83.3% (GA)',
+    trades: 0,
+    config: {
+      stopLossPct: 35, takeProfitPct: 200, trailingStopPct: 12,
+      minLiquidityUsd: 3000, minScore: 43, maxTokenAgeHours: 24,
+      strategyMode: 'aggressive',
+    },
+  },
 ];
 
 /** UTC hours proven profitable in 928-token OHLCV backtest */
