@@ -6,6 +6,7 @@ import { useSniperStore, type SniperConfig, type StrategyMode, STRATEGY_PRESETS 
 import type { BagsGraduation } from '@/lib/bags-api';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
+import { buildFundSessionTx, createSessionWallet, destroySessionWallet, getSessionBalance, isLikelyFunded, loadSessionWalletFromStorage, sweepToMainWallet } from '@/lib/session-wallet';
 
 /**
  * Analyze the current scanner feed and suggest the best strategy preset.
@@ -120,8 +121,8 @@ const STRATEGY_INFO: Record<string, { summary: string; optimal: string; risk: st
 };
 
 export function SniperControls() {
-  const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining, graduations } = useSniperStore();
-  const { connected, signTransaction, publicKey } = usePhantomWallet();
+  const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining, graduations, tradeSignerMode, setTradeSignerMode, sessionWalletPubkey, setSessionWalletPubkey } = useSniperStore();
+  const { connected, address, signTransaction, publicKey } = usePhantomWallet();
   const { snipe, ready: walletReady } = useSnipeExecutor();
   const [expanded, setExpanded] = useState(true);
   const [bestEverLoaded, setBestEverLoaded] = useState(false);
@@ -131,10 +132,54 @@ export function SniperControls() {
   const [snipeLoading, setSnipeLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
 
+  // Session wallet (auto-signing) state
+  const [sessionBalanceSol, setSessionBalanceSol] = useState<number | null>(null);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [sessionFundSol, setSessionFundSol] = useState('');
+  const [confirmSweep, setConfirmSweep] = useState(false);
+
   // Load BEST_EVER on mount
   useEffect(() => {
     loadBestEverConfig();
   }, []);
+
+  // Sync session wallet pubkey from sessionStorage on mount (tab refresh safe)
+  useEffect(() => {
+    try {
+      const stored = loadSessionWalletFromStorage();
+      if (stored && !sessionWalletPubkey) {
+        setSessionWalletPubkey(stored.publicKey);
+      }
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refresh session wallet balance periodically
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refresh() {
+      if (!sessionWalletPubkey) {
+        setSessionBalanceSol(null);
+        return;
+      }
+      try {
+        const bal = await getSessionBalance(sessionWalletPubkey);
+        if (!cancelled) setSessionBalanceSol(bal);
+      } catch {
+        // ignore
+      }
+    }
+
+    refresh();
+    const t = setInterval(refresh, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [sessionWalletPubkey]);
 
   async function loadBestEverConfig() {
     try {
@@ -159,6 +204,9 @@ export function SniperControls() {
     : 0;
   const useRecommendedExits = config.useRecommendedExits !== false;
   const suggestion = suggestStrategy(graduations as BagsGraduation[]);
+
+  const usingSession = tradeSignerMode === 'session';
+  const sessionReady = !!sessionWalletPubkey && sessionBalanceSol != null && isLikelyFunded(sessionBalanceSol, budget.budgetSol);
 
   function handleBudgetPreset(sol: number) {
     setBudgetSol(sol);
@@ -221,6 +269,78 @@ export function SniperControls() {
     } finally {
       setAuthLoading(false);
     }
+  }
+
+  async function handleCreateSessionWallet() {
+    if (!address) return;
+    setSessionBusy(true);
+    try {
+      const { publicKey: pubkey } = createSessionWallet(address);
+      setSessionWalletPubkey(pubkey);
+      setTradeSignerMode('phantom'); // user toggles to session after funding
+    } finally {
+      setSessionBusy(false);
+    }
+  }
+
+  async function handleFundSessionWallet() {
+    if (!connected || !address || !signTransaction || !sessionWalletPubkey) return;
+    const amount = Math.max(0.001, Number.parseFloat(sessionFundSol || String(budget.budgetSol)) || budget.budgetSol || 0);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    setSessionBusy(true);
+    try {
+      const fundTx = await buildFundSessionTx(address, sessionWalletPubkey, amount);
+      const signed = await signTransaction(fundTx);
+
+      const { Connection } = await import('@solana/web3.js');
+      const connection = new Connection(
+        process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com',
+        'confirmed',
+      );
+
+      const sig = await connection.sendRawTransaction(signed.serialize(), {
+        skipPreflight: true,
+        maxRetries: 3,
+      });
+      await connection.confirmTransaction(sig, 'confirmed');
+
+      // Refresh balance
+      const bal = await getSessionBalance(sessionWalletPubkey);
+      setSessionBalanceSol(bal);
+    } finally {
+      setSessionBusy(false);
+    }
+  }
+
+  async function handleSweepSessionWallet() {
+    if (!confirmSweep) {
+      setConfirmSweep(true);
+      setTimeout(() => setConfirmSweep(false), 3000);
+      return;
+    }
+    setConfirmSweep(false);
+
+    const stored = loadSessionWalletFromStorage();
+    if (!stored) return;
+
+    setSessionBusy(true);
+    try {
+      await sweepToMainWallet(stored.keypair, stored.mainWallet);
+      if (sessionWalletPubkey) {
+        const bal = await getSessionBalance(sessionWalletPubkey);
+        setSessionBalanceSol(bal);
+      }
+    } finally {
+      setSessionBusy(false);
+    }
+  }
+
+  function handleDestroySessionWallet() {
+    destroySessionWallet();
+    setSessionWalletPubkey(null);
+    setSessionBalanceSol(null);
+    if (usingSession) setTradeSignerMode('phantom');
   }
 
   async function handleManualSnipe() {
@@ -461,6 +581,135 @@ export function SniperControls() {
         </button>
       </div>
 
+      {/* ─── AUTO-EXECUTE (SESSION WALLET) ─── */}
+      <div className="p-3 rounded-lg bg-bg-secondary border border-border-primary mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Flame className="w-3.5 h-3.5 text-accent-warning" />
+          <span className="text-xs font-semibold">Auto-Execute (Session Wallet)</span>
+          <span className={`ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded-full border ${
+            usingSession ? 'text-accent-warning bg-accent-warning/10 border-accent-warning/20' : 'text-text-muted bg-bg-tertiary border-border-primary'
+          }`}>
+            {usingSession ? 'AUTO' : 'MANUAL'}
+          </span>
+        </div>
+
+        <p className="text-[10px] text-text-muted/70 leading-relaxed mb-3">
+          Optional burner wallet that can auto-sign buys and sells (no Phantom popups). This is the only way SL/TP can execute automatically.
+          Fund it with a small amount you are willing to lose.
+        </p>
+
+        {!sessionWalletPubkey ? (
+          <button
+            onClick={handleCreateSessionWallet}
+            disabled={!connected || sessionBusy}
+            className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              connected ? 'bg-accent-warning text-black hover:bg-accent-warning/90' : 'bg-bg-tertiary text-text-muted border border-border-primary'
+            } ${(!connected || sessionBusy) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            title={!connected ? 'Connect Phantom to create a session wallet' : 'Create a burner wallet for auto execution'}
+          >
+            {sessionBusy ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Working...</> : 'Create Session Wallet'}
+          </button>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-bg-tertiary border border-border-primary">
+              <div className="flex flex-col">
+                <span className="text-[9px] text-text-muted uppercase tracking-wider">Session Address</span>
+                <span className="text-[10px] font-mono text-text-primary break-all">
+                  {sessionWalletPubkey}
+                </span>
+              </div>
+              <button
+                onClick={async () => {
+                  try { await navigator.clipboard.writeText(sessionWalletPubkey); } catch {}
+                }}
+                className="text-[10px] font-mono px-2 py-1 rounded border bg-bg-secondary text-text-muted border-border-primary hover:border-border-hover"
+                title="Copy address"
+              >
+                Copy
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between text-[10px] font-mono px-1">
+              <span className="text-text-muted">Balance</span>
+              <span className={`font-bold ${sessionBalanceSol != null && sessionBalanceSol > 0 ? 'text-accent-warning' : 'text-text-muted'}`}>
+                {sessionBalanceSol == null ? '—' : `${sessionBalanceSol.toFixed(4)} SOL`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder={`Fund (ex: ${budget.budgetSol} SOL)`}
+                value={sessionFundSol}
+                onChange={(e) => setSessionFundSol(e.target.value)}
+                disabled={!connected || sessionBusy}
+                className="flex-1 bg-bg-tertiary border border-border-primary rounded-lg px-3 py-2 text-xs font-mono text-text-primary outline-none placeholder:text-text-muted/40 focus:border-accent-warning/40 disabled:opacity-50 transition-all"
+              />
+              <button
+                onClick={handleFundSessionWallet}
+                disabled={!connected || sessionBusy}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  connected ? 'bg-accent-warning text-black hover:bg-accent-warning/90' : 'bg-bg-tertiary text-text-muted border border-border-primary'
+                } ${(!connected || sessionBusy) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                {sessionBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Fund'}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between p-2.5 rounded-lg bg-bg-tertiary border border-border-primary">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold">Use session wallet for trading</span>
+                <span className="text-[9px] text-text-muted/70">
+                  When enabled: buys/sells auto-sign and SL/TP can auto-execute.
+                </span>
+              </div>
+              <button
+                onClick={() => setTradeSignerMode(usingSession ? 'phantom' : 'session')}
+                disabled={!sessionReady}
+                className={`relative w-10 h-5 rounded-full transition-all ${
+                  usingSession ? 'bg-accent-warning' : 'bg-bg-secondary border border-border-primary'
+                } ${!sessionReady ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                title={!sessionReady ? 'Fund the session wallet with your budget first' : 'Toggle auto execution'}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full transition-all ${
+                  usingSession ? 'left-[22px] bg-black' : 'left-0.5 bg-text-muted'
+                }`} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={handleSweepSessionWallet}
+                disabled={sessionBusy}
+                className={`py-2 rounded-lg text-[11px] font-semibold transition-all border ${
+                  confirmSweep
+                    ? 'bg-accent-error/20 text-accent-error border-accent-error/40 animate-pulse'
+                    : 'bg-bg-tertiary text-text-muted border-border-primary hover:border-border-hover'
+                } ${sessionBusy ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                title="Send all SOL back to your main Phantom wallet (leaves tiny dust for fees)"
+              >
+                {confirmSweep ? 'Click again to sweep' : 'Sweep Back'}
+              </button>
+              <button
+                onClick={handleDestroySessionWallet}
+                disabled={sessionBusy}
+                className={`py-2 rounded-lg text-[11px] font-semibold transition-all border bg-accent-error/[0.06] text-accent-error/80 border-accent-error/20 hover:border-accent-error/40 hover:text-accent-error ${
+                  sessionBusy ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                }`}
+                title="Deletes the session key from this tab (you cannot recover funds without the key)"
+              >
+                Delete Session
+              </button>
+            </div>
+
+            <p className="text-[9px] text-text-muted/60 leading-relaxed">
+              Note: auto-execution still requires this page to stay open. If you close the tab, automation stops.
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* ─── QUICK SNIPE SECTION ─── */}
       <div className="p-3 rounded-lg bg-bg-secondary border border-border-primary mb-4">
         <div className="flex items-center gap-2 mb-3">
@@ -585,7 +834,7 @@ export function SniperControls() {
             />
             <ConfigField
               icon={<Zap className="w-3.5 h-3.5 text-accent-neon" />}
-              label="Per-Snipe Size"
+              label="Per-Snipe"
               value={config.maxPositionSol}
               suffix=" SOL"
               onChange={(v) => setConfig({ maxPositionSol: v })}
@@ -765,10 +1014,10 @@ function ConfigField({
   };
 
   return (
-    <div className="flex flex-col gap-1.5 p-2.5 rounded-lg bg-bg-secondary border border-border-primary">
-      <div className="flex items-center gap-1.5">
-        {icon}
-        <span className="text-[10px] text-text-muted uppercase tracking-wider">{label}</span>
+    <div className="flex flex-col gap-1.5 p-2.5 rounded-lg bg-bg-secondary border border-border-primary min-w-0 overflow-hidden">
+      <div className="flex items-center gap-1.5 min-w-0">
+        {icon && <span className="flex-shrink-0">{icon}</span>}
+        <span className="text-[10px] text-text-muted uppercase tracking-wider truncate">{label}</span>
       </div>
       <div className="flex items-center gap-2">
         <input

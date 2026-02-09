@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { BagsGraduation } from '@/lib/bags-api';
 
 export type StrategyMode = 'conservative' | 'aggressive';
+export type TradeSignerMode = 'phantom' | 'session';
 
 /** Proven strategy presets from backtesting 895+ tokens */
 export interface StrategyPreset {
@@ -23,36 +24,52 @@ export interface StrategyPreset {
  */
 export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
+    id: 'elite',
+    name: 'SNIPER ELITE',
+    description: '$100K+ Liq, V/L≥2, Age<100h, 10%+ Mom, Hours Gate',
+    winRate: 'NEW — strictest filter',
+    trades: 0,
+    config: {
+      stopLossPct: 15, takeProfitPct: 60, trailingStopPct: 8,
+      minLiquidityUsd: 100000, minMomentum1h: 10, maxTokenAgeHours: 100,
+      minVolLiqRatio: 2.0, tradingHoursGate: true, strategyMode: 'conservative',
+    },
+  },
+  {
     id: 'momentum',
     name: 'MOMENTUM',
-    description: 'Score≥50 + V/L≥3 + B/S≥1.5',
+    description: 'V/L≥3 + B/S 1.2-2 + 5%+ Mom',
     winRate: '75% (13T)',
     trades: 13,
-    config: { stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8, minLiquidityUsd: 0, minScore: 50, strategyMode: 'conservative' },
+    config: {
+      stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
+      minLiquidityUsd: 50000, minScore: 0, minMomentum1h: 5,
+      minVolLiqRatio: 1.5, tradingHoursGate: true, strategyMode: 'conservative',
+    },
   },
   {
     id: 'insight_j',
     name: 'INSIGHT-J',
-    description: 'Liq≥$25K + Age<100h + 1h↑',
+    description: 'Liq≥$50K + Age<100h + 10%+ Mom',
     winRate: '86% (7T)',
     trades: 7,
-    config: { stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8, minLiquidityUsd: 25000, strategyMode: 'conservative' },
-  },
-  {
-    id: 'hot',
-    name: 'HOT',
-    description: 'Score≥60 + V/L≥2 + Liq≥$10K',
-    winRate: '49% (54T)',
-    trades: 54,
-    config: { stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8, minLiquidityUsd: 10000, minScore: 60, strategyMode: 'conservative' },
+    config: {
+      stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
+      minLiquidityUsd: 50000, maxTokenAgeHours: 100, minMomentum1h: 10,
+      tradingHoursGate: true, strategyMode: 'conservative',
+    },
   },
   {
     id: 'hybrid_b',
-    name: 'HYBRID-B v5',
-    description: 'Balanced default — Liq≥$40K',
-    winRate: '100% (10T)',
+    name: 'HYBRID-B v6',
+    description: 'Balanced — Liq≥$50K + Hours Gate',
+    winRate: '~90% (est)',
     trades: 10,
-    config: { stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8, minLiquidityUsd: 40000, strategyMode: 'conservative' },
+    config: {
+      stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
+      minLiquidityUsd: 50000, minMomentum1h: 5, minVolLiqRatio: 1.0,
+      tradingHoursGate: true, strategyMode: 'conservative',
+    },
   },
   {
     id: 'let_it_ride',
@@ -60,17 +77,30 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: '20/100 + 5% trail — max gains',
     winRate: '100% (10T)',
     trades: 10,
-    config: { stopLossPct: 20, takeProfitPct: 100, trailingStopPct: 5, minLiquidityUsd: 40000, strategyMode: 'aggressive' },
+    config: {
+      stopLossPct: 20, takeProfitPct: 100, trailingStopPct: 5,
+      minLiquidityUsd: 50000, minMomentum1h: 5, tradingHoursGate: true,
+      strategyMode: 'aggressive',
+    },
   },
   {
-    id: 'insight_i',
-    name: 'INSIGHT-I',
-    description: 'Liq≥$50K + Age<200h + B/S 1-3',
-    winRate: '60% (14T)',
-    trades: 14,
-    config: { stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8, minLiquidityUsd: 50000, strategyMode: 'conservative' },
+    id: 'loose',
+    name: 'WIDE NET',
+    description: 'Original loose filters — more trades, lower WR',
+    winRate: '49% (54T)',
+    trades: 54,
+    config: {
+      stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
+      minLiquidityUsd: 25000, minMomentum1h: 0, maxTokenAgeHours: 500,
+      minVolLiqRatio: 0.5, tradingHoursGate: false, strategyMode: 'conservative',
+    },
   },
 ];
+
+/** UTC hours proven profitable in 928-token OHLCV backtest */
+export const PROVEN_TRADING_HOURS = [2, 4, 8, 11, 14, 20, 21];
+/** UTC hours with 0% win rate in backtest — hard avoid */
+export const DEAD_HOURS = [1, 3, 5, 6, 7, 9, 12, 13, 16, 19, 22, 23];
 
 export interface SniperConfig {
   stopLossPct: number;
@@ -90,6 +120,40 @@ export interface SniperConfig {
   maxPositionAgeHours: number;
   /** Use per-position recommended SL/TP (default). If false, force global SL/TP for all positions. */
   useRecommendedExits: boolean;
+  /** Minimum 1h price momentum required (%). Backtest: 5-10% dramatically cuts losers. */
+  minMomentum1h: number;
+  /** Max token age in hours (younger = higher alpha). Backtest: <200h is sweet spot. */
+  maxTokenAgeHours: number;
+  /** Min Vol/Liq ratio. Backtest: >=1.0 is 8x edge vs <0.5. */
+  minVolLiqRatio: number;
+  /** Only trade during proven UTC hours (OHLCV backtest). Prevents 0% WR hour entries. */
+  tradingHoursGate: boolean;
+  /** Minimum minutes since graduation before sniping (avoids post-graduation dumps). 0 = disabled. */
+  minAgeMinutes: number;
+  // ─── Circuit Breaker ───
+  /** Enable circuit breaker to halt auto-sniping on cascading losses */
+  circuitBreakerEnabled: boolean;
+  /** Halt after N consecutive losses (0 = disabled) */
+  maxConsecutiveLosses: number;
+  /** Halt after losing X SOL in a rolling 24h window (0 = disabled) */
+  maxDailyLossSol: number;
+  /** Halt if remaining budget drops below X SOL (capital preservation) */
+  minBalanceGuardSol: number;
+}
+
+export interface CircuitBreakerState {
+  /** Whether the breaker is currently tripped (sniping halted) */
+  tripped: boolean;
+  /** Human-readable reason for trip */
+  reason: string;
+  /** Timestamp when breaker was tripped */
+  trippedAt: number;
+  /** Running count of consecutive losses */
+  consecutiveLosses: number;
+  /** SOL lost in the current 24h window */
+  dailyLossSol: number;
+  /** Timestamp when the daily window resets */
+  dailyResetAt: number;
 }
 
 export interface BudgetState {
@@ -136,13 +200,28 @@ export interface Position {
   score: number;
   recommendedSl: number;
   recommendedTp: number;
+  /** Per-position adaptive trailing stop % (from getRecommendedSlTp). Falls back to global config if absent. */
+  recommendedTrail?: number;
   /** Trailing stop: highest P&L% ever reached (high water mark) */
   highWaterMarkPct: number;
+  /** Actual SOL received from the sell tx (set after execution for accurate P&L). */
+  exitSolReceived?: number;
+  /** Real P&L based on actual sell proceeds, not price estimate. */
+  realPnlSol?: number;
+  /** Real P&L percent based on actual sell proceeds. */
+  realPnlPercent?: number;
+  // ─── Jupiter Trigger Orders (on-chain SL/TP) ───
+  /** Jupiter trigger order account for take-profit */
+  jupTpOrderKey?: string;
+  /** Jupiter trigger order account for stop-loss */
+  jupSlOrderKey?: string;
+  /** Whether SL/TP orders are placed on-chain */
+  onChainSlTp?: boolean;
 }
 
 export interface ExecutionEvent {
   id: string;
-  type: 'snipe' | 'exit_pending' | 'tp_exit' | 'sl_exit' | 'manual_exit' | 'error' | 'skip';
+  type: 'snipe' | 'exit_pending' | 'tp_exit' | 'sl_exit' | 'manual_exit' | 'error' | 'skip' | 'info';
   symbol: string;
   mint: string;
   amount?: number;
@@ -156,6 +235,7 @@ export interface ExecutionEvent {
 export interface TokenRecommendation {
   sl: number;
   tp: number;
+  trail: number;
   reasoning: string;
 }
 
@@ -227,11 +307,26 @@ export function getRecommendedSlTp(
     reasoning += `, TOD boost (${nowUtcHour}h)`;
   }
 
+  // ─── Adaptive Trailing Stop ───
+  // High momentum → tighter trail (fast movers reverse quickly)
+  // Low momentum → wider trail (give room to develop)
+  let trail: number;
+  if (priceChange1h > 50) {
+    trail = 5;
+    reasoning += ', tight trail (high momentum)';
+  } else if (priceChange1h <= 20) {
+    trail = 12;
+    reasoning += ', wide trail (low momentum)';
+  } else {
+    trail = 8;
+    reasoning += ', default trail';
+  }
+
   // Clamp values — aggressive allows higher TP cap
   sl = Math.max(10, Math.min(30, Math.round(sl)));
   tp = Math.max(30, Math.min(mode === 'aggressive' ? 200 : 120, Math.round(tp)));
 
-  return { sl, tp, reasoning };
+  return { sl, tp, trail, reasoning };
 }
 
 /** Conviction-weighted position sizing — scale bets by signal quality.
@@ -266,12 +361,24 @@ export function getConvictionMultiplier(
   if ([4, 11, 21].includes(nowUtcHour)) { score += 0.2; factors.push(`hr${nowUtcHour}`); }
   else if (nowUtcHour === 8) { score += 0.1; factors.push('hr8'); }
 
-  // Factor 5: B/S sweet spot (1.2–2.0 = optimal in backtest)
+  // Factor 5: B/S sweet spot (1.2-2.0 = optimal in backtest)
   const buys = grad.txn_buys_1h || 0;
   const sells = grad.txn_sells_1h || 0;
   const bsRatio = sells > 0 ? buys / sells : buys;
   if (buys + sells > 10 && bsRatio >= 1.2 && bsRatio <= 2.0) {
     score += 0.1; factors.push(`BS${bsRatio.toFixed(1)}`);
+  }
+
+  // ─── Negative Factors (risk penalties) ───
+
+  // Penalty: Very high price change (>200%) — pump risk
+  if (change1h > 200) {
+    score -= 0.2; factors.push('pump risk');
+  }
+
+  // Penalty: Very high B/S ratio (>3.0) — potential manipulation
+  if (bsRatio > 3.0 && buys + sells > 5) {
+    score -= 0.15; factors.push('high B/S');
   }
 
   // Base 0.5 + factors → clamp to [0.5, 2.0]
@@ -286,14 +393,24 @@ const DEFAULT_CONFIG: SniperConfig = {
   maxPositionSol: 0.1,
   maxConcurrentPositions: 10,
   minScore: 0,          // Backtested: best configs use liq+momentum, not score
-  // Live feeds often show many candidates in the $40-50K range; 40K trades more while still filtering junk.
-  minLiquidityUsd: 40000,
+  minLiquidityUsd: 50000,   // ↑ from $40K — filters more junk, INSIGHT-J uses $25K but we want quality
   autoSnipe: false,
   useJito: true,
   slippageBps: 150,
   strategyMode: 'conservative',
   maxPositionAgeHours: 4,  // Auto-close stale positions after 4h to free capital
   useRecommendedExits: true,
+  // NEW: Stricter quality gates (be pickier, 4x fewer but higher quality)
+  minMomentum1h: 5,        // Require 5%+ upward momentum (was 0% — let everything through)
+  maxTokenAgeHours: 200,   // ↓ from 500h — young tokens have 188% more alpha
+  minVolLiqRatio: 1.0,     // ↑ from 0.5 — tighter filter for vol/liq edge
+  tradingHoursGate: true,  // Only trade during OHLCV-proven hours (blocks 11 dead hours)
+  minAgeMinutes: 2,       // Don't snipe tokens that graduated < 2 min ago (post-grad dumps)
+  // Circuit breaker: halt sniping on cascading losses to protect capital
+  circuitBreakerEnabled: true,
+  maxConsecutiveLosses: 3,     // 3 losses in a row = halt
+  maxDailyLossSol: 0.5,       // 0.5 SOL daily loss limit
+  minBalanceGuardSol: 0.05,   // Stop if budget remaining < 0.05 SOL
 };
 
 /** Monotonic counter to prevent duplicate keys when multiple snipes fire in same ms */
@@ -307,6 +424,14 @@ interface SniperState {
   loadPreset: (presetId: string) => void;
   activePreset: string;
   loadBestEver: (cfg: Record<string, any>) => void;
+
+  // Trade Signing Mode
+  /** Phantom (manual signing) or Session Wallet (auto signing). */
+  tradeSignerMode: TradeSignerMode;
+  setTradeSignerMode: (mode: TradeSignerMode) => void;
+  /** Session wallet public key (base58) when enabled. Secret key stays in sessionStorage only. */
+  sessionWalletPubkey: string | null;
+  setSessionWalletPubkey: (pubkey: string | null) => void;
 
   // Budget / Authorization
   budget: BudgetState;
@@ -329,8 +454,9 @@ interface SniperState {
   updatePrices: (priceMap: Record<string, number>) => void;
   /** Set isClosing lock on a position */
   setPositionClosing: (id: string, closing: boolean) => void;
-  /** Close a position with proper status and stats tracking */
-  closePosition: (id: string, status: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' | 'closed', txHash?: string) => void;
+  /** Close a position with proper status and stats tracking.
+   * @param exitSolReceived — actual SOL from the sell tx (for accurate P&L). */
+  closePosition: (id: string, status: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' | 'closed', txHash?: string, exitSolReceived?: number) => void;
 
   // Snipe action — creates position + logs execution
   snipeToken: (grad: BagsGraduation & Record<string, any>) => void;
@@ -355,6 +481,10 @@ interface SniperState {
   lossCount: number;
   totalTrades: number;
 
+  // Circuit Breaker
+  circuitBreaker: CircuitBreakerState;
+  resetCircuitBreaker: () => void;
+
   // Reset — clears positions, executions, stats, sniped mints
   resetSession: () => void;
 }
@@ -364,6 +494,10 @@ export const useSniperStore = create<SniperState>()(
     (set, get) => ({
   config: DEFAULT_CONFIG,
   activePreset: 'hybrid_b',
+  tradeSignerMode: 'phantom',
+  setTradeSignerMode: (mode) => set({ tradeSignerMode: mode }),
+  sessionWalletPubkey: null,
+  setSessionWalletPubkey: (pubkey) => set({ sessionWalletPubkey: pubkey }),
   setConfig: (partial) => set((s) => {
     // When trailing stop changes, reset HWM on open positions so the trail starts fresh
     const trailChanged = partial.trailingStopPct !== undefined && partial.trailingStopPct !== s.config.trailingStopPct;
@@ -462,41 +596,107 @@ export const useSniperStore = create<SniperState>()(
   setPositionClosing: (id, closing) => set((s) => ({
     positions: s.positions.map((p) => p.id === id ? { ...p, isClosing: closing } : p),
   })),
-  closePosition: (id, status, txHash) => {
+  closePosition: (id, status, txHash, exitSolReceived) => {
     const state = get();
     const pos = state.positions.find((p) => p.id === id);
     if (!pos) return;
 
     execCounter++;
+
+    // Use actual sell proceeds when available, otherwise fall back to price estimate
+    const realPnlSol = exitSolReceived != null
+      ? exitSolReceived - pos.solInvested
+      : pos.pnlSol;
+    const realPnlPct = exitSolReceived != null
+      ? ((exitSolReceived - pos.solInvested) / pos.solInvested) * 100
+      : pos.pnlPercent;
+
     // Trail stop above entry is a win, below entry is a loss
-    const isTrailWin = status === 'trail_stop' && pos.pnlPercent >= 0;
-    const isExpiredWin = status === 'expired' && pos.pnlPercent >= 0;
+    const isWin = realPnlPct >= 0;
     const exitType = status === 'tp_hit' ? 'tp_exit'
-      : status === 'trail_stop' ? (isTrailWin ? 'tp_exit' : 'sl_exit')
+      : status === 'trail_stop' ? (isWin ? 'tp_exit' : 'sl_exit')
       : status === 'sl_hit' ? 'sl_exit'
-      : status === 'expired' ? (isExpiredWin ? 'tp_exit' : 'sl_exit')
+      : status === 'expired' ? (isWin ? 'tp_exit' : 'sl_exit')
       : 'manual_exit';
+
+    // Manual exits count toward win/loss too (based on whether profitable)
+    const countAsWin = exitType === 'tp_exit' || (exitType === 'manual_exit' && isWin);
+    const countAsLoss = exitType === 'sl_exit' || (exitType === 'manual_exit' && !isWin);
+
+    const pnlLabel = exitSolReceived != null
+      ? `${realPnlSol >= 0 ? '+' : ''}${realPnlSol.toFixed(4)} SOL (real)`
+      : `${realPnlPct.toFixed(1)}% (est)`;
+
     const execEvent: ExecutionEvent = {
       id: `exec-${Date.now()}-${execCounter}`,
       type: exitType,
       symbol: pos.symbol,
       mint: pos.mint,
       amount: pos.solInvested,
-      pnlPercent: pos.pnlPercent,
+      pnlPercent: realPnlPct,
       txHash,
       timestamp: Date.now(),
-      reason: `${status === 'trail_stop' ? 'TRAIL STOP' : status === 'expired' ? 'EXPIRED (age limit)' : status.replace('_', ' ').toUpperCase()} at ${pos.pnlPercent.toFixed(1)}%`,
+      reason: `${status === 'trail_stop' ? 'TRAIL STOP' : status === 'expired' ? 'EXPIRED' : status.replace('_', ' ').toUpperCase()} — ${pnlLabel}`,
     };
 
-    set((s) => ({
-      positions: s.positions.map((p) => p.id === id ? { ...p, status, isClosing: false, exitPending: undefined } : p),
-      executionLog: [execEvent, ...s.executionLog].slice(0, 200),
-      totalPnl: s.totalPnl + pos.pnlSol,
-      winCount: exitType === 'tp_exit' ? s.winCount + 1 : s.winCount,
-      lossCount: exitType === 'sl_exit' ? s.lossCount + 1 : s.lossCount,
-      totalTrades: s.totalTrades + 1,
-      budget: { ...s.budget, spent: Math.max(0, s.budget.spent - pos.solInvested) },
-    }));
+    set((s) => {
+      // ─── Circuit Breaker Update ───
+      const cb = { ...s.circuitBreaker };
+      const now = Date.now();
+
+      // Reset 24h window if expired
+      if (now >= cb.dailyResetAt) {
+        cb.dailyLossSol = 0;
+        cb.dailyResetAt = now + 86_400_000;
+      }
+
+      if (countAsLoss) {
+        cb.consecutiveLosses += 1;
+        cb.dailyLossSol += Math.abs(realPnlSol);
+      } else if (countAsWin) {
+        cb.consecutiveLosses = 0; // Reset streak on any win
+      }
+
+      // Check trip conditions
+      const cfg = s.config;
+      if (cfg.circuitBreakerEnabled && !cb.tripped) {
+        const budgetRemaining = s.budget.budgetSol - Math.max(0, s.budget.spent - pos.solInvested);
+        if (cfg.maxConsecutiveLosses > 0 && cb.consecutiveLosses >= cfg.maxConsecutiveLosses) {
+          cb.tripped = true;
+          cb.reason = `${cb.consecutiveLosses} consecutive losses`;
+          cb.trippedAt = now;
+        } else if (cfg.maxDailyLossSol > 0 && cb.dailyLossSol >= cfg.maxDailyLossSol) {
+          cb.tripped = true;
+          cb.reason = `Daily loss ${cb.dailyLossSol.toFixed(3)} SOL >= ${cfg.maxDailyLossSol} limit`;
+          cb.trippedAt = now;
+        } else if (cfg.minBalanceGuardSol > 0 && budgetRemaining < cfg.minBalanceGuardSol) {
+          cb.tripped = true;
+          cb.reason = `Budget remaining ${budgetRemaining.toFixed(3)} SOL < ${cfg.minBalanceGuardSol} guard`;
+          cb.trippedAt = now;
+        }
+      }
+
+      return {
+        positions: s.positions.map((p) => p.id === id ? {
+          ...p,
+          status,
+          isClosing: false,
+          exitPending: undefined,
+          exitSolReceived,
+          realPnlSol,
+          realPnlPercent: realPnlPct,
+        } : p),
+        executionLog: [execEvent, ...s.executionLog].slice(0, 200),
+        totalPnl: s.totalPnl + realPnlSol,
+        winCount: countAsWin ? s.winCount + 1 : s.winCount,
+        lossCount: countAsLoss ? s.lossCount + 1 : s.lossCount,
+        totalTrades: s.totalTrades + 1,
+        budget: { ...s.budget, spent: Math.max(0, s.budget.spent - pos.solInvested) },
+        circuitBreaker: cb,
+        // Auto-disable autoSnipe when breaker trips
+        config: cb.tripped ? { ...s.config, autoSnipe: false } : s.config,
+      };
+    });
   },
 
   snipedMints: new Set(),
@@ -508,6 +708,9 @@ export const useSniperStore = create<SniperState>()(
 
     // Guard: budget not authorized
     if (!budget.authorized) return;
+
+    // Guard: circuit breaker tripped
+    if (state.circuitBreaker.tripped) return;
 
     // Guard: already sniped
     if (snipedMints.has(grad.mint)) return;
@@ -526,7 +729,7 @@ export const useSniperStore = create<SniperState>()(
     const positionSol = Math.min(config.maxPositionSol * conviction, remaining);
     if (positionSol < 0.001) return; // minimum viable position
 
-    // ═══ INSIGHT-DRIVEN FILTERS (backtested: HYBRID_B 91.7% WR) ═══
+    // ═══ ELITE FILTERS — Be pickier, trade less, win more ═══
     // Helper: log skip ONCE per mint, then add to skippedMints so we never re-log
     const logSkipOnce = (reason: string) => {
       execCounter++;
@@ -545,14 +748,55 @@ export const useSniperStore = create<SniperState>()(
       }));
     };
 
-    // Filter 1: Minimum liquidity threshold (USD) — backtested default: $50K
+    // Gate 0: Trading hours — block entries during dead hours (11/24 hours have 0% WR)
+    if (config.tradingHoursGate) {
+      const nowUtcHour = new Date().getUTCHours();
+      if (DEAD_HOURS.includes(nowUtcHour)) {
+        logSkipOnce(`Dead hour (${nowUtcHour}:00 UTC) — ${DEAD_HOURS.length} hours blocked`);
+        return;
+      }
+    }
+
+    // Gate 0.5: Smart entry delay — skip tokens that graduated too recently
+    if (config.minAgeMinutes > 0) {
+      const gradTime = (grad.graduation_time || 0) * 1000; // convert seconds to ms
+      const ageMinutes = (Date.now() - gradTime) / 60000;
+      if (ageMinutes < config.minAgeMinutes) {
+        logSkipOnce(`Too fresh: ${ageMinutes.toFixed(1)}min < ${config.minAgeMinutes}min minimum`);
+        return;
+      }
+    }
+
+    // Gate 1: Minimum liquidity (USD)
     const liq = grad.liquidity || 0;
     if (liq < config.minLiquidityUsd) {
       logSkipOnce(`Low liquidity: $${Math.round(liq).toLocaleString('en-US')} < $${Math.round(config.minLiquidityUsd).toLocaleString('en-US')}`);
       return;
     }
 
-    // Filter 2: Buy/Sell ratio 1.0-3.0 (sweet spot — extreme = pump signal)
+    // Gate 2: Minimum momentum (1h price change) — strongest predictor at 270% power
+    const change1h = grad.price_change_1h || 0;
+    if (change1h < config.minMomentum1h) {
+      logSkipOnce(`Weak momentum: ${change1h.toFixed(1)}% < ${config.minMomentum1h}% min`);
+      return;
+    }
+
+    // Gate 3: Token age — young tokens have 188% more alpha
+    const ageHours = grad.age_hours || 0;
+    if (config.maxTokenAgeHours > 0 && ageHours > config.maxTokenAgeHours) {
+      logSkipOnce(`Too old: ${Math.round(ageHours)}h > ${config.maxTokenAgeHours}h limit`);
+      return;
+    }
+
+    // Gate 4: Vol/Liq ratio — 8x edge (40.6% upside vs 4.9%)
+    const vol24h = grad.volume_24h || 0;
+    const volLiqRatio = liq > 0 ? vol24h / liq : 0;
+    if (vol24h > 0 && volLiqRatio < config.minVolLiqRatio) {
+      logSkipOnce(`Low Vol/Liq: ${volLiqRatio.toFixed(2)} < ${config.minVolLiqRatio} min`);
+      return;
+    }
+
+    // Gate 5: Buy/Sell ratio 1.0-3.0 (sweet spot — extreme = pump-and-dump signal)
     const buys = grad.txn_buys_1h || 0;
     const sells = grad.txn_sells_1h || 0;
     const bsRatio = sells > 0 ? buys / sells : buys;
@@ -561,32 +805,18 @@ export const useSniperStore = create<SniperState>()(
       return;
     }
 
-    // Filter 3: Age < 500h (younger tokens = higher alpha)
-    const ageHours = grad.age_hours || 0;
-    if (ageHours > 500) {
-      logSkipOnce(`Too old: ${Math.round(ageHours)}h > 500h limit`);
-      return;
-    }
-
-    // Filter 4: Positive 1h momentum (288% predictive power in backtest)
-    const change1h = grad.price_change_1h || 0;
-    if (change1h < 0) {
-      logSkipOnce(`Negative 1h momentum: ${change1h.toFixed(1)}%`);
-      return;
-    }
-
-    // TOD note: removed hard block — OHLCV backtest had too few samples (16/200 tokens).
-    // TOD is now handled as a soft penalty in getConvictionMultiplier() instead.
-
-    // Filter 6: Vol/Liq ratio ≥ 0.5 (8x edge: 40.6% upside vs 4.9% for <0.5)
-    const vol24h = grad.volume_24h || 0;
-    const volLiqRatio = liq > 0 ? vol24h / liq : 0;
-    if (vol24h > 0 && volLiqRatio < 0.5) {
-      logSkipOnce(`Low Vol/Liq: ${volLiqRatio.toFixed(2)} < 0.5 (8x edge)`);
-      return;
-    }
-
     // ═══ All insight filters passed — proceed with snipe ═══
+
+    // ─── Volume Spike / Pump Detection ───
+    // If volume > 5x liquidity AND price change > 100%, flag as potential pump
+    let pumpWarning = false;
+    let effectiveConviction = conviction;
+    if (vol24h > 5 * liq && change1h > 100) {
+      pumpWarning = true;
+      effectiveConviction = Math.max(0.5, conviction * 0.3); // reduce by 0.3x (multiply by 0.3)
+    }
+    const positionSolFinal = Math.min(config.maxPositionSol * effectiveConviction, remaining);
+    if (positionSolFinal < 0.001) return;
 
     // Get per-token recommended SL/TP (respects strategy mode)
     const rec = getRecommendedSlTp(grad, config.strategyMode);
@@ -599,8 +829,8 @@ export const useSniperStore = create<SniperState>()(
       name: grad.name,
       entryPrice: grad.price_usd || 0,
       currentPrice: grad.price_usd || 0,
-      amount: positionSol / (grad.price_usd || 1),
-      solInvested: positionSol,
+      amount: positionSolFinal / (grad.price_usd || 1),
+      solInvested: positionSolFinal,
       pnlPercent: 0,
       pnlSol: 0,
       entryTime: Date.now(),
@@ -611,15 +841,16 @@ export const useSniperStore = create<SniperState>()(
       highWaterMarkPct: 0,
     };
 
+    const pumpLabel = pumpWarning ? ' | PUMP WARNING: vol>5x liq + 1h>100%' : '';
     execCounter++;
     const execEvent: ExecutionEvent = {
       id: `exec-${Date.now()}-${execCounter}`,
       type: 'snipe',
       symbol: grad.symbol,
       mint: grad.mint,
-      amount: positionSol,
+      amount: positionSolFinal,
       price: grad.price_usd,
-      reason: `Score ${grad.score} | SL ${rec.sl}% TP ${rec.tp}% | ${conviction.toFixed(1)}x [${convFactors.join(',')}] | ${rec.reasoning}`,
+      reason: `Score ${grad.score} | SL ${rec.sl}% TP ${rec.tp}% Trail ${rec.trail}% | ${effectiveConviction.toFixed(1)}x [${convFactors.join(',')}] | ${rec.reasoning}${pumpLabel}`,
       timestamp: Date.now(),
     };
 
@@ -630,7 +861,7 @@ export const useSniperStore = create<SniperState>()(
       positions: [newPosition, ...s.positions],
       executionLog: [execEvent, ...s.executionLog].slice(0, 200),
       snipedMints: newSniped,
-      budget: { ...s.budget, spent: s.budget.spent + positionSol },
+      budget: { ...s.budget, spent: s.budget.spent + positionSolFinal },
     }));
   },
 
@@ -647,6 +878,26 @@ export const useSniperStore = create<SniperState>()(
   lossCount: 0,
   totalTrades: 0,
 
+  // Circuit Breaker
+  circuitBreaker: {
+    tripped: false,
+    reason: '',
+    trippedAt: 0,
+    consecutiveLosses: 0,
+    dailyLossSol: 0,
+    dailyResetAt: Date.now() + 86_400_000,
+  },
+  resetCircuitBreaker: () => set({
+    circuitBreaker: {
+      tripped: false,
+      reason: '',
+      trippedAt: 0,
+      consecutiveLosses: 0,
+      dailyLossSol: 0,
+      dailyResetAt: Date.now() + 86_400_000,
+    },
+  }),
+
   resetSession: () => set({
     positions: [],
     executionLog: [],
@@ -658,6 +909,14 @@ export const useSniperStore = create<SniperState>()(
     winCount: 0,
     lossCount: 0,
     totalTrades: 0,
+    circuitBreaker: {
+      tripped: false,
+      reason: '',
+      trippedAt: 0,
+      consecutiveLosses: 0,
+      dailyLossSol: 0,
+      dailyResetAt: Date.now() + 86_400_000,
+    },
   }),
     }),
     {
@@ -678,9 +937,12 @@ export const useSniperStore = create<SniperState>()(
       partialize: (state) => ({
         positions: state.positions,
         config: state.config,
+        tradeSignerMode: state.tradeSignerMode,
+        sessionWalletPubkey: state.sessionWalletPubkey,
         budget: state.budget,
         executionLog: state.executionLog.slice(0, 50), // Keep last 50
         snipedMintsArray: Array.from(state.snipedMints), // Set → Array for JSON
+        circuitBreaker: state.circuitBreaker,
         totalPnl: state.totalPnl,
         winCount: state.winCount,
         lossCount: state.lossCount,
@@ -709,6 +971,11 @@ export const useSniperStore = create<SniperState>()(
         const arr = (state as unknown as Record<string, unknown>).snipedMintsArray;
         if (Array.isArray(arr)) {
           state.snipedMints = new Set(arr as string[]);
+        }
+
+        // If session signing was selected but the pubkey is missing, fall back safely.
+        if (state.tradeSignerMode === 'session' && !state.sessionWalletPubkey) {
+          state.tradeSignerMode = 'phantom';
         }
       },
     },

@@ -4,7 +4,8 @@ import { useCallback, useRef } from 'react';
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { usePhantomWallet } from './usePhantomWallet';
 import { useSniperStore, getRecommendedSlTp, getConvictionMultiplier, type Position, type ExecutionEvent } from '@/stores/useSniperStore';
-import { executeSwap, SOL_MINT, type SwapResult, savePositionToServer } from '@/lib/bags-trading';
+import { executeSwap, SOL_MINT, type SwapResult } from '@/lib/bags-trading';
+import { loadSessionWalletFromStorage } from '@/lib/session-wallet';
 import type { BagsGraduation } from '@/lib/bags-api';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
@@ -14,10 +15,10 @@ let execCounter = 0;
 
 /**
  * Hook that wires real on-chain swap execution to the sniper store.
- * Call `snipe(grad)` to: get quote → sign with Phantom → send tx → track position.
+ * Call `snipe(grad)` to: get quote → sign (Phantom or Session Wallet) → send tx → track position.
  */
 export function useSnipeExecutor() {
-  const { address, connected, signTransaction } = usePhantomWallet();
+  const { address, connected, signTransaction, signAllTransactions } = usePhantomWallet();
   const store = useSniperStore();
   const connectionRef = useRef<Connection | null>(null);
   const pendingRef = useRef<Set<string>>(new Set());
@@ -34,8 +35,29 @@ export function useSnipeExecutor() {
     const { config, positions, snipedMints, budget, addPosition, addExecution } = useSniperStore.getState();
 
     // --- Pre-flight guards ---
-    if (!connected || !address) {
-      addExecution(makeExecEvent(grad, 'error', 0, 'Wallet not connected'));
+    const signerMode = useSniperStore.getState().tradeSignerMode;
+    const sessionPubkey = useSniperStore.getState().sessionWalletPubkey;
+
+    const session = signerMode === 'session' ? loadSessionWalletFromStorage() : null;
+    const canUseSession = signerMode === 'session' && !!sessionPubkey && !!session && session.publicKey === sessionPubkey;
+
+    const signerAddress = canUseSession ? sessionPubkey! : address;
+    const signerSignTransaction = canUseSession
+      ? (async (tx: VersionedTransaction) => {
+          tx.sign([session!.keypair]);
+          return tx;
+        })
+      : (signTransaction as ((tx: VersionedTransaction) => Promise<VersionedTransaction>) | undefined);
+
+    if (!signerAddress || !signerSignTransaction) {
+      addExecution(makeExecEvent(
+        grad,
+        'error',
+        0,
+        signerMode === 'session'
+          ? 'Session wallet not ready (create + fund it in controls)'
+          : 'Wallet not connected',
+      ));
       return;
     }
     if (!budget.authorized) {
@@ -118,12 +140,12 @@ export function useSnipeExecutor() {
 
       const result: SwapResult = await executeSwap(
         connection,
-        address,
+        signerAddress,
         SOL_MINT,
         grad.mint,
         positionSol,
         config.slippageBps,
-        signTransaction as (tx: VersionedTransaction) => Promise<VersionedTransaction>,
+        signerSignTransaction,
         config.useJito,
       );
 
@@ -145,7 +167,7 @@ export function useSnipeExecutor() {
         mint: grad.mint,
         symbol: grad.symbol,
         name: grad.name,
-        walletAddress: address,
+        walletAddress: signerAddress,
         entryPrice,
         currentPrice: entryPrice,
         amount: result.outputAmount,
@@ -159,24 +181,11 @@ export function useSnipeExecutor() {
         score: grad.score,
         recommendedSl: rec.sl,
         recommendedTp: rec.tp,
+        recommendedTrail: rec.trail,
         highWaterMarkPct: 0,
       };
 
       addPosition(newPosition);
-
-      // Persist to server for 24/7 risk worker
-      savePositionToServer({
-        mint: grad.mint,
-        symbol: grad.symbol,
-        amount: result.outputAmount,
-        amountLamports: result.outputAmountLamports,
-        solInvested: positionSol,
-        entryPrice,
-        stopLossPct: rec.sl,
-        takeProfitPct: rec.tp,
-        txHash: result.txHash,
-        walletAddress: address,
-      });
 
       // Update budget spent
       useSniperStore.setState((s) => ({
@@ -190,6 +199,20 @@ export function useSnipeExecutor() {
         txHash: result.txHash,
         price: entryPrice,
       });
+
+      // Immediately confirm SL/TP monitoring is active for this position.
+      // The risk worker (useAutomatedRiskManagement) polls every 1.5s and will
+      // auto-execute in session-wallet mode, or mark exitPending in Phantom mode.
+      const sigMode = useSniperStore.getState().tradeSignerMode;
+      const isAutoMode = sigMode === 'session';
+      addExecution(makeExecEvent(
+        grad,
+        'info',
+        0,
+        `SL/TP ACTIVE: SL -${rec.sl}% | TP +${rec.tp}% | Trail ${rec.trail}% | ${
+          isAutoMode ? 'AUTO-SELL enabled (session wallet)' : 'Manual mode — approve exits in Positions'
+        }`,
+      ));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       addExecution(makeExecEvent(grad, 'error', positionSol, `Exception: ${msg}`));
@@ -200,7 +223,7 @@ export function useSnipeExecutor() {
     } finally {
       pendingRef.current.delete(grad.mint);
     }
-  }, [connected, address, signTransaction]);
+  }, [connected, address, signTransaction, signAllTransactions]);
 
   return { snipe, ready: connected && !!address };
 }
@@ -224,9 +247,7 @@ function makeExecEvent(
   };
 }
 
-async function resolveEntryPriceUsd(mint: string, fallback?: number): Promise<number> {
-  if (typeof fallback === 'number' && fallback > 0) return fallback;
-
+async function fetchDexScreenerPrice(mint: string): Promise<number> {
   try {
     const res = await fetch(`${DEXSCREENER_TOKENS}/${mint}`, {
       headers: { Accept: 'application/json' },
@@ -234,7 +255,6 @@ async function resolveEntryPriceUsd(mint: string, fallback?: number): Promise<nu
     if (!res.ok) return 0;
     const pairs: any[] = await res.json();
 
-    // Pick the pair with the highest liquidity for price stability.
     let best: any | null = null;
     for (const p of pairs) {
       const liq = parseFloat(p?.liquidity?.usd || '0');
@@ -246,4 +266,67 @@ async function resolveEntryPriceUsd(mint: string, fallback?: number): Promise<nu
   } catch {
     return 0;
   }
+}
+
+async function resolveEntryPriceUsd(mint: string, fallback?: number): Promise<number> {
+  if (typeof fallback === 'number' && fallback > 0) return fallback;
+
+  // Try DexScreener immediately
+  const price = await fetchDexScreenerPrice(mint);
+  if (price > 0) return price;
+
+  // Retry after 2s — pair may not be indexed yet right after graduation
+  await new Promise((r) => setTimeout(r, 2000));
+  return fetchDexScreenerPrice(mint);
+}
+
+/**
+ * If a position was created with entryPrice=0, keep retrying in the background
+ * until we get a real price. SL/TP monitoring is skipped while entryPrice=0,
+ * so this is critical to prevent silent risk management failure.
+ */
+function scheduleDeferredPriceResolution(posId: string, mint: string) {
+  const delays = [5000, 10000, 20000, 40000]; // retry at 5s, 10s, 20s, 40s
+  let attempt = 0;
+
+  const tryResolve = async () => {
+    const pos = useSniperStore.getState().positions.find((p) => p.id === posId);
+    if (!pos || pos.status !== 'open') return; // closed or removed
+    if (pos.entryPrice > 0) return; // already resolved
+
+    const price = await fetchDexScreenerPrice(mint);
+    if (price > 0) {
+      useSniperStore.getState().updatePosition(posId, {
+        entryPrice: price,
+        currentPrice: price,
+      });
+      useSniperStore.getState().addExecution({
+        id: `price-resolved-${Date.now()}-${posId.slice(-4)}`,
+        type: 'info',
+        symbol: pos.symbol,
+        mint,
+        amount: 0,
+        reason: `Entry price resolved: $${price.toFixed(8)} — SL/TP now active`,
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    attempt++;
+    if (attempt < delays.length) {
+      setTimeout(tryResolve, delays[attempt]);
+    } else {
+      useSniperStore.getState().addExecution({
+        id: `price-fail-${Date.now()}-${posId.slice(-4)}`,
+        type: 'error',
+        symbol: pos.symbol,
+        mint,
+        amount: 0,
+        reason: 'Could not resolve entry price after 4 retries — SL/TP INACTIVE. Close manually.',
+        timestamp: Date.now(),
+      });
+    }
+  };
+
+  setTimeout(tryResolve, delays[0]);
 }

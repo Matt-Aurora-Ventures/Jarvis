@@ -765,8 +765,9 @@ function makeResult(
 // Data Source 4: Helius DAS API (token metadata, holders)
 // ════════════════════════════════════════════════════════════════
 
-const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_API_KEY || '95014bec-7a2f-46af-9750-48be929844f4';
-const HELIUS_RPC = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
+// Server-side only: never hardcode API keys in the repo.
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY || '';
+const HELIUS_RPC = HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}` : '';
 
 interface HeliusAsset {
   mint: string;
@@ -783,6 +784,7 @@ interface HeliusAsset {
 async function fetchHeliusTokenData(mints: string[]): Promise<Map<string, HeliusAsset>> {
   const result = new Map<string, HeliusAsset>();
   if (mints.length === 0) return result;
+  if (!HELIUS_RPC) return result;
 
   // Batch in groups of 100 (Helius limit per batch)
   const batchSize = 100;

@@ -5,14 +5,18 @@ import { X, DollarSign, Clock, ExternalLink, Shield, Target, BarChart3, RotateCc
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
-import { closePositionOnServer, executeSwapFromQuote, getSellQuote } from '@/lib/bags-trading';
+import { executeSwapFromQuote, getSellQuote } from '@/lib/bags-trading';
 import { getOwnerTokenBalanceLamports, minLamportsString } from '@/lib/solana-tokens';
+import { computeTargetsFromEntryUsd, formatUsdPrice, isBlueChipLongConvictionSymbol } from '@/lib/trade-plan';
+import { loadSessionWalletFromStorage } from '@/lib/session-wallet';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
 
 export function PositionsPanel() {
   const { positions, setSelectedMint, selectedMint, resetSession, totalPnl, winCount, lossCount, totalTrades } = useSniperStore();
   const config = useSniperStore((s) => s.config);
+  const tradeSignerMode = useSniperStore((s) => s.tradeSignerMode);
+  const sessionWalletPubkey = useSniperStore((s) => s.sessionWalletPubkey);
   const setPositionClosing = useSniperStore((s) => s.setPositionClosing);
   const updatePosition = useSniperStore((s) => s.updatePosition);
   const closePosition = useSniperStore((s) => s.closePosition);
@@ -41,14 +45,30 @@ export function PositionsPanel() {
     if (!pos || pos.isClosing) return;
 
     // Manual close = real sell. Never "close the record" without swapping out.
-    if (!connected || !address) {
+    const session = tradeSignerMode === 'session' ? loadSessionWalletFromStorage() : null;
+    const canUseSession =
+      tradeSignerMode === 'session' &&
+      !!sessionWalletPubkey &&
+      !!session &&
+      session.publicKey === sessionWalletPubkey &&
+      pos.walletAddress === sessionWalletPubkey;
+
+    const signerAddress = canUseSession ? sessionWalletPubkey! : address;
+    const signerSignTransaction = canUseSession
+      ? (async (tx: VersionedTransaction) => {
+          tx.sign([session!.keypair]);
+          return tx;
+        })
+      : (signTransaction as ((tx: VersionedTransaction) => Promise<VersionedTransaction>) | undefined);
+
+    if (!signerAddress || !signerSignTransaction) {
       addExecution({
         id: `close-${Date.now()}-${id.slice(-4)}`,
         type: 'error',
         symbol: pos.symbol,
         mint: pos.mint,
         amount: pos.solInvested,
-        reason: 'Connect wallet to close (sell) this position',
+        reason: canUseSession ? 'Session wallet not ready' : 'Connect Phantom to sell this position',
         timestamp: Date.now(),
       });
       return;
@@ -63,7 +83,7 @@ export function PositionsPanel() {
 
       // Prefer the exact swap output amount recorded at entry, but clamp to wallet balance if needed.
       let amountLamports = pos.amountLamports;
-      const bal = await getOwnerTokenBalanceLamports(connection, address, pos.mint);
+      const bal = await getOwnerTokenBalanceLamports(connection, signerAddress, pos.mint);
       if (!amountLamports || amountLamports === '0') {
         if (!bal || bal.amountLamports === '0') throw new Error('No token balance found to sell');
         amountLamports = bal.amountLamports;
@@ -92,9 +112,9 @@ export function PositionsPanel() {
 
       const result = await executeSwapFromQuote(
         connection,
-        address,
+        signerAddress,
         quote,
-        signTransaction as (tx: VersionedTransaction) => Promise<VersionedTransaction>,
+        signerSignTransaction,
         config.useJito,
       );
 
@@ -106,8 +126,7 @@ export function PositionsPanel() {
         pnlSol: realPnlSol,
         highWaterMarkPct: Math.max(pos.highWaterMarkPct ?? 0, realPnlPct),
       });
-      closePosition(id, status, result.txHash);
-      closePositionOnServer({ mint: pos.mint, status, txHash: result.txHash });
+      closePosition(id, status, result.txHash, exitValueSol);
     } catch (err) {
       setPositionClosing(id, false);
       const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -163,9 +182,25 @@ export function PositionsPanel() {
     const toClose = openPositions.filter(p => !p.isClosing);
     if (toClose.length === 0) return;
     setClosingAllCount({ done: 0, total: toClose.length });
-    for (let i = 0; i < toClose.length; i++) {
-      setClosingAllCount({ done: i, total: toClose.length });
-      await handleClose(toClose[i].id, 'closed');
+    let doneCount = 0;
+    const results = await Promise.allSettled(
+      toClose.map(async (p) => {
+        await handleClose(p.id, 'closed');
+        doneCount++;
+        setClosingAllCount({ done: doneCount, total: toClose.length });
+      }),
+    );
+    const failCount = results.filter(r => r.status === 'rejected').length;
+    if (failCount > 0) {
+      addExecution({
+        id: `close-all-${Date.now()}`,
+        type: 'error',
+        symbol: 'ALL',
+        mint: '',
+        amount: 0,
+        reason: `Close All: ${doneCount - failCount}/${toClose.length} succeeded, ${failCount} failed`,
+        timestamp: Date.now(),
+      });
     }
     setClosingAllCount(null);
   }
@@ -322,6 +357,12 @@ function PositionRow({ pos, isSelected, onClose, onWriteOff, onSelect }: {
   onSelect: () => void;
 }) {
   const { connected, connecting, connect } = usePhantomWallet();
+  const tradeSignerMode = useSniperStore((s) => s.tradeSignerMode);
+  const sessionWalletPubkey = useSniperStore((s) => s.sessionWalletPubkey);
+  const canAutoRetry = tradeSignerMode === 'session'
+    && !!sessionWalletPubkey
+    && pos.walletAddress === sessionWalletPubkey
+    && !!loadSessionWalletFromStorage();
   const [, setTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setTick(n => n + 1), 30_000);
@@ -343,7 +384,10 @@ function PositionRow({ pos, isSelected, onClose, onWriteOff, onSelect }: {
   // Exits: either per-position recommended or forced global values.
   const sl = useRecommendedExits ? (pos.recommendedSl ?? cfg.stopLossPct) : cfg.stopLossPct;
   const tp = useRecommendedExits ? (pos.recommendedTp ?? cfg.takeProfitPct) : cfg.takeProfitPct;
-  const trailPct = cfg.trailingStopPct;
+  const isBlueChip = isBlueChipLongConvictionSymbol(pos.symbol);
+  const targets = computeTargetsFromEntryUsd(pos.entryPrice, sl, tp);
+  // Per-position adaptive trailing stop — matches risk management hook logic
+  const trailPct = pos.recommendedTrail ?? cfg.trailingStopPct;
   const hwm = pos.highWaterMarkPct ?? 0;
 
   // Trigger proximity detection (trail only arms when HWM >= trail%, matching risk manager fix)
@@ -392,54 +436,23 @@ function PositionRow({ pos, isSelected, onClose, onWriteOff, onSelect }: {
                   : 'bg-accent-error/[0.03] border-accent-error/20 hover:border-accent-error/30'
       }`}
     >
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold">{pos.symbol}</span>
-          <span className="text-[9px] font-mono text-text-muted bg-bg-tertiary px-1.5 py-0.5 rounded">
+      {/* Row 1: Symbol + SOL | P&L + action icons */}
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm font-bold truncate">{pos.symbol}</span>
+          <span className="text-[9px] font-mono text-text-muted bg-bg-tertiary px-1.5 py-0.5 rounded flex-shrink-0">
             {pos.solInvested.toFixed(2)} SOL
           </span>
-          {isSelected && (
-            <BarChart3 className="w-3 h-3 text-accent-neon" />
-          )}
+          {isSelected && <BarChart3 className="w-3 h-3 text-accent-neon flex-shrink-0" />}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <span className={`text-sm font-mono font-bold ${pos.pnlPercent >= 0 ? 'text-accent-neon' : 'text-accent-error'}`}>
             {pos.pnlPercent >= 0 ? '+' : ''}{pos.pnlPercent.toFixed(1)}%
           </span>
-          {pending && !pos.isClosing && pendingLabel && (
-            <span className={`text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full border ${pendingColor}`}>
-              {pendingLabel} pending
-            </span>
-          )}
-          {pos.isClosing && (
-            <span className="text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full bg-accent-warning/10 text-accent-warning border border-accent-warning/25">
-              Signing...
-            </span>
-          )}
-          {pending && !pos.isClosing && pendingLabel && (
-            connected ? (
-              <button
-                onClick={(e) => { e.stopPropagation(); void onClose(pos.id, pending.trigger); }}
-                className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors ${pendingColor} hover:opacity-90`}
-                title={pending.quoteAvailable === false ? 'Quote unavailable — will attempt sell with higher slippage' : 'Opens Phantom to approve the sell'}
-              >
-                Approve
-              </button>
-            ) : (
-              <button
-                onClick={(e) => { e.stopPropagation(); void connect(); }}
-                disabled={connecting}
-                className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors bg-bg-tertiary text-text-muted border-border-primary hover:border-border-hover disabled:opacity-60"
-                title="Connect Phantom to approve the sell"
-              >
-                {connecting ? 'Connecting...' : 'Sign in Phantom'}
-              </button>
-            )
-          )}
           <button
             onClick={(e) => { e.stopPropagation(); onWriteOff(pos.id); }}
             disabled={pos.isClosing}
-            className="w-6 h-6 rounded-full flex items-center justify-center transition-all bg-text-muted/5 text-text-muted/50 hover:bg-accent-error/10 hover:text-accent-error"
+            className="w-6 h-6 rounded-full flex items-center justify-center transition-all bg-text-muted/5 text-text-muted/50 hover:bg-accent-error/10 hover:text-accent-error flex-shrink-0"
             title="Write off (mark as -100% loss, no sell)"
           >
             <Trash2 className="w-3 h-3" />
@@ -447,7 +460,7 @@ function PositionRow({ pos, isSelected, onClose, onWriteOff, onSelect }: {
           <button
             onClick={(e) => { e.stopPropagation(); void onClose(pos.id, 'closed'); }}
             disabled={pos.isClosing}
-            className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+            className={`w-6 h-6 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
               pos.isClosing
                 ? 'bg-bg-tertiary text-text-muted cursor-not-allowed'
                 : 'bg-accent-error/10 text-accent-error hover:bg-accent-error/20'
@@ -459,46 +472,94 @@ function PositionRow({ pos, isSelected, onClose, onWriteOff, onSelect }: {
         </div>
       </div>
 
-      {/* Per-position SL/TP + age */}
-      <div className="flex items-center gap-2 text-[9px] font-mono text-text-muted">
-        <Clock className={`w-3 h-3 ${ageColor}`} />
-        <span className={ageColor}>{ageLabel}</span>
-        {countdownLabel && (
-          <>
-            <span className={`${nearExpiry ? 'text-accent-warning font-semibold' : 'text-text-muted/60'}`}>
+      {/* Row 2: Exit pending — FULL WIDTH action button (never gets cut off) */}
+      {pending && !pos.isClosing && pendingLabel && (
+        <div className="mb-1.5">
+          {canAutoRetry ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); void onClose(pos.id, pending.trigger); }}
+              className={`w-full py-1.5 rounded-lg text-[10px] font-mono font-bold border transition-all flex items-center justify-center gap-1.5 ${pendingColor} hover:opacity-90`}
+              title="Retry sell with Session Wallet auto-signing"
+            >
+              <Shield className="w-3 h-3" />
+              {pendingLabel} triggered — tap to retry sell
+            </button>
+          ) : connected ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); void onClose(pos.id, pending.trigger); }}
+              className={`w-full py-1.5 rounded-lg text-[10px] font-mono font-bold border transition-all flex items-center justify-center gap-1.5 ${pendingColor} hover:opacity-90`}
+              title={pending.quoteAvailable === false ? 'Quote unavailable — will attempt sell with higher slippage' : 'Click to approve the sell'}
+            >
+              <Shield className="w-3 h-3" />
+              {pendingLabel} triggered — tap to sell
+            </button>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); void connect(); }}
+              disabled={connecting}
+              className="w-full py-1.5 rounded-lg text-[10px] font-mono font-bold border transition-all bg-bg-tertiary text-text-muted border-border-primary hover:border-border-hover disabled:opacity-60 flex items-center justify-center gap-1.5"
+              title="Connect Phantom to approve the sell"
+            >
+              <Shield className="w-3 h-3" />
+              {connecting ? 'Connecting...' : `${pendingLabel} triggered — connect wallet to sell`}
+            </button>
+          )}
+        </div>
+      )}
+      {pos.isClosing && (
+        <div className="mb-1.5">
+          <div className="w-full py-1.5 rounded-lg text-[10px] font-mono font-bold border bg-accent-warning/10 text-accent-warning border-accent-warning/25 flex items-center justify-center gap-1.5">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Signing sell transaction...
+          </div>
+        </div>
+      )}
+
+      {/* Row 3: SL/TP + age info — wraps naturally */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] font-mono text-text-muted">
+        <span className={`flex items-center gap-0.5 ${ageColor}`}>
+          <Clock className="w-3 h-3" />
+          {ageLabel}
+          {countdownLabel && (
+            <span className={`ml-0.5 ${nearExpiry ? 'text-accent-warning font-semibold' : 'text-text-muted/60'}`}>
               ({countdownLabel})
             </span>
-          </>
-        )}
-        <span className="text-text-muted/50">|</span>
-        <span className="flex items-center gap-0.5 text-accent-error">
-          <Shield className="w-2.5 h-2.5" /> SL -{sl}%
+          )}
         </span>
-        <span className="text-text-muted/50">|</span>
-        <span className="flex items-center gap-0.5 text-accent-neon">
-          <Target className="w-2.5 h-2.5" /> TP +{tp}%
-        </span>
-        <span className="text-text-muted/50">|</span>
-        <span className="text-[8px] font-mono text-text-muted/70 uppercase tracking-wider">
-          {useRecommendedExits ? 'REC' : 'GLOBAL'}
-        </span>
-        {trailPct > 0 && hwm > 0 && (
+        <span className="text-text-muted/30">|</span>
+        <span>Entry {formatUsdPrice(targets.entryUsd)}</span>
+        {isBlueChip ? (
           <>
-            <span className="text-text-muted/50">|</span>
-            <span className="flex items-center gap-0.5 text-accent-warning">
-              <TrendingUp className="w-2.5 h-2.5" /> HWM +{hwm.toFixed(1)}%
+            <span className="text-text-muted/30">|</span>
+            <span className="text-[8px] font-semibold uppercase tracking-wider text-accent-warning">
+              Long conviction
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-text-muted/30">|</span>
+            <span className="flex items-center gap-0.5 text-accent-error">
+              <Shield className="w-2.5 h-2.5" /> SL -{sl}%
+            </span>
+            <span className="text-text-muted/30">|</span>
+            <span className="flex items-center gap-0.5 text-accent-neon">
+              <Target className="w-2.5 h-2.5" /> TP +{tp}%
             </span>
           </>
         )}
-        {pos.score != null && (
+        {trailPct > 0 && (
           <>
-            <span className="text-text-muted/50">|</span>
-            <span className="text-text-muted">Score {pos.score}</span>
+            <span className="text-text-muted/30">|</span>
+            <span className={`flex items-center gap-0.5 ${hwm >= trailPct ? 'text-accent-warning' : 'text-text-muted/70'}`}>
+              <TrendingUp className="w-2.5 h-2.5" />
+              Trail {trailPct}%
+              {hwm > 0 && hwm >= trailPct && <span className="ml-0.5 font-semibold">ARMED</span>}
+            </span>
           </>
         )}
         {pos.txHash && (
           <>
-            <span className="text-text-muted/50">|</span>
+            <span className="text-text-muted/30">|</span>
             <a
               href={`https://solscan.io/tx/${pos.txHash}`}
               target="_blank"

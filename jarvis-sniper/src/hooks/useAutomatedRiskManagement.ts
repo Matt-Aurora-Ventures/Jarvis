@@ -1,38 +1,48 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Connection } from '@solana/web3.js';
+import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { usePhantomWallet } from './usePhantomWallet';
 import { useSniperStore } from '@/stores/useSniperStore';
-import { getSellQuote } from '@/lib/bags-trading';
+import { executeSwapFromQuote, getSellQuote } from '@/lib/bags-trading';
 import { getOwnerTokenBalanceLamports, minLamportsString } from '@/lib/solana-tokens';
+import { loadSessionWalletFromStorage } from '@/lib/session-wallet';
+import { isBlueChipLongConvictionSymbol } from '@/lib/trade-plan';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
-const CHECK_INTERVAL_MS = 2000;
-// Background quote cadence: ensures SL/TP still works even if DexScreener prices are missing/stale.
-const QUOTE_BG_INTERVAL_MS = 12_000;
-const QUOTE_BG_INTERVAL_NO_PRICE_MS = 5_000;
-const MAX_BG_QUOTES_PER_TICK = 2;
-const QUOTE_ERROR_LOG_TTL_MS = 60_000;
+const WORKER_INTERVAL_MS = 1500;
+
+type TriggerType = 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired';
 
 /**
- * Automated SL/TP execution loop.
+ * Automated risk management (SL/TP/Trail/Expiry).
  *
- * Strategy: "Quote-Based Monitoring"
- * Instead of relying on chart prices (which don't account for slippage),
- * we fetch a Bags sell quote (via server proxy) to determine the *realizable* exit value.
- * If the P&L hits the SL/TP/trailing threshold, we mark the position as "Exit Pending".
- * The UI then prompts the user to click Approve to open Phantom (reliable user gesture).
+ * Design goals:
+ * - Hosted-safe for many users: do NOT spam Bags quotes every tick.
+ * - Fast + reliable: price polling and trigger detection runs in a Web Worker.
+ * - Self-custody: we never touch user keys on the server.
  *
- * Non-custodial: we never auto-sign or custody keys. This tab just monitors and alerts.
+ * Execution modes:
+ * - Phantom mode: when a trigger hits, we mark `exitPending` and the user clicks Approve.
+ * - Session wallet mode: we auto-sign and execute the sell immediately via Bags (no popup).
  */
 export function useAutomatedRiskManagement() {
-  const { connected, address } = usePhantomWallet();
+  const { connected, address, signTransaction } = usePhantomWallet();
+  const positions = useSniperStore((s) => s.positions);
+  const config = useSniperStore((s) => s.config);
+  const tradeSignerMode = useSniperStore((s) => s.tradeSignerMode);
+  const sessionWalletPubkey = useSniperStore((s) => s.sessionWalletPubkey);
+  const setPositionClosing = useSniperStore((s) => s.setPositionClosing);
+  const updatePosition = useSniperStore((s) => s.updatePosition);
+  const closePosition = useSniperStore((s) => s.closePosition);
+  const addExecution = useSniperStore((s) => s.addExecution);
 
-  const isCheckingRef = useRef(false);
   const connectionRef = useRef<Connection | null>(null);
-  const lastQuoteAtRef = useRef<Map<string, number>>(new Map());
-  const lastQuoteErrAtRef = useRef<Map<string, number>>(new Map());
+  const workerRef = useRef<Worker | null>(null);
+  const inFlightRef = useRef<Set<string>>(new Set());
+  const handleTriggerRef = useRef<(id: string, trigger: TriggerType, pnlPct: number) => Promise<void>>(
+    async () => {},
+  );
 
   function getConnection(): Connection {
     if (!connectionRef.current) {
@@ -41,269 +51,254 @@ export function useAutomatedRiskManagement() {
     return connectionRef.current;
   }
 
+  // Boot the risk worker once.
   useEffect(() => {
-    const checkRisk = async () => {
-      if (isCheckingRef.current) return;
-      isCheckingRef.current = true;
+    if (workerRef.current) return;
 
-      try {
-        const currentState = useSniperStore.getState();
-        const { config, addExecution, updatePosition } = currentState;
-        const useRecommendedExits = config.useRecommendedExits !== false;
-        const activePositions = currentState.positions.filter((p) => p.status === 'open' && !p.isClosing);
+    const worker = new Worker(new URL('../workers/risk.worker.ts', import.meta.url), { type: 'module' });
+    workerRef.current = worker;
 
-        if (activePositions.length === 0) return;
+    worker.onmessage = (event: MessageEvent<any>) => {
+      const msg = event.data;
+      if (!msg || typeof msg !== 'object') return;
 
-        const now = Date.now();
+      if (msg.type === 'PRICE_UPDATE' && Array.isArray(msg.updates)) {
+        const updates: Array<{ id: string; priceUsd: number; pnlPct: number; hwmPct: number }> = msg.updates;
+        const byId = new Map(updates.map((u) => [u.id, u]));
 
-        // Decide which positions get quoted this tick:
-        // 1) Any position "near" a trigger (based on fast DexScreener PnL).
-        // 2) A small number of stale positions (quote heartbeat) so we don't miss stops when price feeds fail.
-        const urgent = new Set<string>();
-        const stale: Array<{ pos: typeof activePositions[number]; last: number; desired: number }> = [];
+        // Batch-apply to the store to keep UI + trailing state in sync.
+        useSniperStore.setState((s) => ({
+          positions: s.positions.map((p) => {
+            const u = byId.get(p.id);
+            if (!u || p.status !== 'open' || p.isClosing) return p;
+            const pnlSol = p.solInvested * (u.pnlPct / 100);
+            return {
+              ...p,
+              currentPrice: u.priceUsd,
+              pnlPercent: u.pnlPct,
+              pnlSol,
+              highWaterMarkPct: Math.max(p.highWaterMarkPct ?? 0, u.hwmPct),
+            };
+          }),
+        }));
+        return;
+      }
 
-        for (const pos of activePositions) {
-          // Use per-position recommended SL/TP, or force global exits when disabled.
-          const slThreshold = useRecommendedExits ? (pos.recommendedSl ?? config.stopLossPct) : config.stopLossPct;
-          const tpThreshold = useRecommendedExits ? (pos.recommendedTp ?? config.takeProfitPct) : config.takeProfitPct;
-          const trailingStopPct = currentState.config.trailingStopPct;
-
-          // Skip if no amount data to sell
-          if (!pos.amountLamports && pos.amount <= 0) continue;
-          // Risk monitoring can continue even if Phantom is disconnected, as long as we know the owner address.
-          if (!address && !pos.walletAddress) continue;
-
-          // Check using current price from DexScreener (set by usePnlTracker)
-          // This is a fast preliminary check before doing the expensive quote
-          const quickPnl = pos.pnlPercent;
-          const hwm = pos.highWaterMarkPct ?? 0;
-          const nearSl = quickPnl <= -(slThreshold * 0.8); // within 80% of SL
-          const nearTp = quickPnl >= (tpThreshold * 0.8); // within 80% of TP
-
-          // Trailing stop: only arms after position reaches meaningful profit (HWM >= trail%).
-          // Prevents false triggers when a small HWM (+2%) drops through zero to negative PnL.
-          const trailActive = trailingStopPct > 0 && hwm >= trailingStopPct;
-          const trailDrop = trailActive ? hwm - quickPnl : 0;
-          const nearTrail = trailActive && trailDrop >= (trailingStopPct * 0.8);
-
-          const id = pos.id;
-          const lastQuoteAt = lastQuoteAtRef.current.get(id) ?? 0;
-          const hasUsefulQuickPnl = pos.entryPrice > 0;
-          const desiredInterval = hasUsefulQuickPnl ? QUOTE_BG_INTERVAL_MS : QUOTE_BG_INTERVAL_NO_PRICE_MS;
-          const quoteStale = now - lastQuoteAt >= desiredInterval;
-
-          // Position age expiry: treat as urgent when past max age
-          const maxAgeMs = (config.maxPositionAgeHours ?? 4) * 3600_000;
-          const posAgeMs = now - pos.entryTime;
-          const nearExpiry = maxAgeMs > 0 && posAgeMs >= maxAgeMs;
-
-          const hasExitPending = !!pos.exitPending;
-          if (nearSl || nearTp || nearTrail || nearExpiry || hasExitPending) {
-            urgent.add(id);
-          }
-          if (quoteStale) {
-            stale.push({ pos, last: lastQuoteAt, desired: desiredInterval });
-          }
-        }
-
-        // Stale positions: oldest first, capped per tick (non-urgent).
-        stale.sort((a, b) => a.last - b.last);
-        const bgQueue = stale
-          .filter((x) => !urgent.has(x.pos.id))
-          .slice(0, Math.max(0, MAX_BG_QUOTES_PER_TICK));
-
-        // Process: urgent first, then background.
-        const ordered = [
-          ...activePositions.filter((p) => urgent.has(p.id)),
-          ...bgQueue.map((x) => x.pos),
-        ];
-
-        if (ordered.length === 0) return;
-
-        for (const pos of ordered) {
-          const connection = getConnection();
-          const ownerAddress = address ?? pos.walletAddress;
-          if (!ownerAddress) continue;
-          if (!pos.walletAddress && address) {
-            // Migrate older persisted positions (pre-walletAddress) so monitoring works even if Phantom disconnects later.
-            updatePosition(pos.id, { walletAddress: address });
-          }
-
-          // Use per-position recommended SL/TP, or force global exits when disabled.
-          const slThreshold = useRecommendedExits ? (pos.recommendedSl ?? config.stopLossPct) : config.stopLossPct;
-          const tpThreshold = useRecommendedExits ? (pos.recommendedTp ?? config.takeProfitPct) : config.takeProfitPct;
-          const trailingStopPct = currentState.config.trailingStopPct;
-
-          // Track quote attempt so we don't spam Bags when DexScreener is missing.
-          lastQuoteAtRef.current.set(pos.id, now);
-
-          // Fetch a real sell quote to get realizable value
-          let amountStr = pos.amountLamports;
-
-          // If we don't have a reliable raw token amount, fetch from chain.
-          // Also clamp to wallet balance to avoid "insufficient funds" if the recorded amount is stale.
-          const bal = await getOwnerTokenBalanceLamports(connection, ownerAddress, pos.mint);
-          if (!amountStr || amountStr === '0') {
-            if (!bal || bal.amountLamports === '0') continue;
-            amountStr = bal.amountLamports;
-            updatePosition(pos.id, { amountLamports: amountStr });
-          } else if (bal && bal.amountLamports !== '0') {
-            const clamped = minLamportsString(amountStr, bal.amountLamports);
-            if (clamped !== amountStr) {
-              amountStr = clamped;
-              updatePosition(pos.id, { amountLamports: amountStr });
-            }
-          }
-
-          // Quick trigger check using fast chart PnL (DexScreener / Birdeye prices).
-          // Used as a fallback when we can't get a quote due to low liquidity or slippage.
-          const quickPnl = pos.pnlPercent;
-          const quickHwm = pos.highWaterMarkPct ?? 0;
-          const quickHitSl = quickPnl <= -slThreshold;
-          const quickHitTp = quickPnl >= tpThreshold;
-          const quickTrailDrop = trailingStopPct > 0 && quickHwm >= trailingStopPct ? quickHwm - quickPnl : 0;
-          const quickHitTrail = trailingStopPct > 0 && quickHwm >= trailingStopPct && quickTrailDrop >= trailingStopPct;
-          const maxAgeMs = (config.maxPositionAgeHours ?? 4) * 3600_000;
-          const posAge = now - pos.entryTime;
-          const quickHitExpiry = maxAgeMs > 0 && posAge >= maxAgeMs;
-
-          // Try sell quotes with a small slippage fallback so we still detect exits during volatility.
-          const slippageBase = config.slippageBps;
-          const sellQuote =
-            (await getSellQuote(pos.mint, amountStr, slippageBase)) ??
-            (await getSellQuote(pos.mint, amountStr, Math.max(slippageBase, 300))) ??
-            (await getSellQuote(pos.mint, amountStr, Math.max(slippageBase, 500)));
-
-          if (!sellQuote) {
-            // No route (or quote error). Token may have lost liquidity, or slippage may be too tight.
-            const lastErr = lastQuoteErrAtRef.current.get(pos.id) ?? 0;
-            if (now - lastErr >= QUOTE_ERROR_LOG_TTL_MS) {
-              lastQuoteErrAtRef.current.set(pos.id, now);
-              addExecution({
-                id: `risk-quote-${Date.now()}-${pos.id.slice(-4)}`,
-                type: 'error',
-                symbol: pos.symbol,
-                mint: pos.mint,
-                amount: pos.solInvested,
-                reason: `Could not get a sell quote (no route / slippage too low / liquidity pulled). Try higher slippage.`,
-                timestamp: Date.now(),
-              });
-            }
-
-            // If a stop condition is hit (even from chart prices), still surface it as pending so the user sees "activation".
-            if (quickHitSl || quickHitTp || quickHitTrail || quickHitExpiry) {
-              const triggerType: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' =
-                quickHitTp ? 'tp_hit' : quickHitTrail ? 'trail_stop' : quickHitExpiry ? 'expired' : 'sl_hit';
-              const ageStr = `${(posAge / 3600_000).toFixed(1)}h`;
-              const triggerLabel = triggerType === 'tp_hit'
-                ? 'TP'
-                : triggerType === 'trail_stop'
-                  ? `TRAIL (HWM ${quickHwm.toFixed(1)}%)`
-                  : triggerType === 'expired'
-                    ? `EXPIRED (${ageStr})`
-                    : 'SL';
-              const reason = 'Quote unavailable — try higher slippage or liquidity may be pulled.';
-
-              updatePosition(pos.id, {
-                exitPending: {
-                  trigger: triggerType,
-                  pnlPercent: quickPnl,
-                  quoteAvailable: false,
-                  reason,
-                  updatedAt: now,
-                },
-              });
-
-              if (!pos.exitPending || pos.exitPending.trigger !== triggerType || pos.exitPending.quoteAvailable) {
-                addExecution({
-                  id: `risk-${Date.now()}-${pos.id.slice(-4)}`,
-                  type: 'exit_pending',
-                  symbol: pos.symbol,
-                  mint: pos.mint,
-                  amount: pos.solInvested,
-                  pnlPercent: quickPnl,
-                  reason: `${triggerLabel} hit at ${quickPnl.toFixed(1)}% — ${reason} Click Approve in Positions to attempt the sell.`,
-                  timestamp: Date.now(),
-                });
-              }
-            } else if (pos.exitPending) {
-              // No trigger condition met AND quote unavailable — clear stale pending marker.
-              updatePosition(pos.id, { exitPending: undefined });
-            }
-            continue;
-          }
-
-          // Calculate real P&L from quote
-          const exitValueSol = Number(BigInt(sellQuote.outAmount)) / 1e9;
-          const realPnlPct = ((exitValueSol - pos.solInvested) / pos.solInvested) * 100;
-
-          // Keep store P&L aligned with the realizable (quote-based) exit.
-          const nextHwm = Math.max(pos.highWaterMarkPct ?? 0, realPnlPct);
-          updatePosition(pos.id, {
-            pnlPercent: realPnlPct,
-            pnlSol: pos.solInvested * (realPnlPct / 100),
-            highWaterMarkPct: nextHwm,
-          });
-
-          const hitSl = realPnlPct <= -slThreshold;
-          const hitTp = realPnlPct >= tpThreshold;
-
-          // Trailing stop: recalculate with real P&L — only arms when HWM >= trail%
-          const realTrailDrop = trailingStopPct > 0 && nextHwm >= trailingStopPct ? nextHwm - realPnlPct : 0;
-          const hitTrail = trailingStopPct > 0 && nextHwm >= trailingStopPct && realTrailDrop >= trailingStopPct;
-
-          // Position age expiry: auto-close stale positions to free capital
-          const maxAgeMs2 = (config.maxPositionAgeHours ?? 4) * 3600_000;
-          const posAge2 = now - pos.entryTime;
-          const hitExpiry = maxAgeMs2 > 0 && posAge2 >= maxAgeMs2;
-
-          if (!hitSl && !hitTp && !hitTrail && !hitExpiry) {
-            // Clear any stale pending marker when the trigger is no longer met.
-            if (pos.exitPending) updatePosition(pos.id, { exitPending: undefined });
-            continue;
-          }
-
-          // Priority: TP > Trailing Stop > Expiry > SL
-          const triggerType: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' = hitTp ? 'tp_hit' : hitTrail ? 'trail_stop' : hitExpiry ? 'expired' : 'sl_hit';
-          const ageStr = `${(posAge2 / 3600_000).toFixed(1)}h`;
-          console.log(
-            `[Risk] ${triggerType.toUpperCase()} ${pos.symbol}: ${realPnlPct.toFixed(1)}% (${
-              hitTp ? `TP ${tpThreshold}%` : hitTrail ? `trail ${trailingStopPct}% from HWM ${nextHwm.toFixed(1)}%` : hitExpiry ? `expired after ${ageStr}` : `SL ${slThreshold}%`
-            })`
-          );
-
-          // Mark pending (user must click Approve to open Phantom reliably).
-          const triggerLabel = hitTp ? 'TP' : hitTrail ? `TRAIL (HWM ${nextHwm.toFixed(1)}%)` : hitExpiry ? `EXPIRED (${ageStr})` : 'SL';
-          updatePosition(pos.id, {
-            exitPending: {
-              trigger: triggerType,
-              pnlPercent: realPnlPct,
-              exitValueSol,
-              quoteAvailable: true,
-              updatedAt: now,
-            },
-          });
-
-          // Log once per trigger transition to avoid spamming the execution log.
-          if (!pos.exitPending || pos.exitPending.trigger !== triggerType) {
-            addExecution({
-              id: `risk-${Date.now()}-${pos.id.slice(-4)}`,
-              type: 'exit_pending',
-              symbol: pos.symbol,
-              mint: pos.mint,
-              amount: pos.solInvested,
-              pnlPercent: realPnlPct,
-              reason: `${triggerLabel} hit at ${realPnlPct.toFixed(1)}% — click Approve in Positions to sell (${exitValueSol.toFixed(4)} SOL quote)`,
-              timestamp: Date.now(),
-            });
-          }
-        }
-      } finally {
-        isCheckingRef.current = false;
+      if (msg.type === 'TRIGGER' && msg.id && msg.trigger) {
+        void handleTriggerRef.current(msg.id as string, msg.trigger as TriggerType, msg.pnlPct as number);
       }
     };
 
-    const interval = setInterval(checkRisk, CHECK_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [connected, address]);
+    return () => {
+      worker.terminate();
+      workerRef.current = null;
+    };
+  }, []);
+
+  // Keep worker synced with the current open positions + thresholds.
+  useEffect(() => {
+    const worker = workerRef.current;
+    if (!worker) return;
+
+    const useRec = config.useRecommendedExits !== false;
+
+    const open = positions.filter((p) => p.status === 'open' && !p.isClosing);
+    const workerPositions = open
+      .filter((p) => !isBlueChipLongConvictionSymbol(p.symbol))
+      .map((p) => {
+        const sl = useRec ? (p.recommendedSl ?? config.stopLossPct) : config.stopLossPct;
+        const tp = useRec ? (p.recommendedTp ?? config.takeProfitPct) : config.takeProfitPct;
+        const trail = p.recommendedTrail ?? config.trailingStopPct;
+        return {
+          id: p.id,
+          mint: p.mint,
+          entryPriceUsd: p.entryPrice,
+          slPct: sl,
+          tpPct: tp,
+          trailPct: trail,
+          hwmPct: p.highWaterMarkPct ?? 0,
+          entryTime: p.entryTime,
+          maxAgeHours: config.maxPositionAgeHours ?? 0,
+        };
+      });
+
+    if (workerPositions.length === 0) {
+      worker.postMessage({ type: 'STOP' });
+      return;
+    }
+
+    worker.postMessage({
+      type: 'SYNC',
+      positions: workerPositions,
+      intervalMs: WORKER_INTERVAL_MS,
+    });
+  }, [positions, config, tradeSignerMode, sessionWalletPubkey]);
+
+  async function handleTrigger(id: string, trigger: TriggerType, pnlPct: number) {
+    const state = useSniperStore.getState();
+    const pos = state.positions.find((p) => p.id === id);
+    if (!pos || pos.status !== 'open') return;
+    if (pos.isClosing) return;
+    if (inFlightRef.current.has(id)) return;
+
+    if (isBlueChipLongConvictionSymbol(pos.symbol)) return;
+
+    const useRec = state.config.useRecommendedExits !== false;
+    const sl = useRec ? (pos.recommendedSl ?? state.config.stopLossPct) : state.config.stopLossPct;
+    const tp = useRec ? (pos.recommendedTp ?? state.config.takeProfitPct) : state.config.takeProfitPct;
+    const trailPct = pos.recommendedTrail ?? state.config.trailingStopPct;
+
+    // If we're not using session wallet signing, we can't auto-execute: mark exit pending.
+    const session = tradeSignerMode === 'session' ? loadSessionWalletFromStorage() : null;
+    const canAuto =
+      tradeSignerMode === 'session' &&
+      !!sessionWalletPubkey &&
+      !!session &&
+      session.publicKey === sessionWalletPubkey &&
+      pos.walletAddress === sessionWalletPubkey;
+
+    if (!canAuto) {
+      // Manual mode: show activation clearly, but avoid spamming the store/log every tick.
+      const now = Date.now();
+      const existing = pos.exitPending;
+      const sameTrigger = !!existing && existing.trigger === trigger;
+      const recentlyUpdated = sameTrigger && now - existing.updatedAt < 5_000;
+
+      if (!recentlyUpdated) {
+        updatePosition(id, {
+          exitPending: {
+            trigger,
+            pnlPercent: pnlPct,
+            quoteAvailable: false,
+            reason: 'Auto-exec requires Session Wallet mode. Click Approve to sell with Phantom.',
+            updatedAt: now,
+          },
+        });
+      }
+
+      if (!sameTrigger) {
+        addExecution({
+          id: `risk-${Date.now()}-${id.slice(-4)}`,
+          type: 'exit_pending',
+          symbol: pos.symbol,
+          mint: pos.mint,
+          amount: pos.solInvested,
+          pnlPercent: pnlPct,
+          reason: `${triggerLabel(trigger, trailPct, pos.highWaterMarkPct)} hit at ${pnlPct.toFixed(1)}% — click Approve in Positions to sell`,
+          timestamp: Date.now(),
+        });
+      }
+      return;
+    }
+
+    // Auto-execute via Bags (session wallet signs).
+    inFlightRef.current.add(id);
+    setPositionClosing(id, true);
+    updatePosition(id, { exitPending: undefined });
+
+    try {
+      const connection = getConnection();
+
+      // Determine token amount (prefer recorded out amount, clamp to wallet balance).
+      let amountLamports = pos.amountLamports;
+      const bal = await getOwnerTokenBalanceLamports(connection, sessionWalletPubkey!, pos.mint);
+      if (!amountLamports || amountLamports === '0') {
+        if (!bal || bal.amountLamports === '0') throw new Error('No token balance found to sell');
+        amountLamports = bal.amountLamports;
+        updatePosition(id, { amountLamports });
+      } else if (bal && bal.amountLamports !== '0') {
+        const clamped = minLamportsString(amountLamports, bal.amountLamports);
+        if (clamped !== amountLamports) {
+          amountLamports = clamped;
+          updatePosition(id, { amountLamports });
+        }
+      }
+
+      // Fetch a realizable sell quote (try a small slippage waterfall).
+      const slippageBase = state.config.slippageBps;
+      const quote =
+        (await getSellQuote(pos.mint, amountLamports, slippageBase)) ??
+        (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 300))) ??
+        (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 500))) ??
+        (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 1000))) ??
+        (await getSellQuote(pos.mint, amountLamports, 1500));
+
+      if (!quote) {
+        updatePosition(id, {
+          exitPending: {
+            trigger,
+            pnlPercent: pnlPct,
+            quoteAvailable: false,
+            reason: 'Quote unavailable (no route / liquidity pulled). Try Write Off or manual exit.',
+            updatedAt: Date.now(),
+          },
+          isClosing: false,
+        });
+        addExecution({
+          id: `auto-quote-${Date.now()}-${id.slice(-4)}`,
+          type: 'error',
+          symbol: pos.symbol,
+          mint: pos.mint,
+          amount: pos.solInvested,
+          reason: `${triggerLabel(trigger, trailPct, pos.highWaterMarkPct)} reached but no sell quote found (liquidity may be gone).`,
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      const exitValueSol = Number(BigInt(quote.outAmount)) / 1e9;
+
+      const signWithSession = async (tx: VersionedTransaction) => {
+        tx.sign([session!.keypair]);
+        return tx;
+      };
+
+      const result = await executeSwapFromQuote(
+        connection,
+        sessionWalletPubkey!,
+        quote,
+        signWithSession,
+        state.config.useJito,
+      );
+
+      if (!result.success) throw new Error(result.error || 'Sell failed');
+
+      closePosition(id, trigger, result.txHash, exitValueSol);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setPositionClosing(id, false);
+      updatePosition(id, {
+        exitPending: {
+          trigger,
+          pnlPercent: pnlPct,
+          quoteAvailable: false,
+          reason: `Auto-exit failed: ${msg}`,
+          updatedAt: Date.now(),
+        },
+      });
+      addExecution({
+        id: `auto-fail-${Date.now()}-${id.slice(-4)}`,
+        type: 'error',
+        symbol: pos.symbol,
+        mint: pos.mint,
+        amount: pos.solInvested,
+        reason: `Auto-exit failed: ${msg}`,
+        timestamp: Date.now(),
+      });
+    } finally {
+      inFlightRef.current.delete(id);
+    }
+  }
+
+  // Ensure the worker always calls the latest trigger handler (avoids stale-closure bugs).
+  useEffect(() => {
+    handleTriggerRef.current = handleTrigger;
+  });
+}
+
+function triggerLabel(trigger: TriggerType, trailPct: number, hwm: number | undefined): string {
+  if (trigger === 'tp_hit') return 'TP';
+  if (trigger === 'sl_hit') return 'SL';
+  if (trigger === 'expired') return 'EXPIRED';
+  return `TRAIL (HWM ${(hwm ?? 0).toFixed(1)}%)`;
 }

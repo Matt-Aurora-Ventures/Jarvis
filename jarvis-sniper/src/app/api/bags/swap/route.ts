@@ -5,7 +5,9 @@
  * 2. Injects priority fees (ComputeBudgetProgram) to prevent timeouts
  * 3. Passes partner key for referral revenue
  * 4. Returns serialized VersionedTransaction as base64 for client signing
- * 5. Also persists position data to .positions.json for the risk worker
+ *
+ * Rate limiting: 20 req/min per IP (involves transaction building).
+ * No caching — swap transactions are unique per user/nonce.
  */
 import { NextResponse } from 'next/server';
 import { BagsSDK } from '@bagsfm/bags-sdk';
@@ -17,8 +19,9 @@ import {
   AddressLookupTableAccount,
   ComputeBudgetProgram,
 } from '@solana/web3.js';
+import { swapRateLimiter, getClientIp } from '@/lib/rate-limiter';
 
-const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
+const RPC_URL = process.env.SOLANA_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
 const BAGS_API_KEY = process.env.BAGS_API_KEY || '';
 const REFERRAL_ACCOUNT = process.env.BAGS_REFERRAL_ACCOUNT || '';
 
@@ -86,6 +89,22 @@ async function injectPriorityFee(
 
 export async function POST(request: Request) {
   try {
+    // Rate limit — swap involves transaction building, strict limit
+    const ip = getClientIp(request);
+    const limit = swapRateLimiter.check(ip);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Try again shortly.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((limit.retryAfterMs || 60_000) / 1000)),
+            'X-RateLimit-Remaining': '0',
+          },
+        },
+      );
+    }
+
     const body = await request.json();
     const {
       userPublicKey,

@@ -24,6 +24,7 @@ interface PhantomWalletState {
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   signTransaction: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>;
+  signAllTransactions: <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>;
 }
 
 const PhantomWalletContext = createContext<PhantomWalletState>({
@@ -35,6 +36,7 @@ const PhantomWalletContext = createContext<PhantomWalletState>({
   connect: async () => {},
   disconnect: async () => {},
   signTransaction: async () => { throw new Error('Wallet not connected'); },
+  signAllTransactions: async () => { throw new Error('Wallet not connected'); },
 });
 
 function getProvider(): PhantomProvider | null {
@@ -140,10 +142,16 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
     return provider.signTransaction(tx);
   }, [connected]);
 
+  const signAllTransactions = useCallback(async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
+    const provider = getProvider();
+    if (!provider || !connected) throw new Error('Wallet not connected');
+    return provider.signAllTransactions(txs);
+  }, [connected]);
+
   const address = publicKey?.toBase58() ?? null;
 
   return (
-    <PhantomWalletContext.Provider value={{ connected, connecting, publicKey, address, phantomInstalled, connect, disconnect, signTransaction }}>
+    <PhantomWalletContext.Provider value={{ connected, connecting, publicKey, address, phantomInstalled, connect, disconnect, signTransaction, signAllTransactions }}>
       {children}
     </PhantomWalletContext.Provider>
   );

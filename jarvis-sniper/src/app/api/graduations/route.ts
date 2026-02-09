@@ -1,13 +1,19 @@
 import { NextResponse } from 'next/server';
+import { graduationCache } from '@/lib/server-cache';
+import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
 
 /**
  * Server-side graduation feed using DexScreener API
  * Avoids CORS issues by proxying through our own API route
  *
+ * Caching: 5-second in-memory cache so all concurrent users share one upstream call.
+ * Rate limiting: 60 req/min per IP to prevent abuse.
+ *
  * Flow:
- * 1. Fetch latest boosted Solana tokens from DexScreener
- * 2. Batch-fetch pair data for price, liquidity, volume
- * 3. Score and return as graduation-format data
+ * 1. Check cache — return immediately if fresh
+ * 2. Fetch latest boosted Solana tokens from DexScreener
+ * 3. Batch-fetch pair data for price, liquidity, volume
+ * 4. Score and return as graduation-format data
  */
 
 const DEXSCREENER_BOOSTS = 'https://api.dexscreener.com/token-boosts/latest/v1';
@@ -23,8 +29,38 @@ interface BoostEntry {
   amount: number;
 }
 
-export async function GET() {
+const GRADUATION_CACHE_KEY = 'graduations:latest';
+const GRADUATION_TTL_MS = 5_000; // 5 seconds — balances freshness vs API load
+
+export async function GET(request: Request) {
   try {
+    // Rate limit check
+    const ip = getClientIp(request);
+    const limit = apiRateLimiter.check(ip);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { graduations: [], error: 'Rate limit exceeded' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((limit.retryAfterMs || 60_000) / 1000)),
+            'X-RateLimit-Remaining': '0',
+          },
+        },
+      );
+    }
+
+    // Check cache first — all users share the same cached response
+    const cached = graduationCache.get(GRADUATION_CACHE_KEY);
+    if (cached) {
+      return NextResponse.json(cached, {
+        headers: {
+          'X-Cache': 'HIT',
+          'X-RateLimit-Remaining': String(limit.remaining),
+        },
+      });
+    }
+
     // 1. Fetch latest boosted Solana tokens
     const boostRes = await fetch(DEXSCREENER_BOOSTS, {
       headers: { 'Accept': 'application/json' },
@@ -169,7 +205,16 @@ export async function GET() {
     // Sort by score descending
     graduations.sort((a, b) => b.score - a.score);
 
-    return NextResponse.json({ graduations });
+    // Cache the response so all concurrent users share this result
+    const responseData = { graduations };
+    graduationCache.set(GRADUATION_CACHE_KEY, responseData, GRADUATION_TTL_MS);
+
+    return NextResponse.json(responseData, {
+      headers: {
+        'X-Cache': 'MISS',
+        'X-RateLimit-Remaining': String(limit.remaining),
+      },
+    });
   } catch (err) {
     console.error('Graduation API error:', err);
     return NextResponse.json({ graduations: [], error: 'Internal error' }, { status: 500 });

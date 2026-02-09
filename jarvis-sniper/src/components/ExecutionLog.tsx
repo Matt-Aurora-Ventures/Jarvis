@@ -1,6 +1,6 @@
 'use client';
 
-import { ScrollText, Crosshair, TrendingUp, TrendingDown, XCircle, SkipForward, AlertCircle, Loader2 } from 'lucide-react';
+import { ScrollText, Crosshair, TrendingUp, TrendingDown, XCircle, SkipForward, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
 import { useSniperStore, type ExecutionEvent } from '@/stores/useSniperStore';
 
 const TYPE_CONFIG: Record<ExecutionEvent['type'], { icon: any; color: string; label: string }> = {
@@ -11,6 +11,7 @@ const TYPE_CONFIG: Record<ExecutionEvent['type'], { icon: any; color: string; la
   manual_exit: { icon: XCircle,       color: 'text-accent-warning',  label: 'CLOSE' },
   error:       { icon: AlertCircle,   color: 'text-accent-error',   label: 'ERROR' },
   skip:        { icon: SkipForward,   color: 'text-text-muted',     label: 'SKIP' },
+  info:        { icon: ShieldCheck,   color: 'text-blue-400',       label: 'INFO' },
 };
 
 export function ExecutionLog() {

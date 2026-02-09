@@ -64,18 +64,19 @@ export function EarlyBetaModal() {
                   Self-custody
                 </div>
                 <p className="mt-1 text-[10px] text-text-muted leading-relaxed">
-                  Your private keys never touch our servers. You approve buys and sells in Phantom.
+                  Your private keys never touch our servers. You can trade in Phantom mode (manual approvals) or Session Wallet mode (a temporary burner wallet stored in this tab for auto-signing).
                 </p>
               </div>
 
                <div className="rounded-lg bg-bg-tertiary/60 border border-border-primary p-3">
-                 <div className="flex items-center gap-2 text-[11px] font-semibold text-text-primary">
-                   <Shield className="w-3.5 h-3.5 text-accent-warning" />
-                   SL/TP is semi-automated
-                 </div>
+                  <div className="flex items-center gap-2 text-[11px] font-semibold text-text-primary">
+                    <Shield className="w-3.5 h-3.5 text-accent-warning" />
+                    SL/TP can auto-execute
+                  </div>
                 <p className="mt-1 text-[10px] text-text-muted leading-relaxed">
-                  Triggers run in this tab. When SL/TP hits, the position will show "Exit pending" and you must click Approve to open Phantom and sign the sell.
-                  If you close the tab or lock your wallet, it will not exit.
+                  Phantom mode: when SL/TP/trailing/expiry hits, the position shows "Exit pending" and you must click Approve to sign the sell.
+                  Session Wallet mode: exits are auto-signed and submitted via Bags as long as this tab stays open.
+                  If you close the tab, automation stops.
                   Low-liquidity tokens can still slip past targets (or have no route to sell).
                   If you're seeing lots of "Low liquidity" skips, lower Min Liquidity (USD) while testing.
                 </p>
