@@ -1,7 +1,7 @@
 """
-Arsenal Telegram Bot - Marketing Communications Filter
+ClawdMatt Telegram Bot - Marketing Communications Filter
 
-A Telegram bot interface for the Arsenal communications review service.
+A Telegram bot interface for PR Matt — the communications review service.
 Reviews messages for brand alignment and risk before publishing.
 
 Usage:
@@ -189,7 +189,7 @@ async def handle_help(message):
         return  # Silently ignore unauthorized users
 
     help_text = """
-Welcome to Arsenal - PR Filter Bot
+Welcome to PR Matt - PR Filter Bot
 
 Commands:
 /review <message> - Review a message for PR compliance
@@ -213,9 +213,8 @@ async def handle_status(message):
         return  # Silently ignore unauthorized users
 
     status_text = """
-Arsenal Status: ONLINE
+PR Matt Status: ONLINE
 
-Bot: @kr8tiv_arsenalcoo_bot
 Purpose: Marketing Communications Filter
 Mode: Active
 
@@ -353,7 +352,7 @@ async def main():
     global _lifecycle, _dispatcher
 
     ext_heartbeat = None
-    logger.info("Starting Arsenal Telegram Bot...")
+    logger.info("Starting ClawdMatt Telegram Bot...")
     token_id = BOT_TOKEN.split(":", 1)[0] if ":" in BOT_TOKEN else "unknown"
     logger.info(f"Bot token id: {token_id}")
 
@@ -389,7 +388,7 @@ async def main():
     if HAS_LIFECYCLE:
         try:
             _lifecycle = BotLifecycle(
-                bot_name="Arsenal",
+                bot_name="ClawdMatt",
                 bot_token=BOT_TOKEN,
                 heartbeat_interval_hours=6.0,
                 memory_threshold_mb=256
