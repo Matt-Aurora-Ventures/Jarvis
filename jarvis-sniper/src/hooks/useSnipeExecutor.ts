@@ -22,6 +22,8 @@ export function useSnipeExecutor() {
   const store = useSniperStore();
   const connectionRef = useRef<Connection | null>(null);
   const pendingRef = useRef<Set<string>>(new Set());
+  const tradeSignerMode = useSniperStore((s) => s.tradeSignerMode);
+  const sessionWalletPubkey = useSniperStore((s) => s.sessionWalletPubkey);
 
   // Lazy-init connection
   function getConnection(): Connection {
@@ -74,9 +76,13 @@ export function useSnipeExecutor() {
     }
 
     const remaining = budget.budgetSol - budget.spent;
-    // Conviction-weighted sizing: scale by signal quality (0.5x – 2.0x)
+    // Conviction-weighted sizing (hard cap):
+    // `maxPositionSol` is treated as the user's maximum per trade.
+    // Conviction can scale the size DOWN, but never above the max.
     const { multiplier: conviction, factors: convFactors } = getConvictionMultiplier(grad);
-    const positionSol = Math.min(config.maxPositionSol * conviction, remaining);
+    const sizeFactor = Math.min(1, conviction);
+    const desiredSol = config.maxPositionSol * sizeFactor;
+    const positionSol = Math.min(desiredSol, config.maxPositionSol, remaining);
     if (positionSol < 0.001) {
       addExecution(makeExecEvent(grad, 'skip', 0, 'Insufficient budget'));
       return;
@@ -236,7 +242,14 @@ export function useSnipeExecutor() {
     }
   }, [connected, address, signTransaction, signAllTransactions]);
 
-  return { snipe, ready: connected && !!address };
+  const sessionReady = (() => {
+    if (tradeSignerMode !== 'session') return false;
+    if (!sessionWalletPubkey) return false;
+    const session = loadSessionWalletFromStorage();
+    return !!session && session.publicKey === sessionWalletPubkey;
+  })();
+
+  return { snipe, ready: tradeSignerMode === 'session' ? sessionReady : connected && !!address };
 }
 
 function makeExecEvent(

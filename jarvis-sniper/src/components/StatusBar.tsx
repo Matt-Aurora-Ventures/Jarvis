@@ -1,17 +1,20 @@
 'use client';
 
-import { Crosshair, Zap, Shield, TrendingUp, Wifi, WifiOff } from 'lucide-react';
+import { Crosshair, Zap, Shield, TrendingUp, Wifi, WifiOff, Flame } from 'lucide-react';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { useSniperStore } from '@/stores/useSniperStore';
 
 export function StatusBar() {
   const { connected, connecting, address, phantomInstalled, connect, disconnect } = usePhantomWallet();
-  const { config, totalPnl, winCount, lossCount, totalTrades, positions } = useSniperStore();
+  const { config, totalPnl, winCount, lossCount, totalTrades, positions, tradeSignerMode, sessionWalletPubkey, budget } = useSniperStore();
   const winRate = totalTrades > 0 ? ((winCount / totalTrades) * 100).toFixed(1) : '--';
   const openCount = positions.filter((p) => p.status === 'open').length;
   const anyExitPending = positions.some((p) => p.status === 'open' && (!!p.isClosing || !!p.exitPending));
 
   const shortAddr = address ? `${address.slice(0, 4)}...${address.slice(-4)}` : null;
+  const shortSession = sessionWalletPubkey ? `${sessionWalletPubkey.slice(0, 4)}...${sessionWalletPubkey.slice(-4)}` : null;
+  const autoActive = tradeSignerMode === 'session' && !!sessionWalletPubkey && budget.authorized;
+  const riskEngineOn = connected || autoActive;
 
   return (
     <header className="sticky top-0 z-50 border-b border-border-primary bg-bg-secondary/80 backdrop-blur-xl">
@@ -65,13 +68,34 @@ export function StatusBar() {
           <StatChip
             icon={<Shield className="w-3.5 h-3.5" />}
             label="Risk"
-            value={openCount === 0 ? '--' : anyExitPending ? 'SIGN' : connected ? 'ON' : 'OFF'}
-            color={openCount === 0 ? 'text-text-muted' : anyExitPending ? 'text-accent-warning' : connected ? 'text-accent-neon' : 'text-accent-error'}
+            value={openCount === 0 ? '--' : anyExitPending ? 'SIGN' : riskEngineOn ? 'ON' : 'OFF'}
+            color={openCount === 0 ? 'text-text-muted' : anyExitPending ? 'text-accent-warning' : riskEngineOn ? 'text-accent-neon' : 'text-accent-error'}
           />
         </div>
 
         {/* Right: Wallet */}
         <div className="flex items-center gap-3">
+          {sessionWalletPubkey && (
+            <button
+              onClick={async () => {
+                try { await navigator.clipboard.writeText(sessionWalletPubkey); } catch {}
+              }}
+              className={`hidden sm:flex items-center gap-2 px-3 h-9 rounded-full border transition-colors cursor-pointer ${
+                autoActive
+                  ? 'bg-accent-warning/10 text-accent-warning border-accent-warning/25 hover:border-accent-warning/40'
+                  : 'bg-bg-tertiary text-text-muted border-border-primary hover:border-border-hover'
+              }`}
+              title={autoActive ? 'Auto Wallet ACTIVE (click to copy address)' : 'Session wallet available (click to copy address)'}
+            >
+              <Flame className="w-4 h-4" />
+              <span className="text-[10px] font-mono font-semibold uppercase tracking-wider">
+                {autoActive ? 'AUTO' : 'SESSION'}
+              </span>
+              {shortSession && (
+                <span className="text-xs font-mono font-medium">{shortSession}</span>
+              )}
+            </button>
+          )}
           <div className={`w-2 h-2 rounded-full ${connected ? 'bg-accent-neon' : 'bg-accent-error'}`} />
           {connected ? (
             <button

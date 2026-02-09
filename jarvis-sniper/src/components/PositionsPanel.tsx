@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { X, DollarSign, Clock, ExternalLink, Shield, Target, BarChart3, RotateCcw, Loader2, TrendingUp, Trash2 } from 'lucide-react';
+import { X, DollarSign, Clock, ExternalLink, Shield, ShieldCheck, Target, BarChart3, RotateCcw, Loader2, TrendingUp, Trash2 } from 'lucide-react';
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
@@ -545,6 +545,16 @@ function PositionRow({ pos, isSelected, onClose, onWriteOff, onSelect }: {
             <span className="flex items-center gap-0.5 text-accent-neon">
               <Target className="w-2.5 h-2.5" /> TP +{tp}%
             </span>
+            <span className="text-text-muted/30">|</span>
+            {canAutoRetry ? (
+              <span className="flex items-center gap-0.5 px-1.5 py-px rounded bg-accent-neon/10 text-accent-neon font-semibold">
+                <ShieldCheck className="w-2.5 h-2.5" /> AUTO
+              </span>
+            ) : (
+              <span className="flex items-center gap-0.5 px-1.5 py-px rounded bg-text-muted/10 text-text-muted/70">
+                MANUAL
+              </span>
+            )}
           </>
         )}
         {trailPct > 0 && (

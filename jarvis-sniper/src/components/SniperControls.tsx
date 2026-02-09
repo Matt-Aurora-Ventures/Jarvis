@@ -137,6 +137,12 @@ export function SniperControls() {
   const [sessionBusy, setSessionBusy] = useState(false);
   const [sessionFundSol, setSessionFundSol] = useState('');
   const [confirmSweep, setConfirmSweep] = useState(false);
+  const [activateOpen, setActivateOpen] = useState(false);
+  const [activateBudget, setActivateBudget] = useState('');
+  const [activateMaxTrades, setActivateMaxTrades] = useState('');
+  const [activatePerTrade, setActivatePerTrade] = useState('');
+  const [activateAutoSnipe, setActivateAutoSnipe] = useState(true);
+  const [activateError, setActivateError] = useState<string | null>(null);
 
   // Load BEST_EVER on mount
   useEffect(() => {
@@ -206,7 +212,92 @@ export function SniperControls() {
   const suggestion = suggestStrategy(graduations as BagsGraduation[]);
 
   const usingSession = tradeSignerMode === 'session';
-  const sessionReady = !!sessionWalletPubkey && sessionBalanceSol != null && isLikelyFunded(sessionBalanceSol, budget.budgetSol);
+  const storedSession = sessionWalletPubkey ? loadSessionWalletFromStorage() : null;
+  const sessionKeyOk = !!storedSession && storedSession.publicKey === sessionWalletPubkey;
+  // "Ready" should not depend on the budget setting; we validate exact amounts in the activate modal.
+  const sessionReady = !!sessionWalletPubkey && sessionKeyOk && sessionBalanceSol != null && sessionBalanceSol > 0.005;
+  const canTradeNow = budget.authorized && (usingSession ? sessionReady : connected);
+  const autoWalletActive = usingSession && budget.authorized;
+
+  function openActivate() {
+    setActivateError(null);
+    const bal = sessionBalanceSol ?? 0;
+    const defaultBudget = bal > 0 ? Math.max(0.01, Math.min(budget.budgetSol || 0.1, Math.max(0, bal - 0.005))) : budget.budgetSol || 0.1;
+    setActivateBudget(String(defaultBudget));
+    setActivateMaxTrades(String(config.maxConcurrentPositions));
+    setActivatePerTrade(String(config.maxPositionSol));
+    setActivateAutoSnipe(true);
+    setActivateOpen(true);
+  }
+
+  function closeActivate() {
+    setActivateOpen(false);
+    setActivateError(null);
+  }
+
+  function sumOpenSpentSol(): number {
+    return positions
+      .filter((p) => p.status === 'open')
+      .reduce((acc, p) => acc + (p.solInvested || 0), 0);
+  }
+
+  function commitSessionPlan() {
+    const bal = sessionBalanceSol ?? 0;
+    const budgetSol = Number.parseFloat(activateBudget);
+    const maxTrades = Math.max(1, Math.floor(Number.parseFloat(activateMaxTrades)));
+    const perTradeSol = Number.parseFloat(activatePerTrade);
+
+    if (!sessionWalletPubkey) {
+      setActivateError('No session wallet found. Create one first.');
+      return;
+    }
+    if (!sessionKeyOk) {
+      setActivateError('Session key not found in this tab. Create a new session wallet (the key is not recoverable after closing the tab).');
+      return;
+    }
+    if (!Number.isFinite(budgetSol) || budgetSol <= 0) {
+      setActivateError('Enter a valid total budget (SOL).');
+      return;
+    }
+    if (!Number.isFinite(perTradeSol) || perTradeSol <= 0) {
+      setActivateError('Enter a valid max SOL per trade.');
+      return;
+    }
+    if (!Number.isFinite(maxTrades) || maxTrades < 1) {
+      setActivateError('Enter a valid max trades value.');
+      return;
+    }
+    if (perTradeSol > budgetSol) {
+      setActivateError('Max SOL per trade cannot exceed total budget.');
+      return;
+    }
+
+    // Keep a tiny buffer for fees/ATA creation.
+    const feeBuffer = 0.005;
+    if (bal > 0 && budgetSol > Math.max(0.01, bal - feeBuffer)) {
+      setActivateError(`Budget too high for session balance. Balance=${bal.toFixed(4)} SOL. Leave ~${feeBuffer} SOL for fees.`);
+      return;
+    }
+
+    // Apply in a predictable order.
+    setConfig({
+      maxConcurrentPositions: maxTrades,
+      maxPositionSol: Math.round(perTradeSol * 1000) / 1000,
+      autoSnipe: !!activateAutoSnipe,
+    });
+    setBudgetSol(budgetSol);
+
+    // Mark budget authorized (session mode doesn't require Phantom approvals).
+    // Also set spent to the sum of open positions so remaining is correct.
+    const spent = Math.round(sumOpenSpentSol() * 1000) / 1000;
+    useSniperStore.setState((s) => ({
+      budget: { ...s.budget, authorized: true, spent },
+    }));
+
+    // Switch signing to session wallet for trading.
+    setTradeSignerMode('session');
+    closeActivate();
+  }
 
   function handleBudgetPreset(sol: number) {
     setBudgetSol(sol);
@@ -611,6 +702,19 @@ export function SniperControls() {
           </button>
         ) : (
           <div className="space-y-3">
+            {!sessionKeyOk && (
+              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-accent-error/10 border border-accent-error/20">
+                <AlertTriangle className="w-4 h-4 text-accent-error flex-shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-accent-error">Session key missing</span>
+                  <span className="text-[9px] text-text-muted/80">
+                    This address is saved, but the private key is not in this tab anymore (sessionStorage is cleared when you close the tab).
+                    Create a new session wallet to auto-sign trades.
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-bg-tertiary border border-border-primary">
               <div className="flex flex-col">
                 <span className="text-[9px] text-text-muted uppercase tracking-wider">Session Address</span>
@@ -659,22 +763,22 @@ export function SniperControls() {
 
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-bg-tertiary border border-border-primary">
               <div className="flex flex-col">
-                <span className="text-xs font-semibold">Use session wallet for trading</span>
+                <span className="text-xs font-semibold">Activate Auto Wallet</span>
                 <span className="text-[9px] text-text-muted/70">
-                  When enabled: buys/sells auto-sign and SL/TP can auto-execute.
+                  Set your budget + trade limits, then auto-snipe using the selected strategy.
                 </span>
               </div>
               <button
-                onClick={() => setTradeSignerMode(usingSession ? 'phantom' : 'session')}
-                disabled={!sessionReady}
-                className={`relative w-10 h-5 rounded-full transition-all ${
-                  usingSession ? 'bg-accent-warning' : 'bg-bg-secondary border border-border-primary'
-                } ${!sessionReady ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
-                title={!sessionReady ? 'Fund the session wallet with your budget first' : 'Toggle auto execution'}
+                onClick={openActivate}
+                disabled={!sessionReady || sessionBusy}
+                className={`px-3 py-2 rounded-lg text-[11px] font-bold transition-all border flex items-center gap-1.5 ${
+                  autoWalletActive
+                    ? 'bg-accent-warning/15 text-accent-warning border-accent-warning/30 hover:bg-accent-warning/20'
+                    : 'bg-accent-warning text-black border-accent-warning/30 hover:bg-accent-warning/90'
+                } ${(!sessionReady || sessionBusy) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                title={!sessionReady ? 'Fund the session wallet first' : autoWalletActive ? 'Adjust plan (budget / limits)' : 'Activate auto trading with session wallet'}
               >
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full transition-all ${
-                  usingSession ? 'left-[22px] bg-black' : 'left-0.5 bg-text-muted'
-                }`} />
+                {autoWalletActive ? <><ShieldCheck className="w-3.5 h-3.5" /> Active</> : <><Flame className="w-3.5 h-3.5" /> Activate</>}
               </button>
             </div>
 
@@ -703,12 +807,155 @@ export function SniperControls() {
               </button>
             </div>
 
+            {usingSession && (
+              <button
+                onClick={() => {
+                  // Safety: stop auto-snipe when switching signing back to Phantom.
+                  setConfig({ autoSnipe: false });
+                  setTradeSignerMode('phantom');
+                }}
+                disabled={sessionBusy}
+                className={`w-full py-2 rounded-lg text-[11px] font-semibold transition-all border bg-bg-tertiary text-text-muted border-border-primary hover:border-border-hover ${
+                  sessionBusy ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                }`}
+                title="Switch signing back to Phantom (manual). Auto-Snipe will turn off."
+              >
+                Switch to Phantom
+              </button>
+            )}
+
             <p className="text-[9px] text-text-muted/60 leading-relaxed">
               Note: auto-execution still requires this page to stay open. If you close the tab, automation stops.
             </p>
           </div>
         )}
       </div>
+
+      {activateOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeActivate} />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="activate-auto-wallet-title"
+            className="relative w-full max-w-[560px] card-glass p-5 border border-accent-warning/25 shadow-xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 w-9 h-9 rounded-full bg-accent-warning/15 border border-accent-warning/25 flex items-center justify-center">
+                <Flame className="w-4.5 h-4.5 text-accent-warning" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 id="activate-auto-wallet-title" className="font-display text-base font-semibold">
+                    Activate Auto Wallet
+                  </h2>
+                  <span className="text-[10px] font-mono font-semibold uppercase tracking-wider px-2 py-1 rounded-full bg-accent-warning/10 text-accent-warning border border-accent-warning/25">
+                    session
+                  </span>
+                </div>
+
+                <p className="mt-2 text-[12px] text-text-secondary leading-relaxed">
+                  This will switch trading to your Session Wallet and optionally turn on Auto-Snipe using the strategy you selected above.
+                  Buys and sells execute through Bags. Keep this tab open for automation.
+                </p>
+
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="rounded-lg bg-bg-tertiary/60 border border-border-primary p-3">
+                    <div className="text-[9px] text-text-muted uppercase tracking-wider">Total Budget (SOL)</div>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={activateBudget}
+                      onChange={(e) => setActivateBudget(e.target.value)}
+                      className="mt-1 w-full bg-bg-secondary border border-border-primary rounded-lg px-3 py-2 text-xs font-mono text-text-primary outline-none focus:border-accent-warning/40"
+                      placeholder="0.10"
+                    />
+                    <div className="mt-1 text-[9px] text-text-muted/70">
+                      Balance: {sessionBalanceSol == null ? '—' : `${sessionBalanceSol.toFixed(4)} SOL`}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-bg-tertiary/60 border border-border-primary p-3">
+                    <div className="text-[9px] text-text-muted uppercase tracking-wider">Max Trades</div>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={activateMaxTrades}
+                      onChange={(e) => setActivateMaxTrades(e.target.value)}
+                      className="mt-1 w-full bg-bg-secondary border border-border-primary rounded-lg px-3 py-2 text-xs font-mono text-text-primary outline-none focus:border-accent-warning/40"
+                      placeholder="4"
+                    />
+                    <div className="mt-1 text-[9px] text-text-muted/70">
+                      (Max open positions)
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-bg-tertiary/60 border border-border-primary p-3">
+                    <div className="text-[9px] text-text-muted uppercase tracking-wider">Max / Trade (SOL)</div>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={activatePerTrade}
+                      onChange={(e) => setActivatePerTrade(e.target.value)}
+                      className="mt-1 w-full bg-bg-secondary border border-border-primary rounded-lg px-3 py-2 text-xs font-mono text-text-primary outline-none focus:border-accent-warning/40"
+                      placeholder="0.03"
+                    />
+                    <div className="mt-1 text-[9px] text-text-muted/70">
+                      (Hard cap per buy)
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between p-2.5 rounded-lg bg-bg-tertiary border border-border-primary">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold">Enable Auto-Snipe</span>
+                    <span className="text-[9px] text-text-muted/70">
+                      Automatically buys new tokens that pass the active strategy filters.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setActivateAutoSnipe(!activateAutoSnipe)}
+                    className={`relative w-10 h-5 rounded-full transition-all ${
+                      activateAutoSnipe ? 'bg-accent-warning' : 'bg-bg-secondary border border-border-primary'
+                    }`}
+                    title={activateAutoSnipe ? 'Auto-Snipe will turn ON' : 'Auto-Snipe will stay OFF'}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full transition-all ${
+                      activateAutoSnipe ? 'left-[22px] bg-black' : 'left-0.5 bg-text-muted'
+                    }`} />
+                  </button>
+                </div>
+
+                {activateError && (
+                  <div className="mt-3 flex items-start gap-2 p-2.5 rounded-lg bg-accent-error/10 border border-accent-error/20">
+                    <AlertCircle className="w-4 h-4 text-accent-error flex-shrink-0 mt-0.5" />
+                    <span className="text-[11px] text-accent-error">{activateError}</span>
+                  </div>
+                )}
+
+                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                  <button
+                    onClick={commitSessionPlan}
+                    className="btn-neon w-full sm:w-auto flex-1"
+                  >
+                    Activate
+                  </button>
+                  <button
+                    onClick={closeActivate}
+                    className="btn-secondary w-full sm:w-auto flex-1"
+                  >
+                    Cancel
+                  </button>
+                </div>
+
+                <p className="mt-3 text-[9px] text-text-muted font-mono">
+                  Safety: keep your session wallet small. You can lose 100% on illiquid tokens.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── QUICK SNIPE SECTION ─── */}
       <div className="p-3 rounded-lg bg-bg-secondary border border-border-primary mb-4">
@@ -771,10 +1018,10 @@ export function SniperControls() {
         </div>
         <button
           onClick={() => setConfig({ autoSnipe: !config.autoSnipe })}
-          disabled={!connected || !budget.authorized}
+          disabled={!canTradeNow}
           className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
             config.autoSnipe ? 'bg-accent-neon' : 'bg-bg-tertiary border border-border-primary'
-          } ${(!connected || !budget.authorized) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+          } ${!canTradeNow ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <span className={`absolute top-0.5 w-5 h-5 rounded-full transition-all duration-300 ${
             config.autoSnipe
