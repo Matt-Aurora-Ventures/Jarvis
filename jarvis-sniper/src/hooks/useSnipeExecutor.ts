@@ -200,6 +200,17 @@ export function useSnipeExecutor() {
         price: entryPrice,
       });
 
+      // CRITICAL: if entry price is 0, SL/TP won't trigger. Schedule background retries.
+      if (entryPrice <= 0) {
+        addExecution(makeExecEvent(
+          grad,
+          'error',
+          0,
+          'Entry price unknown — SL/TP PAUSED. Retrying price lookup...',
+        ));
+        scheduleDeferredPriceResolution(posId, grad.mint);
+      }
+
       // Immediately confirm SL/TP monitoring is active for this position.
       // The risk worker (useAutomatedRiskManagement) polls every 1.5s and will
       // auto-execute in session-wallet mode, or mark exitPending in Phantom mode.
