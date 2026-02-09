@@ -68,6 +68,193 @@ class PublicBotHandler:
         self.token_analyzer = TokenAnalyzer()
         self.demo_intelligence = DemoWalletIntelligence()
         self.default_slippage_bps = 100
+        # Simple per-user navigation stack for inline menu flows.
+        # Stored in PTB's per-user context.user_data dict.
+        self._NAV_STACK_KEY = "public_nav_stack"
+        self._NAV_CURRENT_KEY = "public_nav_current"
+        self._NAV_MAX_DEPTH = 30
+        # Namespace callback_data to avoid collisions with other bot menus.
+        self._CB_PREFIX = "pub:"
+
+    def _cb(self, data: str) -> str:
+        """Prefix callback data so we can route safely alongside other handlers."""
+        return f"{self._CB_PREFIX}{data}"
+
+    def _strip_cb(self, data: str) -> str:
+        """Strip callback prefix; returns original if prefix not present."""
+        if isinstance(data, str) and data.startswith(self._CB_PREFIX):
+            return data[len(self._CB_PREFIX):]
+        return data
+
+    @staticmethod
+    def _is_private_chat(update: Update) -> bool:
+        """Return True if the update is from a private DM chat."""
+        try:
+            chat = update.effective_chat
+            return bool(chat and getattr(chat, "type", "") == "private")
+        except Exception:
+            return False
+
+    # --------------------------------------------------------------------------
+    # Navigation helpers (inline menus)
+    # --------------------------------------------------------------------------
+
+    def _nav_get_stack(self, context: ContextTypes.DEFAULT_TYPE) -> List[str]:
+        stack = context.user_data.get(self._NAV_STACK_KEY, [])
+        return stack if isinstance(stack, list) else []
+
+    def _nav_set_stack(self, context: ContextTypes.DEFAULT_TYPE, stack: List[str]) -> None:
+        context.user_data[self._NAV_STACK_KEY] = (stack or [])[-self._NAV_MAX_DEPTH:]
+
+    def _nav_get_current(self, context: ContextTypes.DEFAULT_TYPE) -> str:
+        cur = context.user_data.get(self._NAV_CURRENT_KEY, "")
+        return cur if isinstance(cur, str) else ""
+
+    def _nav_set_current(self, context: ContextTypes.DEFAULT_TYPE, page_id: str) -> None:
+        context.user_data[self._NAV_CURRENT_KEY] = page_id
+
+    def _nav_push(self, context: ContextTypes.DEFAULT_TYPE, next_page_id: str) -> None:
+        """Push current page and set the next page as current."""
+        current = self._nav_get_current(context)
+        if current and current != next_page_id:
+            stack = self._nav_get_stack(context)
+            if not stack or stack[-1] != current:
+                stack.append(current)
+            self._nav_set_stack(context, stack)
+        self._nav_set_current(context, next_page_id)
+
+    def _nav_pop(self, context: ContextTypes.DEFAULT_TYPE) -> str:
+        """Pop and return previous page id; falls back to main menu."""
+        stack = self._nav_get_stack(context)
+        target = stack.pop() if stack else "main_menu"
+        self._nav_set_stack(context, stack)
+        self._nav_set_current(context, target)
+        return target
+
+    def _reset_interactive_state(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Clear flow state so 'back' won't leave the bot stuck awaiting input."""
+        for key in ("flow", "flow_data", "pending_trade", "pending_send", "pending_wallet"):
+            context.user_data.pop(key, None)
+
+    def _with_prev_menu_button(self, reply_markup: Optional[InlineKeyboardMarkup]) -> InlineKeyboardMarkup:
+        """Ensure the reply markup includes a 'Previous Menu' button."""
+        prev_btn = InlineKeyboardButton("↩️ Previous Menu", callback_data=self._cb("nav_back"))
+        if reply_markup is None:
+            return InlineKeyboardMarkup([[prev_btn]])
+
+        try:
+            rows = list(reply_markup.inline_keyboard or [])
+            for row in rows:
+                for btn in row:
+                    if getattr(btn, "callback_data", None) == self._cb("nav_back"):
+                        return reply_markup
+            rows.append([prev_btn])
+            return InlineKeyboardMarkup(rows)
+        except Exception:
+            return reply_markup
+
+    async def _edit_page(
+        self,
+        query,
+        context: ContextTypes.DEFAULT_TYPE,
+        page_id: str,
+        text: str,
+        *,
+        parse_mode: Optional[str] = None,
+        reply_markup: Optional[InlineKeyboardMarkup] = None,
+        **kwargs,
+    ) -> None:
+        """Edit the current message and append a Previous Menu button."""
+        self._nav_push(context, page_id)
+        reply_markup = self._with_prev_menu_button(reply_markup)
+        await query.edit_message_text(
+            text,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup,
+            **kwargs,
+        )
+
+    async def _edit_main_menu(self, query, context: ContextTypes.DEFAULT_TYPE) -> None:
+        text = (
+            "🤖 JARVIS Trading Bot\n\n"
+            "Pick an option:"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("🧠 Jarvis Picks", callback_data=self._cb("menu_picks")),
+                InlineKeyboardButton("📊 Sentiment", callback_data=self._cb("menu_sentiment")),
+            ],
+            [
+                InlineKeyboardButton("💰 Buy", callback_data=self._cb("menu_buy")),
+                InlineKeyboardButton("💸 Sell", callback_data=self._cb("menu_sell")),
+            ],
+            [
+                InlineKeyboardButton("👛 Wallet", callback_data=self._cb("wallet_menu")),
+                InlineKeyboardButton("⚙️ Settings", callback_data=self._cb("menu_settings")),
+            ],
+        ]
+        await self._edit_page(
+            query,
+            context,
+            "main_menu",
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    async def _build_wallet_overview(self, user_id: int) -> tuple[str, InlineKeyboardMarkup]:
+        wallet = self.user_manager.get_primary_wallet(user_id)
+        if not wallet:
+            return (
+                "No wallet found. Create one with /start",
+                InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Main Menu", callback_data=self._cb("main_menu"))]]),
+            )
+
+        trading = await self._get_public_trading()
+        portfolio = await trading.get_portfolio(wallet.public_key)
+        total_value = portfolio.sol_value_usd + sum(h.value_usd for h in portfolio.holdings)
+
+        lines = [
+            "<b>Wallet</b>",
+            "",
+            f"Address: <code>{wallet.public_key}</code>",
+            f"SOL: {portfolio.sol_balance:.4f} (~${portfolio.sol_value_usd:,.2f})",
+            "",
+            "<b>Top Holdings</b>",
+        ]
+
+        if portfolio.holdings:
+            for holding in portfolio.holdings[:10]:
+                lines.append(f"- {holding.symbol}: {holding.amount:.4f} (~${holding.value_usd:,.2f})")
+        else:
+            lines.append("- No token holdings yet")
+
+        lines.append("")
+        lines.append(f"Total value: ${total_value:,.2f}")
+
+        keyboard = [
+            [
+                InlineKeyboardButton("Deposit", callback_data=self._cb("wallet_deposit")),
+                InlineKeyboardButton("Withdraw", callback_data=self._cb("wallet_withdraw")),
+            ],
+            [
+                InlineKeyboardButton("Export Key", callback_data=self._cb("wallet_export")),
+                InlineKeyboardButton("Import Wallet", callback_data=self._cb("wallet_import")),
+            ],
+        ]
+
+        return "\n".join(lines), InlineKeyboardMarkup(keyboard)
+
+    async def _edit_wallet_menu(self, query, context: ContextTypes.DEFAULT_TYPE, user_id: int) -> None:
+        text, keyboard = await self._build_wallet_overview(user_id)
+        await self._edit_page(
+            query,
+            context,
+            "wallet_menu",
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard,
+            disable_web_page_preview=True,
+        )
 
     def _demo_enabled(self, context: ContextTypes.DEFAULT_TYPE) -> bool:
         return bool(context.user_data.get("demo_ack"))
@@ -105,8 +292,8 @@ class PublicBotHandler:
     async def _show_demo_disclaimer(self, update: Update) -> None:
         keyboard = [
             [
-                InlineKeyboardButton("✅ I Understand & Accept the Risks", callback_data="demo_accept"),
-                InlineKeyboardButton("❌ Exit", callback_data="demo_exit"),
+                InlineKeyboardButton("✅ I Understand & Accept the Risks", callback_data=self._cb("demo_accept")),
+                InlineKeyboardButton("❌ Exit", callback_data=self._cb("demo_exit")),
             ]
         ]
         await update.message.reply_text(
@@ -122,16 +309,16 @@ class PublicBotHandler:
         )
         keyboard = [
             [
-                InlineKeyboardButton("🧠 Jarvis Picks", callback_data="menu_picks"),
-                InlineKeyboardButton("📊 Sentiment", callback_data="menu_sentiment"),
+                InlineKeyboardButton("🧠 Jarvis Picks", callback_data=self._cb("menu_picks")),
+                InlineKeyboardButton("📊 Sentiment", callback_data=self._cb("menu_sentiment")),
             ],
             [
-                InlineKeyboardButton("💰 Buy", callback_data="menu_buy"),
-                InlineKeyboardButton("💸 Sell", callback_data="menu_sell"),
+                InlineKeyboardButton("💰 Buy", callback_data=self._cb("menu_buy")),
+                InlineKeyboardButton("💸 Sell", callback_data=self._cb("menu_sell")),
             ],
             [
-                InlineKeyboardButton("👛 Wallet", callback_data="menu_wallet"),
-                InlineKeyboardButton("⚙️ Settings", callback_data="menu_settings"),
+                InlineKeyboardButton("👛 Wallet", callback_data=self._cb("menu_wallet")),
+                InlineKeyboardButton("⚙️ Settings", callback_data=self._cb("menu_settings")),
             ],
         ]
         await context.bot.send_message(
@@ -180,6 +367,9 @@ class PublicBotHandler:
 
     async def cmd_demo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /demo command (restricted)."""
+        if not self._is_private_chat(update):
+            await update.message.reply_text("For safety, use this command in a private DM with the bot.")
+            return
         username = update.effective_user.username or ""
         if username not in DEMO_AUTHORIZED_USERS:
             await update.message.reply_text("Demo mode is not available.")
@@ -191,6 +381,12 @@ class PublicBotHandler:
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command - onboarding and wallet creation."""
         try:
+            if not self._is_private_chat(update):
+                await update.message.reply_text(
+                    "For security, wallet setup is only available in a private DM with this bot."
+                )
+                return
+
             user_id = update.effective_user.id
             username = update.effective_user.username or update.effective_user.first_name
 
@@ -246,16 +442,21 @@ Private key:
 We will NEVER ask for your seed phrase or private key."""
 
             keyboard = [[
-                InlineKeyboardButton("I saved my seed phrase", callback_data="onboard_confirm"),
-                InlineKeyboardButton("Cancel", callback_data="onboard_cancel"),
+                InlineKeyboardButton("I saved my seed phrase", callback_data=self._cb("onboard_confirm")),
+                InlineKeyboardButton("Cancel", callback_data=self._cb("onboard_cancel")),
             ]]
 
-            await update.message.reply_text(
+            msg = await update.message.reply_text(
                 onboarding_text,
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 disable_web_page_preview=True,
             )
+            # Auto-delete onboarding secrets after 10 minutes if the user doesn't confirm.
+            try:
+                self._schedule_delete_message(context, msg.chat_id, msg.message_id, delay_seconds=600)
+            except Exception:
+                pass
 
         except Exception as e:
             logger.error(f"Start command failed: {e}")
@@ -266,6 +467,9 @@ We will NEVER ask for your seed phrase or private key."""
     async def cmd_analyze(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /analyze <token> command."""
         try:
+            if not self._is_private_chat(update):
+                await update.message.reply_text("For safety, use this command in a private DM with the bot.")
+                return
             if not context.args:
                 await update.message.reply_text(
                     "📊 Token Analysis\n\n"
@@ -312,8 +516,8 @@ We will NEVER ask for your seed phrase or private key."""
                 keyboard = []
                 if analysis.recommendation and analysis.recommendation.action == "BUY":
                     keyboard = [[
-                        InlineKeyboardButton("💰 Buy", callback_data=f"buy_{token_symbol}"),
-                        InlineKeyboardButton("📊 Details", callback_data=f"analyze_details_{token_symbol}"),
+                        InlineKeyboardButton("💰 Buy", callback_data=self._cb(f"buy_{token_symbol}")),
+                        InlineKeyboardButton("📊 Details", callback_data=self._cb(f"analyze_details_{token_symbol}")),
                     ]]
 
                 reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
@@ -384,6 +588,9 @@ We will NEVER ask for your seed phrase or private key."""
     async def cmd_buy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /buy command - interactive buy flow."""
         try:
+            if not self._is_private_chat(update):
+                await update.message.reply_text("For safety, trading is only available in a private DM with the bot.")
+                return
             user_id = update.effective_user.id
             profile = self.user_manager.get_user_profile(user_id)
 
@@ -412,6 +619,9 @@ We will NEVER ask for your seed phrase or private key."""
     async def cmd_sell(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /sell command - list holdings to sell."""
         try:
+            if not self._is_private_chat(update):
+                await update.message.reply_text("For safety, trading is only available in a private DM with the bot.")
+                return
             user_id = update.effective_user.id
             profile = self.user_manager.get_user_profile(user_id)
             if not profile:
@@ -437,7 +647,7 @@ We will NEVER ask for your seed phrase or private key."""
             keyboard = []
             for idx, holding in enumerate(holdings[:10]):
                 label = f"{holding.symbol} | {holding.amount:.4f}"
-                keyboard.append([InlineKeyboardButton(label, callback_data=f"sell_pick:{idx}")])
+                keyboard.append([InlineKeyboardButton(label, callback_data=self._cb(f"sell_pick:{idx}"))])
 
             await update.message.reply_text(
                 "Select a token to sell:",
@@ -453,6 +663,9 @@ We will NEVER ask for your seed phrase or private key."""
     async def cmd_portfolio(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /portfolio command - show holdings."""
         try:
+            if not self._is_private_chat(update):
+                await update.message.reply_text("For safety, use this command in a private DM with the bot.")
+                return
             user_id = update.effective_user.id
             stats = self.user_manager.get_user_stats(user_id)
 
@@ -499,6 +712,9 @@ Streaks:
     async def cmd_performance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /performance command - detailed stats."""
         try:
+            if not self._is_private_chat(update):
+                await update.message.reply_text("For safety, use this command in a private DM with the bot.")
+                return
             user_id = update.effective_user.id
             stats = self.user_manager.get_user_stats(user_id)
 
@@ -553,51 +769,19 @@ Use /settings to adjust risk level.
     async def cmd_wallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /wallet command - show wallet overview."""
         try:
-            user_id = update.effective_user.id
-            wallet = self.user_manager.get_primary_wallet(user_id)
-            if not wallet:
-                await update.message.reply_text("? No wallet found. Create one with /start")
+            if not self._is_private_chat(update):
+                await update.message.reply_text("For security, wallet commands only work in a private DM with the bot.")
                 return
+            user_id = update.effective_user.id
+            # Track navigation so inline pages (deposit/export/etc) can go back.
+            self._nav_push(context, "wallet_menu")
 
-            trading = await self._get_public_trading()
-            portfolio = await trading.get_portfolio(wallet.public_key)
-
-            total_value = portfolio.sol_value_usd + sum(h.value_usd for h in portfolio.holdings)
-            lines = [
-                "<b>Wallet</b>",
-                "",
-                f"Address: <code>{wallet.public_key}</code>",
-                f"SOL: {portfolio.sol_balance:.4f} (~${portfolio.sol_value_usd:,.2f})",
-                "",
-                "<b>Top Holdings</b>",
-            ]
-
-            if portfolio.holdings:
-                for holding in portfolio.holdings[:10]:
-                    lines.append(
-                        f"- {holding.symbol}: {holding.amount:.4f} (~${holding.value_usd:,.2f})"
-                    )
-            else:
-                lines.append("- No token holdings yet")
-
-            lines.append("")
-            lines.append(f"Total value: ${total_value:,.2f}")
-
-            keyboard = [
-                [
-                    InlineKeyboardButton("Deposit", callback_data="wallet_deposit"),
-                    InlineKeyboardButton("Withdraw", callback_data="wallet_withdraw"),
-                ],
-                [
-                    InlineKeyboardButton("Export Key", callback_data="wallet_export"),
-                    InlineKeyboardButton("Import Wallet", callback_data="wallet_import"),
-                ],
-            ]
-
+            text, keyboard = await self._build_wallet_overview(user_id)
+            keyboard = self._with_prev_menu_button(keyboard)
             await update.message.reply_text(
-                "\n".join(lines),
+                text,
                 parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(keyboard),
+                reply_markup=keyboard,
                 disable_web_page_preview=True,
             )
 
@@ -608,6 +792,9 @@ Use /settings to adjust risk level.
     async def cmd_send(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /send command - start send flow."""
         try:
+            if not self._is_private_chat(update):
+                await update.message.reply_text("For safety, sending funds is only available in a private DM with the bot.")
+                return
             user_id = update.effective_user.id
             wallet = self.user_manager.get_primary_wallet(user_id)
             if not wallet:
@@ -625,6 +812,9 @@ Use /settings to adjust risk level.
     async def cmd_sentiment(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /sentiment <token> command."""
         try:
+            if not self._is_private_chat(update):
+                await update.message.reply_text("For safety, use this command in a private DM with the bot.")
+                return
             if not context.args:
                 await update.message.reply_text(
                     "Usage: /sentiment <token symbol or address>"
@@ -680,9 +870,9 @@ Use /settings to adjust risk level.
 
             keyboard = [
                 [
-                    InlineKeyboardButton("Buy 0.1 SOL", callback_data="sentiment_buy:0.1"),
-                    InlineKeyboardButton("Buy 0.5 SOL", callback_data="sentiment_buy:0.5"),
-                    InlineKeyboardButton("Buy 1 SOL", callback_data="sentiment_buy:1"),
+                    InlineKeyboardButton("Buy 0.1 SOL", callback_data=self._cb("sentiment_buy:0.1")),
+                    InlineKeyboardButton("Buy 0.5 SOL", callback_data=self._cb("sentiment_buy:0.5")),
+                    InlineKeyboardButton("Buy 1 SOL", callback_data=self._cb("sentiment_buy:1")),
                 ]
             ]
 
@@ -698,6 +888,9 @@ Use /settings to adjust risk level.
     async def cmd_picks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /picks command - show Jarvis picks."""
         try:
+            if not self._is_private_chat(update):
+                await update.message.reply_text("For safety, use this command in a private DM with the bot.")
+                return
             import json
             import tempfile
             from pathlib import Path
@@ -782,9 +975,9 @@ Use /settings to adjust risk level.
                 for idx, pick in enumerate(tradeable[:3]):
                     buttons = [
                         [
-                            InlineKeyboardButton("Buy 0.1 SOL", callback_data=f"pick_buy:{idx}:0.1"),
-                            InlineKeyboardButton("Buy 0.5 SOL", callback_data=f"pick_buy:{idx}:0.5"),
-                            InlineKeyboardButton("Buy 1 SOL", callback_data=f"pick_buy:{idx}:1"),
+                            InlineKeyboardButton("Buy 0.1 SOL", callback_data=self._cb(f"pick_buy:{idx}:0.1")),
+                            InlineKeyboardButton("Buy 0.5 SOL", callback_data=self._cb(f"pick_buy:{idx}:0.5")),
+                            InlineKeyboardButton("Buy 1 SOL", callback_data=self._cb(f"pick_buy:{idx}:1")),
                         ]
                     ]
                     await update.message.reply_text(
@@ -806,6 +999,9 @@ Use /settings to adjust risk level.
     async def cmd_settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /settings command - user preferences."""
         try:
+            if not self._is_private_chat(update):
+                await update.message.reply_text("For safety, use this command in a private DM with the bot.")
+                return
             user_id = update.effective_user.id
             profile = self.user_manager.get_user_profile(user_id)
 
@@ -837,14 +1033,16 @@ What would you like to change?
 """
 
             keyboard = [[
-                InlineKeyboardButton("📊 Risk Level", callback_data="settings_risk"),
-                InlineKeyboardButton("💰 Limits", callback_data="settings_limits"),
+                InlineKeyboardButton("📊 Risk Level", callback_data=self._cb("settings_risk")),
+                InlineKeyboardButton("💰 Limits", callback_data=self._cb("settings_limits")),
             ], [
-                InlineKeyboardButton("🔒 Safety", callback_data="settings_safety"),
-                InlineKeyboardButton("🤖 Learning", callback_data="settings_learning"),
+                InlineKeyboardButton("🔒 Safety", callback_data=self._cb("settings_safety")),
+                InlineKeyboardButton("🤖 Learning", callback_data=self._cb("settings_learning")),
             ]]
 
             reply_markup = InlineKeyboardMarkup(keyboard)
+            self._nav_push(context, "settings_menu")
+            reply_markup = self._with_prev_menu_button(reply_markup)
 
             await update.message.reply_text(
                 settings_text,
@@ -860,6 +1058,9 @@ What would you like to change?
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command - full command reference."""
         try:
+            if not self._is_private_chat(update):
+                await update.message.reply_text("For safety, use this command in a private DM with the bot.")
+                return
             help_text = """
 <b>Jarvis Trading Bot - Command Reference</b>
 
@@ -898,32 +1099,57 @@ What would you like to change?
         if not query:
             return
 
-        data = query.data or ""
+        if not self._is_private_chat(update):
+            try:
+                await query.answer("For security, use this in a private DM with the bot.", show_alert=True)
+            except Exception:
+                pass
+            return
+
+        raw_data = query.data or ""
+        # Ignore callbacks that are not intended for the public bot (avoid collisions).
+        if not raw_data.startswith(self._CB_PREFIX):
+            return
+
+        data = self._strip_cb(raw_data)
         await query.answer()
 
+        # Global Previous Menu support across all public bot pages.
+        # This is intentionally handled before other branches so any screen can go back.
+        if data == "nav_back":
+            self._reset_interactive_state(context)
+            data = self._nav_pop(context)
+
+        if data == "main_menu":
+            await self._edit_main_menu(query, context)
+            return
+
+        if data == "wallet_menu":
+            await self._edit_wallet_menu(query, context, update.effective_user.id)
+            return
+
         if data == "ui_test_ping":
-            await query.edit_message_text("UI callback OK.")
+            await self._edit_page(query, context, "ui_test_ping", "UI callback OK.")
             return
 
         if data == "demo_exit":
-            await query.edit_message_text("Demo mode canceled.")
+            await self._edit_page(query, context, "demo_exit", "Demo mode canceled.")
             return
 
         if data == "demo_accept":
             context.user_data["demo_ack"] = True
-            await query.edit_message_text("Demo mode enabled.")
-            await self._show_main_menu(query.message.chat_id, context)
+            await self._edit_main_menu(query, context)
             return
 
         if data == "onboard_cancel":
             context.user_data.pop("pending_wallet", None)
-            await query.edit_message_text("Onboarding canceled.")
+            await self._edit_page(query, context, "onboard_cancel", "Onboarding canceled.")
             return
 
         if data == "onboard_confirm":
             pending = context.user_data.get("pending_wallet")
             if not pending:
-                await query.edit_message_text("No pending wallet found.")
+                await self._edit_page(query, context, "onboard_confirm", "No pending wallet found.")
                 return
             user_id = update.effective_user.id
             success, _wallet = self.user_manager.create_wallet(
@@ -934,16 +1160,16 @@ What would you like to change?
             )
             context.user_data.pop("pending_wallet", None)
             if not success:
-                await query.edit_message_text("Wallet setup failed. Try /start again.")
+                await self._edit_page(query, context, "onboard_confirm", "Wallet setup failed. Try /start again.")
                 return
-            await query.edit_message_text("Wallet created. Use /wallet to view it.")
+            await self._edit_page(query, context, "onboard_confirm", "Wallet created. Use /wallet to view it.")
             return
 
         if data == "wallet_deposit":
             user_id = update.effective_user.id
             wallet = self.user_manager.get_primary_wallet(user_id)
             if not wallet:
-                await query.edit_message_text("No wallet found. Use /start to create one.")
+                await self._edit_page(query, context, "wallet_deposit", "No wallet found. Use /start to create one.")
                 return
             deposit_text = f"""FUNDING YOUR WALLET
 --------------------
@@ -953,13 +1179,19 @@ Send SOL to:
 
 IMPORTANT: Early V1 software.
 We recommend $50-100 max while testing."""
-            await query.edit_message_text(deposit_text, parse_mode=ParseMode.HTML)
+            await self._edit_page(
+                query,
+                context,
+                "wallet_deposit",
+                deposit_text,
+                parse_mode=ParseMode.HTML,
+            )
             return
 
         if data == "wallet_withdraw":
             context.user_data["flow"] = "send_address"
             context.user_data["flow_data"] = {}
-            await query.edit_message_text("Enter destination Solana address:")
+            await self._edit_page(query, context, "wallet_withdraw", "Enter destination Solana address:")
             return
 
         if data == "wallet_export":
@@ -973,10 +1205,13 @@ CRITICAL:
 
 Proceed?"""
             keyboard = [[
-                InlineKeyboardButton("Show Private Key", callback_data="wallet_export_confirm"),
-                InlineKeyboardButton("Cancel", callback_data="cancel"),
+                InlineKeyboardButton("Show Private Key", callback_data=self._cb("wallet_export_confirm")),
+                InlineKeyboardButton("Cancel", callback_data=self._cb("cancel")),
             ]]
-            await query.edit_message_text(
+            await self._edit_page(
+                query,
+                context,
+                "wallet_export",
                 warn_text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
             )
@@ -986,11 +1221,11 @@ Proceed?"""
             user_id = update.effective_user.id
             wallet = self.user_manager.get_primary_wallet(user_id)
             if not wallet:
-                await query.edit_message_text("No wallet found. Use /start to create one.")
+                await self._edit_page(query, context, "wallet_export_confirm", "No wallet found. Use /start to create one.")
                 return
             wallet_password = self._get_public_wallet_password()
             if not wallet_password:
-                await query.edit_message_text("Wallet encryption not configured.")
+                await self._edit_page(query, context, "wallet_export_confirm", "Wallet encryption not configured.")
                 return
             wallet_service = await self._get_wallet_service()
             try:
@@ -999,7 +1234,7 @@ Proceed?"""
                     wallet_password,
                 )
             except Exception:
-                await query.edit_message_text("Failed to decrypt key. Check wallet password.")
+                await self._edit_page(query, context, "wallet_export_confirm", "Failed to decrypt key. Check wallet password.")
                 return
 
             msg = await context.bot.send_message(
@@ -1009,13 +1244,13 @@ Proceed?"""
                 parse_mode=ParseMode.HTML,
             )
             self._schedule_delete_message(context, query.message.chat_id, msg.message_id)
-            await query.edit_message_text("Private key sent.")
+            await self._edit_page(query, context, "wallet_export_confirm", "Private key sent.")
             return
 
         if data == "wallet_import":
             context.user_data["flow"] = "import_wallet"
             context.user_data["flow_data"] = {}
-            await query.edit_message_text("Send your seed phrase or private key:")
+            await self._edit_page(query, context, "wallet_import", "Send your seed phrase or private key:")
             return
 
         if data == "cancel":
@@ -1023,14 +1258,14 @@ Proceed?"""
             context.user_data.pop("flow_data", None)
             context.user_data.pop("pending_trade", None)
             context.user_data.pop("pending_send", None)
-            await query.edit_message_text("Canceled.")
+            await self._edit_page(query, context, "cancel", "Canceled.")
             return
 
         if data.startswith("buy_amount:"):
             amount = self._parse_amount(data.split(":", 1)[1])
             token = context.user_data.get("buy_token")
             if not token or not amount:
-                await query.edit_message_text("Buy token not set. Use /buy again.")
+                await self._edit_page(query, context, data, "Buy token not set. Use /buy again.")
                 return
             await self._show_buy_confirmation(query.message.chat_id, context, token, amount)
             return
@@ -1038,13 +1273,13 @@ Proceed?"""
         if data == "buy_custom":
             context.user_data["flow"] = "buy_custom_amount"
             context.user_data["flow_data"] = {}
-            await query.edit_message_text("Enter amount in SOL:")
+            await self._edit_page(query, context, "buy_custom", "Enter amount in SOL:")
             return
 
         if data.startswith("sell_pick:"):
             holding = self._get_holding_from_callback(context, data)
             if not holding:
-                await query.edit_message_text("Holding not found. Use /sell again.")
+                await self._edit_page(query, context, data, "Holding not found. Use /sell again.")
                 return
             await self._prompt_sell_amount(query.message.chat_id, context, holding)
             return
@@ -1053,7 +1288,7 @@ Proceed?"""
             pct = self._parse_amount(data.split(":", 1)[1])
             holding = context.user_data.get("sell_selected")
             if not holding or pct is None:
-                await query.edit_message_text("Sell selection expired. Use /sell again.")
+                await self._edit_page(query, context, data, "Sell selection expired. Use /sell again.")
                 return
             amount_tokens = holding["amount"] * (pct / 100.0)
             await self._show_sell_confirmation(
@@ -1066,7 +1301,7 @@ Proceed?"""
 
         if data == "sell_custom":
             context.user_data["flow"] = "sell_custom_amount"
-            await query.edit_message_text("Enter token amount to sell:")
+            await self._edit_page(query, context, "sell_custom", "Enter token amount to sell:")
             return
 
         if data.startswith("confirm_trade:"):
@@ -1078,7 +1313,7 @@ Proceed?"""
             amount = self._parse_amount(data.split(":", 1)[1])
             token = context.user_data.get("sentiment_token")
             if not token or not amount:
-                await query.edit_message_text("Sentiment token not set. Use /sentiment again.")
+                await self._edit_page(query, context, data, "Sentiment token not set. Use /sentiment again.")
                 return
             await self._show_buy_confirmation(query.message.chat_id, context, token, amount)
             return
@@ -1086,7 +1321,7 @@ Proceed?"""
         if data.startswith("pick_buy:"):
             token = self._get_pick_from_callback(context, data)
             if not token:
-                await query.edit_message_text("Pick expired. Use /picks again.")
+                await self._edit_page(query, context, data, "Pick expired. Use /picks again.")
                 return
             if self._demo_enabled(context):
                 self.demo_intelligence.record_pick_action(
@@ -1112,14 +1347,14 @@ Proceed?"""
                 amount = self._parse_amount(amount_label)
             dest = context.user_data.get("send_destination")
             if not dest or not amount:
-                await query.edit_message_text("Send flow expired. Use /send again.")
+                await self._edit_page(query, context, data, "Send flow expired. Use /send again.")
                 return
             await self._show_send_confirmation(query.message.chat_id, context, dest, amount)
             return
 
         if data == "send_custom":
             context.user_data["flow"] = "send_custom_amount"
-            await query.edit_message_text("Enter amount in SOL to send:")
+            await self._edit_page(query, context, "send_custom", "Enter amount in SOL to send:")
             return
 
         if data.startswith("confirm_send:"):
@@ -1151,11 +1386,13 @@ Proceed?"""
             await context.bot.send_message(chat_id=query.message.chat_id, text="Use /settings to adjust preferences.")
             return
 
-        await query.edit_message_text("Action not supported yet.")
+        await self._edit_page(query, context, "unsupported", "Action not supported yet.")
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle text messages for interactive flows."""
         if not update.message:
+            return
+        if not self._is_private_chat(update):
             return
         text = (update.message.text or "").strip()
         flow = context.user_data.get("flow")
@@ -1229,11 +1466,11 @@ Price: ${resolved.price_usd:,.6f}
 Select amount to buy:"""
         keyboard = [
             [
-                InlineKeyboardButton("0.1 SOL", callback_data="buy_amount:0.1"),
-                InlineKeyboardButton("0.5 SOL", callback_data="buy_amount:0.5"),
-                InlineKeyboardButton("1 SOL", callback_data="buy_amount:1"),
+                InlineKeyboardButton("0.1 SOL", callback_data=self._cb("buy_amount:0.1")),
+                InlineKeyboardButton("0.5 SOL", callback_data=self._cb("buy_amount:0.5")),
+                InlineKeyboardButton("1 SOL", callback_data=self._cb("buy_amount:1")),
             ],
-            [InlineKeyboardButton("Custom", callback_data="buy_custom")],
+            [InlineKeyboardButton("Custom", callback_data=self._cb("buy_custom"))],
         ]
         await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -1278,8 +1515,8 @@ Price Impact: {quote.price_impact_pct:.2%}
 {self._risk_warning_block()}{self._large_trade_warning(amount_sol)}"""
 
         keyboard = [[
-            InlineKeyboardButton("Confirm Buy", callback_data=f"confirm_trade:{trade_id}"),
-            InlineKeyboardButton("Cancel", callback_data="cancel"),
+            InlineKeyboardButton("Confirm Buy", callback_data=self._cb(f"confirm_trade:{trade_id}")),
+            InlineKeyboardButton("Cancel", callback_data=self._cb("cancel")),
         ]]
         await context.bot.send_message(
             chat_id=chat_id,
@@ -1296,12 +1533,12 @@ Price Impact: {quote.price_impact_pct:.2%}
         context.user_data["sell_selected"] = holding
         keyboard = [
             [
-                InlineKeyboardButton("25%", callback_data="sell_amount:25"),
-                InlineKeyboardButton("50%", callback_data="sell_amount:50"),
-                InlineKeyboardButton("75%", callback_data="sell_amount:75"),
-                InlineKeyboardButton("100%", callback_data="sell_amount:100"),
+                InlineKeyboardButton("25%", callback_data=self._cb("sell_amount:25")),
+                InlineKeyboardButton("50%", callback_data=self._cb("sell_amount:50")),
+                InlineKeyboardButton("75%", callback_data=self._cb("sell_amount:75")),
+                InlineKeyboardButton("100%", callback_data=self._cb("sell_amount:100")),
             ],
-            [InlineKeyboardButton("Custom", callback_data="sell_custom")],
+            [InlineKeyboardButton("Custom", callback_data=self._cb("sell_custom"))],
         ]
         await context.bot.send_message(
             chat_id=chat_id,
@@ -1346,11 +1583,11 @@ Amount: {amount_tokens:.4f}
 Est. Receive: {quote.output_amount_ui:.4f} SOL
 Price Impact: {quote.price_impact_pct:.2%}
 
-{self._risk_warning_block()}"""
+        {self._risk_warning_block()}"""
 
         keyboard = [[
-            InlineKeyboardButton("Confirm Sell", callback_data=f"confirm_trade:{trade_id}"),
-            InlineKeyboardButton("Cancel", callback_data="cancel"),
+            InlineKeyboardButton("Confirm Sell", callback_data=self._cb(f"confirm_trade:{trade_id}")),
+            InlineKeyboardButton("Cancel", callback_data=self._cb("cancel")),
         ]]
         await context.bot.send_message(
             chat_id=chat_id,
@@ -1513,12 +1750,12 @@ https://solscan.io/tx/{result.signature}""",
 
         keyboard = [
             [
-                InlineKeyboardButton("0.1 SOL", callback_data="send_amount:0.1"),
-                InlineKeyboardButton("0.5 SOL", callback_data="send_amount:0.5"),
-                InlineKeyboardButton("1 SOL", callback_data="send_amount:1"),
+                InlineKeyboardButton("0.1 SOL", callback_data=self._cb("send_amount:0.1")),
+                InlineKeyboardButton("0.5 SOL", callback_data=self._cb("send_amount:0.5")),
+                InlineKeyboardButton("1 SOL", callback_data=self._cb("send_amount:1")),
             ],
-            [InlineKeyboardButton("Max", callback_data="send_amount:max")],
-            [InlineKeyboardButton("Custom", callback_data="send_custom")],
+            [InlineKeyboardButton("Max", callback_data=self._cb("send_amount:max"))],
+            [InlineKeyboardButton("Custom", callback_data=self._cb("send_custom"))],
         ]
         await context.bot.send_message(
             chat_id=chat_id,
@@ -1553,8 +1790,8 @@ Fee: ~0.000005 SOL
 Confirm transfer?"""
 
         keyboard = [[
-            InlineKeyboardButton("Send", callback_data=f"confirm_send:{send_id}"),
-            InlineKeyboardButton("Cancel", callback_data="cancel"),
+            InlineKeyboardButton("Send", callback_data=self._cb(f"confirm_send:{send_id}")),
+            InlineKeyboardButton("Cancel", callback_data=self._cb("cancel")),
         ]]
 
         await context.bot.send_message(

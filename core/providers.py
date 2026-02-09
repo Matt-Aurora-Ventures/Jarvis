@@ -718,6 +718,14 @@ def _groq_client():
 
 def _grok_client():
     """Get X.AI Grok client if available."""
+    try:
+        from core.feature_flags import is_xai_enabled
+        if not is_xai_enabled(default=True):
+            return None
+    except Exception:
+        # Conservative: if flags can't be evaluated, treat xAI as disabled.
+        return None
+
     key = os.environ.get("XAI_API_KEY") or secrets.get_grok_key()
     if not key:
         return None

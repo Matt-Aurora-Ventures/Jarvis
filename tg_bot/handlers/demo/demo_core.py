@@ -4,11 +4,12 @@ Demo Core Handlers
 Primary entrypoints for the /demo command, demo callbacks, and demo message handler.
 """
 
+import asyncio
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.error import BadRequest
+from telegram.error import BadRequest, NetworkError, TimedOut
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -33,6 +34,83 @@ from tg_bot.handlers.demo.demo_callbacks import get_callback_router
 
 logger = logging.getLogger(__name__)
 
+_DEMO_NAV_STACK_KEY = "demo_nav_stack"
+_DEMO_NAV_CURRENT_KEY = "demo_current_page"
+_DEMO_NAV_MAX_DEPTH = 50
+
+
+def _demo_nav_get_stack(context: ContextTypes.DEFAULT_TYPE) -> List[str]:
+    try:
+        stack = context.user_data.get(_DEMO_NAV_STACK_KEY, [])
+        return stack if isinstance(stack, list) else []
+    except Exception:
+        return []
+
+
+def _demo_nav_set_stack(context: ContextTypes.DEFAULT_TYPE, stack: List[str]) -> None:
+    try:
+        context.user_data[_DEMO_NAV_STACK_KEY] = (stack or [])[-_DEMO_NAV_MAX_DEPTH:]
+    except Exception:
+        pass
+
+
+def _demo_nav_get_current(context: ContextTypes.DEFAULT_TYPE) -> str:
+    try:
+        cur = context.user_data.get(_DEMO_NAV_CURRENT_KEY, "")
+        return cur if isinstance(cur, str) else ""
+    except Exception:
+        return ""
+
+
+def _demo_nav_set_current(context: ContextTypes.DEFAULT_TYPE, page: str) -> None:
+    try:
+        context.user_data[_DEMO_NAV_CURRENT_KEY] = page
+    except Exception:
+        pass
+
+
+def _demo_nav_push(context: ContextTypes.DEFAULT_TYPE, next_page: str) -> None:
+    """Push current page onto stack (if it exists) and set new current page."""
+    try:
+        current = _demo_nav_get_current(context)
+        if current and current != next_page:
+            stack = _demo_nav_get_stack(context)
+            # Avoid pushing duplicates to keep back navigation sane.
+            if not stack or stack[-1] != current:
+                stack.append(current)
+            _demo_nav_set_stack(context, stack)
+        _demo_nav_set_current(context, next_page)
+    except Exception:
+        pass
+
+
+def _demo_nav_pop(context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Pop previous page from stack (or return main). Also updates current."""
+    stack = _demo_nav_get_stack(context)
+    target = stack.pop() if stack else "demo:main"
+    _demo_nav_set_stack(context, stack)
+    _demo_nav_set_current(context, target)
+    return target
+
+
+def _ensure_prev_menu_button(keyboard: Optional[InlineKeyboardMarkup]) -> InlineKeyboardMarkup:
+    """Append a 'Previous Menu' button to every demo page (unless already present)."""
+    prev_btn = InlineKeyboardButton("↩️ Previous Menu", callback_data="demo:nav_back")
+
+    if keyboard is None:
+        return InlineKeyboardMarkup([[prev_btn]])
+
+    try:
+        rows = list(keyboard.inline_keyboard or [])
+        for row in rows:
+            for btn in row:
+                if getattr(btn, "callback_data", None) == "demo:nav_back":
+                    return keyboard
+        rows.append([prev_btn])
+        return InlineKeyboardMarkup(rows)
+    except Exception:
+        return keyboard
+
 
 # =============================================================================
 # Demo Command Handler
@@ -54,19 +132,19 @@ async def demo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         market_regime = {}
 
         try:
-            market_regime = await get_market_regime()
+            market_regime = await asyncio.wait_for(get_market_regime(), timeout=4.0)
         except Exception as exc:
             logger.warning(f"Could not load market regime: {exc}")
 
         try:
-            engine = await _get_demo_engine()
+            engine = await asyncio.wait_for(_get_demo_engine(), timeout=8.0)
             treasury = engine.wallet.get_treasury()
             if treasury:
                 wallet_address = treasury.address
 
-            sol_balance, usd_value = await engine.get_portfolio_value()
+            sol_balance, usd_value = await asyncio.wait_for(engine.get_portfolio_value(), timeout=6.0)
 
-            await engine.update_positions()
+            await asyncio.wait_for(engine.update_positions(), timeout=8.0)
             positions = engine.get_open_positions()
             open_positions = len(positions)
 
@@ -77,6 +155,10 @@ async def demo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         except Exception as exc:
             logger.warning(f"Could not load treasury data: {exc}")
+
+        # Reset demo navigation context on /demo entry.
+        _demo_nav_set_stack(context, [])
+        _demo_nav_set_current(context, "demo:main")
 
         ai_auto_enabled = context.user_data.get("ai_auto_trade", False)
         text, keyboard = DemoMenuBuilder.main_menu(
@@ -89,6 +171,7 @@ async def demo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             market_regime=market_regime,
             ai_auto_enabled=ai_auto_enabled,
         )
+        keyboard = _ensure_prev_menu_button(keyboard)
 
         await update.message.reply_text(
             text,
@@ -131,6 +214,9 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not is_admin:
             try:
                 await query.answer("Admin only.", show_alert=True)
+            except (TimedOut, NetworkError) as exc:
+                logger.debug("Demo callback answer failed during admin check: %s", exc)
+                return
             except BadRequest as exc:
                 if (
                     "Query is too old" in str(exc)
@@ -147,6 +233,9 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         await query.answer()
+    except (TimedOut, NetworkError) as exc:
+        # Non-fatal: callback answers can time out during transient network issues.
+        logger.debug("Demo callback answer timed out: %s", exc)
     except BadRequest as exc:
         if (
             "Query is too old" in str(exc)
@@ -164,6 +253,21 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Non-demo callback received: {data}")
         return
 
+    # Global "Previous Menu" navigation for demo UI.
+    # We keep a small per-user stack of rendered demo pages so every screen can reliably go back.
+    if data == "demo:nav_back":
+        data = _demo_nav_pop(context)
+    else:
+        # Don't treat noop/close as navigation targets.
+        try:
+            next_action = data.split(":")[1] if ":" in data else data
+            # Some callbacks trigger side-effects (e.g., sending photos) while leaving the
+            # current menu unchanged. Avoid polluting the nav stack with those actions.
+            if next_action not in ("noop", "close", "view_chart", "copy_ca"):
+                _demo_nav_push(context, data)
+        except Exception:
+            pass
+
     action = data.split(":")[1] if ":" in data else data
 
     # Build shared state for modular handlers
@@ -175,14 +279,14 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     positions: List[Dict[str, Any]] = []
 
     try:
-        engine = await _get_demo_engine()
+        engine = await asyncio.wait_for(_get_demo_engine(), timeout=8.0)
         treasury = engine.wallet.get_treasury()
         if treasury:
             wallet_address = treasury.address
 
-        sol_balance, usd_value = await engine.get_portfolio_value()
+        sol_balance, usd_value = await asyncio.wait_for(engine.get_portfolio_value(), timeout=6.0)
 
-        await engine.update_positions()
+        await asyncio.wait_for(engine.update_positions(), timeout=8.0)
         open_pos = engine.get_open_positions()
         positions = [
             {
@@ -207,7 +311,7 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Could not load treasury data in callback: {exc}")
 
     try:
-        market_regime = await get_market_regime()
+        market_regime = await asyncio.wait_for(get_market_regime(), timeout=4.0)
     except Exception as exc:
         logger.warning(f"Could not load market regime in callback: {exc}")
         market_regime = {}
@@ -229,14 +333,21 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         text, keyboard = await router.route(action, data, update, context, shared_state)
-        
+         
         # Handler returned (None, None) = it already sent its own response
         if text is None and keyboard is None:
             logger.debug(f"[DEMO_CALLBACK] Handler returned None, None for action={action}")
             return
-        
+
+        if text is None:
+            logger.debug(f"[DEMO_CALLBACK] Handler returned no text for action={action}")
+            return
+
+        # Ensure every page has a "Previous Menu" button (user UX requirement).
+        keyboard = _ensure_prev_menu_button(keyboard)
+         
         logger.info(f"[DEMO_CALLBACK] Got response for action={action}, text_len={len(text) if text else 0}, has_keyboard={keyboard is not None}")
-        
+         
         try:
             await query.message.edit_text(
                 text,
@@ -285,6 +396,7 @@ async def demo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             retry_action=f"demo:{action}",
             context_hint=f"Error ID: {error_id}",
         )
+        keyboard = _ensure_prev_menu_button(keyboard)
         try:
             await query.message.edit_text(
                 text,
@@ -393,17 +505,20 @@ async def demo_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
 def register_demo_handlers(app) -> None:
     """Register demo handlers with the application."""
-    from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, filters
+    from telegram.ext import CommandHandler, CallbackQueryHandler
 
     app.add_handler(CommandHandler("demo", demo))
     app.add_handler(CallbackQueryHandler(demo_callback, pattern=r"^demo:"))
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            demo_message_handler,
-        ),
-        group=0,
-    )
+    # NOTE: Do not register a catch-all text MessageHandler here.
+    #
+    # PTB executes at most one handler per group; a broad text handler would
+    # intercept all user messages (including public DM wallet import flows),
+    # causing the rest of the bot to appear "broken" and risking sensitive
+    # message logging/leakage.
+    #
+    # Text routing for demo input is handled by the global message router in
+    # tg_bot/bot.py, which only delegates to demo_message_handler when demo
+    # is explicitly awaiting input.
 
     logger.info("Demo handlers registered")
 

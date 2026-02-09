@@ -23,16 +23,31 @@ from datetime import datetime
 from pathlib import Path
 import json
 
-# Encryption
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.backends import default_backend
 import base64
 
-# Solana
-from solders.keypair import Keypair
-from solders.pubkey import Pubkey
+# Encryption (optional at import time; required for wallet operations)
+try:
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.backends import default_backend
+    HAS_CRYPTOGRAPHY = True
+except Exception:
+    Fernet = None  # type: ignore[assignment]
+    hashes = None  # type: ignore[assignment]
+    PBKDF2HMAC = None  # type: ignore[assignment]
+    default_backend = None  # type: ignore[assignment]
+    HAS_CRYPTOGRAPHY = False
+
+# Solana (optional at import time)
+try:
+    from solders.keypair import Keypair
+    from solders.pubkey import Pubkey
+    HAS_SOLDERS = True
+except Exception:
+    Keypair = None  # type: ignore[assignment]
+    Pubkey = None  # type: ignore[assignment]
+    HAS_SOLDERS = False
 
 try:
     from bip_utils import (
@@ -78,6 +93,8 @@ class WalletEncryption:
         Args:
             master_key: Encryption master key (if None, generate new)
         """
+        if not HAS_CRYPTOGRAPHY or Fernet is None or PBKDF2HMAC is None:
+            raise RuntimeError("cryptography library not installed (required for wallet encryption). Install: pip install cryptography")
         self.master_key = master_key or self._generate_master_key()
 
     def _generate_master_key(self) -> bytes:

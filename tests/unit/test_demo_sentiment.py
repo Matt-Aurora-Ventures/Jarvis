@@ -500,31 +500,22 @@ class TestBagsTopTokens:
         assert result[0]["sentiment"] == "bullish"
 
     @pytest.mark.asyncio
-    async def test_get_bags_top_tokens_fallback_to_trending(self, mock_signal_service):
-        """Test falls back to trending on Bags failure."""
-        # Create a signal that ends with "bags" to pass the filter
-        bags_signal = SimpleNamespace(
-            symbol="TESTBAGS",
-            name="Test Bags Token",
-            address="testbags_addr",
-            price_usd=1.0,
-            price_change_24h=5.0,
-            volume_24h=50_000,
-            liquidity_usd=25_000,
-            sentiment="neutral",
-            sentiment_score=0.5,
-            sentiment_confidence=0.6,
-            sentiment_summary="Test token",
-            signal="NEUTRAL",
-            signal_score=0.5,
-            signal_reasons=["Test"],
-        )
-        mock_signal_service.get_trending_tokens = AsyncMock(return_value=[bags_signal])
+    async def test_get_bags_top_tokens_fallback_to_dexscreener(self):
+        """Test falls back to DexScreener (bags-only filter) when Bags leaderboard is unavailable."""
+        fallback_token = {
+            "symbol": "TESTBAGS",
+            "name": "Test Bags Token",
+            "address": "testbags_addr",
+            "price_usd": 1.0,
+            "price_change_24h": 5.0,
+            "volume_24h": 50_000,
+            "liquidity": 25_000,
+        }
 
         with patch("tg_bot.handlers.demo.demo_trading.get_bags_client", return_value=None), \
-             patch("tg_bot.services.signal_service.get_signal_service", return_value=mock_signal_service):
+             patch("tg_bot.handlers.demo.demo_sentiment._fallback_bags_top_tokens_via_dexscreener", new_callable=AsyncMock, return_value=[fallback_token]), \
+             patch("tg_bot.handlers.demo.demo_sentiment.get_ai_sentiment_for_token", new_callable=AsyncMock, return_value={"sentiment": "neutral", "score": 0.5, "signal": "NEUTRAL"}):
             result = await demo_sentiment.get_bags_top_tokens_with_sentiment(limit=15)
 
-        # Should fall back to trending (signal service) with bags-suffixed tokens
-        assert len(result) >= 1
+        assert len(result) == 1
         assert result[0]["symbol"] == "TESTBAGS"

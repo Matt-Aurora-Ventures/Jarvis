@@ -12,6 +12,7 @@ from tg_bot.services.digest_formatter import escape_markdown_v1 as escape_md
 from tg_bot.handlers import error_handler, admin_only
 from tg_bot.handlers.admin import reload, config_cmd, logs, system
 from tg_bot.handlers.sentiment import digest
+from tg_bot.handlers.ui_nav import ensure_prev_menu
 
 # Import interactive UI components
 from tg_bot.handlers.interactive_ui import (
@@ -148,6 +149,7 @@ risk: {engine.risk_level.value}
                 InlineKeyboardButton("\U0001f4ca Report", callback_data="refresh_report"),
             ]
         ])
+        keyboard = ensure_prev_menu(keyboard)
 
         await update.message.reply_text(
             message,
@@ -225,7 +227,7 @@ async def positions(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "\n".join(lines),
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup(keyboard_rows),
+            reply_markup=ensure_prev_menu(InlineKeyboardMarkup(keyboard_rows)),
             disable_web_page_preview=True,
         )
 
@@ -315,6 +317,7 @@ async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("balance", callback_data="refresh_balance"),
         ]
     ])
+    keyboard = ensure_prev_menu(keyboard)
 
     if not positions:
         # JARVIS voice - lowercase, casual with more context

@@ -16,8 +16,8 @@ import aiohttp
 from aiohttp import ClientTimeout
 
 from bots.treasury.jupiter import JupiterClient, SwapQuote, SwapResult
-from bots.treasury.wallet import WalletInfo
 from core import dexscreener
+from core.trading.bags_client import get_bags_client as get_bags_api_client
 from core.wallet_service import WalletService
 from tg_bot.services.token_data import KNOWN_TOKENS
 
@@ -76,14 +76,11 @@ class UserWalletAdapter:
     def __init__(self, keypair: "Keypair"):
         self._keypair = keypair
         address = str(keypair.pubkey())
-        self._wallet_info = WalletInfo(
-            address=address,
-            created_at="",
-            label="User",
-            is_treasury=False,
-        )
+        # Avoid importing bots.treasury.wallet (cryptography dependency) here.
+        # JupiterClient only requires an object with an .address attribute.
+        self._wallet_info = type("_UserWalletInfo", (), {"address": address})()
 
-    def get_treasury(self) -> Optional[WalletInfo]:
+    def get_treasury(self) -> Optional[object]:
         return self._wallet_info
 
     def sign_transaction(self, address: str, transaction: Any) -> bytes:
@@ -305,6 +302,62 @@ class PublicTradingService:
         )
 
     async def execute_swap(self, quote: SwapQuote, keypair: "Keypair") -> SwapResult:
+        """
+        Execute a swap for a user wallet.
+
+        Policy:
+        - Purchases (SOL -> token) execute via Bags.fm by default.
+        - Optional Jupiter fallback for buys can be enabled with PUBLIC_BUY_ALLOW_JUPITER_FALLBACK=1.
+        - Non-buy routes default to Jupiter execution (until bags.fm base-unit handling for
+          arbitrary input mints is fully validated).
+        """
+        allow_buy_fallback = str(os.environ.get("PUBLIC_BUY_ALLOW_JUPITER_FALLBACK", "0")).strip().lower() not in (
+            "0",
+            "false",
+            "off",
+            "no",
+        )
+
+        # Purchases: enforce Bags execution (Bags-only by default).
+        if quote.input_mint == self.jupiter.SOL_MINT:
+            bags = get_bags_api_client(profile="public")
+            if not getattr(bags, "api_key", None) or not getattr(bags, "partner_key", None):
+                return SwapResult(
+                    success=False,
+                    error="Bags.fm is not configured (missing BAGS_API_KEY / BAGS_PARTNER_KEY)",
+                )
+
+            wallet_address = str(keypair.pubkey())
+            try:
+                bags_result = await bags.swap(
+                    from_token=quote.input_mint,
+                    to_token=quote.output_mint,
+                    amount=float(quote.input_amount_ui or 0.0),
+                    wallet_address=wallet_address,
+                    slippage_bps=int(quote.slippage_bps or 0),
+                    keypair=keypair,
+                )
+                if bags_result and bags_result.success and bags_result.tx_hash:
+                    return SwapResult(
+                        success=True,
+                        signature=str(bags_result.tx_hash),
+                        input_amount=float(quote.input_amount_ui or 0.0),
+                        output_amount=float(getattr(bags_result, "to_amount", 0.0) or quote.output_amount_ui or 0.0),
+                        input_symbol="SOL",
+                        output_symbol="",
+                        price_impact=float(quote.price_impact_pct or 0.0),
+                        fees_usd=0.0,
+                        error="",
+                    )
+
+                err = getattr(bags_result, "error", None) or "Bags.fm swap failed"
+                if not allow_buy_fallback:
+                    return SwapResult(success=False, error=str(err))
+            except Exception as exc:
+                if not allow_buy_fallback:
+                    return SwapResult(success=False, error=f"Bags.fm swap failed: {exc}")
+
+        # Default execution route: Jupiter.
         wallet = UserWalletAdapter(keypair)
         return await self.jupiter.execute_swap(quote, wallet)
 

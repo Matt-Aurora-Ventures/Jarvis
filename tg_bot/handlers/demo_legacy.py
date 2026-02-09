@@ -1378,12 +1378,20 @@ async def get_conviction_picks() -> List[Dict[str, Any]]:
 # =============================================================================
 # UI Constants - Trojan-Style Theme
 async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, Any]]:
-    """
-    Get top trending tokens by volume with AI sentiment overlay.
+    """Backwards-compatible wrapper for Bags Top 15.
 
-    Now uses DexScreener for reliable token data.
-    Bags API is reserved for trade execution only.
+    The canonical implementation lives in `tg_bot.handlers.demo.demo_sentiment` and:
+    - Prefer the official bags.fm leaderboard API
+    - Fall back to DexScreener filtered by the bags.fm pools allowlist
+    - Never inject mock/placeholder tokens
     """
+    from tg_bot.handlers.demo.demo_sentiment import (
+        get_bags_top_tokens_with_sentiment as _get_bags_top_tokens_with_sentiment,
+    )
+
+    return await _get_bags_top_tokens_with_sentiment(limit=limit)
+
+    # Legacy implementation below (unreachable). Kept for reference during the UI migration.
     tokens = []
 
     try:
@@ -4827,10 +4835,20 @@ Reply with a Solana token address to buy.
         # Calculate total volume
         total_volume = sum(t.get("volume_24h", 0) for t in tokens)
 
+        # Data source marker (bags.fm endpoint is often flaky; we fall back to DexScreener)
+        data_source = "bags.fm"
+        try:
+            sources = {(t.get("source") or "").lower().strip() for t in (tokens or []) if isinstance(t, dict)}
+            # The only DexScreener fallback we allow here is filtered by the bags.fm pools allowlist.
+            if any(s.startswith("dexscreener") for s in sources):
+                data_source = "DexScreener (Bags allowlist)"
+        except Exception:
+            pass
+
         lines = [
             f"🎒 *BAGS.FM TOP 15*",
             "━━━━━━━━━━━━━━━━━━━━━",
-            f"Market: {regime_emoji} {regime_name} | 24h Vol: ${total_volume/1_000_000:.1f}M",
+            f"Market: {regime_emoji} {regime_name} | 24h Vol: ${total_volume/1_000_000:.1f}M | Src: {data_source}",
             "",
             "*Volume Leaders with AI Sentiment:*",
             "",
@@ -5856,6 +5874,9 @@ _Updated: {datetime.now(timezone.utc).strftime('%H:%M UTC')}_
 
         keyboard = [
             [
+                InlineKeyboardButton("↩️ Previous Menu", callback_data="demo:nav_back"),
+            ],
+            [
                 InlineKeyboardButton(f"{theme.HOME} Main Menu", callback_data="demo:main"),
                 InlineKeyboardButton(f"{theme.CHART} Positions", callback_data="demo:positions"),
             ],
@@ -5930,6 +5951,9 @@ _Updated: {datetime.now(timezone.utc).strftime('%H:%M UTC')}_
         text = "\n".join(lines)
 
         keyboard = [
+            [
+                InlineKeyboardButton("↩️ Previous Menu", callback_data="demo:nav_back"),
+            ],
             [
                 InlineKeyboardButton(f"{theme.REFRESH} Try Again", callback_data=retry_action),
                 InlineKeyboardButton(f"{theme.BACK} Main Menu", callback_data="demo:main"),

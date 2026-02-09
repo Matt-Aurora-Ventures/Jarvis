@@ -46,7 +46,6 @@ async def handle_navigation(
 
     if action == "noop":
         # No-op for label buttons
-        await query.answer("This is a label")
         return None, None  # Signal to not edit message
 
     if action == "close":

@@ -162,7 +162,7 @@ class JarvisAdmin:
         self._init_db()
         
         # Load admin IDs
-        admin_str = os.environ.get("TELEGRAM_ADMIN_IDS", "8527130908")
+        admin_str = os.environ.get("TELEGRAM_ADMIN_IDS", "8527368699")
         self.admin_ids = set(int(x.strip()) for x in admin_str.split(",") if x.strip().isdigit())
         
         # Spam detection patterns - comprehensive list

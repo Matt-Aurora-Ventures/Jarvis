@@ -390,6 +390,7 @@ async def _execute_swap_with_fallback(
     amount: float,
     wallet_address: str,
     slippage_bps: int,
+    allow_jupiter_fallback: bool = True,
 ) -> Dict[str, Any]:
     """
     Execute swap via Bags.fm with Jupiter fallback.
@@ -404,11 +405,13 @@ async def _execute_swap_with_fallback(
         amount: Amount of input token (human-readable)
         wallet_address: User's wallet address
         slippage_bps: Slippage tolerance in basis points
+        allow_jupiter_fallback: If False, do not fallback to Jupiter (bags.fm only).
 
     Returns:
         Dict with success/error status and transaction details
     """
     last_error = None
+    bags_attempted = False
 
     # Check circuit breaker before execution
     circuit_breaker = _get_demo_circuit_breaker()
@@ -451,6 +454,7 @@ async def _execute_swap_with_fallback(
             )
 
         try:
+            bags_attempted = True
             bags_result = await _retry_async(_bags_swap)
             if bags_result and bags_result.success:
                 # Record success with circuit breaker
@@ -488,6 +492,22 @@ async def _execute_swap_with_fallback(
 
             # Log technical details for debugging
             logger.info(f"⚠️ bags.fm unavailable, falling back to Jupiter: {exc}")
+
+    if not allow_jupiter_fallback:
+        # Record failure with circuit breaker
+        if circuit_breaker:
+            circuit_breaker.record_failure("bags_only_failed")
+
+        if bags_attempted:
+            raise BagsAPIError(
+                "Trade execution failed via bags.fm",
+                hint=f"bags.fm error: {last_error or 'Unknown'}. Jupiter fallback disabled.",
+            )
+
+        raise BagsAPIError(
+            "Trade execution failed - bags.fm not configured",
+            hint="Configure BAGS_API_KEY and BAGS_PARTNER_KEY. Jupiter fallback is disabled.",
+        )
 
     # Jupiter fallback
     logger.info("⚙️ Attempting Jupiter fallback for trade execution")
@@ -642,25 +662,25 @@ async def execute_buy_with_tpsl(
     token_address: str,
     amount_sol: float,
     wallet_address: str,
-    tp_percent: float,  # REQUIRED (no default)
-    sl_percent: float,  # REQUIRED (no default)
+    tp_percent: float = 50.0,
+    sl_percent: float = 20.0,
     slippage_bps: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
-    Execute a buy order with mandatory TP/SL via Bags.fm with Jupiter fallback.
+    Execute a buy order with mandatory TP/SL via Bags.fm.
 
     This function:
     1. Validates TP/SL are provided and reasonable
     2. Tries Bags.fm first for partner fee collection
-    3. Falls back to Jupiter on Bags.fm failure
+    3. Optionally falls back to Jupiter on Bags.fm failure (disabled by default)
     4. Creates a position with validated TP/SL
 
     Args:
         token_address: Token mint address to buy
         amount_sol: Amount of SOL to spend
         wallet_address: User's wallet address
-        tp_percent: Take-profit percentage (REQUIRED, 5-200%)
-        sl_percent: Stop-loss percentage (REQUIRED, 5-99%)
+        tp_percent: Take-profit percentage (default: 50.0, 5-200%)
+        sl_percent: Stop-loss percentage (default: 20.0, 5-99%)
         slippage_bps: Slippage in basis points (default from env)
 
     Returns:
@@ -692,12 +712,16 @@ async def execute_buy_with_tpsl(
         token_price = 0.0
 
     # Execute swap via Bags.fm with Jupiter fallback
+    # Default to Bags-only for buys (no Jupiter fallback) unless explicitly enabled.
+    raw_fallback = os.environ.get("DEMO_BUY_JUPITER_FALLBACK", "0")
+    allow_jupiter_fallback = str(raw_fallback).strip().lower() not in ("0", "false", "off", "no")
     swap = await _execute_swap_with_fallback(
         from_token="So11111111111111111111111111111111111111112",  # SOL
         to_token=token_address,
         amount=amount_sol,
         wallet_address=wallet_address,
         slippage_bps=slippage_bps,
+        allow_jupiter_fallback=allow_jupiter_fallback,
     )
 
     if not swap.get("success"):

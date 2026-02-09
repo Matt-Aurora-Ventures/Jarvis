@@ -118,21 +118,22 @@ async def handle_learning(
                 "avg_trades_per_day": summary.get("avg_trades_per_day", 0),
             }
         else:
+            # Real data only: don't fabricate performance numbers.
             performance_stats = {
-                "total_trades": 47,
-                "wins": 31,
-                "losses": 16,
-                "win_rate": 66.0,
-                "total_pnl": 1247.50,
-                "total_pnl_pct": 24.95,
-                "best_trade": {"symbol": "BONK", "pnl_pct": 142.5},
-                "worst_trade": {"symbol": "BOME", "pnl_pct": -35.2},
-                "current_streak": 3,
-                "avg_hold_time_minutes": 45,
-                "daily_pnl": 125.50,
-                "weekly_pnl": 487.25,
-                "monthly_pnl": 1247.50,
-                "avg_trades_per_day": 2.3,
+                "total_trades": 0,
+                "wins": 0,
+                "losses": 0,
+                "win_rate": 0.0,
+                "total_pnl": 0.0,
+                "total_pnl_pct": 0.0,
+                "best_trade": {},
+                "worst_trade": {},
+                "current_streak": 0,
+                "avg_hold_time_minutes": 0,
+                "daily_pnl": 0.0,
+                "weekly_pnl": 0.0,
+                "monthly_pnl": 0.0,
+                "avg_trades_per_day": 0.0,
             }
 
         return DemoMenuBuilder.performance_dashboard(performance_stats)
@@ -144,15 +145,7 @@ async def handle_learning(
             summary = intelligence.get_learning_summary()
             trades = summary.get("recent_trades", [])
         else:
-            trades = [
-                {"symbol": "BONK", "pnl_pct": 42.5, "pnl_usd": 85.00},
-                {"symbol": "WIF", "pnl_pct": -12.3, "pnl_usd": -24.60},
-                {"symbol": "POPCAT", "pnl_pct": 28.7, "pnl_usd": 57.40},
-                {"symbol": "PEPE", "pnl_pct": 15.2, "pnl_usd": 30.40},
-                {"symbol": "MOODENG", "pnl_pct": -8.5, "pnl_usd": -17.00},
-                {"symbol": "GOAT", "pnl_pct": 67.3, "pnl_usd": 134.60},
-                {"symbol": "PNUT", "pnl_pct": 22.1, "pnl_usd": 44.20},
-            ]
+            trades = []
 
         return DemoMenuBuilder.trade_history_view(trades)
 
@@ -165,15 +158,7 @@ async def handle_learning(
             summary = intelligence.get_learning_summary()
             trades = summary.get("recent_trades", [])
         else:
-            trades = [
-                {"symbol": "BONK", "pnl_pct": 42.5, "pnl_usd": 85.00},
-                {"symbol": "WIF", "pnl_pct": -12.3, "pnl_usd": -24.60},
-                {"symbol": "POPCAT", "pnl_pct": 28.7, "pnl_usd": 57.40},
-                {"symbol": "PEPE", "pnl_pct": 15.2, "pnl_usd": 30.40},
-                {"symbol": "MOODENG", "pnl_pct": -8.5, "pnl_usd": -17.00},
-                {"symbol": "GOAT", "pnl_pct": 67.3, "pnl_usd": 134.60},
-                {"symbol": "PNUT", "pnl_pct": 22.1, "pnl_usd": 44.20},
-            ]
+            trades = []
 
         return DemoMenuBuilder.trade_history_view(trades, page=page)
 

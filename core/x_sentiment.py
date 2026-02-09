@@ -45,6 +45,13 @@ class TrendAnalysis:
 
 def _is_grok_available() -> bool:
     """Check if Grok provider is available and configured."""
+    try:
+        from core.feature_flags import is_xai_enabled
+        if not is_xai_enabled(default=True):
+            return False
+    except Exception:
+        return False
+
     cfg = config.load_config()
     grok_enabled = cfg.get("providers", {}).get("grok", {}).get("enabled", False)
     if not grok_enabled:

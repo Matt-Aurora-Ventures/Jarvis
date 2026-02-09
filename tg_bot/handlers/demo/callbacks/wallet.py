@@ -12,6 +12,62 @@ from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
 
+def _is_private_chat(update: Update) -> bool:
+    try:
+        chat = update.effective_chat
+        return bool(chat and getattr(chat, "type", "") == "private")
+    except Exception:
+        return False
+
+
+def _export_private_key_from_wallet(wallet: Any, expected_address: str | None = None) -> tuple[str, str]:
+    """
+    Export a base58 private key from a wallet-like object.
+
+    Supports:
+    - SecureWallet (get_private_key / get_address)
+    - _SimpleWallet (keypair property exposing solders.Keypair)
+
+    Returns:
+        (private_key_base58, wallet_address)
+    """
+    # Prefer an explicit expected address if we have one from shared state.
+    wallet_address = (expected_address or "").strip() or None
+
+    # 1) SecureWallet-style API
+    try:
+        if hasattr(wallet, "get_private_key"):
+            try:
+                private_key = wallet.get_private_key(wallet_address) if wallet_address else wallet.get_private_key()
+            except TypeError:
+                private_key = wallet.get_private_key()
+            if not wallet_address and hasattr(wallet, "get_address"):
+                try:
+                    wallet_address = wallet.get_address()
+                except Exception:
+                    wallet_address = None
+            return str(private_key), str(wallet_address or "")
+    except Exception:
+        # Fall through to keypair export.
+        pass
+
+    # 2) Keypair export (KeyManager / _SimpleWallet)
+    if hasattr(wallet, "keypair"):
+        import base58
+
+        keypair = getattr(wallet, "keypair")
+        if keypair is None:
+            raise ValueError("Wallet keypair unavailable")
+        private_key_b58 = base58.b58encode(bytes(keypair)).decode()
+        if not wallet_address:
+            try:
+                wallet_address = str(keypair.pubkey())
+            except Exception:
+                wallet_address = None
+        return private_key_b58, str(wallet_address or "")
+
+    raise ValueError("Unsupported wallet type for private key export")
+
 
 async def handle_wallet(
     ctx,
@@ -140,30 +196,33 @@ _QR code coming in V2_
         return DemoMenuBuilder.wallet_import_input(import_type="seed")
 
     elif action == "export_key":
-        # Show actual private key (SENSITIVE)
-        try:
-            from bots.treasury.wallet import SecureWallet
-            from tg_bot.handlers.demo.demo_trading import _get_demo_wallet_password, _get_demo_wallet_dir
-
-            wallet_password = _get_demo_wallet_password()
-            if not wallet_password:
-                raise ValueError("Demo wallet password not configured")
-            wallet = SecureWallet(
-                master_password=wallet_password,
-                wallet_dir=_get_demo_wallet_dir(),
+        # Show actual private key (SENSITIVE).
+        # SECURITY: Only export in DM. Never show keys in group chats, even if the group is private.
+        if not _is_private_chat(update):
+            return DemoMenuBuilder.error_message(
+                "For security, private keys can only be exported in a private chat.\n\n"
+                "Open a DM with this bot and retry from there."
             )
-            private_key = wallet.get_private_key()
-            wallet_address = wallet.get_address()
+
+        try:
+            # IMPORTANT: Use the same wallet the demo engine is currently using.
+            # The demo engine can fall back to the "treasury" profile; constructing a wallet
+            # from DEMO_PROFILE would then point at the wrong wallet directory and fail.
+            engine = await ctx.get_demo_engine()
+            wallet = getattr(engine, "wallet", None)
+            expected_addr = (state.get("wallet_address") or "").strip() or None
+            private_key, wallet_address = _export_private_key_from_wallet(wallet, expected_addr)
 
             text, keyboard = DemoMenuBuilder.export_key_show(
                 private_key=private_key,
                 wallet_address=wallet_address,
             )
-            logger.warning(f"Private key exported for wallet {wallet_address[:8]}...")
+            logger.warning("Private key exported for wallet %s...", (wallet_address or "")[:8])
             return text, keyboard
         except Exception as e:
-            logger.error(f"Failed to export key: {e}")
-            return DemoMenuBuilder.error_message(f"Could not export key: {str(e)[:50]}")
+            # Never include sensitive data in errors.
+            logger.error("Failed to export key: %s", e)
+            return DemoMenuBuilder.error_message("Could not export key. Ensure a wallet is configured and try again.")
 
     elif action == "wallet_create":
         # Generate new wallet

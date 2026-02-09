@@ -13,6 +13,7 @@ from tg_bot.services.signal_service import get_signal_service
 from tg_bot.services.cost_tracker import get_tracker
 from tg_bot.services import digest_formatter as fmt
 from tg_bot.handlers import error_handler, admin_only
+from tg_bot.handlers.ui_nav import ensure_prev_menu
 
 
 @error_handler
@@ -60,6 +61,8 @@ async def trending(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         if trade_buttons:
             keyboard = InlineKeyboardMarkup(trade_buttons)
+
+    keyboard = ensure_prev_menu(keyboard)
 
     await update.message.reply_text(
         "\n".join(lines),
@@ -110,6 +113,7 @@ async def digest(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message,
             parse_mode=ParseMode.MARKDOWN,
             disable_web_page_preview=True,
+            reply_markup=ensure_prev_menu(None),
         )
 
     except Exception as e:
@@ -119,6 +123,7 @@ async def digest(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"{str(e)[:100]}"
             ),
             parse_mode=ParseMode.MARKDOWN,
+            reply_markup=ensure_prev_menu(None),
         )
 
 
@@ -136,6 +141,16 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Use full SentimentReportGenerator if available
     if bot_module.SENTIMENT_REPORT_AVAILABLE:
+        # In cooldown mode / when xAI is disabled, do not run Grok sentiment.
+        # Fall back to a simplified, no-sentiment report to avoid paid API calls.
+        if not config.has_grok():
+            await update.message.reply_text(
+                "_sentiment is disabled right now (cooldown mode). generating a basic report..._",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            await bot_module._generate_simple_report(update, context)
+            return
+
         if not force:
             try:
                 from core.context_engine import context as context_engine

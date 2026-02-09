@@ -65,22 +65,14 @@ async def handle_sentiment_hub(
 
     elif action == "hub_news":
         try:
-            mock_news = [
-                {"title": "SOL breaks $225 resistance", "source": "CoinDesk", "time": "2h ago", "sentiment": "bullish"},
-                {"title": "Whale accumulation on BONK", "source": "Arkham", "time": "4h ago", "sentiment": "bullish"},
-                {"title": "Fed signals rate pause", "source": "Reuters", "time": "6h ago", "sentiment": "neutral"},
-                {"title": "New Solana DeFi protocol launches", "source": "The Block", "time": "8h ago", "sentiment": "bullish"},
-            ]
-            mock_macro = {
-                "dxy_trend": "weakening",
-                "fed_stance": "neutral",
-                "risk_appetite": "high",
-                "btc_correlation": 0.85,
-            }
-
-            return DemoMenuBuilder.sentiment_hub_news(
-                news_items=mock_news,
-                macro_analysis=mock_macro,
+            # Real data only: this feature needs a configured news + macro data source.
+            return DemoMenuBuilder.error_message(
+                error=(
+                    "News feed is not configured.\n\n"
+                    "No real-time news provider is wired into this bot yet."
+                ),
+                retry_action="demo:hub",
+                context_hint="hub_news",
             )
         except Exception as e:
             logger.error(f"Hub news error: {e}")
@@ -92,18 +84,14 @@ async def handle_sentiment_hub(
 
     elif action == "hub_traditional":
         try:
-            mock_stocks = {"spy_change": 0.45, "qqq_change": 0.72, "dia_change": 0.22, "outlook": "bullish"}
-            mock_dxy = {"value": 103.25, "change": -0.15, "trend": "weakening"}
-            mock_commodities = [
-                {"symbol": "GOLD", "price": 2045.50, "change": 0.8},
-                {"symbol": "SILVER", "price": 24.15, "change": 1.2},
-                {"symbol": "OIL", "price": 78.50, "change": -0.5},
-            ]
-
-            return DemoMenuBuilder.sentiment_hub_traditional(
-                stocks_outlook=mock_stocks,
-                dxy_data=mock_dxy,
-                commodities=mock_commodities,
+            # Real data only: this feature needs configured tradfi data sources (indices/DXY/commodities).
+            return DemoMenuBuilder.error_message(
+                error=(
+                    "Traditional markets view is not configured.\n\n"
+                    "No real-time TradFi provider is wired into this bot yet."
+                ),
+                retry_action="demo:hub",
+                context_hint="hub_traditional",
             )
         except Exception as e:
             logger.error(f"Hub traditional error: {e}")
@@ -115,9 +103,10 @@ async def handle_sentiment_hub(
 
     elif action == "hub_wallet":
         try:
-            wallet_address = context.user_data.get("wallet_address", "")
-            sol_balance = context.user_data.get("sol_balance", 0.0)
-            usd_value = sol_balance * 225
+            # Use shared_state (real engine-derived values) instead of hard-coded conversions.
+            wallet_address = state.get("wallet_address", "") or ""
+            sol_balance = float(state.get("sol_balance", 0.0) or 0.0)
+            usd_value = float(state.get("usd_value", 0.0) or 0.0)
 
             return DemoMenuBuilder.sentiment_hub_wallet(
                 wallet_address=wallet_address,
