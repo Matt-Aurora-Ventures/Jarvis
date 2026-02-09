@@ -16,8 +16,8 @@ elif command -v wsl >/dev/null 2>&1; then
   elif [[ "${REPO_ROOT}" =~ ^/[A-Za-z]/ ]]; then
     # MSYS-style path: /c/Users/... -> /mnt/c/Users/...
     REPO_WSL="/mnt${REPO_ROOT}"
-  elif [[ "${REPO_ROOT}" =~ ^[A-Za-z]:\\ ]]; then
-    # Windows path: C:\Users\... -> /mnt/c/Users/...
+  elif [[ "${REPO_ROOT}" =~ ^[A-Za-z]:[\\\\/] ]]; then
+    # Windows path: C:\Users\... or C:/Users/... -> /mnt/c/Users/...
     REPO_WSL="$(wsl wslpath "${REPO_ROOT}" 2>/dev/null || echo "")"
   fi
 
