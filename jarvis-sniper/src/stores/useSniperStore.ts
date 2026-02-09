@@ -131,6 +131,54 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
       strategyMode: 'aggressive',
     },
   },
+  {
+    id: 'genetic_v2',
+    name: 'GENETIC V2 (71% WR)',
+    description: 'Optimizer v2 champion — SL45/TP207/Trail10, volume surge filter',
+    winRate: '71.1% (GA v2)',
+    trades: 45,
+    config: {
+      stopLossPct: 45, takeProfitPct: 207, trailingStopPct: 10,
+      minLiquidityUsd: 5000, minScore: 0,
+      strategyMode: 'aggressive',
+    },
+  },
+  {
+    id: 'xstock_momentum',
+    name: 'XSTOCK MOMENTUM',
+    description: 'xStocks with tight exits — US market hours optimal',
+    winRate: 'NEW',
+    trades: 0,
+    config: {
+      stopLossPct: 3, takeProfitPct: 8, trailingStopPct: 2,
+      minLiquidityUsd: 10000, minScore: 0,
+      strategyMode: 'conservative',
+    },
+  },
+  {
+    id: 'prestock_speculative',
+    name: 'PRESTOCK SPEC',
+    description: 'Pre-IPO tokens with wider risk tolerance — high reward potential',
+    winRate: 'NEW',
+    trades: 0,
+    config: {
+      stopLossPct: 15, takeProfitPct: 50, trailingStopPct: 8,
+      minLiquidityUsd: 5000, minScore: 0,
+      strategyMode: 'aggressive',
+    },
+  },
+  {
+    id: 'index_revert',
+    name: 'INDEX MEAN REVERT',
+    description: 'Solana index tokens — tight SL/TP for mean reversion plays',
+    winRate: 'NEW',
+    trades: 0,
+    config: {
+      stopLossPct: 2, takeProfitPct: 5, trailingStopPct: 1.5,
+      minLiquidityUsd: 20000, minScore: 0,
+      strategyMode: 'conservative',
+    },
+  },
 ];
 
 /** UTC hours proven profitable in 928-token OHLCV backtest */

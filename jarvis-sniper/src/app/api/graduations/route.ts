@@ -17,7 +17,24 @@ import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
  */
 
 const DEXSCREENER_BOOSTS = 'https://api.dexscreener.com/token-boosts/latest/v1';
+const DEXSCREENER_PROFILES = 'https://api.dexscreener.com/token-profiles/latest/v1';
+const DEXSCREENER_SOL_PAIRS = 'https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112';
 const DEXSCREENER_TOKENS = 'https://api.dexscreener.com/tokens/v1/solana';
+
+/** Fetch with a timeout to prevent hanging when DexScreener is slow/unreachable */
+async function fetchWithTimeout(url: string, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 interface BoostEntry {
   chainId: string;
@@ -27,6 +44,98 @@ interface BoostEntry {
   links?: Array<{ type?: string; url: string }>;
   totalAmount: number;
   amount: number;
+}
+
+interface ProfileEntry {
+  chainId: string;
+  tokenAddress: string;
+  description?: string;
+  icon?: string;
+  links?: Array<{ type?: string; url: string }>;
+}
+
+/**
+ * Fetch Solana tokens from the boosts endpoint (primary source).
+ * Returns deduplicated entries filtered to chainId === 'solana'.
+ */
+async function fetchBoostedTokens(): Promise<BoostEntry[]> {
+  try {
+    const res = await fetchWithTimeout(DEXSCREENER_BOOSTS);
+    if (!res.ok) return [];
+    const all: BoostEntry[] = await res.json();
+    const seen = new Set<string>();
+    return all.filter(b => {
+      if (b.chainId !== 'solana' || seen.has(b.tokenAddress)) return false;
+      seen.add(b.tokenAddress);
+      return true;
+    }).slice(0, 30);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fallback 1: Fetch tokens with recently updated profiles on DexScreener.
+ * Profile entries share the same shape as boosts minus totalAmount/amount.
+ * We convert them to BoostEntry with totalAmount/amount = 0.
+ */
+async function fetchProfileTokens(): Promise<BoostEntry[]> {
+  try {
+    const res = await fetchWithTimeout(DEXSCREENER_PROFILES);
+    if (!res.ok) return [];
+    const all: ProfileEntry[] = await res.json();
+    const seen = new Set<string>();
+    return all.filter(p => {
+      if (p.chainId !== 'solana' || seen.has(p.tokenAddress)) return false;
+      seen.add(p.tokenAddress);
+      return true;
+    }).slice(0, 30).map(p => ({
+      ...p,
+      totalAmount: 0,
+      amount: 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fallback 2: Fetch top SOL pairs by volume as a last resort.
+ * The pairs endpoint returns a different shape, so we convert to BoostEntry.
+ */
+async function fetchSolPairsAsTokens(): Promise<BoostEntry[]> {
+  try {
+    const res = await fetchWithTimeout(DEXSCREENER_SOL_PAIRS);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const pairs: any[] = data.pairs || [];
+    // Sort by 24h volume descending and pick unique base tokens
+    const sorted = pairs
+      .filter((p: any) => p.chainId === 'solana' && p.baseToken?.address)
+      .sort((a: any, b: any) => parseFloat(b.volume?.h24 || '0') - parseFloat(a.volume?.h24 || '0'));
+    const seen = new Set<string>();
+    const results: BoostEntry[] = [];
+    for (const pair of sorted) {
+      const addr = pair.baseToken.address;
+      // Skip wrapped SOL itself
+      if (addr === 'So11111111111111111111111111111111111111112') continue;
+      if (seen.has(addr)) continue;
+      seen.add(addr);
+      results.push({
+        chainId: 'solana',
+        tokenAddress: addr,
+        description: pair.baseToken.name || undefined,
+        icon: pair.info?.imageUrl ? 'true' : undefined, // presence flag
+        links: pair.info?.websites?.map((w: any) => ({ type: 'website', url: w.url || w })) || [],
+        totalAmount: 0,
+        amount: 0,
+      });
+      if (results.length >= 30) break;
+    }
+    return results;
+  } catch {
+    return [];
+  }
 }
 
 const GRADUATION_CACHE_KEY = 'graduations:latest';
@@ -61,36 +170,39 @@ export async function GET(request: Request) {
       });
     }
 
-    // 1. Fetch latest boosted Solana tokens
-    const boostRes = await fetch(DEXSCREENER_BOOSTS, {
-      headers: { 'Accept': 'application/json' },
-      next: { revalidate: 30 },
-    });
+    // 1. Fetch Solana tokens from ALL sources in parallel (first with data wins)
+    const [boostResult, profileResult, pairsResult] = await Promise.allSettled([
+      fetchBoostedTokens(),
+      fetchProfileTokens(),
+      fetchSolPairsAsTokens(),
+    ]);
 
-    if (!boostRes.ok) {
-      return NextResponse.json({ graduations: [], error: 'DexScreener boosts unavailable' }, { status: 502 });
+    // Use first source that returned data (priority: boosts > profiles > pairs)
+    const boosts = boostResult.status === 'fulfilled' ? boostResult.value : [];
+    const profiles = profileResult.status === 'fulfilled' ? profileResult.value : [];
+    const pairsTokens = pairsResult.status === 'fulfilled' ? pairsResult.value : [];
+
+    let solanaTokens: BoostEntry[];
+    let source: string;
+    if (boosts.length > 0) {
+      solanaTokens = boosts;
+      source = 'boosts';
+    } else if (profiles.length > 0) {
+      solanaTokens = profiles;
+      source = 'profiles';
+    } else if (pairsTokens.length > 0) {
+      solanaTokens = pairsTokens;
+      source = 'sol-pairs';
+    } else {
+      console.warn('[Graduations] All DexScreener sources returned 0 Solana tokens');
+      return NextResponse.json({ graduations: [], source: 'none' });
     }
 
-    const allBoosts: BoostEntry[] = await boostRes.json();
-
-    // Filter to Solana only, deduplicate by address
-    const seen = new Set<string>();
-    const solanaTokens = allBoosts.filter(b => {
-      if (b.chainId !== 'solana' || seen.has(b.tokenAddress)) return false;
-      seen.add(b.tokenAddress);
-      return true;
-    }).slice(0, 30);
-
-    if (solanaTokens.length === 0) {
-      return NextResponse.json({ graduations: [] });
-    }
+    console.log(`[Graduations] Using source=${source}, tokens=${solanaTokens.length}`);
 
     // 2. Batch fetch pair data (max 30 addresses per call)
     const addresses = solanaTokens.map(t => t.tokenAddress).join(',');
-    const pairRes = await fetch(`${DEXSCREENER_TOKENS}/${addresses}`, {
-      headers: { 'Accept': 'application/json' },
-      next: { revalidate: 30 },
-    });
+    const pairRes = await fetchWithTimeout(`${DEXSCREENER_TOKENS}/${addresses}`);
 
     const pairsByMint = new Map<string, any>();
     if (pairRes.ok) {

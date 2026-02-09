@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3 } from 'lucide-react';
+import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3, Trophy, Check } from 'lucide-react';
 import { useSniperStore, type SniperConfig, type StrategyMode, STRATEGY_PRESETS } from '@/stores/useSniperStore';
 import type { BagsGraduation } from '@/lib/bags-api';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
 import { buildFundSessionTx, createSessionWallet, destroySessionWallet, getSessionBalance, isLikelyFunded, loadSessionWalletFromStorage, sweepToMainWallet } from '@/lib/session-wallet';
+import { STRATEGY_CATEGORIES } from '@/components/strategy-categories';
+import { STRATEGY_INFO } from '@/components/strategy-info';
 
 /**
  * Analyze the current scanner feed and suggest the best strategy preset.
@@ -80,44 +82,12 @@ function suggestStrategy(graduations: BagsGraduation[]): { presetId: string; rea
 const BUDGET_PRESETS = [0.1, 0.2, 0.5, 1.0];
 const LIQUIDITY_PRESETS_USD = [10000, 25000, 40000, 50000];
 
-/** Rich strategy descriptions shown in the breakdown panel */
-const STRATEGY_INFO: Record<string, { summary: string; optimal: string; risk: string; params: string }> = {
-  momentum: {
-    summary: 'Targets high-conviction tokens with strong volume activity and decent scores. Casts a wider net with no liquidity floor.',
-    optimal: 'Best in active markets with many new graduates. High volume-to-liquidity ratios signal organic demand, not wash trading.',
-    risk: 'No minimum liquidity means higher slippage risk on entry/exit. Use smaller position sizes.',
-    params: 'SL 20% | TP 60% | Trail 8% | Score 50+ | Vol/Liq 3+',
-  },
-  insight_j: {
-    summary: 'Strict quality filter requiring $25K+ liquidity, young tokens (<100h), and positive momentum. High selectivity = fewer but better trades.',
-    optimal: 'Works best when you want quality over quantity. The 86% win rate comes from only touching tokens with real market depth.',
-    risk: 'Very selective — may go long periods without a trade. Requires patience for the right setup.',
-    params: 'SL 20% | TP 60% | Trail 8% | Liq $25K+ | Age <100h',
-  },
-  hot: {
-    summary: 'Balanced approach: requires both a minimum score (60+) and liquidity ($10K+). Generates the most trades of any strategy.',
-    optimal: 'Ideal for active trading sessions. More opportunities but a wider spread of outcomes. Volume-weighted for real activity.',
-    risk: 'Lower win rate (49%) means you need discipline with stop losses. The volume of trades smooths returns over time.',
-    params: 'SL 20% | TP 60% | Trail 8% | Score 60+ | Liq $10K+',
-  },
-  hybrid_b: {
-    summary: 'The battle-tested default. Combines all HYBRID-B insight filters with a $40K liquidity floor. 100% WR in OHLCV validation.',
-    optimal: 'The go-to for most sessions. Strong enough filters to avoid rugs, loose enough to still find trades regularly.',
-    risk: 'Small sample size (10 trades in backtest). Performance may regress to mean, but the filter logic is sound.',
-    params: 'SL 20% | TP 60% | Trail 8% | Liq $40K+ | All filters on',
-  },
-  let_it_ride: {
-    summary: 'Aggressive mode with 100% take-profit and tight 5% trailing stop. Designed to capture large moves while protecting gains.',
-    optimal: 'Perfect for bull markets or when scanning shows strong momentum. The tight trail locks in gains on any pullback.',
-    risk: 'The 5% trail means early exits on normal volatility. Best when conviction is very high on a specific token.',
-    params: 'SL 20% | TP 100% | Trail 5% | Liq $40K+ | Aggressive mode',
-  },
-  insight_i: {
-    summary: 'The strictest preset: $50K liquidity, age under 200h, and B/S ratio in the 1-3 sweet spot. Maximum quality filter.',
-    optimal: 'When you want to be extremely selective. Only trades tokens with institutional-grade liquidity and balanced order flow.',
-    risk: 'Very few tokens pass all gates. You may see 0 trades for hours. Best combined with patience and larger position sizes.',
-    params: 'SL 20% | TP 60% | Trail 8% | Liq $50K+ | B/S 1-3 | Age <200h',
-  },
+/** Icon lookup for strategy categories */
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  Trophy: <Trophy className="w-3 h-3" />,
+  Shield: <Shield className="w-3 h-3" />,
+  Zap: <Zap className="w-3 h-3" />,
+  BarChart3: <BarChart3 className="w-3 h-3" />,
 };
 
 export function SniperControls() {
@@ -125,6 +95,7 @@ export function SniperControls() {
   const { connected, address, signTransaction, publicKey } = usePhantomWallet();
   const { snipe, ready: walletReady } = useSnipeExecutor();
   const [expanded, setExpanded] = useState(true);
+  const [strategyOpen, setStrategyOpen] = useState(false);
   const [bestEverLoaded, setBestEverLoaded] = useState(false);
   const [customBudget, setCustomBudget] = useState('');
   const [budgetFocused, setBudgetFocused] = useState(false);
@@ -519,43 +490,108 @@ export function SniperControls() {
         </span>
       </div>
 
-      {/* ─── STRATEGY PRESET SELECTOR ─── */}
-      <div className="grid grid-cols-2 gap-1.5 mb-4">
-        {STRATEGY_PRESETS.map((preset) => {
-          const isActive = activePreset === preset.id;
-          const isAggressive = preset.config.strategyMode === 'aggressive';
-          const isSuggested = suggestion?.presetId === preset.id && !isActive;
-          return (
-            <button
-              key={preset.id}
-              onClick={() => loadPreset(preset.id)}
-              className={`flex flex-col p-2 rounded-lg border transition-all text-left relative ${
-                isActive
-                  ? isAggressive
-                    ? 'bg-accent-warning/10 border-accent-warning/30 text-accent-warning'
-                    : 'bg-accent-neon/10 border-accent-neon/30 text-accent-neon'
-                  : isSuggested
-                    ? 'bg-blue-500/[0.06] border-blue-400/30 text-text-muted hover:border-blue-400/50'
-                    : 'bg-bg-secondary border-border-primary text-text-muted hover:border-border-hover'
-              }`}
-            >
-              {isSuggested && (
-                <span className="absolute -top-1.5 -right-1 text-[7px] font-bold uppercase tracking-wider bg-blue-500/90 text-white px-1.5 py-0.5 rounded-full leading-none">
-                  Suggested
-                </span>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold">{preset.name}</span>
-                <span className={`text-[8px] font-mono px-1 rounded ${
-                  isActive ? 'bg-current/10' : 'bg-bg-tertiary'
-                }`}>
-                  {preset.winRate}
-                </span>
+      {/* ─── STRATEGY PRESET SELECTOR (Grouped Dropdown) ─── */}
+      <div className="relative mb-4">
+        {/* Dropdown trigger button */}
+        <button
+          onClick={() => setStrategyOpen(!strategyOpen)}
+          className={`w-full flex items-center justify-between p-2.5 rounded-lg border transition-all ${
+            strategyOpen
+              ? 'border-accent-neon/40 bg-accent-neon/[0.04]'
+              : 'border-border-primary bg-bg-secondary hover:border-border-hover'
+          }`}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Crosshair className="w-3.5 h-3.5 text-accent-neon flex-shrink-0" />
+            <div className="flex flex-col items-start min-w-0">
+              <span className="text-[11px] font-bold text-text-primary truncate">
+                {STRATEGY_PRESETS.find(p => p.id === activePreset)?.name ?? 'Select Strategy'}
+              </span>
+              <span className="text-[9px] text-text-muted truncate">
+                {STRATEGY_PRESETS.find(p => p.id === activePreset)?.description ?? 'Choose a strategy preset'}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {STRATEGY_PRESETS.find(p => p.id === activePreset)?.winRate && (
+              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-accent-neon/10 text-accent-neon border border-accent-neon/20">
+                {STRATEGY_PRESETS.find(p => p.id === activePreset)?.winRate}
+              </span>
+            )}
+            <ChevronDown className={`w-3.5 h-3.5 text-text-muted transition-transform ${strategyOpen ? 'rotate-180' : ''}`} />
+          </div>
+        </button>
+
+        {/* Dropdown panel with categories */}
+        {strategyOpen && (
+          <div className="mt-1.5 rounded-lg border border-border-primary bg-bg-secondary overflow-hidden animate-fade-in">
+            {STRATEGY_CATEGORIES.map((category) => (
+              <div key={category.label}>
+                {/* Category header */}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-tertiary/50 border-b border-border-primary/50">
+                  <span className="text-text-muted/60">{CATEGORY_ICONS[category.icon]}</span>
+                  <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-text-muted/60">{category.label}</span>
+                </div>
+                {/* Strategy rows */}
+                {category.presetIds.map((presetId) => {
+                  const preset = STRATEGY_PRESETS.find(p => p.id === presetId);
+                  if (!preset) return null;
+                  const isActive = activePreset === preset.id;
+                  const isAggressive = preset.config.strategyMode === 'aggressive';
+                  const isSuggested = suggestion?.presetId === preset.id && !isActive;
+                  return (
+                    <button
+                      key={preset.id}
+                      onClick={() => { loadPreset(preset.id); setStrategyOpen(false); }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-all border-b border-border-primary/30 last:border-b-0 ${
+                        isActive
+                          ? isAggressive
+                            ? 'bg-accent-warning/[0.08] text-accent-warning'
+                            : 'bg-accent-neon/[0.08] text-accent-neon'
+                          : isSuggested
+                            ? 'bg-blue-500/[0.04] text-text-secondary hover:bg-blue-500/[0.08]'
+                            : 'text-text-secondary hover:bg-bg-tertiary/60'
+                      }`}
+                    >
+                      {/* Active indicator */}
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        isActive
+                          ? isAggressive
+                            ? 'bg-accent-warning/20 border border-accent-warning/40'
+                            : 'bg-accent-neon/20 border border-accent-neon/40'
+                          : 'border border-border-primary/50'
+                      }`}>
+                        {isActive && <Check className="w-2.5 h-2.5" />}
+                      </div>
+                      {/* Name + description */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] font-bold truncate ${isActive ? '' : 'text-text-primary'}`}>{preset.name}</span>
+                          {isSuggested && (
+                            <span className="text-[7px] font-bold uppercase tracking-wider bg-blue-500/90 text-white px-1 py-0.5 rounded-full leading-none flex-shrink-0">
+                              Suggested
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[8px] opacity-50 line-clamp-1">{preset.description}</span>
+                      </div>
+                      {/* Win rate badge */}
+                      <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded flex-shrink-0 ${
+                        isActive
+                          ? isAggressive
+                            ? 'bg-accent-warning/10 text-accent-warning'
+                            : 'bg-accent-neon/10 text-accent-neon'
+                          : 'bg-bg-tertiary text-text-muted'
+                      }`}>
+                        {preset.winRate}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-              <span className="text-[8px] opacity-60 mt-0.5">{preset.description}</span>
-            </button>
-          );
-        })}
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ─── STRATEGY SUGGESTION REASON ─── */}

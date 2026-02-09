@@ -104,24 +104,28 @@ export function useAutomatedRiskManagement() {
     const useRec = config.useRecommendedExits !== false;
 
     const open = positions.filter((p) => p.status === 'open' && !p.isClosing);
-    const workerPositions = open
-      .filter((p) => !isBlueChipLongConvictionSymbol(p.symbol))
-      .map((p) => {
-        const sl = useRec ? (p.recommendedSl ?? config.stopLossPct) : config.stopLossPct;
-        const tp = useRec ? (p.recommendedTp ?? config.takeProfitPct) : config.takeProfitPct;
-        const trail = p.recommendedTrail ?? config.trailingStopPct;
-        return {
-          id: p.id,
-          mint: p.mint,
-          entryPriceUsd: p.entryPrice,
-          slPct: sl,
-          tpPct: tp,
-          trailPct: trail,
-          hwmPct: p.highWaterMarkPct ?? 0,
-          entryTime: p.entryTime,
-          maxAgeHours: config.maxPositionAgeHours ?? 0,
-        };
-      });
+    const workerPositions = open.map((p) => {
+      const isBlueChip = isBlueChipLongConvictionSymbol(p.symbol);
+
+      // Blue-chip "long conviction" positions should still get price/PnL updates,
+      // but never trigger automated exits.
+      const sl = isBlueChip ? 0 : (useRec ? (p.recommendedSl ?? config.stopLossPct) : config.stopLossPct);
+      const tp = isBlueChip ? 0 : (useRec ? (p.recommendedTp ?? config.takeProfitPct) : config.takeProfitPct);
+      const trail = isBlueChip ? 0 : (p.recommendedTrail ?? config.trailingStopPct);
+      const maxAgeHours = isBlueChip ? 0 : (config.maxPositionAgeHours ?? 0);
+
+      return {
+        id: p.id,
+        mint: p.mint,
+        entryPriceUsd: p.entryPrice,
+        slPct: sl,
+        tpPct: tp,
+        trailPct: trail,
+        hwmPct: p.highWaterMarkPct ?? 0,
+        entryTime: p.entryTime,
+        maxAgeHours,
+      };
+    });
 
     if (workerPositions.length === 0) {
       worker.postMessage({ type: 'STOP' });

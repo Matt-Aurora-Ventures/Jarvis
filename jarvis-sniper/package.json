@@ -38,6 +38,7 @@
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vite-tsconfig-paths": "^6.1.0",
     "vitest": "^2.1.9"
   }
 }
