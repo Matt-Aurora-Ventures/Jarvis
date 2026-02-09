@@ -19,7 +19,12 @@ import asyncio
 import json
 import logging
 import os
-import psutil
+try:
+    import psutil  # type: ignore
+    PSUTIL_AVAILABLE = True
+except Exception:
+    psutil = None  # type: ignore[assignment]
+    PSUTIL_AVAILABLE = False
 import sys
 import time
 from datetime import datetime, timezone
@@ -49,6 +54,7 @@ from tg_bot.services.signal_service import get_signal_service
 from tg_bot.services.cost_tracker import get_tracker
 from tg_bot.services import digest_formatter as fmt
 from tg_bot.services.chat_responder import ChatResponder
+from tg_bot.handlers.ui_nav import ensure_prev_menu
 
 # Ape trading buttons with mandatory TP/SL
 try:
@@ -139,7 +145,7 @@ _LAST_REPLY_AT: dict[int, float] = {}
 
 # Default admin user ID - used as fallback when TREASURY_ADMIN_IDS not set
 # CRITICAL: Must be defined here (not later) to avoid forward reference error
-DEFAULT_ADMIN_USER_ID = int(os.environ.get("JARVIS_ADMIN_USER_ID", "8527130908"))
+DEFAULT_ADMIN_USER_ID = int(os.environ.get("JARVIS_ADMIN_USER_ID", "8527368699"))
 
 # Rate limiting constants for expand buttons
 EXPAND_MESSAGE_DELAY = 0.5  # 500ms between messages (was 200ms)
@@ -813,6 +819,7 @@ async def signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message,
             parse_mode=ParseMode.MARKDOWN,
             disable_web_page_preview=True,
+            reply_markup=ensure_prev_menu(None),
         )
 
     except Exception as e:
@@ -823,6 +830,7 @@ async def signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Check /status for issues."
             ),
             parse_mode=ParseMode.MARKDOWN,
+            reply_markup=ensure_prev_menu(None),
         )
 
 
@@ -1185,19 +1193,22 @@ async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Current process info
         current_pid = os.getpid()
-        try:
-            proc = psutil.Process(current_pid)
-            mem_mb = proc.memory_info().rss / (1024 * 1024)
-            cpu_pct = proc.cpu_percent(interval=0.1)
-            create_time = proc.create_time()
-            uptime_secs = time.time() - create_time
-            uptime_str = _format_uptime(uptime_secs)
+        if PSUTIL_AVAILABLE and psutil is not None:
+            try:
+                proc = psutil.Process(current_pid)
+                mem_mb = proc.memory_info().rss / (1024 * 1024)
+                cpu_pct = proc.cpu_percent(interval=0.1)
+                create_time = proc.create_time()
+                uptime_secs = time.time() - create_time
+                uptime_str = _format_uptime(uptime_secs)
 
-            lines.append(f"✅ <b>This Process</b>: PID {current_pid}")
-            lines.append(f"   Memory: {mem_mb:.1f} MB | CPU: {cpu_pct:.1f}%")
-            lines.append(f"   Uptime: {uptime_str}")
-        except Exception as e:
-            lines.append(f"⚠️ <b>Process Info</b>: Error - {str(e)[:50]}")
+                lines.append(f"✅ <b>This Process</b>: PID {current_pid}")
+                lines.append(f"   Memory: {mem_mb:.1f} MB | CPU: {cpu_pct:.1f}%")
+                lines.append(f"   Uptime: {uptime_str}")
+            except Exception as e:
+                lines.append(f"⚠️ <b>Process Info</b>: Error - {str(e)[:50]}")
+        else:
+            lines.append("⚠️ <b>Process Info</b>: psutil not installed")
 
         # Instance lock status
         try:
@@ -1212,14 +1223,17 @@ async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     lines.append(f"✅ <b>Lock</b>: Held by this process (PID {lock_pid})")
                 elif lock_pid:
                     # Check if that PID is still running
-                    try:
-                        other_proc = psutil.Process(lock_pid)
-                        if other_proc.is_running():
-                            lines.append(f"⚠️ <b>Lock</b>: Held by PID {lock_pid} (still running!)")
-                        else:
-                            lines.append(f"🔴 <b>Lock</b>: Stale (PID {lock_pid} not running)")
-                    except psutil.NoSuchProcess:
-                        lines.append(f"🔴 <b>Lock</b>: Stale (PID {lock_pid} no longer exists)")
+                    if PSUTIL_AVAILABLE and psutil is not None:
+                        try:
+                            other_proc = psutil.Process(lock_pid)
+                            if other_proc.is_running():
+                                lines.append(f"⚠️ <b>Lock</b>: Held by PID {lock_pid} (still running!)")
+                            else:
+                                lines.append(f"🔴 <b>Lock</b>: Stale (PID {lock_pid} not running)")
+                        except Exception:
+                            lines.append(f"🔴 <b>Lock</b>: Stale (PID {lock_pid} no longer exists)")
+                    else:
+                        lines.append(f"⚠️ <b>Lock</b>: Held by PID {lock_pid} (psutil not installed; cannot verify)")
                 else:
                     lines.append(f"⚠️ <b>Lock</b>: File exists but unreadable")
             else:
@@ -1228,24 +1242,27 @@ async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"⚠️ <b>Lock Check</b>: Error - {str(e)[:50]}")
 
         # Detect other tg_bot processes (zombie detection)
-        try:
-            other_tg_procs = []
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    cmdline = proc.info.get('cmdline') or []
-                    cmdline_str = ' '.join(cmdline) if cmdline else ''
-                    if 'tg_bot' in cmdline_str and proc.info['pid'] != current_pid:
-                        other_tg_procs.append(proc.info['pid'])
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
+        if PSUTIL_AVAILABLE and psutil is not None:
+            try:
+                other_tg_procs = []
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        cmdline = proc.info.get('cmdline') or []
+                        cmdline_str = ' '.join(cmdline) if cmdline else ''
+                        if 'tg_bot' in cmdline_str and proc.info['pid'] != current_pid:
+                            other_tg_procs.append(proc.info['pid'])
+                    except Exception:
+                        continue
 
-            if other_tg_procs:
-                lines.append(f"🔴 <b>Zombie Detection</b>: {len(other_tg_procs)} other tg_bot process(es)!")
-                lines.append(f"   PIDs: {', '.join(map(str, other_tg_procs[:5]))}")
-            else:
-                lines.append(f"✅ <b>Zombie Detection</b>: No other tg_bot processes")
-        except Exception as e:
-            lines.append(f"⚠️ <b>Zombie Detection</b>: Error - {str(e)[:50]}")
+                if other_tg_procs:
+                    lines.append(f"🔴 <b>Zombie Detection</b>: {len(other_tg_procs)} other tg_bot process(es)!")
+                    lines.append(f"   PIDs: {', '.join(map(str, other_tg_procs[:5]))}")
+                else:
+                    lines.append(f"✅ <b>Zombie Detection</b>: No other tg_bot processes")
+            except Exception as e:
+                lines.append(f"⚠️ <b>Zombie Detection</b>: Error - {str(e)[:50]}")
+        else:
+            lines.append("⚠️ <b>Zombie Detection</b>: psutil not installed")
 
         # Response time
         elapsed_ms = (time.time() - start_time) * 1000
@@ -2129,8 +2146,9 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message, user_id, username=username, send_update=send_status
         )
         
-        # Send result to GROUP (not DM)
-        GROUP_CHAT_ID = -1003408655098
+        # Send result to configured broadcast group (fallback: current chat).
+        config = get_config()
+        target_chat_id = config.broadcast_chat_id or chat_id
         status_emoji = "✅" if success else "⚠️"
         result_msg = (
             f"{status_emoji} <b>Coding Task Complete</b>\n\n"
@@ -2138,9 +2156,9 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>Details:</b>\n<pre>{output[:2000]}</pre>"
         )
 
-        # Always send to group, not DM
+        # Prefer group, not DM (unless broadcast chat is not configured).
         await context.bot.send_message(
-            chat_id=GROUP_CHAT_ID,
+            chat_id=target_chat_id,
             text=result_msg,
             parse_mode=ParseMode.HTML
         )
@@ -5546,12 +5564,52 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text.strip()
     if context and getattr(context, "user_data", None):
+        # Public DM trading flows use a separate router; if a flow is active,
+        # do not process/log text here (can contain seed phrases/private keys).
+        if context.user_data.get("flow"):
+            return
         if (
             context.user_data.get("awaiting_token")
             or context.user_data.get("awaiting_wallet_import")
             or context.user_data.get("awaiting_watchlist_token")
         ):
             return
+
+    def _looks_like_wallet_secret(s: str) -> bool:
+        raw = (s or "").strip()
+        if not raw:
+            return False
+
+        # Seed phrase heuristic (12-24 lowercase words).
+        words = raw.split()
+        if 12 <= len(words) <= 24 and all(w.isalpha() and w.islower() and 3 <= len(w) <= 8 for w in words):
+            return True
+
+        # Base58 private key heuristic (single token, long, base58 alphabet).
+        if " " not in raw and 40 <= len(raw) <= 120:
+            b58 = set("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+            if all(ch in b58 for ch in raw):
+                return True
+
+        return False
+
+    # Safety: if a user pastes secret wallet material in DMs outside an import flow,
+    # avoid logging it and prompt them to use the wallet import UI.
+    try:
+        chat = update.effective_chat
+        if chat and getattr(chat, "type", "") == "private" and _looks_like_wallet_secret(text):
+            try:
+                await update.message.delete()
+            except Exception:
+                pass
+            await update.message.reply_text(
+                "For safety, I didn't process that message.\n\n"
+                "Use `/wallet` -> `Import Wallet` (in DM), and avoid pasting keys in group chats.",
+                parse_mode="Markdown",
+            )
+            return
+    except Exception:
+        pass
     user_id = update.effective_user.id if update.effective_user else 0
     import sys
     # Sanitize text for Windows console (remove emojis/special chars)

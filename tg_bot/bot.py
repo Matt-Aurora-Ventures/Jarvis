@@ -18,7 +18,7 @@ from telegram.ext import (
 
 import tg_bot.bot_core as bot_core
 from tg_bot.bot_core import *  # re-export non-underscore symbols for legacy imports
-from tg_bot.handlers.commands import start, help_command, status, subscribe, unsubscribe
+from tg_bot.handlers.commands import start as start_cmd, help_command, status, subscribe, unsubscribe
 from tg_bot.handlers.commands.about_command import about_command
 from tg_bot.handlers.sentiment import trending, digest, report, sentiment, picks
 from tg_bot.handlers.admin import reload, config_cmd, logs, system, away, back, awaystatus, memory, sysmem, errors
@@ -42,10 +42,16 @@ from tg_bot.handlers.commands.commands_command import commands_command
 from core.utils.instance_lock import acquire_instance_lock
 
 # Demo UI (v6.0.0 - Trojan-style trading interface)
-from tg_bot.handlers.demo import register_demo_handlers
+from tg_bot.handlers.demo import register_demo_handlers, demo, demo_callback
 
 # Raid Bot (v6.1.0 - Twitter engagement campaigns)
 from tg_bot.handlers.raid import register_raid_handlers
+
+# Public DM trading flows (wallet per user, safe callback namespace)
+from tg_bot.public_bot_handler import PublicBotHandler
+
+# Back-compat exports expected by tests/legacy imports.
+start = start_cmd  # noqa: F401
 
 # FSM Session Management (v7.0.0 - Redis-backed state persistence)
 try:
@@ -100,11 +106,121 @@ async def _pre_warm_dexter():
 
 def register_handlers(app: Application, config) -> None:
     """Register command, callback, and message handlers on the Telegram app."""
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
+    public = PublicBotHandler()
+
+    def _is_private(update: Update) -> bool:
+        try:
+            chat = update.effective_chat
+            return bool(chat and getattr(chat, "type", "") == "private")
+        except Exception:
+            return False
+
+    def _is_admin(update: Update) -> bool:
+        try:
+            user = update.effective_user
+            if not user:
+                return False
+            try:
+                return bool(config.is_admin(user.id, getattr(user, "username", None)))
+            except TypeError:
+                return bool(config.is_admin(user.id))
+        except Exception:
+            return False
+
+    async def start_router(update: Update, context) -> None:
+        # Public DM onboarding (wallet per user). Keep admin/group /start unchanged.
+        if _is_private(update) and (not _is_admin(update)):
+            await public.cmd_start(update, context)
+            return
+        await start_cmd(update, context)
+
+    async def help_router(update: Update, context) -> None:
+        if _is_private(update) and (not _is_admin(update)):
+            await public.cmd_help(update, context)
+            return
+        await help_command(update, context)
+
+    async def wallet_router(update: Update, context) -> None:
+        if _is_private(update) and (not _is_admin(update)):
+            await public.cmd_wallet(update, context)
+            return
+        await wallet(update, context)
+
+    async def portfolio_router(update: Update, context) -> None:
+        if _is_private(update) and (not _is_admin(update)):
+            await public.cmd_portfolio(update, context)
+            return
+        await treasury_handlers.handle_portfolio(update, context)
+
+    async def settings_router(update: Update, context) -> None:
+        if _is_private(update) and (not _is_admin(update)):
+            await public.cmd_settings(update, context)
+            return
+        await settings(update, context)
+
+    async def sentiment_router(update: Update, context) -> None:
+        if _is_private(update) and (not _is_admin(update)):
+            await public.cmd_sentiment(update, context)
+            return
+        await sentiment(update, context)
+
+    async def picks_router(update: Update, context) -> None:
+        if _is_private(update) and (not _is_admin(update)):
+            await public.cmd_picks(update, context)
+            return
+        await picks(update, context)
+
+    _PUBLIC_TEXT_FLOWS = {
+        "buy_token",
+        "buy_custom_amount",
+        "sell_custom_amount",
+        "send_address",
+        "send_custom_amount",
+        "import_wallet",
+    }
+
+    def _demo_is_awaiting_text(context) -> bool:
+        ud = getattr(context, "user_data", None) or {}
+        return any(
+            ud.get(k)
+            for k in (
+                "awaiting_custom_buy_amount",
+                "awaiting_watchlist_token",
+                "awaiting_wallet_import",
+                "awaiting_token",
+                "awaiting_token_search",
+            )
+        )
+
+    async def message_router(update: Update, context) -> None:
+        # Single text router to prevent handler collisions and avoid logging
+        # sensitive user input (wallet import/seed phrases).
+        if not getattr(update, "message", None) or not getattr(update.message, "text", None):
+            return
+
+        if _is_private(update):
+            flow = (getattr(context, "user_data", None) or {}).get("flow")
+            if flow in _PUBLIC_TEXT_FLOWS:
+                await public.handle_message(update, context)
+                return
+
+        if _is_admin(update) and _demo_is_awaiting_text(context):
+            # Let the dedicated demo text handler (registered in group=1) consume
+            # awaited demo inputs without allowing bot_core to see/log them.
+            return
+
+        await bot_core.handle_message(update, context)
+
+    app.add_handler(CommandHandler("start", start_router))
+    app.add_handler(CommandHandler("help", help_router))
     app.add_handler(CommandHandler("about", about_command))
     app.add_handler(CommandHandler("commands", commands_command))
     app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("buy", public.cmd_buy, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("sell", public.cmd_sell, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("send", public.cmd_send, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("performance", public.cmd_performance, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("wallets", public.cmd_wallets, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("subscribe", subscribe))
     app.add_handler(CommandHandler("unsubscribe", unsubscribe))
     app.add_handler(CommandHandler("costs", costs))
@@ -137,7 +253,7 @@ def register_handlers(app: Application, config) -> None:
     app.add_handler(CommandHandler("config", config_cmd))
     app.add_handler(CommandHandler("orders", orders))
     app.add_handler(CommandHandler("system", system))
-    app.add_handler(CommandHandler("wallet", wallet))
+    app.add_handler(CommandHandler("wallet", wallet_router))
     app.add_handler(CommandHandler("logs", logs))
     app.add_handler(CommandHandler("errors", errors))
     app.add_handler(CommandHandler("away", away))
@@ -178,8 +294,8 @@ def register_handlers(app: Application, config) -> None:
 
     # Treasury Trading Commands
     app.add_handler(CommandHandler("report", report))
-    app.add_handler(CommandHandler("sentiment", sentiment))
-    app.add_handler(CommandHandler("picks", picks))
+    app.add_handler(CommandHandler("sentiment", sentiment_router))
+    app.add_handler(CommandHandler("picks", picks_router))
     app.add_handler(CommandHandler("balance", balance))
     app.add_handler(CommandHandler("positions", positions))
     app.add_handler(CommandHandler("dashboard", dashboard))
@@ -189,12 +305,12 @@ def register_handlers(app: Application, config) -> None:
 
     # Treasury Display Commands (v4.7.0)
     app.add_handler(CommandHandler("treasury", treasury_handlers.handle_treasury))
-    app.add_handler(CommandHandler("portfolio", treasury_handlers.handle_portfolio))
+    app.add_handler(CommandHandler("portfolio", portfolio_router))
     app.add_handler(CommandHandler("p", treasury_handlers.handle_portfolio))
     app.add_handler(CommandHandler("b", treasury_handlers.handle_balance))
     app.add_handler(CommandHandler("pnl", treasury_handlers.handle_pnl))
     app.add_handler(CommandHandler("sector", treasury_handlers.handle_sector))
-    app.add_handler(CommandHandler("settings", settings))
+    app.add_handler(CommandHandler("settings", settings_router))
 
     # Interactive UI Commands (v4.8.0)
     app.add_handler(CommandHandler("compare", compare))
@@ -228,6 +344,9 @@ def register_handlers(app: Application, config) -> None:
     app.add_handler(CommandHandler("flag", report_spam))
     app.add_handler(CommandHandler("togglemedia", toggle_media))
 
+    # Public DM callbacks (namespaced as pub:*) must be handled before the
+    # generic callback router to avoid collisions.
+    app.add_handler(CallbackQueryHandler(public.handle_callback, pattern=r"^pub:"))
     app.add_handler(CallbackQueryHandler(button_callback))
 
     # Anti-scam protection (runs BEFORE regular message handler)
@@ -245,7 +364,23 @@ def register_handlers(app: Application, config) -> None:
     else:
         print("Anti-scam protection: DISABLED (no antiscam module or admin IDs)")
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_router))
+
+    # Demo text input handler (admin-only) runs after the main router so it can't
+    # block public DM flows or core message handling.
+    try:
+        from tg_bot.handlers.demo import demo_message_handler
+
+        if getattr(config, "admin_ids", None):
+            app.add_handler(
+                MessageHandler(
+                    filters.User(list(config.admin_ids)) & filters.TEXT & ~filters.COMMAND,
+                    demo_message_handler,
+                ),
+                group=1,
+            )
+    except Exception:
+        pass
 
     # Media handler - blocks GIFs/animations when restricted mode is active
     app.add_handler(MessageHandler(
@@ -438,9 +573,7 @@ def main():
     print("=" * 50 + "\n")
 
     # Start background services (TP/SL monitoring, health checks)
-    import sys
     async def startup_tasks(app):
-        import sys
         print("[DEBUG] startup_tasks: ENTERED", flush=True)
         sys.stdout.flush()
         try:

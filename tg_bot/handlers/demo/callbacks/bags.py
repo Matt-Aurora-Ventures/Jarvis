@@ -153,6 +153,8 @@ async def handle_bags(
                     amount=amount_sol,
                     wallet_address=wallet_address,
                     slippage_bps=slippage_bps,
+                    # Policy: purchases should be bags.fm only (no Jupiter fallback) unless explicitly enabled.
+                    allow_jupiter_fallback=False,
                 )
 
                 if swap.get("success"):
@@ -207,6 +209,49 @@ async def handle_bags(
                 retry_action="demo:bags_fm",
             )
 
+    elif action == "bags_custom_tpsl" or data.startswith("demo:bags_custom_tpsl:"):
+        # Custom TP/SL presets for a specific Bags token detail page.
+        parts = data.split(":")
+        token_ref = parts[2] if len(parts) > 2 else ""
+        address = ctx.resolve_token_ref(context, token_ref) if token_ref else ""
+
+        # Best-effort token lookup (kept soft to avoid turning this into a hard dependency).
+        symbol = "TOKEN"
+        try:
+            bags_tokens = await ctx.get_bags_top_tokens_with_sentiment(limit=15)
+            token = next((t for t in bags_tokens if t.get("address") == address), None)
+            if token:
+                symbol = token.get("symbol", symbol) or symbol
+        except Exception:
+            pass
+
+        current_tp = float(context.user_data.get("bags_tp_percent", 15.0) or 15.0)
+        current_sl = float(context.user_data.get("bags_sl_percent", 15.0) or 15.0)
+
+        text = f"""
+{theme.SETTINGS} *CUSTOM TP/SL*
+{'=' * 20}
+
+*{symbol}*
+Current defaults: TP +{current_tp:.0f}% | SL -{current_sl:.0f}%
+
+Choose a preset (applies only to this token screen):
+"""
+
+        def _btn(tp: float, sl: float) -> InlineKeyboardButton:
+            return InlineKeyboardButton(
+                f"TP +{tp:.0f}% | SL -{sl:.0f}%",
+                callback_data=f"demo:bags_buy:{token_ref}:{tp}:{sl}",
+            )
+
+        keyboard = InlineKeyboardMarkup([
+            [_btn(10, 10), _btn(15, 15)],
+            [_btn(25, 15), _btn(35, 20)],
+            [_btn(50, 25), _btn(60, 25)],
+            [InlineKeyboardButton(f"{theme.BACK} Back", callback_data=f"demo:bags_info:{token_ref}")],
+        ])
+        return text, keyboard
+
     elif action == "bags_settings":
         default_tp = context.user_data.get("bags_tp_percent", 15.0)
         default_sl = context.user_data.get("bags_sl_percent", 15.0)
@@ -244,7 +289,6 @@ _Applied to all Bags.fm trades_
     elif data.startswith("demo:bags_set_tp:"):
         tp_value = float(data.split(":")[2])
         context.user_data["bags_tp_percent"] = tp_value
-        await query.answer(f"Take Profit set to +{tp_value:.0f}%")
 
         default_tp = tp_value
         default_sl = context.user_data.get("bags_sl_percent", 15.0)
@@ -281,7 +325,6 @@ _Applied to all Bags.fm trades_
     elif data.startswith("demo:bags_set_sl:"):
         sl_value = float(data.split(":")[2])
         context.user_data["bags_sl_percent"] = sl_value
-        await query.answer(f"Stop Loss set to -{sl_value:.0f}%")
 
         default_tp = context.user_data.get("bags_tp_percent", 15.0)
         default_sl = sl_value

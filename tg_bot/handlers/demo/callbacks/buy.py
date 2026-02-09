@@ -244,7 +244,12 @@ Amount: *{amount} SOL*
                 sl_percent = context.user_data.get("sl_percent", 20.0)
 
                 # Execute buy with mandatory TP/SL validation
-                result = await ctx.execute_buy_with_tpsl(
+                exec_buy = getattr(ctx, "execute_buy_with_tpsl", None)
+                if not callable(exec_buy):
+                    # Backwards-compatible fallback in case the context loader is out of sync.
+                    from tg_bot.handlers.demo.demo_trading import execute_buy_with_tpsl as exec_buy
+
+                result = await exec_buy(
                     token_address=token_addr,
                     amount_sol=amount,
                     wallet_address=wallet_address,

@@ -479,7 +479,7 @@ class DemoContextLoader:
 
     @staticmethod
     async def execute_buy_with_tpsl(**kwargs):
-        """Execute buy with mandatory TP/SL via Bags.fm with Jupiter fallback."""
+        """Execute buy with mandatory TP/SL via Bags.fm (optional Jupiter fallback)."""
         from tg_bot.handlers.demo.demo_trading import execute_buy_with_tpsl
         return await execute_buy_with_tpsl(**kwargs)
 

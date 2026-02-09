@@ -800,6 +800,8 @@ class BagsAPIClient:
                     f"{base_url}/tokens/top",
                     params={"limit": limit, "sort": "volume24h"},
                     headers=self._get_headers(),
+                    # UI-facing endpoint: fail fast so Telegram callbacks don't feel "stuck".
+                    timeout=6.0,
                 )
 
                 response.raise_for_status()

@@ -106,21 +106,17 @@ async def handle_snipe(
                         "sightings": 1,
                     }
 
-            # Fallback to mock data
+            # Real data only: don't inject placeholder tokens if upstream sources fail.
             if not hottest_token:
-                hottest_token = {
-                    "symbol": "FARTCOIN",
-                    "address": "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump",
-                    "price": 0.00125,
-                    "change_24h": 145.5,
-                    "volume_24h": 2500000,
-                    "liquidity": 850000,
-                    "market_cap": 125000000,
-                    "conviction": "VERY HIGH",
-                    "sentiment_score": 92,
-                    "entry_timing": "GOOD",
-                    "sightings": 3,
-                }
+                return DemoMenuBuilder.error_message(
+                    error=(
+                        "Insta Snipe is temporarily unavailable.\n\n"
+                        "Could not load boosted tokens from DexScreener or Bags Top tokens.\n"
+                        "Try again in ~30-60 seconds."
+                    ),
+                    retry_action="demo:insta_snipe",
+                    context_hint="insta_snipe",
+                )
 
             hottest_token["token_id"] = ctx.register_token_id(context, hottest_token.get("address"))
 
@@ -261,7 +257,12 @@ async def handle_snipe(
                         )
 
                     # Execute buy with mandatory TP/SL via the centralized path
-                    result = await ctx.execute_buy_with_tpsl(
+                    exec_buy = getattr(ctx, "execute_buy_with_tpsl", None)
+                    if not callable(exec_buy):
+                        # Backwards-compatible fallback in case the context loader is out of sync.
+                        from tg_bot.handlers.demo.demo_trading import execute_buy_with_tpsl as exec_buy
+
+                    result = await exec_buy(
                         token_address=address,
                         amount_sol=amount,
                         wallet_address=wallet_address,

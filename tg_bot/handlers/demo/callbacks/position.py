@@ -255,7 +255,6 @@ async def _handle_set_tp(ctx, data, update, context, positions, theme):
 
         position = next((p for p in positions if p.get("id") == pos_id), None)
         if position:
-            await query.answer(f"Take Profit set to +{tp_value}%")
             return DemoMenuBuilder.position_adjust_menu(
                 pos_id=pos_id,
                 symbol=position.get("symbol", "???"),
@@ -267,8 +266,10 @@ async def _handle_set_tp(ctx, data, update, context, positions, theme):
             return _position_not_found(theme)
     except (ValueError, IndexError) as e:
         logger.warning(f"Set TP error: {e}")
-        await query.answer("Error setting TP")
-        return None, None
+        return DemoMenuBuilder.error_message(
+            error="Error setting TP",
+            retry_action="demo:positions",
+        )
 
 
 async def _handle_set_sl(ctx, data, update, context, positions, theme):
@@ -290,7 +291,6 @@ async def _handle_set_sl(ctx, data, update, context, positions, theme):
 
         position = next((p for p in positions if p.get("id") == pos_id), None)
         if position:
-            await query.answer(f"Stop Loss set to -{sl_value}%")
             return DemoMenuBuilder.position_adjust_menu(
                 pos_id=pos_id,
                 symbol=position.get("symbol", "???"),
@@ -302,8 +302,10 @@ async def _handle_set_sl(ctx, data, update, context, positions, theme):
             return _position_not_found(theme)
     except (ValueError, IndexError) as e:
         logger.warning(f"Set SL error: {e}")
-        await query.answer("Error setting SL")
-        return None, None
+        return DemoMenuBuilder.error_message(
+            error="Error setting SL",
+            retry_action="demo:positions",
+        )
 
 
 async def _handle_adj_tp(ctx, data, context, positions, theme):

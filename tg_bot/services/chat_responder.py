@@ -33,6 +33,7 @@ from tg_bot.services.memory_service import (
     store_conversation_fact,
 )
 from core.async_utils import fire_and_forget
+from tg_bot.services.supermemory_context import get_supermemory_bridge
 
 # Voice bible - canonical brand guide (lazy-loaded to avoid circular imports)
 try:
@@ -60,6 +61,15 @@ def get_bot_finance_integration():
     """Get Dexter bot finance integration (lazy load)."""
     global _bot_finance_integration
     if _bot_finance_integration is None:
+        # Dexter uses xAI heavily. In cooldown mode / when xAI is disabled, do not load it.
+        try:
+            from core.feature_flags import is_xai_enabled
+            if not is_xai_enabled(default=True):
+                _bot_finance_integration = False
+                logger.info("Dexter finance integration disabled (xAI disabled/cooldown)")
+                return None
+        except Exception:
+            pass
         try:
             from core.dexter.bot_integration import get_bot_finance_integration as get_dexter_integration
             _bot_finance_integration = get_dexter_integration()
@@ -1019,6 +1029,26 @@ Never mention Claude or Anthropic.
                     name=f"store_pref_{pref_key}"
                 )
 
+                # Also store in Supermemory (best-effort) so context survives compaction/migrations.
+                try:
+                    sm = get_supermemory_bridge()
+                    if sm.is_available():
+                        fire_and_forget(
+                            sm.add(
+                                content=f"telegram preference: {pref_key}={pref_value} (evidence: {matched_text})",
+                                user_id=int(user_id),
+                                metadata={
+                                    "source": "telegram",
+                                    "type": "user_preference",
+                                    "preference_key": pref_key,
+                                    "preference_value": pref_value,
+                                },
+                            ),
+                            name=f"sm_pref_{pref_key}",
+                        )
+                except Exception:
+                    pass
+
         # MEMORY: Get user context for personalization
         user_context = {}
         if TELEGRAM_MEMORY_ENABLED and user_id:
@@ -1116,6 +1146,22 @@ Never mention Claude or Anthropic.
         except Exception as e:
             logger.debug(f"Failed to get persistent context: {e}")
 
+        # Supermemory "prompt submit hook": retrieve relevant long-term context.
+        try:
+            sm = get_supermemory_bridge()
+            if sm.is_available():
+                sm_ctx = await sm.get_context(
+                    text,
+                    chat_id=int(chat_id) if chat_id else None,
+                    user_id=int(user_id) if user_id else None,
+                    include_shared=True,
+                    limit=5,
+                )
+                if sm_ctx:
+                    context_hint += f"\n\n(Supermemory context)\n{sm_ctx}"
+        except Exception as e:
+            logger.debug(f"Supermemory context retrieval failed: {e}")
+
         # Add self-reflection context
         if self_reflection:
             context_hint += f"\n\n(Internal state: {self_reflection})"
@@ -1184,8 +1230,16 @@ Never mention Claude or Anthropic.
 
             return reply
 
-        # Fallback to xAI (Grok) if CLI unavailable
+        # Fallback to xAI (Grok) if CLI unavailable (unless explicitly disabled/cooldown).
+        xai_enabled = False
         if self.xai_api_key:
+            try:
+                from core.feature_flags import is_xai_enabled
+                xai_enabled = is_xai_enabled(default=True)
+            except Exception:
+                xai_enabled = False
+
+        if xai_enabled:
             reply = await self._generate_with_xai(text, username, chat_title, is_private, is_admin)
             if reply:
                 # VOICE BIBLE VALIDATION: Ensure response adheres to Jarvis personality

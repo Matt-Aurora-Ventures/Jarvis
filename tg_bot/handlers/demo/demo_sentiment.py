@@ -299,12 +299,12 @@ def _conviction_label(score: float) -> str:
 
     NOTE: Conviction thresholds are aligned to demo UX:
       - HIGH: 85+
-      - MEDIUM: 70–84
-      - LOW: <70
+      - MEDIUM: 60–84
+      - LOW: <60
     """
     if score >= 85:
         return "HIGH"
-    if score >= 70:
+    if score >= 60:
         return "MEDIUM"
     return "LOW"
 
@@ -487,58 +487,183 @@ async def get_conviction_picks() -> List[Dict[str, Any]]:
         picks = sorted(picks, key=lambda p: float(p.get("score", 0) or 0), reverse=True)
         return picks[:10]
 
-    # Final fallback: never show an empty Top 10.
-    # Use a small hardcoded Blue Chips set (SOL, JUP, RAY, BONK, WIF, PYTH)
-    # and overlay live-ish pricing/sentiment.
-    try:
-        bluechips = [
-            ("SOL", "So11111111111111111111111111111111111111112"),
-            ("JUP", "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"),
-            ("RAY", "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R"),
-            ("BONK", "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"),
-            ("WIF", "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"),
-            ("PYTH", "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3"),
-        ]
+    # Real data only: if all upstream sources fail, return empty and let the UI
+    # display a clear empty-state rather than injecting placeholder tokens.
+    return []
 
-        fallback: List[Dict[str, Any]] = []
-        for symbol, address in bluechips:
+
+# =============================================================================
+# Bags.fm Top Tokens (Bags + DexScreener Fallback)
+# =============================================================================
+
+_BAGS_POOLS_MINTS_CACHE: Optional[set[str]] = None
+_BAGS_POOLS_MINTS_CACHE_TS: Optional[datetime] = None
+_BAGS_POOLS_MINTS_LOCK = asyncio.Lock()
+_BAGS_POOLS_MINTS_TTL_SEC: int = 24 * 60 * 60  # 24 hours
+
+
+def _bags_pools_mints_cache_path() -> Path:
+    root = Path(__file__).resolve().parents[3]
+    return root / "data" / "bags" / "bags_pools_token_mints.txt"
+
+
+async def _get_bags_pools_token_mints(*, force_refresh: bool = False) -> set[str]:
+    """Return a cached set of token mints launched via bags.fm DBC pools.
+
+    Source-of-truth: GET https://public-api-v2.bags.fm/api/v1/solana/bags/pools
+
+    Note: This endpoint returns a large payload (100k+ items) and currently does
+    not accept query params. We cache it aggressively to avoid UI timeouts.
+    """
+    global _BAGS_POOLS_MINTS_CACHE, _BAGS_POOLS_MINTS_CACHE_TS
+
+    now = datetime.now(timezone.utc)
+    cache_path = _bags_pools_mints_cache_path()
+
+    def _load_from_disk() -> set[str]:
+        if not cache_path.exists():
+            return set()
+        try:
+            mints = set()
+            for raw in cache_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                mint = (raw or "").strip()
+                if mint:
+                    mints.add(mint)
+            return mints
+        except Exception:
+            return set()
+
+    async with _BAGS_POOLS_MINTS_LOCK:
+        # Memory cache
+        if (
+            not force_refresh
+            and _BAGS_POOLS_MINTS_CACHE
+            and _BAGS_POOLS_MINTS_CACHE_TS
+            and (now - _BAGS_POOLS_MINTS_CACHE_TS).total_seconds() <= _BAGS_POOLS_MINTS_TTL_SEC
+        ):
+            return _BAGS_POOLS_MINTS_CACHE
+
+        # Disk cache (mtime-based)
+        if not force_refresh and cache_path.exists():
             try:
-                s = await get_ai_sentiment_for_token(address)
+                age = now.timestamp() - cache_path.stat().st_mtime
             except Exception:
-                s = {}
-            price = float(s.get("price", 0) or s.get("price_usd", 0) or 0)
-            score = int(round(float(s.get("score", 0.5) or 0.5) * 100))
-            conviction = _conviction_label(score)
-            tp_pct, sl_pct = _default_tp_sl(conviction)
-            fallback.append({
-                "symbol": symbol,
+                age = None
+            if age is not None and age <= _BAGS_POOLS_MINTS_TTL_SEC:
+                mints = _load_from_disk()
+                if mints:
+                    _BAGS_POOLS_MINTS_CACHE = mints
+                    _BAGS_POOLS_MINTS_CACHE_TS = now
+                    return mints
+
+        # Fetch from Bags (public)
+        try:
+            import httpx
+
+            url = "https://public-api-v2.bags.fm/api/v1/solana/bags/pools"
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(url, headers={"Accept": "application/json"})
+                resp.raise_for_status()
+                payload = resp.json() or {}
+
+            if not payload.get("success"):
+                raise RuntimeError("bags_pools_api_failed")
+
+            items = payload.get("response") or []
+            seen = set()
+            ordered: List[str] = []
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                mint = (it.get("tokenMint") or "").strip()
+                if not mint or mint in seen:
+                    continue
+                seen.add(mint)
+                ordered.append(mint)
+
+            mints = set(ordered)
+            if mints:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text("\n".join(ordered).rstrip("\n") + "\n", encoding="utf-8")
+
+                _BAGS_POOLS_MINTS_CACHE = mints
+                _BAGS_POOLS_MINTS_CACHE_TS = now
+            return mints
+        except Exception as e:
+            logger.warning(f"Failed to fetch bags pools mints: {e}")
+            # Last resort: serve stale disk cache (even if expired).
+            mints = _load_from_disk()
+            if mints:
+                _BAGS_POOLS_MINTS_CACHE = mints
+                _BAGS_POOLS_MINTS_CACHE_TS = now
+            return mints
+
+
+async def _get_dexscreener_trending_pairs(*, limit: int) -> List[Any]:
+    """Async wrapper around core.dexscreener.get_solana_trending (sync)."""
+    def _fetch() -> List[Any]:
+        from core.dexscreener import get_solana_trending
+        # Keep filters permissive; we filter and rank by volume after bags-only filtering.
+        return get_solana_trending(
+            min_liquidity=2_000,
+            min_volume_24h=0,
+            max_liquidity=50_000_000,
+            limit=limit,
+            cache_ttl_seconds=120,
+        )
+
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _fetch)
+
+
+async def _fallback_bags_top_tokens_via_dexscreener(limit: int) -> List[Dict[str, Any]]:
+    """Bags Top 15 fallback when bags.fm leaderboard endpoints are unavailable.
+
+    Strategy:
+    - Build a bags-only mint allowlist from /solana/bags/pools
+    - Pull trending Solana tokens from DexScreener
+    - Filter to bags-only mints, then rank by 24h volume
+    """
+    try:
+        bags_mints = await _get_bags_pools_token_mints()
+        if not bags_mints:
+            return []
+
+        fetch_limit = max(250, limit * 25)
+        pairs = await _get_dexscreener_trending_pairs(limit=fetch_limit)
+        if not pairs:
+            return []
+
+        out: List[Dict[str, Any]] = []
+        for p in pairs:
+            address = (getattr(p, "base_token_address", "") or "").strip()
+            if not address or address not in bags_mints:
+                continue
+
+            symbol = (getattr(p, "base_token_symbol", "") or "").strip()
+            name = (getattr(p, "base_token_name", "") or "").strip()
+            out.append({
                 "address": address,
-                "conviction": conviction,
-                "thesis": "",
-                "entry_price": price,
-                "target_price": price * (1 + tp_pct / 100) if price else 0,
-                "stop_loss": price * (1 - sl_pct / 100) if price else 0,
-                "tp_percent": tp_pct,
-                "sl_percent": sl_pct,
-                "score": score,
-                "signal": s.get("signal", "NEUTRAL"),
-                "sentiment": s.get("sentiment", "neutral"),
-                "change_24h": float(s.get("change_24h", 0) or 0),
-                "volume_24h": float(s.get("volume_24h", 0) or 0),
+                "symbol": symbol or address[:6],
+                "name": name or symbol or address[:6],
+                "decimals": 9,
+                "price_usd": float(getattr(p, "price_usd", 0) or 0),
+                "price_sol": float(getattr(p, "price_native", 0) or 0),
+                "volume_24h": float(getattr(p, "volume_24h", 0) or 0),
+                "liquidity": float(getattr(p, "liquidity_usd", 0) or 0),
+                "holders": 0,
+                "market_cap": 0,
+                "price_change_24h": float(getattr(p, "price_change_24h", 0) or 0),
+                "chart_url": f"https://dexscreener.com/solana/{address}",
+                "source": "dexscreener_bags_allowlist",
             })
 
-        fallback = sorted(fallback, key=lambda p: float(p.get("score", 0) or 0), reverse=True)
-        return fallback[:10]
+        out.sort(key=lambda t: float(t.get("volume_24h", 0) or 0), reverse=True)
+        return out[:limit]
     except Exception as e:
-        logger.warning(f"Conviction picks bluechips fallback failed: {e}")
+        logger.warning(f"DexScreener fallback for Bags top tokens failed: {e}")
+        return []
 
-    # If we have no real data sources, return minimal non-empty placeholder
-    return [{"symbol": "BONK", "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "conviction": "MEDIUM", "thesis": "", "entry_price": 0, "target_price": 0, "stop_loss": 0, "tp_percent": 25, "sl_percent": 15, "score": 75, "signal": "NEUTRAL", "sentiment": "neutral", "change_24h": 0.0, "volume_24h": 0.0}]
-
-
-# =============================================================================
-# Bags.fm Top Tokens
-# =============================================================================
 
 async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, Any]]:
     """\
@@ -549,8 +674,8 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
       - Prefer the official bags.fm API (/tokens/top via BagsClient)
       - Do NOT "guess" using name/symbol suffixes like "bags" or address patterns
 
-    If the Bags API is unavailable, we return an empty list rather than mixing in generic
-    trending tokens from other sources (which can include non-bags launches).
+    If the bags.fm leaderboard endpoint is unavailable, we fall back to DexScreener trending
+    filtered by the bags.fm pools allowlist. If that also fails, we return an empty list.
     """
     from tg_bot.handlers.demo.demo_trading import get_bags_client
 
@@ -563,13 +688,18 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
         return float(_field(token, "volume_24h", _field(token, "volume", 0)) or 0)
 
     try:
-        bags_client = get_bags_client()
-        if not bags_client:
-            return []
+        from core.feature_flags import is_xai_enabled
 
-        # BagsClient.get_top_tokens_by_volume() already returns bags.fm launches.
+        bags_client = get_bags_client()
         fetch_limit = max(limit * 2, limit)
-        tokens = await bags_client.get_top_tokens_by_volume(limit=fetch_limit, allow_public=True)
+
+        tokens: List[Any] = []
+        if bags_client:
+            tokens = await bags_client.get_top_tokens_by_volume(limit=fetch_limit, allow_public=True)
+
+        # Endpoint is frequently unavailable; use bags-only DexScreener fallback.
+        if not tokens:
+            tokens = await _fallback_bags_top_tokens_via_dexscreener(limit=fetch_limit)
 
         if not tokens:
             return []
@@ -577,12 +707,16 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
         tokens = sorted(tokens, key=_coerce_volume, reverse=True)
 
         result: List[Dict[str, Any]] = []
+        allow_ai_sentiment = is_xai_enabled(default=True)
         for t in tokens[:limit]:
             address = _field(t, "address", "")
             # Get sentiment for each token
-            try:
-                sentiment = await get_ai_sentiment_for_token(address)
-            except Exception:
+            if allow_ai_sentiment:
+                try:
+                    sentiment = await get_ai_sentiment_for_token(address)
+                except Exception:
+                    sentiment = {"sentiment": "neutral", "score": 0.5, "signal": "NEUTRAL"}
+            else:
                 sentiment = {"sentiment": "neutral", "score": 0.5, "signal": "NEUTRAL"}
 
             change_24h = _field(t, "price_change_24h", None)
@@ -602,6 +736,8 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
                 "sentiment": sentiment.get("sentiment", "neutral"),
                 "sentiment_score": sentiment.get("score", 0.5),
                 "signal": sentiment.get("signal", "NEUTRAL"),
+                "chart_url": _field(t, "chart_url", None),
+                "source": _field(t, "source", "bags_fm"),
             })
 
         return result

@@ -98,7 +98,7 @@ class TradingConfig:
     max_drawdown_pct: float = 0.15        # Pause if drawdown exceeds 15%
 
     # === ADMIN ===
-    admin_user_id: int = 8527130908       # Primary admin Telegram ID
+    admin_user_id: int = 8527368699       # Primary admin Telegram ID
 
     @classmethod
     def from_env(cls) -> "TradingConfig":

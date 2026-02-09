@@ -199,7 +199,7 @@ CLAUDE_OUTPUT_PATTERNS = [
 class ClaudeCLIHandler:
     """Handler for executing coding commands via Claude CLI.
 
-    Security: Only authorized admin (@matthaynes88) can execute.
+    Security: Only authorized Telegram admins can execute.
     All output is triple-scrubbed before returning.
     """
 
@@ -217,7 +217,8 @@ class ClaudeCLIHandler:
 
     # Strict admin whitelist - ONLY these users can execute CLI
     ADMIN_WHITELIST = {
-        8527130908,  # Matt (@matthaynes88)
+        8527368699,  # Current primary admin (env TELEGRAM_ADMIN_IDS is preferred)
+        8527130908,  # Legacy default (kept for backwards compatibility)
     }
 
     # Telegram usernames allowed (as backup check)
@@ -348,8 +349,14 @@ class ClaudeCLIHandler:
     }
 
     def __init__(self, admin_user_ids: list[int] = None):
-        # Use strict whitelist, ignore env var for CLI execution
+        # Start with strict whitelist, then extend from env for account migrations.
         self.admin_ids = set(self.ADMIN_WHITELIST)
+        env_admins = (os.environ.get("TELEGRAM_ADMIN_IDS", "") or "").strip()
+        if env_admins:
+            for part in env_admins.split(","):
+                part = part.strip()
+                if part.isdigit():
+                    self.admin_ids.add(int(part))
         if admin_user_ids:
             # Allow additional admins only if explicitly passed
             self.admin_ids.update(admin_user_ids)
@@ -465,7 +472,7 @@ class ClaudeCLIHandler:
     def is_admin(self, user_id: int, username: str = None) -> bool:
         """Check if user is authorized for CLI execution.
 
-        Uses strict whitelist - only @matthaynes88.
+        Uses TELEGRAM_ADMIN_IDS (preferred), then strict fallback whitelist.
         """
         if user_id in self.admin_ids:
             return True

@@ -73,6 +73,7 @@ def build_analyze_keyboard(token_address: str, token_symbol: str) -> InlineKeybo
             InlineKeyboardButton("Details", callback_data=f"details:{token_address}"),
             InlineKeyboardButton("Close", callback_data=f"ui_close:{token_address}"),
         ],
+        [InlineKeyboardButton("↩️ Previous Menu", callback_data="menu_back")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -116,7 +117,7 @@ def build_holder_pagination_keyboard(
         nav_buttons,
         [
             InlineKeyboardButton("Top 100", callback_data=f"holders_top100:{token_address}"),
-            InlineKeyboardButton("Back", callback_data=f"analyze_back:{token_address}"),
+            InlineKeyboardButton("↩️ Previous Menu", callback_data=f"analyze_back:{token_address}"),
             InlineKeyboardButton("Close", callback_data=f"ui_close:{token_address}"),
         ],
     ]
@@ -140,6 +141,7 @@ def build_signal_keyboard(token_address: str, token_symbol: str) -> InlineKeyboa
             InlineKeyboardButton("Set Reminder", callback_data=f"signal_remind:{token_address}"),
             InlineKeyboardButton("Close", callback_data=f"ui_close:{token_address}"),
         ],
+        [InlineKeyboardButton("↩️ Previous Menu", callback_data=f"analyze_back:{token_address}")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -163,6 +165,7 @@ def build_comparison_keyboard(tokens: List[str]) -> InlineKeyboardMarkup:
             InlineKeyboardButton("Compare Details", callback_data=f"compare_details:{token_str}"),
             InlineKeyboardButton("Close", callback_data="ui_close:compare"),
         ],
+        [InlineKeyboardButton("↩️ Previous Menu", callback_data="menu_back")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -192,6 +195,7 @@ def build_watchlist_keyboard(watchlist: List[Dict], user_id: int) -> InlineKeybo
         InlineKeyboardButton("Clear All", callback_data="watch_clear"),
         InlineKeyboardButton("Refresh", callback_data="watch_refresh"),
     ])
+    keyboard.append([InlineKeyboardButton("↩️ Previous Menu", callback_data="menu_back")])
 
     return InlineKeyboardMarkup(keyboard)
 
@@ -204,7 +208,7 @@ def build_trades_keyboard(token_address: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("Last 100", callback_data=f"trades_100:{token_address}"),
         ],
         [
-            InlineKeyboardButton("Back", callback_data=f"analyze_back:{token_address}"),
+            InlineKeyboardButton("↩️ Previous Menu", callback_data=f"analyze_back:{token_address}"),
             InlineKeyboardButton("Close", callback_data=f"ui_close:{token_address}"),
         ],
     ]
@@ -231,7 +235,7 @@ def build_chart_keyboard(token_address: str) -> InlineKeyboardMarkup:
             ),
         ],
         [
-            InlineKeyboardButton("Back", callback_data=f"analyze_back:{token_address}"),
+            InlineKeyboardButton("↩️ Previous Menu", callback_data=f"analyze_back:{token_address}"),
             InlineKeyboardButton("Close", callback_data=f"ui_close:{token_address}"),
         ],
     ]
@@ -706,7 +710,7 @@ async def _handle_details_callback(query, context, token_address: str, user_id: 
     message = await format_details_view(token_address)
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("Back", callback_data=f"analyze_back:{token_address}"),
+            InlineKeyboardButton("↩️ Previous Menu", callback_data=f"analyze_back:{token_address}"),
             InlineKeyboardButton("Close", callback_data=f"ui_close:{token_address}"),
         ]
     ])

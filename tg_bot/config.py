@@ -217,7 +217,14 @@ class BotConfig:
 
     def has_grok(self) -> bool:
         """Check if Grok API is configured."""
-        return bool(self.grok_api_key)
+        if not self.grok_api_key:
+            return False
+        try:
+            from core.feature_flags import is_xai_enabled
+            return is_xai_enabled(default=True)
+        except Exception:
+            # Be conservative: if flags can't be evaluated, assume disabled.
+            return False
 
     def has_claude(self) -> bool:
         """Check if Claude API is configured."""
@@ -327,4 +334,15 @@ def get_config() -> BotConfig:
     global _config
     if _config is None:
         _config = BotConfig()
+    return _config
+
+
+def reload_config() -> BotConfig:
+    """Reload config from the environment / secrets and reset the singleton."""
+    global _config
+    try:
+        _hydrate_env_from_keys_json()
+    except Exception:
+        pass
+    _config = BotConfig()
     return _config

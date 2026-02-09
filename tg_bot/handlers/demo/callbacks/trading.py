@@ -44,12 +44,17 @@ async def handle_trading(
     if action == "trending":
         trending = await ctx.get_trending_with_sentiment()
         if not trending:
-            trending = [
-                {"symbol": "BONK", "change_24h": 15.2, "volume": 1500000, "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "sentiment": "bullish", "sentiment_score": 0.72, "signal": "BUY"},
-                {"symbol": "WIF", "change_24h": -5.3, "volume": 2300000, "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", "sentiment": "neutral", "sentiment_score": 0.45, "signal": "NEUTRAL"},
-                {"symbol": "POPCAT", "change_24h": 42.1, "volume": 890000, "address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr", "sentiment": "very_bullish", "sentiment_score": 0.85, "signal": "STRONG_BUY"},
-                {"symbol": "MEW", "change_24h": 8.7, "volume": 650000, "address": "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5", "sentiment": "bullish", "sentiment_score": 0.61, "signal": "BUY"},
-            ]
+            # Real data only: if upstream sources are down, show a clear empty-state instead
+            # of injecting fake/placeholder tokens.
+            return DemoMenuBuilder.error_message(
+                error=(
+                    "Trending tokens are temporarily unavailable.\n\n"
+                    "This usually means DexScreener or the signal service is timing out.\n"
+                    "Try again in ~30-60 seconds."
+                ),
+                retry_action="demo:trending",
+                context_hint="trending",
+            )
         for token in trending:
             token["token_id"] = ctx.register_token_id(context, token.get("address"))
         return DemoMenuBuilder.trending_tokens(
@@ -97,15 +102,11 @@ async def handle_trading(
 
     elif action == "quick_trade":
         trending = await ctx.get_trending_with_sentiment()
-        if not trending:
-            trending = [
-                {"symbol": "BONK", "change_24h": 15.2, "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"},
-                {"symbol": "WIF", "change_24h": -5.3, "address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"},
-                {"symbol": "POPCAT", "change_24h": 42.1, "address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr"},
-            ]
+        for token in (trending or []):
+            token["token_id"] = ctx.register_token_id(context, token.get("address"))
 
         return DemoMenuBuilder.quick_trade_menu(
-            trending_tokens=trending,
+            trending_tokens=trending or [],
             positions=positions,
             sol_balance=sol_balance,
             market_regime=market_regime.get("regime", "NEUTRAL"),

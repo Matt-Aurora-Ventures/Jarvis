@@ -10,6 +10,7 @@ from telegram.constants import ParseMode
 
 from tg_bot.config import reload_config
 from tg_bot.handlers import error_handler, admin_only
+from tg_bot.handlers.ui_nav import ensure_prev_menu
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "config reloaded. fresh settings loaded.",
         parse_mode=ParseMode.MARKDOWN,
+        reply_markup=ensure_prev_menu(None),
     )
 
 
@@ -33,7 +35,11 @@ async def logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log_file = Path("logs/jarvis.log")
 
         if not log_file.exists():
-            await update.message.reply_text("no log file. nothing to show.", parse_mode=ParseMode.HTML)
+            await update.message.reply_text(
+                "no log file. nothing to show.",
+                parse_mode=ParseMode.HTML,
+                reply_markup=ensure_prev_menu(None),
+            )
             return
 
         # Read last 20 lines
@@ -46,10 +52,18 @@ async def logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 line = line[:77] + "..."
             output.append(f"<code>{line}</code>")
 
-        await update.message.reply_text("\n".join(output), parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            "\n".join(output),
+            parse_mode=ParseMode.HTML,
+            reply_markup=ensure_prev_menu(None),
+        )
     except Exception as e:
         logger.error(f"Logs error: {e}")
-        await update.message.reply_text(f"Logs error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(
+            f"Logs error: {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=ensure_prev_menu(None),
+        )
 
 
 @error_handler
@@ -136,10 +150,18 @@ async def system(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("")
         lines.append(f"\U0001f550 <b>Time:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode=ParseMode.HTML,
+            reply_markup=ensure_prev_menu(None),
+        )
     except Exception as e:
         logger.error(f"System error: {e}")
-        await update.message.reply_text(f"System error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(
+            f"System error: {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=ensure_prev_menu(None),
+        )
 
 
 @error_handler
@@ -171,11 +193,13 @@ async def config_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text(
                         f"\u2705 Set <code>{key}</code> = {value}",
                         parse_mode=ParseMode.HTML,
+                        reply_markup=ensure_prev_menu(None),
                     )
                 else:
                     await update.message.reply_text(
                         f"\u274c Failed to set {key}",
                         parse_mode=ParseMode.HTML,
+                        reply_markup=ensure_prev_menu(None),
                     )
                 return
 
@@ -198,10 +222,18 @@ async def config_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for k, v in sorted(bot_cfg.items()):
             lines.append(f"  <code>{k}</code>: {v}")
 
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode=ParseMode.HTML,
+            reply_markup=ensure_prev_menu(None),
+        )
     except Exception as e:
         logger.error(f"Config error: {e}")
-        await update.message.reply_text(f"Config error: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(
+            f"Config error: {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=ensure_prev_menu(None),
+        )
 
 
 @error_handler
