@@ -15,7 +15,7 @@ Two background processes running continuously without requiring user interventio
 - ✓ Port 65002 (Hostinger alternate) - Currently checking
 - ✓ Username: root (Hostinger default)
 - ✓ Username: jarvis (fallback)
-- ✓ Password: xsxs235645DwfAs####
+- ✓ Password: [REDACTED]
 
 **When VPS Comes Online**:
 1. Orchestrator detects connectivity on available port
@@ -177,7 +177,7 @@ ls ~/Jarvis/data/validation_proof/ | wc -l
 - Username (Primary): root
 - Username (Fallback): jarvis
 - SSH Ports: 22 (primary), 65002 (Hostinger alternate)
-- Password: xsxs235645DwfAs####
+- Password: [REDACTED]
 
 **Grok Sentiment Integration**:
 - Primary weighting: 1.0 (highest)

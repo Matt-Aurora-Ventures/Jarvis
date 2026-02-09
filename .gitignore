@@ -213,6 +213,7 @@ bots/treasury/.wallets/
 bots/treasury/.positions.json
 jarvis-sniper/.positions.json
 jarvis-sniper/scripts/.backtest-*.json
+jarvis-sniper/_tmp_npm/
 bots/treasury/.trade_history.json
 bots/treasury/.backtest_results/
 data/treasury_keypair.json

@@ -10,7 +10,7 @@
 
 ### CRITICAL ISSUE: Exposed VPS Credentials
 
-**Problem**: VPS password `xsxs235645DwfAs####` was hardcoded in 5 Python deployment scripts:
+**Problem**: VPS password `[REDACTED]` was hardcoded in 5 Python deployment scripts:
 - `scripts/deploy_with_password.py`
 - `scripts/deploy_with_retry.py`
 - `scripts/deploy_orchestrator.py`
@@ -29,7 +29,7 @@
 ```bash
 VPS_HOST=72.61.7.126
 VPS_USERNAME=root
-VPS_PASSWORD=xsxs235645DwfAs####
+VPS_PASSWORD=[REDACTED]
 VPS_SSH_PORT_PRIMARY=22
 VPS_SSH_PORT_ALTERNATE=65002
 ```
@@ -87,7 +87,7 @@ python scripts/deploy_with_password.py 72.61.7.126 root <password>
 
 **Option 3: From shell environment**
 ```bash
-export VPS_PASSWORD=xsxs235645DwfAs####
+export VPS_PASSWORD=[REDACTED]
 python scripts/deploy_orchestrator.py
 ```
 
@@ -97,8 +97,8 @@ python scripts/deploy_orchestrator.py
 
 ✅ **Security Check Passed**:
 ```bash
-grep -r "xsxs235645DwfAs####" scripts/*.py
-# Result: EMPTY (no hardcoded credentials found)
+rg -n "VPS_PASSWORD\\s*=\\s*[^\\s]+" scripts/*.py
+# Result: EMPTY (no hardcoded password assignments in scripts)
 ```
 
 ✅ **.env is protected**:
@@ -168,7 +168,7 @@ grep "os.environ.get('VPS_PASSWORD')" scripts/deploy_*.py
 ### 4. Git Safety
 ```bash
 # Verify no credentials in git history
-git log -p --all -S "xsxs235645DwfAs####"
+git log -p --all -S "VPS_PASSWORD="
 # Result: Should find only the initial commit with hardcoded value
 
 # To fully clean history (if already committed):
