@@ -78,6 +78,18 @@ export function StatusBar() {
           {sessionWalletPubkey && (
             <button
               onClick={async () => {
+                // Make session wallet activation discoverable:
+                // - If auto wallet isn't active yet, jump to the Activate modal in SniperControls.
+                // - If active, clicking copies the session wallet address (useful for funding/verification).
+                if (!autoActive) {
+                  try {
+                    window.dispatchEvent(new CustomEvent('jarvis-sniper:open-activate'));
+                  } catch {
+                    // ignore
+                  }
+                  return;
+                }
+
                 try { await navigator.clipboard.writeText(sessionWalletPubkey); } catch {}
               }}
               className={`hidden sm:flex items-center gap-2 px-3 h-9 rounded-full border transition-colors cursor-pointer ${
@@ -85,11 +97,11 @@ export function StatusBar() {
                   ? 'bg-accent-warning/10 text-accent-warning border-accent-warning/25 hover:border-accent-warning/40'
                   : 'bg-bg-tertiary text-text-muted border-border-primary hover:border-border-hover'
               }`}
-              title={autoActive ? 'Auto Wallet ACTIVE (click to copy address)' : 'Session wallet available (click to copy address)'}
+              title={autoActive ? 'Auto Wallet ACTIVE (click to copy address)' : 'Session wallet ready (click to activate auto trading)'}
             >
               <Flame className="w-4 h-4" />
               <span className="text-[10px] font-mono font-semibold uppercase tracking-wider">
-                {autoActive ? 'AUTO' : 'SESSION'}
+                {autoActive ? 'AUTO' : 'ACTIVATE'}
               </span>
               {shortSession && (
                 <span className="text-xs font-mono font-medium">{shortSession}</span>

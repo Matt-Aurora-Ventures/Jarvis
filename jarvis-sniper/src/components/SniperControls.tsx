@@ -235,6 +235,14 @@ export function SniperControls() {
     setActivateError(null);
   }
 
+  // Allow StatusBar (top wallet chip) to open the activation modal.
+  // This keeps the "auto wallet" flow discoverable and avoids adding global UI state.
+  useEffect(() => {
+    const onOpen = () => openActivate();
+    window.addEventListener('jarvis-sniper:open-activate', onOpen as EventListener);
+    return () => window.removeEventListener('jarvis-sniper:open-activate', onOpen as EventListener);
+  }, [openPositionCount, sessionBalanceSol, budget.budgetSol, config.maxConcurrentPositions, config.maxPositionSol]);
+
   function sumOpenSpentSol(): number {
     return positions
       .filter((p) => p.status === 'open')
