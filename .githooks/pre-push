@@ -19,10 +19,12 @@ elif command -v wsl >/dev/null 2>&1; then
   else
     REPO_WSL=""
   fi
-  if [ -n "${REPO_WSL:-}" ]; then
-    wsl -e bash -lc "cd '${REPO_WSL}' && python3 scripts/secret_scan_staged.py"
-    exit $?
+  if [ -z "${REPO_WSL:-}" ]; then
+    echo "ERROR: python not found and WSL path conversion failed; cannot run secret scan." >&2
+    exit 1
   fi
+  wsl -e bash -lc "cd '${REPO_WSL}' && python3 scripts/secret_scan_staged.py"
+  exit $?
 else
   echo "ERROR: python not found; cannot run secret scan." >&2
   exit 1
