@@ -226,6 +226,7 @@ export async function executeSwapFromQuote(
   quote: SwapQuote,
   signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>,
   useJito = false,
+  priorityFeeMicroLamports: number = 200_000,
 ): Promise<SwapResult> {
   const timestamp = Date.now();
 
@@ -237,7 +238,7 @@ export async function executeSwapFromQuote(
       body: JSON.stringify({
         quote,
         userPublicKey: walletAddress,
-        priorityFeeMicroLamports: 200_000,
+        priorityFeeMicroLamports,
       }),
     });
 

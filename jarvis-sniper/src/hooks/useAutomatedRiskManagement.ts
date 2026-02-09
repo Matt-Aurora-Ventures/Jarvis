@@ -215,14 +215,27 @@ export function useAutomatedRiskManagement() {
         }
       }
 
-      // Fetch a realizable sell quote (try a small slippage waterfall).
+      // Fetch a realizable sell quote (slippage waterfall).
+      // For SL/Trail/Expiry, we allow more slippage to maximize exit probability on micro-caps.
       const slippageBase = state.config.slippageBps;
-      const quote =
-        (await getSellQuote(pos.mint, amountLamports, slippageBase)) ??
-        (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 300))) ??
-        (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 500))) ??
-        (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 1000))) ??
-        (await getSellQuote(pos.mint, amountLamports, 1500));
+      const waterfall = [
+        slippageBase,
+        Math.max(slippageBase, 300),
+        Math.max(slippageBase, 500),
+        Math.max(slippageBase, 1000),
+        1500,
+        ...(trigger === 'sl_hit' || trigger === 'trail_stop' || trigger === 'expired'
+          ? [3000, 5000, 10_000]
+          : []),
+      ]
+        .filter((n, i, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === i)
+        .sort((a, b) => a - b);
+
+      let quote = null as Awaited<ReturnType<typeof getSellQuote>>;
+      for (const bps of waterfall) {
+        quote = await getSellQuote(pos.mint, amountLamports, bps);
+        if (quote) break;
+      }
 
       if (!quote) {
         updatePosition(id, {
@@ -254,12 +267,17 @@ export function useAutomatedRiskManagement() {
         return tx;
       };
 
+      // Priority fee: small bump on emergency exits to reduce timeout risk.
+      const priorityFeeMicroLamports =
+        trigger === 'tp_hit' ? 200_000 : 350_000;
+
       const result = await executeSwapFromQuote(
         connection,
         sessionWalletPubkey!,
         quote,
         signWithSession,
         state.config.useJito,
+        priorityFeeMicroLamports,
       );
 
       if (!result.success) throw new Error(result.error || 'Sell failed');

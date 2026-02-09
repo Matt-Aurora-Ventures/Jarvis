@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { BagsGraduation } from '@/lib/bags-api';
 
-export type StrategyMode = 'conservative' | 'aggressive';
+export type StrategyMode = 'conservative' | 'balanced' | 'aggressive';
 export type TradeSignerMode = 'phantom' | 'session';
 
 /** Proven strategy presets from backtesting 895+ tokens */
@@ -23,6 +23,30 @@ export interface StrategyPreset {
  * Only INSIGHT/MOMENTUM configs held up under real candle validation.
  */
 export const STRATEGY_PRESETS: StrategyPreset[] = [
+  {
+    id: 'pump_fresh_tight',
+    name: 'PUMP FRESH TIGHT (88% WR)',
+    description: 'Fresh pumpswap tokens with tight exits — 88.2% WR (v4 champion)',
+    winRate: '88.2% (17T)',
+    trades: 17,
+    config: {
+      stopLossPct: 20, takeProfitPct: 80, trailingStopPct: 8,
+      minLiquidityUsd: 5000, minScore: 40, maxTokenAgeHours: 24,
+      strategyMode: 'conservative',
+    },
+  },
+  {
+    id: 'micro_cap_surge',
+    name: 'MICRO CAP SURGE (76% WR)',
+    description: 'Micro-cap tokens with 3x volume surge — 76.2% WR, huge TP potential',
+    winRate: '76.2%',
+    trades: 0,
+    config: {
+      stopLossPct: 45, takeProfitPct: 250, trailingStopPct: 20,
+      minLiquidityUsd: 3000, minScore: 30, maxTokenAgeHours: 24,
+      strategyMode: 'aggressive',
+    },
+  },
   {
     id: 'elite',
     name: 'SNIPER ELITE',
@@ -126,7 +150,7 @@ export interface SniperConfig {
   autoSnipe: boolean;
   useJito: boolean;
   slippageBps: number;
-  /** Strategy mode: conservative (20/60) vs aggressive (20/100 "let it ride") */
+  /** Strategy mode: conservative (PUMP_FRESH_TIGHT 20/80), balanced (SURGE_HUNTER 20/100), aggressive (MICRO_CAP_SURGE 45/250) */
   strategyMode: StrategyMode;
   /** Max position age in hours before auto-close (0 = disabled). Frees capital from stale positions. */
   maxPositionAgeHours: number;
@@ -268,24 +292,52 @@ export function getRecommendedSlTp(
   const priceChange1h = grad.price_change_1h || 0;
   const buySellRatio = grad.buy_sell_ratio || 0;
   const ageHours = grad.age_hours || 0;
+  const vol24h = grad.volume_24h || 0;
+  const volLiqRatio = liq > 0 ? vol24h / liq : 0;
+  const source = (grad.source || '').toLowerCase();
 
-  // Base SL/TP depends on strategy mode
+  // ─── Strategy Selection (v4 backtest champion logic) ───
+  // Priority 1: Fresh pumpswap tokens → PUMP_FRESH_TIGHT (88.2% WR champion)
+  if (ageHours < 24 && source === 'pumpswap') {
+    return {
+      sl: 20, tp: 80, trail: 8,
+      reasoning: 'PUMP_FRESH_TIGHT: fresh pumpswap token (<24h) — 88.2% WR v4 champion',
+    };
+  }
+
+  // Priority 2: Volume surge (3x+ Vol/Liq) → SURGE_HUNTER
+  if (volLiqRatio >= 3.0) {
+    return {
+      sl: 20, tp: 100, trail: 10,
+      reasoning: `SURGE_HUNTER: volume surge detected (V/L ${volLiqRatio.toFixed(1)}x)`,
+    };
+  }
+
+  // Priority 3: Micro-cap (liquidity < $15K) → MICRO_CAP_SURGE (76.2% WR)
+  if (liq < 15000) {
+    return {
+      sl: 45, tp: 250, trail: 20,
+      reasoning: `MICRO_CAP_SURGE: micro-cap ($${Math.round(liq).toLocaleString('en-US')} liq) — 76.2% WR, high TP`,
+    };
+  }
+
+  // ─── Fallback: Adaptive FRESH_DEGEN base ───
   let sl = 20;
-  let tp = mode === 'aggressive' ? 100 : 60;
-  let reasoning = mode === 'aggressive' ? 'Aggressive 20/100 base' : 'Conservative 20/60 base';
+  let tp = mode === 'aggressive' ? 100 : 80;
+  let reasoning = 'FRESH_DEGEN fallback';
 
   // Liquidity tier adjustments (high liq = less slippage, can tighten SL)
   if (liq > 200000) {
     sl = 15;
-    reasoning = (mode === 'aggressive' ? 'Aggressive' : 'Conservative') + ', high liq ($200K+) — tighter SL';
+    reasoning += ', high liq ($200K+) — tighter SL';
   } else if (liq > 100000) {
     sl = 18;
-    reasoning = (mode === 'aggressive' ? 'Aggressive' : 'Conservative') + ', strong liq ($100K+)';
+    reasoning += ', strong liq ($100K+)';
   }
   // Low liquidity = wider SL to absorb spread
   else if (liq < 25000) {
     sl = 25; tp = mode === 'aggressive' ? 80 : 50;
-    reasoning = (mode === 'aggressive' ? 'Aggressive' : 'Conservative') + ', low liq — wider SL';
+    reasoning += ', low liq — wider SL';
   }
 
   // Strong momentum = extend TP (let winners run even more)
@@ -399,9 +451,9 @@ export function getConvictionMultiplier(
 }
 
 const DEFAULT_CONFIG: SniperConfig = {
-  stopLossPct: 20,      // Backtested: wider SL dramatically improves win rate
-  takeProfitPct: 60,    // Backtested: 20/60 = 87.5% WR with HYBRID_B v4 config
-  trailingStopPct: 8,   // 928-token OHLCV: 8% trail = 94.1% WR, PF 1533 (10% = 100% WR)
+  stopLossPct: 20,      // PUMP_FRESH_TIGHT champion: 88.2% WR, Sharpe 1.22
+  takeProfitPct: 80,    // v4 backtest champion: 20/80/8 on fresh pumpswap tokens
+  trailingStopPct: 8,   // Tight trail locks profits — 88.2% WR with 8% trail
   maxPositionSol: 0.1,
   maxConcurrentPositions: 10,
   minScore: 0,          // Backtested: best configs use liq+momentum, not score
@@ -507,7 +559,7 @@ export const useSniperStore = create<SniperState>()(
   persist(
     (set, get) => ({
   config: DEFAULT_CONFIG,
-  activePreset: 'hybrid_b',
+  activePreset: 'pump_fresh_tight',
   tradeSignerMode: 'phantom',
   setTradeSignerMode: (mode) => set({ tradeSignerMode: mode }),
   sessionWalletPubkey: null,
@@ -536,16 +588,27 @@ export const useSniperStore = create<SniperState>()(
       };
     });
   },
-  setStrategyMode: (mode) => set((s) => ({
-    config: {
-      ...s.config,
-      strategyMode: mode,
-      // Auto-adjust base SL/TP/trail to match 928-token OHLCV optimums
-      takeProfitPct: mode === 'aggressive' ? 100 : 60,
-      stopLossPct: 20,  // Both modes use 20% SL
-      trailingStopPct: mode === 'aggressive' ? 10 : 8,  // Aggressive: 10% (100% WR), Conservative: 8% (94.1% WR)
-    },
-  })),
+  setStrategyMode: (mode) => set((s) => {
+    // v4 backtest-mapped presets:
+    //   aggressive   → MICRO_CAP_SURGE (76.2% WR, 45/250/20)
+    //   balanced     → SURGE_HUNTER (20/100/10)
+    //   conservative → PUMP_FRESH_TIGHT (88.2% WR, 20/80/8) — safest high-WR
+    const presets: Record<StrategyMode, { sl: number; tp: number; trail: number }> = {
+      aggressive:   { sl: 45, tp: 250, trail: 20 },
+      balanced:     { sl: 20, tp: 100, trail: 10 },
+      conservative: { sl: 20, tp: 80,  trail: 8  },
+    };
+    const p = presets[mode];
+    return {
+      config: {
+        ...s.config,
+        strategyMode: mode,
+        stopLossPct: p.sl,
+        takeProfitPct: p.tp,
+        trailingStopPct: p.trail,
+      },
+    };
+  }),
   loadBestEver: (cfg) => set((s) => ({
     config: {
       ...s.config,

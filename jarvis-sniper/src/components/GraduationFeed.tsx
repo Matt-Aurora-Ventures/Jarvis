@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Clock, Droplets, BarChart3, ExternalLink, Crosshair, Shield, Target, Check, Ban, Copy } from 'lucide-react';
-import { useSniperStore } from '@/stores/useSniperStore';
+import { useSniperStore, type StrategyMode } from '@/stores/useSniperStore';
 import { getScoreTier, TIER_CONFIG, type BagsGraduation } from '@/lib/bags-api';
 import { getRecommendedSlTp, getConvictionMultiplier } from '@/stores/useSniperStore';
 import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
@@ -164,7 +164,7 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
   budgetAuthorized: boolean;
   walletReady: boolean;
   minLiquidityUsd: number;
-  strategyMode: 'conservative' | 'aggressive';
+  strategyMode: StrategyMode;
 }) {
   const tier = getScoreTier(grad.score);
   const tierCfg = TIER_CONFIG[tier];
