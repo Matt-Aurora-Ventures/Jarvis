@@ -5,6 +5,24 @@ if command -v python >/dev/null 2>&1; then
   PYTHON_BIN=python
 elif command -v python3 >/dev/null 2>&1; then
   PYTHON_BIN=python3
+elif command -v wsl >/dev/null 2>&1; then
+  # Windows fallback: run the scan inside WSL.
+  # We convert the current repo path to a WSL path and execute there.
+  if command -v cygpath >/dev/null 2>&1; then
+    REPO_WIN="$(cygpath -w "$PWD")"
+  else
+    # MSYS typically supports `pwd -W`; ignore errors if unavailable.
+    REPO_WIN="$(pwd -W 2>/dev/null || echo "")"
+  fi
+  if [ -n "${REPO_WIN:-}" ]; then
+    REPO_WSL="$(wsl wslpath "${REPO_WIN}" 2>/dev/null || echo "")"
+  else
+    REPO_WSL=""
+  fi
+  if [ -n "${REPO_WSL:-}" ]; then
+    wsl -e bash -lc "cd '${REPO_WSL}' && python3 scripts/secret_scan_staged.py"
+    exit $?
+  fi
 else
   echo "ERROR: python not found; cannot run secret scan." >&2
   exit 1
