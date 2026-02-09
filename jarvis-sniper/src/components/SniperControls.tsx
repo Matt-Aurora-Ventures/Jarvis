@@ -1,13 +1,53 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck } from 'lucide-react';
+import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3 } from 'lucide-react';
 import { useSniperStore, type SniperConfig, type StrategyMode, STRATEGY_PRESETS } from '@/stores/useSniperStore';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
 
 const BUDGET_PRESETS = [0.1, 0.2, 0.5, 1.0];
 const LIQUIDITY_PRESETS_USD = [10000, 25000, 40000, 50000];
+
+/** Rich strategy descriptions shown in the breakdown panel */
+const STRATEGY_INFO: Record<string, { summary: string; optimal: string; risk: string; params: string }> = {
+  momentum: {
+    summary: 'Targets high-conviction tokens with strong volume activity and decent scores. Casts a wider net with no liquidity floor.',
+    optimal: 'Best in active markets with many new graduates. High volume-to-liquidity ratios signal organic demand, not wash trading.',
+    risk: 'No minimum liquidity means higher slippage risk on entry/exit. Use smaller position sizes.',
+    params: 'SL 20% | TP 60% | Trail 8% | Score 50+ | Vol/Liq 3+',
+  },
+  insight_j: {
+    summary: 'Strict quality filter requiring $25K+ liquidity, young tokens (<100h), and positive momentum. High selectivity = fewer but better trades.',
+    optimal: 'Works best when you want quality over quantity. The 86% win rate comes from only touching tokens with real market depth.',
+    risk: 'Very selective — may go long periods without a trade. Requires patience for the right setup.',
+    params: 'SL 20% | TP 60% | Trail 8% | Liq $25K+ | Age <100h',
+  },
+  hot: {
+    summary: 'Balanced approach: requires both a minimum score (60+) and liquidity ($10K+). Generates the most trades of any strategy.',
+    optimal: 'Ideal for active trading sessions. More opportunities but a wider spread of outcomes. Volume-weighted for real activity.',
+    risk: 'Lower win rate (49%) means you need discipline with stop losses. The volume of trades smooths returns over time.',
+    params: 'SL 20% | TP 60% | Trail 8% | Score 60+ | Liq $10K+',
+  },
+  hybrid_b: {
+    summary: 'The battle-tested default. Combines all HYBRID-B insight filters with a $40K liquidity floor. 100% WR in OHLCV validation.',
+    optimal: 'The go-to for most sessions. Strong enough filters to avoid rugs, loose enough to still find trades regularly.',
+    risk: 'Small sample size (10 trades in backtest). Performance may regress to mean, but the filter logic is sound.',
+    params: 'SL 20% | TP 60% | Trail 8% | Liq $40K+ | All filters on',
+  },
+  let_it_ride: {
+    summary: 'Aggressive mode with 100% take-profit and tight 5% trailing stop. Designed to capture large moves while protecting gains.',
+    optimal: 'Perfect for bull markets or when scanning shows strong momentum. The tight trail locks in gains on any pullback.',
+    risk: 'The 5% trail means early exits on normal volatility. Best when conviction is very high on a specific token.',
+    params: 'SL 20% | TP 100% | Trail 5% | Liq $40K+ | Aggressive mode',
+  },
+  insight_i: {
+    summary: 'The strictest preset: $50K liquidity, age under 200h, and B/S ratio in the 1-3 sweet spot. Maximum quality filter.',
+    optimal: 'When you want to be extremely selective. Only trades tokens with institutional-grade liquidity and balanced order flow.',
+    risk: 'Very few tokens pass all gates. You may see 0 trades for hours. Best combined with patience and larger position sizes.',
+    params: 'SL 20% | TP 60% | Trail 8% | Liq $50K+ | B/S 1-3 | Age <200h',
+  },
+};
 
 export function SniperControls() {
   const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining } = useSniperStore();
@@ -192,6 +232,42 @@ export function SniperControls() {
           );
         })}
       </div>
+
+      {/* ─── STRATEGY BREAKDOWN BOX ─── */}
+      {STRATEGY_INFO[activePreset] && (() => {
+        const info = STRATEGY_INFO[activePreset];
+        const preset = STRATEGY_PRESETS.find(p => p.id === activePreset);
+        const isAgg = preset?.config.strategyMode === 'aggressive';
+        return (
+          <div className={`mb-4 rounded-lg border overflow-hidden ${isAgg ? 'border-accent-warning/20 bg-accent-warning/[0.03]' : 'border-accent-neon/20 bg-accent-neon/[0.03]'}`}>
+            <div className={`flex items-center gap-2 px-3 py-2 border-b ${isAgg ? 'border-accent-warning/10' : 'border-accent-neon/10'}`}>
+              <Info className={`w-3.5 h-3.5 ${isAgg ? 'text-accent-warning' : 'text-accent-neon'}`} />
+              <span className={`text-[11px] font-bold ${isAgg ? 'text-accent-warning' : 'text-accent-neon'}`}>{preset?.name}</span>
+              <span className={`ml-auto text-[9px] font-mono ${isAgg ? 'text-accent-warning/70' : 'text-accent-neon/70'}`}>{preset?.winRate}</span>
+            </div>
+            <div className="px-3 py-2.5 space-y-2.5">
+              <p className="text-[10px] text-text-secondary leading-relaxed">{info.summary}</p>
+              <div className="flex items-start gap-1.5">
+                <BarChart3 className="w-3 h-3 text-accent-neon flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-[9px] font-bold text-accent-neon uppercase tracking-wide">Best when</span>
+                  <p className="text-[10px] text-text-muted leading-relaxed mt-0.5">{info.optimal}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-1.5">
+                <AlertCircle className="w-3 h-3 text-accent-warning flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-[9px] font-bold text-accent-warning uppercase tracking-wide">Watch out</span>
+                  <p className="text-[10px] text-text-muted leading-relaxed mt-0.5">{info.risk}</p>
+                </div>
+              </div>
+              <div className="pt-1.5 border-t border-border-primary/50">
+                <span className="text-[9px] font-mono text-text-muted/70">{info.params}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {!connected && (
         <div className="flex items-center gap-2 p-2.5 rounded-lg bg-accent-warning/10 border border-accent-warning/20 mb-4">
