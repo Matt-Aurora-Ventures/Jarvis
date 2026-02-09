@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { Sparkles, Clock, Droplets, BarChart3, ExternalLink, Crosshair, TrendingUp, TrendingDown, Shield, Target, Check, ArrowRightLeft, Timer, Zap, Ban } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Sparkles, Clock, Droplets, BarChart3, ExternalLink, Crosshair, TrendingUp, TrendingDown, Shield, Target, Check, ArrowRightLeft, Timer, Zap, Ban, Copy } from 'lucide-react';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { getScoreTier, TIER_CONFIG, type BagsGraduation } from '@/lib/bags-api';
 import { getRecommendedSlTp, getConvictionMultiplier } from '@/stores/useSniperStore';
@@ -121,6 +121,37 @@ export function GraduationFeed() {
   );
 }
 
+function CopyableAddress({ mint }: { mint: string }) {
+  const [copied, setCopied] = useState(false);
+  const truncated = `${mint.slice(0, 4)}...${mint.slice(-4)}`;
+
+  async function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(mint);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Fallback for non-HTTPS or blocked clipboard
+    }
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1 text-[9px] font-mono text-text-muted/60 hover:text-text-muted transition-colors mb-1.5 group/addr"
+      title={mint}
+    >
+      {copied ? (
+        <Check className="w-2.5 h-2.5 text-accent-neon" />
+      ) : (
+        <Copy className="w-2.5 h-2.5 opacity-40 group-hover/addr:opacity-100 transition-opacity" />
+      )}
+      <span className={copied ? 'text-accent-neon' : ''}>{copied ? 'Copied!' : truncated}</span>
+    </button>
+  );
+}
+
 function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnipe, onChart, budgetAuthorized, walletReady, minLiquidityUsd, strategyMode }: {
   grad: BagsGraduation;
   isNew: boolean;
@@ -203,6 +234,9 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
           {grad.score.toFixed(0)}
         </span>
       </div>
+
+      {/* Contract address (clickable to copy) */}
+      <CopyableAddress mint={grad.mint} />
 
       {/* Metrics row */}
       <div className="flex items-center gap-3 text-[10px] text-text-muted font-mono mb-2">

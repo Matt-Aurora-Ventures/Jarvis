@@ -226,6 +226,9 @@ export function useAutomatedRiskManagement() {
                   timestamp: Date.now(),
                 });
               }
+            } else if (pos.exitPending) {
+              // No trigger condition met AND quote unavailable — clear stale pending marker.
+              updatePosition(pos.id, { exitPending: undefined });
             }
             continue;
           }

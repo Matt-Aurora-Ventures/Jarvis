@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Maximize2, Minimize2, ExternalLink, BarChart3, RefreshCw, GripHorizontal } from 'lucide-react';
+import { X, Maximize2, Minimize2, ExternalLink, BarChart3, RefreshCw, GripHorizontal, Copy, Check } from 'lucide-react';
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { useSniperStore } from '@/stores/useSniperStore';
 
@@ -34,6 +34,7 @@ export function TokenChart() {
   const [iframeKey, setIframeKey] = useState(0);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [isDragging, setIsDragging] = useState(false);
+  const [mintCopied, setMintCopied] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
   const startHeight = useRef(0);
@@ -98,9 +99,16 @@ export function TokenChart() {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-accent-neon sniper-dot" />
           <span className="text-sm font-bold text-text-primary">{symbol}</span>
-          <span className="text-[10px] font-mono text-text-muted truncate max-w-[140px]">
-            {selectedMint.slice(0, 8)}...{selectedMint.slice(-6)}
-          </span>
+          <button
+            onClick={async () => {
+              try { await navigator.clipboard.writeText(selectedMint); setMintCopied(true); setTimeout(() => setMintCopied(false), 1500); } catch {}
+            }}
+            className="flex items-center gap-1 text-[10px] font-mono text-text-muted hover:text-text-primary transition-colors group/mint"
+            title="Click to copy contract address"
+          >
+            {mintCopied ? <Check className="w-3 h-3 text-accent-neon" /> : <Copy className="w-3 h-3 opacity-40 group-hover/mint:opacity-100 transition-opacity" />}
+            <span className={mintCopied ? 'text-accent-neon' : ''}>{mintCopied ? 'Copied!' : selectedMint}</span>
+          </button>
         </div>
         <div className="flex items-center gap-1.5">
           {/* Chart provider switcher */}

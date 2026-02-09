@@ -364,15 +364,29 @@ export const useSniperStore = create<SniperState>()(
     (set, get) => ({
   config: DEFAULT_CONFIG,
   activePreset: 'hybrid_b',
-  setConfig: (partial) => set((s) => ({ config: { ...s.config, ...partial }, skippedMints: new Set() })),
+  setConfig: (partial) => set((s) => {
+    // When trailing stop changes, reset HWM on open positions so the trail starts fresh
+    const trailChanged = partial.trailingStopPct !== undefined && partial.trailingStopPct !== s.config.trailingStopPct;
+    const positions = trailChanged
+      ? s.positions.map((p) => p.status === 'open' ? { ...p, highWaterMarkPct: Math.max(p.pnlPercent, 0), exitPending: undefined } : p)
+      : s.positions;
+    return { config: { ...s.config, ...partial }, skippedMints: new Set(), positions };
+  }),
   loadPreset: (presetId) => {
     const preset = STRATEGY_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
-    set((s) => ({
-      activePreset: presetId,
-      config: { ...s.config, ...preset.config },
-      skippedMints: new Set(), // Re-evaluate with new filter params
-    }));
+    set((s) => {
+      const trailChanged = preset.config.trailingStopPct !== undefined && preset.config.trailingStopPct !== s.config.trailingStopPct;
+      const positions = trailChanged
+        ? s.positions.map((p) => p.status === 'open' ? { ...p, highWaterMarkPct: Math.max(p.pnlPercent, 0), exitPending: undefined } : p)
+        : s.positions;
+      return {
+        activePreset: presetId,
+        config: { ...s.config, ...preset.config },
+        skippedMints: new Set(),
+        positions,
+      };
+    });
   },
   setStrategyMode: (mode) => set((s) => ({
     config: {

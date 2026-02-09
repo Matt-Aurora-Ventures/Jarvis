@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { X, DollarSign, Clock, ExternalLink, Shield, Target, BarChart3, RotateCcw, Loader2, TrendingUp } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { X, DollarSign, Clock, ExternalLink, Shield, Target, BarChart3, RotateCcw, Loader2, TrendingUp, Trash2 } from 'lucide-react';
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
@@ -20,6 +20,8 @@ export function PositionsPanel() {
   const { connected, address, signTransaction } = usePhantomWallet();
   const connectionRef = useRef<Connection | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmCloseAll, setConfirmCloseAll] = useState(false);
+  const [closingAllCount, setClosingAllCount] = useState<{ done: number; total: number } | null>(null);
   const openPositions = positions.filter(p => p.status === 'open');
   const closedPositions = positions.filter(p => p.status !== 'open').slice(0, 10);
 
@@ -78,8 +80,10 @@ export function PositionsPanel() {
       const quote =
         (await getSellQuote(pos.mint, amountLamports, slippageBase)) ??
         (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 300))) ??
-        (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 500)));
-      if (!quote) throw new Error('No sell quote found — try higher slippage or liquidity may be pulled');
+        (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 500))) ??
+        (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 1000))) ??
+        (await getSellQuote(pos.mint, amountLamports, 1500));
+      if (!quote) throw new Error('No sell route found at up to 15% slippage — token may have no liquidity. Use Write Off to remove.');
 
       // Realizable exit value from the quote (better than chart prices for low-liquidity tokens).
       const exitValueSol = Number(BigInt(quote.outAmount)) / 1e9;
@@ -132,6 +136,40 @@ export function PositionsPanel() {
     setConfirmReset(false);
   }
 
+  function handleWriteOff(id: string) {
+    const pos = positions.find(p => p.id === id);
+    if (!pos) return;
+    updatePosition(id, { pnlPercent: -100, pnlSol: -pos.solInvested, exitPending: undefined });
+    closePosition(id, 'sl_hit');
+    addExecution({
+      id: `writeoff-${Date.now()}-${id.slice(-4)}`,
+      type: 'sl_exit',
+      symbol: pos.symbol,
+      mint: pos.mint,
+      amount: pos.solInvested,
+      pnlPercent: -100,
+      reason: `Written off (no liquidity) — ${pos.solInvested.toFixed(3)} SOL lost`,
+      timestamp: Date.now(),
+    });
+  }
+
+  async function handleCloseAll() {
+    if (!confirmCloseAll) {
+      setConfirmCloseAll(true);
+      setTimeout(() => setConfirmCloseAll(false), 3000);
+      return;
+    }
+    setConfirmCloseAll(false);
+    const toClose = openPositions.filter(p => !p.isClosing);
+    if (toClose.length === 0) return;
+    setClosingAllCount({ done: 0, total: toClose.length });
+    for (let i = 0; i < toClose.length; i++) {
+      setClosingAllCount({ done: i, total: toClose.length });
+      await handleClose(toClose[i].id, 'closed');
+    }
+    setClosingAllCount(null);
+  }
+
   return (
     <div className="card-glass p-4">
       {/* Header */}
@@ -148,6 +186,36 @@ export function PositionsPanel() {
         </div>
       </div>
 
+      {/* ─── SESSION STATS BAR ─── */}
+      {totalTrades > 0 && (
+        <div className="grid grid-cols-4 gap-2 mb-3 p-2.5 rounded-lg bg-bg-secondary border border-border-primary">
+          <div className="flex flex-col items-center">
+            <span className="text-[9px] text-text-muted uppercase tracking-wider">Trades</span>
+            <span className="text-xs font-bold font-mono text-text-primary">{totalTrades}</span>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="text-[9px] text-text-muted uppercase tracking-wider">Win Rate</span>
+            <span className={`text-xs font-bold font-mono ${totalTrades > 0 && winCount / totalTrades >= 0.5 ? 'text-accent-neon' : 'text-accent-error'}`}>
+              {totalTrades > 0 ? `${Math.round((winCount / totalTrades) * 100)}%` : '—'}
+            </span>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="text-[9px] text-text-muted uppercase tracking-wider">W / L</span>
+            <span className="text-xs font-bold font-mono">
+              <span className="text-accent-neon">{winCount}</span>
+              <span className="text-text-muted/50"> / </span>
+              <span className="text-accent-error">{lossCount}</span>
+            </span>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="text-[9px] text-text-muted uppercase tracking-wider">Net PnL</span>
+            <span className={`text-xs font-bold font-mono ${totalPnl >= 0 ? 'text-accent-neon' : 'text-accent-error'}`}>
+              {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(3)}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Reset Record button — only visible when no open positions and there's data */}
       {canReset && (
         <button
@@ -160,6 +228,38 @@ export function PositionsPanel() {
         >
           <RotateCcw className="w-3 h-3" />
           {confirmReset ? 'Click again to confirm reset' : `Reset Record (${totalTrades} trades, ${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(3)} SOL)`}
+        </button>
+      )}
+
+      {/* Close All button — visible when 2+ open positions */}
+      {openPositions.length >= 2 && (
+        <button
+          onClick={handleCloseAll}
+          disabled={!!closingAllCount}
+          className={`w-full mb-3 py-2 rounded-lg text-[11px] font-semibold transition-all flex items-center justify-center gap-1.5 ${
+            closingAllCount
+              ? 'bg-accent-warning/15 text-accent-warning border border-accent-warning/30 cursor-wait'
+              : confirmCloseAll
+                ? 'bg-accent-error/20 text-accent-error border border-accent-error/40 animate-pulse'
+                : 'bg-accent-error/[0.06] text-accent-error/80 border border-accent-error/20 hover:border-accent-error/40 hover:text-accent-error'
+          }`}
+        >
+          {closingAllCount ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Closing {closingAllCount.done + 1}/{closingAllCount.total}...
+            </>
+          ) : confirmCloseAll ? (
+            <>
+              <X className="w-3 h-3" />
+              Click again to close all {openPositions.length} positions
+            </>
+          ) : (
+            <>
+              <X className="w-3 h-3" />
+              Close All ({openPositions.length})
+            </>
+          )}
         </button>
       )}
 
@@ -179,6 +279,7 @@ export function PositionsPanel() {
               pos={pos}
               isSelected={selectedMint === pos.mint}
               onClose={handleClose}
+              onWriteOff={handleWriteOff}
               onSelect={() => setSelectedMint(pos.mint)}
             />
           ))}
@@ -213,19 +314,28 @@ export function PositionsPanel() {
   );
 }
 
-function PositionRow({ pos, isSelected, onClose, onSelect }: {
+function PositionRow({ pos, isSelected, onClose, onWriteOff, onSelect }: {
   pos: any;
   isSelected: boolean;
   onClose: (id: string, status?: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' | 'closed') => void | Promise<void>;
+  onWriteOff: (id: string) => void;
   onSelect: () => void;
 }) {
   const { connected, connecting, connect } = usePhantomWallet();
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick(n => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
   const ageMin = Math.floor((Date.now() - pos.entryTime) / 60000);
   const ageLabel = ageMin < 1 ? '<1m' : ageMin < 60 ? `${ageMin}m` : `${(ageMin / 60).toFixed(1)}h`;
   const maxAgeHours = useSniperStore.getState().config.maxPositionAgeHours ?? 4;
   const ageHours = ageMin / 60;
-  const nearExpiry = maxAgeHours > 0 && ageHours >= maxAgeHours * 0.75; // warn at 75% of max age
+  const nearExpiry = maxAgeHours > 0 && ageHours >= maxAgeHours * 0.75;
   const ageColor = nearExpiry ? 'text-accent-warning' : 'text-text-muted';
+  // Countdown to expiry
+  const remainingMin = maxAgeHours > 0 ? Math.max(0, maxAgeHours * 60 - ageMin) : -1;
+  const countdownLabel = remainingMin < 0 ? '' : remainingMin === 0 ? 'EXPIRED' : remainingMin < 60 ? `${remainingMin}m left` : `${(remainingMin / 60).toFixed(1)}h left`;
 
   const cfg = useSniperStore.getState().config;
   const useRecommendedExits = cfg.useRecommendedExits !== false;
@@ -236,11 +346,11 @@ function PositionRow({ pos, isSelected, onClose, onSelect }: {
   const trailPct = cfg.trailingStopPct;
   const hwm = pos.highWaterMarkPct ?? 0;
 
-  // Trigger proximity detection
+  // Trigger proximity detection (trail only arms when HWM >= trail%, matching risk manager fix)
   const nearSl = pos.pnlPercent <= -(sl * 0.8);
   const nearTp = pos.pnlPercent >= (tp * 0.8);
-  const trailDrop = trailPct > 0 && hwm > 0 ? hwm - pos.pnlPercent : 0;
-  const nearTrail = trailPct > 0 && hwm > 0 && trailDrop >= (trailPct * 0.8);
+  const trailDrop = trailPct > 0 && hwm >= trailPct ? hwm - pos.pnlPercent : 0;
+  const nearTrail = trailPct > 0 && hwm >= trailPct && trailDrop >= (trailPct * 0.8);
   const hasExitPending = !!pos.exitPending;
   const nearTrigger = nearSl || nearTp || nearTrail || nearExpiry || hasExitPending;
 
@@ -327,6 +437,14 @@ function PositionRow({ pos, isSelected, onClose, onSelect }: {
             )
           )}
           <button
+            onClick={(e) => { e.stopPropagation(); onWriteOff(pos.id); }}
+            disabled={pos.isClosing}
+            className="w-6 h-6 rounded-full flex items-center justify-center transition-all bg-text-muted/5 text-text-muted/50 hover:bg-accent-error/10 hover:text-accent-error"
+            title="Write off (mark as -100% loss, no sell)"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+          <button
             onClick={(e) => { e.stopPropagation(); void onClose(pos.id, 'closed'); }}
             disabled={pos.isClosing}
             className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
@@ -334,6 +452,7 @@ function PositionRow({ pos, isSelected, onClose, onSelect }: {
                 ? 'bg-bg-tertiary text-text-muted cursor-not-allowed'
                 : 'bg-accent-error/10 text-accent-error hover:bg-accent-error/20'
             }`}
+            title="Sell via Phantom"
           >
             {pos.isClosing ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
           </button>
@@ -343,7 +462,14 @@ function PositionRow({ pos, isSelected, onClose, onSelect }: {
       {/* Per-position SL/TP + age */}
       <div className="flex items-center gap-2 text-[9px] font-mono text-text-muted">
         <Clock className={`w-3 h-3 ${ageColor}`} />
-        <span className={ageColor}>{ageLabel}{nearExpiry ? ' ⏳' : ''}</span>
+        <span className={ageColor}>{ageLabel}</span>
+        {countdownLabel && (
+          <>
+            <span className={`${nearExpiry ? 'text-accent-warning font-semibold' : 'text-text-muted/60'}`}>
+              ({countdownLabel})
+            </span>
+          </>
+        )}
         <span className="text-text-muted/50">|</span>
         <span className="flex items-center gap-0.5 text-accent-error">
           <Shield className="w-2.5 h-2.5" /> SL -{sl}%

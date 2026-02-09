@@ -3,8 +3,78 @@
 import { useState, useEffect } from 'react';
 import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3 } from 'lucide-react';
 import { useSniperStore, type SniperConfig, type StrategyMode, STRATEGY_PRESETS } from '@/stores/useSniperStore';
+import type { BagsGraduation } from '@/lib/bags-api';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
+
+/**
+ * Analyze the current scanner feed and suggest the best strategy preset.
+ * Pure function — no side effects, no store writes.
+ */
+function suggestStrategy(graduations: BagsGraduation[]): { presetId: string; reason: string } | null {
+  if (graduations.length < 3) return null; // need enough data to decide
+
+  // Compute market statistics from the feed
+  const liqs = graduations.map(g => g.liquidity || 0).filter(l => l > 0);
+  const avgLiq = liqs.length > 0 ? liqs.reduce((a, b) => a + b, 0) / liqs.length : 0;
+  const medianLiq = liqs.length > 0 ? liqs.sort((a, b) => a - b)[Math.floor(liqs.length / 2)] : 0;
+
+  const momPositive = graduations.filter(g => (g.price_change_1h ?? 0) > 0).length;
+  const momPct = momPositive / graduations.length;
+
+  const vols = graduations.map(g => g.volume_24h || 0).filter(v => v > 0);
+  const avgVol = vols.length > 0 ? vols.reduce((a, b) => a + b, 0) / vols.length : 0;
+  const highVolCount = graduations.filter(g => {
+    const l = g.liquidity || 0;
+    const v = g.volume_24h || 0;
+    return l > 0 && v / l >= 3;
+  }).length;
+
+  // Count tokens passing each preset's minimum liquidity gate
+  const countAbove = (usd: number) => liqs.filter(l => l >= usd).length;
+  const above10k = countAbove(10000);
+  const above25k = countAbove(25000);
+  const above40k = countAbove(40000);
+  const above50k = countAbove(50000);
+
+  // Decision tree (simple, interpretable)
+  // 1. Strong bull momentum + high volume → LET IT RIDE
+  if (momPct >= 0.6 && highVolCount >= 3 && above40k >= 3) {
+    return { presetId: 'let_it_ride', reason: `${Math.round(momPct * 100)}% momentum + high vol activity` };
+  }
+
+  // 2. Many high-vol tokens but mixed momentum → MOMENTUM (wide net)
+  if (highVolCount >= 4 && above10k >= 5) {
+    return { presetId: 'momentum', reason: `${highVolCount} high Vol/Liq tokens in feed` };
+  }
+
+  // 3. Plenty of tokens above $40K but not wild momentum → HYBRID-B (balanced default)
+  if (above40k >= 4) {
+    return { presetId: 'hybrid_b', reason: `${above40k} tokens above $40K liq` };
+  }
+
+  // 4. Decent liquidity, young tokens, positive momentum → INSIGHT-J
+  if (above25k >= 3 && momPct >= 0.4) {
+    return { presetId: 'insight_j', reason: `${above25k} tokens with $25K+ liq & ${Math.round(momPct * 100)}% momentum` };
+  }
+
+  // 5. Very high liquidity cluster → INSIGHT-I (institutional)
+  if (above50k >= 3) {
+    return { presetId: 'insight_i', reason: `${above50k} tokens with $50K+ liq` };
+  }
+
+  // 6. Lots of tokens passing lax filters → HOT (high volume of trades)
+  if (above10k >= 6) {
+    return { presetId: 'hot', reason: `Active feed: ${above10k} tokens above $10K` };
+  }
+
+  // 7. Thin market → MOMENTUM (cast widest net)
+  if (graduations.length >= 3) {
+    return { presetId: 'momentum', reason: 'Thin market — wide net is safest' };
+  }
+
+  return null;
+}
 
 const BUDGET_PRESETS = [0.1, 0.2, 0.5, 1.0];
 const LIQUIDITY_PRESETS_USD = [10000, 25000, 40000, 50000];
@@ -50,7 +120,7 @@ const STRATEGY_INFO: Record<string, { summary: string; optimal: string; risk: st
 };
 
 export function SniperControls() {
-  const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining } = useSniperStore();
+  const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining, graduations } = useSniperStore();
   const { connected, signTransaction, publicKey } = usePhantomWallet();
   const { snipe, ready: walletReady } = useSnipeExecutor();
   const [expanded, setExpanded] = useState(true);
@@ -88,6 +158,7 @@ export function SniperControls() {
     ? Math.round((budget.budgetSol / config.maxConcurrentPositions) * 100) / 100
     : 0;
   const useRecommendedExits = config.useRecommendedExits !== false;
+  const suggestion = suggestStrategy(graduations as BagsGraduation[]);
 
   function handleBudgetPreset(sol: number) {
     setBudgetSol(sol);
@@ -207,18 +278,26 @@ export function SniperControls() {
         {STRATEGY_PRESETS.map((preset) => {
           const isActive = activePreset === preset.id;
           const isAggressive = preset.config.strategyMode === 'aggressive';
+          const isSuggested = suggestion?.presetId === preset.id && !isActive;
           return (
             <button
               key={preset.id}
               onClick={() => loadPreset(preset.id)}
-              className={`flex flex-col p-2 rounded-lg border transition-all text-left ${
+              className={`flex flex-col p-2 rounded-lg border transition-all text-left relative ${
                 isActive
                   ? isAggressive
                     ? 'bg-accent-warning/10 border-accent-warning/30 text-accent-warning'
                     : 'bg-accent-neon/10 border-accent-neon/30 text-accent-neon'
-                  : 'bg-bg-secondary border-border-primary text-text-muted hover:border-border-hover'
+                  : isSuggested
+                    ? 'bg-blue-500/[0.06] border-blue-400/30 text-text-muted hover:border-blue-400/50'
+                    : 'bg-bg-secondary border-border-primary text-text-muted hover:border-border-hover'
               }`}
             >
+              {isSuggested && (
+                <span className="absolute -top-1.5 -right-1 text-[7px] font-bold uppercase tracking-wider bg-blue-500/90 text-white px-1.5 py-0.5 rounded-full leading-none">
+                  Suggested
+                </span>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold">{preset.name}</span>
                 <span className={`text-[8px] font-mono px-1 rounded ${
@@ -232,6 +311,17 @@ export function SniperControls() {
           );
         })}
       </div>
+
+      {/* ─── STRATEGY SUGGESTION REASON ─── */}
+      {suggestion && suggestion.presetId !== activePreset && (
+        <div className="flex items-center gap-2 px-3 py-2 mb-4 rounded-lg bg-blue-500/[0.06] border border-blue-400/20">
+          <Zap className="w-3 h-3 text-blue-400 flex-shrink-0" />
+          <span className="text-[10px] text-blue-300/90">
+            <span className="font-bold">{STRATEGY_PRESETS.find(p => p.id === suggestion.presetId)?.name}</span>
+            {' '}may fit current conditions — {suggestion.reason}
+          </span>
+        </div>
+      )}
 
       {/* ─── STRATEGY BREAKDOWN BOX ─── */}
       {STRATEGY_INFO[activePreset] && (() => {
