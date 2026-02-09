@@ -8,6 +8,8 @@ export function StatusBar() {
   const { connected, connecting, address, phantomInstalled, connect, disconnect } = usePhantomWallet();
   const { config, totalPnl, winCount, lossCount, totalTrades, positions } = useSniperStore();
   const winRate = totalTrades > 0 ? ((winCount / totalTrades) * 100).toFixed(1) : '--';
+  const openCount = positions.filter((p) => p.status === 'open').length;
+  const anyExitPending = positions.some((p) => p.status === 'open' && (!!p.isClosing || !!p.exitPending));
 
   const shortAddr = address ? `${address.slice(0, 4)}...${address.slice(-4)}` : null;
 
@@ -57,8 +59,14 @@ export function StatusBar() {
           <StatChip
             icon={positions.length > 0 ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
             label="Positions"
-            value={`${positions.filter(p => p.status === 'open').length}/${config.maxConcurrentPositions}`}
+            value={`${openCount}/${config.maxConcurrentPositions}`}
             color="text-text-secondary"
+          />
+          <StatChip
+            icon={<Shield className="w-3.5 h-3.5" />}
+            label="Risk"
+            value={openCount === 0 ? '--' : connected ? (anyExitPending ? 'SIGN' : 'ON') : 'OFF'}
+            color={openCount === 0 ? 'text-text-muted' : connected ? (anyExitPending ? 'text-accent-warning' : 'text-accent-neon') : 'text-accent-error'}
           />
         </div>
 

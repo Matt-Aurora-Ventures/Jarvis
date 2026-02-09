@@ -1,19 +1,25 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign } from 'lucide-react';
-import { useSniperStore, type SniperConfig } from '@/stores/useSniperStore';
+import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck } from 'lucide-react';
+import { useSniperStore, type SniperConfig, type StrategyMode, STRATEGY_PRESETS } from '@/stores/useSniperStore';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
+import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
 
 const BUDGET_PRESETS = [0.1, 0.2, 0.5, 1.0];
+const LIQUIDITY_PRESETS_USD = [10000, 25000, 40000, 50000];
 
 export function SniperControls() {
-  const { config, setConfig, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining } = useSniperStore();
-  const { connected } = usePhantomWallet();
+  const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining } = useSniperStore();
+  const { connected, signTransaction, publicKey } = usePhantomWallet();
+  const { snipe, ready: walletReady } = useSnipeExecutor();
   const [expanded, setExpanded] = useState(true);
   const [bestEverLoaded, setBestEverLoaded] = useState(false);
   const [customBudget, setCustomBudget] = useState('');
   const [budgetFocused, setBudgetFocused] = useState(false);
+  const [snipeMint, setSnipeMint] = useState('');
+  const [snipeLoading, setSnipeLoading] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
 
   // Load BEST_EVER on mount
   useEffect(() => {
@@ -41,6 +47,7 @@ export function SniperControls() {
   const perSnipeSol = budget.budgetSol > 0
     ? Math.round((budget.budgetSol / config.maxConcurrentPositions) * 100) / 100
     : 0;
+  const useRecommendedExits = config.useRecommendedExits !== false;
 
   function handleBudgetPreset(sol: number) {
     setBudgetSol(sol);
@@ -55,11 +62,86 @@ export function SniperControls() {
     setBudgetFocused(false);
   }
 
-  function handleAuthorize() {
+  async function handleAuthorize() {
     if (budget.authorized) {
       deauthorizeBudget();
-    } else {
+      return;
+    }
+    if (!connected || !publicKey || !signTransaction) return;
+    setAuthLoading(true);
+    try {
+      // Build a real on-chain memo transaction to prove wallet ownership
+      const { Connection, SystemProgram, Transaction, PublicKey: PK } = await import('@solana/web3.js');
+      const connection = new Connection(
+        process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com',
+        'confirmed',
+      );
+      const tx = new Transaction();
+      // 0-lamport self-transfer + memo to mark session start on-chain
+      tx.add(
+        SystemProgram.transfer({
+          fromPubkey: publicKey,
+          toPubkey: publicKey,
+          lamports: 0,
+        }),
+      );
+      // Memo instruction — records authorization on-chain
+      const MEMO_PROGRAM = new PK('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
+      tx.add({
+        keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
+        programId: MEMO_PROGRAM,
+        data: Buffer.from(`Jarvis Sniper | Authorize ${budget.budgetSol} SOL | ${new Date().toISOString()}`),
+      });
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = publicKey;
+      const signed = await signTransaction(tx);
+      const txHash = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: true });
+      await connection.confirmTransaction(txHash, 'confirmed');
+      console.log('[Auth] On-chain authorization confirmed:', txHash);
       authorizeBudget();
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (msg.includes('User rejected') || msg.includes('user rejected')) {
+        console.log('[Auth] User cancelled');
+      } else {
+        console.error('[Auth] Failed:', err);
+      }
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleManualSnipe() {
+    const mint = snipeMint.trim();
+    if (!mint || mint.length < 32 || !walletReady || !budget.authorized) return;
+    setSnipeLoading(true);
+    try {
+      // Build a grad object that bypasses insight filters for manual snipes
+      // (user explicitly chose this token — set values to pass all gates)
+      const grad = {
+        mint,
+        symbol: mint.slice(0, 6).toUpperCase(),
+        name: `Token ${mint.slice(0, 8)}`,
+        score: 0,
+        graduation_time: Math.floor(Date.now() / 1000),
+        liquidity: Math.max(config.minLiquidityUsd, 100000), // Pass liq gate even if user raised threshold
+        price_usd: 0,
+        logo_uri: '',
+        price_change_1h: 1,     // Pass momentum gate
+        volume_24h: 0,
+        age_hours: 1,           // Pass age gate
+        buy_sell_ratio: 1.5,    // Pass B/S gate
+        txn_buys_1h: 10,
+        txn_sells_1h: 7,
+        total_txns_1h: 17,
+      };
+      await snipe(grad as any);
+      setSnipeMint('');
+    } catch (err) {
+      console.error('[ManualSnipe] Failed:', err);
+    } finally {
+      setSnipeLoading(false);
     }
   }
 
@@ -71,11 +153,44 @@ export function SniperControls() {
           <Settings className="w-4 h-4 text-accent-neon" />
           <h2 className="font-display text-sm font-semibold">Sniper Strategy</h2>
         </div>
-        {bestEverLoaded && (
-          <span className="text-[9px] font-mono text-accent-neon bg-accent-neon/10 px-2 py-0.5 rounded-full border border-accent-neon/20">
-            BEST_EVER LOADED
-          </span>
-        )}
+        <span className={`text-[9px] font-mono px-2 py-0.5 rounded-full border ${
+          config.strategyMode === 'aggressive'
+            ? 'text-accent-warning bg-accent-warning/10 border-accent-warning/20'
+            : 'text-accent-neon bg-accent-neon/10 border-accent-neon/20'
+        }`}>
+          {STRATEGY_PRESETS.find(p => p.id === activePreset)?.name ?? 'HYBRID-B v5'} {bestEverLoaded ? '+ BEST_EVER' : `${config.stopLossPct}/${config.takeProfitPct}+${config.trailingStopPct}t`}
+        </span>
+      </div>
+
+      {/* ─── STRATEGY PRESET SELECTOR ─── */}
+      <div className="grid grid-cols-2 gap-1.5 mb-4">
+        {STRATEGY_PRESETS.map((preset) => {
+          const isActive = activePreset === preset.id;
+          const isAggressive = preset.config.strategyMode === 'aggressive';
+          return (
+            <button
+              key={preset.id}
+              onClick={() => loadPreset(preset.id)}
+              className={`flex flex-col p-2 rounded-lg border transition-all text-left ${
+                isActive
+                  ? isAggressive
+                    ? 'bg-accent-warning/10 border-accent-warning/30 text-accent-warning'
+                    : 'bg-accent-neon/10 border-accent-neon/30 text-accent-neon'
+                  : 'bg-bg-secondary border-border-primary text-text-muted hover:border-border-hover'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold">{preset.name}</span>
+                <span className={`text-[8px] font-mono px-1 rounded ${
+                  isActive ? 'bg-current/10' : 'bg-bg-tertiary'
+                }`}>
+                  {preset.winRate}
+                </span>
+              </div>
+              <span className="text-[8px] opacity-60 mt-0.5">{preset.description}</span>
+            </button>
+          );
+        })}
       </div>
 
       {!connected && (
@@ -163,19 +278,61 @@ export function SniperControls() {
         {/* Authorize / Deauthorize button */}
         <button
           onClick={handleAuthorize}
-          disabled={!connected || budget.budgetSol <= 0}
+          disabled={!connected || budget.budgetSol <= 0 || authLoading}
           className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
             budget.authorized
               ? 'bg-accent-error/15 text-accent-error border border-accent-error/30 hover:bg-accent-error/25'
               : 'bg-accent-neon text-black hover:bg-accent-neon/90'
-          } ${(!connected || budget.budgetSol <= 0) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+          } ${(!connected || budget.budgetSol <= 0 || authLoading) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
         >
-          {budget.authorized ? (
+          {authLoading ? (
+            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Signing with Phantom...</>
+          ) : budget.authorized ? (
             <><Lock className="w-3.5 h-3.5" /> Revoke Authorization</>
           ) : (
             <><Unlock className="w-3.5 h-3.5" /> Authorize {budget.budgetSol} SOL</>
           )}
         </button>
+      </div>
+
+      {/* ─── QUICK SNIPE SECTION ─── */}
+      <div className="p-3 rounded-lg bg-bg-secondary border border-border-primary mb-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Send className="w-3.5 h-3.5 text-accent-neon" />
+          <span className="text-xs font-semibold">Quick Snipe</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Paste token mint address..."
+            value={snipeMint}
+            onChange={(e) => setSnipeMint(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleManualSnipe(); }}
+            disabled={!walletReady || !budget.authorized || snipeLoading}
+            className="flex-1 bg-bg-tertiary border border-border-primary rounded-lg px-3 py-2 text-xs font-mono text-text-primary outline-none placeholder:text-text-muted/40 focus:border-accent-neon/40 disabled:opacity-50 transition-all"
+          />
+          <button
+            onClick={handleManualSnipe}
+            disabled={!walletReady || !budget.authorized || snipeLoading || snipeMint.trim().length < 32}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              walletReady && budget.authorized && !snipeLoading && snipeMint.trim().length >= 32
+                ? 'bg-accent-neon text-black hover:bg-accent-neon/90 cursor-pointer'
+                : 'bg-bg-tertiary text-text-muted border border-border-primary opacity-50 cursor-not-allowed'
+            }`}
+          >
+            {snipeLoading ? (
+              <><Loader2 className="w-3 h-3 animate-spin" /> Sniping...</>
+            ) : (
+              <><Crosshair className="w-3 h-3" /> Snipe</>
+            )}
+          </button>
+        </div>
+        {!walletReady && (
+          <p className="text-[9px] text-accent-warning mt-2">Connect wallet to enable</p>
+        )}
+        {walletReady && !budget.authorized && (
+          <p className="text-[9px] text-accent-warning mt-2">Authorize budget first</p>
+        )}
       </div>
 
       {/* Auto-Snipe Toggle */}
@@ -189,10 +346,10 @@ export function SniperControls() {
           <div>
             <span className="text-sm font-semibold">Auto-Snipe</span>
             <p className="text-[10px] text-text-muted">
-              {!budget.authorized
-                ? 'Authorize a budget to enable'
-                : config.autoSnipe
-                  ? 'Buying tokens above score threshold'
+                {!budget.authorized
+                  ? 'Authorize a budget to enable'
+                  : config.autoSnipe
+                  ? `${config.strategyMode === 'aggressive' ? 'LET IT RIDE' : 'HYBRID-B v5'}: Liq≥$${Math.round(config.minLiquidityUsd).toLocaleString()} + V/L≥0.5 + B/S 1-3 + Age<500h + Mom↑ + TOD | ${useRecommendedExits ? 'REC SL/TP' : `${config.stopLossPct}/${config.takeProfitPct}`}+${config.trailingStopPct}t${config.maxPositionAgeHours > 0 ? ` | ${config.maxPositionAgeHours}h expiry` : ''}`
                   : 'Manual mode — click to snipe'}
             </p>
           </div>
@@ -289,6 +446,53 @@ export function SniperControls() {
             />
           </div>
 
+          {/* Exits: recommended vs global */}
+          <div className="flex items-center justify-between p-2.5 rounded-lg bg-bg-secondary border border-border-primary">
+            <div className="flex items-center gap-2">
+              <Target className="w-3.5 h-3.5 text-accent-neon" />
+              <div className="flex flex-col">
+                <span className="text-xs font-medium">Use recommended exits</span>
+                <span className="text-[9px] text-text-muted/70">Per-token backtested SL/TP. Turn off to force global SL/TP.</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setConfig({ useRecommendedExits: !useRecommendedExits })}
+              className={`relative w-10 h-5 rounded-full transition-all ${
+                useRecommendedExits ? 'bg-accent-neon' : 'bg-bg-tertiary border border-border-primary'
+              }`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full transition-all ${
+                useRecommendedExits ? 'left-[22px] bg-black' : 'left-0.5 bg-text-muted'
+              }`} />
+            </button>
+          </div>
+
+          {/* Liquidity gate (HYBRID-B) */}
+          <div className="p-2.5 rounded-lg bg-bg-secondary border border-border-primary">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] text-text-muted uppercase tracking-wider">Min Liquidity (USD)</span>
+              <span className="text-[10px] font-mono text-text-muted">${Math.round(config.minLiquidityUsd).toLocaleString()}</span>
+            </div>
+            <div className="flex gap-1">
+              {LIQUIDITY_PRESETS_USD.map((usd) => (
+                <button
+                  key={usd}
+                  onClick={() => setConfig({ minLiquidityUsd: usd })}
+                  className={`flex-1 text-[10px] font-mono px-2 py-1 rounded transition-all ${
+                    config.minLiquidityUsd === usd
+                      ? 'bg-accent-neon/15 text-accent-neon border border-accent-neon/30'
+                      : 'bg-bg-tertiary text-text-muted border border-border-primary hover:border-border-hover'
+                  }`}
+                >
+                  {usd >= 1000 ? `${Math.round(usd / 1000)}K` : String(usd)}
+                </button>
+              ))}
+            </div>
+            <p className="text-[9px] text-text-muted/60 mt-2">
+              Lower = more trades, but higher rug/spread risk. Default 50K matches backtest.
+            </p>
+          </div>
+
           {/* Jito Toggle */}
           <div className="flex items-center justify-between p-2.5 rounded-lg bg-bg-secondary border border-border-primary">
             <div className="flex items-center gap-2">
@@ -305,6 +509,26 @@ export function SniperControls() {
                 config.useJito ? 'left-[22px] bg-black' : 'left-0.5 bg-text-muted'
               }`} />
             </button>
+          </div>
+
+          {/* Position Age Expiry */}
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-text-muted">Max Age (auto-close)</span>
+            <div className="flex gap-1">
+              {[2, 4, 8, 0].map((hrs) => (
+                <button
+                  key={hrs}
+                  onClick={() => setConfig({ maxPositionAgeHours: hrs })}
+                  className={`text-[10px] font-mono px-2 py-1 rounded transition-all ${
+                    config.maxPositionAgeHours === hrs
+                      ? 'bg-accent-neon/15 text-accent-neon border border-accent-neon/30'
+                      : 'bg-bg-tertiary text-text-muted border border-border-primary hover:border-border-hover'
+                  }`}
+                >
+                  {hrs === 0 ? 'OFF' : `${hrs}h`}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Slippage */}

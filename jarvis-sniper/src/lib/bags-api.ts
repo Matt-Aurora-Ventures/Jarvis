@@ -17,6 +17,16 @@ export interface BagsGraduation {
   price_usd: number;
   liquidity: number;
   logo_uri?: string;
+  // Insight-driven fields (from backtest v3)
+  volume_24h?: number;
+  boost_amount?: number;
+  price_change_5m?: number;
+  price_change_1h?: number;
+  txn_buys_1h?: number;
+  txn_sells_1h?: number;
+  age_hours?: number;
+  buy_sell_ratio?: number;
+  total_txns_1h?: number;
 }
 
 export interface BagsToken {

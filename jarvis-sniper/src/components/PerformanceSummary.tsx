@@ -41,9 +41,9 @@ export function PerformanceSummary() {
     {
       icon: <Shield className="w-4 h-4" />,
       label: 'Strategy',
-      value: `SL ${config.stopLossPct}% / TP ${config.takeProfitPct}%`,
-      color: 'text-text-secondary',
-      bgColor: 'bg-bg-secondary border-border-primary',
+      value: `${config.strategyMode === 'aggressive' ? 'RIDE' : 'HB-v5'} ${config.stopLossPct}/${config.takeProfitPct}+${config.trailingStopPct}t`,
+      color: config.strategyMode === 'aggressive' ? 'text-accent-warning' : 'text-accent-neon',
+      bgColor: config.strategyMode === 'aggressive' ? 'bg-accent-warning/5 border-accent-warning/15' : 'bg-accent-neon/5 border-accent-neon/15',
     },
     {
       icon: <Zap className="w-4 h-4" />,

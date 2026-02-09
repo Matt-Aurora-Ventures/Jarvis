@@ -1,10 +1,11 @@
 'use client';
 
-import { ScrollText, Crosshair, TrendingUp, TrendingDown, XCircle, SkipForward, AlertCircle } from 'lucide-react';
+import { ScrollText, Crosshair, TrendingUp, TrendingDown, XCircle, SkipForward, AlertCircle, Loader2 } from 'lucide-react';
 import { useSniperStore, type ExecutionEvent } from '@/stores/useSniperStore';
 
 const TYPE_CONFIG: Record<ExecutionEvent['type'], { icon: any; color: string; label: string }> = {
   snipe:       { icon: Crosshair,    color: 'text-accent-neon',    label: 'SNIPE' },
+  exit_pending:{ icon: Loader2,      color: 'text-accent-warning', label: 'PENDING' },
   tp_exit:     { icon: TrendingUp,   color: 'text-accent-neon',    label: 'TP HIT' },
   sl_exit:     { icon: TrendingDown,  color: 'text-accent-error',   label: 'SL HIT' },
   manual_exit: { icon: XCircle,       color: 'text-accent-warning',  label: 'CLOSE' },
@@ -43,7 +44,7 @@ export function ExecutionLog() {
                 key={event.id}
                 className="flex items-center gap-3 p-2 rounded-lg bg-bg-secondary/40 animate-slide-in"
               >
-                <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${cfg.color}`} />
+                <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${cfg.color} ${event.type === 'exit_pending' ? 'animate-spin' : ''}`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={`text-[9px] font-mono font-bold uppercase ${cfg.color}`}>{cfg.label}</span>

@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Sparkles, Clock, Droplets, BarChart3, ExternalLink, Crosshair, TrendingUp, TrendingDown, Shield, Target, Check } from 'lucide-react';
+import { Sparkles, Clock, Droplets, BarChart3, ExternalLink, Crosshair, TrendingUp, TrendingDown, Shield, Target, Check, ArrowRightLeft, Timer, Zap } from 'lucide-react';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { getScoreTier, TIER_CONFIG, type BagsGraduation } from '@/lib/bags-api';
-import { getRecommendedSlTp } from '@/stores/useSniperStore';
+import { getRecommendedSlTp, getConvictionMultiplier } from '@/stores/useSniperStore';
 import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
 
 async function fetchFromApi(): Promise<BagsGraduation[]> {
@@ -64,7 +64,8 @@ export function GraduationFeed() {
     if (openCount >= config.maxConcurrentPositions) return;
 
     for (const grad of graduations) {
-      if (grad.score >= config.minScore && !snipedMints.has(grad.mint)) {
+      const hybrid = computeHybridB(grad, config.minLiquidityUsd);
+      if (grad.score >= config.minScore && hybrid.passesAll && !snipedMints.has(grad.mint)) {
         const currentOpen = positions.filter(p => p.status === 'open').length;
         if (currentOpen >= config.maxConcurrentPositions) break;
         snipe(grad as any);
@@ -94,26 +95,31 @@ export function GraduationFeed() {
             <div className="skeleton w-48 h-2" />
           </div>
         ) : (
-          graduations.map((grad) => (
-            <TokenCard
-              key={grad.mint}
-              grad={grad}
-              isNew={newMintsRef.current.has(grad.mint)}
-              meetsThreshold={grad.score >= config.minScore}
-              isSniped={snipedMints.has(grad.mint)}
-              onSnipe={() => snipe(grad as any)}
-              onChart={() => setSelectedMint(grad.mint)}
-              budgetAuthorized={budget.authorized}
-              walletReady={walletReady}
-            />
-          ))
+          graduations.map((grad) => {
+            const hybrid = computeHybridB(grad, config.minLiquidityUsd);
+            return (
+              <TokenCard
+                key={grad.mint}
+                grad={grad}
+                isNew={newMintsRef.current.has(grad.mint)}
+                meetsThreshold={grad.score >= config.minScore && hybrid.passesAll}
+                isSniped={snipedMints.has(grad.mint)}
+                onSnipe={() => snipe(grad as any)}
+                onChart={() => setSelectedMint(grad.mint)}
+                budgetAuthorized={budget.authorized}
+                walletReady={walletReady}
+                minLiquidityUsd={config.minLiquidityUsd}
+                strategyMode={config.strategyMode}
+              />
+            );
+          })
         )}
       </div>
     </div>
   );
 }
 
-function TokenCard({ grad, isNew, meetsThreshold, isSniped, onSnipe, onChart, budgetAuthorized, walletReady }: {
+function TokenCard({ grad, isNew, meetsThreshold, isSniped, onSnipe, onChart, budgetAuthorized, walletReady, minLiquidityUsd, strategyMode }: {
   grad: BagsGraduation;
   isNew: boolean;
   meetsThreshold: boolean;
@@ -122,15 +128,43 @@ function TokenCard({ grad, isNew, meetsThreshold, isSniped, onSnipe, onChart, bu
   onChart: () => void;
   budgetAuthorized: boolean;
   walletReady: boolean;
+  minLiquidityUsd: number;
+  strategyMode: 'conservative' | 'aggressive';
 }) {
   const tier = getScoreTier(grad.score);
   const tierCfg = TIER_CONFIG[tier];
   const age = Math.floor((Date.now() / 1000 - grad.graduation_time) / 60);
   const ageLabel = age < 1 ? 'JUST NOW' : age < 60 ? `${age}m ago` : age < 1440 ? `${Math.floor(age / 60)}h ago` : `${Math.floor(age / 1440)}d ago`;
 
-  const priceChange = (grad as any).price_change_1h;
-  const volume = (grad as any).volume_24h || 0;
-  const rec = getRecommendedSlTp(grad as any);
+  const priceChange = grad.price_change_1h ?? 0;
+  const volume = grad.volume_24h || 0;
+  const bsRatio = grad.buy_sell_ratio ?? 0;
+  const ageH = grad.age_hours ?? 0;
+  const totalTxns = grad.total_txns_1h ?? 0;
+  const rec = getRecommendedSlTp(grad as any, strategyMode);
+
+  // Insight filter checks (HYBRID_B v4 criteria)
+  const passesLiq = (grad.liquidity || 0) >= minLiquidityUsd;
+  // Mirror executor logic: only enforce B/S gate when there's enough activity.
+  const passesBSRatio = totalTxns <= 10 ? true : (bsRatio >= 1.0 && bsRatio <= 3.0);
+  const passesAge = ageH <= 500;
+  const passesMomentum = priceChange >= 0;
+  // Time-of-day filter (928-token OHLCV backtest)
+  const nowUtcHour = new Date().getUTCHours();
+  const BAD_HOURS = [1, 3, 5, 9, 17, 23];
+  const GOOD_HOURS = [4, 8, 11, 21];
+  const passesTod = !BAD_HOURS.includes(nowUtcHour);
+  const isGoodHour = GOOD_HOURS.includes(nowUtcHour);
+  // Vol/Liq filter (8x edge: 40.6% upside ≥0.5 vs 4.9% <0.5)
+  const vol24h = grad.volume_24h || 0;
+  const gradLiq = grad.liquidity || 0;
+  const volLiq = gradLiq > 0 ? vol24h / gradLiq : 0;
+  const passesVolLiq = vol24h === 0 || volLiq >= 0.5; // skip filter when no vol data
+  const passesAll = passesLiq && passesBSRatio && passesAge && passesMomentum && passesTod && passesVolLiq;
+  // Conviction-weighted sizing preview
+  const { multiplier: conviction, factors: convFactors } = getConvictionMultiplier(grad as BagsGraduation & Record<string, any>);
+  const convLabel = conviction >= 1.5 ? 'HIGH' : conviction >= 1.0 ? 'MED' : 'LOW';
+  const convColor = conviction >= 1.5 ? 'text-accent-neon' : conviction >= 1.0 ? 'text-accent-warning' : 'text-text-muted';
 
   return (
     <div className={`
@@ -182,6 +216,44 @@ function TokenCard({ grad, isNew, meetsThreshold, isSniped, onSnipe, onChart, bu
         )}
       </div>
 
+      {/* Insight filters row */}
+      <div className="flex items-center gap-2 text-[9px] font-mono mb-1.5">
+        <span className={`flex items-center gap-0.5 px-1 py-0.5 rounded ${passesLiq ? 'bg-accent-neon/10 text-accent-neon' : 'bg-accent-error/10 text-accent-error'}`}>
+          <Droplets className="w-2.5 h-2.5" /> Liq{passesLiq ? '✓' : '✗'}
+        </span>
+        {bsRatio > 0 && (
+          <span className={`flex items-center gap-0.5 px-1 py-0.5 rounded ${passesBSRatio ? 'bg-accent-neon/10 text-accent-neon' : 'bg-accent-error/10 text-accent-error'}`}>
+            <ArrowRightLeft className="w-2.5 h-2.5" /> B/S {bsRatio.toFixed(1)}{passesBSRatio ? '✓' : '✗'}
+          </span>
+        )}
+        {ageH > 0 && (
+          <span className={`flex items-center gap-0.5 px-1 py-0.5 rounded ${passesAge ? 'bg-accent-neon/10 text-accent-neon' : 'bg-accent-error/10 text-accent-error'}`}>
+            <Timer className="w-2.5 h-2.5" /> {ageH < 24 ? `${ageH.toFixed(0)}h` : `${Math.round(ageH / 24)}d`}{passesAge ? '✓' : '✗'}
+          </span>
+        )}
+        <span className={`flex items-center gap-0.5 px-1 py-0.5 rounded ${passesMomentum ? 'bg-accent-neon/10 text-accent-neon' : 'bg-accent-error/10 text-accent-error'}`}>
+          <Zap className="w-2.5 h-2.5" /> Mom{passesMomentum ? '✓' : '✗'}
+        </span>
+        <span className={`flex items-center gap-0.5 px-1 py-0.5 rounded ${isGoodHour ? 'bg-accent-neon/10 text-accent-neon' : passesTod ? 'bg-bg-tertiary text-text-muted' : 'bg-accent-error/10 text-accent-error'}`}>
+          <Clock className="w-2.5 h-2.5" /> {nowUtcHour}h{passesTod ? (isGoodHour ? '++' : '') : '✗'}
+        </span>
+        {vol24h > 0 && (
+          <span className={`flex items-center gap-0.5 px-1 py-0.5 rounded ${passesVolLiq ? 'bg-accent-neon/10 text-accent-neon' : 'bg-accent-error/10 text-accent-error'}`}>
+            V/L {volLiq.toFixed(1)}{passesVolLiq ? '✓' : '✗'}
+          </span>
+        )}
+        {passesAll && (
+          <span className={`flex items-center gap-0.5 px-1 py-0.5 rounded bg-bg-tertiary ${convColor}`} title={convFactors.join(', ')}>
+            {conviction.toFixed(1)}x {convLabel}
+          </span>
+        )}
+        {passesAll && (
+          <span className={`ml-auto font-bold text-[9px] ${strategyMode === 'aggressive' ? 'text-accent-warning' : 'text-accent-neon'}`}>
+            {strategyMode === 'aggressive' ? 'LET IT RIDE ✓' : 'HYBRID-B v5 ✓'}
+          </span>
+        )}
+      </div>
+
       {/* Recommended SL/TP row */}
       <div className="flex items-center gap-3 text-[10px] font-mono">
         <span className="flex items-center gap-1 text-accent-error">
@@ -207,6 +279,10 @@ function TokenCard({ grad, isNew, meetsThreshold, isSniped, onSnipe, onChart, bu
           <span className="flex items-center gap-1.5 text-[10px] font-medium px-3 py-1.5 rounded-full bg-accent-warning/15 text-accent-warning border border-accent-warning/30">
             <Shield className="w-3 h-3" /> Authorize budget first
           </span>
+        ) : !meetsThreshold ? (
+          <span className="flex items-center gap-1.5 text-[10px] font-medium px-3 py-1.5 rounded-full bg-bg-tertiary text-text-secondary border border-border-primary">
+            <Shield className="w-3 h-3" /> Filtered (HYBRID-B)
+          </span>
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); onSnipe(); }}
@@ -224,4 +300,21 @@ function TokenCard({ grad, isNew, meetsThreshold, isSniped, onSnipe, onChart, bu
       </div>
     </div>
   );
+}
+
+function computeHybridB(grad: BagsGraduation, minLiquidityUsd: number): { passesAll: boolean } {
+  const liq = grad.liquidity || 0;
+  const buys = grad.txn_buys_1h || 0;
+  const sells = grad.txn_sells_1h || 0;
+  const totalTxns = grad.total_txns_1h ?? (buys + sells);
+  const bsRatio = grad.buy_sell_ratio ?? (sells > 0 ? buys / sells : buys);
+  const ageH = grad.age_hours ?? 0;
+  const change1h = grad.price_change_1h ?? 0;
+
+  const passesLiq = liq >= minLiquidityUsd;
+  const passesBSRatio = totalTxns <= 10 ? true : (bsRatio >= 1.0 && bsRatio <= 3.0);
+  const passesAge = ageH <= 500;
+  const passesMomentum = change1h >= 0;
+
+  return { passesAll: passesLiq && passesBSRatio && passesAge && passesMomentum };
 }

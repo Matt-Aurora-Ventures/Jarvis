@@ -10,18 +10,24 @@
 
 2. **Scoring & Filtering**: Score each token 0-100 using liquidity, volume, social links, boost amount, buy/sell ratio, and price momentum. Only tokens meeting the minimum score threshold are snipe candidates.
 
-3. **Real On-Chain Execution**: When the user clicks "Snipe" or auto-snipe triggers:
-   - Get a swap quote from the Bags.fm/Jupiter aggregator API
+3. **Real On-Chain Execution**: When the user clicks "Snipe" (manual or auto-snipe):
+   - Get a swap quote via waterfall strategy: Jupiter v6 (primary) -> Bags.fm (fallback) -> Direct Raydium/Meteora (for brand-new tokens)
    - Build a versioned Solana transaction
    - Send to Phantom wallet for user to sign
    - Submit signed transaction to Solana mainnet (with optional Jito MEV bundle)
-   - Confirm on-chain and track the position with real tx hash
+   - Confirm on-chain and track the position with real tx hash and token amounts
 
-4. **Position Management**: Track open positions with real-time P&L, per-token SL/TP recommendations, manual close buttons, and position age tracking.
+4. **Real-Time P&L Tracking**: `usePnlTracker` hook polls DexScreener every 3 seconds to fetch current token prices and update all open positions with real-time P&L.
 
-5. **Budget Authorization System**: Users must explicitly set and authorize a SOL budget before any sniping can occur. This prevents accidental trades and ghost positions.
+5. **Automated Risk Management**: `useAutomatedRiskManagement` hook continuously monitors open positions and automatically triggers sell transactions when SL/TP thresholds are hit.
 
-6. **Chart Integration**: Embedded charts (Birdeye TV widget, DexScreener, GeckoTerminal) for any selected token, with drag-to-resize.
+6. **Budget Authorization System**: Users must set a SOL budget and sign an on-chain memo transaction via Phantom to prove wallet ownership before any sniping can occur. This prevents accidental trades and ensures real wallet control.
+
+7. **Manual Quick Snipe**: Dedicated input field in SniperControls lets users paste any token mint address and snipe it with one click — no need to wait for scanner discovery.
+
+8. **Chart Integration**: Multi-provider chart embeds (Birdeye TV widget default, DexScreener, GeckoTerminal fallbacks) with drag-to-resize and provider switching.
+
+9. **Session Management**: "Reset Record" button clears all stats, positions, and execution history — only available when no open trades exist.
 
 ---
 
@@ -39,13 +45,10 @@
 ### Solana / Blockchain
 | Library | Version | Purpose |
 |---------|---------|---------|
-| **@solana/web3.js** | ^1.98.0 | Solana SDK — Connection, Transaction, PublicKey, VersionedTransaction |
-| **@solana/wallet-adapter-base** | ^0.9.23 | Base wallet adapter types (installed but NOT used for connection — we use native Phantom API) |
-| **@solana/wallet-adapter-phantom** | ^0.9.24 | Phantom adapter types (installed but NOT used directly) |
-| **@solana/wallet-adapter-react** | ^0.15.35 | React context for wallets (installed but ConnectionProvider REMOVED to avoid console errors) |
+| **@solana/web3.js** | ^1.98.0 | Solana SDK — Connection, Transaction, VersionedTransaction, PublicKey, SystemProgram |
 | **buffer** | ^6.0.3 | Node.js Buffer polyfill for browser (needed by @solana/web3.js for transaction serialization) |
 
-**IMPORTANT**: We do NOT use `@solana/wallet-adapter-react`'s `ConnectionProvider` or `WalletProvider`. We have a custom `usePhantomWallet` hook that directly interfaces with `window.phantom.solana` (the Phantom browser extension's injected provider). This was done because wallet-adapter was causing `WalletContext` console errors.
+**IMPORTANT**: We do NOT use `@solana/wallet-adapter-react`'s `ConnectionProvider` or `WalletProvider`. We have a custom `usePhantomWallet` hook that directly interfaces with `window.phantom.solana` (the Phantom browser extension's injected provider).
 
 ### State Management
 | Library | Version | Purpose |
@@ -55,11 +58,8 @@
 ### UI Libraries
 | Library | Version | Purpose |
 |---------|---------|---------|
-| **lucide-react** | ^0.563.0 | Icon library (Crosshair, Shield, Target, BarChart3, etc.) |
+| **lucide-react** | ^0.563.0 | Icon library (Crosshair, Shield, Target, Send, Loader2, etc.) |
 | **framer-motion** | ^12.31.1 | Animations (installed, available for future use) |
-| **sonner** | ^2.0.7 | Toast notifications (installed, available for future use) |
-| **clsx** | ^2.1.1 | Conditional className utility |
-| **tailwind-merge** | ^3.4.0 | Merge Tailwind classes without conflicts |
 
 ---
 
@@ -69,34 +69,37 @@
 jarvis-sniper/
 ├── src/
 │   ├── app/
-│   │   ├── layout.tsx              # Root layout — fonts, WalletProvider wrapper, dark terminal background
-│   │   ├── page.tsx                # Main dashboard — 3-column grid layout
+│   │   ├── layout.tsx              # Root layout — fonts, PhantomWalletProvider, dark terminal
+│   │   ├── page.tsx                # Main dashboard — 3-column grid, P&L tracker, risk mgmt
 │   │   ├── globals.css             # Tailwind v4 theme — dark terminal design system
 │   │   └── api/
-│   │       ├── graduations/route.ts  # Server-side API: DexScreener → scored token feed
+│   │       ├── graduations/route.ts  # Server-side: DexScreener → scored token feed
 │   │       └── best-ever/route.ts    # Loads BEST_EVER.json backtester config
 │   ├── components/
-│   │   ├── StatusBar.tsx           # Top bar — wallet connect, SOL balance, system status
-│   │   ├── GraduationFeed.tsx      # LEFT COLUMN — Token scanner, auto-snipe, token cards
-│   │   ├── PerformanceSummary.tsx   # CENTER TOP — Win rate, total P&L, trade count
-│   │   ├── TokenChart.tsx          # CENTER MIDDLE — Birdeye/DexScreener/Gecko chart embed with drag resize
-│   │   ├── ExecutionLog.tsx        # CENTER BOTTOM — Snipe/error/exit event log
-│   │   ├── SniperControls.tsx      # RIGHT TOP — Budget system, config sliders, auto-snipe toggle
-│   │   ├── PositionsPanel.tsx      # RIGHT BOTTOM — Open/closed positions, click-to-chart
+│   │   ├── StatusBar.tsx           # Top bar — wallet connect, SOL balance
+│   │   ├── GraduationFeed.tsx      # LEFT — Token scanner with auto-snipe
+│   │   ├── PerformanceSummary.tsx   # CENTER TOP — PnL, win rate, trade count
+│   │   ├── TokenChart.tsx          # CENTER — Birdeye/DexScreener/Gecko + drag resize
+│   │   ├── ExecutionLog.tsx        # CENTER BOTTOM — Event log
+│   │   ├── SniperControls.tsx      # RIGHT TOP — Budget, Quick Snipe, config, auto-snipe
+│   │   ├── PositionsPanel.tsx      # RIGHT BOTTOM — Positions + Reset Record button
 │   │   └── providers/
-│   │       └── WalletProvider.tsx   # Client-side wrapper — Buffer polyfill + PhantomWalletProvider
+│   │       └── WalletProvider.tsx   # Buffer polyfill + PhantomWalletProvider
 │   ├── hooks/
-│   │   ├── usePhantomWallet.tsx    # Custom Phantom wallet hook — connect, disconnect, signTransaction
-│   │   └── useSnipeExecutor.ts     # Real swap execution hook — quote → sign → send → confirm
+│   │   ├── usePhantomWallet.tsx    # Phantom wallet — connect, sign, disconnect
+│   │   ├── useSnipeExecutor.ts     # Swap execution — quote → sign → send → confirm
+│   │   ├── usePnlTracker.ts       # Real-time P&L — polls DexScreener prices every 3s
+│   │   └── useAutomatedRiskManagement.ts  # Auto SL/TP — monitors + sells positions
 │   ├── stores/
-│   │   └── useSniperStore.ts       # Zustand store — all state, config, positions, budget, actions
+│   │   └── useSniperStore.ts       # Zustand — state, config, positions, budget, actions
 │   └── lib/
-│       ├── bags-api.ts             # Bags.fm API client — fetchGraduations, fetchTokenInfo, scoring
-│       └── bags-trading.ts         # Swap execution — getQuote, executeSwap, Jito bundle support
-├── .env.local                      # NEXT_PUBLIC_SOLANA_RPC endpoint
+│       ├── bags-api.ts             # DexScreener scoring + BagsGraduation types
+│       └── bags-trading.ts         # Swap execution — waterfall quotes, Jupiter/Bags/Direct DEX
+├── architecture.isoflow.json       # Full architecture diagram (isoflow format)
+├── NOTEBOOK_LM_CONTEXT.md          # This file
+├── .env.local                      # RPC + Bags.fm API keys
 ├── package.json
-├── tsconfig.json
-└── tailwind.config.ts (Tailwind v4 — configured via globals.css @theme)
+└── tsconfig.json
 ```
 
 ---
@@ -117,31 +120,40 @@ DexScreener Boosts API ──→ /api/graduations (server route) ──→ Score
                         (polls every 30 seconds)
                               │
                               ▼
-                     Token cards with scores
-                     Auto-snipe if enabled
+                     Token cards with scores + Snipe buttons
+                     Auto-snipe if enabled + wallet ready + budget authorized
 ```
 
 ### Swap Execution Flow (THE CRITICAL PATH)
 ```
-User clicks "Snipe" or auto-snipe triggers
+User clicks "Snipe" or Quick Snipe or auto-snipe triggers
        │
        ▼
 useSnipeExecutor.snipe(grad)
        │
        ├── Guard checks: wallet connected? budget authorized? not already sniped?
+       │   not at capacity? sufficient budget? not in-flight?
        │
        ▼
-bags-trading.ts → getQuote()
+bags-trading.ts → getQuote() [WATERFALL STRATEGY]
        │
-       │  POST https://public-api-v2.bags.fm/api/v1/trade/quote
-       │  Params: inputMint (SOL), outputMint (token), amount (lamports), slippageBps
+       │  1. Jupiter v6: GET https://quote-api.jup.ag/v6/quote
+       │     (Standard aggregator, covers Raydium/Orca/Meteora, no auth)
+       │
+       │  2. Bags.fm fallback: GET https://public-api-v2.bags.fm/api/v1/trade/quote
+       │     (Their proxy, uses BAGS_API_KEY for auth)
+       │
+       │  3. Direct DEX fallback (if dexHint provided):
+       │     - Raydium: GET https://transaction-v1.raydium.io/compute/swap-base-in
+       │     - Meteora: Bags.fm with API key auth
        │
        ▼
-bags-trading.ts → executeSwap()
+bags-trading.ts → getSwapTransaction()
        │
-       │  POST https://public-api-v2.bags.fm/api/v1/trade/swap
-       │  Body: { userPublicKey, quoteResponse }
-       │  Returns: { swapTransaction (base64 encoded) }
+       │  1. Jupiter: POST https://quote-api.jup.ag/v6/swap
+       │     Body: { quoteResponse, userPublicKey, wrapAndUnwrapSol, dynamicComputeUnitLimit }
+       │
+       │  2. Bags.fm fallback: POST .../trade/swap
        │
        ▼
 Deserialize VersionedTransaction from base64
@@ -151,70 +163,123 @@ Phantom wallet signTransaction(tx) ──→ User approves in Phantom popup
        │
        ▼
 Send to Solana:
-  ├── If Jito enabled: POST to Jito block engine endpoints
-  └── Else: connection.sendRawTransaction()
+  ├── If Jito enabled: POST to Jito block engine (3 endpoints with failover)
+  └── Else: connection.sendRawTransaction({ skipPreflight: true, maxRetries: 3 })
        │
        ▼
 connection.confirmTransaction(txHash, 'confirmed')
        │
        ▼
-Create Position in Zustand store with real txHash + token amounts
+Create Position in store with real txHash + token amounts
+Update budget spent
 ```
 
-### Current Issue: "Swap failed: Quote failed"
-The `getQuote()` call to `https://public-api-v2.bags.fm/api/v1/trade/quote` is returning a non-success response. This could be because:
-1. The Bags.fm trade API endpoint URL may be wrong or deprecated
-2. The API might require authentication (API key / partner key)
-3. The token might not have a Jupiter-routable pair yet
-4. The API response format might have changed
-5. Jupiter v6 API could be used directly instead of going through Bags.fm
+### Real-Time P&L Flow
+```
+usePnlTracker hook (mounted in page.tsx)
+       │
+       │ Every 3 seconds:
+       │ 1. Collect all open position mints
+       │ 2. Batch fetch from DexScreener tokens API
+       │ 3. Extract current prices
+       │ 4. Call store.updatePrices(priceMap)
+       │    → Each position recalculates pnlPercent and pnlSol
+       │
+       ▼
+UI reflects live P&L in PositionsPanel + PerformanceSummary
+```
 
-**Fallback option**: Use Jupiter's own quote API directly:
-- Quote: `https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint={TOKEN}&amount={LAMPORTS}&slippageBps={BPS}`
-- Swap: `https://quote-api.jup.ag/v6/swap` (POST with quote + userPublicKey)
+### Automated Risk Management Flow
+```
+useAutomatedRiskManagement hook (mounted in page.tsx)
+       │
+       │ Continuously monitors open positions:
+       │ 1. Check pnlPercent vs position's recommendedSl / recommendedTp
+       │ 2. If SL hit: get sell quote → build tx → sign → send → confirm
+       │ 3. If TP hit: same sell flow
+       │ 4. Uses setPositionClosing() to lock position during sell
+       │ 5. Uses closePosition() to update status + stats + free budget
+       │
+       │ Uses bags-trading.ts:
+       │   - getSellQuote(tokenMint, amountLamports) for Token→SOL quotes
+       │   - executeSwapFromQuote() to skip re-quoting
+       │
+       ▼
+Position closed with proper status (tp_hit / sl_hit)
+Stats updated (winCount, lossCount, totalPnl)
+Budget refunded (spent -= solInvested)
+```
+
+### Budget Authorization Flow
+```
+User sets budget (0.1/0.2/0.5/1.0 SOL presets or custom)
+       │
+       ▼
+Clicks "Authorize X SOL"
+       │
+       ▼
+Build on-chain memo transaction:
+  - 0-lamport self-transfer (SystemProgram.transfer to self)
+  - Memo instruction: "Jarvis Sniper | Authorize X SOL | timestamp"
+  - Fetch recent blockhash
+  - Set fee payer = user wallet
+       │
+       ▼
+Phantom popup → User signs
+       │
+       ▼
+Send + confirm on-chain
+       │
+       ▼
+Store: budget.authorized = true, auto-calculate per-snipe SOL
+```
 
 ---
 
 ## API Integrations
 
-### 1. DexScreener API (Token Discovery)
-- **Boosts endpoint**: `https://api.dexscreener.com/token-boosts/latest/v1`
-  - Returns recently boosted tokens across all chains
-  - We filter to `chainId === 'solana'`
-- **Token data endpoint**: `https://api.dexscreener.com/tokens/v1/solana/{addresses}`
-  - Batch fetch pair data (price, liquidity, volume, txn counts)
-  - Up to 30 comma-separated addresses per call
-- **Embed chart**: `https://dexscreener.com/solana/{mint}?embed=1&theme=dark`
-  - Embeddable iframe chart (sometimes shows "no data" for new tokens)
+### 1. Jupiter v6 API (PRIMARY Swap Route)
+- **Quote**: `https://quote-api.jup.ag/v6/quote?inputMint=...&outputMint=...&amount=...&slippageBps=...&swapMode=ExactIn`
+- **Swap**: `POST https://quote-api.jup.ag/v6/swap` with `{ quoteResponse, userPublicKey, wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true, prioritizationFeeLamports: 'auto' }`
+- **Sell Quote**: Same endpoint with inputMint=token, outputMint=SOL
+- No API key required. Routes across Raydium, Orca, Meteora.
 
-### 2. Bags.fm Trade API (Swap Execution)
+### 2. Bags.fm Trade API (FALLBACK)
 - **Base URL**: `https://public-api-v2.bags.fm/api/v1`
 - **Quote**: `GET /trade/quote?inputMint=...&outputMint=...&amount=...&slippageBps=...`
 - **Swap**: `POST /trade/swap` with `{ userPublicKey, quoteResponse }`
-- **Status**: Currently returning failures — may need API key or may be deprecated
+- **Auth**: `x-api-key` header with `BAGS_API_KEY`
+- API key configured: `bags_prod_<redacted>...`
 
-### 3. Jupiter v6 API (Alternative Swap Route)
-- **Quote**: `https://quote-api.jup.ag/v6/quote?inputMint=...&outputMint=...&amount=...&slippageBps=...`
-- **Swap**: `POST https://quote-api.jup.ag/v6/swap` with `{ quoteResponse, userPublicKey, wrapAndUnwrapSol: true }`
-- Jupiter is the standard Solana swap aggregator — more reliable than going through Bags.fm
+### 3. Direct DEX APIs (Last Resort)
+- **Raydium V4**: `GET https://transaction-v1.raydium.io/compute/swap-base-in?inputMint=...&outputMint=...&amount=...&slippageBps=...&txVersion=V0`
+  - Program ID: `675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8`
+- **Meteora DAMM v2**: Via Bags.fm authenticated endpoint
+  - Program ID: `cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG`
+- **Meteora DBC**: `dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN`
 
-### 4. Birdeye TV Widget (Chart)
-- **URL**: `https://birdeye.so/tv-widget/{mint}?chain=solana&viewMode=pair&chartInterval=15&chartType=CANDLE&chartLeftToolbar=show&theme=dark`
-- Works reliably with Solana token mints
-- Shows TradingView-style candlestick charts
+### 4. DexScreener API (Token Discovery + P&L)
+- **Boosts**: `https://api.dexscreener.com/token-boosts/latest/v1` (recently boosted tokens)
+- **Tokens**: `https://api.dexscreener.com/tokens/v1/solana/{addresses}` (batch price data, up to 30)
+- **Used for**: Token discovery scoring + real-time P&L price polling
 
-### 5. GeckoTerminal (Chart Fallback)
-- **URL**: `https://www.geckoterminal.com/solana/tokens/{mint}?embed=1&info=0&swaps=0`
+### 5. Chart Providers
+- **Birdeye TV Widget** (default): `https://birdeye.so/tv-widget/{mint}?chain=solana&viewMode=pair&chartInterval=15&chartType=CANDLE&chartLeftToolbar=show&theme=dark`
+- **DexScreener embed**: `https://dexscreener.com/solana/{mint}?embed=1&theme=dark`
+- **GeckoTerminal embed**: `https://www.geckoterminal.com/solana/tokens/{mint}?embed=1&info=0&swaps=0`
 
 ### 6. Jito MEV Bundles (Optional Fast Execution)
-- Endpoints: `https://mainnet.block-engine.jito.wtf/api/v1/transactions` (+ amsterdam, frankfurt)
-- Sends signed transaction as base64 via JSON-RPC `sendTransaction`
-- Faster block inclusion via MEV bundle
+- **Endpoints** (with failover):
+  1. `https://mainnet.block-engine.jito.wtf/api/v1/transactions`
+  2. `https://amsterdam.mainnet.block-engine.jito.wtf/api/v1/transactions`
+  3. `https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/transactions`
+- JSON-RPC `sendTransaction` with base64-encoded signed tx
+- Falls back to standard RPC if all Jito endpoints fail
 
 ### 7. Solana RPC
 - Configured via `NEXT_PUBLIC_SOLANA_RPC` in `.env.local`
 - Currently: `https://api.mainnet-beta.solana.com` (public, rate-limited)
-- Recommended upgrade: Helius, QuickNode, or Triton for production
+- Used for: sendRawTransaction, confirmTransaction, getLatestBlockhash
 
 ---
 
@@ -222,35 +287,57 @@ The `getQuote()` call to `https://public-api-v2.bags.fm/api/v1/trade/quote` is r
 
 ### useSniperStore (Zustand)
 Central state store containing:
-- **config**: SL%, TP%, trailing stop, max position size, max concurrent positions, min score, auto-snipe toggle, Jito toggle, slippage BPS
-- **budget**: { budgetSol, authorized, spent } — authorization gate for all trades
-- **positions**: Array of Position objects (mint, symbol, entry price, current price, P&L, tx hash, status, per-token SL/TP)
-- **executionLog**: Array of ExecutionEvent objects (snipe, error, exit events)
-- **graduations**: Array of BagsGraduation objects from scanner
+- **config**: SL%, TP%, trailing stop%, max position size (SOL), max concurrent positions, min score, auto-snipe toggle, Jito toggle, slippage BPS
+- **budget**: `{ budgetSol, authorized, spent }` — on-chain authorization gate for all trades
+- **positions[]**: mint, symbol, entryPrice, currentPrice, amount, amountLamports, solInvested, pnlPercent, pnlSol, entryTime, txHash, status (open/tp_hit/sl_hit/closed), isClosing, score, recommendedSl, recommendedTp
+- **executionLog[]**: type (snipe/tp_exit/sl_exit/manual_exit/error/skip), symbol, mint, amount, price, pnlPercent, reason, txHash, timestamp
+- **graduations[]**: Scored tokens from DexScreener scanner
 - **snipedMints**: Set of already-sniped token addresses (dedup)
 - **selectedMint**: Currently selected token for chart display
+- **stats**: totalPnl, winCount, lossCount, totalTrades
+- **Key actions**: snipeToken (local fallback), updatePrices, setPositionClosing, closePosition, resetSession
 
 ### usePhantomWallet (Custom Hook)
 - Detects Phantom extension via `window.phantom.solana`
 - Eager reconnect via `connect({ onlyIfTrusted: true })`
 - Exposes: `connected`, `address`, `publicKey`, `signTransaction`, `connect`, `disconnect`
-- Listens for `accountChanged` events (Phantom account switching)
+- Listens for `connect`, `disconnect`, `accountChanged` events
+- `signTransaction` shows Phantom popup for user approval
 
 ### useSnipeExecutor (Execution Hook)
 - Lazy-initializes Solana `Connection` from env RPC URL
-- Guards: wallet connected, budget authorized, not already sniped, not at capacity, sufficient budget
-- Calls `executeSwap()` from bags-trading.ts
-- On success: creates real Position with txHash
-- On failure: logs error, un-marks token for retry
-- Has in-flight dedup via `pendingRef`
+- Pre-flight guards: wallet connected, budget authorized, not already sniped, not at capacity, sufficient budget remaining, not in-flight (pendingRef)
+- Marks `snipedMints` immediately to prevent duplicates
+- Calls `executeSwap()` from bags-trading.ts (waterfall quote strategy)
+- On success: creates real Position with txHash + token amounts, updates budget spent
+- On failure: logs error execution event, un-marks sniped mint for retry
+
+### usePnlTracker (Real-Time Pricing)
+- Polls DexScreener tokens API every 3 seconds
+- Batch fetches current prices for all open position mints
+- Calls `store.updatePrices(priceMap)` to recalculate P&L
+
+### useAutomatedRiskManagement (Auto SL/TP)
+- Monitors all open positions against their per-token SL/TP thresholds
+- When SL/TP hit: gets sell quote via `getSellQuote()`, executes via `executeSwapFromQuote()`
+- Uses `isClosing` lock to prevent duplicate sell attempts
+- Updates position status, stats, and frees budget on close
 
 ### getRecommendedSlTp (Per-Token Risk)
 Multi-factor SL/TP recommendation:
 - Base from score tier: 80+ → SL 15% TP 60%; 65+ → SL 20% TP 40%; 50+ → SL 25% TP 30%; <50 → SL 30% TP 20%
 - Adjusted for liquidity (high liq = tighter SL)
-- Adjusted for momentum (strong up = wider TP)
-- Adjusted for volume (high vol = more reliable)
+- Adjusted for momentum (strong upward = wider TP)
+- Adjusted for volume (high vol = more reliable moves)
 - Clamped: SL 5-50%, TP 10-150%
+
+### bags-trading.ts (Swap Execution Module)
+- **getQuote()**: Waterfall — Jupiter v6 → Bags.fm → Direct DEX (Raydium/Meteora)
+- **getSellQuote()**: Token→SOL via Jupiter (for risk management exits)
+- **executeSwap()**: Full flow — quote → buildTx → sign → send → confirm
+- **executeSwapFromQuote()**: Execute with pre-fetched quote (skip re-quoting for SL/TP)
+- **getSwapTransaction()**: Jupiter swap endpoint → Bags.fm fallback
+- **sendWithJito()**: MEV bundle submission with 3-endpoint failover
 
 ---
 
@@ -271,9 +358,11 @@ Dark terminal aesthetic with green accent (`#22c55e`). Glassmorphism cards with 
 │                     StatusBar                         │
 ├──────────────┬──────────────────┬────────────────────┤
 │ Token Scanner│ Performance      │ Sniper Controls    │
-│ (Graduation  │ TokenChart       │ (Budget + Config)  │
-│  Feed)       │ ExecutionLog     │ Positions Panel    │
-│              │                  │                    │
+│ (Graduation  │ TokenChart       │ Quick Snipe        │
+│  Feed)       │ (drag resize)    │ Budget + Auth      │
+│              │ ExecutionLog     │ Config + Toggles   │
+│              │                  │ Positions Panel    │
+│              │                  │ (Reset Record)     │
 └──────────────┴──────────────────┴────────────────────┘
 Grid: [340px] [1fr] [380px]
 ```
@@ -282,86 +371,54 @@ Grid: [340px] [1fr] [380px]
 
 ## Environment Variables
 
-| Variable | Value | Notes |
-|----------|-------|-------|
-| `NEXT_PUBLIC_SOLANA_RPC` | `https://api.mainnet-beta.solana.com` | Public RPC, rate-limited. Upgrade to Helius/QuickNode for production. |
-| `NEXT_PUBLIC_BAGS_API_KEY` | (not set) | May be needed for Bags.fm trade API |
-| `NEXT_PUBLIC_BAGS_PARTNER_KEY` | (not set) | May be needed for Bags.fm trade API |
+| Variable | Status | Notes |
+|----------|--------|-------|
+| `NEXT_PUBLIC_SOLANA_RPC` | Set | `https://api.mainnet-beta.solana.com` — upgrade to Helius/QuickNode for production |
+| `BAGS_API_KEY` | Set | `bags_prod_<redacted>` |
+| `BAGS_REFERRAL_ACCOUNT` | Set | `7jxnA3V5RbkuRpM1iP23i2eD37SqfrqNgoTU4UoB9Mdr` |
 
 ---
 
-## Known Issues & Debugging
+## Resolved Issues
 
-### 1. "Swap failed: Quote failed"
-- **Where**: `useSnipeExecutor` → `executeSwap()` → `getQuote()`
-- **API call**: `GET https://public-api-v2.bags.fm/api/v1/trade/quote?inputMint=So1111...&outputMint={token}&amount={lamports}&slippageBps=150`
-- **Problem**: API returns non-200 or `success: false`
-- **Fix options**:
-  a. Switch to Jupiter v6 API directly (more reliable, no API key needed)
-  b. Check if Bags.fm API requires authentication
-  c. Verify the token has a Jupiter-routable pair
+### "Swap failed: Quote failed" — RESOLVED
+- **Root cause**: Bags.fm trade API was failing as primary quote source
+- **Fix**: Switched to Jupiter v6 API as primary, Bags.fm as fallback, Direct Raydium/Meteora as last resort
+- **Status**: Waterfall quote strategy working
 
-### 2. DexScreener Chart "No Data"
-- DexScreener embeds need the pair address, not token mint. New tokens may not have indexed pairs yet.
-- **Fixed**: Added Birdeye TV widget as default (works with token mints directly), DexScreener and GeckoTerminal as fallbacks.
+### DexScreener Chart "No Data" — RESOLVED
+- **Fix**: Switched to Birdeye TV widget as default (works with token mints directly), DexScreener and GeckoTerminal as fallbacks with provider switching buttons
 
-### 3. Ghost Positions
-- **Fixed**: Budget authorization system prevents trades without explicit user approval. `useSnipeExecutor` requires wallet connection + budget authorization before any swap executes.
+### Ghost Positions (Sniper says it worked but didn't) — RESOLVED
+- **Root cause**: `snipeToken()` in store created local-only positions without blockchain transactions
+- **Fix**: Created `useSnipeExecutor` hook that wires real swap execution (Jupiter/Bags) through Phantom wallet signing
 
-### 4. Duplicate Execution Keys
-- **Fixed**: Monotonic `execCounter` ensures unique IDs even when multiple events fire in same millisecond.
+### Budget Authorization — ENHANCED
+- **Before**: Local state toggle only (`authorized: true`)
+- **After**: On-chain memo transaction signed via Phantom — proves wallet ownership, creates auditable on-chain record
 
----
-
-## Backtester Integration
-
-The sniper has a companion backtester (in parent `jarvis-sniper/` directory) that:
-- Runs continuous backtests on historical DexScreener data
-- Saves best configuration to `winning/BEST_EVER.json`
-- The web app loads this via `/api/best-ever` and applies config (SL%, TP%, position size, etc.)
-- Genetic optimizer tunes parameters automatically
+### No Manual Snipe Flow — RESOLVED
+- **Before**: Could only snipe via hover overlay on scanner cards
+- **After**: "Quick Snipe" input in SniperControls — paste any token mint and snipe with one click
 
 ---
 
-## Solana-Specific Technical Notes
+## Future Improvements / Research Questions
 
-### Transaction Types
-- Solana uses **VersionedTransaction** (v0) for modern transactions with address lookup tables
-- The swap API returns a base64-encoded serialized transaction
-- We deserialize it, sign with Phantom, then send raw bytes to the network
+1. **Interactive Chart with Position Lines**: Replace Birdeye iframe with `lightweight-charts` library to overlay Entry, SL, TP price lines on candlestick charts. Requires fetching OHLCV data from Birdeye/Bitquery API.
 
-### SOL Amounts
-- Solana native unit: **lamports** (1 SOL = 1,000,000,000 lamports)
-- UI shows SOL, API expects lamports: `Math.floor(amountSol * 1e9)`
+2. **Jito Tip Instructions**: Add dynamic Jito tip amounts to transactions for guaranteed block inclusion. Fetch tip floor from `bundles.jito.wtf/api/v1/bundles/tip_floor`.
 
-### Phantom Wallet Integration
-- Phantom injects `window.phantom.solana` as a provider object
-- Key methods: `connect()`, `disconnect()`, `signTransaction(tx)`, `signAllTransactions(txs)`
-- Events: `connect`, `disconnect`, `accountChanged`
-- `signTransaction` shows a popup asking user to approve — this is the authorization gate
+3. **Direct Raydium SDK Integration**: Use `@raydium-io/raydium-sdk` for swapping tokens before Jupiter indexes them. Requires fetching pool keys on-chain.
 
-### RPC Considerations
-- Public Solana RPC (`api.mainnet-beta.solana.com`) has rate limits
-- For production sniping, need dedicated RPC (Helius, QuickNode, Triton)
-- `confirmTransaction` waits for 'confirmed' commitment level
+4. **Jupiter Ultra API**: Migrate SL/TP exits to Jupiter Ultra (`/ultra/v1/`) for automated landing logic and real-time slippage estimation.
 
-### Jito MEV Bundles
-- Optional faster execution path
-- Sends to Jito's block engine which includes tx in next block via MEV auction
-- Falls back to standard `sendRawTransaction` if Jito fails
+5. **Dedicated RPC Provider**: Switch from public Solana RPC to Helius/QuickNode/Triton for sub-second execution latency.
 
----
+6. **Time-Based Exit**: Add `autoSellDelay` config — force-close positions older than X minutes that are still negative (slow rug protection).
 
-## Research Questions for Troubleshooting
+7. **Split Slippage**: Separate `buySlippageBps` (tight, 0.3-0.5%) from `sellSlippageBps` (loose, 2-5%) for better entry/exit optimization.
 
-1. **Is the Bags.fm trade API (`public-api-v2.bags.fm/api/v1/trade/quote`) still operational?** Does it require API keys? Has the endpoint changed?
+8. **Trailing Stop Visualization**: Show dynamic trailing stop line on chart that moves up with price peaks.
 
-2. **Should we switch to Jupiter v6 API directly?** `quote-api.jup.ag/v6/quote` is the standard and doesn't require API keys.
-
-3. **How to handle tokens that don't have Jupiter-routable pairs yet?** Newly graduated tokens might only be on Raydium or Meteora. Jupiter aggregates across DEXes, but there may be a delay.
-
-4. **What's the optimal RPC provider for sub-second snipe execution?** Helius, QuickNode, Triton — which has lowest latency for mainnet?
-
-5. **How to implement real-time P&L tracking?** Need to poll token prices periodically and update position `currentPrice` / `pnlPercent`. Could use DexScreener WebSocket or Birdeye price API.
-
-6. **How to implement actual SL/TP execution?** Currently SL/TP are display-only recommendations. Need a monitoring loop that checks price vs SL/TP levels and auto-sells when hit.
+9. **Dynamic Priority Fees**: Escalation ladder — normal trades use "high" priority, SL exits use "veryHigh" + Jito tips.

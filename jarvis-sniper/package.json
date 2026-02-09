@@ -6,9 +6,11 @@
     "dev": "next dev --port 3001",
     "build": "next build",
     "start": "next start --port 3001",
-    "lint": "eslint"
+    "lint": "eslint",
+    "risk-worker": "npx tsx scripts/risk-worker.ts"
   },
   "dependencies": {
+    "@bagsfm/bags-sdk": "^1.2.7",
     "@solana/wallet-adapter-base": "^0.9.23",
     "@solana/wallet-adapter-phantom": "^0.9.24",
     "@solana/wallet-adapter-react": "^0.15.35",

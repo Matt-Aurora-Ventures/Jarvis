@@ -182,6 +182,7 @@ tests/__pycache__/
 *.bak
 *.tmp
 *.temp
+.tmp/
 .cache/
 *.cache
 
@@ -210,6 +211,8 @@ bots/buy_tracker/predictions_history.json
 # CRITICAL: Never commit wallet keys or trading state
 bots/treasury/.wallets/
 bots/treasury/.positions.json
+jarvis-sniper/.positions.json
+jarvis-sniper/scripts/.backtest-*.json
 bots/treasury/.trade_history.json
 bots/treasury/.backtest_results/
 data/treasury_keypair.json

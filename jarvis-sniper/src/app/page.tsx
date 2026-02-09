@@ -7,8 +7,10 @@ import { PositionsPanel } from '@/components/PositionsPanel';
 import { ExecutionLog } from '@/components/ExecutionLog';
 import { PerformanceSummary } from '@/components/PerformanceSummary';
 import { TokenChart } from '@/components/TokenChart';
+import { EarlyBetaModal } from '@/components/EarlyBetaModal';
 import { usePnlTracker } from '@/hooks/usePnlTracker';
 import { useAutomatedRiskManagement } from '@/hooks/useAutomatedRiskManagement';
+import { useTabNotifications } from '@/hooks/useTabNotifications';
 
 export default function SniperDashboard() {
   // Real-time P&L: polls DexScreener every 3s to update position prices
@@ -17,8 +19,12 @@ export default function SniperDashboard() {
   // Automated SL/TP: monitors positions and triggers sells when thresholds hit
   useAutomatedRiskManagement();
 
+  // Tab title flashing for important events (snipes, TP/SL exits)
+  useTabNotifications();
+
   return (
     <div className="min-h-screen flex flex-col">
+      <EarlyBetaModal />
       <StatusBar />
 
       <main className="flex-1 p-3 lg:p-4 max-w-[1920px] mx-auto w-full">
