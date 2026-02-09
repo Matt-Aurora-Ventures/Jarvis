@@ -42,7 +42,9 @@ let timer: number | null = null;
 
 const triggered = new Map<string, { trigger: TriggerType; at: number }>();
 
-const JUP_PRICE = 'https://api.jup.ag/price/v2';
+// Jupiter's paid `api.jup.ag` now requires an API key for many endpoints.
+// Use the free, CORS-friendly lite endpoint for client-side price polling.
+const JUP_PRICE = 'https://lite-api.jup.ag/price/v3';
 const DEXSCREENER_TOKENS = 'https://api.dexscreener.com/tokens/v1/solana';
 
 function uniq<T>(arr: T[]): T[] {
@@ -94,9 +96,16 @@ async function fetchJupiterPrices(mints: string[]): Promise<Record<string, numbe
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!res.ok) return priceMap;
     const data = await res.json();
-    const d = data?.data || {};
+
+    // v3 lite response shape:
+    // {
+    //   "<mint>": { usdPrice: number, ... }
+    // }
+    // Keep a fallback for older v2-like shapes in case this endpoint changes.
+    const d = data?.data || data || {};
     for (const mint of mints) {
-      const p = d?.[mint]?.price;
+      const node = d?.[mint];
+      const p = node?.usdPrice ?? node?.price;
       const num = typeof p === 'string' ? Number.parseFloat(p) : typeof p === 'number' ? p : 0;
       if (Number.isFinite(num) && num > 0) priceMap[mint] = num;
     }
@@ -210,4 +219,3 @@ async function tick() {
     self.postMessage({ type: 'TRIGGER', ...t });
   }
 }
-
