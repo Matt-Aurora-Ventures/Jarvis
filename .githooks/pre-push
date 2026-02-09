@@ -7,20 +7,22 @@ elif command -v python3 >/dev/null 2>&1; then
   PYTHON_BIN=python3
 elif command -v wsl >/dev/null 2>&1; then
   # Windows fallback: run the scan inside WSL.
-  # We convert the current repo path to a WSL path and execute there.
-  if command -v cygpath >/dev/null 2>&1; then
-    REPO_WIN="$(cygpath -w "$PWD")"
-  else
-    # MSYS typically supports `pwd -W`; ignore errors if unavailable.
-    REPO_WIN="$(pwd -W 2>/dev/null || echo "")"
+  # Resolve repo root and convert to a WSL path without requiring cygpath.
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  REPO_WSL=""
+
+  if [[ "${REPO_ROOT}" == /mnt/* ]]; then
+    REPO_WSL="${REPO_ROOT}"
+  elif [[ "${REPO_ROOT}" =~ ^/[A-Za-z]/ ]]; then
+    # MSYS-style path: /c/Users/... -> /mnt/c/Users/...
+    REPO_WSL="/mnt${REPO_ROOT}"
+  elif [[ "${REPO_ROOT}" =~ ^[A-Za-z]:\\ ]]; then
+    # Windows path: C:\Users\... -> /mnt/c/Users/...
+    REPO_WSL="$(wsl wslpath "${REPO_ROOT}" 2>/dev/null || echo "")"
   fi
-  if [ -n "${REPO_WIN:-}" ]; then
-    REPO_WSL="$(wsl wslpath "${REPO_WIN}" 2>/dev/null || echo "")"
-  else
-    REPO_WSL=""
-  fi
+
   if [ -z "${REPO_WSL:-}" ]; then
-    echo "ERROR: python not found and WSL path conversion failed; cannot run secret scan." >&2
+    echo "ERROR: python not found and could not resolve repo path for WSL; cannot run secret scan." >&2
     exit 1
   fi
   wsl -e bash -lc "cd '${REPO_WSL}' && python3 scripts/secret_scan_staged.py"
