@@ -245,9 +245,9 @@ export function useAutomatedRiskManagement() {
           const hitSl = realPnlPct <= -slThreshold;
           const hitTp = realPnlPct >= tpThreshold;
 
-          // Trailing stop: recalculate with real P&L and high water mark
-          const realTrailDrop = trailingStopPct > 0 && nextHwm > 0 ? nextHwm - realPnlPct : 0;
-          const hitTrail = trailingStopPct > 0 && nextHwm > 0 && realTrailDrop >= trailingStopPct;
+          // Trailing stop: recalculate with real P&L — only arms when HWM >= trail%
+          const realTrailDrop = trailingStopPct > 0 && nextHwm >= trailingStopPct ? nextHwm - realPnlPct : 0;
+          const hitTrail = trailingStopPct > 0 && nextHwm >= trailingStopPct && realTrailDrop >= trailingStopPct;
 
           // Position age expiry: auto-close stale positions to free capital
           const maxAgeMs2 = (config.maxPositionAgeHours ?? 4) * 3600_000;
