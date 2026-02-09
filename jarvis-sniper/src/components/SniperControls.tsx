@@ -1159,7 +1159,7 @@ export function SniperControls() {
               ))}
             </div>
             <p className="text-[9px] text-text-muted/60 mt-2">
-              Lower = more trades, but higher rug/spread risk. Default 40K trades more; 50K matched the OHLCV backtest.
+              Lower = more trades, but higher rug/spread risk. Default 25K is practical; 50K matched the OHLCV backtest.
             </p>
           </div>
 

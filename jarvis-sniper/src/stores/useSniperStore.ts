@@ -23,6 +23,44 @@ export interface StrategyPreset {
  * Only INSIGHT/MOMENTUM configs held up under real candle validation.
  */
 export const STRATEGY_PRESETS: StrategyPreset[] = [
+  // ── Backtest v2 Winners ──
+  {
+    id: 'surge_hunter',
+    name: 'SURGE HUNTER (RECOMMENDED)',
+    description: 'V2 Best: Vol surge >=2.5x, SL35/TP150/Trail15, Liq>=$5K, Safety>=40',
+    winRate: '61.8% (209% PnL)',
+    trades: 0,
+    config: {
+      stopLossPct: 35, takeProfitPct: 150, trailingStopPct: 15,
+      minLiquidityUsd: 5000, minScore: 40, minVolLiqRatio: 2.5,
+      maxTokenAgeHours: 24, tradingHoursGate: false, strategyMode: 'aggressive',
+    },
+  },
+  {
+    id: 'fresh_degen',
+    name: 'FRESH DEGEN',
+    description: 'V2 Highest WR: Fresh tokens <24h, SL40/TP200/Trail18, Liq>=$3K',
+    winRate: '73.9% (193% PnL, 23T)',
+    trades: 23,
+    config: {
+      stopLossPct: 40, takeProfitPct: 200, trailingStopPct: 18,
+      minLiquidityUsd: 3000, minScore: 35, maxTokenAgeHours: 24,
+      minVolLiqRatio: 1.0, tradingHoursGate: false, strategyMode: 'aggressive',
+    },
+  },
+  {
+    id: 'pumpswap_alpha',
+    name: 'PUMPSWAP ALPHA',
+    description: 'V2 Risk-Adj: Lowest drawdown (1.96%), SL30/TP120/Trail12, Liq>=$10K',
+    winRate: '50.0% (75% PnL, Sharpe 0.58)',
+    trades: 0,
+    config: {
+      stopLossPct: 30, takeProfitPct: 120, trailingStopPct: 12,
+      minLiquidityUsd: 10000, minScore: 45, minVolLiqRatio: 1.5,
+      maxTokenAgeHours: 200, tradingHoursGate: true, strategyMode: 'conservative',
+    },
+  },
+  // ── Legacy v1 Presets ──
   {
     id: 'elite',
     name: 'SNIPER ELITE',
@@ -239,14 +277,15 @@ export interface TokenRecommendation {
   reasoning: string;
 }
 
-/** Per-token SL/TP recommendation — backtested on 928 tokens (OHLCV-validated)
+/** Per-token SL/TP recommendation — updated with backtest v2 winners.
  *
- * Key findings (v5 full backtest, 89 configs, 928 tokens):
- * - Conservative (20/60 + 8% trail): 94.1% WR, PF 1533.63  (OHLCV)
- * - Aggressive  (20/100 + 10% trail): 78.9% WR, PF 135.15, +587% TotalPnL
- * - Optimal trail: 8-10% (TRAIL_10 = 100% WR, TRAIL_8 = 94.1% WR)
- * - Vol/Liq ≥ 0.5 → 40.6% upside vs 4.9% for <0.5 (8x edge)
- * - Best hours: 4:00 (60%), 11:00 (57%), 21:00 (52%)
+ * Backtest v2 top strategies:
+ * - SURGE_HUNTER: SL35/TP150/Trail15 — 61.8% WR, 209% PnL, Fitness 0.822
+ * - FRESH_DEGEN: SL40/TP200/Trail18 — 73.9% WR, 193% PnL
+ * - PUMPSWAP_ALPHA: SL30/TP120/Trail12 — 50% WR, Sharpe 0.58, 1.96% DD
+ *
+ * Default recommendation now uses SURGE_HUNTER as base (best composite fitness).
+ * Adjustments layer on top based on token characteristics.
  */
 export function getRecommendedSlTp(
   grad: BagsGraduation & Record<string, any>,
@@ -256,24 +295,42 @@ export function getRecommendedSlTp(
   const priceChange1h = grad.price_change_1h || 0;
   const buySellRatio = grad.buy_sell_ratio || 0;
   const ageHours = grad.age_hours || 0;
+  const vol24h = grad.volume_24h || 0;
+  const volLiqRatio = liq > 0 ? vol24h / liq : 0;
 
-  // Base SL/TP depends on strategy mode
-  let sl = 20;
-  let tp = mode === 'aggressive' ? 100 : 60;
-  let reasoning = mode === 'aggressive' ? 'Aggressive 20/100 base' : 'Conservative 20/60 base';
+  // V2 Strategy Auto-Selection based on token profile
+  const isFresh = ageHours > 0 && ageHours < 24;
+  const hasVolumeSurge = volLiqRatio >= 2.5;
+  const isHighLiq = liq >= 10000;
 
-  // Liquidity tier adjustments (high liq = less slippage, can tighten SL)
-  if (liq > 200000) {
-    sl = 15;
-    reasoning = (mode === 'aggressive' ? 'Aggressive' : 'Conservative') + ', high liq ($200K+) — tighter SL';
-  } else if (liq > 100000) {
-    sl = 18;
-    reasoning = (mode === 'aggressive' ? 'Aggressive' : 'Conservative') + ', strong liq ($100K+)';
+  // SURGE_HUNTER base (best composite fitness 0.822) — default for all tokens
+  let sl = 35;
+  let tp = 150;
+  let trail = 15;
+  let reasoning = 'V2 SURGE_HUNTER base (SL35/TP150/Trail15)';
+
+  // Override: FRESH_DEGEN for very young tokens (highest raw WR at 73.9%)
+  if (isFresh && mode === 'aggressive') {
+    sl = 40;
+    tp = 200;
+    trail = 18;
+    reasoning = 'V2 FRESH_DEGEN (SL40/TP200/Trail18) — token <24h old';
   }
-  // Low liquidity = wider SL to absorb spread
-  else if (liq < 25000) {
-    sl = 25; tp = mode === 'aggressive' ? 80 : 50;
-    reasoning = (mode === 'aggressive' ? 'Aggressive' : 'Conservative') + ', low liq — wider SL';
+  // Override: PUMPSWAP_ALPHA for high-liq conservative (lowest drawdown 1.96%)
+  else if (isHighLiq && mode === 'conservative') {
+    sl = 30;
+    tp = 120;
+    trail = 12;
+    reasoning = 'V2 PUMPSWAP_ALPHA (SL30/TP120/Trail12) — high liq, risk-adjusted';
+  }
+
+  // Liquidity-based adjustments (layered on v2 base)
+  if (liq > 200000) {
+    sl -= 5;
+    reasoning += ', high liq ($200K+) — tighter SL';
+  } else if (liq < 3000) {
+    sl += 5; tp -= 20;
+    reasoning += ', micro liq — wider SL, lower TP';
   }
 
   // Strong momentum = extend TP (let winners run even more)
@@ -285,8 +342,14 @@ export function getRecommendedSlTp(
     reasoning += ', good momentum';
   }
 
+  // Volume surge bonus — key SURGE_HUNTER signal
+  if (hasVolumeSurge) {
+    tp += 15;
+    reasoning += `, vol surge (V/L ${volLiqRatio.toFixed(1)}x)`;
+  }
+
   // Young + active = higher potential
-  if (ageHours < 100 && buySellRatio >= 1.2 && buySellRatio <= 2.5) {
+  if (ageHours < 24 && buySellRatio >= 1.2 && buySellRatio <= 2.5) {
     tp += 10;
     reasoning += ', young+active';
   }
@@ -299,40 +362,38 @@ export function getRecommendedSlTp(
 
   // Time-of-day adjustments (928-token OHLCV backtest: good hours > 50% WR)
   const nowUtcHour = new Date().getUTCHours();
-  const GOOD_HOURS = [14, 20]; // OHLCV-validated: 20:00 (43.5% WR), 14:00 (25% WR)
+  const GOOD_HOURS = [14, 20];
   if (GOOD_HOURS.includes(nowUtcHour)) {
-    // During high-WR hours: tighten SL (less drawdown), widen TP (let winners run)
     sl -= 3;
     tp += 15;
     reasoning += `, TOD boost (${nowUtcHour}h)`;
   }
 
-  // ─── Adaptive Trailing Stop ───
-  // High momentum → tighter trail (fast movers reverse quickly)
-  // Low momentum → wider trail (give room to develop)
-  let trail: number;
+  // Adaptive Trailing Stop Adjustment
+  // High momentum = tighter trail (fast movers reverse quickly)
+  // Low momentum = wider trail (give room to develop)
   if (priceChange1h > 50) {
-    trail = 5;
-    reasoning += ', tight trail (high momentum)';
-  } else if (priceChange1h <= 20) {
-    trail = 12;
-    reasoning += ', wide trail (low momentum)';
-  } else {
-    trail = 8;
-    reasoning += ', default trail';
+    trail = Math.max(5, trail - 5);
+    reasoning += ', tighter trail (high momentum)';
+  } else if (priceChange1h <= 5) {
+    trail = Math.min(20, trail + 3);
+    reasoning += ', wider trail (low momentum)';
   }
 
-  // Clamp values — aggressive allows higher TP cap
-  sl = Math.max(10, Math.min(30, Math.round(sl)));
-  tp = Math.max(30, Math.min(mode === 'aggressive' ? 200 : 120, Math.round(tp)));
+  // Clamp values — v2 allows wider ranges (SL up to 45, TP up to 250 aggressive)
+  sl = Math.max(10, Math.min(45, Math.round(sl)));
+  tp = Math.max(30, Math.min(mode === 'aggressive' ? 250 : 150, Math.round(tp)));
+  trail = Math.max(5, Math.min(20, Math.round(trail)));
 
   return { sl, tp, trail, reasoning };
 }
 
 /** Conviction-weighted position sizing — scale bets by signal quality.
- * Returns 0.5x – 2.0x multiplier on base position size.
- * Based on 928-token OHLCV feature importance:
- *   Price Change 1h (244.5%), Vol/Liq (77.6%), Liquidity, TOD, B/S ratio.
+ * Returns 0.5x - 2.0x multiplier on base position size.
+ * Updated with backtest v2 insights:
+ *   Volume surge (V/L >= 2.5) is the #1 alpha signal (SURGE_HUNTER fitness 0.822).
+ *   Fresh tokens (<24h) with activity = highest raw WR (73.9%).
+ *   Feature importance: Price Change 1h (244.5%), Vol/Liq (77.6%), Token Age, B/S ratio.
  */
 export function getConvictionMultiplier(
   grad: BagsGraduation & Record<string, any>,
@@ -342,26 +403,37 @@ export function getConvictionMultiplier(
 
   // Factor 1: Price Change 1h — strongest predictor (244.5% power)
   const change1h = grad.price_change_1h || 0;
-  if (change1h > 200) { score += 0.4; factors.push(`1h↑${Math.round(change1h)}%`); }
-  else if (change1h > 50) { score += 0.2; factors.push(`1h↑${Math.round(change1h)}%`); }
+  if (change1h > 200) { score += 0.4; factors.push(`1h+${Math.round(change1h)}%`); }
+  else if (change1h > 50) { score += 0.2; factors.push(`1h+${Math.round(change1h)}%`); }
 
-  // Factor 2: Vol/Liq ratio (77.6% predictive power)
+  // Factor 2: Vol/Liq ratio — V2 key signal (SURGE_HUNTER requires >= 2.5)
   const liq = grad.liquidity || 0;
   const vol24h = grad.volume_24h || 0;
   const volLiq = liq > 0 ? vol24h / liq : 0;
-  if (volLiq > 3.0) { score += 0.3; factors.push(`V/L ${volLiq.toFixed(1)}`); }
+  if (volLiq >= 2.5) {
+    // Volume surge — SURGE_HUNTER core signal. Highest conviction boost.
+    score += 0.5; factors.push(`VOL_SURGE ${volLiq.toFixed(1)}x`);
+  } else if (volLiq > 3.0) { score += 0.3; factors.push(`V/L ${volLiq.toFixed(1)}`); }
   else if (volLiq > 1.0) { score += 0.2; factors.push(`V/L ${volLiq.toFixed(1)}`); }
 
-  // Factor 3: Liquidity tier — higher = safer bet
+  // Factor 3: Fresh token bonus (V2: FRESH_DEGEN — 73.9% WR on tokens <24h)
+  const ageHours = grad.age_hours || 0;
+  if (ageHours > 0 && ageHours < 24) {
+    score += 0.3; factors.push(`fresh ${Math.round(ageHours)}h`);
+  } else if (ageHours > 0 && ageHours < 100) {
+    score += 0.1; factors.push(`young ${Math.round(ageHours)}h`);
+  }
+
+  // Factor 4: Liquidity tier — higher = safer bet
   if (liq > 200000) { score += 0.2; factors.push('$200K+'); }
   else if (liq > 100000) { score += 0.1; factors.push('$100K+'); }
 
-  // Factor 4: Good hour (OHLCV best hours: 4=60%, 11=57%, 21=52%)
+  // Factor 5: Good hour (OHLCV best hours: 4=60%, 11=57%, 21=52%)
   const nowUtcHour = new Date().getUTCHours();
   if ([4, 11, 21].includes(nowUtcHour)) { score += 0.2; factors.push(`hr${nowUtcHour}`); }
   else if (nowUtcHour === 8) { score += 0.1; factors.push('hr8'); }
 
-  // Factor 5: B/S sweet spot (1.2-2.0 = optimal in backtest)
+  // Factor 6: B/S sweet spot (1.2-2.0 = optimal in backtest)
   const buys = grad.txn_buys_1h || 0;
   const sells = grad.txn_sells_1h || 0;
   const bsRatio = sells > 0 ? buys / sells : buys;
@@ -369,7 +441,12 @@ export function getConvictionMultiplier(
     score += 0.1; factors.push(`BS${bsRatio.toFixed(1)}`);
   }
 
-  // ─── Negative Factors (risk penalties) ───
+  // Factor 7: Combined surge + fresh = strongest V2 combo
+  if (volLiq >= 2.5 && ageHours > 0 && ageHours < 24) {
+    score += 0.2; factors.push('SURGE+FRESH');
+  }
+
+  // Negative Factors (risk penalties)
 
   // Penalty: Very high price change (>200%) — pump risk
   if (change1h > 200) {
@@ -381,31 +458,31 @@ export function getConvictionMultiplier(
     score -= 0.15; factors.push('high B/S');
   }
 
-  // Base 0.5 + factors → clamp to [0.5, 2.0]
+  // Base 0.5 + factors -> clamp to [0.5, 2.0]
   const multiplier = Math.max(0.5, Math.min(2.0, 0.5 + score));
   return { multiplier, factors };
 }
 
 const DEFAULT_CONFIG: SniperConfig = {
-  stopLossPct: 20,      // Backtested: wider SL dramatically improves win rate
-  takeProfitPct: 60,    // Backtested: 20/60 = 87.5% WR with HYBRID_B v4 config
-  trailingStopPct: 8,   // 928-token OHLCV: 8% trail = 94.1% WR, PF 1533 (10% = 100% WR)
+  stopLossPct: 35,      // V2 SURGE_HUNTER: SL35 (best composite fitness 0.822)
+  takeProfitPct: 150,   // V2 SURGE_HUNTER: TP150 (209% PnL, PF 20.0)
+  trailingStopPct: 15,  // V2 SURGE_HUNTER: Trail15 (locks gains without choking runners)
   maxPositionSol: 0.1,
   maxConcurrentPositions: 10,
-  minScore: 0,          // Backtested: best configs use liq+momentum, not score
-  minLiquidityUsd: 50000,   // ↑ from $40K — filters more junk, INSIGHT-J uses $25K but we want quality
+  minScore: 40,         // V2 SURGE_HUNTER: safety threshold 0.40 -> minScore 40
+  minLiquidityUsd: 5000,    // V2 SURGE_HUNTER: $5K min (wider net for fresh tokens)
   autoSnipe: false,
   useJito: true,
   slippageBps: 150,
-  strategyMode: 'conservative',
+  strategyMode: 'aggressive', // V2 SURGE_HUNTER uses aggressive mode for wider TP range
   maxPositionAgeHours: 4,  // Auto-close stale positions after 4h to free capital
   useRecommendedExits: true,
-  // NEW: Stricter quality gates (be pickier, 4x fewer but higher quality)
-  minMomentum1h: 5,        // Require 5%+ upward momentum (was 0% — let everything through)
-  maxTokenAgeHours: 200,   // ↓ from 500h — young tokens have 188% more alpha
-  minVolLiqRatio: 1.0,     // ↑ from 0.5 — tighter filter for vol/liq edge
-  tradingHoursGate: true,  // Only trade during OHLCV-proven hours (blocks 11 dead hours)
-  minAgeMinutes: 2,       // Don't snipe tokens that graduated < 2 min ago (post-grad dumps)
+  // V2 quality gates tuned to SURGE_HUNTER params
+  minMomentum1h: 0,        // SURGE_HUNTER relies on vol surge, not momentum filter
+  maxTokenAgeHours: 24,    // V2: fresh tokens (<24h) have 188% more alpha
+  minVolLiqRatio: 2.5,     // V2 SURGE_HUNTER: volume surge >= 2.5x is the core signal
+  tradingHoursGate: false, // SURGE_HUNTER trades any hour (volume surge overrides TOD)
+  minAgeMinutes: 2,        // Don't snipe tokens that graduated < 2 min ago (post-grad dumps)
   // Circuit breaker: halt sniping on cascading losses to protect capital
   circuitBreakerEnabled: true,
   maxConsecutiveLosses: 3,     // 3 losses in a row = halt
@@ -493,7 +570,7 @@ export const useSniperStore = create<SniperState>()(
   persist(
     (set, get) => ({
   config: DEFAULT_CONFIG,
-  activePreset: 'hybrid_b',
+  activePreset: 'surge_hunter',
   tradeSignerMode: 'phantom',
   setTradeSignerMode: (mode) => set({ tradeSignerMode: mode }),
   sessionWalletPubkey: null,
@@ -526,10 +603,10 @@ export const useSniperStore = create<SniperState>()(
     config: {
       ...s.config,
       strategyMode: mode,
-      // Auto-adjust base SL/TP/trail to match 928-token OHLCV optimums
-      takeProfitPct: mode === 'aggressive' ? 100 : 60,
-      stopLossPct: 20,  // Both modes use 20% SL
-      trailingStopPct: mode === 'aggressive' ? 10 : 8,  // Aggressive: 10% (100% WR), Conservative: 8% (94.1% WR)
+      // V2: Aggressive -> SURGE_HUNTER (35/150/15), Conservative -> PUMPSWAP_ALPHA (30/120/12)
+      stopLossPct: mode === 'aggressive' ? 35 : 30,
+      takeProfitPct: mode === 'aggressive' ? 150 : 120,
+      trailingStopPct: mode === 'aggressive' ? 15 : 12,
     },
   })),
   loadBestEver: (cfg) => set((s) => ({
