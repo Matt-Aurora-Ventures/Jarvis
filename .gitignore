@@ -405,6 +405,7 @@ deploy/vps_remote_control_setup.md
 
 # === BUILD / CACHE ARTIFACTS ===
 .next/
+*.tsbuildinfo
 .venv-wsl/
 coverage_html*/
 htmlcov*/
