@@ -478,11 +478,11 @@ class TestBagsTopTokens:
     async def test_get_bags_top_tokens_with_sentiment(self):
         """Test gets top tokens from Bags with sentiment."""
         mock_bags_client = AsyncMock()
-        # Token needs name or symbol ending in "bags" due to filtering
+        # Token needs a bags launch mint suffix due to filtering
         mock_token = SimpleNamespace(
             symbol="TESTBAGS",
             name="Test Bags",
-            address="bags_addr",
+            address="SomeMintBAGS",
             price_usd=2.0,
             price_change_24h=5.0,
             volume_24h=100_000,
@@ -505,7 +505,7 @@ class TestBagsTopTokens:
         fallback_token = {
             "symbol": "TESTBAGS",
             "name": "Test Bags Token",
-            "address": "testbags_addr",
+            "address": "AnotherMintBAGS",
             "price_usd": 1.0,
             "price_change_24h": 5.0,
             "volume_24h": 50_000,
@@ -519,3 +519,33 @@ class TestBagsTopTokens:
 
         assert len(result) == 1
         assert result[0]["symbol"] == "TESTBAGS"
+
+    @pytest.mark.asyncio
+    async def test_get_bags_top_tokens_filters_out_pump_fun_mints(self):
+        """Pump.fun mints (…pump) must never appear in the Bags Top 15 menu."""
+        mock_bags_client = AsyncMock()
+        pump_token = SimpleNamespace(
+            symbol="PUMP",
+            name="Pump Token",
+            address="Cm6fNnMkmHpump",
+            price_usd=1.0,
+            price_change_24h=-10.0,
+            volume_24h=1_000_000,
+            liquidity=250_000,
+        )
+        good_token = SimpleNamespace(
+            symbol="GOOD",
+            name="Good Bags Token",
+            address="GoodMintBAGS",
+            price_usd=1.0,
+            price_change_24h=10.0,
+            volume_24h=500_000,
+            liquidity=250_000,
+        )
+        mock_bags_client.get_top_tokens_by_volume = AsyncMock(return_value=[pump_token, good_token])
+
+        with patch("tg_bot.handlers.demo.demo_trading.get_bags_client", return_value=mock_bags_client), \
+             patch("tg_bot.handlers.demo.demo_sentiment.get_ai_sentiment_for_token", new_callable=AsyncMock, return_value={"sentiment": "neutral", "score": 0.5, "signal": "NEUTRAL"}):
+            result = await demo_sentiment.get_bags_top_tokens_with_sentiment(limit=15)
+
+        assert [r.get("address") for r in result] == ["GoodMintBAGS"]
