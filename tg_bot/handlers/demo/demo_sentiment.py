@@ -502,6 +502,26 @@ _BAGS_POOLS_MINTS_LOCK = asyncio.Lock()
 _BAGS_POOLS_MINTS_TTL_SEC: int = 24 * 60 * 60  # 24 hours
 
 
+def _looks_like_bags_launch_mint(address: str) -> bool:
+    """Best-effort check for "bags.fm launch" mints.
+
+    In practice, bags.fm launch mints have a vanity suffix "BAGS". We use this to
+    prevent DexScreener trending (often dominated by pump.fun) from polluting the
+    "🎒 BAGS.FM TOP 15" menu.
+
+    This is intentionally conservative: if we cannot confidently classify the
+    mint as a bags launch, we exclude it from this specific menu.
+    """
+    addr = (address or "").strip()
+    if not addr:
+        return False
+    # pump.fun launch mints often end with "pump" (user report). Block them here.
+    lower = addr.lower()
+    if lower.endswith("pump"):
+        return False
+    return lower.endswith("bags")
+
+
 def _bags_pools_mints_cache_path() -> Path:
     root = Path(__file__).resolve().parents[3]
     return root / "data" / "bags" / "bags_pools_token_mints.txt"
@@ -620,15 +640,10 @@ async def _fallback_bags_top_tokens_via_dexscreener(limit: int) -> List[Dict[str
     """Bags Top 15 fallback when bags.fm leaderboard endpoints are unavailable.
 
     Strategy:
-    - Build a bags-only mint allowlist from /solana/bags/pools
     - Pull trending Solana tokens from DexScreener
-    - Filter to bags-only mints, then rank by 24h volume
+    - Filter to bags launch mints (vanity suffix "BAGS"), then rank by 24h volume
     """
     try:
-        bags_mints = await _get_bags_pools_token_mints()
-        if not bags_mints:
-            return []
-
         fetch_limit = max(250, limit * 25)
         pairs = await _get_dexscreener_trending_pairs(limit=fetch_limit)
         if not pairs:
@@ -637,11 +652,12 @@ async def _fallback_bags_top_tokens_via_dexscreener(limit: int) -> List[Dict[str
         out: List[Dict[str, Any]] = []
         for p in pairs:
             address = (getattr(p, "base_token_address", "") or "").strip()
-            if not address or address not in bags_mints:
+            if not _looks_like_bags_launch_mint(address):
                 continue
 
             symbol = (getattr(p, "base_token_symbol", "") or "").strip()
             name = (getattr(p, "base_token_name", "") or "").strip()
+            pair_address = (getattr(p, "pair_address", "") or "").strip()
             out.append({
                 "address": address,
                 "symbol": symbol or address[:6],
@@ -654,8 +670,8 @@ async def _fallback_bags_top_tokens_via_dexscreener(limit: int) -> List[Dict[str
                 "holders": 0,
                 "market_cap": 0,
                 "price_change_24h": float(getattr(p, "price_change_24h", 0) or 0),
-                "chart_url": f"https://dexscreener.com/solana/{address}",
-                "source": "dexscreener_bags_allowlist",
+                "chart_url": f"https://dexscreener.com/solana/{pair_address or address}",
+                "source": "dexscreener_bags_only",
             })
 
         out.sort(key=lambda t: float(t.get("volume_24h", 0) or 0), reverse=True)
@@ -691,15 +707,28 @@ async def get_bags_top_tokens_with_sentiment(limit: int = 15) -> List[Dict[str, 
         from core.feature_flags import is_xai_enabled
 
         bags_client = get_bags_client()
-        fetch_limit = max(limit * 2, limit)
+        # We may need to fetch more than `limit` to get enough bags launch mints after filtering.
+        fetch_limit = max(limit * 6, 90)
+        fetch_limit = min(fetch_limit, 200)
 
         tokens: List[Any] = []
         if bags_client:
             tokens = await bags_client.get_top_tokens_by_volume(limit=fetch_limit, allow_public=True)
 
-        # Endpoint is frequently unavailable; use bags-only DexScreener fallback.
+        # Filter to bags launch mints only (prevents pump.fun tokens in the Bags menu).
+        tokens = [
+            t for t in (tokens or [])
+            if _looks_like_bags_launch_mint(_field(t, "address", ""))
+        ]
+
+        # Endpoint can be unavailable; use DexScreener fallback filtered to bags launch mints.
         if not tokens:
             tokens = await _fallback_bags_top_tokens_via_dexscreener(limit=fetch_limit)
+            # Defense-in-depth: ensure patched/broken fallback can't leak non-bags tokens here.
+            tokens = [
+                t for t in (tokens or [])
+                if _looks_like_bags_launch_mint(_field(t, "address", ""))
+            ]
 
         if not tokens:
             return []

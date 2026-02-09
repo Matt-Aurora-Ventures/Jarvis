@@ -4835,13 +4835,13 @@ Reply with a Solana token address to buy.
         # Calculate total volume
         total_volume = sum(t.get("volume_24h", 0) for t in tokens)
 
-        # Data source marker (bags.fm endpoint is often flaky; we fall back to DexScreener)
+        # Data source marker (bags.fm endpoint is often flaky; we may fall back to DexScreener)
         data_source = "bags.fm"
         try:
             sources = {(t.get("source") or "").lower().strip() for t in (tokens or []) if isinstance(t, dict)}
-            # The only DexScreener fallback we allow here is filtered by the bags.fm pools allowlist.
+            # DexScreener fallback is filtered to bags launch mints only.
             if any(s.startswith("dexscreener") for s in sources):
-                data_source = "DexScreener (Bags allowlist)"
+                data_source = "DexScreener (Bags-only)"
         except Exception:
             pass
 
@@ -7547,19 +7547,29 @@ first, then create DCA plans from there.
             try:
                 # Fetch tokens with sentiment
                 bags_tokens = await get_bags_top_tokens_with_sentiment(limit=15)
-                for token in bags_tokens:
-                    token["token_id"] = _register_token_id(context, token.get("address"))
+                if not bags_tokens:
+                    text, keyboard = DemoMenuBuilder.error_message(
+                        error=(
+                            "Bags Top 15 is temporarily unavailable (bags.fm public API is returning errors).\n\n"
+                            "Try again in ~1-2 minutes."
+                        ),
+                        retry_action="demo:bags_fm",
+                        context_hint="bags_fm",
+                    )
+                else:
+                    for token in bags_tokens:
+                        token["token_id"] = _register_token_id(context, token.get("address"))
 
-                # Get user's TP/SL settings
-                default_tp = context.user_data.get("bags_tp_percent", 15.0)
-                default_sl = context.user_data.get("bags_sl_percent", 15.0)
+                    # Get user's TP/SL settings
+                    default_tp = context.user_data.get("bags_tp_percent", 15.0)
+                    default_sl = context.user_data.get("bags_sl_percent", 15.0)
 
-                text, keyboard = DemoMenuBuilder.bags_fm_top_tokens(
-                    tokens=bags_tokens,
-                    market_regime=market_regime,
-                    default_tp_percent=default_tp,
-                    default_sl_percent=default_sl,
-                )
+                    text, keyboard = DemoMenuBuilder.bags_fm_top_tokens(
+                        tokens=bags_tokens,
+                        market_regime=market_regime,
+                        default_tp_percent=default_tp,
+                        default_sl_percent=default_sl,
+                    )
             except Exception as e:
                 logger.error(f"Bags.fm error: {e}")
                 text, keyboard = DemoMenuBuilder.error_message(
@@ -7647,6 +7657,8 @@ first, then create DCA plans from there.
                         amount=amount_sol,
                         wallet_address=wallet_address,
                         slippage_bps=slippage_bps,
+                        # Policy: purchases should be bags.fm only (no Jupiter fallback) unless explicitly enabled.
+                        allow_jupiter_fallback=False,
                     )
 
                     if swap.get("success"):

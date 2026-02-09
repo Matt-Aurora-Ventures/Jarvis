@@ -151,6 +151,19 @@ def _looks_like_placeholder(text: str) -> bool:
     )
 
 
+def _bags_top15_contains_pump_fun(text: str) -> bool:
+    """Fail the crawl if the Bags Top 15 menu shows pump.fun mints (…pump)."""
+    raw = text or ""
+    if "BAGS.FM TOP 15" not in raw.upper():
+        return False
+    for line in raw.splitlines():
+        l = line.strip().lower()
+        # Bot formats these as "📋 CA: <prefix>...<suffix>".
+        if "ca:" in l and ("...pump" in l or l.endswith("pump")):
+            return True
+    return False
+
+
 def _page_signature(text: str) -> str:
     """Best-effort stable page id for back-navigation verification."""
     raw = text or ""
@@ -695,6 +708,8 @@ async def scenario_crawl(
                 and (not _looks_like_error(child_text))
                 and (not _looks_like_placeholder(raw_text))
                 and (not _looks_like_placeholder(child_text))
+                and (not _bags_top15_contains_pump_fun(raw_text))
+                and (not _bags_top15_contains_pump_fun(child_text))
             )
             out.append(
                 StepResult(
