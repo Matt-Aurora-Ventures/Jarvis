@@ -3,6 +3,8 @@
  *
  * Jupiter v6 is the standard Solana swap aggregator.
  * No API key required. Routes across Raydium, Orca, Meteora, etc.
+ *
+ * Supports both buy (SOL→Token) and sell (Token→SOL) flows.
  */
 
 import { Connection, VersionedTransaction } from '@solana/web3.js';
@@ -42,22 +44,225 @@ const JITO_ENDPOINTS = [
   'https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/transactions',
 ];
 
+// --- Known DEX program IDs for fallback routing ---
+export const DEX_PROGRAMS = {
+  METEORA_DAMM_V2: 'cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG',
+  METEORA_DBC: 'dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN',
+  RAYDIUM_V4: '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
+} as const;
+
 /**
  * Get swap quote from Jupiter v6, falling back to Bags.fm
+ * Works for both buy (SOL→Token) and sell (Token→SOL).
+ */
+/**
+ * Waterfall quote strategy:
+ * 1. Jupiter v6 — standard aggregator, covers Raydium/Orca/Meteora
+ * 2. Bags.fm — their proxy, may require API key
+ * 3. Direct Raydium/Meteora — for brand-new tokens not yet indexed
+ *
+ * If all fail, returns null ("No route found").
  */
 export async function getQuote(
   inputMint: string,
   outputMint: string,
   amountSol: number,
   slippageBps = 100,
+  dexHint?: 'raydium' | 'meteora',
 ): Promise<SwapQuote | null> {
-  // Try Jupiter v6 first
+  // 1. Jupiter v6 — handles most tokens
   const jupiterQuote = await getJupiterQuote(inputMint, outputMint, amountSol, slippageBps);
   if (jupiterQuote) return jupiterQuote;
 
-  // Fallback to Bags.fm
+  // 2. Bags.fm fallback
   const bagsQuote = await getBagsQuote(inputMint, outputMint, amountSol, slippageBps);
-  return bagsQuote;
+  if (bagsQuote) return bagsQuote;
+
+  // 3. Direct DEX fallback — for newly graduated tokens not yet on Jupiter
+  // Jupiter typically indexes new pools within 30s-2min, but this gap is critical for sniping
+  if (dexHint) {
+    console.warn(`[Fallback] Jupiter + Bags failed for ${inputMint}, attempting direct ${dexHint} quote...`);
+    const directQuote = await getDirectDexQuote(inputMint, outputMint, amountSol, slippageBps, dexHint);
+    if (directQuote) return directQuote;
+  }
+
+  return null;
+}
+
+/**
+ * Direct DEX quote fallback — attempts to get a quote directly from
+ * Raydium or Meteora APIs when Jupiter hasn't indexed the pair yet.
+ *
+ * Note: These are API-level fallbacks. Full native SDK integration
+ * (building swap instructions from pool state) would require
+ * @meteora-ag/dlmm or raydium-sdk, which adds significant bundle size.
+ * This approach uses their public APIs instead.
+ */
+async function getDirectDexQuote(
+  inputMint: string,
+  outputMint: string,
+  amountSol: number,
+  slippageBps: number,
+  dex: 'raydium' | 'meteora',
+): Promise<SwapQuote | null> {
+  const lamports = Math.floor(amountSol * 1e9);
+
+  if (dex === 'raydium') {
+    try {
+      // Raydium's swap API (v2) — public, no auth
+      const params = new URLSearchParams({
+        inputMint,
+        outputMint,
+        amount: lamports.toString(),
+        slippageBps: slippageBps.toString(),
+        txVersion: 'V0',
+      });
+      const res = await fetch(`https://transaction-v1.raydium.io/compute/swap-base-in?${params}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data) {
+          console.log('[Raydium] Direct quote succeeded');
+          return {
+            inputMint,
+            outputMint,
+            inAmount: lamports.toString(),
+            outAmount: data.data.outputAmount?.toString() || '0',
+            otherAmountThreshold: data.data.otherAmountThreshold?.toString() || '0',
+            priceImpactPct: (data.data.priceImpact || 0).toString(),
+            routePlan: [{ dex: 'raydium', programId: DEX_PROGRAMS.RAYDIUM_V4 }],
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('[Raydium] Direct quote failed:', err);
+    }
+  }
+
+  if (dex === 'meteora') {
+    try {
+      // Meteora doesn't have a public quote API in the same style,
+      // but their DLMM pools are indexed by Jupiter within seconds.
+      // For DAMM v2 pools (Bags graduations), try the Bags API with auth.
+      const apiKey = typeof window !== 'undefined'
+        ? (window as any).__NEXT_PUBLIC_BAGS_API_KEY
+        : process.env.NEXT_PUBLIC_BAGS_API_KEY;
+
+      if (apiKey) {
+        const params = new URLSearchParams({
+          inputMint,
+          outputMint,
+          amount: lamports.toString(),
+          slippageBps: slippageBps.toString(),
+        });
+        const res = await fetch(`${BAGS_TRADE_API}/trade/quote?${params}`, {
+          headers: {
+            Accept: 'application/json',
+            'x-api-key': apiKey,
+          },
+        });
+        if (res.ok) {
+          const result = await res.json();
+          if (result.success && result.response) {
+            console.log('[Meteora/Bags] Authenticated quote succeeded');
+            return result.response as SwapQuote;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Meteora] Direct quote failed:', err);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Get a sell quote (Token→SOL) using raw lamport amount.
+ * Used by the risk management loop to check exit value.
+ */
+export async function getSellQuote(
+  tokenMint: string,
+  amountLamports: string,
+  slippageBps = 200,
+): Promise<SwapQuote | null> {
+  try {
+    const params = new URLSearchParams({
+      inputMint: tokenMint,
+      outputMint: SOL_MINT,
+      amount: amountLamports,
+      slippageBps: slippageBps.toString(),
+      swapMode: 'ExactIn',
+    });
+
+    const res = await fetch(`${JUPITER_QUOTE}?${params}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!res.ok) {
+      console.warn('[Jupiter] Sell quote failed:', res.status);
+      return null;
+    }
+
+    const data = await res.json();
+    if (data.error) {
+      console.warn('[Jupiter] Sell quote error:', data.error);
+      return null;
+    }
+
+    return data as SwapQuote;
+  } catch (err) {
+    console.warn('[Jupiter] Sell quote exception:', err);
+    return null;
+  }
+}
+
+/**
+ * Execute a swap using a pre-fetched quote (skips re-quoting).
+ * Used by the SL/TP loop to execute immediately with the same quote it checked.
+ */
+export async function executeSwapFromQuote(
+  connection: Connection,
+  walletAddress: string,
+  quote: SwapQuote,
+  signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>,
+  useJito = false,
+): Promise<SwapResult> {
+  const timestamp = Date.now();
+  try {
+    const swapTxBase64 = await getSwapTransaction(walletAddress, quote);
+    if (!swapTxBase64) {
+      return { success: false, inputAmount: 0, outputAmount: 0, priceImpact: parseFloat(quote.priceImpactPct || '0'), error: 'Swap transaction build failed', timestamp };
+    }
+
+    const txBuffer = Buffer.from(swapTxBase64, 'base64');
+    const transaction = VersionedTransaction.deserialize(txBuffer);
+    const signedTx = await signTransaction(transaction);
+
+    let txHash: string;
+    if (useJito) {
+      txHash = await sendWithJito(signedTx, connection);
+    } else {
+      txHash = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: true, maxRetries: 3 });
+    }
+
+    const confirmation = await connection.confirmTransaction(txHash, 'confirmed');
+    if (confirmation.value.err) {
+      return { success: false, txHash, inputAmount: 0, outputAmount: 0, priceImpact: parseFloat(quote.priceImpactPct || '0'), error: 'On-chain failure', timestamp };
+    }
+
+    const rawOut = parseInt(quote.outAmount);
+    const outputAmount = rawOut > 1e12 ? rawOut / 1e9 : rawOut / 1e6;
+
+    return { success: true, txHash, inputAmount: parseInt(quote.inAmount) / 1e9, outputAmount, priceImpact: parseFloat(quote.priceImpactPct || '0'), timestamp };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    if (msg.includes('User rejected') || msg.includes('user rejected')) {
+      return { success: false, inputAmount: 0, outputAmount: 0, priceImpact: 0, error: 'Transaction rejected by user', timestamp };
+    }
+    return { success: false, inputAmount: 0, outputAmount: 0, priceImpact: 0, error: msg, timestamp };
+  }
 }
 
 async function getJupiterQuote(

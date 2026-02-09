@@ -1,10 +1,11 @@
 'use client';
 
-import { X, DollarSign, Clock, ExternalLink, Shield, Target, BarChart3, Trash2 } from 'lucide-react';
+import { X, DollarSign, Clock, ExternalLink, Shield, Target, BarChart3, Trash2, Loader2 } from 'lucide-react';
 import { useSniperStore } from '@/stores/useSniperStore';
 
 export function PositionsPanel() {
-  const { positions, updatePosition, addExecution, setSelectedMint, selectedMint, resetSession } = useSniperStore();
+  const { positions, setSelectedMint, selectedMint, resetSession } = useSniperStore();
+  const closePosition = useSniperStore((s) => s.closePosition);
   const openPositions = positions.filter(p => p.status === 'open');
   const closedPositions = positions.filter(p => p.status !== 'open').slice(0, 10);
 
@@ -13,17 +14,8 @@ export function PositionsPanel() {
 
   function handleClose(id: string) {
     const pos = positions.find(p => p.id === id);
-    if (!pos) return;
-    updatePosition(id, { status: 'closed' });
-    addExecution({
-      id: `close-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      type: 'manual_exit',
-      symbol: pos.symbol,
-      mint: pos.mint,
-      amount: pos.solInvested,
-      pnlPercent: pos.pnlPercent,
-      timestamp: Date.now(),
-    });
+    if (!pos || pos.isClosing) return;
+    closePosition(id, 'closed');
   }
 
   const hasData = positions.length > 0;
@@ -143,9 +135,14 @@ function PositionRow({ pos, isSelected, onClose, onSelect }: {
           </span>
           <button
             onClick={(e) => { e.stopPropagation(); onClose(pos.id); }}
-            className="w-6 h-6 rounded-full flex items-center justify-center bg-accent-error/10 text-accent-error hover:bg-accent-error/20 transition-all"
+            disabled={pos.isClosing}
+            className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+              pos.isClosing
+                ? 'bg-bg-tertiary text-text-muted cursor-not-allowed'
+                : 'bg-accent-error/10 text-accent-error hover:bg-accent-error/20'
+            }`}
           >
-            <X className="w-3 h-3" />
+            {pos.isClosing ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
           </button>
         </div>
       </div>

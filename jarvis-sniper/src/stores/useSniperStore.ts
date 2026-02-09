@@ -30,12 +30,16 @@ export interface Position {
   entryPrice: number;
   currentPrice: number;
   amount: number;
+  /** Raw token amount in lamports (smallest unit) for sell quotes */
+  amountLamports?: string;
   solInvested: number;
   pnlPercent: number;
   pnlSol: number;
   entryTime: number;
   txHash?: string;
   status: 'open' | 'tp_hit' | 'sl_hit' | 'closed';
+  /** Lock flag — prevents duplicate sell attempts while tx is in-flight */
+  isClosing?: boolean;
   score: number;
   recommendedSl: number;
   recommendedTp: number;
@@ -145,6 +149,12 @@ interface SniperState {
   addPosition: (pos: Position) => void;
   updatePosition: (id: string, update: Partial<Position>) => void;
   removePosition: (id: string) => void;
+  /** Batch-update prices from DexScreener polling */
+  updatePrices: (priceMap: Record<string, number>) => void;
+  /** Set isClosing lock on a position */
+  setPositionClosing: (id: string, closing: boolean) => void;
+  /** Close a position with proper status and stats tracking */
+  closePosition: (id: string, status: 'tp_hit' | 'sl_hit' | 'closed', txHash?: string) => void;
 
   // Snipe action — creates position + logs execution
   snipeToken: (grad: BagsGraduation & Record<string, any>) => void;
@@ -222,6 +232,47 @@ export const useSniperStore = create<SniperState>((set, get) => ({
   removePosition: (id) => set((s) => ({
     positions: s.positions.filter((p) => p.id !== id),
   })),
+  updatePrices: (priceMap) => set((s) => ({
+    positions: s.positions.map((p) => {
+      const newPrice = priceMap[p.mint];
+      if (newPrice == null || p.status !== 'open') return p;
+      const pnlPercent = p.entryPrice > 0 ? ((newPrice - p.entryPrice) / p.entryPrice) * 100 : 0;
+      const pnlSol = p.solInvested * (pnlPercent / 100);
+      return { ...p, currentPrice: newPrice, pnlPercent, pnlSol };
+    }),
+  })),
+  setPositionClosing: (id, closing) => set((s) => ({
+    positions: s.positions.map((p) => p.id === id ? { ...p, isClosing: closing } : p),
+  })),
+  closePosition: (id, status, txHash) => {
+    const state = get();
+    const pos = state.positions.find((p) => p.id === id);
+    if (!pos) return;
+
+    execCounter++;
+    const exitType = status === 'tp_hit' ? 'tp_exit' : status === 'sl_hit' ? 'sl_exit' : 'manual_exit';
+    const execEvent: ExecutionEvent = {
+      id: `exec-${Date.now()}-${execCounter}`,
+      type: exitType,
+      symbol: pos.symbol,
+      mint: pos.mint,
+      amount: pos.solInvested,
+      pnlPercent: pos.pnlPercent,
+      txHash,
+      timestamp: Date.now(),
+      reason: `${status.replace('_', ' ').toUpperCase()} at ${pos.pnlPercent.toFixed(1)}%`,
+    };
+
+    set((s) => ({
+      positions: s.positions.map((p) => p.id === id ? { ...p, status, isClosing: false } : p),
+      executionLog: [execEvent, ...s.executionLog].slice(0, 200),
+      totalPnl: s.totalPnl + pos.pnlSol,
+      winCount: exitType === 'tp_exit' ? s.winCount + 1 : s.winCount,
+      lossCount: exitType === 'sl_exit' ? s.lossCount + 1 : s.lossCount,
+      totalTrades: s.totalTrades + 1,
+      budget: { ...s.budget, spent: Math.max(0, s.budget.spent - pos.solInvested) },
+    }));
+  },
 
   snipedMints: new Set(),
 
