@@ -88,14 +88,8 @@ export function useSnipeExecutor() {
       addExecution(makeExecEvent(grad, 'skip', 0, `Negative momentum: ${change1h.toFixed(1)}%`));
       return;
     }
-    // Filter 5: Time-of-day (928-token OHLCV backtest — block hours with <18% WR)
-    // Best: 4:00 (60%), 11:00 (57%), 21:00 (52%) | Worst: 3,5 (0%), 9 (8%), 23 (6%), 17 (15%), 1 (18%)
-    const nowUtcHour = new Date().getUTCHours();
-    const BAD_HOURS = [1, 3, 5, 9, 17, 23];
-    if (BAD_HOURS.includes(nowUtcHour)) {
-      addExecution(makeExecEvent(grad, 'skip', 0, `Bad hour: ${nowUtcHour}:00 UTC (928-token backtest <18% WR)`));
-      return;
-    }
+    // TOD note: removed hard block — OHLCV backtest had too few samples (16/200 tokens).
+    // TOD is now handled as a soft penalty in getConvictionMultiplier() instead.
     // Filter 6: Vol/Liq ratio ≥ 0.5 (8x edge: 40.6% upside vs 4.9% for <0.5)
     const vol24h = grad.volume_24h || 0;
     const volLiqRatio = liq > 0 ? vol24h / liq : 0;
@@ -151,6 +145,7 @@ export function useSnipeExecutor() {
         mint: grad.mint,
         symbol: grad.symbol,
         name: grad.name,
+        walletAddress: address,
         entryPrice,
         currentPrice: entryPrice,
         amount: result.outputAmount,

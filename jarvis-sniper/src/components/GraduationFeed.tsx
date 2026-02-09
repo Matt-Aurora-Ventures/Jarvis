@@ -149,11 +149,10 @@ function TokenCard({ grad, isNew, meetsThreshold, isSniped, onSnipe, onChart, bu
   const passesBSRatio = totalTxns <= 10 ? true : (bsRatio >= 1.0 && bsRatio <= 3.0);
   const passesAge = ageH <= 500;
   const passesMomentum = priceChange >= 0;
-  // Time-of-day filter (928-token OHLCV backtest)
+  // Time-of-day — soft indicator only (no hard-block).
   const nowUtcHour = new Date().getUTCHours();
-  const BAD_HOURS = [1, 3, 5, 9, 17, 23];
-  const GOOD_HOURS = [4, 8, 11, 21];
-  const passesTod = !BAD_HOURS.includes(nowUtcHour);
+  const GOOD_HOURS = [14, 20]; // OHLCV-validated: 20:00 (43.5% WR), 14:00 (25% WR)
+  const passesTod = true;
   const isGoodHour = GOOD_HOURS.includes(nowUtcHour);
   // Vol/Liq filter (8x edge: 40.6% upside ≥0.5 vs 4.9% <0.5)
   const vol24h = grad.volume_24h || 0;

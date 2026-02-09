@@ -42,8 +42,6 @@ export function useAutomatedRiskManagement() {
   }
 
   useEffect(() => {
-    if (!connected || !address) return;
-
     const checkRisk = async () => {
       if (isCheckingRef.current) return;
       isCheckingRef.current = true;
@@ -52,9 +50,7 @@ export function useAutomatedRiskManagement() {
         const currentState = useSniperStore.getState();
         const { config, addExecution, updatePosition } = currentState;
         const useRecommendedExits = config.useRecommendedExits !== false;
-        const activePositions = currentState.positions.filter(
-          (p) => p.status === 'open' && !p.isClosing
-        );
+        const activePositions = currentState.positions.filter((p) => p.status === 'open' && !p.isClosing);
 
         if (activePositions.length === 0) return;
 
@@ -74,6 +70,8 @@ export function useAutomatedRiskManagement() {
 
           // Skip if no amount data to sell
           if (!pos.amountLamports && pos.amount <= 0) continue;
+          // Risk monitoring can continue even if Phantom is disconnected, as long as we know the owner address.
+          if (!address && !pos.walletAddress) continue;
 
           // Check using current price from DexScreener (set by usePnlTracker)
           // This is a fast preliminary check before doing the expensive quote
@@ -124,6 +122,12 @@ export function useAutomatedRiskManagement() {
 
         for (const pos of ordered) {
           const connection = getConnection();
+          const ownerAddress = address ?? pos.walletAddress;
+          if (!ownerAddress) continue;
+          if (!pos.walletAddress && address) {
+            // Migrate older persisted positions (pre-walletAddress) so monitoring works even if Phantom disconnects later.
+            updatePosition(pos.id, { walletAddress: address });
+          }
 
           // Use per-position recommended SL/TP, or force global exits when disabled.
           const slThreshold = useRecommendedExits ? (pos.recommendedSl ?? config.stopLossPct) : config.stopLossPct;
@@ -138,7 +142,7 @@ export function useAutomatedRiskManagement() {
 
           // If we don't have a reliable raw token amount, fetch from chain.
           // Also clamp to wallet balance to avoid "insufficient funds" if the recorded amount is stale.
-          const bal = await getOwnerTokenBalanceLamports(connection, address, pos.mint);
+          const bal = await getOwnerTokenBalanceLamports(connection, ownerAddress, pos.mint);
           if (!amountStr || amountStr === '0') {
             if (!bal || bal.amountLamports === '0') continue;
             amountStr = bal.amountLamports;
@@ -151,7 +155,24 @@ export function useAutomatedRiskManagement() {
             }
           }
 
-          const sellQuote = await getSellQuote(pos.mint, amountStr, config.slippageBps);
+          // Quick trigger check using fast chart PnL (DexScreener / Birdeye prices).
+          // Used as a fallback when we can't get a quote due to low liquidity or slippage.
+          const quickPnl = pos.pnlPercent;
+          const quickHwm = pos.highWaterMarkPct ?? 0;
+          const quickHitSl = quickPnl <= -slThreshold;
+          const quickHitTp = quickPnl >= tpThreshold;
+          const quickTrailDrop = trailingStopPct > 0 && quickHwm > 0 ? quickHwm - quickPnl : 0;
+          const quickHitTrail = trailingStopPct > 0 && quickHwm > 0 && quickTrailDrop >= trailingStopPct;
+          const maxAgeMs = (config.maxPositionAgeHours ?? 4) * 3600_000;
+          const posAge = now - pos.entryTime;
+          const quickHitExpiry = maxAgeMs > 0 && posAge >= maxAgeMs;
+
+          // Try sell quotes with a small slippage fallback so we still detect exits during volatility.
+          const slippageBase = config.slippageBps;
+          const sellQuote =
+            (await getSellQuote(pos.mint, amountStr, slippageBase)) ??
+            (await getSellQuote(pos.mint, amountStr, Math.max(slippageBase, 300))) ??
+            (await getSellQuote(pos.mint, amountStr, Math.max(slippageBase, 500)));
 
           if (!sellQuote) {
             // No route (or quote error). Token may have lost liquidity, or slippage may be too tight.
@@ -167,6 +188,44 @@ export function useAutomatedRiskManagement() {
                 reason: `Could not get a sell quote (no route / slippage too low / liquidity pulled). Try higher slippage.`,
                 timestamp: Date.now(),
               });
+            }
+
+            // If a stop condition is hit (even from chart prices), still surface it as pending so the user sees "activation".
+            if (quickHitSl || quickHitTp || quickHitTrail || quickHitExpiry) {
+              const triggerType: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' =
+                quickHitTp ? 'tp_hit' : quickHitTrail ? 'trail_stop' : quickHitExpiry ? 'expired' : 'sl_hit';
+              const ageStr = `${(posAge / 3600_000).toFixed(1)}h`;
+              const triggerLabel = triggerType === 'tp_hit'
+                ? 'TP'
+                : triggerType === 'trail_stop'
+                  ? `TRAIL (HWM ${quickHwm.toFixed(1)}%)`
+                  : triggerType === 'expired'
+                    ? `EXPIRED (${ageStr})`
+                    : 'SL';
+              const reason = 'Quote unavailable — try higher slippage or liquidity may be pulled.';
+
+              updatePosition(pos.id, {
+                exitPending: {
+                  trigger: triggerType,
+                  pnlPercent: quickPnl,
+                  quoteAvailable: false,
+                  reason,
+                  updatedAt: now,
+                },
+              });
+
+              if (!pos.exitPending || pos.exitPending.trigger !== triggerType || pos.exitPending.quoteAvailable) {
+                addExecution({
+                  id: `risk-${Date.now()}-${pos.id.slice(-4)}`,
+                  type: 'exit_pending',
+                  symbol: pos.symbol,
+                  mint: pos.mint,
+                  amount: pos.solInvested,
+                  pnlPercent: quickPnl,
+                  reason: `${triggerLabel} hit at ${quickPnl.toFixed(1)}% — ${reason} Click Approve in Positions to attempt the sell.`,
+                  timestamp: Date.now(),
+                });
+              }
             }
             continue;
           }
@@ -191,9 +250,9 @@ export function useAutomatedRiskManagement() {
           const hitTrail = trailingStopPct > 0 && nextHwm > 0 && realTrailDrop >= trailingStopPct;
 
           // Position age expiry: auto-close stale positions to free capital
-          const maxAgeMs = (config.maxPositionAgeHours ?? 4) * 3600_000;
-          const posAge = now - pos.entryTime;
-          const hitExpiry = maxAgeMs > 0 && posAge >= maxAgeMs;
+          const maxAgeMs2 = (config.maxPositionAgeHours ?? 4) * 3600_000;
+          const posAge2 = now - pos.entryTime;
+          const hitExpiry = maxAgeMs2 > 0 && posAge2 >= maxAgeMs2;
 
           if (!hitSl && !hitTp && !hitTrail && !hitExpiry) {
             // Clear any stale pending marker when the trigger is no longer met.
@@ -203,7 +262,7 @@ export function useAutomatedRiskManagement() {
 
           // Priority: TP > Trailing Stop > Expiry > SL
           const triggerType: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' = hitTp ? 'tp_hit' : hitTrail ? 'trail_stop' : hitExpiry ? 'expired' : 'sl_hit';
-          const ageStr = `${(posAge / 3600_000).toFixed(1)}h`;
+          const ageStr = `${(posAge2 / 3600_000).toFixed(1)}h`;
           console.log(
             `[Risk] ${triggerType.toUpperCase()} ${pos.symbol}: ${realPnlPct.toFixed(1)}% (${
               hitTp ? `TP ${tpThreshold}%` : hitTrail ? `trail ${trailingStopPct}% from HWM ${nextHwm.toFixed(1)}%` : hitExpiry ? `expired after ${ageStr}` : `SL ${slThreshold}%`
@@ -217,6 +276,7 @@ export function useAutomatedRiskManagement() {
               trigger: triggerType,
               pnlPercent: realPnlPct,
               exitValueSol,
+              quoteAvailable: true,
               updatedAt: now,
             },
           });

@@ -65,8 +65,8 @@ export function StatusBar() {
           <StatChip
             icon={<Shield className="w-3.5 h-3.5" />}
             label="Risk"
-            value={openCount === 0 ? '--' : connected ? (anyExitPending ? 'SIGN' : 'ON') : 'OFF'}
-            color={openCount === 0 ? 'text-text-muted' : connected ? (anyExitPending ? 'text-accent-warning' : 'text-accent-neon') : 'text-accent-error'}
+            value={openCount === 0 ? '--' : anyExitPending ? 'SIGN' : connected ? 'ON' : 'OFF'}
+            color={openCount === 0 ? 'text-text-muted' : anyExitPending ? 'text-accent-warning' : connected ? 'text-accent-neon' : 'text-accent-error'}
           />
         </div>
 

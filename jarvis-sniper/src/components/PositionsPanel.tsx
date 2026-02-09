@@ -74,8 +74,12 @@ export function PositionsPanel() {
         }
       }
 
-      const quote = await getSellQuote(pos.mint, amountLamports, config.slippageBps);
-      if (!quote) throw new Error('No sell route found — liquidity may be pulled');
+      const slippageBase = config.slippageBps;
+      const quote =
+        (await getSellQuote(pos.mint, amountLamports, slippageBase)) ??
+        (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 300))) ??
+        (await getSellQuote(pos.mint, amountLamports, Math.max(slippageBase, 500)));
+      if (!quote) throw new Error('No sell quote found — try higher slippage or liquidity may be pulled');
 
       // Realizable exit value from the quote (better than chart prices for low-liquidity tokens).
       const exitValueSol = Number(BigInt(quote.outAmount)) / 1e9;
@@ -215,6 +219,7 @@ function PositionRow({ pos, isSelected, onClose, onSelect }: {
   onClose: (id: string, status?: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' | 'closed') => void | Promise<void>;
   onSelect: () => void;
 }) {
+  const { connected, connecting, connect } = usePhantomWallet();
   const ageMin = Math.floor((Date.now() - pos.entryTime) / 60000);
   const ageLabel = ageMin < 1 ? '<1m' : ageMin < 60 ? `${ageMin}m` : `${(ageMin / 60).toFixed(1)}h`;
   const maxAgeHours = useSniperStore.getState().config.maxPositionAgeHours ?? 4;
@@ -239,7 +244,14 @@ function PositionRow({ pos, isSelected, onClose, onSelect }: {
   const hasExitPending = !!pos.exitPending;
   const nearTrigger = nearSl || nearTp || nearTrail || nearExpiry || hasExitPending;
 
-  const pending = pos.exitPending as undefined | { trigger: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired'; pnlPercent: number; exitValueSol: number; updatedAt: number };
+  const pending = pos.exitPending as undefined | {
+    trigger: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired';
+    pnlPercent: number;
+    exitValueSol?: number;
+    quoteAvailable?: boolean;
+    reason?: string;
+    updatedAt: number;
+  };
   const pendingLabel = pending?.trigger === 'tp_hit' ? 'TP'
     : pending?.trigger === 'trail_stop' ? 'TRAIL'
       : pending?.trigger === 'expired' ? 'EXPIRED'
@@ -295,13 +307,24 @@ function PositionRow({ pos, isSelected, onClose, onSelect }: {
             </span>
           )}
           {pending && !pos.isClosing && pendingLabel && (
-            <button
-              onClick={(e) => { e.stopPropagation(); void onClose(pos.id, pending.trigger); }}
-              className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors ${pendingColor} hover:opacity-90`}
-              title="Opens Phantom to approve the sell"
-            >
-              Approve
-            </button>
+            connected ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); void onClose(pos.id, pending.trigger); }}
+                className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors ${pendingColor} hover:opacity-90`}
+                title={pending.quoteAvailable === false ? 'Quote unavailable — will attempt sell with higher slippage' : 'Opens Phantom to approve the sell'}
+              >
+                Approve
+              </button>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); void connect(); }}
+                disabled={connecting}
+                className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors bg-bg-tertiary text-text-muted border-border-primary hover:border-border-hover disabled:opacity-60"
+                title="Connect Phantom to approve the sell"
+              >
+                {connecting ? 'Connecting...' : 'Sign in Phantom'}
+              </button>
+            )
           )}
           <button
             onClick={(e) => { e.stopPropagation(); void onClose(pos.id, 'closed'); }}

@@ -49,10 +49,10 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'hybrid_b',
     name: 'HYBRID-B v5',
-    description: 'Balanced default — Liq≥$50K',
+    description: 'Balanced default — Liq≥$40K',
     winRate: '100% (10T)',
     trades: 10,
-    config: { stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8, minLiquidityUsd: 50000, strategyMode: 'conservative' },
+    config: { stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8, minLiquidityUsd: 40000, strategyMode: 'conservative' },
   },
   {
     id: 'let_it_ride',
@@ -60,7 +60,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: '20/100 + 5% trail — max gains',
     winRate: '100% (10T)',
     trades: 10,
-    config: { stopLossPct: 20, takeProfitPct: 100, trailingStopPct: 5, minLiquidityUsd: 50000, strategyMode: 'aggressive' },
+    config: { stopLossPct: 20, takeProfitPct: 100, trailingStopPct: 5, minLiquidityUsd: 40000, strategyMode: 'aggressive' },
   },
   {
     id: 'insight_i',
@@ -106,6 +106,8 @@ export interface Position {
   mint: string;
   symbol: string;
   name: string;
+  /** Wallet that holds the tokens (lets risk monitoring continue even if Phantom disconnects). */
+  walletAddress?: string;
   entryPrice: number;
   currentPrice: number;
   amount: number;
@@ -123,7 +125,12 @@ export interface Position {
   exitPending?: {
     trigger: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired';
     pnlPercent: number;
-    exitValueSol: number;
+    /** Realizable exit value from a Bags quote (may be missing if quote failed). */
+    exitValueSol?: number;
+    /** Whether a Bags quote was available when we marked this pending. */
+    quoteAvailable?: boolean;
+    /** Optional human hint (e.g. "no quote route", "increase slippage"). */
+    reason?: string;
     updatedAt: number;
   };
   score: number;
@@ -212,7 +219,7 @@ export function getRecommendedSlTp(
 
   // Time-of-day adjustments (928-token OHLCV backtest: good hours > 50% WR)
   const nowUtcHour = new Date().getUTCHours();
-  const GOOD_HOURS = [4, 8, 11, 21]; // 4=60%, 8=42% (314 trades), 11=57%, 21=52%
+  const GOOD_HOURS = [14, 20]; // OHLCV-validated: 20:00 (43.5% WR), 14:00 (25% WR)
   if (GOOD_HOURS.includes(nowUtcHour)) {
     // During high-WR hours: tighten SL (less drawdown), widen TP (let winners run)
     sl -= 3;
@@ -279,7 +286,8 @@ const DEFAULT_CONFIG: SniperConfig = {
   maxPositionSol: 0.1,
   maxConcurrentPositions: 10,
   minScore: 0,          // Backtested: best configs use liq+momentum, not score
-  minLiquidityUsd: 50000,
+  // Live feeds often show many candidates in the $40-50K range; 40K trades more while still filtering junk.
+  minLiquidityUsd: 40000,
   autoSnipe: false,
   useJito: true,
   slippageBps: 150,
@@ -330,6 +338,9 @@ interface SniperState {
   // Track which tokens were already sniped (prevents duplicates)
   snipedMints: Set<string>;
 
+  // Track tokens that were evaluated and skipped (prevents skip-spam in logs)
+  skippedMints: Set<string>;
+
   // Selected token for chart display
   selectedMint: string | null;
   setSelectedMint: (mint: string | null) => void;
@@ -353,13 +364,14 @@ export const useSniperStore = create<SniperState>()(
     (set, get) => ({
   config: DEFAULT_CONFIG,
   activePreset: 'hybrid_b',
-  setConfig: (partial) => set((s) => ({ config: { ...s.config, ...partial } })),
+  setConfig: (partial) => set((s) => ({ config: { ...s.config, ...partial }, skippedMints: new Set() })),
   loadPreset: (presetId) => {
     const preset = STRATEGY_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     set((s) => ({
       activePreset: presetId,
       config: { ...s.config, ...preset.config },
+      skippedMints: new Set(), // Re-evaluate with new filter params
     }));
   },
   setStrategyMode: (mode) => set((s) => ({
@@ -474,16 +486,20 @@ export const useSniperStore = create<SniperState>()(
   },
 
   snipedMints: new Set(),
+  skippedMints: new Set(),
 
   snipeToken: (grad) => {
     const state = get();
-    const { config, positions, snipedMints, budget } = state;
+    const { config, positions, snipedMints, skippedMints, budget } = state;
 
     // Guard: budget not authorized
     if (!budget.authorized) return;
 
     // Guard: already sniped
     if (snipedMints.has(grad.mint)) return;
+
+    // Guard: already evaluated and skipped — prevents skip-spam in logs
+    if (skippedMints.has(grad.mint)) return;
 
     // Guard: at capacity
     const openCount = positions.filter(p => p.status === 'open').length;
@@ -497,22 +513,28 @@ export const useSniperStore = create<SniperState>()(
     if (positionSol < 0.001) return; // minimum viable position
 
     // ═══ INSIGHT-DRIVEN FILTERS (backtested: HYBRID_B 91.7% WR) ═══
-
-    // Filter 1: Minimum liquidity threshold (USD) — backtested default: $50K
-    const liq = grad.liquidity || 0;
-    if (liq < config.minLiquidityUsd) {
-      // Log skip for transparency
+    // Helper: log skip ONCE per mint, then add to skippedMints so we never re-log
+    const logSkipOnce = (reason: string) => {
       execCounter++;
+      const newSkipped = new Set(get().skippedMints);
+      newSkipped.add(grad.mint);
       set((s) => ({
+        skippedMints: newSkipped,
         executionLog: [{
           id: `exec-${Date.now()}-${execCounter}`,
           type: 'skip' as const,
           symbol: grad.symbol,
           mint: grad.mint,
-          reason: `Low liquidity: $${Math.round(liq).toLocaleString()} < $${Math.round(config.minLiquidityUsd).toLocaleString()}`,
+          reason,
           timestamp: Date.now(),
         }, ...s.executionLog].slice(0, 200),
       }));
+    };
+
+    // Filter 1: Minimum liquidity threshold (USD) — backtested default: $50K
+    const liq = grad.liquidity || 0;
+    if (liq < config.minLiquidityUsd) {
+      logSkipOnce(`Low liquidity: $${Math.round(liq).toLocaleString('en-US')} < $${Math.round(config.minLiquidityUsd).toLocaleString('en-US')}`);
       return;
     }
 
@@ -521,88 +543,32 @@ export const useSniperStore = create<SniperState>()(
     const sells = grad.txn_sells_1h || 0;
     const bsRatio = sells > 0 ? buys / sells : buys;
     if (buys + sells > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) {
-      execCounter++;
-      set((s) => ({
-        executionLog: [{
-          id: `exec-${Date.now()}-${execCounter}`,
-          type: 'skip' as const,
-          symbol: grad.symbol,
-          mint: grad.mint,
-          reason: `B/S ratio ${bsRatio.toFixed(1)} outside 1.0-3.0 range`,
-          timestamp: Date.now(),
-        }, ...s.executionLog].slice(0, 200),
-      }));
+      logSkipOnce(`B/S ratio ${bsRatio.toFixed(1)} outside 1.0-3.0 range`);
       return;
     }
 
     // Filter 3: Age < 500h (younger tokens = higher alpha)
     const ageHours = grad.age_hours || 0;
     if (ageHours > 500) {
-      execCounter++;
-      set((s) => ({
-        executionLog: [{
-          id: `exec-${Date.now()}-${execCounter}`,
-          type: 'skip' as const,
-          symbol: grad.symbol,
-          mint: grad.mint,
-          reason: `Too old: ${Math.round(ageHours)}h > 500h limit`,
-          timestamp: Date.now(),
-        }, ...s.executionLog].slice(0, 200),
-      }));
+      logSkipOnce(`Too old: ${Math.round(ageHours)}h > 500h limit`);
       return;
     }
 
     // Filter 4: Positive 1h momentum (288% predictive power in backtest)
     const change1h = grad.price_change_1h || 0;
     if (change1h < 0) {
-      execCounter++;
-      set((s) => ({
-        executionLog: [{
-          id: `exec-${Date.now()}-${execCounter}`,
-          type: 'skip' as const,
-          symbol: grad.symbol,
-          mint: grad.mint,
-          reason: `Negative 1h momentum: ${change1h.toFixed(1)}%`,
-          timestamp: Date.now(),
-        }, ...s.executionLog].slice(0, 200),
-      }));
+      logSkipOnce(`Negative 1h momentum: ${change1h.toFixed(1)}%`);
       return;
     }
 
-    // Filter 5: Time-of-day (928-token OHLCV backtest — block hours with <18% WR)
-    // Best: 4:00 (60%), 11:00 (57%), 21:00 (52%) | Worst: 3,5 (0%), 9 (8%), 23 (6%), 17 (15%), 1 (18%)
-    const nowUtcHour = new Date().getUTCHours();
-    const BAD_HOURS = [1, 3, 5, 9, 17, 23];
-    if (BAD_HOURS.includes(nowUtcHour)) {
-      execCounter++;
-      set((s) => ({
-        executionLog: [{
-          id: `exec-${Date.now()}-${execCounter}`,
-          type: 'skip' as const,
-          symbol: grad.symbol,
-          mint: grad.mint,
-          reason: `Bad hour: ${nowUtcHour}:00 UTC (928-token backtest <18% WR)`,
-          timestamp: Date.now(),
-        }, ...s.executionLog].slice(0, 200),
-      }));
-      return;
-    }
+    // TOD note: removed hard block — OHLCV backtest had too few samples (16/200 tokens).
+    // TOD is now handled as a soft penalty in getConvictionMultiplier() instead.
 
     // Filter 6: Vol/Liq ratio ≥ 0.5 (8x edge: 40.6% upside vs 4.9% for <0.5)
     const vol24h = grad.volume_24h || 0;
     const volLiqRatio = liq > 0 ? vol24h / liq : 0;
     if (vol24h > 0 && volLiqRatio < 0.5) {
-      execCounter++;
-      set((s) => ({
-        executionLog: [{
-          id: `exec-${Date.now()}-${execCounter}`,
-          type: 'skip' as const,
-          symbol: grad.symbol,
-          mint: grad.mint,
-          reason: `Low Vol/Liq: ${volLiqRatio.toFixed(2)} < 0.5 (8x edge in 928-token backtest)`,
-          timestamp: Date.now(),
-        }, ...s.executionLog].slice(0, 200),
-      }));
+      logSkipOnce(`Low Vol/Liq: ${volLiqRatio.toFixed(2)} < 0.5 (8x edge)`);
       return;
     }
 
@@ -671,6 +637,7 @@ export const useSniperStore = create<SniperState>()(
     positions: [],
     executionLog: [],
     snipedMints: new Set(),
+    skippedMints: new Set(),
     selectedMint: null,
     budget: { budgetSol: 0.1, authorized: false, spent: 0 },
     totalPnl: 0,

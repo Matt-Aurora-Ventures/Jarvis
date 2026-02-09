@@ -349,7 +349,7 @@ export function SniperControls() {
                 {!budget.authorized
                   ? 'Authorize a budget to enable'
                   : config.autoSnipe
-                  ? `${config.strategyMode === 'aggressive' ? 'LET IT RIDE' : 'HYBRID-B v5'}: Liq≥$${Math.round(config.minLiquidityUsd).toLocaleString()} + V/L≥0.5 + B/S 1-3 + Age<500h + Mom↑ + TOD | ${useRecommendedExits ? 'REC SL/TP' : `${config.stopLossPct}/${config.takeProfitPct}`}+${config.trailingStopPct}t${config.maxPositionAgeHours > 0 ? ` | ${config.maxPositionAgeHours}h expiry` : ''}`
+                  ? `${config.strategyMode === 'aggressive' ? 'LET IT RIDE' : 'HYBRID-B v5'}: Liq≥$${Math.round(config.minLiquidityUsd).toLocaleString('en-US')} + V/L≥0.5 + B/S 1-3 + Age<500h + Mom↑ + TOD | ${useRecommendedExits ? 'REC SL/TP' : `${config.stopLossPct}/${config.takeProfitPct}`}+${config.trailingStopPct}t${config.maxPositionAgeHours > 0 ? ` | ${config.maxPositionAgeHours}h expiry` : ''}`
                   : 'Manual mode — click to snipe'}
             </p>
           </div>
@@ -471,7 +471,7 @@ export function SniperControls() {
           <div className="p-2.5 rounded-lg bg-bg-secondary border border-border-primary">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] text-text-muted uppercase tracking-wider">Min Liquidity (USD)</span>
-              <span className="text-[10px] font-mono text-text-muted">${Math.round(config.minLiquidityUsd).toLocaleString()}</span>
+              <span className="text-[10px] font-mono text-text-muted">${Math.round(config.minLiquidityUsd).toLocaleString('en-US')}</span>
             </div>
             <div className="flex gap-1">
               {LIQUIDITY_PRESETS_USD.map((usd) => (
@@ -489,7 +489,7 @@ export function SniperControls() {
               ))}
             </div>
             <p className="text-[9px] text-text-muted/60 mt-2">
-              Lower = more trades, but higher rug/spread risk. Default 50K matches backtest.
+              Lower = more trades, but higher rug/spread risk. Default 40K trades more; 50K matched the OHLCV backtest.
             </p>
           </div>
 
