@@ -107,6 +107,9 @@ if HAS_SECURITY:
     _allowlist = load_allowlist()
     logger.info(f"Loaded allowlist with {len(_allowlist)} authorized users")
 
+# Public beta toggle: when enabled, allow everyone to use "safe" bot commands.
+PUBLIC_MODE = os.environ.get("CLAWDBOT_PUBLIC_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+
 # Initialize lifecycle (optional)
 _lifecycle = None
 
@@ -134,9 +137,19 @@ Examples:
 
 def check_user_authorized(user_id: int) -> bool:
     """Check if a user is authorized to use the bot."""
+    if PUBLIC_MODE:
+        return True
     if not HAS_SECURITY or not _allowlist:
         return True  # Dev mode - allow all
     return check_authorization(user_id, AuthorizationLevel.OBSERVER, _allowlist)
+
+
+async def _deny(reason: str, message) -> None:
+    """Tell unauthorized users why nothing happened (avoid silent failure)."""
+    try:
+        await bot.reply_to(message, f"⛔ {reason}\n\nIf you should have access, contact support.")
+    except Exception:
+        return
 
 
 def _yoda_brief_answer(question: str) -> str:
@@ -197,6 +210,7 @@ def _yoda_brief_answer(question: str) -> str:
 @bot.message_handler(commands=["start", "help"])
 async def handle_help(message):
     if not check_user_authorized(message.from_user.id):
+        await _deny("This bot is currently in private beta.", message)
         return
     await bot.reply_to(message, YODA_HELP)
 
@@ -204,6 +218,7 @@ async def handle_help(message):
 @bot.message_handler(commands=["status"])
 async def handle_status(message):
     if not check_user_authorized(message.from_user.id):
+        await _deny("This bot is currently in private beta.", message)
         return
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     text = f"ClawdYoda Status: ONLINE\nTime: {now}\nMode: Innovation & Future-Tech Advisor"
@@ -213,6 +228,7 @@ async def handle_status(message):
 @bot.message_handler(commands=["yoda"])
 async def handle_yoda(message):
     if not check_user_authorized(message.from_user.id):
+        await _deny("This bot is currently in private beta.", message)
         return
 
     text = message.text or ""
@@ -299,4 +315,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
