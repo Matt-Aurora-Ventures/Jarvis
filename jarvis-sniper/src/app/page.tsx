@@ -10,6 +10,7 @@ import { ExecutionLog } from '@/components/ExecutionLog';
 import { PerformanceSummary } from '@/components/PerformanceSummary';
 import { TokenChart } from '@/components/TokenChart';
 import { EarlyBetaModal } from '@/components/EarlyBetaModal';
+import { BacktestPanel } from '@/components/BacktestPanel';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { useAutomatedRiskManagement } from '@/hooks/useAutomatedRiskManagement';
 import { useTabNotifications } from '@/hooks/useTabNotifications';
@@ -46,9 +47,10 @@ export default function SniperDashboard() {
             <GraduationFeed />
           </div>
 
-          {/* Center: Performance + Chart + Execution Log */}
+          {/* Center: Performance + Backtest Validation + Chart + Execution Log */}
           <div className="flex flex-col gap-4 min-h-0 min-w-0">
             <PerformanceSummary />
+            <BacktestPanel />
             <TokenChart />
             <div className="flex-1 min-h-0">
               <ExecutionLog />
