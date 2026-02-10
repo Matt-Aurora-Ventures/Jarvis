@@ -1,7 +1,7 @@
 # Jarvis Sniper — Project State
 
-**Last Updated:** 2026-02-10T09:03Z
-**Current Phase:** 2.2 (Data Integration) — Plan 01 complete, Plans 02-03 pending
+**Last Updated:** 2026-02-10T09:24Z
+**Current Phase:** 2.2 (Data Integration) — Plans 01-02 complete, Plan 03 pending
 **Milestone:** v2.0
 
 ---
@@ -12,7 +12,7 @@
 |-------|--------|-------|
 | Phase 1 | ✅ Complete | All 8 requirements delivered |
 | Phase 2.1 | 🔄 In Progress | Plan 01 done (historical data hardened), Plans 02-03 pending |
-| Phase 2.2 | 🔄 In Progress | Plan 01 done (TV screener lib + API route), Plans 02-03 pending |
+| Phase 2.2 | 🔄 In Progress | Plans 01-02 done (TV screener + enhanced scoring), Plan 03 pending |
 | Phase 2.3 | ✅ Complete | Wallet persistence + per-asset circuit breakers done |
 | Phase 2.4 | ⏳ Pending | Advanced algorithms — research complete (10 strategies ranked) |
 | Phase 2.5 | ⏳ Pending | Power features |
@@ -27,7 +27,7 @@
 | 02.1-02 | Backtest Dashboard UI | ✅ Complete | useBacktest hook + BacktestPanel collapsible component |
 | 02.1-03 | Backtest API + Store Integration | ✅ Complete | Data-source routing, 18 strategies, backtestMeta in store |
 | 02.2-01 | TradingView Screener Integration | ✅ Complete | 60-ticker symbol map, 45-column TV scan, 60s cache, API route |
-| 02.2-02 | Enhanced Scoring | ⏳ Pending | |
+| 02.2-02 | Enhanced Scoring | ✅ Complete | TDD-built tv-scoring.ts with momentum/volume/composite scoring, wired into xStocks API |
 | 02.2-03 | UI Integration | ⏳ Pending | |
 
 ---
@@ -71,6 +71,8 @@
 - Per-asset circuit breakers use Zustand counters per asset class
 - All new strategies must be backtested before being added as presets
 - tvscreener integration uses direct HTTP (no Python dependency)
+- TV-enhanced scoring: weight normalization adjusts proportionally when indicators are null
+- calcBaseEquityScore standalone copy in tv-scoring.ts for library independence
 - Birdeye public OHLCV API used as Tier 2 fallback when DexScreener returns empty
 - Memecoin graduation backtesting uses 100 synthetic patterns (4 archetypes) instead of historical data
 - Adaptive rate limiting: 1s for Birdeye API, 500ms for DexScreener
@@ -81,7 +83,8 @@
 
 ### What Works
 - `calcBlueChipScore()` produces meaningful differentiation (10-90 range)
-- `calcEquityScore()` sector bonuses improve ranking quality
+- `calcEquityScore()` sector bonuses improve ranking quality (now legacy; active scoring uses calcTVEnhancedScore)
+- TV-enhanced scoring blends DexScreener (40%) + momentum (35%) + volume (25%) for better accuracy
 - Asset-type-aware snipe filters solved cross-class interference
 - 30s DexScreener cache prevents rate limiting
 - 3-tier OHLCV fallback ensures real data for backtests
@@ -96,10 +99,10 @@
 
 ## Session Continuity
 
-Last session: 2026-02-10T09:03Z
-Stopped at: Completed 02.2-01-PLAN.md
+Last session: 2026-02-10T09:24Z
+Stopped at: Completed 02.2-02-PLAN.md
 Resume file: None
 
 ---
 
-*Last updated: 2026-02-10T09:03Z*
+*Last updated: 2026-02-10T09:24Z*
