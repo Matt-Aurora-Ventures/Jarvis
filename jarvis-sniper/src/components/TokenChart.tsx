@@ -1,7 +1,7 @@
 'use client';
 
-import { X, Maximize2, Minimize2, ExternalLink, BarChart3, RefreshCw, GripHorizontal, Copy, Check } from 'lucide-react';
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { X, Maximize2, Minimize2, ExternalLink, BarChart3, RefreshCw, GripHorizontal, Copy, Check, Loader2 } from 'lucide-react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useSniperStore } from '@/stores/useSniperStore';
 
 type ChartProvider = 'birdeye' | 'dexscreener' | 'geckoterminal';
@@ -30,11 +30,12 @@ const DEFAULT_HEIGHT = 420;
 export function TokenChart() {
   const { selectedMint, setSelectedMint, graduations, positions } = useSniperStore();
   const [expanded, setExpanded] = useState(false);
-  const [provider, setProvider] = useState<ChartProvider>('birdeye');
+  const [provider, setProvider] = useState<ChartProvider>('dexscreener');
   const [iframeKey, setIframeKey] = useState(0);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [isDragging, setIsDragging] = useState(false);
   const [mintCopied, setMintCopied] = useState(false);
+  const [chartLoading, setChartLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
   const startHeight = useRef(0);
@@ -48,6 +49,11 @@ export function TokenChart() {
     () => selectedMint ? getChartUrl(selectedMint, provider) : null,
     [selectedMint, provider]
   );
+
+  // Reset loading spinner whenever the chart source changes
+  useEffect(() => {
+    setChartLoading(true);
+  }, [selectedMint, provider, iframeKey]);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -162,6 +168,12 @@ export function TokenChart() {
 
       {/* Chart iframe */}
       <div className="flex-1 relative bg-black">
+        {chartLoading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm gap-3">
+            <Loader2 className="w-6 h-6 text-accent-neon animate-spin" />
+            <span className="text-[11px] font-mono text-text-muted">Loading chart...</span>
+          </div>
+        )}
         <iframe
           key={`${selectedMint}-${provider}-${iframeKey}`}
           src={embedUrl!}
@@ -170,6 +182,7 @@ export function TokenChart() {
           title={`${symbol} chart`}
           allow="clipboard-write"
           loading="lazy"
+          onLoad={() => setChartLoading(false)}
         />
       </div>
 

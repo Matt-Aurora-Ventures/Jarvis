@@ -160,8 +160,12 @@ export async function executeSwap(
       });
     }
 
-    // 5. Confirm (use 'confirmed' for speed, not 'finalized')
-    const confirmation = await connection.confirmTransaction(txHash, 'confirmed');
+    // 5. Confirm with 90s timeout (use 'confirmed' for speed, not 'finalized')
+    const confirmPromise = connection.confirmTransaction(txHash, 'confirmed');
+    const confirmTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`TX confirmation timeout (90s): ${txHash}`)), 90_000)
+    );
+    const confirmation = await Promise.race([confirmPromise, confirmTimeout]) as Awaited<ReturnType<typeof connection.confirmTransaction>>;
     if (confirmation.value.err) {
       return {
         success: false, txHash, inputAmount: amountSol, outputAmount: 0,

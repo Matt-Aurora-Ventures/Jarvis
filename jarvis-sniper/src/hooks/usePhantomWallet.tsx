@@ -139,7 +139,12 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
   const signTransaction = useCallback(async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
     const provider = getProvider();
     if (!provider || !connected) throw new Error('Wallet not connected');
-    return provider.signTransaction(tx);
+    // Timeout after 60s to prevent infinite hang if popup blocked or user ignores
+    const signed = provider.signTransaction(tx);
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Phantom wallet approval timeout (60s)')), 60_000)
+    );
+    return Promise.race([signed, timeout]) as Promise<T>;
   }, [connected]);
 
   const signAllTransactions = useCallback(async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {

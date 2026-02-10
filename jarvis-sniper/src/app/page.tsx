@@ -5,6 +5,7 @@ import { StatusBar } from '@/components/StatusBar';
 import { GraduationFeed } from '@/components/GraduationFeed';
 import { SniperControls } from '@/components/SniperControls';
 import { PositionsPanel } from '@/components/PositionsPanel';
+import { WatchlistPanel } from '@/components/WatchlistPanel';
 import { ExecutionLog } from '@/components/ExecutionLog';
 import { PerformanceSummary } from '@/components/PerformanceSummary';
 import { TokenChart } from '@/components/TokenChart';
@@ -57,6 +58,7 @@ export default function SniperDashboard() {
           {/* Right: Controls + Positions */}
           <div className="flex flex-col gap-4 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden custom-scrollbar">
             <SniperControls />
+            <WatchlistPanel />
             <PositionsPanel />
           </div>
         </div>

@@ -7,7 +7,7 @@ import type { NextRequest } from 'next/server';
  * Applies security headers, CORS controls, and basic request validation
  * to all routes. Critical for a Solana trading app handling real money.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const response = NextResponse.next();
 
   // ─── Security Headers ───

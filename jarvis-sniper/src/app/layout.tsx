@@ -27,6 +27,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{
+          __html: `(function(){try{var t=localStorage.getItem('jarvis-sniper-theme');if(t==='light')document.documentElement.setAttribute('data-theme','light')}catch(e){}})()`,
+        }} />
         <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&display=swap" rel="stylesheet" />
       </head>
       <body className={`${dmSans.variable} ${jetbrainsMono.variable} bg-bg-primary text-text-primary antialiased overflow-x-hidden`}>

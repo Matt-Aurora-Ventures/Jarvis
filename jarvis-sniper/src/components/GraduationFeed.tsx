@@ -1,16 +1,19 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Clock, Droplets, BarChart3, ExternalLink, Crosshair, Shield, Target, Check, Ban, Copy } from 'lucide-react';
-import { useSniperStore, type StrategyMode } from '@/stores/useSniperStore';
+import { Sparkles, Clock, Droplets, BarChart3, ExternalLink, Crosshair, Shield, Target, Check, Ban, Copy, Eye } from 'lucide-react';
+import { useSniperStore, type StrategyMode, type AssetType } from '@/stores/useSniperStore';
 import { getScoreTier, TIER_CONFIG, type BagsGraduation } from '@/lib/bags-api';
 import { getRecommendedSlTp, getConvictionMultiplier } from '@/stores/useSniperStore';
 import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
 import { computeTargetsFromEntryUsd, formatUsdPrice, isBlueChipLongConviction } from '@/lib/trade-plan';
 
-async function fetchFromApi(): Promise<BagsGraduation[]> {
+async function fetchFromApi(assetFilter: AssetType): Promise<BagsGraduation[]> {
   try {
-    const res = await fetch('/api/graduations');
+    const url = assetFilter === 'memecoin'
+      ? '/api/graduations'
+      : `/api/xstocks?category=${assetFilter === 'xstock' ? 'XSTOCK' : assetFilter === 'prestock' ? 'PRESTOCK' : 'INDEX'}`;
+    const res = await fetch(url);
     if (!res.ok) return [];
     const data = await res.json();
     return data.graduations || [];
@@ -19,22 +22,39 @@ async function fetchFromApi(): Promise<BagsGraduation[]> {
   }
 }
 
+const FILTER_LABELS: Record<string, { label: string; color: string }> = {
+  memecoin: { label: 'MEME', color: 'bg-accent-neon/15 text-accent-neon' },
+  xstock: { label: 'xSTOCK', color: 'bg-blue-500/15 text-blue-400' },
+  prestock: { label: 'PRE-IPO', color: 'bg-purple-500/15 text-purple-400' },
+  index: { label: 'INDEX', color: 'bg-amber-500/15 text-amber-400' },
+};
+
 export function GraduationFeed() {
-  const { graduations, setGraduations, addGraduation, config, snipedMints, positions, setSelectedMint, budget, budgetRemaining } = useSniperStore();
+  const { graduations, setGraduations, addGraduation, config, snipedMints, positions, setSelectedMint, budget, budgetRemaining, watchlist, addToWatchlist, removeFromWatchlist, assetFilter } = useSniperStore();
   const { snipe, ready: walletReady } = useSnipeExecutor();
   const prevMintsRef = useRef<Set<string>>(new Set());
   const newMintsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    fetchFromApi().then((grads) => {
+    // Reset state when asset filter changes
+    prevMintsRef.current = new Set();
+    newMintsRef.current = new Set();
+
+    fetchFromApi(assetFilter).then((grads) => {
       if (grads.length > 0) {
         setGraduations(grads);
         prevMintsRef.current = new Set(grads.map(g => g.mint));
+        // Auto-select the highest-scoring token so the chart loads on first visit
+        if (!useSniperStore.getState().selectedMint || true) {
+          setSelectedMint(grads[0].mint); // grads are pre-sorted by score/liquidity from API
+        }
+      } else {
+        setGraduations([]);
       }
     });
 
     const interval = setInterval(async () => {
-      const grads = await fetchFromApi();
+      const grads = await fetchFromApi(assetFilter);
       if (grads.length > 0) {
         const newOnes = grads.filter(g => !prevMintsRef.current.has(g.mint));
         newOnes.forEach(g => {
@@ -50,7 +70,7 @@ export function GraduationFeed() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [setGraduations, addGraduation]);
+  }, [setGraduations, addGraduation, assetFilter, setSelectedMint]);
 
   // Auto-snipe: when enabled AND budget authorized AND wallet connected, auto-snipe qualifying tokens
   useEffect(() => {
@@ -65,7 +85,7 @@ export function GraduationFeed() {
     if (openCount >= config.maxConcurrentPositions) return;
 
     for (const grad of graduations) {
-      const hybrid = computeHybridB(grad, config.minLiquidityUsd);
+      const hybrid = computeHybridB(grad, config.minLiquidityUsd, assetFilter);
       if (grad.score >= config.minScore && hybrid.passesAll && !snipedMints.has(grad.mint)) {
         const currentOpen = positions.filter(p => p.status === 'open').length;
         if (currentOpen >= config.maxConcurrentPositions) break;
@@ -80,6 +100,14 @@ export function GraduationFeed() {
         <div className="flex items-center gap-2">
           <Crosshair className="w-4 h-4 text-accent-neon" />
           <h2 className="font-display text-sm font-semibold">Token Scanner</h2>
+          {(() => {
+            const filterInfo = FILTER_LABELS[assetFilter] || FILTER_LABELS.memecoin;
+            return (
+              <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${filterInfo.color}`}>
+                {filterInfo.label}
+              </span>
+            );
+          })()}
         </div>
         <span className="text-[10px] font-mono text-text-muted">
           {graduations.length} targets
@@ -97,7 +125,7 @@ export function GraduationFeed() {
           </div>
         ) : (
           graduations.map((grad) => {
-            const hybrid = computeHybridB(grad, config.minLiquidityUsd);
+            const hybrid = computeHybridB(grad, config.minLiquidityUsd, assetFilter);
             const meetsAll = grad.score >= config.minScore && hybrid.passesAll;
             return (
               <TokenCard
@@ -109,10 +137,13 @@ export function GraduationFeed() {
                 isSniped={snipedMints.has(grad.mint)}
                 onSnipe={() => snipe(grad as any)}
                 onChart={() => setSelectedMint(grad.mint)}
+                isWatched={watchlist.includes(grad.mint)}
+                onWatch={() => watchlist.includes(grad.mint) ? removeFromWatchlist(grad.mint) : addToWatchlist(grad.mint)}
                 budgetAuthorized={budget.authorized}
                 walletReady={walletReady}
                 minLiquidityUsd={config.minLiquidityUsd}
                 strategyMode={config.strategyMode}
+                assetFilter={assetFilter}
               />
             );
           })
@@ -153,7 +184,7 @@ function CopyableAddress({ mint }: { mint: string }) {
   );
 }
 
-function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnipe, onChart, budgetAuthorized, walletReady, minLiquidityUsd, strategyMode }: {
+function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnipe, onChart, isWatched, onWatch, budgetAuthorized, walletReady, minLiquidityUsd, strategyMode, assetFilter }: {
   grad: BagsGraduation;
   isNew: boolean;
   meetsThreshold: boolean;
@@ -161,10 +192,13 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
   isSniped: boolean;
   onSnipe: () => void;
   onChart: () => void;
+  isWatched: boolean;
+  onWatch: () => void;
   budgetAuthorized: boolean;
   walletReady: boolean;
   minLiquidityUsd: number;
   strategyMode: StrategyMode;
+  assetFilter: string;
 }) {
   const tier = getScoreTier(grad.score);
   const tierCfg = TIER_CONFIG[tier];
@@ -175,6 +209,10 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
   const volume = grad.volume_24h || 0;
   const bsRatio = grad.buy_sell_ratio ?? 0;
   const ageH = grad.age_hours ?? 0;
+  const ageCategory = ageH < 24 ? 'FRESH' : ageH < 168 ? 'YOUNG' : ageH < 2160 ? 'EST' : 'VET';
+  const ageCatColor = ageH < 24 ? 'text-accent-neon' : ageH < 168 ? 'text-blue-400' : ageH < 2160 ? 'text-text-muted' : 'text-text-muted/50';
+  // For equities, override age display with sector/category info
+  const isEquity = assetFilter !== 'memecoin';
   const totalTxns = grad.total_txns_1h ?? 0;
   const rec = getRecommendedSlTp(grad as any, strategyMode);
   const isBlueChip = isBlueChipLongConviction(grad);
@@ -183,9 +221,9 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
   // Insight filter checks (HYBRID_B v4 criteria)
   const passesLiq = (grad.liquidity || 0) >= minLiquidityUsd;
   // Mirror executor logic: only enforce B/S gate when there's enough activity.
-  const passesBSRatio = totalTxns <= 10 ? true : (bsRatio >= 1.0 && bsRatio <= 3.0);
-  const passesAge = ageH <= 500;
-  const passesMomentum = priceChange >= 0;
+  const passesBSRatio = isEquity || totalTxns <= 10 ? true : (bsRatio >= 1.0 && bsRatio <= 3.0);
+  const passesAge = isEquity || ageH <= 500;
+  const passesMomentum = isEquity || priceChange >= 0;
   // Vol/Liq filter (8x edge: 40.6% upside ≥0.5 vs 4.9% <0.5)
   const vol24h = grad.volume_24h || 0;
   const gradLiq = grad.liquidity || 0;
@@ -208,8 +246,10 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
   const passCount = filterChecks.filter(f => f.pass).length;
 
   return (
-    <div className={`
-      group relative rounded-lg border p-3 transition-all duration-300
+    <div
+      onClick={onChart}
+      className={`
+      group relative rounded-lg border p-3 transition-all duration-300 cursor-pointer
       ${isNew ? 'animate-new-grad border-accent-neon/40 bg-accent-neon/[0.04]' : 'border-border-primary bg-bg-secondary/60 hover:border-border-hover hover:bg-bg-tertiary/60'}
       ${!meetsThreshold ? 'opacity-40' : ''}
       ${isSniped ? 'border-accent-neon/30 bg-accent-neon/[0.02]' : ''}
@@ -227,6 +267,13 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-bold text-text-primary">{grad.symbol}</span>
+              {grad.dex_id && grad.dex_id !== 'unknown' && (
+                <span className={`text-[8px] font-mono font-semibold uppercase px-1 py-px rounded ${
+                  grad.dex_id === 'pumpswap' ? 'bg-purple-500/15 text-purple-400' :
+                  grad.dex_id === 'raydium' ? 'bg-blue-500/15 text-blue-400' :
+                  'bg-bg-tertiary text-text-muted'
+                }`}>{grad.dex_id === 'raydium_clmm' ? 'RAY' : grad.dex_id.slice(0, 4).toUpperCase()}</span>
+              )}
               <span className="text-[10px] text-text-muted/60 truncate">{grad.name}</span>
             </div>
             <CopyableAddress mint={grad.mint} />
@@ -242,6 +289,7 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
         <span className="flex items-center gap-1">
           <Clock className="w-3 h-3 opacity-50" /> {ageLabel}
         </span>
+        {!isEquity && <span className={`text-[8px] font-bold ${ageCatColor}`}>{ageCategory}</span>}
         <span className="text-border-primary">|</span>
         <span className="flex items-center gap-1">
           <Droplets className="w-3 h-3 opacity-50" /> ${(grad.liquidity || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
@@ -316,43 +364,53 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
       )}
 
       {/* Action overlay on hover */}
-      <div className="absolute inset-0 rounded-lg flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-bg-primary/80 backdrop-blur-sm">
+      <div className="absolute inset-0 rounded-lg flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-bg-primary/90">
         {isSniped ? (
-          <span className="flex items-center gap-1.5 text-[11px] font-semibold px-4 py-2 rounded-full bg-accent-neon/15 text-accent-neon border border-accent-neon/30">
-            <Check className="w-3.5 h-3.5" /> Sniped
+          <span className="flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1.5 rounded-md bg-accent-neon/15 text-accent-neon border border-accent-neon/30">
+            <Check className="w-3 h-3" /> Sniped
           </span>
         ) : !walletReady ? (
-          <span className="flex items-center gap-1.5 text-[11px] font-medium px-4 py-2 rounded-full bg-accent-warning/15 text-accent-warning border border-accent-warning/30">
+          <span className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-md bg-accent-warning/15 text-accent-warning border border-accent-warning/30">
             Connect wallet
           </span>
         ) : !budgetAuthorized ? (
-          <span className="flex items-center gap-1.5 text-[11px] font-medium px-4 py-2 rounded-full bg-accent-warning/15 text-accent-warning border border-accent-warning/30">
+          <span className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-md bg-accent-warning/15 text-accent-warning border border-accent-warning/30">
             Authorize budget
           </span>
         ) : !meetsThreshold ? (
-          <span className="flex items-center gap-1.5 text-[11px] font-medium px-4 py-2 rounded-full bg-bg-tertiary text-text-secondary border border-border-primary">
+          <span className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-md bg-bg-tertiary text-text-secondary border border-border-primary">
             Filtered
           </span>
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); onSnipe(); }}
-            className="flex items-center gap-1.5 text-[11px] font-semibold px-4 py-2 rounded-full bg-accent-neon text-black hover:shadow-lg transition-all cursor-pointer"
+            className="flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1.5 rounded-md bg-accent-neon text-black hover:shadow-lg transition-all cursor-pointer"
           >
-            <Crosshair className="w-3.5 h-3.5" /> Snipe
+            <Crosshair className="w-3 h-3" /> Snipe
           </button>
         )}
         <button
           onClick={(e) => { e.stopPropagation(); onChart(); }}
-          className="flex items-center gap-1 text-[11px] font-medium px-4 py-2 rounded-full bg-bg-tertiary text-text-secondary border border-border-primary hover:border-border-hover transition-all cursor-pointer"
+          className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-md bg-bg-tertiary text-text-secondary border border-border-primary hover:border-border-hover transition-all cursor-pointer"
         >
           <ExternalLink className="w-3 h-3" /> Chart
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onWatch(); }}
+          className={`flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-md border transition-all cursor-pointer ${
+            isWatched
+              ? 'bg-accent-warning/15 text-accent-warning border-accent-warning/30'
+              : 'bg-bg-tertiary text-text-secondary border-border-primary hover:border-border-hover'
+          }`}
+        >
+          <Eye className="w-3 h-3" /> {isWatched ? 'Watching' : 'Watch'}
         </button>
       </div>
     </div>
   );
 }
 
-function computeHybridB(grad: BagsGraduation, minLiquidityUsd: number): { passesAll: boolean; rejectReason: string | null } {
+function computeHybridB(grad: BagsGraduation, minLiquidityUsd: number, assetFilter: string = 'memecoin'): { passesAll: boolean; rejectReason: string | null } {
   const liq = grad.liquidity || 0;
   const buys = grad.txn_buys_1h || 0;
   const sells = grad.txn_sells_1h || 0;
@@ -364,9 +422,9 @@ function computeHybridB(grad: BagsGraduation, minLiquidityUsd: number): { passes
   const volLiq = liq > 0 ? vol24h / liq : 0;
 
   if (liq < minLiquidityUsd) return { passesAll: false, rejectReason: `Liq $${(liq / 1000).toFixed(0)}K < $${(minLiquidityUsd / 1000).toFixed(0)}K` };
-  if (totalTxns > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) return { passesAll: false, rejectReason: `B/S ${bsRatio.toFixed(1)} outside range` };
-  if (ageH > 500) return { passesAll: false, rejectReason: `Age ${Math.round(ageH)}h > 500h` };
-  if (change1h < 0) return { passesAll: false, rejectReason: `Momentum ${change1h.toFixed(1)}%` };
+  if (assetFilter === 'memecoin' && totalTxns > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) return { passesAll: false, rejectReason: `B/S ${bsRatio.toFixed(1)} outside range` };
+  if (assetFilter === 'memecoin' && ageH > 500) return { passesAll: false, rejectReason: `Age ${Math.round(ageH)}h > 500h` };
+  if (assetFilter === 'memecoin' && change1h < 0) return { passesAll: false, rejectReason: `Momentum ${change1h.toFixed(1)}%` };
   if (vol24h > 0 && volLiq < 0.5) return { passesAll: false, rejectReason: `Vol/Liq ${volLiq.toFixed(2)} < 0.5` };
 
   return { passesAll: true, rejectReason: null };

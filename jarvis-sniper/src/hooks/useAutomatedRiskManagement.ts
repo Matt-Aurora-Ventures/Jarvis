@@ -72,7 +72,11 @@ export function useAutomatedRiskManagement() {
           positions: s.positions.map((p) => {
             const u = byId.get(p.id);
             if (!u || p.status !== 'open' || p.isClosing) return p;
-            const pnlSol = p.solInvested * (u.pnlPct / 100);
+            // SOL-denominated P&L: use actual token holdings + SOL price for real positions
+            const solPrice = s.lastSolPriceUsd;
+            const pnlSol = solPrice > 0 && p.amountLamports && p.amount > 0
+              ? (p.amount * u.priceUsd) / solPrice - p.solInvested
+              : p.solInvested * (u.pnlPct / 100);
             return {
               ...p,
               currentPrice: u.priceUsd,

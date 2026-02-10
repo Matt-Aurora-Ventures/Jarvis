@@ -311,6 +311,7 @@ export async function GET(request: Request) {
         age_hours: Math.round(ageHours * 10) / 10,
         buy_sell_ratio: Math.round(buySellRatio * 100) / 100,
         total_txns_1h: txnBuys + txnSells,
+        dex_id: pair?.dexId || 'unknown',
       };
     });
 

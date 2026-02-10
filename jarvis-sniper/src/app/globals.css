@@ -51,6 +51,52 @@
 }
 
 /* ============================================
+   LIGHT THEME OVERRIDES
+   ============================================ */
+
+[data-theme="light"] {
+  /* Backgrounds */
+  --bg-primary: #F8FAFC;
+  --bg-secondary: #F1F5F9;
+  --bg-tertiary: #E2E8F0;
+  --bg-card: rgba(241, 245, 249, 0.9);
+  --bg-card-hover: rgba(226, 232, 240, 1);
+
+  /* Text */
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #94A3B8;
+
+  /* Borders */
+  --border-primary: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(34, 197, 94, 0.3);
+
+  /* Accents - keep the same for brand consistency */
+  --accent-neon: #16a34a;
+  --accent-neon-glow: rgba(22, 163, 74, 0.3);
+  --accent-error: #DC2626;
+  --accent-error-glow: rgba(220, 38, 38, 0.3);
+  --accent-success: #059669;
+  --accent-warning: #D97706;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(241, 245, 249, 0.8);
+  --glass-border: rgba(34, 197, 94, 0.15);
+  --glass-blur: blur(20px);
+
+  /* Card tokens */
+  --card-bg: rgba(241, 245, 249, 0.85);
+  --card-border: rgba(0, 0, 0, 0.06);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* ============================================
    TAILWIND THEME MAPPINGS
    ============================================ */
 

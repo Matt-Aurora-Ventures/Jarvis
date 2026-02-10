@@ -166,7 +166,7 @@ export function useSnipeExecutor() {
 
       // Success — create real position
       const posId = `pos-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const entryPrice = await resolveEntryPriceUsd(grad.mint, grad.price_usd);
+      const entryPrice = await resolveEntryPriceUsd(grad.mint, grad.price_usd, positionSol, result.outputAmount);
 
       const newPosition: Position = {
         id: posId,
@@ -292,7 +292,58 @@ async function fetchDexScreenerPrice(mint: string): Promise<number> {
   }
 }
 
-async function resolveEntryPriceUsd(mint: string, fallback?: number): Promise<number> {
+async function fetchSolUsdPrice(): Promise<number> {
+  // Prefer our server-cached macro endpoint (avoids hammering public APIs per snipe).
+  try {
+    const res = await fetch('/api/macro');
+    if (res.ok) {
+      const json = await res.json();
+      const p = typeof json?.solPrice === 'number' ? json.solPrice : 0;
+      if (Number.isFinite(p) && p > 0) return p;
+    }
+  } catch {
+    // ignore
+  }
+
+  // Fallback: Jupiter lite price endpoint (no API key required).
+  try {
+    const res = await fetch('https://lite-api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112', {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return 0;
+    const json = await res.json();
+    const node = json?.data?.So11111111111111111111111111111111111111112 ?? json?.So11111111111111111111111111111111111111112;
+    const p = node?.usdPrice ?? node?.price;
+    const num = typeof p === 'string' ? Number.parseFloat(p) : typeof p === 'number' ? p : 0;
+    return Number.isFinite(num) && num > 0 ? num : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function resolveEntryPriceUsd(
+  mint: string,
+  fallback: number | undefined,
+  solInvested?: number,
+  tokenOutAmount?: number,
+): Promise<number> {
+  // Best: compute cost-basis entry from the executed trade (works even before DEX indexing).
+  if (
+    typeof solInvested === 'number' &&
+    typeof tokenOutAmount === 'number' &&
+    Number.isFinite(solInvested) &&
+    Number.isFinite(tokenOutAmount) &&
+    solInvested > 0 &&
+    tokenOutAmount > 0
+  ) {
+    const solUsd = await fetchSolUsdPrice();
+    if (solUsd > 0) {
+      const entry = (solInvested * solUsd) / tokenOutAmount;
+      if (Number.isFinite(entry) && entry > 0) return entry;
+    }
+  }
+
+  // Fallback: use feed-provided price if present.
   if (typeof fallback === 'number' && fallback > 0) return fallback;
 
   // Try DexScreener immediately

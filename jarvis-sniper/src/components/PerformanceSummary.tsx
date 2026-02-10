@@ -1,13 +1,24 @@
 'use client';
 
 import { TrendingUp, Target, Shield, Zap, BarChart3, Activity } from 'lucide-react';
-import { useSniperStore } from '@/stores/useSniperStore';
+import { useSniperStore, STRATEGY_PRESETS } from '@/stores/useSniperStore';
+
+/** Backtest v5 WR data for each preset — updated from massive-backtest-results.json */
+const BACKTEST_WR: Record<string, number> = {
+  pump_fresh_tight: 81.0, insight_j: 73.0, genetic_best: 82.1, genetic_v2: 88.1,
+  hybrid_b: 73.5, momentum: 20.9, let_it_ride: 82.4, micro_cap_surge: 78.8,
+  elite: 81.8, loose: 29.9, hot: 20.9, xstock_momentum: 0, prestock_speculative: 0,
+  index_revert: 0,
+};
 
 export function PerformanceSummary() {
-  const { totalPnl, winCount, lossCount, totalTrades, positions, config } = useSniperStore();
+  const { totalPnl, winCount, lossCount, totalTrades, positions, config, activePreset } = useSniperStore();
   const winRate = totalTrades > 0 ? (winCount / totalTrades) * 100 : 0;
   const openCount = positions.filter(p => p.status === 'open').length;
   const unrealizedPnl = positions.filter(p => p.status === 'open').reduce((s, p) => s + p.pnlSol, 0);
+  const preset = STRATEGY_PRESETS.find(p => p.id === activePreset);
+  const presetLabel = preset?.name || activePreset?.toUpperCase() || 'CUSTOM';
+  const backtestWr = BACKTEST_WR[activePreset] ?? null;
 
   const stats = [
     {
@@ -41,7 +52,8 @@ export function PerformanceSummary() {
     {
       icon: <Shield className="w-4 h-4" />,
       label: 'Strategy',
-      value: `${config.strategyMode === 'aggressive' ? 'RIDE' : 'HB-v5'} ${config.stopLossPct}/${config.takeProfitPct}+${config.trailingStopPct}t`,
+      value: `${presetLabel} ${config.stopLossPct}/${config.takeProfitPct}+${config.trailingStopPct}t`,
+      sub: backtestWr !== null && backtestWr > 0 ? `BT: ${backtestWr.toFixed(0)}% WR` : undefined,
       color: config.strategyMode === 'aggressive' ? 'text-accent-warning' : 'text-accent-neon',
       bgColor: config.strategyMode === 'aggressive' ? 'bg-accent-warning/5 border-accent-warning/15' : 'bg-accent-neon/5 border-accent-neon/15',
     },
@@ -65,7 +77,8 @@ export function PerformanceSummary() {
             {stat.icon}
             <span className="text-[9px] uppercase tracking-wider font-medium">{stat.label}</span>
           </div>
-          <span className={`text-sm font-mono font-bold ${stat.color}`}>{stat.value}</span>
+          <span className={`text-sm font-mono font-bold ${stat.color} truncate`}>{stat.value}</span>
+          {stat.sub && <span className="text-[9px] font-mono text-text-muted/70">{stat.sub}</span>}
         </div>
       ))}
     </div>

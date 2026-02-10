@@ -249,31 +249,57 @@ export function PositionsPanel() {
       </div>
 
       {/* ─── SESSION STATS BAR ─── */}
-      {totalTrades > 0 && (
+      {(totalTrades > 0 || openPositions.length > 0) && (
         <div className="grid grid-cols-4 gap-2 mb-3 p-2.5 rounded-lg bg-bg-secondary border border-border-primary">
           <div className="flex flex-col items-center">
             <span className="text-[9px] text-text-muted uppercase tracking-wider">Trades</span>
-            <span className="text-xs font-bold font-mono text-text-primary">{totalTrades}</span>
+            <span className="text-xs font-bold font-mono text-text-primary">
+              {totalTrades + openPositions.length}
+              {openPositions.length > 0 && (
+                <span className="text-[8px] text-text-muted font-normal ml-0.5">({openPositions.length} open)</span>
+              )}
+            </span>
           </div>
           <div className="flex flex-col items-center">
             <span className="text-[9px] text-text-muted uppercase tracking-wider">Win Rate</span>
-            <span className={`text-xs font-bold font-mono ${totalTrades > 0 && winCount / totalTrades >= 0.5 ? 'text-accent-neon' : 'text-accent-error'}`}>
-              {totalTrades > 0 ? `${Math.round((winCount / totalTrades) * 100)}%` : '—'}
-            </span>
+            {(() => {
+              const totalClosed = totalTrades;
+              const openWins = openPositions.filter(p => p.pnlPercent > 0).length;
+              const openLosses = openPositions.filter(p => p.pnlPercent <= 0).length;
+              const allWins = winCount + openWins;
+              const allTotal = totalClosed + openPositions.length;
+              const rate = allTotal > 0 ? Math.round((allWins / allTotal) * 100) : 0;
+              return (
+                <span className={`text-xs font-bold font-mono ${allTotal > 0 && rate >= 50 ? 'text-accent-neon' : 'text-accent-error'}`}>
+                  {allTotal > 0 ? `${rate}%` : '—'}
+                </span>
+              );
+            })()}
           </div>
           <div className="flex flex-col items-center">
             <span className="text-[9px] text-text-muted uppercase tracking-wider">W / L</span>
-            <span className="text-xs font-bold font-mono">
-              <span className="text-accent-neon">{winCount}</span>
-              <span className="text-text-muted/50"> / </span>
-              <span className="text-accent-error">{lossCount}</span>
-            </span>
+            {(() => {
+              const openWins = openPositions.filter(p => p.pnlPercent > 0).length;
+              const openLosses = openPositions.filter(p => p.pnlPercent <= 0).length;
+              return (
+                <span className="text-xs font-bold font-mono">
+                  <span className="text-accent-neon">{winCount + openWins}</span>
+                  <span className="text-text-muted/50"> / </span>
+                  <span className="text-accent-error">{lossCount + openLosses}</span>
+                </span>
+              );
+            })()}
           </div>
           <div className="flex flex-col items-center">
             <span className="text-[9px] text-text-muted uppercase tracking-wider">Net PnL</span>
-            <span className={`text-xs font-bold font-mono ${totalPnl >= 0 ? 'text-accent-neon' : 'text-accent-error'}`}>
-              {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(3)}
-            </span>
+            {(() => {
+              const combinedPnl = totalPnl + unrealizedPnl;
+              return (
+                <span className={`text-xs font-bold font-mono ${combinedPnl >= 0 ? 'text-accent-neon' : 'text-accent-error'}`}>
+                  {combinedPnl >= 0 ? '+' : ''}{combinedPnl.toFixed(3)}
+                </span>
+              );
+            })()}
           </div>
         </div>
       )}

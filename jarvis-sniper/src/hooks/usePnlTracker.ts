@@ -69,8 +69,22 @@ export function usePnlTracker() {
           }
         }
 
+        // Fetch current SOL price for accurate SOL-denominated P&L
+        let solPriceUsd: number | undefined;
+        try {
+          const macroRes = await fetch('/api/macro');
+          if (macroRes.ok) {
+            const macroData = await macroRes.json();
+            if (typeof macroData?.solPrice === 'number' && macroData.solPrice > 0) {
+              solPriceUsd = macroData.solPrice;
+            }
+          }
+        } catch {
+          // SOL price unavailable — P&L will use approximation
+        }
+
         if (Object.keys(priceMap).length > 0) {
-          updatePrices(priceMap);
+          updatePrices(priceMap, solPriceUsd);
         }
       } finally {
         isPollingRef.current = false;

@@ -27,6 +27,7 @@ export interface BagsGraduation {
   age_hours?: number;
   buy_sell_ratio?: number;
   total_txns_1h?: number;
+  dex_id?: string;
 }
 
 export interface BagsToken {

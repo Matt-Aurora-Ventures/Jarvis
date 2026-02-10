@@ -1,15 +1,27 @@
 'use client';
 
-import { Crosshair, Zap, Shield, TrendingUp, Wifi, WifiOff, Flame } from 'lucide-react';
+import { Crosshair, Zap, Shield, TrendingUp, Wifi, WifiOff, Flame, Sun, Moon } from 'lucide-react';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { useSniperStore } from '@/stores/useSniperStore';
+import { useMacroData } from '@/hooks/useMacroData';
+import { useTheme } from '@/hooks/useTheme';
 
 export function StatusBar() {
   const { connected, connecting, address, phantomInstalled, connect, disconnect } = usePhantomWallet();
   const { config, totalPnl, winCount, lossCount, totalTrades, positions, tradeSignerMode, sessionWalletPubkey, budget } = useSniperStore();
-  const winRate = totalTrades > 0 ? ((winCount / totalTrades) * 100).toFixed(1) : '--';
-  const openCount = positions.filter((p) => p.status === 'open').length;
+  const openPositions = positions.filter((p) => p.status === 'open');
+  const openCount = openPositions.length;
+  const unrealizedPnl = openPositions.reduce((sum, p) => sum + p.pnlSol, 0);
+  const combinedPnl = totalPnl + unrealizedPnl;
+  const openWins = openPositions.filter(p => p.pnlPercent > 0).length;
+  const openLosses = openPositions.filter(p => p.pnlPercent <= 0).length;
+  const allTrades = totalTrades + openCount;
+  const allWins = winCount + openWins;
+  const winRate = allTrades > 0 ? ((allWins / allTrades) * 100).toFixed(1) : '--';
   const anyExitPending = positions.some((p) => p.status === 'open' && (!!p.isClosing || !!p.exitPending));
+
+  const macro = useMacroData();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const shortAddr = address ? `${address.slice(0, 4)}...${address.slice(-4)}` : null;
   const shortSession = sessionWalletPubkey ? `${sessionWalletPubkey.slice(0, 4)}...${sessionWalletPubkey.slice(-4)}` : null;
@@ -37,15 +49,43 @@ export function StatusBar() {
               MANUAL
             </span>
           )}
+          {macro.regime && (
+            <span className={`flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border ${
+              macro.regime === 'risk_on' ? 'bg-accent-neon/10 text-accent-neon border-accent-neon/20' :
+              macro.regime === 'risk_off' ? 'bg-accent-error/10 text-accent-error border-accent-error/20' :
+              'bg-bg-tertiary text-text-muted border-border-primary'
+            }`}>
+              {macro.regime === 'risk_on' ? '\u2191 RISK ON' : macro.regime === 'risk_off' ? '\u2193 RISK OFF' : '\u2014 NEUTRAL'}
+            </span>
+          )}
         </div>
 
         {/* Center: Stats */}
         <div className="hidden md:flex items-center gap-6">
+          {macro.btcPrice != null && (
+            <StatChip
+              icon={<span className="text-[10px] font-bold">BTC</span>}
+              label="BTC"
+              value={`$${macro.btcPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+              color={(macro.btcChange24h ?? 0) >= 0 ? 'text-accent-neon' : 'text-accent-error'}
+            />
+          )}
+          {macro.solPrice != null && (
+            <StatChip
+              icon={<span className="text-[10px] font-bold">SOL</span>}
+              label="SOL"
+              value={`$${macro.solPrice.toFixed(2)}`}
+              color={(macro.solChange24h ?? 0) >= 0 ? 'text-accent-neon' : 'text-accent-error'}
+            />
+          )}
+          {(macro.btcPrice != null || macro.solPrice != null) && (
+            <span className="text-border-primary select-none">|</span>
+          )}
           <StatChip
             icon={<TrendingUp className="w-3.5 h-3.5" />}
             label="PnL"
-            value={`${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)} SOL`}
-            color={totalPnl >= 0 ? 'text-accent-neon' : 'text-accent-error'}
+            value={`${combinedPnl >= 0 ? '+' : ''}${combinedPnl.toFixed(2)} SOL`}
+            color={combinedPnl >= 0 ? 'text-accent-neon' : 'text-accent-error'}
           />
           <StatChip
             icon={<Zap className="w-3.5 h-3.5" />}
@@ -56,7 +96,7 @@ export function StatusBar() {
           <StatChip
             icon={<Shield className="w-3.5 h-3.5" />}
             label="W/L"
-            value={`${winCount}/${lossCount}`}
+            value={`${allWins}/${lossCount + openLosses}`}
             color="text-text-secondary"
           />
           <StatChip
@@ -73,8 +113,20 @@ export function StatusBar() {
           />
         </div>
 
-        {/* Right: Wallet */}
+        {/* Right: Theme + Wallet */}
         <div className="flex items-center gap-3">
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            className="flex items-center justify-center w-9 h-9 rounded-full bg-bg-tertiary border border-border-primary hover:border-border-hover transition-colors cursor-pointer"
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-text-secondary" />
+            ) : (
+              <Moon className="w-4 h-4 text-text-secondary" />
+            )}
+          </button>
           {sessionWalletPubkey && (
             <button
               onClick={async () => {
@@ -92,7 +144,7 @@ export function StatusBar() {
 
                 try { await navigator.clipboard.writeText(sessionWalletPubkey); } catch {}
               }}
-              className={`hidden sm:flex items-center gap-2 px-3 h-9 rounded-full border transition-colors cursor-pointer ${
+              className={`flex items-center gap-2 px-2.5 sm:px-3 h-9 rounded-full border transition-colors cursor-pointer ${
                 autoActive
                   ? 'bg-accent-warning/10 text-accent-warning border-accent-warning/25 hover:border-accent-warning/40'
                   : 'bg-bg-tertiary text-text-muted border-border-primary hover:border-border-hover'
@@ -101,10 +153,11 @@ export function StatusBar() {
             >
               <Flame className="w-4 h-4" />
               <span className="text-[10px] font-mono font-semibold uppercase tracking-wider">
-                {autoActive ? 'AUTO' : 'ACTIVATE'}
+                <span className="hidden sm:inline">{autoActive ? 'AUTO' : 'ACTIVATE'}</span>
+                <span className="sm:hidden">{autoActive ? 'AUTO' : 'ACT'}</span>
               </span>
               {shortSession && (
-                <span className="text-xs font-mono font-medium">{shortSession}</span>
+                <span className="hidden md:inline text-xs font-mono font-medium">{shortSession}</span>
               )}
             </button>
           )}

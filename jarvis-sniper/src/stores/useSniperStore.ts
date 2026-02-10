@@ -5,6 +5,8 @@ import type { BagsGraduation } from '@/lib/bags-api';
 export type StrategyMode = 'conservative' | 'balanced' | 'aggressive';
 export type TradeSignerMode = 'phantom' | 'session';
 
+export type AssetType = 'memecoin' | 'xstock' | 'prestock' | 'index';
+
 /** Proven strategy presets from backtesting 895+ tokens */
 export interface StrategyPreset {
   id: string;
@@ -13,6 +15,7 @@ export interface StrategyPreset {
   winRate: string;
   trades: number;
   config: Partial<SniperConfig>;
+  assetType?: AssetType;
 }
 
 /**
@@ -29,6 +32,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: 'Fresh pumpswap tokens with tight exits — 88.2% WR (v4 champion)',
     winRate: '88.2% (17T)',
     trades: 17,
+    assetType: 'memecoin',
     config: {
       stopLossPct: 20, takeProfitPct: 80, trailingStopPct: 8,
       minLiquidityUsd: 5000, minScore: 40, maxTokenAgeHours: 24,
@@ -41,6 +45,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: 'Micro-cap tokens with 3x volume surge — 76.2% WR, huge TP potential',
     winRate: '76.2%',
     trades: 0,
+    assetType: 'memecoin',
     config: {
       stopLossPct: 45, takeProfitPct: 250, trailingStopPct: 20,
       minLiquidityUsd: 3000, minScore: 30, maxTokenAgeHours: 24,
@@ -53,6 +58,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: '$100K+ Liq, V/L≥2, Age<100h, 10%+ Mom, Hours Gate',
     winRate: 'NEW — strictest filter',
     trades: 0,
+    assetType: 'memecoin',
     config: {
       stopLossPct: 15, takeProfitPct: 60, trailingStopPct: 8,
       minLiquidityUsd: 100000, minMomentum1h: 10, maxTokenAgeHours: 100,
@@ -65,6 +71,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: 'V/L≥3 + B/S 1.2-2 + 5%+ Mom',
     winRate: '75% (13T)',
     trades: 13,
+    assetType: 'memecoin',
     config: {
       stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
       minLiquidityUsd: 50000, minScore: 0, minMomentum1h: 5,
@@ -77,6 +84,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: 'Liq≥$50K + Age<100h + 10%+ Mom',
     winRate: '86% (7T)',
     trades: 7,
+    assetType: 'memecoin',
     config: {
       stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
       minLiquidityUsd: 50000, maxTokenAgeHours: 100, minMomentum1h: 10,
@@ -89,6 +97,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: 'Balanced — Liq≥$50K + Hours Gate',
     winRate: '~90% (est)',
     trades: 10,
+    assetType: 'memecoin',
     config: {
       stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
       minLiquidityUsd: 50000, minMomentum1h: 5, minVolLiqRatio: 1.0,
@@ -101,6 +110,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: '20/100 + 5% trail — max gains',
     winRate: '100% (10T)',
     trades: 10,
+    assetType: 'memecoin',
     config: {
       stopLossPct: 20, takeProfitPct: 100, trailingStopPct: 5,
       minLiquidityUsd: 50000, minMomentum1h: 5, tradingHoursGate: true,
@@ -113,6 +123,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: 'Original loose filters — more trades, lower WR',
     winRate: '49% (54T)',
     trades: 54,
+    assetType: 'memecoin',
     config: {
       stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
       minLiquidityUsd: 25000, minMomentum1h: 0, maxTokenAgeHours: 500,
@@ -125,6 +136,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: 'Genetic optimizer champion — SL35/TP200/Trail12, fresh tokens, $3K liq',
     winRate: '83.3% (GA)',
     trades: 0,
+    assetType: 'memecoin',
     config: {
       stopLossPct: 35, takeProfitPct: 200, trailingStopPct: 12,
       minLiquidityUsd: 3000, minScore: 43, maxTokenAgeHours: 24,
@@ -137,6 +149,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: 'Optimizer v2 champion — SL45/TP207/Trail10, volume surge filter',
     winRate: '71.1% (GA v2)',
     trades: 45,
+    assetType: 'memecoin',
     config: {
       stopLossPct: 45, takeProfitPct: 207, trailingStopPct: 10,
       minLiquidityUsd: 5000, minScore: 0,
@@ -149,6 +162,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: 'xStocks with tight exits — US market hours optimal',
     winRate: 'NEW',
     trades: 0,
+    assetType: 'xstock',
     config: {
       stopLossPct: 3, takeProfitPct: 8, trailingStopPct: 2,
       minLiquidityUsd: 10000, minScore: 0,
@@ -161,6 +175,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: 'Pre-IPO tokens with wider risk tolerance — high reward potential',
     winRate: 'NEW',
     trades: 0,
+    assetType: 'prestock',
     config: {
       stopLossPct: 15, takeProfitPct: 50, trailingStopPct: 8,
       minLiquidityUsd: 5000, minScore: 0,
@@ -173,6 +188,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     description: 'Solana index tokens — tight SL/TP for mean reversion plays',
     winRate: 'NEW',
     trades: 0,
+    assetType: 'index',
     config: {
       stopLossPct: 2, takeProfitPct: 5, trailingStopPct: 1.5,
       minLiquidityUsd: 20000, minScore: 0,
@@ -537,6 +553,7 @@ interface SniperState {
   setStrategyMode: (mode: StrategyMode) => void;
   loadPreset: (presetId: string) => void;
   activePreset: string;
+  assetFilter: AssetType;
   loadBestEver: (cfg: Record<string, any>) => void;
 
   // Trade Signing Mode
@@ -564,8 +581,9 @@ interface SniperState {
   addPosition: (pos: Position) => void;
   updatePosition: (id: string, update: Partial<Position>) => void;
   removePosition: (id: string) => void;
-  /** Batch-update prices from DexScreener polling */
-  updatePrices: (priceMap: Record<string, number>) => void;
+  /** Batch-update prices from DexScreener polling.
+   *  @param solPriceUsd — current SOL/USD price for accurate SOL-denominated P&L. */
+  updatePrices: (priceMap: Record<string, number>, solPriceUsd?: number) => void;
   /** Set isClosing lock on a position */
   setPositionClosing: (id: string, closing: boolean) => void;
   /** Close a position with proper status and stats tracking.
@@ -581,6 +599,11 @@ interface SniperState {
   // Track tokens that were evaluated and skipped (prevents skip-spam in logs)
   skippedMints: Set<string>;
 
+  // Watchlist — track tokens to monitor
+  watchlist: string[];
+  addToWatchlist: (mint: string) => void;
+  removeFromWatchlist: (mint: string) => void;
+
   // Selected token for chart display
   selectedMint: string | null;
   setSelectedMint: (mint: string | null) => void;
@@ -595,6 +618,9 @@ interface SniperState {
   lossCount: number;
   totalTrades: number;
 
+  /** Last known SOL/USD price — updated by PnL tracker for accurate SOL-denominated P&L. */
+  lastSolPriceUsd: number;
+
   // Circuit Breaker
   circuitBreaker: CircuitBreakerState;
   resetCircuitBreaker: () => void;
@@ -608,6 +634,7 @@ export const useSniperStore = create<SniperState>()(
     (set, get) => ({
   config: DEFAULT_CONFIG,
   activePreset: 'pump_fresh_tight',
+  assetFilter: 'memecoin' as AssetType,
   tradeSignerMode: 'phantom',
   setTradeSignerMode: (mode) => set({ tradeSignerMode: mode }),
   sessionWalletPubkey: null,
@@ -630,6 +657,7 @@ export const useSniperStore = create<SniperState>()(
         : s.positions;
       return {
         activePreset: presetId,
+        assetFilter: preset.assetType || 'memecoin',
         config: { ...s.config, ...preset.config },
         skippedMints: new Set(),
         positions,
@@ -707,12 +735,22 @@ export const useSniperStore = create<SniperState>()(
   removePosition: (id) => set((s) => ({
     positions: s.positions.filter((p) => p.id !== id),
   })),
-  updatePrices: (priceMap) => set((s) => ({
+  updatePrices: (priceMap, solPriceUsd) => set((s) => ({
+    ...(solPriceUsd && solPriceUsd > 0 ? { lastSolPriceUsd: solPriceUsd } : {}),
     positions: s.positions.map((p) => {
       const newPrice = priceMap[p.mint];
       if (newPrice == null || p.status !== 'open') return p;
       const pnlPercent = p.entryPrice > 0 ? ((newPrice - p.entryPrice) / p.entryPrice) * 100 : 0;
-      const pnlSol = p.solInvested * (pnlPercent / 100);
+      // SOL-denominated P&L: use actual token holdings + SOL price for real positions
+      let pnlSol: number;
+      if (solPriceUsd && solPriceUsd > 0 && p.amountLamports && p.amount > 0) {
+        // Real on-chain position: compute current SOL value from token count * USD price / SOL price
+        const currentValueSol = (p.amount * newPrice) / solPriceUsd;
+        pnlSol = currentValueSol - p.solInvested;
+      } else {
+        // Paper position or SOL price unavailable: approximate (assumes constant SOL price)
+        pnlSol = p.solInvested * (pnlPercent / 100);
+      }
       // Track high water mark for trailing stop
       const highWaterMarkPct = Math.max(p.highWaterMarkPct ?? 0, pnlPercent);
       return { ...p, currentPrice: newPrice, pnlPercent, pnlSol, highWaterMarkPct };
@@ -826,6 +864,15 @@ export const useSniperStore = create<SniperState>()(
 
   snipedMints: new Set(),
   skippedMints: new Set(),
+
+  // Watchlist
+  watchlist: [],
+  addToWatchlist: (mint) => set((s) => ({
+    watchlist: s.watchlist.includes(mint) ? s.watchlist : [...s.watchlist, mint],
+  })),
+  removeFromWatchlist: (mint) => set((s) => ({
+    watchlist: s.watchlist.filter((m) => m !== mint),
+  })),
 
   snipeToken: (grad) => {
     const state = get();
@@ -1002,6 +1049,7 @@ export const useSniperStore = create<SniperState>()(
   winCount: 0,
   lossCount: 0,
   totalTrades: 0,
+  lastSolPriceUsd: 0,
 
   // Circuit Breaker
   circuitBreaker: {
@@ -1028,6 +1076,7 @@ export const useSniperStore = create<SniperState>()(
     executionLog: [],
     snipedMints: new Set(),
     skippedMints: new Set(),
+    watchlist: [],
     selectedMint: null,
     budget: { budgetSol: 0.1, authorized: false, spent: 0 },
     totalPnl: 0,
@@ -1067,6 +1116,7 @@ export const useSniperStore = create<SniperState>()(
         budget: state.budget,
         executionLog: state.executionLog.slice(0, 50), // Keep last 50
         snipedMintsArray: Array.from(state.snipedMints), // Set → Array for JSON
+        watchlist: state.watchlist,
         circuitBreaker: state.circuitBreaker,
         totalPnl: state.totalPnl,
         winCount: state.winCount,
