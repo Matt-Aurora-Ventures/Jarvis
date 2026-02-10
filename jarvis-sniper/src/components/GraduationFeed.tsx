@@ -6,13 +6,20 @@ import { useSniperStore, type StrategyMode, type AssetType } from '@/stores/useS
 import { getScoreTier, TIER_CONFIG, type BagsGraduation } from '@/lib/bags-api';
 import { getRecommendedSlTp, getConvictionMultiplier } from '@/stores/useSniperStore';
 import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
+import { useTVScreener } from '@/hooks/useTVScreener';
+import { MarketStatus } from '@/components/MarketStatus';
 import { computeTargetsFromEntryUsd, formatUsdPrice, isBlueChipLongConviction } from '@/lib/trade-plan';
 
 async function fetchFromApi(assetFilter: AssetType): Promise<BagsGraduation[]> {
   try {
-    const url = assetFilter === 'memecoin'
-      ? '/api/graduations'
-      : `/api/xstocks?category=${assetFilter === 'xstock' ? 'XSTOCK' : assetFilter === 'prestock' ? 'PRESTOCK' : 'INDEX'}`;
+    let url: string;
+    if (assetFilter === 'memecoin') {
+      url = '/api/graduations';
+    } else if (assetFilter === 'bluechip') {
+      url = '/api/bluechips';
+    } else {
+      url = `/api/xstocks?category=${assetFilter === 'xstock' ? 'XSTOCK' : assetFilter === 'prestock' ? 'PRESTOCK' : 'INDEX'}`;
+    }
     const res = await fetch(url);
     if (!res.ok) return [];
     const data = await res.json();
@@ -27,11 +34,13 @@ const FILTER_LABELS: Record<string, { label: string; color: string }> = {
   xstock: { label: 'xSTOCK', color: 'bg-blue-500/15 text-blue-400' },
   prestock: { label: 'PRE-IPO', color: 'bg-purple-500/15 text-purple-400' },
   index: { label: 'INDEX', color: 'bg-amber-500/15 text-amber-400' },
+  bluechip: { label: 'BLUE CHIP', color: 'bg-cyan-500/15 text-cyan-400' },
 };
 
 export function GraduationFeed() {
-  const { graduations, setGraduations, addGraduation, config, snipedMints, positions, setSelectedMint, budget, budgetRemaining, watchlist, addToWatchlist, removeFromWatchlist, assetFilter } = useSniperStore();
+  const { graduations, setGraduations, addGraduation, config, snipedMints, positions, setSelectedMint, budget, budgetRemaining, watchlist, addToWatchlist, removeFromWatchlist, assetFilter, activePreset } = useSniperStore();
   const { snipe, ready: walletReady } = useSnipeExecutor();
+  const { marketPhase, lastUpdated: tvLastUpdated } = useTVScreener();
   const prevMintsRef = useRef<Set<string>>(new Set());
   const newMintsRef = useRef<Set<string>>(new Set());
 
@@ -92,7 +101,7 @@ export function GraduationFeed() {
         snipe(grad as any);
       }
     }
-  }, [graduations, config.autoSnipe, config.minScore, config.maxConcurrentPositions, positions, snipedMints, snipe, budget.authorized, budgetRemaining, walletReady]);
+  }, [graduations, config.autoSnipe, config.minScore, config.maxConcurrentPositions, config.minLiquidityUsd, assetFilter, activePreset, positions, snipedMints, snipe, budget.authorized, budget.spent, budgetRemaining, walletReady]);
 
   return (
     <div className="card-glass p-4 flex flex-col h-full">
@@ -109,9 +118,12 @@ export function GraduationFeed() {
             );
           })()}
         </div>
-        <span className="text-[10px] font-mono text-text-muted">
-          {graduations.length} targets
-        </span>
+        <div className="flex items-center gap-2">
+          <MarketStatus marketPhase={marketPhase} lastUpdated={tvLastUpdated} />
+          <span className="text-[10px] font-mono text-text-muted">
+            {graduations.length} targets
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 max-h-[calc(100vh-260px)]">
