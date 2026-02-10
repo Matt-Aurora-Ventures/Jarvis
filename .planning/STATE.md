@@ -1,13 +1,21 @@
 # Jarvis V2 - Project State
 
-**Last Updated:** 2026-02-10T07:19:50Z
+**Last Updated:** 2026-02-10T07:39:32Z
 **Current Milestone:** v2.0 Combined Scope (ClawdBot + Web Trading)
 **Phase:** Phase 9 - Team Orchestration (UNIFIED_GSD) - 85% complete | Jarvis Sniper Phase 02.1 - In Progress
-**Next Action:** VPS integration testing, GRU integration testing | Sniper: Execute 02.1-03-PLAN (Zustand store integration)
+**Next Action:** VPS integration testing, GRU integration testing | Sniper: Execute next 02.1 plan (if any) or advance to Phase 02.2
 
 ---
 
 ## Today's Progress (2026-02-10)
+
+### Jarvis Sniper - Phase 02.1 Backtesting Pipeline (Plan 03 Complete)
+- Completed `02.1-03-PLAN.md` - Backtest API + Store Integration
+- Enhanced backtest API with data-source routing: bluechip (real OHLCV), memecoin (graduation synthetic), xstock (server synthetic)
+- Added all 18 strategies to STRATEGY_CONFIGS (was 11)
+- Added validated/dataSource/underperformers fields to API response
+- Added backtestMeta state to Zustand store with persistence and getPresetWithMeta() helper
+- SUMMARY: `jarvis-sniper/.planning/phases/02.1-backtesting-pipeline/02.1-03-SUMMARY.md`
 
 ### Jarvis Sniper - Phase 02.1 Backtesting Pipeline (Plan 02 Complete)
 - Completed `02.1-02-PLAN.md` - Backtest Dashboard UI
