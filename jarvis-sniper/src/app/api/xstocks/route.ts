@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { XSTOCKS, PRESTOCKS, INDEXES, type TokenizedEquity } from '@/lib/xstocks-data';
 import { ServerCache } from '@/lib/server-cache';
+import { getCachedTVData, XSTOCKS_TO_TV_SYMBOL } from '@/lib/tv-screener';
+import { calcTVEnhancedScoreDetailed } from '@/lib/tv-scoring';
+import type { TVStockData } from '@/lib/tv-screener';
 
 /**
  * xStocks / PreStocks / Indexes API route
@@ -34,6 +37,112 @@ async function fetchWithTimeout(url: string, timeoutMs = 10000): Promise<Respons
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Legacy: kept for reference. Active scoring uses calcTVEnhancedScore from tv-scoring.ts
+ *
+ * Dynamic scoring for xStocks/PreStocks/Indexes.
+ *
+ * Traditional assets have guaranteed liquidity (backed by real stocks),
+ * so scoring focuses on:
+ * - Trading Activity (0-30): Volume, transaction count
+ * - Price Momentum (0-30): Trending strength, directional clarity
+ * - Market Quality (0-20): B/S ratio, spread health
+ * - Asset Class Bonus (0-20): Blue chip stocks > speculative pre-IPO
+ */
+function calcEquityScore(
+  token: TokenizedEquity,
+  pair: any,
+): number {
+  if (!pair) return 35;
+
+  const liq = parseFloat(pair.liquidity?.usd || '0');
+  const vol24h = parseFloat(pair.volume?.h24 || '0');
+  const change1h = pair.priceChange?.h1 || 0;
+  const change24h = pair.priceChange?.h24 || 0;
+  const buys1h = pair.txns?.h1?.buys || 0;
+  const sells1h = pair.txns?.h1?.sells || 0;
+  const totalTxns = buys1h + sells1h;
+  const bsRatio = sells1h > 0 ? buys1h / sells1h : buys1h;
+  const volLiqRatio = liq > 0 ? vol24h / liq : 0;
+
+  let score = 0;
+
+  // ─── Trading Activity (0-30) ───
+  if (volLiqRatio >= 2.0) score += 20;
+  else if (volLiqRatio >= 1.0) score += 16;
+  else if (volLiqRatio >= 0.5) score += 12;
+  else if (volLiqRatio >= 0.2) score += 8;
+  else score += 4;
+
+  if (totalTxns >= 200) score += 10;
+  else if (totalTxns >= 50) score += 7;
+  else if (totalTxns >= 20) score += 5;
+  else if (totalTxns >= 5) score += 3;
+  else score += 1;
+
+  // ─── Price Momentum (0-30) ───
+  const absChange1h = Math.abs(change1h);
+  if (absChange1h >= 3) score += 15;  // Strong move for a stock
+  else if (absChange1h >= 1.5) score += 12;
+  else if (absChange1h >= 0.5) score += 8;
+  else score += 4;  // Very flat
+
+  // Trend consistency (1h and 24h aligned)
+  if ((change1h > 0 && change24h > 0) || (change1h < 0 && change24h < 0)) {
+    score += 10; // aligned trend
+  } else if (Math.abs(change24h) < 1) {
+    score += 5; // rangebound — can still trade mean reversion
+  } else {
+    score += 3; // mixed signals
+  }
+
+  // Strong intraday momentum bonus
+  if (absChange1h >= 5) score += 5;
+
+  // ─── Market Quality (0-20) ───
+  if (liq >= 500_000) score += 8;
+  else if (liq >= 100_000) score += 5;
+  else if (liq >= 50_000) score += 3;
+  else score += 1;
+
+  if (bsRatio >= 1.0 && bsRatio <= 2.5 && totalTxns >= 10) {
+    score += 7; // healthy buying
+  } else if (bsRatio >= 0.5 && bsRatio <= 3.5) {
+    score += 4;
+  } else {
+    score += 1;
+  }
+
+  // Spread quality proxy (liq relative to volume)
+  if (liq > 200_000 && volLiqRatio > 0.3) score += 5;
+  else score += 2;
+
+  // ─── Asset Class Bonus (0-20) ───
+  const cat = token.category;
+  const sector = token.sector.toLowerCase();
+  if (cat === 'INDEX') {
+    // Indexes get high structural score (diversified, always liquid)
+    score += 15;
+    if (token.ticker === 'TQQQx') score -= 3; // Leveraged = riskier
+  } else if (cat === 'XSTOCK') {
+    // Blue chip stocks
+    if (['technology', 'finance'].includes(sector)) score += 12;
+    else if (['healthcare', 'consumer', 'energy'].includes(sector)) score += 10;
+    else score += 8;
+    // Mega-cap bonus
+    if (['AAPLx', 'MSFTx', 'GOOGLx', 'AMZNx', 'NVDAx', 'METAx'].includes(token.ticker)) {
+      score += 5;
+    }
+  } else if (cat === 'PRESTOCK') {
+    // Pre-IPO = more speculative
+    score += 5;
+  } else if (cat === 'COMMODITY') {
+    score += 12; // Gold = stable
+  }
+
+  return Math.max(10, Math.min(100, Math.round(score)));
 }
 
 function getCategoryTokens(category: string): TokenizedEquity[] {
@@ -91,14 +200,25 @@ export async function GET(request: Request) {
       }
     }
 
+    // Fetch TradingView data (cached, non-blocking)
+    let tvData: Record<string, TVStockData> = {};
+    try {
+      tvData = await getCachedTVData();
+    } catch {
+      // TV data is a nice-to-have, not a requirement
+    }
+
     // Map tokens to BagsGraduation format
     const graduations = tokens.map(token => {
       const pair = pairsByMint.get(token.mintAddress);
+      const tvTicker = XSTOCKS_TO_TV_SYMBOL[token.ticker];
+      const tvStock = tvTicker ? tvData[tvTicker] ?? null : null;
+      const scoreDetails = calcTVEnhancedScoreDetailed(tvStock, pair, token);
       return {
         mint: token.mintAddress,
         symbol: token.ticker,
         name: token.name,
-        score: 50, // neutral score for equities
+        score: scoreDetails.composite,
         graduation_time: Date.now() / 1000, // established tokens
         bonding_curve_score: 0,
         holder_distribution_score: 0,
@@ -121,6 +241,11 @@ export async function GET(request: Request) {
         fdv: pair?.fdv || 0,
         description: token.description,
         logo_uri: undefined,
+        // TV-enhanced scoring breakdown
+        tv_enhanced: scoreDetails.hasTVData,
+        tv_momentum: scoreDetails.momentum,
+        tv_volume_confirmation: scoreDetails.volumeConfirmation,
+        tv_base_score: scoreDetails.baseEquityScore,
       };
     });
 
