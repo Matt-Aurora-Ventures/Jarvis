@@ -14,13 +14,25 @@ import subprocess
 import sys
 from typing import List, Tuple
 
-SKILLS_FIND_CMD = ["npx", "-y", "skills@latest", "find"]
-SKILLS_ADD_CMD = ["npx", "-y", "skills@latest", "add"]
+# On Windows, `npx` is often a PowerShell script (`npx.ps1`) which cannot be
+# executed directly via CreateProcess. Prefer the `.cmd` shim for subprocess.
+NPX = "npx.cmd" if os.name == "nt" else "npx"
+
+SKILLS_FIND_CMD = [NPX, "-y", "skills@latest", "find"]
+SKILLS_ADD_CMD = [NPX, "-y", "skills@latest", "add"]
 
 
 def run_find(query: str) -> Tuple[List[Tuple[str, str]], str]:
     cmd = SKILLS_FIND_CMD + [query]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    # `skills find` prints ANSI + box drawing characters; force UTF-8 to avoid
+    # Windows cp1252 decode errors when capturing output.
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     output = (result.stdout or "") + "\n" + (result.stderr or "")
     # Strip ANSI escape codes to avoid polluted skill names
     output = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", output)
