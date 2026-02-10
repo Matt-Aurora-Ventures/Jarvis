@@ -1,7 +1,7 @@
 # Jarvis Sniper — Project State
 
-**Last Updated:** 2026-02-10
-**Current Phase:** 2.1 (Backtesting Pipeline) — Plan 01 complete, Plans 02-03 pending
+**Last Updated:** 2026-02-10T09:03Z
+**Current Phase:** 2.2 (Data Integration) — Plan 01 complete, Plans 02-03 pending
 **Milestone:** v2.0
 
 ---
@@ -12,7 +12,7 @@
 |-------|--------|-------|
 | Phase 1 | ✅ Complete | All 8 requirements delivered |
 | Phase 2.1 | 🔄 In Progress | Plan 01 done (historical data hardened), Plans 02-03 pending |
-| Phase 2.2 | ⏳ Pending | tvscreener — research complete, implementation ready |
+| Phase 2.2 | 🔄 In Progress | Plan 01 done (TV screener lib + API route), Plans 02-03 pending |
 | Phase 2.3 | ✅ Complete | Wallet persistence + per-asset circuit breakers done |
 | Phase 2.4 | ⏳ Pending | Advanced algorithms — research complete (10 strategies ranked) |
 | Phase 2.5 | ⏳ Pending | Power features |
@@ -24,8 +24,11 @@
 | Plan | Name | Status | Summary |
 |------|------|--------|---------|
 | 02.1-01 | Historical Data Pipeline Hardening | ✅ Complete | Birdeye fallback + memecoin graduation calibration |
-| 02.1-02 | Backtest Validation Runs | ⏳ Pending | |
-| 02.1-03 | Backtest API Integration | ⏳ Pending | |
+| 02.1-02 | Backtest Dashboard UI | ✅ Complete | useBacktest hook + BacktestPanel collapsible component |
+| 02.1-03 | Backtest API + Store Integration | ✅ Complete | Data-source routing, 18 strategies, backtestMeta in store |
+| 02.2-01 | TradingView Screener Integration | ✅ Complete | 60-ticker symbol map, 45-column TV scan, 60s cache, API route |
+| 02.2-02 | Enhanced Scoring | ⏳ Pending | |
+| 02.2-03 | UI Integration | ⏳ Pending | |
 
 ---
 
@@ -93,10 +96,10 @@
 
 ## Session Continuity
 
-Last session: 2026-02-10T07:20Z
-Stopped at: Completed 02.1-01-PLAN.md
+Last session: 2026-02-10T09:03Z
+Stopped at: Completed 02.2-01-PLAN.md
 Resume file: None
 
 ---
 
-*Last updated: 2026-02-10*
+*Last updated: 2026-02-10T09:03Z*
