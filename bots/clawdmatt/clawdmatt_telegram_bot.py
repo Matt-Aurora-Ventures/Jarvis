@@ -1,7 +1,7 @@
 """
-ClawdMatt Telegram Bot - Marketing Communications Filter
+Arsenal Telegram Bot - COO Safety Filter
 
-A Telegram bot interface for PR Matt — the communications review service.
+A Telegram bot interface for Arsenal — the tactical communications guardrail.
 Reviews messages for brand alignment and risk before publishing.
 
 Usage:
@@ -92,10 +92,11 @@ load_tokens()
 # Silence token for heartbeat monitors (also used by unit tests).
 HEARTBEAT_OK = "HEARTBEAT_OK"
 
-# Get token
-BOT_TOKEN = os.environ.get("CLAWDMATT_BOT_TOKEN")
+# Get token (user-facing rename: "Matt" -> "Arsenal")
+# Keep CLAWDMATT_BOT_TOKEN as a backward-compatible fallback.
+BOT_TOKEN = os.environ.get("CLAWDARSENAL_BOT_TOKEN") or os.environ.get("CLAWDMATT_BOT_TOKEN")
 if not BOT_TOKEN:
-    logger.error("CLAWDMATT_BOT_TOKEN not found in environment")
+    logger.error("CLAWDARSENAL_BOT_TOKEN (or CLAWDMATT_BOT_TOKEN) not found in environment")
     sys.exit(1)
 
 # Initialize bot
