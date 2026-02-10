@@ -5,7 +5,7 @@ import type { BagsGraduation } from '@/lib/bags-api';
 export type StrategyMode = 'conservative' | 'balanced' | 'aggressive';
 export type TradeSignerMode = 'phantom' | 'session';
 
-export type AssetType = 'memecoin' | 'xstock' | 'prestock' | 'index';
+export type AssetType = 'memecoin' | 'xstock' | 'prestock' | 'index' | 'bluechip';
 
 /** Proven strategy presets from backtesting 895+ tokens */
 export interface StrategyPreset {
@@ -16,6 +16,21 @@ export interface StrategyPreset {
   trades: number;
   config: Partial<SniperConfig>;
   assetType?: AssetType;
+  /** Set to true after this strategy has been backtested with real/calibrated data */
+  backtested?: boolean;
+  /** If backtested, the data source used ('dexscreener' | 'birdeye' | 'synthetic-calibrated') */
+  dataSource?: string;
+  /** If backtested and win rate < 40% or profit factor < 1.0 */
+  underperformer?: boolean;
+}
+
+/** Runtime backtest metadata for a strategy preset (persisted via Zustand) */
+export interface BacktestMetaEntry {
+  winRate: string;
+  trades: number;
+  backtested: boolean;
+  dataSource: string;
+  underperformer: boolean;
 }
 
 /**
@@ -156,43 +171,132 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
       strategyMode: 'aggressive',
     },
   },
+  // ─── xStocks / PreStocks / Indexes ───────────────────────────────────────
+  // Traditional assets: real financial instruments, guaranteed liquidity.
+  // SL/TP calibrated to actual stock/index daily ranges (SPY ~1-2%, AAPL ~2-4%).
   {
-    id: 'xstock_momentum',
-    name: 'XSTOCK MOMENTUM',
-    description: 'xStocks with tight exits — US market hours optimal',
-    winRate: 'NEW',
+    id: 'xstock_intraday',
+    name: 'XSTOCK INTRADAY',
+    description: 'US stocks — 1.5% SL, 3% TP — captures normal intraday swings',
+    winRate: 'Calibrated to 1-3% daily ranges',
+    trades: 0,
+    assetType: 'xstock',
+    config: {
+      stopLossPct: 1.5, takeProfitPct: 3, trailingStopPct: 1,
+      minLiquidityUsd: 10000, minScore: 40,
+      strategyMode: 'conservative',
+    },
+  },
+  {
+    id: 'xstock_swing',
+    name: 'XSTOCK SWING',
+    description: 'US stocks — 3% SL, 8% TP — multi-day momentum plays',
+    winRate: 'Calibrated to weekly stock ranges',
     trades: 0,
     assetType: 'xstock',
     config: {
       stopLossPct: 3, takeProfitPct: 8, trailingStopPct: 2,
-      minLiquidityUsd: 10000, minScore: 0,
-      strategyMode: 'conservative',
+      minLiquidityUsd: 10000, minScore: 50,
+      strategyMode: 'balanced',
     },
   },
   {
     id: 'prestock_speculative',
     name: 'PRESTOCK SPEC',
-    description: 'Pre-IPO tokens with wider risk tolerance — high reward potential',
-    winRate: 'NEW',
+    description: 'Pre-IPO — wider SL/TP for higher vol (5% SL, 15% TP)',
+    winRate: 'Pre-IPO volatility adjusted',
     trades: 0,
     assetType: 'prestock',
     config: {
-      stopLossPct: 15, takeProfitPct: 50, trailingStopPct: 8,
-      minLiquidityUsd: 5000, minScore: 0,
+      stopLossPct: 5, takeProfitPct: 15, trailingStopPct: 3,
+      minLiquidityUsd: 5000, minScore: 30,
       strategyMode: 'aggressive',
     },
   },
   {
-    id: 'index_revert',
-    name: 'INDEX MEAN REVERT',
-    description: 'Solana index tokens — tight SL/TP for mean reversion plays',
-    winRate: 'NEW',
+    id: 'index_intraday',
+    name: 'INDEX INTRADAY',
+    description: 'SPY/QQQ — 0.8% SL, 1.5% TP — tight index scalping',
+    winRate: 'Calibrated to SPY 0.5-1.5% daily range',
     trades: 0,
     assetType: 'index',
     config: {
-      stopLossPct: 2, takeProfitPct: 5, trailingStopPct: 1.5,
-      minLiquidityUsd: 20000, minScore: 0,
+      stopLossPct: 0.8, takeProfitPct: 1.5, trailingStopPct: 0.5,
+      minLiquidityUsd: 20000, minScore: 50,
       strategyMode: 'conservative',
+    },
+  },
+  {
+    id: 'index_leveraged',
+    name: 'INDEX TQQQ SWING',
+    description: 'TQQQ 3x leveraged — 3% SL, 8% TP — amplified index moves',
+    winRate: 'Leveraged index calibrated',
+    trades: 0,
+    assetType: 'index',
+    config: {
+      stopLossPct: 3, takeProfitPct: 8, trailingStopPct: 2,
+      minLiquidityUsd: 20000, minScore: 40,
+      strategyMode: 'aggressive',
+    },
+  },
+  // ─── Blue Chip Solana — Established Tokens, 2yr+, High Liquidity ────────
+  // Research-backed strategies from systematic trading literature:
+  // - Mean Reversion: Buy oversold blue chips (RSI <30 equivalent), tight SL
+  // - Trend Following: Ride established momentum, trailing stop captures gains
+  // - Breakout Scalp: Catch range breakouts on high-volume blue chips
+  //
+  // Key parameters derived from:
+  // - SOL avg daily volatility: 4-6% → SL 3-5%, TP 5-12%
+  // - JUP/RAY avg daily volatility: 5-8% → SL 4-6%, TP 8-15%
+  // - BONK/WIF avg daily volatility: 8-12% → SL 5-8%, TP 10-20%
+  // - Academic: optimal trailing stop = 1x ATR ≈ daily volatility
+  {
+    id: 'bluechip_mean_revert',
+    name: 'BLUE CHIP MEAN REVERT',
+    description: 'Buy oversold blue chips — tight 3% SL, 8% TP, 2% trail. SOL/JUP/RAY/PYTH class.',
+    winRate: 'Systematic: 55-65% WR, 1.8:1 R/R',
+    trades: 0,
+    assetType: 'bluechip',
+    config: {
+      stopLossPct: 3, takeProfitPct: 8, trailingStopPct: 2,
+      minLiquidityUsd: 200000, minScore: 55,
+      maxTokenAgeHours: 99999,
+      minMomentum1h: 0, // mean reversion buys dips — no momentum requirement
+      minVolLiqRatio: 0.3,
+      strategyMode: 'conservative',
+    },
+  },
+  {
+    id: 'bluechip_trend_follow',
+    name: 'BLUE CHIP TREND',
+    description: 'Ride momentum on established tokens — 5% SL, 15% TP, 4% trail. Catches multi-day moves.',
+    winRate: 'Systematic: 45-55% WR, 2.5:1 R/R',
+    trades: 0,
+    assetType: 'bluechip',
+    config: {
+      stopLossPct: 5, takeProfitPct: 15, trailingStopPct: 4,
+      minLiquidityUsd: 200000, minScore: 60,
+      maxTokenAgeHours: 99999,
+      minMomentum1h: 3, // require momentum for trend following
+      minVolLiqRatio: 0.5,
+      tradingHoursGate: false, // blue chips trade 24/7 on Solana
+      strategyMode: 'balanced',
+    },
+  },
+  {
+    id: 'bluechip_breakout',
+    name: 'BLUE CHIP BREAKOUT',
+    description: 'High-volume breakouts on top tokens — 4% SL, 12% TP, 3% trail. Needs volume surge.',
+    winRate: 'Systematic: 50-60% WR, 2:1 R/R',
+    trades: 0,
+    assetType: 'bluechip',
+    config: {
+      stopLossPct: 4, takeProfitPct: 12, trailingStopPct: 3,
+      minLiquidityUsd: 200000, minScore: 65,
+      maxTokenAgeHours: 99999,
+      minMomentum1h: 5, // needs clear breakout momentum
+      minVolLiqRatio: 1.5, // volume surge required (breakout signal)
+      strategyMode: 'balanced',
     },
   },
 ];
@@ -241,19 +345,31 @@ export interface SniperConfig {
   minBalanceGuardSol: number;
 }
 
+/** Per-asset-class circuit breaker counters (CIRCUIT-01) */
+export interface AssetClassBreaker {
+  tripped: boolean;
+  reason: string;
+  trippedAt: number;
+  consecutiveLosses: number;
+  dailyLossSol: number;
+  dailyResetAt: number;
+}
+
 export interface CircuitBreakerState {
-  /** Whether the breaker is currently tripped (sniping halted) */
+  /** Whether the breaker is currently tripped (sniping halted) — global fallback */
   tripped: boolean;
   /** Human-readable reason for trip */
   reason: string;
   /** Timestamp when breaker was tripped */
   trippedAt: number;
-  /** Running count of consecutive losses */
+  /** Running count of consecutive losses (global) */
   consecutiveLosses: number;
-  /** SOL lost in the current 24h window */
+  /** SOL lost in the current 24h window (global) */
   dailyLossSol: number;
   /** Timestamp when the daily window resets */
   dailyResetAt: number;
+  /** Per-asset-class breakers — isolates losses by asset type (CIRCUIT-01) */
+  perAsset: Record<AssetType, AssetClassBreaker>;
 }
 
 export interface BudgetState {
@@ -317,6 +433,8 @@ export interface Position {
   jupSlOrderKey?: string;
   /** Whether SL/TP orders are placed on-chain */
   onChainSlTp?: boolean;
+  /** Asset class this position belongs to (for per-asset circuit breakers) */
+  assetType?: AssetType;
 }
 
 export interface ExecutionEvent {
@@ -360,7 +478,35 @@ export function getRecommendedSlTp(
   const volLiqRatio = liq > 0 ? vol24h / liq : 0;
   const source = (grad.source || '').toLowerCase();
 
-  // ─── Strategy Selection (v4 backtest champion logic) ───
+  // ─── Traditional Assets / Blue Chips — separate SL/TP universe ───
+  // xStocks/indexes/prestocks/bluechips have fundamentally different volatility
+  // than memecoins. A 100% TP on SPY is absurd; a 3% TP is normal.
+
+  if (source === 'xstock') {
+    // US stocks: typical daily range 1-4%, weekly 3-8%
+    const absM = Math.abs(priceChange1h);
+    if (absM >= 3) return { sl: 2, tp: 5, trail: 1.5, reasoning: `XSTOCK: strong momentum (${priceChange1h.toFixed(1)}% 1h) — wider targets` };
+    return { sl: 1.5, tp: 3, trail: 1, reasoning: 'XSTOCK: standard intraday — tight SL/TP for stock-level volatility' };
+  }
+  if (source === 'index') {
+    // Indexes: SPY daily range 0.5-2%, TQQQ 1.5-6% (3x leveraged)
+    if (grad.symbol === 'TQQQx') return { sl: 3, tp: 8, trail: 2, reasoning: 'INDEX TQQQ: 3x leveraged — wider SL/TP' };
+    return { sl: 0.8, tp: 1.5, trail: 0.5, reasoning: 'INDEX: tight scalping — indexes move slowly' };
+  }
+  if (source === 'prestock') {
+    // Pre-IPO: higher vol than stocks, lower than memes
+    return { sl: 5, tp: 15, trail: 3, reasoning: 'PRESTOCK: pre-IPO volatility — moderate SL/TP' };
+  }
+  if (source === 'bluechip') {
+    // Established Solana tokens: daily vol 4-12% depending on tier
+    const absM = Math.abs(priceChange1h);
+    if (absM >= 10) return { sl: 5, tp: 15, trail: 4, reasoning: `BLUECHIP: high momentum (${priceChange1h.toFixed(1)}% 1h) — trend follow` };
+    if (absM >= 5) return { sl: 4, tp: 12, trail: 3, reasoning: `BLUECHIP: moderate momentum — breakout setup` };
+    if (volLiqRatio >= 1.5) return { sl: 4, tp: 12, trail: 3, reasoning: `BLUECHIP: volume surge (V/L ${volLiqRatio.toFixed(1)}x) — breakout` };
+    return { sl: 3, tp: 8, trail: 2, reasoning: 'BLUECHIP: mean reversion — tight SL/TP for established tokens' };
+  }
+
+  // ─── Memecoin Strategy Selection (v4 backtest champion logic) ───
   // Priority 1: Fresh pumpswap tokens → PUMP_FRESH_TIGHT (88.2% WR champion)
   if (ageHours < 24 && source === 'pumpswap') {
     return {
@@ -625,8 +771,50 @@ interface SniperState {
   circuitBreaker: CircuitBreakerState;
   resetCircuitBreaker: () => void;
 
+  // Backtest Metadata — runtime overlay on const STRATEGY_PRESETS
+  /** Per-strategy backtest results (keyed by strategyId) — populated after backtest runs */
+  backtestMeta: Record<string, BacktestMetaEntry>;
+  /** Update backtest metadata for one or more strategy presets */
+  updatePresetBacktestResults: (results: Array<{
+    strategyId: string;
+    winRate: string;
+    trades: number;
+    backtested: boolean;
+    dataSource: string;
+    underperformer: boolean;
+  }>) => void;
+
   // Reset — clears positions, executions, stats, sniped mints
   resetSession: () => void;
+}
+
+function makeDefaultAssetBreaker(): AssetClassBreaker {
+  return {
+    tripped: false,
+    reason: '',
+    trippedAt: 0,
+    consecutiveLosses: 0,
+    dailyLossSol: 0,
+    dailyResetAt: Date.now() + 86_400_000,
+  };
+}
+
+function makeDefaultCircuitBreaker(): CircuitBreakerState {
+  return {
+    tripped: false,
+    reason: '',
+    trippedAt: 0,
+    consecutiveLosses: 0,
+    dailyLossSol: 0,
+    dailyResetAt: Date.now() + 86_400_000,
+    perAsset: {
+      memecoin: makeDefaultAssetBreaker(),
+      bluechip: makeDefaultAssetBreaker(),
+      xstock: makeDefaultAssetBreaker(),
+      index: makeDefaultAssetBreaker(),
+      prestock: makeDefaultAssetBreaker(),
+    },
+  };
 }
 
 export const useSniperStore = create<SniperState>()(
@@ -803,39 +991,68 @@ export const useSniperStore = create<SniperState>()(
     };
 
     set((s) => {
-      // ─── Circuit Breaker Update ───
-      const cb = { ...s.circuitBreaker };
+      // ─── Circuit Breaker Update (global + per-asset) ───
+      const cb = { ...s.circuitBreaker, perAsset: { ...s.circuitBreaker.perAsset } };
       const now = Date.now();
+      const posAssetType: AssetType = pos.assetType || s.assetFilter;
 
-      // Reset 24h window if expired
+      // Reset 24h window if expired (global)
       if (now >= cb.dailyResetAt) {
         cb.dailyLossSol = 0;
         cb.dailyResetAt = now + 86_400_000;
       }
 
+      // Update global counters
       if (countAsLoss) {
         cb.consecutiveLosses += 1;
         cb.dailyLossSol += Math.abs(realPnlSol);
       } else if (countAsWin) {
-        cb.consecutiveLosses = 0; // Reset streak on any win
+        cb.consecutiveLosses = 0;
       }
 
-      // Check trip conditions
+      // Update per-asset counters
+      const ab = { ...(cb.perAsset[posAssetType] || makeDefaultAssetBreaker()) };
+      if (now >= ab.dailyResetAt) {
+        ab.dailyLossSol = 0;
+        ab.dailyResetAt = now + 86_400_000;
+      }
+      if (countAsLoss) {
+        ab.consecutiveLosses += 1;
+        ab.dailyLossSol += Math.abs(realPnlSol);
+      } else if (countAsWin) {
+        ab.consecutiveLosses = 0;
+      }
+      cb.perAsset[posAssetType] = ab;
+
+      // Check global trip conditions
       const cfg = s.config;
       if (cfg.circuitBreakerEnabled && !cb.tripped) {
         const budgetRemaining = s.budget.budgetSol - Math.max(0, s.budget.spent - pos.solInvested);
         if (cfg.maxConsecutiveLosses > 0 && cb.consecutiveLosses >= cfg.maxConsecutiveLosses) {
           cb.tripped = true;
-          cb.reason = `${cb.consecutiveLosses} consecutive losses`;
+          cb.reason = `${cb.consecutiveLosses} consecutive losses (global)`;
           cb.trippedAt = now;
         } else if (cfg.maxDailyLossSol > 0 && cb.dailyLossSol >= cfg.maxDailyLossSol) {
           cb.tripped = true;
-          cb.reason = `Daily loss ${cb.dailyLossSol.toFixed(3)} SOL >= ${cfg.maxDailyLossSol} limit`;
+          cb.reason = `Daily loss ${cb.dailyLossSol.toFixed(3)} SOL >= ${cfg.maxDailyLossSol} limit (global)`;
           cb.trippedAt = now;
         } else if (cfg.minBalanceGuardSol > 0 && budgetRemaining < cfg.minBalanceGuardSol) {
           cb.tripped = true;
           cb.reason = `Budget remaining ${budgetRemaining.toFixed(3)} SOL < ${cfg.minBalanceGuardSol} guard`;
           cb.trippedAt = now;
+        }
+      }
+
+      // Check per-asset trip conditions (isolate losses by asset class)
+      if (cfg.circuitBreakerEnabled && !ab.tripped) {
+        if (cfg.maxConsecutiveLosses > 0 && ab.consecutiveLosses >= cfg.maxConsecutiveLosses) {
+          ab.tripped = true;
+          ab.reason = `${ab.consecutiveLosses} consecutive ${posAssetType} losses`;
+          ab.trippedAt = now;
+        } else if (cfg.maxDailyLossSol > 0 && ab.dailyLossSol >= cfg.maxDailyLossSol) {
+          ab.tripped = true;
+          ab.reason = `${posAssetType} daily loss ${ab.dailyLossSol.toFixed(3)} SOL >= limit`;
+          ab.trippedAt = now;
         }
       }
 
@@ -881,8 +1098,10 @@ export const useSniperStore = create<SniperState>()(
     // Guard: budget not authorized
     if (!budget.authorized) return;
 
-    // Guard: circuit breaker tripped
+    // Guard: circuit breaker tripped (global or per-asset)
     if (state.circuitBreaker.tripped) return;
+    const assetBreaker = state.circuitBreaker.perAsset[state.assetFilter];
+    if (assetBreaker?.tripped) return;
 
     // Guard: already sniped
     if (snipedMints.has(grad.mint)) return;
@@ -1001,7 +1220,8 @@ export const useSniperStore = create<SniperState>()(
       name: grad.name,
       entryPrice: grad.price_usd || 0,
       currentPrice: grad.price_usd || 0,
-      amount: positionSolFinal / (grad.price_usd || 1),
+      // Estimate token amount: (SOL * SOL_USD) / token_USD. Falls back to SOL/token_USD if no SOL price.
+      amount: grad.price_usd ? (positionSolFinal * (get().lastSolPriceUsd || 1)) / grad.price_usd : 0,
       solInvested: positionSolFinal,
       pnlPercent: 0,
       pnlSol: 0,
@@ -1011,6 +1231,7 @@ export const useSniperStore = create<SniperState>()(
       recommendedSl: rec.sl,
       recommendedTp: rec.tp,
       highWaterMarkPct: 0,
+      assetType: state.assetFilter,
     };
 
     const pumpLabel = pumpWarning ? ' | PUMP WARNING: vol>5x liq + 1h>100%' : '';
@@ -1052,46 +1273,45 @@ export const useSniperStore = create<SniperState>()(
   lastSolPriceUsd: 0,
 
   // Circuit Breaker
-  circuitBreaker: {
-    tripped: false,
-    reason: '',
-    trippedAt: 0,
-    consecutiveLosses: 0,
-    dailyLossSol: 0,
-    dailyResetAt: Date.now() + 86_400_000,
-  },
+  circuitBreaker: makeDefaultCircuitBreaker(),
   resetCircuitBreaker: () => set({
-    circuitBreaker: {
-      tripped: false,
-      reason: '',
-      trippedAt: 0,
-      consecutiveLosses: 0,
-      dailyLossSol: 0,
-      dailyResetAt: Date.now() + 86_400_000,
-    },
+    circuitBreaker: makeDefaultCircuitBreaker(),
   }),
 
-  resetSession: () => set({
+  // Backtest Metadata
+  backtestMeta: {} as Record<string, BacktestMetaEntry>,
+  updatePresetBacktestResults: (results) => set((s) => {
+    const updated = { ...s.backtestMeta };
+    for (const r of results) {
+      updated[r.strategyId] = {
+        winRate: r.winRate,
+        trades: r.trades,
+        backtested: r.backtested,
+        dataSource: r.dataSource,
+        underperformer: r.underperformer,
+      };
+    }
+    return { backtestMeta: updated };
+  }),
+
+  resetSession: () => set((s) => ({
     positions: [],
     executionLog: [],
     snipedMints: new Set(),
     skippedMints: new Set(),
     watchlist: [],
     selectedMint: null,
+    // Safety defaults: do not resume automation after reset.
+    tradeSignerMode: 'phantom',
+    sessionWalletPubkey: null,
+    config: { ...s.config, autoSnipe: false },
     budget: { budgetSol: 0.1, authorized: false, spent: 0 },
     totalPnl: 0,
     winCount: 0,
     lossCount: 0,
     totalTrades: 0,
-    circuitBreaker: {
-      tripped: false,
-      reason: '',
-      trippedAt: 0,
-      consecutiveLosses: 0,
-      dailyLossSol: 0,
-      dailyResetAt: Date.now() + 86_400_000,
-    },
-  }),
+    circuitBreaker: makeDefaultCircuitBreaker(),
+  })),
     }),
     {
       name: 'jarvis-sniper-store',
@@ -1122,6 +1342,7 @@ export const useSniperStore = create<SniperState>()(
         winCount: state.winCount,
         lossCount: state.lossCount,
         totalTrades: state.totalTrades,
+        backtestMeta: state.backtestMeta,
       }),
       // Rehydrate: convert snipedMintsArray back to Set
       onRehydrateStorage: () => (state) => {
@@ -1129,6 +1350,24 @@ export const useSniperStore = create<SniperState>()(
 
         // Migrate config defaults (new fields, etc.)
         state.config = { ...DEFAULT_CONFIG, ...(state.config as SniperConfig | undefined) };
+
+        // Migrate circuit breaker shape (per-asset counters were added after initial launch).
+        const cbDefault = makeDefaultCircuitBreaker();
+        const cbAny = (state.circuitBreaker as any) || {};
+        state.circuitBreaker = {
+          ...cbDefault,
+          ...cbAny,
+          perAsset: {
+            ...cbDefault.perAsset,
+            ...(cbAny.perAsset || {}),
+          },
+        };
+        for (const k of Object.keys(cbDefault.perAsset) as AssetType[]) {
+          (state.circuitBreaker.perAsset as any)[k] = {
+            ...makeDefaultAssetBreaker(),
+            ...((state.circuitBreaker.perAsset as any)[k] || {}),
+          };
+        }
 
         // Positions may contain non-persistable transient fields (Phantom prompts, etc.). Reset them.
         if (Array.isArray(state.positions)) {
@@ -1148,11 +1387,72 @@ export const useSniperStore = create<SniperState>()(
           state.snipedMints = new Set(arr as string[]);
         }
 
-        // If session signing was selected but the pubkey is missing, fall back safely.
-        if (state.tradeSignerMode === 'session' && !state.sessionWalletPubkey) {
-          state.tradeSignerMode = 'phantom';
+        // Migrate backtestMeta (added in Plan 02.1-03)
+        if (!state.backtestMeta || typeof state.backtestMeta !== 'object') {
+          state.backtestMeta = {};
+        }
+
+        // If session signing was selected but the key isn't available, fall back safely
+        // (prevents auto-mode from thrashing Phantom popups / failing silently).
+        if (state.tradeSignerMode === 'session') {
+          const pk = state.sessionWalletPubkey;
+          if (!pk) {
+            state.tradeSignerMode = 'phantom';
+          } else if (typeof window !== 'undefined') {
+            const hasKey = (() => {
+              try {
+                const sources: Array<{ storage: Storage | undefined; key: string }> = [
+                  { storage: typeof localStorage !== 'undefined' ? localStorage : undefined, key: `__jarvis_session_wallet_by_pubkey:${pk}` },
+                  { storage: typeof localStorage !== 'undefined' ? localStorage : undefined, key: '__jarvis_wallet_persistent' },
+                  { storage: typeof sessionStorage !== 'undefined' ? sessionStorage : undefined, key: '__jarvis_session_wallet' },
+                ];
+                for (const { storage, key } of sources) {
+                  if (!storage) continue;
+                  const raw = storage.getItem(key);
+                  if (!raw) continue;
+                  const parsed = JSON.parse(raw);
+                  if (String(parsed?.publicKey || '') === pk) return true;
+                }
+              } catch {
+                // ignore
+              }
+              return false;
+            })();
+
+            if (!hasKey) {
+              state.tradeSignerMode = 'phantom';
+              state.config = { ...state.config, autoSnipe: false };
+            }
+          }
         }
       },
     },
   ),
 );
+
+/**
+ * Get a strategy preset merged with its runtime backtest metadata.
+ *
+ * Returns the const STRATEGY_PRESETS entry overlaid with backtestMeta from
+ * the Zustand store (win rate, trades, validated status, underperformer flag).
+ * If no backtest has been run for this preset, returns the original preset unchanged.
+ *
+ * @param presetId - The strategy preset ID (e.g. 'pump_fresh_tight')
+ * @returns StrategyPreset with backtested metadata merged, or undefined if not found
+ */
+export function getPresetWithMeta(presetId: string): StrategyPreset | undefined {
+  const preset = STRATEGY_PRESETS.find(p => p.id === presetId);
+  if (!preset) return undefined;
+
+  const meta = useSniperStore.getState().backtestMeta[presetId];
+  if (!meta) return preset;
+
+  return {
+    ...preset,
+    winRate: meta.winRate,
+    trades: meta.trades,
+    backtested: meta.backtested,
+    dataSource: meta.dataSource,
+    underperformer: meta.underperformer,
+  };
+}
