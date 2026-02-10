@@ -29,6 +29,14 @@ export interface HistoricalDataSet {
   source: OHLCVSource;
 }
 
+/** Memecoin graduation pattern archetype */
+export type MemeGraduationPattern = 'moon' | 'pump_dump' | 'slow_bleed' | 'dead_on_arrival';
+
+/** Historical data set with memecoin graduation pattern metadata */
+export interface MemeGraduationDataSet extends HistoricalDataSet {
+  pattern: MemeGraduationPattern;
+}
+
 export interface FetchProgress {
   current: number;
   total: number;
@@ -409,4 +417,173 @@ export function clearHistoryCache(): void {
   for (const key of keys) {
     localStorage.removeItem(key);
   }
+}
+
+// ─── Memecoin Graduation Synthetic Data ───
+
+/**
+ * Pattern distribution weights (based on real bags.fm graduation observations):
+ *   15% moon, 35% pump_dump, 30% slow_bleed, 20% dead_on_arrival
+ */
+const MEME_PATTERN_WEIGHTS: { pattern: MemeGraduationPattern; weight: number }[] = [
+  { pattern: 'moon', weight: 0.15 },
+  { pattern: 'pump_dump', weight: 0.35 },
+  { pattern: 'slow_bleed', weight: 0.30 },
+  { pattern: 'dead_on_arrival', weight: 0.20 },
+];
+
+/** Pick a pattern according to the weighted distribution */
+function pickMemePattern(): MemeGraduationPattern {
+  const r = Math.random();
+  let cumulative = 0;
+  for (const { pattern, weight } of MEME_PATTERN_WEIGHTS) {
+    cumulative += weight;
+    if (r <= cumulative) return pattern;
+  }
+  return 'slow_bleed'; // fallback (shouldn't reach here)
+}
+
+/**
+ * Generate a single memecoin graduation candle set.
+ *
+ * Uses Ornstein-Uhlenbeck process with memecoin-calibrated parameters:
+ *   - Hourly volatility: 15-40% (vs 0.2-0.5% for blue chips)
+ *   - Volume: log-normal with high variance
+ *   - Starting price: 0.00001 - 0.001 range (typical post-graduation)
+ */
+function generateMemePatternCandles(
+  pattern: MemeGraduationPattern,
+): OHLCVCandle[] {
+  // 24-72 candles (1h resolution, 1-3 days of post-graduation life)
+  const numCandles = 24 + Math.floor(Math.random() * 49); // 24..72
+  const hourlyVol = 0.15 + Math.random() * 0.25; // 15-40%
+  const startPrice = 0.00001 + Math.random() * 0.00099; // 0.00001 - 0.001
+  const baseVolume = 10000 + Math.random() * 90000; // 10k-100k base
+  const now = Date.now();
+  const startTime = now - numCandles * 3600 * 1000;
+
+  const candles: OHLCVCandle[] = [];
+  let price = startPrice;
+
+  for (let i = 0; i < numCandles; i++) {
+    const timestamp = startTime + i * 3600 * 1000;
+    const open = price;
+    const progress = i / numCandles; // 0..1
+
+    // Pattern-specific drift
+    const drift = patternDrift(pattern, progress, startPrice, price);
+
+    // Ornstein-Uhlenbeck: mean-reverting random walk with pattern drift
+    const meanReversionPull = (startPrice - price) * 0.002;
+    const randomShock = (Math.random() - 0.5) * 2 * hourlyVol;
+    const change = drift + meanReversionPull + randomShock;
+    const close = Math.max(open * (1 + change), startPrice * 0.001); // Floor at 0.1% of start
+
+    // High/low with memecoin-level wicks
+    const wickFactor = hourlyVol * (0.3 + Math.random() * 0.7);
+    const high = Math.max(open, close) * (1 + Math.random() * wickFactor);
+    const low = Math.min(open, close) * (1 - Math.random() * wickFactor);
+
+    // Volume: log-normal with high variance (10x-100x spikes)
+    const volMultiplier = Math.exp((Math.random() - 0.5) * 4);
+    const volume = baseVolume * volMultiplier;
+
+    candles.push({ timestamp, open, high, low, close, volume });
+    price = close;
+  }
+
+  return candles;
+}
+
+/**
+ * Compute per-candle drift component based on pattern archetype.
+ *
+ * The drift biases the random walk to produce the characteristic shape
+ * of each pattern, while the O-U process adds realistic noise.
+ */
+function patternDrift(
+  pattern: MemeGraduationPattern,
+  progress: number,
+  startPrice: number,
+  currentPrice: number,
+): number {
+  switch (pattern) {
+    case 'moon': {
+      // Sharp pump (3-10x) in first ~20%, then gradual decline (50-80% retrace)
+      if (progress < 0.2) {
+        // Strong upward drift during pump phase
+        return 0.15 + Math.random() * 0.25;
+      }
+      // Gradual retracement
+      const peakMultiple = currentPrice / startPrice;
+      if (peakMultiple > 2) {
+        return -0.02 - Math.random() * 0.04; // Slow bleed back
+      }
+      return -0.005; // Gentle decline
+    }
+
+    case 'pump_dump': {
+      // Quick 2-5x pump in first ~10%, crash within first ~30%
+      if (progress < 0.1) {
+        return 0.20 + Math.random() * 0.30; // Aggressive pump
+      }
+      if (progress < 0.3) {
+        return -0.15 - Math.random() * 0.20; // Aggressive dump
+      }
+      // Flat/slow decline after crash
+      return -0.01 + Math.random() * 0.005;
+    }
+
+    case 'slow_bleed': {
+      // Initial 20-50% pump, then steady decline
+      if (progress < 0.08) {
+        return 0.05 + Math.random() * 0.10; // Modest pump
+      }
+      // Steady downward pressure
+      return -0.02 - Math.random() * 0.02;
+    }
+
+    case 'dead_on_arrival': {
+      // Flat or immediate decline, no significant pump
+      return -0.01 - Math.random() * 0.03;
+    }
+  }
+}
+
+/**
+ * Generate synthetic memecoin graduation candle sets for backtesting.
+ *
+ * Produces an array of candle sets, each representing a graduated memecoin's
+ * price action with one of 4 pattern archetypes:
+ *   - 15% "moon": sharp pump (3-10x), gradual decline
+ *   - 35% "pump_dump": quick 2-5x, crash below entry
+ *   - 30% "slow_bleed": modest pump, steady decline
+ *   - 20% "dead_on_arrival": flat or immediate decline
+ *
+ * Each run produces unique candle sets due to randomized parameters.
+ * Calibrated against real bags.fm graduation data observations.
+ *
+ * @param numTokens Number of synthetic token datasets to generate (default 100)
+ */
+export function generateMemeGraduationCandles(
+  numTokens: number = 100,
+): MemeGraduationDataSet[] {
+  const datasets: MemeGraduationDataSet[] = [];
+
+  for (let i = 0; i < numTokens; i++) {
+    const pattern = pickMemePattern();
+    const candles = generateMemePatternCandles(pattern);
+
+    datasets.push({
+      tokenSymbol: `MEME_${pattern.toUpperCase()}_${i}`,
+      mintAddress: `synthetic_meme_${i}`,
+      pairAddress: '',
+      candles,
+      fetchedAt: Date.now(),
+      source: 'synthetic',
+      pattern,
+    });
+  }
+
+  return datasets;
 }
