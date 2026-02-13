@@ -15,6 +15,7 @@ const ALLOWED_METHODS = new Set([
   'getRecentBlockhash',
   'isBlockhashValid',
   'getBalance',
+  'getSignaturesForAddress',
   'getTokenAccountsByOwner',
   'getAccountInfo',
   'getMultipleAccounts',
