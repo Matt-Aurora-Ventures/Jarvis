@@ -34,7 +34,7 @@ if ($exists) {
     --time-zone "$TimeZone" `
     --uri "$uri" `
     --http-method POST `
-    --headers "$headers" `
+    --update-headers "$headers" `
     --message-body "{}" `
     --quiet | Out-Null
   Write-Host "[scheduler] Updated existing job." -ForegroundColor Green
