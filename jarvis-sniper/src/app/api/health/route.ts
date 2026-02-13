@@ -9,6 +9,17 @@ import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
  */
 export async function GET() {
   const rpcConfig = resolveServerRpcConfig();
+  const xaiConfigured = String(process.env.XAI_API_KEY || '').trim().length > 0;
+  const xaiBatchEnabled = String(process.env.XAI_BATCH_ENABLED || 'false').toLowerCase() === 'true';
+  const xaiModel = String(process.env.XAI_FRONTIER_MODEL || 'grok-4-1-fast-reasoning').trim();
+  const xaiDailyBudget = Number(process.env.XAI_DAILY_BUDGET_USD || 10);
+  const keyRatePolicy = {
+    qps: Number(process.env.XAI_KEY_RATE_QPS || 0.2),
+    qpm: Number(process.env.XAI_KEY_RATE_QPM || 12),
+    tpm: Number(process.env.XAI_KEY_RATE_TPM || 120000),
+  };
+  const autonomyEnabled = String(process.env.AUTONOMY_ENABLED || 'false').toLowerCase() === 'true';
+  const autonomyApplyOverrides = String(process.env.AUTONOMY_APPLY_OVERRIDES || 'false').toLowerCase() === 'true';
   const checks = {
     status: 'ok' as 'ok' | 'degraded' | 'error',
     timestamp: new Date().toISOString(),
@@ -26,6 +37,17 @@ export async function GET() {
       productionMode: rpcConfig.isProduction,
       url: rpcConfig.sanitizedUrl,
       diagnostic: rpcConfig.diagnostic,
+    },
+    autonomy: {
+      enabled: autonomyEnabled,
+      applyOverrides: autonomyApplyOverrides,
+    },
+    xai: {
+      configured: xaiConfigured,
+      batchEnabled: xaiBatchEnabled,
+      modelPolicy: xaiModel,
+      dailyBudgetUsd: Number.isFinite(xaiDailyBudget) ? xaiDailyBudget : 10,
+      keyRatePolicy,
     },
     memory: {
       heapUsedMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),

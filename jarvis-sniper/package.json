@@ -10,12 +10,15 @@
     "lint": "eslint",
     "risk-worker": "npx tsx scripts/risk-worker.ts",
     "cloud:hardening": "powershell -ExecutionPolicy Bypass -File scripts/post-deploy-cloud-run-hardening.ps1",
-    "deploy:hardened": "powershell -ExecutionPolicy Bypass -Command \"$env:GOOGLE_CLOUD_QUOTA_PROJECT='kr8tiv'; npx firebase-tools deploy --only hosting; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\" && npm run cloud:hardening"
+    "deploy:hardened": "powershell -ExecutionPolicy Bypass -Command \"$env:GOOGLE_CLOUD_QUOTA_PROJECT='kr8tiv'; npx firebase-tools deploy --only hosting; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\" && npm run cloud:hardening",
+    "autonomy:scheduler": "powershell -ExecutionPolicy Bypass -File scripts/autonomy/setup-hourly-scheduler.ps1",
+    "xai:provision-key": "powershell -ExecutionPolicy Bypass -File scripts/xai/provision-runtime-key.ps1"
   },
   "dependencies": {
     "@bagsfm/bags-sdk": "^1.2.7",
     "@fontsource/dm-sans": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
+    "@google-cloud/storage": "^7.16.0",
     "@solana/wallet-adapter-base": "^0.9.23",
     "@solana/wallet-adapter-phantom": "^0.9.24",
     "@solana/wallet-adapter-react": "^0.15.35",
@@ -26,7 +29,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^12.31.1",
     "lucide-react": "^0.563.0",
-    "next": "16.1.6",
+    "next": "^16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "sonner": "^2.0.7",

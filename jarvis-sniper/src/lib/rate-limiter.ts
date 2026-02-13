@@ -112,6 +112,9 @@ export const quoteRateLimiter = new RateLimiter({ maxRequests: 30, windowMs: 60_
 /** Bags swap endpoint: strict limit (20 req/min) — involves transaction building */
 export const swapRateLimiter = new RateLimiter({ maxRequests: 20, windowMs: 60_000 });
 
+/** Autonomy control routes: very low throughput by design (scheduler + manual checks). */
+export const autonomyRateLimiter = new RateLimiter({ maxRequests: 6, windowMs: 60_000 });
+
 /**
  * Helper to extract client IP from a Next.js request.
  *

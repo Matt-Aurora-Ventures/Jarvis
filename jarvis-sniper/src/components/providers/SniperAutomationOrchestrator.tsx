@@ -388,7 +388,6 @@ export function SniperAutomationOrchestrator() {
         const resolution = selection?.resolution;
 
         if (!selected || !resolution) {
-          setAutomationState('paused');
           const nowLog = Date.now();
           if (nowLog - lastWrGateNoEligibleLogAtRef.current > 60_000) {
             addExecution({
@@ -397,63 +396,63 @@ export function SniperAutomationOrchestrator() {
               symbol: 'AUTO',
               mint: '',
               amount: 0,
-              reason: `AUTO_STOP_WR_GATE_NO_ELIGIBLE: no strategy passed WR gate (${config.autoWrMethod === 'wilson95_lower' ? 'Wilson95 lower' : 'point WR'} ${config.autoWrPrimaryPct}% -> ${config.autoWrFallbackPct}%, min ${config.autoWrMinTrades} trades)`,
+              reason: `AUTO_INFO_WR_GATE_FAIL_OPEN_NO_ELIGIBLE: no strategy passed WR gate (${config.autoWrMethod === 'wilson95_lower' ? 'Wilson95 lower' : 'point WR'} ${config.autoWrPrimaryPct}% -> ${config.autoWrFallbackPct}%, min ${config.autoWrMinTrades} trades). Continuing with current preset.`,
               timestamp: nowLog,
             });
             lastWrGateNoEligibleLogAtRef.current = nowLog;
           }
-          return;
-        }
-
-        const selectionSig = `${selected.strategyId}:${resolution.mode}:${resolution.usedThreshold}:${resolution.eligibleCount}`;
-        const shouldLogSelection = selectionSig !== wrGateSelectionSigRef.current;
-        const logSelectionEvent = () => {
-          const nowLog = Date.now();
-          if (resolution.mode === 'fallback') {
+          wrGateSelectionSigRef.current = '';
+        } else {
+          const selectionSig = `${selected.strategyId}:${resolution.mode}:${resolution.usedThreshold}:${resolution.eligibleCount}`;
+          const shouldLogSelection = selectionSig !== wrGateSelectionSigRef.current;
+          const logSelectionEvent = () => {
+            const nowLog = Date.now();
+            if (resolution.mode === 'fallback') {
+              if (
+                shouldLogSelection ||
+                nowLog - lastWrGateFallbackLogAtRef.current > 120_000
+              ) {
+                addExecution({
+                  id: `auto-wr-gate-fallback-${nowLog}`,
+                  type: 'info',
+                  symbol: 'AUTO',
+                  mint: '',
+                  amount: 0,
+                  reason: `AUTO_INFO_WR_GATE_FALLBACK: selected ${selected.strategyId} @ ${selection.selectedThresholdPct ?? resolution.usedThreshold}% (source=${selection.selectedThresholdSource || 'fallback'}, eligible=${resolution.eligibleCount}, rank=max net P&L)`,
+                  timestamp: nowLog,
+                });
+                lastWrGateFallbackLogAtRef.current = nowLog;
+                wrGateSelectionSigRef.current = selectionSig;
+              }
+              return;
+            }
             if (
               shouldLogSelection ||
-              nowLog - lastWrGateFallbackLogAtRef.current > 120_000
+              nowLog - lastWrGatePrimaryLogAtRef.current > 120_000
             ) {
               addExecution({
-                id: `auto-wr-gate-fallback-${nowLog}`,
+                id: `auto-wr-gate-primary-${nowLog}`,
                 type: 'info',
                 symbol: 'AUTO',
                 mint: '',
                 amount: 0,
-                reason: `AUTO_INFO_WR_GATE_FALLBACK: selected ${selected.strategyId} @ ${selection.selectedThresholdPct ?? resolution.usedThreshold}% (source=${selection.selectedThresholdSource || 'fallback'}, eligible=${resolution.eligibleCount}, rank=max net P&L)`,
+                reason: `AUTO_INFO_WR_GATE_PRIMARY: selected ${selected.strategyId} @ ${selection.selectedThresholdPct ?? resolution.usedThreshold}% (source=${selection.selectedThresholdSource || 'global_primary'}, eligible=${resolution.eligibleCount}, rank=max net P&L)`,
                 timestamp: nowLog,
               });
-              lastWrGateFallbackLogAtRef.current = nowLog;
+              lastWrGatePrimaryLogAtRef.current = nowLog;
               wrGateSelectionSigRef.current = selectionSig;
             }
+          };
+
+          if (activePreset !== selected.strategyId) {
+            logSelectionEvent();
+            loadPreset(selected.strategyId);
+            setAutomationState('scanning');
             return;
           }
-          if (
-            shouldLogSelection ||
-            nowLog - lastWrGatePrimaryLogAtRef.current > 120_000
-          ) {
-            addExecution({
-              id: `auto-wr-gate-primary-${nowLog}`,
-              type: 'info',
-              symbol: 'AUTO',
-              mint: '',
-              amount: 0,
-              reason: `AUTO_INFO_WR_GATE_PRIMARY: selected ${selected.strategyId} @ ${selection.selectedThresholdPct ?? resolution.usedThreshold}% (source=${selection.selectedThresholdSource || 'global_primary'}, eligible=${resolution.eligibleCount}, rank=max net P&L)`,
-              timestamp: nowLog,
-            });
-            lastWrGatePrimaryLogAtRef.current = nowLog;
-            wrGateSelectionSigRef.current = selectionSig;
-          }
-        };
 
-        if (activePreset !== selected.strategyId) {
           logSelectionEvent();
-          loadPreset(selected.strategyId);
-          setAutomationState('scanning');
-          return;
         }
-
-        logSelectionEvent();
       } else {
         wrGateSelectionSigRef.current = '';
       }
