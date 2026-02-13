@@ -48,52 +48,55 @@
   --card-bg: rgba(17, 18, 20, 0.85);
   --card-border: rgba(255, 255, 255, 0.06);
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 12px rgba(34, 197, 94, 0.04);
+  --app-shell-max-width: 2400px;
 }
 
 /* ============================================
-   LIGHT THEME OVERRIDES
+   LIGHT THEME — AIRBNB B&W AESTHETIC
+   Pure white, prominent dark borders, high contrast.
+   No new colours — stays within existing accent variance.
    ============================================ */
 
 [data-theme="light"] {
-  /* Backgrounds */
-  --bg-primary: #F8FAFC;
-  --bg-secondary: #F1F5F9;
-  --bg-tertiary: #E2E8F0;
-  --bg-card: rgba(241, 245, 249, 0.9);
-  --bg-card-hover: rgba(226, 232, 240, 1);
+  /* Backgrounds — pure white, no blue-gray tint */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F7F7F7;
+  --bg-tertiary: #EBEBEB;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F7F7F7;
 
-  /* Text */
-  --text-primary: #0F172A;
-  --text-secondary: #334155;
-  --text-muted: #94A3B8;
+  /* Text — true black for maximum readability */
+  --text-primary: #222222;
+  --text-secondary: #484848;
+  --text-muted: #717171;
 
-  /* Borders */
-  --border-primary: rgba(0, 0, 0, 0.08);
-  --border-hover: rgba(34, 197, 94, 0.3);
+  /* Borders — prominent and architectural */
+  --border-primary: #DDDDDD;
+  --border-hover: rgba(22, 163, 74, 0.5);
 
-  /* Accents - keep the same for brand consistency */
+  /* Accents — slightly deeper for contrast on white */
   --accent-neon: #16a34a;
-  --accent-neon-glow: rgba(22, 163, 74, 0.3);
+  --accent-neon-glow: rgba(22, 163, 74, 0.15);
   --accent-error: #DC2626;
-  --accent-error-glow: rgba(220, 38, 38, 0.3);
+  --accent-error-glow: rgba(220, 38, 38, 0.15);
   --accent-success: #059669;
   --accent-warning: #D97706;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
+  /* Shadows — clean, Airbnb-style elevation */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-xl: 0 8px 30px rgba(0, 0, 0, 0.15);
 
-  /* Glassmorphism */
-  --glass-bg: rgba(241, 245, 249, 0.8);
-  --glass-border: rgba(34, 197, 94, 0.15);
+  /* Glassmorphism — solid white in light mode */
+  --glass-bg: rgba(255, 255, 255, 0.97);
+  --glass-border: #DDDDDD;
   --glass-blur: blur(20px);
 
-  /* Card tokens */
-  --card-bg: rgba(241, 245, 249, 0.85);
-  --card-border: rgba(0, 0, 0, 0.06);
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  /* Card tokens — white cards with prominent dark borders */
+  --card-bg: #FFFFFF;
+  --card-border: #DDDDDD;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 /* ============================================
@@ -119,6 +122,10 @@
   --color-accent-error: var(--accent-error);
   --color-accent-success: var(--accent-success);
   --color-accent-warning: var(--accent-warning);
+
+  /* Local fonts (no build-time Google Fonts fetch) */
+  --font-dm-sans: 'DM Sans';
+  --font-jetbrains-mono: 'JetBrains Mono';
 
   --font-display: 'Clash Display', sans-serif;
   --font-sans: var(--font-dm-sans), system-ui, sans-serif;
@@ -151,7 +158,11 @@
   padding: 10px 24px;
   font-weight: 600;
   box-shadow: 0 4px 15px var(--accent-neon-glow);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: none;
   cursor: pointer;
 
@@ -178,7 +189,10 @@
   padding: 10px 24px;
   font-weight: 500;
   border: 1px solid var(--border-primary);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
 
   &:hover {
@@ -194,7 +208,10 @@
   padding: 10px 24px;
   font-weight: 600;
   border: 1px solid rgba(239, 68, 68, 0.3);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
 
   &:hover {
@@ -210,6 +227,19 @@
     background: var(--border-primary);
     border-radius: 3px;
     &:hover { background: var(--accent-neon); }
+  }
+}
+
+.app-shell {
+  width: 100%;
+  max-width: var(--app-shell-max-width);
+  margin-inline: auto;
+  padding-inline: clamp(0.75rem, 1.4vw, 2.25rem);
+}
+
+@media (max-width: 1023px) {
+  .app-shell {
+    padding-inline: 0.75rem;
   }
 }
 
@@ -242,6 +272,77 @@
   background: rgba(239, 68, 68, 0.1);
   color: #EF4444;
   border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* ============================================
+   LIGHT-MODE ELEMENT OVERRIDES
+   ============================================ */
+
+/* Hide ambient neon orbs in light mode — they muddy the clean white */
+[data-theme="light"] .ambient-orb,
+[data-theme="light"] .ambient-orb-2,
+[data-theme="light"] .ambient-orb-3 {
+  opacity: 0;
+}
+
+/* Cards get a stronger border + subtle shadow in light mode */
+[data-theme="light"] .card-glass {
+  border-color: #DDDDDD;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .card-glass:hover {
+  border-color: #BBBBBB;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* Scrollbar — darker thumb on white track */
+[data-theme="light"] .custom-scrollbar::-webkit-scrollbar-track {
+  background: #F7F7F7;
+}
+[data-theme="light"] .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #CCCCCC;
+}
+[data-theme="light"] .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #999999;
+}
+
+/* Skeleton shimmer — light mode variant */
+[data-theme="light"] .skeleton {
+  background: linear-gradient(90deg, #EBEBEB 25%, #F7F7F7 50%, #EBEBEB 75%);
+  background-size: 200% 100%;
+}
+
+/* Badge tiers — slightly stronger borders for light bg */
+[data-theme="light"] .badge-exceptional {
+  background: rgba(5, 150, 105, 0.08);
+  color: #059669;
+  border-color: rgba(5, 150, 105, 0.3);
+}
+[data-theme="light"] .badge-strong {
+  background: rgba(22, 163, 74, 0.08);
+  color: #16a34a;
+  border-color: rgba(22, 163, 74, 0.3);
+}
+[data-theme="light"] .badge-average {
+  background: rgba(217, 119, 6, 0.08);
+  color: #B45309;
+  border-color: rgba(217, 119, 6, 0.25);
+}
+[data-theme="light"] .badge-weak {
+  background: rgba(234, 88, 12, 0.08);
+  color: #C2410C;
+  border-color: rgba(234, 88, 12, 0.25);
+}
+[data-theme="light"] .badge-poor {
+  background: rgba(220, 38, 38, 0.08);
+  color: #DC2626;
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
+/* Selection — invert for light mode */
+[data-theme="light"] ::selection {
+  background: #222222;
+  color: #FFFFFF;
 }
 
 /* ============================================

@@ -5,6 +5,7 @@ import {
   getMarketPhase,
 } from '@/lib/tv-screener';
 import type { TVStockData } from '@/lib/tv-screener';
+import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
 
 /**
  * GET /api/tv-screener
@@ -26,8 +27,32 @@ import type { TVStockData } from '@/lib/tv-screener';
  *
  * Cache-Control: 30s server cache with 60s stale-while-revalidate.
  */
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: Request): Promise<NextResponse> {
   try {
+    // Rate limit check
+    const ip = getClientIp(request);
+    const limit = apiRateLimiter.check(ip);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Rate limit exceeded',
+          marketPhase: getMarketPhase(),
+          count: 0,
+          timestamp: new Date().toISOString(),
+          data: {},
+          xstocksMap: {},
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((limit.retryAfterMs || 60_000) / 1000)),
+            'X-RateLimit-Remaining': '0',
+          },
+        },
+      );
+    }
+
     // Fetch all TV stock data (cache-aware, 60s TTL)
     const allTVData = await getCachedTVData();
 

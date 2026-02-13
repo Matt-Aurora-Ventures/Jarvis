@@ -13,11 +13,12 @@ Start from `jarvis-sniper/.env.example` and create `jarvis-sniper/.env.local`.
 
 Required:
 
-- `SOLANA_RPC_URL` (server-side; can include provider API keys)
+- `HELIUS_GATEKEEPER_RPC_URL` (server-side Helius Gatekeeper URL; production routes fail closed without this)
 - `BAGS_API_KEY` (server-side; used by `/api/bags/quote` + `/api/bags/swap`)
 
 Recommended:
 
+- `SOLANA_RPC_URL` (legacy server fallback checked after `HELIUS_GATEKEEPER_RPC_URL`)
 - `NEXT_PUBLIC_SOLANA_RPC` (client-side; use a **public** endpoint)
 - `ALLOWED_ORIGINS` (CORS allowlist for `/api/*` routes; comma-separated)
 - `BAGS_REFERRAL_ACCOUNT` (optional referral account for Bags)
@@ -48,6 +49,7 @@ Health check:
 
 1. Import the repo into Vercel.
 2. Set environment variables (Project Settings → Environment Variables):
+   - `HELIUS_GATEKEEPER_RPC_URL`
    - `SOLANA_RPC_URL`
    - `BAGS_API_KEY`
    - Optional: `BAGS_REFERRAL_ACCOUNT`, `ALLOWED_ORIGINS`
@@ -56,8 +58,26 @@ Health check:
 Notes:
 - Vercel will run API routes as serverless functions. The Bags SDK stays server-side and is not exposed to users.
 - Same-origin requests work without `ALLOWED_ORIGINS`; add it if you serve multiple origins.
+- Production RPC endpoints are fail-closed: if Helius RPC config is missing/invalid, `/api/rpc` and `/api/bags/*` return `503` instead of falling back to public RPC.
 
 ## Operational Notes (V1)
 
 - For a small beta (50–100 users), the built-in in-memory rate limiting is sufficient.
 - For larger scale or multiple instances, move rate limiting + caching to a shared store (Redis/Upstash).
+
+## Firebase / Cloud Run Env Example
+
+For `kr8tiv` (`ssrkr8tiv`, `us-central1`), set Gatekeeper URL before deploy:
+
+```bash
+gcloud run services update ssrkr8tiv \
+  --project kr8tiv \
+  --region us-central1 \
+  --set-env-vars HELIUS_GATEKEEPER_RPC_URL="https://beta.helius-rpc.com/?api-key=REPLACE_ME"
+```
+
+Then deploy with the hardened flow:
+
+```bash
+npm run deploy:hardened
+```

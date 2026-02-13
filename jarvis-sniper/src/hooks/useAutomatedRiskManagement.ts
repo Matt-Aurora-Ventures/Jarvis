@@ -6,10 +6,10 @@ import { usePhantomWallet } from './usePhantomWallet';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { executeSwapFromQuote, getSellQuote } from '@/lib/bags-trading';
 import { getOwnerTokenBalanceLamports, minLamportsString } from '@/lib/solana-tokens';
-import { loadSessionWalletFromStorage, sweepExcessToMainWallet } from '@/lib/session-wallet';
+import { loadSessionWalletByPublicKey, loadSessionWalletFromStorage, sweepExcessToMainWallet } from '@/lib/session-wallet';
 import { isBlueChipLongConvictionSymbol } from '@/lib/trade-plan';
-
-const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
+import { filterOpenPositionsForActiveWallet, isPositionInActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
+import { getConnection as getSharedConnection } from '@/lib/rpc-url';
 const WORKER_INTERVAL_MS = 1500;
 
 type TriggerType = 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired';
@@ -47,7 +47,7 @@ export function useAutomatedRiskManagement() {
 
   function getConnection(): Connection {
     if (!connectionRef.current) {
-      connectionRef.current = new Connection(RPC_URL, 'confirmed');
+      connectionRef.current = getSharedConnection();
     }
     return connectionRef.current;
   }
@@ -107,7 +107,8 @@ export function useAutomatedRiskManagement() {
 
     const useRec = config.useRecommendedExits !== false;
 
-    const open = positions.filter((p) => p.status === 'open' && !p.isClosing);
+    const activeWallet = resolveActiveWallet(tradeSignerMode, sessionWalletPubkey, address);
+    const open = filterOpenPositionsForActiveWallet(positions, activeWallet, { includeManualOnly: false }).filter((p) => !p.isClosing);
     const workerPositions = open.map((p) => {
       const isBlueChip = isBlueChipLongConvictionSymbol(p.symbol);
 
@@ -141,13 +142,17 @@ export function useAutomatedRiskManagement() {
       positions: workerPositions,
       intervalMs: WORKER_INTERVAL_MS,
     });
-  }, [positions, config, tradeSignerMode, sessionWalletPubkey]);
+  }, [positions, config, tradeSignerMode, sessionWalletPubkey, address]);
 
   async function handleTrigger(id: string, trigger: TriggerType, pnlPct: number) {
     const state = useSniperStore.getState();
+    if (state.operationLock.active && state.operationLock.mode === 'close_all') return;
     const pos = state.positions.find((p) => p.id === id);
     if (!pos || pos.status !== 'open') return;
+    const activeWallet = resolveActiveWallet(tradeSignerMode, sessionWalletPubkey, address);
+    if (!isPositionInActiveWallet(pos, activeWallet)) return;
     if (pos.isClosing) return;
+    if (pos.manualOnly) return;
     if (inFlightRef.current.has(id)) return;
 
     if (isBlueChipLongConvictionSymbol(pos.symbol)) return;
@@ -158,13 +163,26 @@ export function useAutomatedRiskManagement() {
     const trailPct = pos.recommendedTrail ?? state.config.trailingStopPct;
 
     // If we're not using session wallet signing, we can't auto-execute: mark exit pending.
-    const session = tradeSignerMode === 'session' ? loadSessionWalletFromStorage() : null;
+    const session = tradeSignerMode === 'session'
+      ? (
+          sessionWalletPubkey
+            ? await loadSessionWalletByPublicKey(sessionWalletPubkey, { mainWallet: address || undefined })
+            : await loadSessionWalletFromStorage({ mainWallet: address || undefined })
+        )
+      : null;
     const canAuto =
       tradeSignerMode === 'session' &&
       !!sessionWalletPubkey &&
       !!session &&
       session.publicKey === sessionWalletPubkey &&
       pos.walletAddress === sessionWalletPubkey;
+
+    if (canAuto) {
+      const pending = pos.exitPending;
+      if (pending && pending.trigger === trigger && Date.now() - pending.updatedAt < 45_000) {
+        return;
+      }
+    }
 
     if (!canAuto) {
       // Manual mode: show activation clearly, but avoid spamming the store/log every tick.

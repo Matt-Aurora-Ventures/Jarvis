@@ -11,7 +11,13 @@ import {
   type OHLCVCandle,
 } from '@/lib/backtest-engine';
 import { ALL_BLUECHIPS } from '@/lib/bluechip-data';
-import { fetchTokenHistory, generateMemeGraduationCandles } from '@/lib/historical-data';
+import { fetchGeckoSolanaPoolUniverse } from '@/lib/gecko-universe';
+import { fetchTokenHistory, fetchMintHistory } from '@/lib/historical-data';
+import { XSTOCKS, PRESTOCKS, INDEXES, COMMODITIES_TOKENS, type TokenizedEquity } from '@/lib/xstocks-data';
+import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
+
+// Uses Node.js runtime for caching + filesystem-friendly execution.
+export const runtime = 'nodejs';
 
 /**
  * Continuous Backtesting API Route — Daily strategy drift detection
@@ -191,15 +197,6 @@ const STRATEGY_CONFIGS: Record<string, Omit<BacktestConfig, 'entrySignal'>> = {
   },
 };
 
-// Volatility profiles for xStock/index synthetic candles
-const XSTOCK_INDEX_VOLATILITY: Record<string, number> = {
-  xstock_intraday: 3,
-  xstock_swing: 4,
-  prestock_speculative: 8,
-  index_intraday: 1.5,
-  index_leveraged: 5,
-};
-
 // ─── Drift Report Types ───
 
 interface StrategyHealthResult {
@@ -220,86 +217,189 @@ interface ContinuousBacktestReport {
 
 // ─── Data Fetching Helpers ───
 
-/**
- * Generate synthetic candles for server-side backtesting.
- * Used for xStock/index/prestock strategies where no real on-chain data exists.
- */
-function generateServerCandles(avgVolatility: number, numCandles = 4320): OHLCVCandle[] {
-  const candles: OHLCVCandle[] = [];
-  const hourlyVol = avgVolatility / 100 / 24;
-  let price = 1.0;
-  const now = Date.now();
-  const startTime = now - numCandles * 3600 * 1000;
+const DEXSCREENER_BOOSTS = 'https://api.dexscreener.com/token-boosts/latest/v1';
+const DEXSCREENER_PROFILES = 'https://api.dexscreener.com/token-profiles/latest/v1';
+const DEXSCREENER_SOL_PAIRS =
+  'https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112';
 
-  for (let i = 0; i < numCandles; i++) {
-    const open = price;
-    const candleVol = hourlyVol * (0.5 + Math.random());
-    const change = (Math.random() - 0.48) * 2 * candleVol;
-    const close = open * (1 + change);
-    const range = Math.abs(change) + candleVol * 0.5;
-    const high = Math.max(open, close) * (1 + Math.random() * range);
-    const low = Math.min(open, close) * (1 - Math.random() * range);
-    const volume = 100000 * Math.exp((Math.random() - 0.5) * 2);
-
-    candles.push({
-      timestamp: startTime + i * 3600 * 1000,
-      open, high, low, close, volume,
+async function fetchWithTimeout(url: string, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
     });
-    price = close;
+  } finally {
+    clearTimeout(timer);
   }
-
-  return candles;
 }
 
-/**
- * Fetch candle data for a strategy based on its category.
- * Reduced dataset sizes for speed (50 meme patterns, 3 bluechip tokens).
- */
-async function fetchDataForCategory(
-  category: StrategyCategory,
-  strategyId: string,
-): Promise<OHLCVCandle[]> {
-  switch (category) {
-    case 'bluechip': {
-      // Fetch representative tokens: SOL, JUP, RAY (first 3)
-      const tokens = ALL_BLUECHIPS.slice(0, 3);
-      const allCandles: OHLCVCandle[] = [];
-      for (const token of tokens) {
-        try {
-          const data = await fetchTokenHistory(token);
-          allCandles.push(...data.candles);
-        } catch (err) {
-          console.warn(`[continuous-backtest] Failed to fetch ${token.ticker}:`, err);
-        }
+async function fetchDexScreenerSolanaMintUniverse(limit: number): Promise<string[]> {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (mint: string | undefined | null) => {
+    if (!mint) return;
+    if (mint === 'So11111111111111111111111111111111111111112') return;
+    if (seen.has(mint)) return;
+    seen.add(mint);
+    out.push(mint);
+  };
+
+  const [boostsRes, profilesRes, solPairsRes] = await Promise.allSettled([
+    fetchWithTimeout(DEXSCREENER_BOOSTS),
+    fetchWithTimeout(DEXSCREENER_PROFILES),
+    fetchWithTimeout(DEXSCREENER_SOL_PAIRS),
+  ]);
+
+  if (boostsRes.status === 'fulfilled' && boostsRes.value.ok) {
+    try {
+      const all: any[] = await boostsRes.value.json();
+      for (const b of all) {
+        if (b?.chainId !== 'solana') continue;
+        push(b?.tokenAddress);
+        if (out.length >= limit) return out.slice(0, limit);
       }
-      return allCandles;
-    }
-
-    case 'memecoin': {
-      // Reduced from 200 to 50 patterns for speed
-      const datasets = generateMemeGraduationCandles(50);
-      return datasets.flatMap(d => d.candles);
-    }
-
-    case 'xstock_index': {
-      const volatility = XSTOCK_INDEX_VOLATILITY[strategyId] || 3;
-      return generateServerCandles(volatility);
+    } catch {
+      // ignore
     }
   }
+
+  if (profilesRes.status === 'fulfilled' && profilesRes.value.ok) {
+    try {
+      const all: any[] = await profilesRes.value.json();
+      for (const p of all) {
+        if (p?.chainId !== 'solana') continue;
+        push(p?.tokenAddress);
+        if (out.length >= limit) return out.slice(0, limit);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (solPairsRes.status === 'fulfilled' && solPairsRes.value.ok) {
+    try {
+      const json = await solPairsRes.value.json();
+      const pairs: any[] = json?.pairs || [];
+      for (const pair of pairs) {
+        push(pair?.baseToken?.address);
+        if (out.length >= limit) return out.slice(0, limit);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return out.slice(0, limit);
 }
 
-/**
- * Run a single strategy and return its BacktestResult.
- */
-function runSingleStrategy(
+function equityUniverseForStrategy(strategyId: string): TokenizedEquity[] {
+  if (strategyId.startsWith('xstock_')) return XSTOCKS;
+  if (strategyId.startsWith('prestock_')) return PRESTOCKS;
+  if (strategyId.startsWith('index_')) return [...INDEXES, ...COMMODITIES_TOKENS];
+  return [...XSTOCKS, ...PRESTOCKS, ...INDEXES, ...COMMODITIES_TOKENS];
+}
+
+type GeckoPoolCandidate = {
+  baseMint: string;
+  baseSymbol: string;
+  poolAddress: string;
+};
+
+async function fetchDatasetsForPools(
+  pools: GeckoPoolCandidate[],
+  maxDatasets: number,
+  options: Parameters<typeof fetchMintHistory>[2],
+  batchSize = 3,
+): Promise<{ datasets: { symbol: string; candles: OHLCVCandle[] }[]; attempted: number }> {
+  const datasets: { symbol: string; candles: OHLCVCandle[] }[] = [];
+  let attempted = 0;
+
+  for (let i = 0; i < pools.length && datasets.length < maxDatasets; i += batchSize) {
+    const batch = pools.slice(i, i + batchSize);
+    attempted += batch.length;
+
+    const settled = await Promise.allSettled(
+      batch.map((p) =>
+        fetchMintHistory(p.baseMint, p.baseSymbol || p.baseMint.slice(0, 6), {
+          ...options,
+          pairAddressOverride: p.poolAddress,
+        }),
+      ),
+    );
+
+    for (const s of settled) {
+      if (s.status !== 'fulfilled') continue;
+      datasets.push({ symbol: s.value.tokenSymbol, candles: s.value.candles });
+      if (datasets.length >= maxDatasets) break;
+    }
+  }
+
+  return { datasets, attempted };
+}
+
+async function fetchDatasetsForMints(
+  mints: string[],
+  maxDatasets: number,
+  tokenSymbolForMint: (mint: string) => string,
+  options: Parameters<typeof fetchMintHistory>[2],
+  batchSize = 3,
+): Promise<{ mints: string[]; datasets: { symbol: string; candles: OHLCVCandle[] }[]; attempted: number }> {
+  const datasets: { symbol: string; candles: OHLCVCandle[] }[] = [];
+  let attempted = 0;
+
+  for (let i = 0; i < mints.length && datasets.length < maxDatasets; i += batchSize) {
+    const batch = mints.slice(i, i + batchSize);
+    attempted += batch.length;
+
+    const settled = await Promise.allSettled(
+      batch.map((mint) => fetchMintHistory(mint, tokenSymbolForMint(mint), options)),
+    );
+
+    for (const s of settled) {
+      if (s.status !== 'fulfilled') continue;
+      datasets.push({ symbol: s.value.tokenSymbol, candles: s.value.candles });
+      if (datasets.length >= maxDatasets) break;
+    }
+  }
+
+  return { mints, datasets, attempted };
+}
+
+function aggregateHealth(results: BacktestResult[]): { totalTrades: number; winRate: number; profitFactor: number } {
+  let totalTrades = 0;
+  let wins = 0;
+  let winningPnl = 0;
+  let losingPnl = 0;
+
+  for (const r of results) {
+    totalTrades += r.totalTrades;
+    wins += r.wins;
+    for (const t of r.trades) {
+      if (t.pnlNet > 0) winningPnl += t.pnlNet;
+      else losingPnl += Math.abs(t.pnlNet);
+    }
+  }
+
+  const winRate = totalTrades > 0 ? wins / totalTrades : 0;
+  const rawPF = losingPnl > 0 ? winningPnl / losingPnl : (winningPnl > 0 ? 999 : 0);
+  const profitFactor = Math.min(rawPF, 999);
+
+  return { totalTrades, winRate, profitFactor };
+}
+
+function runQuickStrategy(
   strategyId: string,
   config: Omit<BacktestConfig, 'entrySignal'>,
   candles: OHLCVCandle[],
+  tokenSymbol: string,
 ): BacktestResult {
   const entrySignal = ENTRY_SIGNALS[strategyId] || momentumEntry;
   const fullConfig: BacktestConfig = { ...config, entrySignal };
   const engine = new BacktestEngine(candles, fullConfig);
-  return engine.run(strategyId);
+  return engine.run(tokenSymbol);
 }
 
 // ─── POST Handler ───
@@ -308,6 +408,22 @@ export async function POST(request: Request) {
   const startTime = Date.now();
 
   try {
+    // Rate limit check (strict: backtest is compute-heavy)
+    const ip = getClientIp(request);
+    const limit = apiRateLimiter.check(ip);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', timestamp: new Date().toISOString() },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((limit.retryAfterMs || 60_000) / 1000)),
+            'X-RateLimit-Remaining': '0',
+          },
+        },
+      );
+    }
+
     let strategies: string[] | undefined;
     let threshold = 0.45;
 
@@ -329,6 +445,115 @@ export async function POST(request: Request) {
     const healthResults: StrategyHealthResult[] = [];
     const alerts: string[] = [];
 
+    // Per-request caches for expensive upstream calls.
+    let bluechipCache: { datasets: { symbol: string; candles: OHLCVCandle[] }[] } | null = null;
+    let memecoinCache:
+      | { datasets: { symbol: string; candles: OHLCVCandle[] }[]; attempted: number; candidates: number }
+      | null = null;
+    const equityCache = new Map<string, { datasets: { symbol: string; candles: OHLCVCandle[] }[]; attempted: number }>();
+
+    const ensureBluechipDatasets = async () => {
+      if (bluechipCache) return bluechipCache;
+      const tokens = ALL_BLUECHIPS.slice(0, 3);
+      const settled = await Promise.allSettled(tokens.map((t) => fetchTokenHistory(t)));
+      const datasets: { symbol: string; candles: OHLCVCandle[] }[] = [];
+      for (let i = 0; i < tokens.length; i++) {
+        const s = settled[i];
+        if (s.status !== 'fulfilled') continue;
+        datasets.push({ symbol: tokens[i].ticker, candles: s.value.candles });
+      }
+      bluechipCache = { datasets };
+      return bluechipCache;
+    };
+
+    const ensureMemecoinDatasets = async () => {
+      if (memecoinCache) return memecoinCache;
+
+      const nowMs = Date.now();
+      const minAgeMs = 50 * 60 * 60 * 1000; // minCandles (1h) => hours of history required
+      const geckoCandidates = await fetchGeckoSolanaPoolUniverse(120, { minAgeMs });
+      const eligible = geckoCandidates.filter((p) => {
+        if (!p.createdAtMs) return true;
+        return nowMs - p.createdAtMs >= minAgeMs;
+      });
+
+      const pools: GeckoPoolCandidate[] = eligible.map((p) => ({
+        baseMint: p.baseMint,
+        baseSymbol: p.baseSymbol,
+        poolAddress: p.poolAddress,
+      }));
+
+      let { datasets, attempted } = await fetchDatasetsForPools(
+        pools,
+        12,
+        {
+          allowBirdeyeFallback: false,
+          attemptBirdeyeIfCandlesBelow: 50,
+          minCandles: 50,
+          maxCandles: 600,
+        },
+        3,
+      );
+
+      // Fallback to DexScreener universe if GeckoTerminal discovery is down.
+      let candidates = pools.map((p) => p.baseMint);
+      if (datasets.length === 0) {
+        const fallbackMints = await fetchDexScreenerSolanaMintUniverse(80);
+        const fallback = await fetchDatasetsForMints(
+          fallbackMints,
+          12,
+          (mint) => mint.slice(0, 6),
+          {
+            allowBirdeyeFallback: false,
+            attemptBirdeyeIfCandlesBelow: 50,
+            minCandles: 50,
+            maxCandles: 600,
+          },
+          3,
+        );
+        candidates = fallbackMints;
+        datasets = fallback.datasets;
+        attempted += fallback.attempted;
+      }
+
+      memecoinCache = { datasets, attempted, candidates: candidates.length };
+      return memecoinCache;
+    };
+
+    const equityGroupForStrategy = (sid: string): string => {
+      if (sid.startsWith('xstock_')) return 'xstock';
+      if (sid.startsWith('prestock_')) return 'prestock';
+      if (sid.startsWith('index_')) return 'index';
+      return 'xstock_index';
+    };
+
+    const ensureEquityDatasets = async (sid: string) => {
+      const group = equityGroupForStrategy(sid);
+      const cached = equityCache.get(group);
+      if (cached) return cached;
+
+      const equities = equityUniverseForStrategy(sid).slice(0, 10);
+      const tickerByMint = new Map(equities.map((e) => [e.mintAddress, e.ticker]));
+      const mints = equities.map((e) => e.mintAddress);
+
+      const { datasets, attempted } = await fetchDatasetsForMints(
+        mints,
+        equities.length,
+        (mint) => tickerByMint.get(mint) || mint.slice(0, 6),
+        {
+          allowBirdeyeFallback: true,
+          attemptBirdeyeIfCandlesBelow: 50,
+          minCandles: 50,
+          birdeyeLookbackDays: 365,
+        },
+        3,
+      );
+
+      const res = { datasets, attempted };
+      equityCache.set(group, res);
+      return res;
+    };
+
     // Run strategies sequentially to avoid memory pressure
     for (let i = 0; i < strategyIds.length; i++) {
       const sid = strategyIds[i];
@@ -338,10 +563,25 @@ export async function POST(request: Request) {
       console.log(`[continuous-backtest] Running ${sid} (${i + 1}/${strategyIds.length}) [${category}]`);
 
       try {
-        // Fetch data for this strategy's category
-        const candles = await fetchDataForCategory(category, sid);
+        let datasets: { symbol: string; candles: OHLCVCandle[] }[] = [];
 
-        if (candles.length === 0) {
+        if (category === 'bluechip') {
+          datasets = (await ensureBluechipDatasets()).datasets;
+        } else if (category === 'memecoin') {
+          const mc = await ensureMemecoinDatasets();
+          datasets = mc.datasets;
+          if (mc.datasets.length < 6) {
+            alerts.push(`${sid}: memecoin datasets low (${mc.datasets.length}/${mc.candidates} candidates, attempted=${mc.attempted})`);
+          }
+        } else {
+          const eq = await ensureEquityDatasets(sid);
+          datasets = eq.datasets;
+          if (eq.datasets.length < 3) {
+            alerts.push(`${sid}: equity datasets low (${eq.datasets.length}, attempted=${eq.attempted})`);
+          }
+        }
+
+        if (datasets.length === 0) {
           alerts.push(`${sid}: No data available`);
           healthResults.push({
             strategyId: sid,
@@ -353,14 +593,14 @@ export async function POST(request: Request) {
           continue;
         }
 
-        // Run the backtest
-        const result = runSingleStrategy(sid, config, candles);
+        const perAsset = datasets.map((d) => runQuickStrategy(sid, config, d.candles, d.symbol));
+        const agg = aggregateHealth(perAsset);
 
         // Classify health
         let status: 'healthy' | 'degraded' | 'failing';
-        if (result.winRate >= threshold) {
+        if (agg.winRate >= threshold) {
           status = 'healthy';
-        } else if (result.winRate >= threshold * 0.8) {
+        } else if (agg.winRate >= threshold * 0.8) {
           status = 'degraded';
         } else {
           status = 'failing';
@@ -368,22 +608,22 @@ export async function POST(request: Request) {
 
         if (status !== 'healthy') {
           alerts.push(
-            `${sid}: win rate ${(result.winRate * 100).toFixed(1)}% ` +
+            `${sid}: win rate ${(agg.winRate * 100).toFixed(1)}% ` +
             `(threshold: ${(threshold * 100).toFixed(0)}%, status: ${status})`
           );
         }
 
         healthResults.push({
           strategyId: sid,
-          winRate: result.winRate,
-          profitFactor: result.profitFactor,
-          totalTrades: result.totalTrades,
+          winRate: agg.winRate,
+          profitFactor: agg.profitFactor,
+          totalTrades: agg.totalTrades,
           status,
         });
 
         console.log(
-          `[continuous-backtest] ${sid}: WR=${(result.winRate * 100).toFixed(1)}% ` +
-          `PF=${result.profitFactor.toFixed(2)} trades=${result.totalTrades} → ${status}`
+          `[continuous-backtest] ${sid}: WR=${(agg.winRate * 100).toFixed(1)}% ` +
+          `PF=${agg.profitFactor.toFixed(2)} trades=${agg.totalTrades} → ${status}`
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

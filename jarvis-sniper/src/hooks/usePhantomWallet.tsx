@@ -2,15 +2,24 @@
 
 import { createContext, useContext, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { PublicKey, VersionedTransaction, Transaction } from '@solana/web3.js';
+import { withTimeout } from '@/lib/async-timeout';
 
-interface PhantomProvider {
-  isPhantom: boolean;
+type WalletKind = 'phantom' | 'solflare' | 'unknown';
+
+interface SolanaProvider {
+  isPhantom?: boolean;
+  isSolflare?: boolean;
   publicKey: PublicKey | null;
   isConnected: boolean;
   connect(opts?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: PublicKey }>;
   disconnect(): Promise<void>;
   signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T>;
   signAllTransactions<T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]>;
+  // Optional: Phantom supports message signing; used for deterministic session wallet recovery.
+  signMessage?(
+    message: Uint8Array,
+    display?: 'utf8' | 'hex',
+  ): Promise<{ signature: Uint8Array }> | Promise<Uint8Array> | Promise<{ signature: number[] }>;
   on(event: string, cb: (...args: any[]) => void): void;
   off(event: string, cb: (...args: any[]) => void): void;
 }
@@ -20,11 +29,13 @@ interface PhantomWalletState {
   connecting: boolean;
   publicKey: PublicKey | null;
   address: string | null;
-  phantomInstalled: boolean;
+  walletInstalled: boolean;
+  walletKind: WalletKind;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   signTransaction: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>;
   signAllTransactions: <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>;
+  signMessage: (message: Uint8Array) => Promise<Uint8Array>;
 }
 
 const PhantomWalletContext = createContext<PhantomWalletState>({
@@ -32,19 +43,31 @@ const PhantomWalletContext = createContext<PhantomWalletState>({
   connecting: false,
   publicKey: null,
   address: null,
-  phantomInstalled: false,
+  walletInstalled: false,
+  walletKind: 'unknown',
   connect: async () => {},
   disconnect: async () => {},
   signTransaction: async () => { throw new Error('Wallet not connected'); },
   signAllTransactions: async () => { throw new Error('Wallet not connected'); },
+  signMessage: async () => { throw new Error('Wallet not connected'); },
 });
 
-function getProvider(): PhantomProvider | null {
+function getProvider(): SolanaProvider | null {
   if (typeof window === 'undefined') return null;
-  const phantom = (window as any).phantom;
-  if (phantom?.solana?.isPhantom) {
-    return phantom.solana as PhantomProvider;
-  }
+  const w = window as any;
+
+  // Preferred: new Phantom injection location
+  const p1 = w?.phantom?.solana;
+  if (p1?.isPhantom) return p1 as SolanaProvider;
+
+  // Solflare typically injects under window.solflare
+  const sf = w?.solflare;
+  if (sf?.isSolflare) return sf as SolanaProvider;
+
+  // Fallback: legacy injection location
+  const p2 = w?.solana;
+  if (p2?.isPhantom || p2?.isSolflare) return p2 as SolanaProvider;
+
   return null;
 }
 
@@ -52,76 +75,154 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [publicKey, setPublicKey] = useState<PublicKey | null>(null);
-  const [phantomInstalled, setPhantomInstalled] = useState(false);
+  const [walletInstalled, setWalletInstalled] = useState(false);
+  const [walletKind, setWalletKind] = useState<WalletKind>('unknown');
 
   // Detect Phantom on mount
   useEffect(() => {
-    const provider = getProvider();
-    setPhantomInstalled(!!provider);
-    if (!provider) return;
+    let disposed = false;
+    let cleanup: (() => void) | null = null;
 
-    // Eager connect — silently reconnect if user previously approved
-    provider.connect({ onlyIfTrusted: true })
-      .then(({ publicKey }) => {
-        setPublicKey(publicKey);
-        setConnected(true);
-      })
-      .catch(() => {
-        // User hasn't approved before or rejected — silent fail
-      });
+    const initProvider = (provider: SolanaProvider) => {
+      setWalletInstalled(true);
+      if (provider?.isPhantom) setWalletKind('phantom');
+      else if (provider?.isSolflare) setWalletKind('solflare');
+      else setWalletKind('unknown');
 
-    // Listen for connect/disconnect/accountChanged
-    const handleConnect = (pk: PublicKey) => {
-      setPublicKey(pk);
-      setConnected(true);
-      setConnecting(false);
-    };
+      // Eager connect — silently reconnect if user previously approved
+      let skipEager = false;
+      try {
+        skipEager = typeof sessionStorage !== 'undefined'
+          && sessionStorage.getItem('jarvis-sniper:skip-eager-connect') === '1';
+        if (skipEager) sessionStorage.removeItem('jarvis-sniper:skip-eager-connect');
+      } catch {
+        // ignore
+      }
 
-    const handleDisconnect = () => {
-      setPublicKey(null);
-      setConnected(false);
-    };
+      if (!skipEager) {
+        provider
+          .connect({ onlyIfTrusted: true })
+          .then(({ publicKey }) => {
+            if (disposed) return;
+            setPublicKey(publicKey);
+            setConnected(true);
+          })
+          .catch(() => {
+            // User hasn't approved before or rejected — silent fail
+          });
+      }
 
-    const handleAccountChanged = (pk: PublicKey | null) => {
-      if (pk) {
+      // Listen for connect/disconnect/accountChanged
+      const handleConnect = (pk: PublicKey) => {
+        if (disposed) return;
         setPublicKey(pk);
         setConnected(true);
-      } else {
-        // Phantom tells us to reconnect
-        provider.connect().then(({ publicKey }) => {
-          setPublicKey(publicKey);
+        setConnecting(false);
+      };
+
+      const handleDisconnect = () => {
+        if (disposed) return;
+        setPublicKey(null);
+        setConnected(false);
+        setConnecting(false);
+      };
+
+      const handleAccountChanged = (pk: PublicKey | null) => {
+        if (disposed) return;
+        if (pk) {
+          setPublicKey(pk);
           setConnected(true);
-        }).catch(() => {
-          setPublicKey(null);
-          setConnected(false);
-        });
-      }
+          return;
+        }
+
+        // Phantom tells us to reconnect
+        provider
+          .connect()
+          .then(({ publicKey }) => {
+            if (disposed) return;
+            setPublicKey(publicKey);
+            setConnected(true);
+          })
+          .catch(() => {
+            if (disposed) return;
+            setPublicKey(null);
+            setConnected(false);
+          });
+      };
+
+      provider.on('connect', handleConnect);
+      provider.on('disconnect', handleDisconnect);
+      provider.on('accountChanged', handleAccountChanged);
+
+      cleanup = () => {
+        provider.off('connect', handleConnect);
+        provider.off('disconnect', handleDisconnect);
+        provider.off('accountChanged', handleAccountChanged);
+      };
     };
 
-    provider.on('connect', handleConnect);
-    provider.on('disconnect', handleDisconnect);
-    provider.on('accountChanged', handleAccountChanged);
+    // Try immediately
+    const initial = getProvider();
+    if (initial) initProvider(initial);
+    else setWalletInstalled(false);
+
+    // Some environments inject the wallet provider late; poll briefly to avoid false negatives.
+    let tries = 0;
+    const timer = setInterval(() => {
+      if (disposed) return;
+      if (cleanup) return; // already initialized
+      tries += 1;
+      const p = getProvider();
+      if (p) {
+        initProvider(p);
+        clearInterval(timer);
+      } else if (tries >= 20) {
+        clearInterval(timer);
+      }
+    }, 250);
 
     return () => {
-      provider.off('connect', handleConnect);
-      provider.off('disconnect', handleDisconnect);
-      provider.off('accountChanged', handleAccountChanged);
+      disposed = true;
+      clearInterval(timer);
+      cleanup?.();
     };
   }, []);
 
   const connect = useCallback(async () => {
-    const provider = getProvider();
-    if (!provider) {
-      window.open('https://phantom.app/', '_blank');
-      return;
-    }
-    setConnecting(true);
     try {
+      setConnecting(true);
+
+      let provider = getProvider();
+      if (!provider) {
+        // Give extensions a beat in case injection is late on first load.
+        await new Promise((r) => setTimeout(r, 250));
+        provider = getProvider();
+      }
+
+      if (!provider) {
+        setWalletInstalled(false);
+        setWalletKind('unknown');
+
+        // Avoid opening an infinite number of "install" tabs if the user keeps clicking.
+        try {
+          const k = 'jarvis-sniper:wallet-help-opened';
+          if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(k) !== '1') {
+            sessionStorage.setItem(k, '1');
+            window.open('https://phantom.app/', '_blank', 'noopener,noreferrer');
+          }
+        } catch {
+          // ignore
+        }
+
+        console.warn('No Solana wallet provider detected (extension not installed / not injected).');
+        return;
+      }
+
       const { publicKey } = await provider.connect();
       setPublicKey(publicKey);
       setConnected(true);
     } catch (err) {
-      console.warn('Phantom connect rejected:', err);
+      console.warn('Wallet connect rejected:', err);
     } finally {
       setConnecting(false);
     }
@@ -139,12 +240,9 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
   const signTransaction = useCallback(async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
     const provider = getProvider();
     if (!provider || !connected) throw new Error('Wallet not connected');
-    // Timeout after 60s to prevent infinite hang if popup blocked or user ignores
-    const signed = provider.signTransaction(tx);
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Phantom wallet approval timeout (60s)')), 60_000)
-    );
-    return Promise.race([signed, timeout]) as Promise<T>;
+    // Timeout after 180s to prevent infinite hang if popup blocked or user ignores.
+    // (60s was too aggressive for manual close flows; users often approve after a minute.)
+    return await withTimeout(provider.signTransaction(tx), 180_000, 'Phantom wallet approval timeout (180s)') as T;
   }, [connected]);
 
   const signAllTransactions = useCallback(async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
@@ -153,10 +251,28 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
     return provider.signAllTransactions(txs);
   }, [connected]);
 
+  const signMessage = useCallback(async (message: Uint8Array): Promise<Uint8Array> => {
+    const provider = getProvider();
+    if (!provider || !connected) throw new Error('Wallet not connected');
+    const fn: unknown = (provider as any).signMessage;
+    if (typeof fn !== 'function') throw new Error('Phantom signMessage not available');
+
+    // Timeout after 180s to avoid indefinite hang if popup blocked/ignored.
+    const signed = Promise.resolve((fn as any).call(provider, message, 'utf8'));
+    const res = await withTimeout(signed, 180_000, 'Phantom message approval timeout (180s)') as any;
+
+    // Phantom may return { signature: Uint8Array } or Uint8Array directly.
+    if (res instanceof Uint8Array) return res;
+    const sig = res?.signature;
+    if (sig instanceof Uint8Array) return sig;
+    if (Array.isArray(sig)) return Uint8Array.from(sig.map((n: any) => Number(n)));
+    throw new Error('Unknown signMessage response');
+  }, [connected]);
+
   const address = publicKey?.toBase58() ?? null;
 
   return (
-    <PhantomWalletContext.Provider value={{ connected, connecting, publicKey, address, phantomInstalled, connect, disconnect, signTransaction, signAllTransactions }}>
+    <PhantomWalletContext.Provider value={{ connected, connecting, publicKey, address, walletInstalled, walletKind, connect, disconnect, signTransaction, signAllTransactions, signMessage }}>
       {children}
     </PhantomWalletContext.Provider>
   );

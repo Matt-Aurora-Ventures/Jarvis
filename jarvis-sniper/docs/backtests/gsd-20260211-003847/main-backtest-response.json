@@ -1,0 +1,146 @@
+﻿{
+    "chunked":  true,
+    "totalStrategies":  23,
+    "successfulStrategies":  0,
+    "failedStrategies":  23,
+    "strategyResults":  [
+                            {
+                                "strategyId":  "bluechip_mean_revert",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "bluechip_trend_follow",
+                                "ok":  false,
+                                "elapsedSec":  45.03,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "bluechip_breakout",
+                                "ok":  false,
+                                "elapsedSec":  45.03,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "pump_fresh_tight",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "momentum",
+                                "ok":  false,
+                                "elapsedSec":  45.01,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "insight_j",
+                                "ok":  false,
+                                "elapsedSec":  45.03,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "micro_cap_surge",
+                                "ok":  false,
+                                "elapsedSec":  45.01,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "elite",
+                                "ok":  false,
+                                "elapsedSec":  45.03,
+                                "error":  "The operation has timed out"
+                            },
+                            {
+                                "strategyId":  "hybrid_b",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "let_it_ride",
+                                "ok":  false,
+                                "elapsedSec":  45.03,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "loose",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "genetic_best",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "genetic_v2",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The operation has timed out"
+                            },
+                            {
+                                "strategyId":  "bags_conservative",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The operation has timed out"
+                            },
+                            {
+                                "strategyId":  "bags_momentum",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "bags_value",
+                                "ok":  false,
+                                "elapsedSec":  45.03,
+                                "error":  "The operation has timed out"
+                            },
+                            {
+                                "strategyId":  "bags_aggressive",
+                                "ok":  false,
+                                "elapsedSec":  45.03,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "bags_elite",
+                                "ok":  false,
+                                "elapsedSec":  45.03,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "xstock_intraday",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "xstock_swing",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "prestock_speculative",
+                                "ok":  false,
+                                "elapsedSec":  1.31,
+                                "error":  "The remote server returned an error: (500) Internal Server Error."
+                            },
+                            {
+                                "strategyId":  "index_intraday",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The request was aborted: The operation has timed out."
+                            },
+                            {
+                                "strategyId":  "index_leveraged",
+                                "ok":  false,
+                                "elapsedSec":  45.02,
+                                "error":  "The request was aborted: The operation has timed out."
+                            }
+                        ]
+}

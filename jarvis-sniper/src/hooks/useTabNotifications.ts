@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { playNotificationSound } from '@/lib/notification-sound';
 
@@ -38,6 +39,35 @@ export function useTabNotifications() {
 
         // Play sound for all important events (even when focused)
         playNotificationSound(latest.type);
+
+        // Show toast popup
+        const amountStr = latest.amount ? `${latest.amount} SOL` : '';
+        if (latest.type === 'snipe') {
+          toast.success(`Sniped ${latest.symbol}`, {
+            description: amountStr ? `${amountStr} swap submitted` : 'Swap submitted',
+            duration: 5000,
+          });
+        } else if (latest.type === 'tp_exit') {
+          toast.success(`TP Hit — ${latest.symbol}`, {
+            description: `Take profit triggered${amountStr ? ` (${amountStr})` : ''}`,
+            duration: 5000,
+          });
+        } else if (latest.type === 'sl_exit') {
+          toast.warning(`SL Hit — ${latest.symbol}`, {
+            description: `Stop loss triggered${amountStr ? ` (${amountStr})` : ''}`,
+            duration: 5000,
+          });
+        } else if (latest.type === 'error') {
+          toast.error(`Error — ${latest.symbol}`, {
+            description: latest.reason?.slice(0, 80) || 'Swap failed',
+            duration: 8000,
+          });
+        } else if (latest.type === 'exit_pending') {
+          toast.info(`Approve exit — ${latest.symbol}`, {
+            description: 'Phantom approval needed',
+            duration: 10000,
+          });
+        }
 
         // Don't flash title if tab is already focused
         if (document.hasFocus()) return;

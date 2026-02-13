@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, Clock, Droplets, BarChart3, ExternalLink, Crosshair, Shield, Target, Check, Ban, Copy, Eye } from 'lucide-react';
-import { useSniperStore, type StrategyMode, type AssetType } from '@/stores/useSniperStore';
+import { useSniperStore, type StrategyMode, type AssetType, type SniperConfig } from '@/stores/useSniperStore';
 import { getScoreTier, TIER_CONFIG, type BagsGraduation } from '@/lib/bags-api';
 import { getRecommendedSlTp, getConvictionMultiplier } from '@/stores/useSniperStore';
 import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
@@ -10,27 +10,9 @@ import { useTVScreener } from '@/hooks/useTVScreener';
 import { MarketStatus } from '@/components/MarketStatus';
 import { computeTargetsFromEntryUsd, formatUsdPrice, isBlueChipLongConviction } from '@/lib/trade-plan';
 
-async function fetchFromApi(assetFilter: AssetType): Promise<BagsGraduation[]> {
-  try {
-    let url: string;
-    if (assetFilter === 'memecoin') {
-      url = '/api/graduations';
-    } else if (assetFilter === 'bluechip') {
-      url = '/api/bluechips';
-    } else {
-      url = `/api/xstocks?category=${assetFilter === 'xstock' ? 'XSTOCK' : assetFilter === 'prestock' ? 'PRESTOCK' : 'INDEX'}`;
-    }
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.graduations || [];
-  } catch {
-    return [];
-  }
-}
-
 const FILTER_LABELS: Record<string, { label: string; color: string }> = {
   memecoin: { label: 'MEME', color: 'bg-accent-neon/15 text-accent-neon' },
+  bags: { label: 'DEGEN', color: 'bg-emerald-500/15 text-emerald-400' },
   xstock: { label: 'xSTOCK', color: 'bg-blue-500/15 text-blue-400' },
   prestock: { label: 'PRE-IPO', color: 'bg-purple-500/15 text-purple-400' },
   index: { label: 'INDEX', color: 'bg-amber-500/15 text-amber-400' },
@@ -38,70 +20,33 @@ const FILTER_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export function GraduationFeed() {
-  const { graduations, setGraduations, addGraduation, config, snipedMints, positions, setSelectedMint, budget, budgetRemaining, watchlist, addToWatchlist, removeFromWatchlist, assetFilter, activePreset } = useSniperStore();
+  const { graduations, config, snipedMints, setSelectedMint, budget, watchlist, addToWatchlist, removeFromWatchlist, assetFilter } = useSniperStore();
   const { snipe, ready: walletReady } = useSnipeExecutor();
   const { marketPhase, lastUpdated: tvLastUpdated } = useTVScreener();
   const prevMintsRef = useRef<Set<string>>(new Set());
   const newMintsRef = useRef<Set<string>>(new Set());
+  const dedupedGraduations = useMemo(() => {
+    const byMint = new Map<string, BagsGraduation>();
+    for (const g of graduations) {
+      if (!g?.mint) continue;
+      const prev = byMint.get(g.mint);
+      if (!prev || (g.score || 0) >= (prev.score || 0)) byMint.set(g.mint, g);
+    }
+    return [...byMint.values()];
+  }, [graduations]);
 
+  // UI-only "new token" pulse; feed refresh/auto-exec is now handled by the global orchestrator.
   useEffect(() => {
-    // Reset state when asset filter changes
-    prevMintsRef.current = new Set();
-    newMintsRef.current = new Set();
-
-    fetchFromApi(assetFilter).then((grads) => {
-      if (grads.length > 0) {
-        setGraduations(grads);
-        prevMintsRef.current = new Set(grads.map(g => g.mint));
-        // Auto-select the highest-scoring token so the chart loads on first visit
-        if (!useSniperStore.getState().selectedMint || true) {
-          setSelectedMint(grads[0].mint); // grads are pre-sorted by score/liquidity from API
-        }
-      } else {
-        setGraduations([]);
-      }
-    });
-
-    const interval = setInterval(async () => {
-      const grads = await fetchFromApi(assetFilter);
-      if (grads.length > 0) {
-        const newOnes = grads.filter(g => !prevMintsRef.current.has(g.mint));
-        newOnes.forEach(g => {
-          addGraduation(g);
-          newMintsRef.current.add(g.mint);
-          setTimeout(() => newMintsRef.current.delete(g.mint), 30000);
-        });
-        prevMintsRef.current = new Set(grads.map(g => g.mint));
-        if (newOnes.length === 0) {
-          setGraduations(grads);
-        }
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [setGraduations, addGraduation, assetFilter, setSelectedMint]);
-
-  // Auto-snipe: when enabled AND budget authorized AND wallet connected, auto-snipe qualifying tokens
-  useEffect(() => {
-    if (!config.autoSnipe) return;
-    if (!budget.authorized) return;
-    if (!walletReady) return;
-
-    const remaining = budgetRemaining();
-    if (remaining < 0.001) return;
-
-    const openCount = positions.filter(p => p.status === 'open').length;
-    if (openCount >= config.maxConcurrentPositions) return;
-
-    for (const grad of graduations) {
-      const hybrid = computeHybridB(grad, config.minLiquidityUsd, assetFilter);
-      if (grad.score >= config.minScore && hybrid.passesAll && !snipedMints.has(grad.mint)) {
-        const currentOpen = positions.filter(p => p.status === 'open').length;
-        if (currentOpen >= config.maxConcurrentPositions) break;
-        snipe(grad as any);
+    const prev = prevMintsRef.current;
+    const curr = new Set(dedupedGraduations.map((g) => g.mint));
+    for (const g of dedupedGraduations) {
+      if (!prev.has(g.mint)) {
+        newMintsRef.current.add(g.mint);
+        setTimeout(() => newMintsRef.current.delete(g.mint), 30000);
       }
     }
-  }, [graduations, config.autoSnipe, config.minScore, config.maxConcurrentPositions, config.minLiquidityUsd, assetFilter, activePreset, positions, snipedMints, snipe, budget.authorized, budget.spent, budgetRemaining, walletReady]);
+    prevMintsRef.current = curr;
+  }, [dedupedGraduations]);
 
   return (
     <div className="card-glass p-4 flex flex-col h-full">
@@ -119,15 +64,27 @@ export function GraduationFeed() {
           })()}
         </div>
         <div className="flex items-center gap-2">
-          <MarketStatus marketPhase={marketPhase} lastUpdated={tvLastUpdated} />
+          {/* Solana-native assets (memes, xstocks, prestocks, indexes) trade 24/7 on DEXes.
+              Only show US equity market hours for bluechip (traditional stock) assets. */}
+          {assetFilter === 'bluechip' ? (
+            <MarketStatus marketPhase={marketPhase} lastUpdated={tvLastUpdated} />
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-bg-tertiary border border-border-primary">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-40 bg-accent-neon" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-neon" />
+              </span>
+              <span className="text-[10px] font-mono font-semibold text-accent-neon">24/7</span>
+            </span>
+          )}
           <span className="text-[10px] font-mono text-text-muted">
-            {graduations.length} targets
+            {dedupedGraduations.length} targets
           </span>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 max-h-[calc(100vh-260px)]">
-        {graduations.length === 0 ? (
+        {dedupedGraduations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <div className="w-10 h-10 rounded-full bg-bg-tertiary flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-text-muted animate-pulse" />
@@ -136,12 +93,12 @@ export function GraduationFeed() {
             <div className="skeleton w-48 h-2" />
           </div>
         ) : (
-          graduations.map((grad) => {
-            const hybrid = computeHybridB(grad, config.minLiquidityUsd, assetFilter);
+          dedupedGraduations.map((grad, idx) => {
+            const hybrid = computeHybridB(grad, config, assetFilter);
             const meetsAll = grad.score >= config.minScore && hybrid.passesAll;
             return (
               <TokenCard
-                key={grad.mint}
+                key={`${grad.mint}:${grad.source || 'src'}:${grad.symbol || 'sym'}:${idx}`}
                 grad={grad}
                 isNew={newMintsRef.current.has(grad.mint)}
                 meetsThreshold={meetsAll}
@@ -154,6 +111,9 @@ export function GraduationFeed() {
                 budgetAuthorized={budget.authorized}
                 walletReady={walletReady}
                 minLiquidityUsd={config.minLiquidityUsd}
+                minMomentum1h={config.minMomentum1h}
+                maxTokenAgeHours={config.maxTokenAgeHours}
+                minVolLiqRatio={config.minVolLiqRatio}
                 strategyMode={config.strategyMode}
                 assetFilter={assetFilter}
               />
@@ -196,7 +156,7 @@ function CopyableAddress({ mint }: { mint: string }) {
   );
 }
 
-function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnipe, onChart, isWatched, onWatch, budgetAuthorized, walletReady, minLiquidityUsd, strategyMode, assetFilter }: {
+function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnipe, onChart, isWatched, onWatch, budgetAuthorized, walletReady, minLiquidityUsd, minMomentum1h, maxTokenAgeHours, minVolLiqRatio, strategyMode, assetFilter }: {
   grad: BagsGraduation;
   isNew: boolean;
   meetsThreshold: boolean;
@@ -209,6 +169,9 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
   budgetAuthorized: boolean;
   walletReady: boolean;
   minLiquidityUsd: number;
+  minMomentum1h: number;
+  maxTokenAgeHours: number;
+  minVolLiqRatio: number;
   strategyMode: StrategyMode;
   assetFilter: string;
 }) {
@@ -230,17 +193,18 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
   const isBlueChip = isBlueChipLongConviction(grad);
   const targets = computeTargetsFromEntryUsd(grad.price_usd, rec.sl, rec.tp);
 
+  const isTraditional = assetFilter === 'xstock' || assetFilter === 'prestock' || assetFilter === 'index';
   // Insight filter checks (HYBRID_B v4 criteria)
-  const passesLiq = (grad.liquidity || 0) >= minLiquidityUsd;
+  const passesLiq = isTraditional ? true : (grad.liquidity || 0) >= minLiquidityUsd;
   // Mirror executor logic: only enforce B/S gate when there's enough activity.
   const passesBSRatio = isEquity || totalTxns <= 10 ? true : (bsRatio >= 1.0 && bsRatio <= 3.0);
-  const passesAge = isEquity || ageH <= 500;
-  const passesMomentum = isEquity || priceChange >= 0;
+  const passesAge = isEquity || maxTokenAgeHours <= 0 || ageH <= maxTokenAgeHours;
+  const passesMomentum = isEquity || priceChange >= minMomentum1h;
   // Vol/Liq filter (8x edge: 40.6% upside ≥0.5 vs 4.9% <0.5)
   const vol24h = grad.volume_24h || 0;
   const gradLiq = grad.liquidity || 0;
   const volLiq = gradLiq > 0 ? vol24h / gradLiq : 0;
-  const passesVolLiq = vol24h === 0 || volLiq >= 0.5; // skip filter when no vol data
+  const passesVolLiq = isTraditional ? true : (vol24h === 0 || volLiq >= minVolLiqRatio); // skip filter when no vol data
   const passesAll = passesLiq && passesBSRatio && passesAge && passesMomentum && passesVolLiq;
   // Conviction-weighted sizing preview
   const { multiplier: conviction, factors: convFactors } = getConvictionMultiplier(grad as BagsGraduation & Record<string, any>);
@@ -422,7 +386,11 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
   );
 }
 
-function computeHybridB(grad: BagsGraduation, minLiquidityUsd: number, assetFilter: string = 'memecoin'): { passesAll: boolean; rejectReason: string | null } {
+function computeHybridB(
+  grad: BagsGraduation,
+  config: Pick<SniperConfig, 'minLiquidityUsd' | 'minMomentum1h' | 'maxTokenAgeHours' | 'minVolLiqRatio' | 'tradingHoursGate' | 'minAgeMinutes'>,
+  assetFilter: string = 'memecoin',
+): { passesAll: boolean; rejectReason: string | null } {
   const liq = grad.liquidity || 0;
   const buys = grad.txn_buys_1h || 0;
   const sells = grad.txn_sells_1h || 0;
@@ -433,11 +401,36 @@ function computeHybridB(grad: BagsGraduation, minLiquidityUsd: number, assetFilt
   const vol24h = grad.volume_24h || 0;
   const volLiq = liq > 0 ? vol24h / liq : 0;
 
-  if (liq < minLiquidityUsd) return { passesAll: false, rejectReason: `Liq $${(liq / 1000).toFixed(0)}K < $${(minLiquidityUsd / 1000).toFixed(0)}K` };
+  // Liquidity is NOT a quality signal for xstocks/prestocks/indexes (guaranteed by platform).
+  // Only apply liquidity filters to memecoins and blue chips.
+  const isTraditional = assetFilter === 'xstock' || assetFilter === 'prestock' || assetFilter === 'index';
+  if (!isTraditional && liq < config.minLiquidityUsd) {
+    return { passesAll: false, rejectReason: `Liq $${(liq / 1000).toFixed(0)}K < $${(config.minLiquidityUsd / 1000).toFixed(0)}K` };
+  }
+
+  // Dead-hour gating disabled for continuous operation:
+  // we do not hard-block entries by UTC hour anymore.
+
+  if (config.minAgeMinutes > 0 && grad.graduation_time) {
+    const ageMin = (Date.now() / 1000 - grad.graduation_time) / 60;
+    if (ageMin < config.minAgeMinutes) {
+      return { passesAll: false, rejectReason: `Too fresh ${ageMin.toFixed(1)}m < ${config.minAgeMinutes}m` };
+    }
+  }
+
+  // Memecoin-specific filters
   if (assetFilter === 'memecoin' && totalTxns > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) return { passesAll: false, rejectReason: `B/S ${bsRatio.toFixed(1)} outside range` };
-  if (assetFilter === 'memecoin' && ageH > 500) return { passesAll: false, rejectReason: `Age ${Math.round(ageH)}h > 500h` };
-  if (assetFilter === 'memecoin' && change1h < 0) return { passesAll: false, rejectReason: `Momentum ${change1h.toFixed(1)}%` };
-  if (vol24h > 0 && volLiq < 0.5) return { passesAll: false, rejectReason: `Vol/Liq ${volLiq.toFixed(2)} < 0.5` };
+  if (assetFilter === 'memecoin' && config.maxTokenAgeHours > 0 && ageH > config.maxTokenAgeHours) {
+    return { passesAll: false, rejectReason: `Age ${Math.round(ageH)}h > ${config.maxTokenAgeHours}h` };
+  }
+  if (assetFilter === 'memecoin' && change1h < config.minMomentum1h) {
+    return { passesAll: false, rejectReason: `Momentum ${change1h.toFixed(1)}% < ${config.minMomentum1h}%` };
+  }
+
+  // Vol/Liq ratio only meaningful for memecoins/blue chips — not xstocks/prestocks/indexes
+  if (!isTraditional && vol24h > 0 && volLiq < config.minVolLiqRatio) {
+    return { passesAll: false, rejectReason: `Vol/Liq ${volLiq.toFixed(2)} < ${config.minVolLiqRatio}` };
+  }
 
   return { passesAll: true, rejectReason: null };
 }

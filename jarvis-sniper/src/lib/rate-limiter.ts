@@ -103,6 +103,9 @@ export class RateLimiter {
 /** General API rate limiter: 60 req/min per IP */
 export const apiRateLimiter = new RateLimiter({ maxRequests: 60, windowMs: 60_000 });
 
+/** RPC proxy limiter: higher cap because web3 polling/subscriptions are chatty */
+export const rpcRateLimiter = new RateLimiter({ maxRequests: 300, windowMs: 60_000 });
+
 /** Bags quote endpoint: stricter limit (30 req/min) — most expensive upstream call */
 export const quoteRateLimiter = new RateLimiter({ maxRequests: 30, windowMs: 60_000 });
 
@@ -111,14 +114,16 @@ export const swapRateLimiter = new RateLimiter({ maxRequests: 20, windowMs: 60_0
 
 /**
  * Helper to extract client IP from a Next.js request.
- * Checks common headers for reverse proxy setups, falls back to 'unknown'.
+ *
+ * On managed platforms (Firebase/Vercel/GCP), x-forwarded-for is normalized
+ * by trusted ingress and the first hop is the original client address.
+ * We use the first non-empty entry for stable, expected per-user limiting.
  */
 export function getClientIp(request: Request): string {
-  // Next.js doesn't expose IP directly on Request, check headers
   const forwarded = request.headers.get('x-forwarded-for');
   if (forwarded) {
-    // x-forwarded-for can contain multiple IPs, take the first (client)
-    return forwarded.split(',')[0].trim();
+    const ips = forwarded.split(',').map(ip => ip.trim()).filter(Boolean);
+    if (ips.length > 0) return ips[0];
   }
   const realIp = request.headers.get('x-real-ip');
   if (realIp) return realIp.trim();

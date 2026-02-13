@@ -7,10 +7,13 @@ import {
   Play,
   Loader2,
   Trash2,
+  Download,
   FlaskConical,
+  Copy,
+  AlertTriangle,
 } from 'lucide-react';
 import { STRATEGY_PRESETS } from '@/stores/useSniperStore';
-import { useBacktest, type BacktestSummary } from '@/hooks/useBacktest';
+import { useBacktest, type BacktestDataScale, type BacktestSummary } from '@/hooks/useBacktest';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -52,21 +55,25 @@ export function BacktestPanel() {
   const [collapsed, setCollapsed] = useState(true);
   const [selectedStrategy, setSelectedStrategy] = useState('all');
   const [mode, setMode] = useState<'quick' | 'full' | 'grid'>('quick');
+  const [dataScale, setDataScale] = useState<BacktestDataScale>('thorough');
 
   const handleRun = () => {
     if (selectedStrategy === 'all') {
-      runAllStrategies();
+      runAllStrategies(dataScale);
     } else {
-      runBacktest(selectedStrategy, mode);
+      runBacktest(selectedStrategy, mode, dataScale);
     }
   };
 
   return (
     <div className="rounded-lg border border-border-primary bg-bg-secondary/80 backdrop-blur-sm overflow-hidden">
       {/* ── Header ────────────────────────────────────────────────────── */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setCollapsed((c) => !c)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-bg-tertiary/40 transition-colors"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed((c) => !c); } }}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-bg-tertiary/40 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
           <FlaskConical size={14} className="text-accent-neon" />
@@ -84,7 +91,7 @@ export function BacktestPanel() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                runAllStrategies();
+                runAllStrategies(dataScale);
               }}
               disabled={state.isRunning}
               className="px-2 py-1 text-[10px] font-mono font-semibold uppercase rounded
@@ -101,7 +108,7 @@ export function BacktestPanel() {
             <ChevronUp size={14} className="text-text-muted" />
           )}
         </div>
-      </button>
+      </div>
 
       {/* ── Body (collapsible) ────────────────────────────────────────── */}
       {!collapsed && (
@@ -146,6 +153,32 @@ export function BacktestPanel() {
               ))}
             </div>
 
+            {/* Data scale selector */}
+            <div
+              className="flex items-center gap-1 bg-bg-tertiary rounded border border-border-primary p-0.5"
+              title="Fast uses smaller samples; Thorough runs ~10x more data for a more honest read (slower)."
+            >
+              {([
+                { id: 'fast', label: 'Fast' },
+                { id: 'thorough', label: '10x' },
+              ] as const).map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => setDataScale(d.id)}
+                  disabled={state.isRunning}
+                  className={`px-2 py-1 text-[10px] font-mono uppercase rounded transition-colors
+                    ${
+                      dataScale === d.id
+                        ? 'bg-accent-neon/20 text-accent-neon'
+                        : 'text-text-muted hover:text-text-secondary'
+                    }
+                    disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+
             {/* Run button */}
             <button
               onClick={handleRun}
@@ -164,16 +197,38 @@ export function BacktestPanel() {
             </button>
 
             {/* Clear button */}
-            {state.results && !state.isRunning && (
-              <button
-                onClick={clearResults}
-                className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-mono uppercase
-                           text-text-muted hover:text-accent-error transition-colors"
-                title="Clear results"
-              >
-                <Trash2 size={10} />
-                Clear
-              </button>
+            {(state.results || state.activeRunId) && !state.isRunning && (
+              <div className="flex items-center gap-2">
+                {(state.evidence?.runId || state.activeRunId) && (
+                  <button
+                    onClick={() => {
+                      const runId = state.evidence?.runId || state.activeRunId;
+                      if (!runId) return;
+                      window.open(`/api/backtest/runs/${encodeURIComponent(runId)}/artifacts?format=csv`, '_blank');
+                    }}
+                    className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-mono uppercase
+                               text-text-muted hover:text-accent-neon transition-colors"
+                    title={
+                      state.evidence
+                        ? `Download evidence CSV (${state.evidence.tradeCount} trades, ${state.evidence.datasetCount} datasets)`
+                        : 'Download evidence CSV'
+                    }
+                  >
+                    <Download size={10} />
+                    Evidence
+                  </button>
+                )}
+
+                <button
+                  onClick={clearResults}
+                  className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-mono uppercase
+                             text-text-muted hover:text-accent-error transition-colors"
+                  title="Clear results"
+                >
+                  <Trash2 size={10} />
+                  Clear
+                </button>
+              </div>
             )}
           </div>
 
@@ -185,6 +240,75 @@ export function BacktestPanel() {
                 Testing {state.progress.currentStrategy}... ({state.progress.current}/
                 {state.progress.total})
               </span>
+            </div>
+          )}
+
+          {(state.activeRunId || state.runStatus) && (
+            <div className="rounded border border-border-primary bg-bg-tertiary/30 p-2 space-y-1">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-text-muted">
+                {state.activeRunId && (
+                  <span className="inline-flex items-center gap-1 rounded border border-border-primary px-1.5 py-0.5">
+                    Run: {state.activeRunId}
+                    <button
+                      onClick={() => navigator.clipboard.writeText(state.activeRunId || '')}
+                      className="hover:text-text-primary transition-colors"
+                      title="Copy run id"
+                    >
+                      <Copy size={10} />
+                    </button>
+                  </span>
+                )}
+                {state.runStatus && (
+                  <>
+                    <span className="rounded border border-border-primary px-1.5 py-0.5">
+                      State: {state.runStatus.state}
+                    </span>
+                    <span className="rounded border border-border-primary px-1.5 py-0.5">
+                      Chunks: {state.runStatus.completedChunks}/{state.runStatus.totalChunks} (+{state.runStatus.failedChunks} failed)
+                    </span>
+                    <span className="rounded border border-border-primary px-1.5 py-0.5">
+                      Progress: {state.runStatus.progress}%
+                    </span>
+                  </>
+                )}
+              </div>
+              {state.runStatus?.currentActivity && (
+                <div className="text-[10px] font-mono text-text-secondary">
+                  Activity: {state.runStatus.currentActivity}
+                </div>
+              )}
+              {state.artifactAvailability && (
+                <div className="flex flex-wrap items-center gap-1 text-[9px] font-mono uppercase">
+                  {(['manifest', 'evidence', 'report', 'csv'] as const).map((k) => (
+                    <span
+                      key={k}
+                      className={`rounded px-1.5 py-0.5 border ${
+                        state.artifactAvailability?.[k]
+                          ? 'text-accent-success border-accent-success/30 bg-accent-success/10'
+                          : 'text-text-muted border-border-primary bg-bg-secondary'
+                      }`}
+                    >
+                      {k}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {state.isStalled && (
+            <div className="flex items-center gap-2 text-xs font-mono text-accent-warning bg-accent-warning/10 rounded px-3 py-2 border border-accent-warning/20">
+              <AlertTriangle size={12} />
+              <span>
+                Backtest appears stalled ({state.stallSeconds}s without heartbeat). Run ID is retained and polling continues.
+              </span>
+            </div>
+          )}
+
+          {state.detachedRun && state.detachedReason && (
+            <div className="flex items-center gap-2 text-xs font-mono text-accent-warning bg-accent-warning/10 rounded px-3 py-2 border border-accent-warning/20">
+              <AlertTriangle size={12} />
+              <span>{state.detachedReason}</span>
             </div>
           )}
 
@@ -203,6 +327,7 @@ export function BacktestPanel() {
                   <tr className="text-text-muted border-b border-border-primary">
                     <th className="text-left py-2 pr-3 font-semibold">Strategy</th>
                     <th className="text-left py-2 pr-3 font-semibold">Token</th>
+                    <th className="text-left py-2 pr-3 font-semibold">Src</th>
                     <th className="text-right py-2 pr-3 font-semibold">Trades</th>
                     <th className="text-right py-2 pr-3 font-semibold">Win Rate</th>
                     <th className="text-right py-2 pr-3 font-semibold">PF</th>
@@ -234,6 +359,22 @@ export function BacktestPanel() {
                           )}
                         </td>
                         <td className="py-1.5 pr-3 text-text-secondary">{row.token}</td>
+                        <td className="py-1.5 pr-3 text-text-muted whitespace-nowrap">
+                          {row.dataSource ? (
+                            <span
+                              className={`px-1 py-0.5 text-[9px] font-bold uppercase rounded border ${
+                                row.validated
+                                  ? 'bg-accent-success/10 text-accent-success border-accent-success/25'
+                                  : 'bg-accent-warning/10 text-accent-warning border-accent-warning/25'
+                              }`}
+                              title={row.validated ? 'Real candles' : 'Client / unverified candles'}
+                            >
+                              {row.dataSource}
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-mono">n/a</span>
+                          )}
+                        </td>
                         <td className="py-1.5 pr-3 text-right text-text-secondary">
                           {row.trades}
                         </td>

@@ -201,7 +201,6 @@ export function calcBaseEquityScore(
 ): number {
   if (!pair) return 35;
 
-  const liq = parseFloat(pair.liquidity?.usd || '0');
   const vol24h = parseFloat(pair.volume?.h24 || '0');
   const change1h = pair.priceChange?.h1 || 0;
   const change24h = pair.priceChange?.h24 || 0;
@@ -209,16 +208,18 @@ export function calcBaseEquityScore(
   const sells1h = pair.txns?.h1?.sells || 0;
   const totalTxns = buys1h + sells1h;
   const bsRatio = sells1h > 0 ? buys1h / sells1h : buys1h;
-  const volLiqRatio = liq > 0 ? vol24h / liq : 0;
 
   let score = 0;
 
   // --- Trading Activity (0-30) ---
-  if (volLiqRatio >= 2.0) score += 20;
-  else if (volLiqRatio >= 1.0) score += 16;
-  else if (volLiqRatio >= 0.5) score += 12;
-  else if (volLiqRatio >= 0.2) score += 8;
-  else score += 4;
+  // Tokenized equities/indexes/pre-IPO are platform-backed; on-chain liquidity is
+  // not a safety signal. Use absolute on-chain volume + transaction depth.
+  if (vol24h >= 250_000) score += 20;
+  else if (vol24h >= 100_000) score += 16;
+  else if (vol24h >= 50_000) score += 12;
+  else if (vol24h >= 20_000) score += 8;
+  else if (vol24h >= 5_000) score += 4;
+  else score += 2;
 
   if (totalTxns >= 200) score += 10;
   else if (totalTxns >= 50) score += 7;
@@ -233,31 +234,33 @@ export function calcBaseEquityScore(
   else if (absChange1h >= 0.5) score += 8;
   else score += 4;
 
+  // Trend consistency
   if ((change1h > 0 && change24h > 0) || (change1h < 0 && change24h < 0)) {
-    score += 10; // aligned trend
+    score += 10;
   } else if (Math.abs(change24h) < 1) {
-    score += 5; // rangebound
+    score += 5;
   } else {
-    score += 3; // mixed signals
+    score += 3;
   }
 
+  // Strong intraday momentum bonus
   if (absChange1h >= 5) score += 5;
 
   // --- Market Quality (0-20) ---
-  if (liq >= 500_000) score += 8;
-  else if (liq >= 100_000) score += 5;
-  else if (liq >= 50_000) score += 3;
-  else score += 1;
+  // Liquidity tiers intentionally ignored. Focus on tape health.
+  score += 8; // Baseline: platform-backed liquidity
 
   if (bsRatio >= 1.0 && bsRatio <= 2.5 && totalTxns >= 10) {
-    score += 7; // healthy buying
+    score += 7;
   } else if (bsRatio >= 0.5 && bsRatio <= 3.5) {
     score += 4;
   } else {
     score += 1;
   }
 
-  if (liq > 200_000 && volLiqRatio > 0.3) score += 5;
+  // Activity depth proxy
+  if (totalTxns >= 100) score += 5;
+  else if (totalTxns >= 20) score += 3;
   else score += 2;
 
   // --- Asset Class Bonus (0-20) ---

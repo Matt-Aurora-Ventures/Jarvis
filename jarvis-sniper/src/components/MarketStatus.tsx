@@ -1,9 +1,9 @@
 'use client';
 
-import type { MarketPhase } from '@/lib/tv-screener';
+import { getMarketPhase, type MarketPhase } from '@/lib/tv-screener';
 
 interface MarketStatusProps {
-  marketPhase: MarketPhase;
+  marketPhase?: MarketPhase;
   lastUpdated: Date | null;
 }
 
@@ -55,7 +55,8 @@ function formatRelativeTime(date: Date): string {
  * Uses CSS variables from globals.css to respect the app theme system.
  */
 export function MarketStatus({ marketPhase, lastUpdated }: MarketStatusProps) {
-  const cfg = PHASE_CONFIG[marketPhase];
+  const resolvedPhase = marketPhase ?? getMarketPhase();
+  const cfg = PHASE_CONFIG[resolvedPhase];
 
   return (
     <div
@@ -67,7 +68,7 @@ export function MarketStatus({ marketPhase, lastUpdated }: MarketStatusProps) {
     >
       {/* Animated dot for active phases */}
       <span className="relative flex h-2 w-2">
-        {marketPhase !== 'CLOSED' && (
+        {resolvedPhase !== 'CLOSED' && (
           <span
             className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-40 ${cfg.dotClass}`}
           />
@@ -84,7 +85,7 @@ export function MarketStatus({ marketPhase, lastUpdated }: MarketStatusProps) {
           className="text-[9px] font-mono"
           style={{ color: 'var(--text-muted)' }}
         >
-          {formatRelativeTime(lastUpdated)}
+          Updated {formatRelativeTime(lastUpdated)}
         </span>
       )}
     </div>

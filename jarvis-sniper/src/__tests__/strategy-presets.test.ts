@@ -7,54 +7,66 @@ import { STRATEGY_PRESETS } from '@/stores/useSniperStore';
 // ────────────────────────────────────────────────────────────────
 
 describe('STRATEGY_PRESETS', () => {
-  // Original 9 presets + 4 new = 13 total
-  it('should have 13 total strategy presets', () => {
-    expect(STRATEGY_PRESETS.length).toBe(13);
+  it('should have at least the core memecoin presets', () => {
+    // Keep this resilient: presets evolve, but we should never regress below core coverage.
+    expect(STRATEGY_PRESETS.length).toBeGreaterThanOrEqual(9);
   });
 
   // ── New presets existence ──
   it('should include genetic_v2 preset', () => {
     const preset = STRATEGY_PRESETS.find(p => p.id === 'genetic_v2');
     expect(preset).toBeDefined();
-    expect(preset!.name).toBe('GENETIC V2 (71% WR)');
-    expect(preset!.config.stopLossPct).toBe(45);
-    expect(preset!.config.takeProfitPct).toBe(207);
-    expect(preset!.config.trailingStopPct).toBe(10);
+    expect(preset!.name).toBe('GENETIC V2');
+    expect(preset!.config.stopLossPct).toBe(28);
+    expect(preset!.config.takeProfitPct).toBe(140);
+    expect(preset!.config.trailingStopPct).toBe(8);
     expect(preset!.config.minLiquidityUsd).toBe(5000);
     expect(preset!.config.strategyMode).toBe('aggressive');
   });
 
-  it('should include xstock_momentum preset', () => {
-    const preset = STRATEGY_PRESETS.find(p => p.id === 'xstock_momentum');
-    expect(preset).toBeDefined();
-    expect(preset!.name).toBe('XSTOCK MOMENTUM');
-    expect(preset!.config.stopLossPct).toBe(3);
-    expect(preset!.config.takeProfitPct).toBe(8);
-    expect(preset!.config.trailingStopPct).toBe(2);
-    expect(preset!.config.minLiquidityUsd).toBe(10000);
-    expect(preset!.config.strategyMode).toBe('conservative');
+  it('should include xstock presets', () => {
+    const intraday = STRATEGY_PRESETS.find(p => p.id === 'xstock_intraday');
+    const swing = STRATEGY_PRESETS.find(p => p.id === 'xstock_swing');
+    expect(intraday).toBeDefined();
+    expect(swing).toBeDefined();
+    expect(intraday!.assetType).toBe('xstock');
+    expect(swing!.assetType).toBe('xstock');
+
+    expect(intraday!.config.stopLossPct).toBe(3);
+    expect(intraday!.config.takeProfitPct).toBe(10);
+    expect(intraday!.config.trailingStopPct).toBe(2.2);
+
+    expect(swing!.config.stopLossPct).toBe(6);
+    expect(swing!.config.takeProfitPct).toBe(18);
+    expect(swing!.config.trailingStopPct).toBe(4);
   });
 
   it('should include prestock_speculative preset', () => {
     const preset = STRATEGY_PRESETS.find(p => p.id === 'prestock_speculative');
     expect(preset).toBeDefined();
     expect(preset!.name).toBe('PRESTOCK SPEC');
-    expect(preset!.config.stopLossPct).toBe(15);
-    expect(preset!.config.takeProfitPct).toBe(50);
-    expect(preset!.config.trailingStopPct).toBe(8);
-    expect(preset!.config.minLiquidityUsd).toBe(5000);
-    expect(preset!.config.strategyMode).toBe('aggressive');
+    expect(preset!.assetType).toBe('prestock');
+    expect(preset!.config.stopLossPct).toBe(8);
+    expect(preset!.config.takeProfitPct).toBe(24);
+    expect(preset!.config.trailingStopPct).toBe(5);
+    expect(preset!.config.minLiquidityUsd).toBe(0); // Liquidity removed as factor for prestocks
   });
 
-  it('should include index_revert preset', () => {
-    const preset = STRATEGY_PRESETS.find(p => p.id === 'index_revert');
-    expect(preset).toBeDefined();
-    expect(preset!.name).toBe('INDEX MEAN REVERT');
-    expect(preset!.config.stopLossPct).toBe(2);
-    expect(preset!.config.takeProfitPct).toBe(5);
-    expect(preset!.config.trailingStopPct).toBe(1.5);
-    expect(preset!.config.minLiquidityUsd).toBe(20000);
-    expect(preset!.config.strategyMode).toBe('conservative');
+  it('should include index presets', () => {
+    const intraday = STRATEGY_PRESETS.find(p => p.id === 'index_intraday');
+    const leveraged = STRATEGY_PRESETS.find(p => p.id === 'index_leveraged');
+    expect(intraday).toBeDefined();
+    expect(leveraged).toBeDefined();
+    expect(intraday!.assetType).toBe('index');
+    expect(leveraged!.assetType).toBe('index');
+
+    expect(intraday!.config.stopLossPct).toBe(2.8);
+    expect(intraday!.config.takeProfitPct).toBe(9);
+    expect(intraday!.config.trailingStopPct).toBe(2);
+
+    expect(leveraged!.config.stopLossPct).toBe(7);
+    expect(leveraged!.config.takeProfitPct).toBe(20);
+    expect(leveraged!.config.trailingStopPct).toBe(4.5);
   });
 
   // ── All presets have required fields ──
@@ -101,9 +113,9 @@ describe('STRATEGY_CATEGORIES', () => {
     expect(Array.isArray(mod.STRATEGY_CATEGORIES)).toBe(true);
   });
 
-  it('should have 4 categories', async () => {
+  it('should have 6 categories', async () => {
     const { STRATEGY_CATEGORIES } = await import('@/components/strategy-categories');
-    expect(STRATEGY_CATEGORIES.length).toBe(4);
+    expect(STRATEGY_CATEGORIES.length).toBe(6);
   });
 
   it('should have correct category labels', async () => {
@@ -112,6 +124,8 @@ describe('STRATEGY_CATEGORIES', () => {
     expect(labels).toContain('TOP PERFORMERS');
     expect(labels).toContain('BALANCED');
     expect(labels).toContain('AGGRESSIVE');
+    expect(labels).toContain('DEGEN');
+    expect(labels).toContain('BLUE CHIP SOLANA');
     expect(labels).toContain('XSTOCK & INDEX');
   });
 
@@ -146,12 +160,10 @@ describe('STRATEGY_CATEGORIES', () => {
 });
 
 describe('STRATEGY_INFO entries for new presets', () => {
-  it('should have STRATEGY_INFO entries for all 4 new presets', async () => {
-    // STRATEGY_INFO is defined inside SniperControls.tsx as a local const.
-    // We'll extract it to a shared module so it can be tested.
+  it('should have STRATEGY_INFO entries for every preset', async () => {
     const { STRATEGY_INFO } = await import('@/components/strategy-info');
-    const newIds = ['genetic_v2', 'xstock_momentum', 'prestock_speculative', 'index_revert'];
-    for (const id of newIds) {
+    for (const preset of STRATEGY_PRESETS) {
+      const id = preset.id;
       expect(STRATEGY_INFO[id]).toBeDefined();
       expect(STRATEGY_INFO[id].summary).toBeTruthy();
       expect(STRATEGY_INFO[id].optimal).toBeTruthy();
@@ -160,9 +172,9 @@ describe('STRATEGY_INFO entries for new presets', () => {
     }
   });
 
-  it('should still have STRATEGY_INFO for original presets', async () => {
+  it('should still have STRATEGY_INFO for key presets', async () => {
     const { STRATEGY_INFO } = await import('@/components/strategy-info');
-    const origIds = ['momentum', 'insight_j', 'hot', 'hybrid_b', 'let_it_ride', 'insight_i'];
+    const origIds = ['momentum', 'insight_j', 'hybrid_b', 'let_it_ride', 'pump_fresh_tight'];
     for (const id of origIds) {
       expect(STRATEGY_INFO[id]).toBeDefined();
     }

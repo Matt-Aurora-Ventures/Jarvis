@@ -1,18 +1,13 @@
-import type { Metadata } from "next";
-import { DM_Sans, JetBrains_Mono } from "next/font/google";
-import "./globals.css";
-import { WalletProvider } from "@/components/providers/WalletProvider";
-
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
-});
+import type { Metadata } from 'next';
+import '@fontsource/dm-sans/400.css';
+import '@fontsource/dm-sans/500.css';
+import '@fontsource/dm-sans/700.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/700.css';
+import './globals.css';
+import { Toaster } from 'sonner';
+import { WalletProvider } from '@/components/providers/WalletProvider';
+import { SniperAutomationOrchestrator } from '@/components/providers/SniperAutomationOrchestrator';
 
 export const metadata: Metadata = {
   title: "Jarvis Sniper | Autonomous Token Sniper",
@@ -32,8 +27,17 @@ export default function RootLayout({
         }} />
         <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&display=swap" rel="stylesheet" />
       </head>
-      <body className={`${dmSans.variable} ${jetbrainsMono.variable} bg-bg-primary text-text-primary antialiased overflow-x-hidden`}>
+      <body className="bg-bg-primary text-text-primary antialiased overflow-x-hidden">
         <WalletProvider>
+          <Toaster
+            position="bottom-right"
+            toastOptions={{
+              style: { background: '#1a1a2e', color: '#e0e0e0', border: '1px solid #2a2a3e' },
+            }}
+            richColors
+            expand
+          />
+          <SniperAutomationOrchestrator />
           {/* Ambient Background */}
           <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
             <div className="ambient-orb absolute top-1/4 left-1/4 w-96 h-96 bg-accent-neon/[0.04] rounded-full blur-[128px]" />

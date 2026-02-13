@@ -42,6 +42,8 @@ export function determineBtcTrend(btcChange24h: number): BtcTrend {
 // ---------------------------------------------------------------------------
 
 const POLL_INTERVAL_MS = 60_000; // 60 seconds
+const MAX_CONSECUTIVE_ERRORS = 5;
+const BASE_BACKOFF_MS = 5_000; // 5s base for exponential backoff
 
 const INITIAL_STATE: MacroData = {
   btcPrice: null,
@@ -60,17 +62,26 @@ const INITIAL_STATE: MacroData = {
 export function useMacroData(): MacroData {
   const [data, setData] = useState<MacroData>(INITIAL_STATE);
   const mountedRef = useRef(true);
+  const errorCountRef = useRef(0);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
 
     async function fetchMacro() {
       try {
-        const res = await fetch('/api/macro');
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 10_000); // 10s timeout
+        const res = await fetch('/api/macro', { signal: controller.signal });
+        clearTimeout(timer);
+
         if (!res.ok) throw new Error(`macro fetch failed: ${res.status}`);
         const json = await res.json();
 
         if (!mountedRef.current) return;
+
+        // Reset error count on success
+        errorCountRef.current = 0;
 
         setData({
           btcPrice: json.btcPrice ?? null,
@@ -81,19 +92,33 @@ export function useMacroData(): MacroData {
           btcTrend: json.btcTrend ?? null,
           loading: false,
         });
-      } catch {
+      } catch (err) {
         if (!mountedRef.current) return;
+        errorCountRef.current += 1;
+        console.warn(
+          `[useMacroData] Fetch failed (${errorCountRef.current}/${MAX_CONSECUTIVE_ERRORS}):`,
+          err instanceof Error ? err.message : err,
+        );
         // On error, keep existing data but mark not loading
         setData((prev) => ({ ...prev, loading: false }));
       }
+
+      // Schedule next poll with exponential backoff on consecutive errors
+      if (!mountedRef.current) return;
+      const backoff = errorCountRef.current > 0
+        ? Math.min(BASE_BACKOFF_MS * Math.pow(2, errorCountRef.current - 1), POLL_INTERVAL_MS * 5)
+        : POLL_INTERVAL_MS;
+      timeoutRef.current = setTimeout(fetchMacro, backoff);
     }
 
     fetchMacro();
-    const interval = setInterval(fetchMacro, POLL_INTERVAL_MS);
 
     return () => {
       mountedRef.current = false;
-      clearInterval(interval);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     };
   }, []);
 

@@ -1,0 +1,16 @@
+﻿{
+    "totalTokens":  0,
+    "tokensWithData":  0,
+    "topStrategies":  [
+
+                      ],
+    "bestStrategy":  null,
+    "graduationStats":  {
+                            "avgScoreWinners":  0,
+                            "avgScoreLosers":  0,
+                            "avgTimeToPeakMs":  0,
+                            "avgPeakMultiplier":  0,
+                            "medianLifespanHours":  0
+                        },
+    "cached":  false
+}

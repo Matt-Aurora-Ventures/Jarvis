@@ -10,16 +10,26 @@ import { BagsSDK } from '@bagsfm/bags-sdk';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { quoteCache } from '@/lib/server-cache';
 import { quoteRateLimiter, getClientIp } from '@/lib/rate-limiter';
+import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
 
-const RPC_URL = process.env.SOLANA_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
 const BAGS_API_KEY = process.env.BAGS_API_KEY || '';
 
 let _sdk: BagsSDK | null = null;
+let _connection: Connection | null = null;
+let _rpcUrl: string | null = null;
 
-function getSDK(): BagsSDK {
+function getConnection(rpcUrl: string): Connection {
+  if (!_connection || _rpcUrl !== rpcUrl) {
+    _connection = new Connection(rpcUrl, 'confirmed');
+    _rpcUrl = rpcUrl;
+    _sdk = null;
+  }
+  return _connection;
+}
+
+function getSDK(connection: Connection): BagsSDK {
   if (!_sdk) {
     if (!BAGS_API_KEY) throw new Error('BAGS_API_KEY not configured');
-    const connection = new Connection(RPC_URL, 'confirmed');
     _sdk = new BagsSDK(BAGS_API_KEY, connection);
   }
   return _sdk;
@@ -51,6 +61,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
+    const rpcConfig = resolveServerRpcConfig();
+    if (!rpcConfig.ok || !rpcConfig.url) {
+      return NextResponse.json(
+        {
+          code: 'RPC_PROVIDER_UNAVAILABLE',
+          error: 'RPC provider unavailable',
+          diagnostic: rpcConfig.diagnostic,
+          source: rpcConfig.source,
+        },
+        { status: 503 },
+      );
+    }
+
     // Cache key: same pair + amount = same quote (within TTL)
     const cacheKey = `quote:${inputMint}:${outputMint}:${amount}:${slippageBps || 'auto'}`;
     const cached = quoteCache.get(cacheKey);
@@ -63,7 +86,8 @@ export async function POST(request: Request) {
       });
     }
 
-    const sdk = getSDK();
+    const connection = getConnection(rpcConfig.url);
+    const sdk = getSDK(connection);
     const quote = await sdk.trade.getQuote({
       inputMint: new PublicKey(inputMint),
       outputMint: new PublicKey(outputMint),

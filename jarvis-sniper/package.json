@@ -3,15 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3001",
+    "dev": "next dev --webpack --port 3001 --hostname 127.0.0.1",
     "build": "next build",
-    "start": "next start --port 3001",
+    "start": "next start --port 3001 --hostname 127.0.0.1",
     "test": "vitest run",
     "lint": "eslint",
-    "risk-worker": "npx tsx scripts/risk-worker.ts"
+    "risk-worker": "npx tsx scripts/risk-worker.ts",
+    "cloud:hardening": "powershell -ExecutionPolicy Bypass -File scripts/post-deploy-cloud-run-hardening.ps1",
+    "deploy:hardened": "powershell -ExecutionPolicy Bypass -Command \"$env:GOOGLE_CLOUD_QUOTA_PROJECT='kr8tiv'; npx firebase-tools deploy --only hosting; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\" && npm run cloud:hardening"
   },
   "dependencies": {
     "@bagsfm/bags-sdk": "^1.2.7",
+    "@fontsource/dm-sans": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
     "@solana/wallet-adapter-base": "^0.9.23",
     "@solana/wallet-adapter-phantom": "^0.9.24",
     "@solana/wallet-adapter-react": "^0.15.35",

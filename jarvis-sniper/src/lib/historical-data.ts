@@ -2,23 +2,28 @@
  * Historical Data Fetcher — Collect OHLCV candles for backtesting
  *
  * Multi-source OHLCV pipeline:
- *   1. DexScreener chart API (primary)
- *   2. Birdeye public OHLCV API (fallback)
- *   3. Synthetic candles (last resort)
+ *   1. DexScreener pair discovery (pool address)
+ *   2. GeckoTerminal OHLCV API (primary candles)
+ *   3. Birdeye OHLCV API (fallback, requires API key)
  *
- * Data is cached in localStorage (client-side) for fast repeat backtests.
- * All localStorage access is guarded for server-side (API route) safety.
+ * Data is cached in localStorage (client-side) and in-memory (server-side)
+ * for fast repeat backtests. All caching is guarded for server-side safety.
  *
  * Fulfills: BACK-01 (Historical Data Pipeline)
  */
 
 import type { OHLCVCandle } from './backtest-engine';
 import { ALL_BLUECHIPS, type BlueChipToken } from './bluechip-data';
+import { geckoFetchPaced as geckoFetchPacedShared } from './gecko-fetch';
+import { ServerCache } from './server-cache';
+import { createHash } from 'crypto';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
 // ─── Types ───
 
-/** Source of OHLCV data: 'dexscreener' | 'birdeye' | 'synthetic' */
-export type OHLCVSource = 'dexscreener' | 'birdeye' | 'synthetic';
+/** Source of OHLCV candle data */
+export type OHLCVSource = 'geckoterminal' | 'birdeye';
 
 export interface HistoricalDataSet {
   tokenSymbol: string;
@@ -29,12 +34,24 @@ export interface HistoricalDataSet {
   source: OHLCVSource;
 }
 
-/** Memecoin graduation pattern archetype */
-export type MemeGraduationPattern = 'moon' | 'pump_dump' | 'slow_bleed' | 'dead_on_arrival';
-
-/** Historical data set with memecoin graduation pattern metadata */
-export interface MemeGraduationDataSet extends HistoricalDataSet {
-  pattern: MemeGraduationPattern;
+export interface FetchMintHistoryOptions {
+  /** Minimum candles required or the fetch fails. */
+  minCandles?: number;
+  /** Override DexScreener pair discovery and use this pool/pair address directly (GeckoTerminal OHLCV). */
+  pairAddressOverride?: string;
+  /**
+   * Attempt Birdeye fallback if GeckoTerminal returns fewer than this many candles.
+   * Defaults to 100. Set to `minCandles` to minimize Birdeye usage.
+   */
+  attemptBirdeyeIfCandlesBelow?: number;
+  /** Disable Birdeye fallback entirely (useful for large batch runs to avoid strict rate limits). */
+  allowBirdeyeFallback?: boolean;
+  /** Candle resolution in minutes for GeckoTerminal OHLCV (default: '60' = 1h). */
+  resolution?: string;
+  /** Limit number of candles pulled from GeckoTerminal. Lower values reduce rate-limit pressure. */
+  maxCandles?: number;
+  /** Birdeye lookback window in days (default: 180). */
+  birdeyeLookbackDays?: number;
 }
 
 export interface FetchProgress {
@@ -44,20 +61,107 @@ export interface FetchProgress {
   status: 'fetching' | 'cached' | 'error' | 'complete';
 }
 
-// ─── DexScreener OHLCV API ───
+// ─── Pair Discovery (DexScreener) ───
 
 const DEXSCREENER_PAIRS = 'https://api.dexscreener.com/tokens/v1/solana';
 const CACHE_KEY_PREFIX = 'jarvis_ohlcv_';
 const CACHE_EXPIRY_MS = 6 * 60 * 60 * 1000; // 6 hours
+const MIN_REAL_CANDLES = 50;
+
+// Server-side cache for Next API routes (localStorage is unavailable on server).
+const serverOhlcvCache = new ServerCache<HistoricalDataSet>();
+
+// Disk-backed server cache for larger universes / long-running tuning.
+// Best-effort: no-ops if fs is unavailable.
+const DISK_CACHE_DIR = join(process.cwd(), '.jarvis-cache', 'ohlcv');
+const DISK_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+let lastDiskCleanupAt = 0;
+
+function sha256Hex(input: string): string {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+function ensureDiskCacheDir(): void {
+  try {
+    if (!existsSync(DISK_CACHE_DIR)) mkdirSync(DISK_CACHE_DIR, { recursive: true });
+  } catch {
+    // ignore
+  }
+}
+
+function diskCachePath(cacheKey: string): string {
+  return join(DISK_CACHE_DIR, `${cacheKey}.json`);
+}
+
+function maybeCleanupDiskCache(now: number): void {
+  if (now - lastDiskCleanupAt < 60_000) return;
+  lastDiskCleanupAt = now;
+
+  try {
+    if (!existsSync(DISK_CACHE_DIR)) return;
+    const files = readdirSync(DISK_CACHE_DIR);
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      const full = join(DISK_CACHE_DIR, f);
+      try {
+        const st = statSync(full);
+        if (now - st.mtimeMs > DISK_CACHE_TTL_MS + 5 * 60_000) {
+          unlinkSync(full);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+type OhlcvCacheKeyArgs = {
+  mintAddress: string;
+  pairAddressOverride?: string;
+  resolution?: string;
+  maxCandles?: number;
+  allowBirdeyeFallback?: boolean;
+  birdeyeLookbackDays?: number;
+};
+
+function makeOhlcvCacheKey(args: OhlcvCacheKeyArgs): string {
+  return sha256Hex(
+    JSON.stringify({
+      v: 1,
+      mintAddress: args.mintAddress,
+      pairAddressOverride: (args.pairAddressOverride || '').trim() || null,
+      resolution: args.resolution || '60',
+      maxCandles: args.maxCandles ?? 2000,
+      allowBirdeyeFallback: args.allowBirdeyeFallback ?? true,
+      birdeyeLookbackDays: args.birdeyeLookbackDays ?? 180,
+    }),
+  );
+}
 
 /**
  * Fetch the best liquidity pair address for a token from DexScreener.
  */
+const DEXSCREENER_TIMEOUT_MS = 12_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchBestPair(mintAddress: string): Promise<string | null> {
   try {
-    const res = await fetch(`${DEXSCREENER_PAIRS}/${mintAddress}`, {
-      headers: { 'Accept': 'application/json' },
-    });
+    const res = await fetchWithTimeout(
+      `${DEXSCREENER_PAIRS}/${mintAddress}`,
+      { headers: { Accept: 'application/json' } },
+      DEXSCREENER_TIMEOUT_MS,
+    );
     if (!res.ok) return null;
 
     const pairs: any[] = await res.json();
@@ -78,45 +182,133 @@ async function fetchBestPair(mintAddress: string): Promise<string | null> {
   }
 }
 
-/**
- * Fetch OHLCV candles from DexScreener's chart data endpoint.
- *
- * DexScreener provides candlestick data via their chart API.
- * We request 1h candles going back as far as possible.
- */
-async function fetchOHLCVFromDexScreener(
-  pairAddress: string,
-  resolution: string = '60', // 60 = 1 hour
-): Promise<OHLCVCandle[]> {
-  // DexScreener chart data endpoint
-  const url = `https://io.dexscreener.com/dex/chart/amm/v3/solana/${pairAddress}?type=line&tf=${resolution}`;
+// ─── OHLCV (GeckoTerminal) ───
 
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Jarvis-Sniper/1.0',
-      },
-    });
+const GECKO_BASE = 'https://api.geckoterminal.com/api/v2/networks/solana/pools';
+const GECKO_MIN_INTERVAL_MS = 2200; // GeckoTerminal free API: ~30 req/min
 
-    if (!res.ok) return [];
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-    const data = await res.json();
+// Server-side pacing so batched backtests don't instantly 429 GeckoTerminal.
+// Client-side isn't heavily used for this module (API routes call it).
+let geckoChain: Promise<Response> = Promise.resolve(null as unknown as Response);
+let geckoLastAt = 0;
 
-    // DexScreener returns bars as arrays: [timestamp, open, high, low, close, volume]
-    if (!data?.bars || !Array.isArray(data.bars)) return [];
+async function geckoFetchPaced(url: string): Promise<Response> {
+  const run = async (): Promise<Response> => {
+    const waitMs = Math.max(0, geckoLastAt + GECKO_MIN_INTERVAL_MS - Date.now());
+    if (waitMs > 0) await sleep(waitMs);
+    geckoLastAt = Date.now();
 
-    return data.bars.map((bar: any) => ({
-      timestamp: bar[0] || bar.t || 0,
-      open: bar[1] || bar.o || 0,
-      high: bar[2] || bar.h || 0,
-      low: bar[3] || bar.l || 0,
-      close: bar[4] || bar.c || 0,
-      volume: bar[5] || bar.v || 0,
-    })).filter((c: OHLCVCandle) => c.timestamp > 0 && c.close > 0);
-  } catch {
-    return [];
+    // Simple 429 retry with backoff (rare if pacing works, but helps under load).
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (res.status !== 429) return res;
+      await sleep(1500 + attempt * 1500);
+      geckoLastAt = Date.now();
+    }
+    return fetch(url, { headers: { Accept: 'application/json' } });
+  };
+
+  // On server: serialize all GeckoTerminal requests with pacing.
+  if (typeof window === 'undefined') {
+    geckoChain = geckoChain.then(run, run);
+    return geckoChain;
   }
+
+  // On client: don't globally serialize (avoid UX stalls if ever used).
+  return run();
+}
+
+type GeckoTimeframe = 'minute' | 'hour' | 'day';
+
+function geckoParamsForResolution(resolutionMins: string): { timeframe: GeckoTimeframe; aggregate: number } {
+  const mins = Number.parseInt(resolutionMins, 10);
+  if (!Number.isFinite(mins) || mins <= 0) return { timeframe: 'hour', aggregate: 1 };
+
+  if (mins < 60) return { timeframe: 'minute', aggregate: Math.max(1, mins) };
+
+  if (mins % 1440 === 0) return { timeframe: 'day', aggregate: Math.max(1, Math.floor(mins / 1440)) };
+
+  if (mins % 60 === 0) return { timeframe: 'hour', aggregate: Math.max(1, Math.floor(mins / 60)) };
+
+  return { timeframe: 'minute', aggregate: Math.max(1, mins) };
+}
+
+/**
+ * Fetch OHLCV candles from GeckoTerminal for a given pool (DexScreener pairAddress).
+ *
+ * Gecko returns most-recent-first; we normalize to ascending timestamps.
+ */
+async function fetchOHLCVFromGeckoTerminal(
+  poolAddress: string,
+  resolutionMins: string = '60',
+  maxCandles: number = 2000,
+): Promise<OHLCVCandle[]> {
+  const { timeframe, aggregate } = geckoParamsForResolution(resolutionMins);
+
+  const all: OHLCVCandle[] = [];
+  let beforeTimestamp: number | null = null; // unix seconds
+
+  // GeckoTerminal supports paging via before_timestamp. Limit is capped server-side (commonly 1000).
+  while (all.length < maxCandles) {
+    const remaining = maxCandles - all.length;
+    const limit = Math.min(1000, Math.max(1, remaining));
+
+    const url =
+      `${GECKO_BASE}/${poolAddress}/ohlcv/${timeframe}` +
+      `?aggregate=${aggregate}&limit=${limit}&currency=usd` +
+      (beforeTimestamp ? `&before_timestamp=${beforeTimestamp}` : '');
+
+    try {
+      const res = await geckoFetchPacedShared(url);
+      if (!res.ok) break;
+
+      const json = await res.json();
+      const list: any[] = json?.data?.attributes?.ohlcv_list;
+      if (!Array.isArray(list) || list.length === 0) break;
+
+      // list items: [timestamp_sec, open, high, low, close, volume]
+      const page = list
+        .map((row: any) => ({
+          tsSec: Number(row?.[0] ?? 0),
+          open: Number(row?.[1] ?? 0),
+          high: Number(row?.[2] ?? 0),
+          low: Number(row?.[3] ?? 0),
+          close: Number(row?.[4] ?? 0),
+          volume: Number(row?.[5] ?? 0),
+        }))
+        .filter((r: any) => Number.isFinite(r.tsSec) && r.tsSec > 0 && r.close > 0);
+
+      if (page.length === 0) break;
+
+      for (const r of page) {
+        all.push({
+          timestamp: r.tsSec * 1000,
+          open: r.open,
+          high: r.high,
+          low: r.low,
+          close: r.close,
+          volume: r.volume,
+        });
+      }
+
+      // Page further back in time using the oldest candle timestamp minus 1 second.
+      const oldest = Math.min(...page.map((p: any) => p.tsSec));
+      beforeTimestamp = oldest > 1 ? oldest - 1 : null;
+
+      // If we received fewer than requested, assume end of history.
+      if (list.length < limit || beforeTimestamp == null) break;
+    } catch {
+      break;
+    }
+  }
+
+  // Gecko returns newest-first; our paging appends in that order. Normalize to ascending and dedupe.
+  const dedup = new Map<number, OHLCVCandle>();
+  for (const c of all) dedup.set(c.timestamp, c);
+
+  return [...dedup.values()].sort((a, b) => a.timestamp - b.timestamp);
 }
 
 // ─── Birdeye OHLCV API (Fallback) ───
@@ -149,7 +341,7 @@ async function fetchFromBirdeye(
   };
 
   const attempt = async (): Promise<OHLCVCandle[]> => {
-    const res = await fetch(url, { headers });
+    const res = await fetchWithTimeout(url, { headers }, 12_000);
 
     if (!res.ok) {
       // Surface the status so callers can decide to retry
@@ -199,85 +391,95 @@ class BirdeyeHttpError extends Error {
   }
 }
 
-// ─── Synthetic Data ───
-
-/**
- * Alternative: Generate synthetic OHLCV data from DexScreener's price change data.
- * Used when chart API is unavailable. Creates realistic candles from known statistics.
- */
-function generateSyntheticCandles(
-  token: BlueChipToken,
-  currentPrice: number,
-  numCandles: number = 4320, // 6 months of 1h candles
-): OHLCVCandle[] {
-  const candles: OHLCVCandle[] = [];
-  const volatility = token.avgDailyVolatility / 100 / 24; // Per-hour volatility
-  const now = Date.now();
-  const startTime = now - numCandles * 3600 * 1000;
-
-  let price = currentPrice;
-
-  // Walk backwards to set start price, then forward to generate candles
-  for (let i = numCandles; i > 0; i--) {
-    // Random walk with mean reversion (Ornstein-Uhlenbeck process)
-    const drift = (currentPrice - price) * 0.001; // Mean reversion pull
-    const randomReturn = (Math.random() - 0.5) * 2 * volatility;
-    price *= (1 + drift + randomReturn);
-  }
-
-  // Forward generation
-  for (let i = 0; i < numCandles; i++) {
-    const timestamp = startTime + i * 3600 * 1000;
-    const open = price;
-
-    // Generate realistic intra-candle movement
-    const candleVol = volatility * (0.5 + Math.random()); // Variable vol per candle
-    const change = (Math.random() - 0.48) * 2 * candleVol; // Slight upward bias
-    const close = open * (1 + change);
-
-    // High/low based on volatility
-    const range = Math.abs(change) + candleVol * 0.5;
-    const high = Math.max(open, close) * (1 + Math.random() * range);
-    const low = Math.min(open, close) * (1 - Math.random() * range);
-
-    // Volume: log-normal distribution
-    const baseVol = 100000 * (token.mcapTier === 'mega' ? 10 : token.mcapTier === 'large' ? 3 : 1);
-    const volume = baseVol * Math.exp((Math.random() - 0.5) * 2);
-
-    candles.push({ timestamp, open, high, low, close, volume });
-    price = close;
-  }
-
-  return candles;
-}
-
 // ─── Cache Management ───
 
-function getCachedData(mintAddress: string): HistoricalDataSet | null {
-  if (typeof localStorage === 'undefined') return null;
+function getCachedData(cacheKey: string, legacyMintKey?: string): HistoricalDataSet | null {
+  // Client-side cache
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(`${CACHE_KEY_PREFIX}${cacheKey}`)
+        ?? (legacyMintKey ? localStorage.getItem(`${CACHE_KEY_PREFIX}${legacyMintKey}`) : null);
+      if (!raw) return null;
+      const data: HistoricalDataSet = JSON.parse(raw);
+      if (Date.now() - data.fetchedAt > CACHE_EXPIRY_MS) return null;
+
+      // Forward-compat: older caches may contain deprecated source labels.
+      const source: OHLCVSource =
+        data.source === 'birdeye' ? 'birdeye' : 'geckoterminal';
+
+      return { ...data, source };
+    } catch {
+      return null;
+    }
+  }
+
+  // Server-side cache (memory)
+  const mem = serverOhlcvCache.get(cacheKey) || (legacyMintKey ? serverOhlcvCache.get(legacyMintKey) : null);
+  if (mem) return mem;
+
+  // Server-side cache (disk fallback)
   try {
-    const raw = localStorage.getItem(`${CACHE_KEY_PREFIX}${mintAddress}`);
-    if (!raw) return null;
-    const data: HistoricalDataSet = JSON.parse(raw);
-    if (Date.now() - data.fetchedAt > CACHE_EXPIRY_MS) return null;
+    ensureDiskCacheDir();
+    const p = diskCachePath(cacheKey);
+    if (!existsSync(p) && legacyMintKey) {
+      const legacyPath = diskCachePath(legacyMintKey);
+      if (existsSync(legacyPath)) {
+        const rawLegacy = JSON.parse(readFileSync(legacyPath, 'utf8'));
+        const expiresAtLegacy = Number(rawLegacy?.expiresAt ?? 0);
+        const dataLegacy = rawLegacy?.data as HistoricalDataSet | undefined;
+        if (dataLegacy && Number.isFinite(expiresAtLegacy) && Date.now() < expiresAtLegacy) {
+          serverOhlcvCache.set(cacheKey, dataLegacy, Math.max(1, expiresAtLegacy - Date.now()));
+          return dataLegacy;
+        }
+      }
+    }
+
+    if (!existsSync(p)) return null;
+
+    const raw = JSON.parse(readFileSync(p, 'utf8'));
+    const expiresAt = Number(raw?.expiresAt ?? 0);
+    const data = raw?.data as HistoricalDataSet | undefined;
+    if (!data || !Number.isFinite(expiresAt) || Date.now() >= expiresAt) return null;
+
+    serverOhlcvCache.set(cacheKey, data, Math.max(1, expiresAt - Date.now()));
     return data;
   } catch {
     return null;
   }
 }
 
-function setCachedData(mintAddress: string, data: HistoricalDataSet): void {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(`${CACHE_KEY_PREFIX}${mintAddress}`, JSON.stringify(data));
-  } catch {
-    // Storage full — clear old entries
-    clearOldCache();
+function setCachedData(cacheKey: string, data: HistoricalDataSet): void {
+  // Client-side cache
+  if (typeof localStorage !== 'undefined') {
     try {
-      localStorage.setItem(`${CACHE_KEY_PREFIX}${mintAddress}`, JSON.stringify(data));
+      localStorage.setItem(`${CACHE_KEY_PREFIX}${cacheKey}`, JSON.stringify(data));
     } catch {
-      // Still full, skip caching
+      // Storage full — clear old entries
+      clearOldCache();
+      try {
+        localStorage.setItem(`${CACHE_KEY_PREFIX}${cacheKey}`, JSON.stringify(data));
+      } catch {
+        // Still full, skip caching
+      }
     }
+    return;
+  }
+
+  // Server-side cache (Next API routes)
+  serverOhlcvCache.set(cacheKey, data, CACHE_EXPIRY_MS);
+
+  // Disk-backed fallback so big universes don't need to refetch every run.
+  try {
+    const now = Date.now();
+    ensureDiskCacheDir();
+    maybeCleanupDiskCache(now);
+    writeFileSync(
+      diskCachePath(cacheKey),
+      JSON.stringify({ expiresAt: now + DISK_CACHE_TTL_MS, data }),
+      'utf8',
+    );
+  } catch {
+    // ignore
   }
 }
 
@@ -296,25 +498,34 @@ function clearOldCache(): void {
 /**
  * Fetch OHLCV data for a single blue chip token.
  *
- * 3-tier fallback: DexScreener -> Birdeye -> Synthetic
+ * 2-tier fallback: GeckoTerminal (via DexScreener pair discovery) -> Birdeye
  */
 export async function fetchTokenHistory(
   token: BlueChipToken,
   currentPrice?: number,
 ): Promise<HistoricalDataSet> {
+  void currentPrice;
   // Check cache first
-  const cached = getCachedData(token.mintAddress);
-  if (cached && cached.candles.length > 100) {
+  const cacheKey = makeOhlcvCacheKey({
+    mintAddress: token.mintAddress,
+    resolution: '60',
+    maxCandles: 3000,
+    allowBirdeyeFallback: true,
+    birdeyeLookbackDays: 180,
+  });
+
+  const cached = getCachedData(cacheKey, token.mintAddress);
+  if (cached && cached.candles.length >= MIN_REAL_CANDLES) {
     return cached;
   }
 
-  // Tier 1: DexScreener chart API
+  // Tier 1: GeckoTerminal OHLCV via DexScreener pair discovery
   const pairAddress = await fetchBestPair(token.mintAddress);
   let candles: OHLCVCandle[] = [];
-  let source: OHLCVSource = 'dexscreener';
+  let source: OHLCVSource = 'geckoterminal';
 
   if (pairAddress) {
-    candles = await fetchOHLCVFromDexScreener(pairAddress);
+    candles = await fetchOHLCVFromGeckoTerminal(pairAddress, '60', 3000);
   }
 
   // Tier 2: Birdeye OHLCV API (if DexScreener returned insufficient data)
@@ -328,11 +539,9 @@ export async function fetchTokenHistory(
     }
   }
 
-  // Tier 3: Synthetic fallback (last resort)
-  if (candles.length < 100) {
-    const price = currentPrice || (candles.length > 0 ? candles[candles.length - 1].close : 1.0);
-    candles = generateSyntheticCandles(token, price);
-    source = 'synthetic';
+  // No synthetic fallback: require real candles.
+  if (candles.length < MIN_REAL_CANDLES) {
+    throw new Error(`Insufficient real OHLCV for ${token.ticker} (${candles.length} candles)`);
   }
 
   const dataset: HistoricalDataSet = {
@@ -344,7 +553,77 @@ export async function fetchTokenHistory(
     source,
   };
 
-  setCachedData(token.mintAddress, dataset);
+  setCachedData(cacheKey, dataset);
+  return dataset;
+}
+
+/**
+ * Fetch OHLCV data for any Solana SPL token mint address.
+ *
+ * Real-data only: GeckoTerminal OHLCV (via DexScreener pair discovery) with optional Birdeye fallback.
+ * Throws if insufficient candles (no synthetic generation).
+ */
+export async function fetchMintHistory(
+  mintAddress: string,
+  tokenSymbol: string = mintAddress.slice(0, 6),
+  options: FetchMintHistoryOptions = {},
+): Promise<HistoricalDataSet> {
+  const minCandles = options.minCandles ?? MIN_REAL_CANDLES;
+  const pairAddressOverride = (options.pairAddressOverride || '').trim();
+  const attemptBirdeyeIfCandlesBelow = options.attemptBirdeyeIfCandlesBelow ?? 100;
+  const allowBirdeyeFallback = options.allowBirdeyeFallback ?? true;
+  const resolution = options.resolution ?? '60';
+  const maxCandles = options.maxCandles ?? 2000;
+  const birdeyeLookbackDays = options.birdeyeLookbackDays ?? 180;
+
+  const cacheKey = makeOhlcvCacheKey({
+    mintAddress,
+    pairAddressOverride,
+    resolution,
+    maxCandles,
+    allowBirdeyeFallback,
+    birdeyeLookbackDays,
+  });
+
+  const cached = getCachedData(cacheKey, mintAddress);
+  if (cached && cached.candles.length >= minCandles) {
+    return cached;
+  }
+
+  const pairAddress = pairAddressOverride || (await fetchBestPair(mintAddress));
+  let candles: OHLCVCandle[] = [];
+  let source: OHLCVSource = 'geckoterminal';
+
+  if (pairAddress) {
+    // Use a smaller cap for batch universes; callers can raise if they need deeper history.
+    candles = await fetchOHLCVFromGeckoTerminal(pairAddress, resolution, maxCandles);
+  }
+
+  // Optional Birdeye fallback (use sparingly; public endpoint is heavily rate limited).
+  if (allowBirdeyeFallback && candles.length < Math.max(minCandles, attemptBirdeyeIfCandlesBelow)) {
+    const lookbackSec = Math.floor((Date.now() - birdeyeLookbackDays * 24 * 3600 * 1000) / 1000);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const birdeyeCandles = await fetchFromBirdeye(mintAddress, lookbackSec, nowSec);
+    if (birdeyeCandles.length >= minCandles) {
+      candles = birdeyeCandles;
+      source = 'birdeye';
+    }
+  }
+
+  if (candles.length < minCandles) {
+    throw new Error(`Insufficient real OHLCV for ${tokenSymbol} (${candles.length} candles)`);
+  }
+
+  const dataset: HistoricalDataSet = {
+    tokenSymbol,
+    mintAddress,
+    pairAddress: pairAddress || '',
+    candles,
+    fetchedAt: Date.now(),
+    source,
+  };
+
+  setCachedData(cacheKey, dataset);
   return dataset;
 }
 
@@ -380,7 +659,7 @@ export async function fetchAllBlueChipHistory(
         current: i + 1,
         total,
         currentToken: token.ticker,
-        status: data.source === 'synthetic' ? 'fetching' : 'cached',
+        status: 'cached',
       });
     } catch {
       onProgress?.({
@@ -417,173 +696,4 @@ export function clearHistoryCache(): void {
   for (const key of keys) {
     localStorage.removeItem(key);
   }
-}
-
-// ─── Memecoin Graduation Synthetic Data ───
-
-/**
- * Pattern distribution weights (based on real bags.fm graduation observations):
- *   15% moon, 35% pump_dump, 30% slow_bleed, 20% dead_on_arrival
- */
-const MEME_PATTERN_WEIGHTS: { pattern: MemeGraduationPattern; weight: number }[] = [
-  { pattern: 'moon', weight: 0.15 },
-  { pattern: 'pump_dump', weight: 0.35 },
-  { pattern: 'slow_bleed', weight: 0.30 },
-  { pattern: 'dead_on_arrival', weight: 0.20 },
-];
-
-/** Pick a pattern according to the weighted distribution */
-function pickMemePattern(): MemeGraduationPattern {
-  const r = Math.random();
-  let cumulative = 0;
-  for (const { pattern, weight } of MEME_PATTERN_WEIGHTS) {
-    cumulative += weight;
-    if (r <= cumulative) return pattern;
-  }
-  return 'slow_bleed'; // fallback (shouldn't reach here)
-}
-
-/**
- * Generate a single memecoin graduation candle set.
- *
- * Uses Ornstein-Uhlenbeck process with memecoin-calibrated parameters:
- *   - Hourly volatility: 15-40% (vs 0.2-0.5% for blue chips)
- *   - Volume: log-normal with high variance
- *   - Starting price: 0.00001 - 0.001 range (typical post-graduation)
- */
-function generateMemePatternCandles(
-  pattern: MemeGraduationPattern,
-): OHLCVCandle[] {
-  // 24-72 candles (1h resolution, 1-3 days of post-graduation life)
-  const numCandles = 24 + Math.floor(Math.random() * 49); // 24..72
-  const hourlyVol = 0.15 + Math.random() * 0.25; // 15-40%
-  const startPrice = 0.00001 + Math.random() * 0.00099; // 0.00001 - 0.001
-  const baseVolume = 10000 + Math.random() * 90000; // 10k-100k base
-  const now = Date.now();
-  const startTime = now - numCandles * 3600 * 1000;
-
-  const candles: OHLCVCandle[] = [];
-  let price = startPrice;
-
-  for (let i = 0; i < numCandles; i++) {
-    const timestamp = startTime + i * 3600 * 1000;
-    const open = price;
-    const progress = i / numCandles; // 0..1
-
-    // Pattern-specific drift
-    const drift = patternDrift(pattern, progress, startPrice, price);
-
-    // Ornstein-Uhlenbeck: mean-reverting random walk with pattern drift
-    const meanReversionPull = (startPrice - price) * 0.002;
-    const randomShock = (Math.random() - 0.5) * 2 * hourlyVol;
-    const change = drift + meanReversionPull + randomShock;
-    const close = Math.max(open * (1 + change), startPrice * 0.001); // Floor at 0.1% of start
-
-    // High/low with memecoin-level wicks
-    const wickFactor = hourlyVol * (0.3 + Math.random() * 0.7);
-    const high = Math.max(open, close) * (1 + Math.random() * wickFactor);
-    const low = Math.min(open, close) * (1 - Math.random() * wickFactor);
-
-    // Volume: log-normal with high variance (10x-100x spikes)
-    const volMultiplier = Math.exp((Math.random() - 0.5) * 4);
-    const volume = baseVolume * volMultiplier;
-
-    candles.push({ timestamp, open, high, low, close, volume });
-    price = close;
-  }
-
-  return candles;
-}
-
-/**
- * Compute per-candle drift component based on pattern archetype.
- *
- * The drift biases the random walk to produce the characteristic shape
- * of each pattern, while the O-U process adds realistic noise.
- */
-function patternDrift(
-  pattern: MemeGraduationPattern,
-  progress: number,
-  startPrice: number,
-  currentPrice: number,
-): number {
-  switch (pattern) {
-    case 'moon': {
-      // Sharp pump (3-10x) in first ~20%, then gradual decline (50-80% retrace)
-      if (progress < 0.2) {
-        // Strong upward drift during pump phase
-        return 0.15 + Math.random() * 0.25;
-      }
-      // Gradual retracement
-      const peakMultiple = currentPrice / startPrice;
-      if (peakMultiple > 2) {
-        return -0.02 - Math.random() * 0.04; // Slow bleed back
-      }
-      return -0.005; // Gentle decline
-    }
-
-    case 'pump_dump': {
-      // Quick 2-5x pump in first ~10%, crash within first ~30%
-      if (progress < 0.1) {
-        return 0.20 + Math.random() * 0.30; // Aggressive pump
-      }
-      if (progress < 0.3) {
-        return -0.15 - Math.random() * 0.20; // Aggressive dump
-      }
-      // Flat/slow decline after crash
-      return -0.01 + Math.random() * 0.005;
-    }
-
-    case 'slow_bleed': {
-      // Initial 20-50% pump, then steady decline
-      if (progress < 0.08) {
-        return 0.05 + Math.random() * 0.10; // Modest pump
-      }
-      // Steady downward pressure
-      return -0.02 - Math.random() * 0.02;
-    }
-
-    case 'dead_on_arrival': {
-      // Flat or immediate decline, no significant pump
-      return -0.01 - Math.random() * 0.03;
-    }
-  }
-}
-
-/**
- * Generate synthetic memecoin graduation candle sets for backtesting.
- *
- * Produces an array of candle sets, each representing a graduated memecoin's
- * price action with one of 4 pattern archetypes:
- *   - 15% "moon": sharp pump (3-10x), gradual decline
- *   - 35% "pump_dump": quick 2-5x, crash below entry
- *   - 30% "slow_bleed": modest pump, steady decline
- *   - 20% "dead_on_arrival": flat or immediate decline
- *
- * Each run produces unique candle sets due to randomized parameters.
- * Calibrated against real bags.fm graduation data observations.
- *
- * @param numTokens Number of synthetic token datasets to generate (default 100)
- */
-export function generateMemeGraduationCandles(
-  numTokens: number = 100,
-): MemeGraduationDataSet[] {
-  const datasets: MemeGraduationDataSet[] = [];
-
-  for (let i = 0; i < numTokens; i++) {
-    const pattern = pickMemePattern();
-    const candles = generateMemePatternCandles(pattern);
-
-    datasets.push({
-      tokenSymbol: `MEME_${pattern.toUpperCase()}_${i}`,
-      mintAddress: `synthetic_meme_${i}`,
-      pairAddress: '',
-      candles,
-      fetchedAt: Date.now(),
-      source: 'synthetic',
-      pattern,
-    });
-  }
-
-  return datasets;
 }

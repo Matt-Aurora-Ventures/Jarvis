@@ -2,9 +2,13 @@
 
 import { useEffect, useRef } from 'react';
 import { useSniperStore } from '@/stores/useSniperStore';
+import { usePhantomWallet } from '@/hooks/usePhantomWallet';
+import { filterOpenPositionsForActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
 
 const DEXSCREENER_TOKENS = 'https://api.dexscreener.com/tokens/v1/solana';
 const POLL_INTERVAL_MS = 3000;
+const MAX_CONSECUTIVE_ERRORS = 10;
+const BASE_BACKOFF_MS = 3_000;
 
 /**
  * Polls DexScreener batch API every 3s to update open position prices.
@@ -12,13 +16,21 @@ const POLL_INTERVAL_MS = 3000;
  * Updates the store's positions with currentPrice, pnlPercent, pnlSol.
  */
 export function usePnlTracker() {
+  const { address } = usePhantomWallet();
   const positions = useSniperStore((s) => s.positions);
+  const tradeSignerMode = useSniperStore((s) => s.tradeSignerMode);
+  const sessionWalletPubkey = useSniperStore((s) => s.sessionWalletPubkey);
   const updatePrices = useSniperStore((s) => s.updatePrices);
   const isPollingRef = useRef(false);
+  const errorCountRef = useRef(0);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const openPositions = positions.filter((p) => p.status === 'open');
+    const activeWallet = resolveActiveWallet(tradeSignerMode, sessionWalletPubkey, address);
+    const openPositions = filterOpenPositionsForActiveWallet(positions, activeWallet);
     if (openPositions.length === 0) return;
+
+    let mounted = true;
 
     const fetchPrices = async () => {
       if (isPollingRef.current) return;
@@ -35,14 +47,22 @@ export function usePnlTracker() {
         }
 
         const priceMap: Record<string, number> = {};
+        let batchErrors = 0;
 
         for (const batch of batches) {
           try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8_000); // 8s timeout
             const res = await fetch(`${DEXSCREENER_TOKENS}/${batch.join(',')}`, {
               headers: { Accept: 'application/json' },
+              signal: controller.signal,
             });
+            clearTimeout(timer);
 
-            if (!res.ok) continue;
+            if (!res.ok) {
+              batchErrors++;
+              continue;
+            }
 
             const pairs: any[] = await res.json();
 
@@ -65,14 +85,18 @@ export function usePnlTracker() {
               }
             }
           } catch {
-            // Silent — don't crash the loop on a single batch failure
+            batchErrors++;
+            // Silent -- don't crash the loop on a single batch failure
           }
         }
 
         // Fetch current SOL price for accurate SOL-denominated P&L
         let solPriceUsd: number | undefined;
         try {
-          const macroRes = await fetch('/api/macro');
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 5_000);
+          const macroRes = await fetch('/api/macro', { signal: controller.signal });
+          clearTimeout(timer);
           if (macroRes.ok) {
             const macroData = await macroRes.json();
             if (typeof macroData?.solPrice === 'number' && macroData.solPrice > 0) {
@@ -80,21 +104,39 @@ export function usePnlTracker() {
             }
           }
         } catch {
-          // SOL price unavailable — P&L will use approximation
+          // SOL price unavailable -- P&L will use approximation
         }
 
         if (Object.keys(priceMap).length > 0) {
           updatePrices(priceMap, solPriceUsd);
+          errorCountRef.current = 0; // Reset on success
+        } else if (batchErrors > 0) {
+          errorCountRef.current = Math.min(errorCountRef.current + 1, MAX_CONSECUTIVE_ERRORS);
+          console.warn(
+            `[usePnlTracker] All batches failed (${errorCountRef.current}/${MAX_CONSECUTIVE_ERRORS})`,
+          );
         }
       } finally {
         isPollingRef.current = false;
       }
+
+      // Schedule next poll with exponential backoff on consecutive errors
+      if (!mounted) return;
+      const backoff = errorCountRef.current > 0
+        ? Math.min(BASE_BACKOFF_MS * Math.pow(2, errorCountRef.current - 1), POLL_INTERVAL_MS * 10)
+        : POLL_INTERVAL_MS;
+      timeoutRef.current = setTimeout(fetchPrices, backoff);
     };
 
     // Initial fetch
     fetchPrices();
 
-    const interval = setInterval(fetchPrices, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [positions, updatePrices]);
+    return () => {
+      mounted = false;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [positions, updatePrices, address, tradeSignerMode, sessionWalletPubkey]);
 }

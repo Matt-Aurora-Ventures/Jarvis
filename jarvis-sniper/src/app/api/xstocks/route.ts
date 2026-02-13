@@ -4,6 +4,7 @@ import { ServerCache } from '@/lib/server-cache';
 import { getCachedTVData, XSTOCKS_TO_TV_SYMBOL } from '@/lib/tv-screener';
 import { calcTVEnhancedScoreDetailed } from '@/lib/tv-scoring';
 import type { TVStockData } from '@/lib/tv-screener';
+import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
 
 /**
  * xStocks / PreStocks / Indexes API route
@@ -102,10 +103,9 @@ function calcEquityScore(
   if (absChange1h >= 5) score += 5;
 
   // ─── Market Quality (0-20) ───
-  if (liq >= 500_000) score += 8;
-  else if (liq >= 100_000) score += 5;
-  else if (liq >= 50_000) score += 3;
-  else score += 1;
+  // Liquidity is NOT a quality signal for tokenized equities — the platform
+  // guarantees it. Instead, weight buy/sell health and trading activity depth.
+  score += 8; // Baseline: platform-backed liquidity
 
   if (bsRatio >= 1.0 && bsRatio <= 2.5 && totalTxns >= 10) {
     score += 7; // healthy buying
@@ -115,8 +115,9 @@ function calcEquityScore(
     score += 1;
   }
 
-  // Spread quality proxy (liq relative to volume)
-  if (liq > 200_000 && volLiqRatio > 0.3) score += 5;
+  // Activity depth proxy (transaction count relative to typical)
+  if (totalTxns >= 100) score += 5;
+  else if (totalTxns >= 20) score += 3;
   else score += 2;
 
   // ─── Asset Class Bonus (0-20) ───
@@ -156,6 +157,22 @@ function getCategoryTokens(category: string): TokenizedEquity[] {
 
 export async function GET(request: Request) {
   try {
+    // Rate limit check
+    const ip = getClientIp(request);
+    const limit = apiRateLimiter.check(ip);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { graduations: [], error: 'Rate limit exceeded' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((limit.retryAfterMs || 60_000) / 1000)),
+            'X-RateLimit-Remaining': '0',
+          },
+        },
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category') || 'XSTOCK';
     const tokens = getCategoryTokens(category);
@@ -169,7 +186,11 @@ export async function GET(request: Request) {
     const cached = xstocksCache.get(cacheKey);
     if (cached) {
       return NextResponse.json(cached, {
-        headers: { 'X-Cache': 'HIT' },
+        headers: {
+          'X-Cache': 'HIT',
+          'X-RateLimit-Remaining': String(limit.remaining),
+          'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+        },
       });
     }
 
@@ -249,17 +270,22 @@ export async function GET(request: Request) {
       };
     });
 
-    // Sort by liquidity descending (most liquid tokens first)
-    graduations.sort((a, b) => b.liquidity - a.liquidity);
+
+    // Sort by score descending (liquidity is not a signal for tokenized equities)
+    graduations.sort((a, b) => (b.score - a.score) || (b.volume_24h - a.volume_24h));
 
     const responseData = { graduations };
     xstocksCache.set(cacheKey, responseData, CACHE_TTL_MS);
 
     return NextResponse.json(responseData, {
-      headers: { 'X-Cache': 'MISS' },
+      headers: {
+        'X-Cache': 'MISS',
+        'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+      },
     });
   } catch (err) {
     console.error('xStocks API error:', err);
-    return NextResponse.json({ graduations: [], error: 'Internal error' }, { status: 500 });
+    // Graceful degradation: return empty graduations with 200 instead of 500
+    return NextResponse.json({ graduations: [], error: 'Internal error', _fallback: true });
   }
 }

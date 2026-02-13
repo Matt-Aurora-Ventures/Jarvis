@@ -3,7 +3,7 @@
  *
  * 1. Gets quote (if needed) + builds swap transaction via Bags SDK
  * 2. Injects priority fees (ComputeBudgetProgram) to prevent timeouts
- * 3. Passes partner key for referral revenue
+ * 3. Uses server-side Bags API key (x-api-key) so partner/segmenter fees apply
  * 4. Returns serialized VersionedTransaction as base64 for client signing
  *
  * Rate limiting: 20 req/min per IP (involves transaction building).
@@ -20,25 +20,30 @@ import {
   ComputeBudgetProgram,
 } from '@solana/web3.js';
 import { swapRateLimiter, getClientIp } from '@/lib/rate-limiter';
+import { checkSignerSolBalance } from '@/lib/solana-balance-guard';
+import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
 
-const RPC_URL = process.env.SOLANA_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
 const BAGS_API_KEY = process.env.BAGS_API_KEY || '';
-const REFERRAL_ACCOUNT = process.env.BAGS_REFERRAL_ACCOUNT || '';
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const SOL_RESERVE_LAMPORTS = 3_000_000;
 
 let _sdk: BagsSDK | null = null;
 let _connection: Connection | null = null;
+let _rpcUrl: string | null = null;
 
-function getConnection(): Connection {
-  if (!_connection) {
-    _connection = new Connection(RPC_URL, 'confirmed');
+function getConnection(rpcUrl: string): Connection {
+  if (!_connection || _rpcUrl !== rpcUrl) {
+    _connection = new Connection(rpcUrl, 'confirmed');
+    _rpcUrl = rpcUrl;
+    _sdk = null;
   }
   return _connection;
 }
 
-function getSDK(): BagsSDK {
+function getSDK(connection: Connection): BagsSDK {
   if (!_sdk) {
     if (!BAGS_API_KEY) throw new Error('BAGS_API_KEY not configured');
-    _sdk = new BagsSDK(BAGS_API_KEY, getConnection());
+    _sdk = new BagsSDK(BAGS_API_KEY, connection);
   }
   return _sdk;
 }
@@ -120,8 +125,51 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing userPublicKey' }, { status: 400 });
     }
 
-    const sdk = getSDK();
-    const connection = getConnection();
+    const rpcConfig = resolveServerRpcConfig();
+    if (!rpcConfig.ok || !rpcConfig.url) {
+      return NextResponse.json(
+        {
+          code: 'RPC_PROVIDER_UNAVAILABLE',
+          error: 'RPC provider unavailable',
+          diagnostic: rpcConfig.diagnostic,
+          source: rpcConfig.source,
+        },
+        { status: 503 },
+      );
+    }
+
+    const connection = getConnection(rpcConfig.url);
+
+    // Server-side fail-closed guard for SOL-funded buys.
+    // Prevents wasted swap builds when the signer wallet cannot cover buy amount + fee reserve.
+    const amountLamports = Number(amount);
+    const isSolInputBuy = String(inputMint || '') === SOL_MINT && Number.isFinite(amountLamports) && amountLamports > 0;
+    if (isSolInputBuy) {
+      const balance = await checkSignerSolBalance(
+        connection,
+        userPublicKey,
+        amountLamports,
+        SOL_RESERVE_LAMPORTS,
+      );
+      if (!balance.ok) {
+        console.warn(
+          `[API /bags/swap] INSUFFICIENT_SIGNER_SOL wallet=${userPublicKey} available=${balance.availableLamports} required=${balance.requiredLamports}`,
+        );
+        return NextResponse.json(
+          {
+            code: 'INSUFFICIENT_SIGNER_SOL',
+            error: 'Signer SOL balance is below required amount for this buy.',
+            availableLamports: balance.availableLamports,
+            requiredLamports: balance.requiredLamports,
+            availableSol: balance.availableSol,
+            requiredSol: balance.requiredSol,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    const sdk = getSDK(connection);
 
     // Get quote if not pre-supplied
     let quote = preQuote;
@@ -141,14 +189,12 @@ export async function POST(request: Request) {
       });
     }
 
-    // Build swap transaction with partner referral
-    const swapParams = {
+    // Build swap transaction via Bags SDK.
+    // Note: partner/segmenter attribution is tied to the server-side `x-api-key`.
+    const result = await sdk.trade.createSwapTransaction({
       quoteResponse: quote,
       userPublicKey: new PublicKey(userPublicKey),
-      ...(REFERRAL_ACCOUNT ? { referralAccount: new PublicKey(REFERRAL_ACCOUNT) } : {}),
-    };
-
-    const result = await sdk.trade.createSwapTransaction(swapParams as Parameters<typeof sdk.trade.createSwapTransaction>[0]);
+    });
 
     // Serialize base transaction
     let txBytes = result.transaction.serialize();

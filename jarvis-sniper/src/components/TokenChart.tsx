@@ -3,15 +3,16 @@
 import { X, Maximize2, Minimize2, ExternalLink, BarChart3, RefreshCw, GripHorizontal, Copy, Check, Loader2 } from 'lucide-react';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useSniperStore } from '@/stores/useSniperStore';
+import { useTheme } from '@/hooks/useTheme';
 
 type ChartProvider = 'birdeye' | 'dexscreener' | 'geckoterminal';
 
-function getChartUrl(mint: string, provider: ChartProvider): string {
+function getChartUrl(mint: string, provider: ChartProvider, theme: 'dark' | 'light'): string {
   switch (provider) {
     case 'birdeye':
-      return `https://birdeye.so/tv-widget/${mint}?chain=solana&viewMode=pair&chartInterval=15&chartType=CANDLE&chartLeftToolbar=show&theme=dark`;
+      return `https://birdeye.so/tv-widget/${mint}?chain=solana&viewMode=pair&chartInterval=15&chartType=CANDLE&chartLeftToolbar=show&theme=${theme}`;
     case 'dexscreener':
-      return `https://dexscreener.com/solana/${mint}?embed=1&theme=dark&trades=0&info=0`;
+      return `https://dexscreener.com/solana/${mint}?embed=1&theme=${theme}&trades=0&info=0`;
     case 'geckoterminal':
       return `https://www.geckoterminal.com/solana/tokens/${mint}?embed=1&info=0&swaps=0`;
   }
@@ -29,6 +30,7 @@ const DEFAULT_HEIGHT = 420;
 
 export function TokenChart() {
   const { selectedMint, setSelectedMint, graduations, positions } = useSniperStore();
+  const { theme } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [provider, setProvider] = useState<ChartProvider>('dexscreener');
   const [iframeKey, setIframeKey] = useState(0);
@@ -46,8 +48,8 @@ export function TokenChart() {
   const symbol = grad?.symbol || pos?.symbol || (selectedMint ? selectedMint.slice(0, 6) : '');
 
   const embedUrl = useMemo(
-    () => selectedMint ? getChartUrl(selectedMint, provider) : null,
-    [selectedMint, provider]
+    () => selectedMint ? getChartUrl(selectedMint, provider, theme) : null,
+    [selectedMint, provider, theme]
   );
 
   // Reset loading spinner whenever the chart source changes
@@ -167,9 +169,9 @@ export function TokenChart() {
       </div>
 
       {/* Chart iframe */}
-      <div className="flex-1 relative bg-black">
+      <div className="flex-1 relative bg-bg-primary">
         {chartLoading && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm gap-3">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-bg-primary/90 backdrop-blur-sm gap-3">
             <Loader2 className="w-6 h-6 text-accent-neon animate-spin" />
             <span className="text-[11px] font-mono text-text-muted">Loading chart...</span>
           </div>

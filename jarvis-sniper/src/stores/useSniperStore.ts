@@ -1,11 +1,105 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { BagsGraduation } from '@/lib/bags-api';
+import { isLegacyRecoveredPositionId, isReliableTradeForStats, sanitizePnlPercent } from '@/lib/position-reliability';
 
 export type StrategyMode = 'conservative' | 'balanced' | 'aggressive';
 export type TradeSignerMode = 'phantom' | 'session';
+export type AutomationState = 'idle' | 'scanning' | 'executing_buy' | 'cooldown' | 'closing_all' | 'paused' | 'tripped';
 
-export type AssetType = 'memecoin' | 'xstock' | 'prestock' | 'index' | 'bluechip';
+export type AssetType = 'memecoin' | 'xstock' | 'prestock' | 'index' | 'bluechip' | 'bags';
+export type PendingTxStatus = 'submitted' | 'settling' | 'confirmed' | 'failed' | 'unresolved';
+export type PendingTxKind = 'buy' | 'sell' | 'fund' | 'sweep';
+
+export interface PendingTxRecord {
+  signature: string;
+  kind: PendingTxKind;
+  mint?: string;
+  submittedAt: number;
+  lastCheckedAt?: number;
+  status: PendingTxStatus;
+  error?: string;
+  sourcePage?: string;
+}
+
+export interface ImportedHoldingMemoEntry {
+  wallet: string;
+  mint: string;
+  amountLamports: string;
+  importedAt: number;
+  lastSeenAt: number;
+}
+
+export interface RecentlyClosedMintMemoEntry {
+  wallet: string;
+  mint: string;
+  closedAt: number;
+  /** Token amount at (or just before) close, as raw lamports string when known. */
+  amountLamports?: string;
+  /** UI amount at (or just before) close, best-effort fallback when lamports unavailable. */
+  uiAmount?: number;
+}
+
+const MINT_REENTRY_COOLDOWN_MS = 15 * 60 * 1000;
+const RECENTLY_CLOSED_RETENTION_MS = 6 * 60 * 60 * 1000; // keep small + bounded for UI dust suppression
+
+function normalizeMint(mint: string | undefined | null): string {
+  return String(mint || '').trim();
+}
+
+function normalizeWalletForKey(wallet: string | null | undefined): string {
+  return String(wallet || '').trim().toLowerCase();
+}
+
+function computeDynamicMinBalanceGuard(budgetSol: number, configuredGuardSol: number): number {
+  const budget = Number.isFinite(budgetSol) ? budgetSol : 0;
+  const configured = Number.isFinite(configuredGuardSol) ? configuredGuardSol : 0;
+  const scaled = budget * 0.10; // 10% of budget
+  const floor = 0.005; // 0.005 SOL floor
+  // Never exceed configured guard; only reduce it for small budgets.
+  return Math.max(floor, Math.min(configured, scaled));
+}
+
+export function buildMintCooldownKey(
+  assetType: AssetType | undefined,
+  walletAddress: string | null | undefined,
+  mint: string | null | undefined,
+): string {
+  const asset = String(assetType || 'memecoin').trim().toLowerCase();
+  const wallet = normalizeWalletForKey(walletAddress) || 'unknown';
+  const normalizedMint = normalizeMint(mint).toLowerCase();
+  return `${asset}:${wallet}:${normalizedMint}`;
+}
+
+function buildImportedHoldingMemoKey(wallet: string, mint: string): string {
+  return `${normalizeWalletForKey(wallet)}:${normalizeMint(mint).toLowerCase()}`;
+}
+
+function buildRecentlyClosedMintKey(wallet: string, mint: string): string {
+  return buildImportedHoldingMemoKey(wallet, mint);
+}
+
+function dedupeGraduationsByMint(input: BagsGraduation[]): BagsGraduation[] {
+  const byMint = new Map<string, BagsGraduation>();
+  for (const g of input) {
+    const mint = normalizeMint(g?.mint);
+    if (!mint) continue;
+    const candidate: BagsGraduation = { ...g, mint };
+    const prev = byMint.get(mint);
+    if (!prev) {
+      byMint.set(mint, candidate);
+      continue;
+    }
+    // Keep the better card when the same mint appears from multiple sources.
+    const prevScore = Number(prev.score || 0);
+    const candScore = Number(candidate.score || 0);
+    const prevTs = Number(prev.graduation_time || 0);
+    const candTs = Number(candidate.graduation_time || 0);
+    const pick = candScore > prevScore || (candScore === prevScore && candTs >= prevTs) ? candidate : prev;
+    byMint.set(mint, pick);
+  }
+  return [...byMint.values()];
+}
 
 /** Proven strategy presets from backtesting 895+ tokens */
 export interface StrategyPreset {
@@ -16,12 +110,19 @@ export interface StrategyPreset {
   trades: number;
   config: Partial<SniperConfig>;
   assetType?: AssetType;
+  /** Optional primary WR threshold override for auto gate qualification. */
+  autoWrPrimaryOverridePct?: number;
+  strategyRevision?: string;
+  seedVersion?: string;
+  promotedFromRunId?: string;
   /** Set to true after this strategy has been backtested with real/calibrated data */
   backtested?: boolean;
-  /** If backtested, the data source used ('dexscreener' | 'birdeye' | 'synthetic-calibrated') */
+  /** If backtested, the data source used ('geckoterminal' | 'birdeye' | 'mixed' | 'client') */
   dataSource?: string;
   /** If backtested and win rate < 40% or profit factor < 1.0 */
   underperformer?: boolean;
+  /** Strategy disabled (e.g. failed backtest) */
+  disabled?: boolean;
 }
 
 /** Runtime backtest metadata for a strategy preset (persisted via Zustand) */
@@ -31,7 +132,28 @@ export interface BacktestMetaEntry {
   backtested: boolean;
   dataSource: string;
   underperformer: boolean;
+  /** Numeric win-rate (%) for machine-readable gating/ranking. */
+  winRatePct?: number;
+  /** Wilson 95% lower bound (%). */
+  winRateLower95Pct?: number;
+  /** Wilson 95% upper bound (%). */
+  winRateUpper95Pct?: number;
+  /** Numeric trade count for confidence gates (defaults to `trades` when omitted). */
+  totalTrades?: number;
+  /** Aggregate net P&L metric (percentage points) used for strategy ranking. */
+  netPnlPct?: number;
+  /** Numeric profit factor for tie-breaking when available. */
+  profitFactorValue?: number;
+  /** Sample-size gate for how much trust to place in the numbers */
+  stage?: 'tiny' | 'sanity' | 'stability' | 'promotion';
+  /** True once the strategy meets the 5,000+ trades promotion gate (sample-size only). */
+  promotionEligible?: boolean;
 }
+
+const STRATEGY_SEED_META = {
+  strategyRevision: 'v2-seed-2026-02-11',
+  seedVersion: 'seed-v2',
+} as const;
 
 /**
  * Strategy presets — ranked by OHLCV-validated performance (real candle data).
@@ -43,26 +165,27 @@ export interface BacktestMetaEntry {
 export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'pump_fresh_tight',
-    name: 'PUMP FRESH TIGHT (88% WR)',
-    description: 'Fresh pumpswap tokens with tight exits — 88.2% WR (v4 champion)',
-    winRate: '88.2% (17T)',
-    trades: 17,
+    name: 'PUMP FRESH TIGHT',
+    description: 'V2 seed: fresh pumpswap tokens with tighter risk envelope for real-data calibration',
+    winRate: 'Unverified',
+    trades: 0,
     assetType: 'memecoin',
+    autoWrPrimaryOverridePct: 50,
     config: {
-      stopLossPct: 20, takeProfitPct: 80, trailingStopPct: 8,
+      stopLossPct: 18, takeProfitPct: 45, trailingStopPct: 5,
       minLiquidityUsd: 5000, minScore: 40, maxTokenAgeHours: 24,
       strategyMode: 'conservative',
     },
   },
   {
     id: 'micro_cap_surge',
-    name: 'MICRO CAP SURGE (76% WR)',
-    description: 'Micro-cap tokens with 3x volume surge — 76.2% WR, huge TP potential',
-    winRate: '76.2%',
+    name: 'MICRO CAP SURGE',
+    description: 'V2 seed: micro-cap surge strategy with reduced extreme stop/target values',
+    winRate: 'Unverified',
     trades: 0,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 45, takeProfitPct: 250, trailingStopPct: 20,
+      stopLossPct: 28, takeProfitPct: 140, trailingStopPct: 12,
       minLiquidityUsd: 3000, minScore: 30, maxTokenAgeHours: 24,
       strategyMode: 'aggressive',
     },
@@ -70,103 +193,103 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'elite',
     name: 'SNIPER ELITE',
-    description: '$100K+ Liq, V/L≥2, Age<100h, 10%+ Mom, Hours Gate',
+    description: 'V2 seed: strict high-liquidity memecoin filter with moderated exits',
     winRate: 'NEW — strictest filter',
     trades: 0,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 15, takeProfitPct: 60, trailingStopPct: 8,
+      stopLossPct: 15, takeProfitPct: 45, trailingStopPct: 5,
       minLiquidityUsd: 100000, minMomentum1h: 10, maxTokenAgeHours: 100,
-      minVolLiqRatio: 2.0, tradingHoursGate: true, strategyMode: 'conservative',
+      minVolLiqRatio: 2.0, tradingHoursGate: false, strategyMode: 'conservative',
     },
   },
   {
     id: 'momentum',
     name: 'MOMENTUM',
-    description: 'V/L≥3 + B/S 1.2-2 + 5%+ Mom',
-    winRate: '75% (13T)',
-    trades: 13,
+    description: 'V2 seed: momentum continuation with tighter profit capture and reduced trail',
+    winRate: 'Unverified',
+    trades: 0,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
+      stopLossPct: 18, takeProfitPct: 45, trailingStopPct: 5,
       minLiquidityUsd: 50000, minScore: 0, minMomentum1h: 5,
-      minVolLiqRatio: 1.5, tradingHoursGate: true, strategyMode: 'conservative',
+      minVolLiqRatio: 1.5, tradingHoursGate: false, strategyMode: 'conservative',
     },
   },
   {
     id: 'insight_j',
     name: 'INSIGHT-J',
-    description: 'Liq≥$50K + Age<100h + 10%+ Mom',
-    winRate: '86% (7T)',
-    trades: 7,
+    description: 'V2 seed: selective quality/momentum setup for younger tokens',
+    winRate: 'Unverified',
+    trades: 0,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
+      stopLossPct: 18, takeProfitPct: 50, trailingStopPct: 5,
       minLiquidityUsd: 50000, maxTokenAgeHours: 100, minMomentum1h: 10,
-      tradingHoursGate: true, strategyMode: 'conservative',
+      tradingHoursGate: false, strategyMode: 'conservative',
     },
   },
   {
     id: 'hybrid_b',
     name: 'HYBRID-B v6',
-    description: 'Balanced — Liq≥$50K + Hours Gate',
-    winRate: '~90% (est)',
-    trades: 10,
+    description: 'V2 seed: balanced setup with moderated exits and standard quality filters',
+    winRate: 'Unverified',
+    trades: 0,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
+      stopLossPct: 18, takeProfitPct: 50, trailingStopPct: 5,
       minLiquidityUsd: 50000, minMomentum1h: 5, minVolLiqRatio: 1.0,
-      tradingHoursGate: true, strategyMode: 'conservative',
+      tradingHoursGate: false, strategyMode: 'conservative',
     },
   },
   {
     id: 'let_it_ride',
     name: 'LET IT RIDE',
-    description: '20/100 + 5% trail — max gains',
-    winRate: '100% (10T)',
-    trades: 10,
+    description: 'V2 seed: long-runner profile with moderated target and tighter trailing control',
+    winRate: 'Unverified',
+    trades: 0,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 20, takeProfitPct: 100, trailingStopPct: 5,
-      minLiquidityUsd: 50000, minMomentum1h: 5, tradingHoursGate: true,
+      stopLossPct: 20, takeProfitPct: 75, trailingStopPct: 3,
+      minLiquidityUsd: 50000, minMomentum1h: 5, tradingHoursGate: false,
       strategyMode: 'aggressive',
     },
   },
   {
     id: 'loose',
     name: 'WIDE NET',
-    description: 'Original loose filters — more trades, lower WR',
-    winRate: '49% (54T)',
-    trades: 54,
+    description: 'V2 seed: broad scanner with wider SL and lower TP for faster mean capture',
+    winRate: 'Unverified',
+    trades: 0,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
+      stopLossPct: 22, takeProfitPct: 45, trailingStopPct: 5,
       minLiquidityUsd: 25000, minMomentum1h: 0, maxTokenAgeHours: 500,
       minVolLiqRatio: 0.5, tradingHoursGate: false, strategyMode: 'conservative',
     },
   },
   {
     id: 'genetic_best',
-    name: 'GENETIC BEST (83% WR)',
-    description: 'Genetic optimizer champion — SL35/TP200/Trail12, fresh tokens, $3K liq',
-    winRate: '83.3% (GA)',
+    name: 'GENETIC BEST',
+    description: 'V2 seed: genetic baseline with reduced risk and target extremity for stability',
+    winRate: 'Unverified',
     trades: 0,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 35, takeProfitPct: 200, trailingStopPct: 12,
+      stopLossPct: 24, takeProfitPct: 120, trailingStopPct: 8,
       minLiquidityUsd: 3000, minScore: 43, maxTokenAgeHours: 24,
       strategyMode: 'aggressive',
     },
   },
   {
     id: 'genetic_v2',
-    name: 'GENETIC V2 (71% WR)',
-    description: 'Optimizer v2 champion — SL45/TP207/Trail10, volume surge filter',
-    winRate: '71.1% (GA v2)',
-    trades: 45,
+    name: 'GENETIC V2',
+    description: 'V2 seed: genetic v2 baseline tuned for realistic risk-reward during calibration',
+    winRate: 'Unverified',
+    trades: 0,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 45, takeProfitPct: 207, trailingStopPct: 10,
+      stopLossPct: 28, takeProfitPct: 140, trailingStopPct: 8,
       minLiquidityUsd: 5000, minScore: 0,
       strategyMode: 'aggressive',
     },
@@ -177,65 +300,65 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'xstock_intraday',
     name: 'XSTOCK INTRADAY',
-    description: 'US stocks — 1.5% SL, 3% TP — captures normal intraday swings',
+    description: 'US stocks — V2 seed intraday envelope',
     winRate: 'Calibrated to 1-3% daily ranges',
     trades: 0,
     assetType: 'xstock',
     config: {
-      stopLossPct: 1.5, takeProfitPct: 3, trailingStopPct: 1,
-      minLiquidityUsd: 10000, minScore: 40,
+      stopLossPct: 3, takeProfitPct: 10, trailingStopPct: 2.2,
+      minLiquidityUsd: 0, minScore: 40,
       strategyMode: 'conservative',
     },
   },
   {
     id: 'xstock_swing',
     name: 'XSTOCK SWING',
-    description: 'US stocks — 3% SL, 8% TP — multi-day momentum plays',
+    description: 'US stocks — V2 seed multi-day swing profile',
     winRate: 'Calibrated to weekly stock ranges',
     trades: 0,
     assetType: 'xstock',
     config: {
-      stopLossPct: 3, takeProfitPct: 8, trailingStopPct: 2,
-      minLiquidityUsd: 10000, minScore: 50,
+      stopLossPct: 6, takeProfitPct: 18, trailingStopPct: 4,
+      minLiquidityUsd: 0, minScore: 50,
       strategyMode: 'balanced',
     },
   },
   {
     id: 'prestock_speculative',
     name: 'PRESTOCK SPEC',
-    description: 'Pre-IPO — wider SL/TP for higher vol (5% SL, 15% TP)',
+    description: 'Pre-IPO — V2 seed speculative profile',
     winRate: 'Pre-IPO volatility adjusted',
     trades: 0,
     assetType: 'prestock',
     config: {
-      stopLossPct: 5, takeProfitPct: 15, trailingStopPct: 3,
-      minLiquidityUsd: 5000, minScore: 30,
+      stopLossPct: 8, takeProfitPct: 24, trailingStopPct: 5,
+      minLiquidityUsd: 0, minScore: 30,
       strategyMode: 'aggressive',
     },
   },
   {
     id: 'index_intraday',
     name: 'INDEX INTRADAY',
-    description: 'SPY/QQQ — 0.8% SL, 1.5% TP — tight index scalping',
+    description: 'SPY/QQQ — V2 seed intraday index profile',
     winRate: 'Calibrated to SPY 0.5-1.5% daily range',
     trades: 0,
     assetType: 'index',
     config: {
-      stopLossPct: 0.8, takeProfitPct: 1.5, trailingStopPct: 0.5,
-      minLiquidityUsd: 20000, minScore: 50,
+      stopLossPct: 2.8, takeProfitPct: 9, trailingStopPct: 2,
+      minLiquidityUsd: 0, minScore: 50,
       strategyMode: 'conservative',
     },
   },
   {
     id: 'index_leveraged',
     name: 'INDEX TQQQ SWING',
-    description: 'TQQQ 3x leveraged — 3% SL, 8% TP — amplified index moves',
+    description: 'TQQQ 3x leveraged — V2 seed amplified index swing profile',
     winRate: 'Leveraged index calibrated',
     trades: 0,
     assetType: 'index',
     config: {
-      stopLossPct: 3, takeProfitPct: 8, trailingStopPct: 2,
-      minLiquidityUsd: 20000, minScore: 40,
+      stopLossPct: 7, takeProfitPct: 20, trailingStopPct: 4.5,
+      minLiquidityUsd: 0, minScore: 40,
       strategyMode: 'aggressive',
     },
   },
@@ -253,12 +376,12 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bluechip_mean_revert',
     name: 'BLUE CHIP MEAN REVERT',
-    description: 'Buy oversold blue chips — tight 3% SL, 8% TP, 2% trail. SOL/JUP/RAY/PYTH class.',
-    winRate: 'Systematic: 55-65% WR, 1.8:1 R/R',
+    description: 'V2 seed: buy oversold blue chips with reduced stop-out pressure',
+    winRate: 'Seed (Not Promoted)',
     trades: 0,
     assetType: 'bluechip',
     config: {
-      stopLossPct: 3, takeProfitPct: 8, trailingStopPct: 2,
+      stopLossPct: 6, takeProfitPct: 12, trailingStopPct: 3,
       minLiquidityUsd: 200000, minScore: 55,
       maxTokenAgeHours: 99999,
       minMomentum1h: 0, // mean reversion buys dips — no momentum requirement
@@ -269,12 +392,12 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bluechip_trend_follow',
     name: 'BLUE CHIP TREND',
-    description: 'Ride momentum on established tokens — 5% SL, 15% TP, 4% trail. Catches multi-day moves.',
-    winRate: 'Systematic: 45-55% WR, 2.5:1 R/R',
+    description: 'V2 seed: trend-following on established tokens with wider trend envelope',
+    winRate: 'Seed (Not Promoted)',
     trades: 0,
     assetType: 'bluechip',
     config: {
-      stopLossPct: 5, takeProfitPct: 15, trailingStopPct: 4,
+      stopLossPct: 7, takeProfitPct: 18, trailingStopPct: 5,
       minLiquidityUsd: 200000, minScore: 60,
       maxTokenAgeHours: 99999,
       minMomentum1h: 3, // require momentum for trend following
@@ -286,12 +409,12 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bluechip_breakout',
     name: 'BLUE CHIP BREAKOUT',
-    description: 'High-volume breakouts on top tokens — 4% SL, 12% TP, 3% trail. Needs volume surge.',
-    winRate: 'Systematic: 50-60% WR, 2:1 R/R',
+    description: 'V2 seed: high-volume breakout setup on top tokens with moderated exits',
+    winRate: 'Seed (Not Promoted)',
     trades: 0,
     assetType: 'bluechip',
     config: {
-      stopLossPct: 4, takeProfitPct: 12, trailingStopPct: 3,
+      stopLossPct: 6, takeProfitPct: 16, trailingStopPct: 4,
       minLiquidityUsd: 200000, minScore: 65,
       maxTokenAgeHours: 99999,
       minMomentum1h: 5, // needs clear breakout momentum
@@ -299,12 +422,131 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
       strategyMode: 'balanced',
     },
   },
-];
+  // ─── Bags.fm — Locked Liquidity, Community-Driven Tokens ─────────────────
+  // All bags.fm tokens have locked liquidity (enforced by the platform).
+  // Liquidity is NOT a risk factor — we focus on community, momentum, longevity.
+  // Typical bags pattern: pump at launch → dump → second pump on community/builder activity.
+  {
+    id: 'bags_fresh_snipe',
+    name: 'BAGS FRESH SNIPE',
+    description: 'V2 seed: snipes fresh bags launches with moderated risk envelope.',
+    winRate: 'Bags: locked liq, community-driven',
+    trades: 0,
+    assetType: 'bags',
+    config: {
+      stopLossPct: 18, takeProfitPct: 55, trailingStopPct: 5,
+      minLiquidityUsd: 0, // bags locks liquidity — no minimum needed
+      minScore: 35, maxTokenAgeHours: 48,
+      strategyMode: 'conservative',
+    },
+  },
+  {
+    id: 'bags_momentum',
+    name: 'BAGS MOMENTUM',
+    description: 'V2 seed: catches post-launch momentum on bags tokens with balanced exits.',
+    winRate: 'Bags: momentum-driven entries',
+    trades: 0,
+    assetType: 'bags',
+    config: {
+      stopLossPct: 20, takeProfitPct: 100, trailingStopPct: 8,
+      minLiquidityUsd: 0,
+      minScore: 30, maxTokenAgeHours: 168,
+      minMomentum1h: 5,
+      strategyMode: 'balanced',
+    },
+  },
+  {
+    id: 'bags_value',
+    name: 'BAGS VALUE HUNTER',
+    description: 'V2 seed: high-quality bags tokens with stable, lower-volatility exit profile.',
+    winRate: 'Bags: quality-focused',
+    trades: 0,
+    assetType: 'bags',
+    config: {
+      stopLossPct: 12, takeProfitPct: 30, trailingStopPct: 4,
+      minLiquidityUsd: 0,
+      minScore: 55, maxTokenAgeHours: 720,
+      strategyMode: 'conservative',
+    },
+  },
+  {
+    id: 'bags_dip_buyer',
+    name: 'BAGS DIP BUYER',
+    description: 'V2 seed: buys post-launch dips targeting second-cycle recovery moves.',
+    winRate: 'Bags: mean-reversion play',
+    trades: 0,
+    assetType: 'bags',
+    config: {
+      stopLossPct: 25, takeProfitPct: 120, trailingStopPct: 8,
+      minLiquidityUsd: 0,
+      minScore: 25, maxTokenAgeHours: 336, // 2 weeks
+      minMomentum1h: 0, // buys dips — no momentum needed
+      strategyMode: 'aggressive',
+    },
+  },
+  {
+    id: 'bags_bluechip',
+    name: 'BAGS BLUE CHIP',
+    description: 'V2 seed: established bags tokens with defensive exits and quality gating.',
+    winRate: 'Bags: established tokens',
+    trades: 0,
+    assetType: 'bags',
+    config: {
+      stopLossPct: 12, takeProfitPct: 28, trailingStopPct: 4,
+      minLiquidityUsd: 0,
+      minScore: 60,
+      maxTokenAgeHours: 99999,
+      strategyMode: 'conservative',
+    },
+  },
+  {
+    id: 'bags_conservative',
+    name: 'BAGS CONSERVATIVE',
+    description: 'V2 seed: conservative bags profile prioritizing survival and consistency.',
+    winRate: 'Seed (Not Promoted)',
+    trades: 0,
+    assetType: 'bags',
+    config: {
+      stopLossPct: 14, takeProfitPct: 35, trailingStopPct: 5,
+      minLiquidityUsd: 0,
+      minScore: 40, maxTokenAgeHours: 336,
+      strategyMode: 'conservative',
+    },
+  },
+  {
+    id: 'bags_aggressive',
+    name: 'BAGS AGGRESSIVE',
+    description: 'V2 seed: aggressive bags profile with tempered but still high-conviction reward targets.',
+    winRate: 'Seed (Not Promoted)',
+    trades: 0,
+    assetType: 'bags',
+    config: {
+      stopLossPct: 30, takeProfitPct: 180, trailingStopPct: 12,
+      minLiquidityUsd: 0,
+      minScore: 10, maxTokenAgeHours: 336,
+      strategyMode: 'aggressive',
+    },
+  },
+  {
+    id: 'bags_elite',
+    name: 'BAGS ELITE',
+    description: 'V2 seed: strict high-score bags filter with controlled exits.',
+    winRate: 'Seed (Not Promoted)',
+    trades: 0,
+    assetType: 'bags',
+    config: {
+      stopLossPct: 14, takeProfitPct: 45, trailingStopPct: 6,
+      minLiquidityUsd: 0,
+      minScore: 70, maxTokenAgeHours: 336,
+      strategyMode: 'balanced',
+    },
+  },
+].map((preset) => ({ ...preset, ...STRATEGY_SEED_META } as StrategyPreset));
 
-/** UTC hours proven profitable in 928-token OHLCV backtest */
-export const PROVEN_TRADING_HOURS = [2, 4, 8, 11, 14, 20, 21];
-/** UTC hours with 0% win rate in backtest — hard avoid */
-export const DEAD_HOURS = [1, 3, 5, 6, 7, 9, 12, 13, 16, 19, 22, 23];
+/** Deprecated: hour-based gating is disabled globally (crypto trades 24/7). */
+export const PROVEN_TRADING_HOURS: number[] = [];
+/** Deprecated: hour-based gating is disabled globally (crypto trades 24/7). */
+export const DEAD_HOURS: number[] = [];
 
 export interface SniperConfig {
   stopLossPct: number;
@@ -316,6 +558,18 @@ export interface SniperConfig {
   /** HYBRID-B gate: skip tokens under this liquidity (USD). */
   minLiquidityUsd: number;
   autoSnipe: boolean;
+  /** Enable backtest win-rate gate for automatic strategy selection. */
+  autoWrGateEnabled: boolean;
+  /** Primary win-rate threshold (%) for automatic strategy selection. */
+  autoWrPrimaryPct: number;
+  /** Fallback win-rate threshold (%) when no strategy passes primary. */
+  autoWrFallbackPct: number;
+  /** Minimum sample size before a strategy can pass WR gating. */
+  autoWrMinTrades: number;
+  /** WR gate metric selector. */
+  autoWrMethod: 'wilson95_lower' | 'point';
+  /** Asset scope for WR gate enforcement. */
+  autoWrScope: 'memecoin_bags' | 'all' | 'memecoin';
   useJito: boolean;
   slippageBps: number;
   /** Strategy mode: conservative (PUMP_FRESH_TIGHT 20/80), balanced (SURGE_HUNTER 20/100), aggressive (MICRO_CAP_SURGE 45/250) */
@@ -330,7 +584,7 @@ export interface SniperConfig {
   maxTokenAgeHours: number;
   /** Min Vol/Liq ratio. Backtest: >=1.0 is 8x edge vs <0.5. */
   minVolLiqRatio: number;
-  /** Only trade during proven UTC hours (OHLCV backtest). Prevents 0% WR hour entries. */
+  /** Deprecated compatibility flag; hour gating is hard-disabled for continuous 24/7 trading. */
   tradingHoursGate: boolean;
   /** Minimum minutes since graduation before sniping (avoids post-graduation dumps). 0 = disabled. */
   minAgeMinutes: number;
@@ -343,6 +597,18 @@ export interface SniperConfig {
   maxDailyLossSol: number;
   /** Halt if remaining budget drops below X SOL (capital preservation) */
   minBalanceGuardSol: number;
+  /** Per-asset-class circuit breaker overrides. Missing keys fall back to global limits. */
+  perAssetBreakerConfig: Record<AssetType, PerAssetBreakerConfig>;
+}
+
+/** Per-asset-class circuit breaker overrides (CIRCUIT-02: Phase 2.3) */
+export interface PerAssetBreakerConfig {
+  /** Max consecutive losses for this asset class (0 = use global default) */
+  maxConsecutiveLosses: number;
+  /** Max daily loss in SOL for this asset class (0 = use global default) */
+  maxDailyLossSol: number;
+  /** Cooldown in minutes after breaker trips before auto-reset (0 = no auto-reset, manual only) */
+  cooldownMinutes: number;
 }
 
 /** Per-asset-class circuit breaker counters (CIRCUIT-01) */
@@ -353,6 +619,8 @@ export interface AssetClassBreaker {
   consecutiveLosses: number;
   dailyLossSol: number;
   dailyResetAt: number;
+  /** Timestamp when cooldown expires and breaker auto-resets (0 = no cooldown active) */
+  cooldownUntil: number;
 }
 
 export interface CircuitBreakerState {
@@ -386,6 +654,8 @@ export interface Position {
   mint: string;
   symbol: string;
   name: string;
+  /** Position creation source (used for automation dedupe/reporting). */
+  entrySource?: 'auto' | 'manual';
   /** Wallet that holds the tokens (lets risk monitoring continue even if Phantom disconnects). */
   walletAddress?: string;
   entryPrice: number;
@@ -435,11 +705,27 @@ export interface Position {
   onChainSlTp?: boolean;
   /** Asset class this position belongs to (for per-asset circuit breakers) */
   assetType?: AssetType;
+  /**
+   * Recovered/imported position from on-chain sync.
+   * Manual-only positions are excluded from automated SL/TP execution
+   * until explicitly re-opened as a normal strategy position.
+   */
+  manualOnly?: boolean;
+  /** Optional provenance for recovered positions */
+  recoveredFrom?: 'onchain-sync';
+  /** Reconciled by on-chain sync because no live balance exists for active wallet. */
+  reconciled?: boolean;
+  /** Reconciliation reason enum for auditability. */
+  reconciledReason?: 'no_onchain_balance' | 'buy_tx_unresolved' | 'buy_tx_failed';
+  /** Reconciliation timestamp (ms). */
+  reconciledAt?: number;
 }
 
 export interface ExecutionEvent {
   id: string;
   type: 'snipe' | 'exit_pending' | 'tp_exit' | 'sl_exit' | 'manual_exit' | 'error' | 'skip' | 'info';
+  /** Optional lifecycle marker for truthful tx-state logging. */
+  phase?: 'attempt' | 'submitted' | 'confirmed' | 'failed';
   symbol: string;
   mint: string;
   amount?: number;
@@ -671,6 +957,12 @@ const DEFAULT_CONFIG: SniperConfig = {
   // Users can still raise this to $40K/$50K for higher-quality entries.
   minLiquidityUsd: 25000,
   autoSnipe: false,
+  autoWrGateEnabled: true,
+  autoWrPrimaryPct: 70,
+  autoWrFallbackPct: 50,
+  autoWrMinTrades: 1000,
+  autoWrMethod: 'wilson95_lower',
+  autoWrScope: 'memecoin_bags',
   useJito: true,
   slippageBps: 150,
   strategyMode: 'conservative',
@@ -680,13 +972,22 @@ const DEFAULT_CONFIG: SniperConfig = {
   minMomentum1h: 5,        // Require 5%+ upward momentum (was 0% — let everything through)
   maxTokenAgeHours: 200,   // ↓ from 500h — young tokens have 188% more alpha
   minVolLiqRatio: 1.0,     // ↑ from 0.5 — tighter filter for vol/liq edge
-  tradingHoursGate: true,  // Only trade during OHLCV-proven hours (blocks 11 dead hours)
+  tradingHoursGate: false, // Hour gating disabled for continuous operation
   minAgeMinutes: 2,       // Don't snipe tokens that graduated < 2 min ago (post-grad dumps)
   // Circuit breaker: halt sniping on cascading losses to protect capital
   circuitBreakerEnabled: true,
-  maxConsecutiveLosses: 3,     // 3 losses in a row = halt
+  maxConsecutiveLosses: 9,     // 3x fail tolerance: 9 losses in a row = halt
   maxDailyLossSol: 0.5,       // 0.5 SOL daily loss limit
   minBalanceGuardSol: 0.05,   // Stop if budget remaining < 0.05 SOL
+  // Per-asset circuit breaker overrides (Phase 2.3)
+  perAssetBreakerConfig: {
+    memecoin:  { maxConsecutiveLosses: 9, maxDailyLossSol: 0.3, cooldownMinutes: 15 },
+    bags:      { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
+    bluechip:  { maxConsecutiveLosses: 15, maxDailyLossSol: 1.0, cooldownMinutes: 30 },
+    xstock:    { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
+    index:     { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
+    prestock:  { maxConsecutiveLosses: 9, maxDailyLossSol: 0.3, cooldownMinutes: 15 },
+  },
 };
 
 /** Monotonic counter to prevent duplicate keys when multiple snipes fire in same ms */
@@ -699,6 +1000,8 @@ interface SniperState {
   setStrategyMode: (mode: StrategyMode) => void;
   loadPreset: (presetId: string) => void;
   activePreset: string;
+  /** Monotonic strategy revision. Bumped whenever algo selection/config changes. */
+  strategyEpoch: number;
   assetFilter: AssetType;
   loadBestEver: (cfg: Record<string, any>) => void;
 
@@ -735,15 +1038,39 @@ interface SniperState {
   /** Close a position with proper status and stats tracking.
    * @param exitSolReceived — actual SOL from the sell tx (for accurate P&L). */
   closePosition: (id: string, status: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' | 'closed', txHash?: string, exitSolReceived?: number) => void;
+  /**
+   * Reconcile a local position against on-chain truth without counting win/loss stats.
+   * Intended for stale/phantom rows where no reliable executed exit exists.
+   */
+  reconcilePosition: (
+    id: string,
+    reason: 'no_onchain_balance' | 'buy_tx_unresolved' | 'buy_tx_failed',
+    opts?: { releaseBudget?: boolean },
+  ) => void;
 
   // Snipe action — creates position + logs execution
   snipeToken: (grad: BagsGraduation & Record<string, any>) => void;
 
   // Track which tokens were already sniped (prevents duplicates)
   snipedMints: Set<string>;
+  /** Re-entry cooldown per asset+wallet+mint. */
+  mintCooldowns: Record<string, number>;
+  setMintCooldown: (key: string, nextEligibleAt: number) => void;
+  clearExpiredMintCooldowns: (now?: number) => void;
 
   // Track tokens that were evaluated and skipped (prevents skip-spam in logs)
   skippedMints: Set<string>;
+
+  /** Suppress repeated "Import Missing Holdings" prompts unless balances change materially. */
+  importedHoldingsMemo: Record<string, ImportedHoldingMemoEntry>;
+  recordImportedHolding: (wallet: string, mint: string, amountLamports: string) => void;
+  updateImportedHoldingSeen: (wallet: string, mint: string, amountLamports: string, seenAt?: number) => void;
+  pruneImportedHoldingMemo: (wallet: string, liveHoldingsByMint: string[]) => void;
+
+  /** Recently closed positions (per wallet+mint) used to suppress post-sell dust re-import prompts. */
+  recentlyClosedMints: Record<string, RecentlyClosedMintMemoEntry>;
+  recordRecentlyClosedMint: (wallet: string, mint: string, memo: Omit<RecentlyClosedMintMemoEntry, 'wallet' | 'mint'>) => void;
+  pruneRecentlyClosedMints: (maxAgeMs?: number) => void;
 
   // Watchlist — track tokens to monitor
   watchlist: string[];
@@ -757,6 +1084,33 @@ interface SniperState {
   // Execution Log
   executionLog: ExecutionEvent[];
   addExecution: (event: ExecutionEvent) => void;
+  /** Global safety lock for new entries (used during Close All / emergency ops). */
+  executionPaused: boolean;
+  /** Temporary safety gate after a debug reset; requires explicit re-arm flow. */
+  autoResetRequired: boolean;
+  /** Timestamp for last debug reset action. */
+  lastAutoResetAt?: number;
+  setExecutionPaused: (paused: boolean, reason?: string) => void;
+  /** Debug-only recovery action: disable auto/session and require fresh activation settings. */
+  resetAutoForRecovery: () => void;
+  /** Automation lifecycle state for UI/debug telemetry. */
+  automationState: AutomationState;
+  setAutomationState: (state: AutomationState) => void;
+  /** Heartbeat timestamp for long-running orchestration visibility. */
+  automationHeartbeatAt: number;
+  touchAutomationHeartbeat: () => void;
+  /** Global operation lock to block new buys while critical operations are running. */
+  operationLock: { active: boolean; reason: string; mode: 'none' | 'close_all' | 'maintenance' };
+  acquireOperationLock: (reason: string, mode?: 'close_all' | 'maintenance') => void;
+  releaseOperationLock: () => void;
+  /** Route-independent transaction reconciliation state. */
+  pendingTxs: Record<string, PendingTxRecord>;
+  txReconcilerRunning: boolean;
+  setTxReconcilerRunning: (running: boolean) => void;
+  registerPendingTx: (record: PendingTxRecord) => void;
+  updatePendingTx: (signature: string, patch: Partial<PendingTxRecord>) => void;
+  finalizePendingTx: (signature: string, status: Extract<PendingTxStatus, 'confirmed' | 'failed' | 'unresolved'>, error?: string) => void;
+  pruneOldPendingTxs: (maxAgeMs?: number) => void;
 
   // Stats
   totalPnl: number;
@@ -782,13 +1136,21 @@ interface SniperState {
     backtested: boolean;
     dataSource: string;
     underperformer: boolean;
+    winRatePct?: number;
+    winRateLower95Pct?: number;
+    winRateUpper95Pct?: number;
+    totalTrades?: number;
+    netPnlPct?: number;
+    profitFactorValue?: number;
+    stage?: 'tiny' | 'sanity' | 'stability' | 'promotion';
+    promotionEligible?: boolean;
   }>) => void;
 
   // Reset — clears positions, executions, stats, sniped mints
   resetSession: () => void;
 }
 
-function makeDefaultAssetBreaker(): AssetClassBreaker {
+export function makeDefaultAssetBreaker(): AssetClassBreaker {
   return {
     tripped: false,
     reason: '',
@@ -796,6 +1158,7 @@ function makeDefaultAssetBreaker(): AssetClassBreaker {
     consecutiveLosses: 0,
     dailyLossSol: 0,
     dailyResetAt: Date.now() + 86_400_000,
+    cooldownUntil: 0,
   };
 }
 
@@ -809,6 +1172,7 @@ function makeDefaultCircuitBreaker(): CircuitBreakerState {
     dailyResetAt: Date.now() + 86_400_000,
     perAsset: {
       memecoin: makeDefaultAssetBreaker(),
+      bags: makeDefaultAssetBreaker(),
       bluechip: makeDefaultAssetBreaker(),
       xstock: makeDefaultAssetBreaker(),
       index: makeDefaultAssetBreaker(),
@@ -822,6 +1186,7 @@ export const useSniperStore = create<SniperState>()(
     (set, get) => ({
   config: DEFAULT_CONFIG,
   activePreset: 'pump_fresh_tight',
+  strategyEpoch: 0,
   assetFilter: 'memecoin' as AssetType,
   tradeSignerMode: 'phantom',
   setTradeSignerMode: (mode) => set({ tradeSignerMode: mode }),
@@ -833,7 +1198,12 @@ export const useSniperStore = create<SniperState>()(
     const positions = trailChanged
       ? s.positions.map((p) => p.status === 'open' ? { ...p, highWaterMarkPct: Math.max(p.pnlPercent, 0), exitPending: undefined } : p)
       : s.positions;
-    return { config: { ...s.config, ...partial }, skippedMints: new Set(), positions };
+    return {
+      config: { ...s.config, ...partial },
+      skippedMints: new Set(),
+      positions,
+      strategyEpoch: s.strategyEpoch + 1,
+    };
   }),
   loadPreset: (presetId) => {
     const preset = STRATEGY_PRESETS.find((p) => p.id === presetId);
@@ -849,6 +1219,7 @@ export const useSniperStore = create<SniperState>()(
         config: { ...s.config, ...preset.config },
         skippedMints: new Set(),
         positions,
+        strategyEpoch: s.strategyEpoch + 1,
       };
     });
   },
@@ -871,6 +1242,7 @@ export const useSniperStore = create<SniperState>()(
         takeProfitPct: p.tp,
         trailingStopPct: p.trail,
       },
+      strategyEpoch: s.strategyEpoch + 1,
     };
   }),
   loadBestEver: (cfg) => set((s) => ({
@@ -887,17 +1259,24 @@ export const useSniperStore = create<SniperState>()(
     },
   })),
 
-  // Budget / Authorization
-  budget: { budgetSol: 0.1, authorized: false, spent: 0 },
+  // Budget / Authorization — default 0.5 SOL is a reasonable starting budget for new users
+  budget: { budgetSol: 0.5, authorized: false, spent: 0 },
   setBudgetSol: (sol) => set((s) => ({
     budget: { ...s.budget, budgetSol: Math.round(sol * 1000) / 1000 },
   })),
   authorizeBudget: () => set((s) => ({
     budget: { ...s.budget, authorized: true, spent: 0 },
-    // Auto-set position size = budget / maxPositions (rounded to 2dp)
+    // Safety: never INCREASE per-trade size on authorize (prevents accidental "all-in" sizing).
+    // We only clamp DOWN to a reasonable per-slot suggestion (budget / maxPositions).
     config: {
       ...s.config,
-      maxPositionSol: Math.round((s.budget.budgetSol / s.config.maxConcurrentPositions) * 100) / 100,
+      maxPositionSol: (() => {
+        const maxPos = Number(s.config.maxPositionSol || 0);
+        const slots = Math.max(1, Number(s.config.maxConcurrentPositions || 1));
+        const suggested = Math.round((s.budget.budgetSol / slots) * 100) / 100;
+        const next = Math.min(maxPos, suggested);
+        return Math.max(0.001, Math.round(next * 100) / 100);
+      })(),
     },
   })),
   deauthorizeBudget: () => set((s) => ({
@@ -910,9 +1289,9 @@ export const useSniperStore = create<SniperState>()(
   },
 
   graduations: [],
-  setGraduations: (grads) => set({ graduations: grads }),
+  setGraduations: (grads) => set({ graduations: dedupeGraduationsByMint(grads).slice(0, 220) }),
   addGraduation: (grad) => set((s) => ({
-    graduations: [grad, ...s.graduations].slice(0, 100),
+    graduations: dedupeGraduationsByMint([grad, ...s.graduations]).slice(0, 220),
   })),
 
   positions: [],
@@ -928,6 +1307,17 @@ export const useSniperStore = create<SniperState>()(
     positions: s.positions.map((p) => {
       const newPrice = priceMap[p.mint];
       if (newPrice == null || p.status !== 'open') return p;
+      // Recovered/manual-only holdings are tracked for visibility + manual close,
+      // but excluded from performance math to prevent distorted metrics.
+      if (p.manualOnly) {
+        return {
+          ...p,
+          currentPrice: newPrice,
+          pnlPercent: 0,
+          pnlSol: 0,
+          highWaterMarkPct: p.highWaterMarkPct ?? 0,
+        };
+      }
       const pnlPercent = p.entryPrice > 0 ? ((newPrice - p.entryPrice) / p.entryPrice) * 100 : 0;
       // SOL-denominated P&L: use actual token holdings + SOL price for real positions
       let pnlSol: number;
@@ -954,13 +1344,25 @@ export const useSniperStore = create<SniperState>()(
 
     execCounter++;
 
-    // Use actual sell proceeds when available, otherwise fall back to price estimate
-    const realPnlSol = exitSolReceived != null
+    // Use actual sell proceeds when available, otherwise fall back to price estimate.
+    // Guard against bad/unknown cost basis (manual recovered holdings, dust, zero-ish invested)
+    // to prevent absurd win/loss and recent-close percentages.
+    const rawPnlSol = exitSolReceived != null
       ? exitSolReceived - pos.solInvested
       : pos.pnlSol;
-    const realPnlPct = exitSolReceived != null
+    const rawPnlPct = exitSolReceived != null && pos.solInvested > 0
       ? ((exitSolReceived - pos.solInvested) / pos.solInvested) * 100
       : pos.pnlPercent;
+    const hasReliableCostBasis = isReliableTradeForStats({
+      id: pos.id,
+      manualOnly: pos.manualOnly,
+      recoveredFrom: pos.recoveredFrom,
+      solInvested: pos.solInvested,
+      pnlPercent: rawPnlPct,
+      status: pos.status,
+    });
+    const realPnlSol = hasReliableCostBasis ? rawPnlSol : 0;
+    const realPnlPct = hasReliableCostBasis ? rawPnlPct : 0;
 
     // Trail stop above entry is a win, below entry is a loss
     const isWin = realPnlPct >= 0;
@@ -971,10 +1373,13 @@ export const useSniperStore = create<SniperState>()(
       : 'manual_exit';
 
     // Manual exits count toward win/loss too (based on whether profitable)
-    const countAsWin = exitType === 'tp_exit' || (exitType === 'manual_exit' && isWin);
-    const countAsLoss = exitType === 'sl_exit' || (exitType === 'manual_exit' && !isWin);
+    const countAsWin = hasReliableCostBasis && (exitType === 'tp_exit' || (exitType === 'manual_exit' && isWin));
+    const countAsLoss = hasReliableCostBasis && (exitType === 'sl_exit' || (exitType === 'manual_exit' && !isWin));
+    const countAsTrade = hasReliableCostBasis;
 
-    const pnlLabel = exitSolReceived != null
+    const pnlLabel = !hasReliableCostBasis
+      ? 'cost basis unavailable (excluded from stats)'
+      : exitSolReceived != null
       ? `${realPnlSol >= 0 ? '+' : ''}${realPnlSol.toFixed(4)} SOL (real)`
       : `${realPnlPct.toFixed(1)}% (est)`;
 
@@ -984,7 +1389,7 @@ export const useSniperStore = create<SniperState>()(
       symbol: pos.symbol,
       mint: pos.mint,
       amount: pos.solInvested,
-      pnlPercent: realPnlPct,
+      pnlPercent: hasReliableCostBasis ? realPnlPct : undefined,
       txHash,
       timestamp: Date.now(),
       reason: `${status === 'trail_stop' ? 'TRAIL STOP' : status === 'expired' ? 'EXPIRED' : status.replace('_', ' ').toUpperCase()} — ${pnlLabel}`,
@@ -1028,6 +1433,7 @@ export const useSniperStore = create<SniperState>()(
       const cfg = s.config;
       if (cfg.circuitBreakerEnabled && !cb.tripped) {
         const budgetRemaining = s.budget.budgetSol - Math.max(0, s.budget.spent - pos.solInvested);
+        const guard = computeDynamicMinBalanceGuard(s.budget.budgetSol, cfg.minBalanceGuardSol);
         if (cfg.maxConsecutiveLosses > 0 && cb.consecutiveLosses >= cfg.maxConsecutiveLosses) {
           cb.tripped = true;
           cb.reason = `${cb.consecutiveLosses} consecutive losses (global)`;
@@ -1036,23 +1442,70 @@ export const useSniperStore = create<SniperState>()(
           cb.tripped = true;
           cb.reason = `Daily loss ${cb.dailyLossSol.toFixed(3)} SOL >= ${cfg.maxDailyLossSol} limit (global)`;
           cb.trippedAt = now;
-        } else if (cfg.minBalanceGuardSol > 0 && budgetRemaining < cfg.minBalanceGuardSol) {
+        } else if (guard > 0 && budgetRemaining < guard) {
           cb.tripped = true;
-          cb.reason = `Budget remaining ${budgetRemaining.toFixed(3)} SOL < ${cfg.minBalanceGuardSol} guard`;
+          cb.reason = `Budget remaining ${budgetRemaining.toFixed(3)} SOL < ${guard.toFixed(3)} guard`;
           cb.trippedAt = now;
         }
       }
 
       // Check per-asset trip conditions (isolate losses by asset class)
+      // Use per-asset config limits when available, fall back to global
+      const assetCfg = cfg.perAssetBreakerConfig?.[posAssetType];
+      const assetMaxLosses = assetCfg?.maxConsecutiveLosses || cfg.maxConsecutiveLosses;
+      const assetMaxDailyLoss = assetCfg?.maxDailyLossSol || cfg.maxDailyLossSol;
+      const assetCooldownMs = (assetCfg?.cooldownMinutes || 0) * 60_000;
+
       if (cfg.circuitBreakerEnabled && !ab.tripped) {
-        if (cfg.maxConsecutiveLosses > 0 && ab.consecutiveLosses >= cfg.maxConsecutiveLosses) {
+        if (assetMaxLosses > 0 && ab.consecutiveLosses >= assetMaxLosses) {
           ab.tripped = true;
           ab.reason = `${ab.consecutiveLosses} consecutive ${posAssetType} losses`;
           ab.trippedAt = now;
-        } else if (cfg.maxDailyLossSol > 0 && ab.dailyLossSol >= cfg.maxDailyLossSol) {
+          ab.cooldownUntil = assetCooldownMs > 0 ? now + assetCooldownMs : 0;
+        } else if (assetMaxDailyLoss > 0 && ab.dailyLossSol >= assetMaxDailyLoss) {
           ab.tripped = true;
-          ab.reason = `${posAssetType} daily loss ${ab.dailyLossSol.toFixed(3)} SOL >= limit`;
+          ab.reason = `${posAssetType} daily loss ${ab.dailyLossSol.toFixed(3)} SOL >= ${assetMaxDailyLoss} SOL`;
           ab.trippedAt = now;
+          ab.cooldownUntil = assetCooldownMs > 0 ? now + assetCooldownMs : 0;
+        }
+      }
+
+      const nextSniped = new Set(s.snipedMints);
+      nextSniped.delete(pos.mint);
+
+      let nextMintCooldowns = s.mintCooldowns;
+      if (!pos.manualOnly && pos.recoveredFrom !== 'onchain-sync') {
+        const walletKey =
+          String(pos.walletAddress || (s.tradeSignerMode === 'session' ? s.sessionWalletPubkey : 'phantom-shared') || '').trim() || 'unknown';
+        const cooldownKey = buildMintCooldownKey(pos.assetType || s.assetFilter, walletKey, pos.mint);
+        nextMintCooldowns = {
+          ...s.mintCooldowns,
+          [cooldownKey]: now + MINT_REENTRY_COOLDOWN_MS,
+        };
+      }
+
+      // Record recently-closed mints so post-sell residues (often missing price data) don't
+      // re-trigger "Import Missing Holdings" prompts or block reconciliation.
+      const walletKeyForClose =
+        String(pos.walletAddress || (s.tradeSignerMode === 'session' ? s.sessionWalletPubkey : 'phantom-shared') || '').trim() || 'unknown';
+      const walletNorm = normalizeWalletForKey(walletKeyForClose) || 'unknown';
+      const mintNorm = normalizeMint(pos.mint).toLowerCase();
+      const closeMemoKey = buildRecentlyClosedMintKey(walletNorm, mintNorm);
+      const nextRecentlyClosedMints: Record<string, RecentlyClosedMintMemoEntry> = {
+        ...(s.recentlyClosedMints || {}),
+        [closeMemoKey]: {
+          wallet: walletNorm,
+          mint: mintNorm,
+          closedAt: now,
+          amountLamports: typeof pos.amountLamports === 'string' ? pos.amountLamports : undefined,
+          uiAmount: Number.isFinite(Number(pos.amount)) ? Number(pos.amount) : undefined,
+        },
+      };
+      // Prune old entries to keep persisted state bounded.
+      for (const [k, v] of Object.entries(nextRecentlyClosedMints)) {
+        const closedAt = Number((v as any)?.closedAt || 0);
+        if (!Number.isFinite(closedAt) || closedAt <= 0 || now - closedAt > RECENTLY_CLOSED_RETENTION_MS) {
+          delete nextRecentlyClosedMints[k];
         }
       }
 
@@ -1065,22 +1518,193 @@ export const useSniperStore = create<SniperState>()(
           exitSolReceived,
           realPnlSol,
           realPnlPercent: realPnlPct,
+          pnlSol: realPnlSol,
+          pnlPercent: realPnlPct,
         } : p),
         executionLog: [execEvent, ...s.executionLog].slice(0, 200),
         totalPnl: s.totalPnl + realPnlSol,
         winCount: countAsWin ? s.winCount + 1 : s.winCount,
         lossCount: countAsLoss ? s.lossCount + 1 : s.lossCount,
-        totalTrades: s.totalTrades + 1,
+        totalTrades: countAsTrade ? s.totalTrades + 1 : s.totalTrades,
         budget: { ...s.budget, spent: Math.max(0, s.budget.spent - pos.solInvested) },
+        snipedMints: nextSniped,
+        mintCooldowns: nextMintCooldowns,
+        recentlyClosedMints: nextRecentlyClosedMints,
         circuitBreaker: cb,
-        // Auto-disable autoSnipe when breaker trips
-        config: cb.tripped ? { ...s.config, autoSnipe: false } : s.config,
+        // Breaker pauses execution but does not change user intent (auto toggle stays as-is).
+        config: s.config,
       };
     });
   },
+  reconcilePosition: (id, reason, opts) => {
+    const state = get();
+    const pos = state.positions.find((p) => p.id === id);
+    if (!pos || pos.status !== 'open') return;
+
+    const now = Date.now();
+    const shouldReleaseBudget = opts?.releaseBudget
+      ?? (!pos.manualOnly && pos.recoveredFrom !== 'onchain-sync');
+    const spentDelta = shouldReleaseBudget ? Math.max(0, Number(pos.solInvested || 0)) : 0;
+
+    set((s) => ({
+      positions: s.positions.map((p) => (
+        p.id === id
+          ? {
+              ...p,
+              status: 'closed',
+              pnlPercent: 0,
+              pnlSol: 0,
+              realPnlPercent: 0,
+              realPnlSol: 0,
+              isClosing: false,
+              exitPending: undefined,
+              reconciled: true,
+              reconciledReason: reason,
+              reconciledAt: now,
+            }
+          : p
+      )),
+      budget: {
+        ...s.budget,
+        spent: Math.max(0, Number(s.budget.spent || 0) - spentDelta),
+      },
+      snipedMints: new Set([...s.snipedMints].filter((mint) => mint !== pos.mint)),
+    }));
+  },
 
   snipedMints: new Set(),
+  mintCooldowns: {},
+  setMintCooldown: (key, nextEligibleAt) => set((s) => {
+    const normalizedKey = String(key || '').trim().toLowerCase();
+    if (!normalizedKey || !Number.isFinite(nextEligibleAt) || nextEligibleAt <= 0) return s;
+    return {
+      mintCooldowns: {
+        ...s.mintCooldowns,
+        [normalizedKey]: nextEligibleAt,
+      },
+    };
+  }),
+  clearExpiredMintCooldowns: (now = Date.now()) => set((s) => {
+    const entries = Object.entries(s.mintCooldowns || {});
+    if (entries.length === 0) return s;
+    const next: Record<string, number> = {};
+    let changed = false;
+    for (const [key, ts] of entries) {
+      if (!Number.isFinite(ts) || ts <= now) {
+        changed = true;
+        continue;
+      }
+      next[key] = ts;
+    }
+    return changed ? { mintCooldowns: next } : s;
+  }),
   skippedMints: new Set(),
+  importedHoldingsMemo: {},
+  recordImportedHolding: (wallet, mint, amountLamports) => set((s) => {
+    const walletNorm = normalizeWalletForKey(wallet);
+    const mintNorm = normalizeMint(mint).toLowerCase();
+    if (!walletNorm || !mintNorm) return s;
+    const key = buildImportedHoldingMemoKey(walletNorm, mintNorm);
+    const now = Date.now();
+    return {
+      importedHoldingsMemo: {
+        ...s.importedHoldingsMemo,
+        [key]: {
+          wallet: walletNorm,
+          mint: mintNorm,
+          amountLamports: String(amountLamports || '0'),
+          importedAt: s.importedHoldingsMemo[key]?.importedAt || now,
+          lastSeenAt: now,
+        },
+      },
+    };
+  }),
+  updateImportedHoldingSeen: (wallet, mint, amountLamports, seenAt) => set((s) => {
+    const walletNorm = normalizeWalletForKey(wallet);
+    const mintNorm = normalizeMint(mint).toLowerCase();
+    if (!walletNorm || !mintNorm) return s;
+    const key = buildImportedHoldingMemoKey(walletNorm, mintNorm);
+    const existing = s.importedHoldingsMemo[key];
+    if (!existing) return s;
+    return {
+      importedHoldingsMemo: {
+        ...s.importedHoldingsMemo,
+        [key]: {
+          ...existing,
+          amountLamports: String(amountLamports || existing.amountLamports || '0'),
+          lastSeenAt: Number(seenAt || Date.now()),
+        },
+      },
+    };
+  }),
+  pruneImportedHoldingMemo: (wallet, liveHoldingsByMint) => set((s) => {
+    const walletNorm = normalizeWalletForKey(wallet);
+    if (!walletNorm) return s;
+    const live = new Set((liveHoldingsByMint || []).map((m) => normalizeMint(m).toLowerCase()).filter(Boolean));
+    const now = Date.now();
+    const retentionMs = 24 * 60 * 60 * 1000; // retain suppression memory for 24h after mint disappears
+    const next: Record<string, ImportedHoldingMemoEntry> = {};
+    let changed = false;
+    for (const [key, value] of Object.entries(s.importedHoldingsMemo || {})) {
+      if (value.wallet !== walletNorm) {
+        next[key] = value;
+        continue;
+      }
+      if (live.has(value.mint)) {
+        next[key] = value;
+      } else {
+        if (now - Number(value.lastSeenAt || value.importedAt || 0) < retentionMs) {
+          next[key] = value;
+        } else {
+          changed = true;
+        }
+      }
+    }
+    return changed ? { importedHoldingsMemo: next } : s;
+  }),
+
+  recentlyClosedMints: {},
+  recordRecentlyClosedMint: (wallet, mint, memo) => set((s) => {
+    const walletNorm = normalizeWalletForKey(wallet) || 'unknown';
+    const mintNorm = normalizeMint(mint).toLowerCase();
+    if (!mintNorm) return s;
+    const key = buildRecentlyClosedMintKey(walletNorm, mintNorm);
+    const now = Date.now();
+    const next: Record<string, RecentlyClosedMintMemoEntry> = {
+      ...(s.recentlyClosedMints || {}),
+      [key]: {
+        wallet: walletNorm,
+        mint: mintNorm,
+        closedAt: Number((memo as any)?.closedAt || now),
+        amountLamports: (memo as any)?.amountLamports ? String((memo as any).amountLamports) : undefined,
+        uiAmount: Number.isFinite(Number((memo as any)?.uiAmount)) ? Number((memo as any).uiAmount) : undefined,
+      },
+    };
+    // Prune old entries to keep persisted state bounded.
+    for (const [k, v] of Object.entries(next)) {
+      const closedAt = Number((v as any)?.closedAt || 0);
+      if (!Number.isFinite(closedAt) || closedAt <= 0 || now - closedAt > RECENTLY_CLOSED_RETENTION_MS) {
+        delete next[k];
+      }
+    }
+    return { recentlyClosedMints: next };
+  }),
+  pruneRecentlyClosedMints: (maxAgeMs = RECENTLY_CLOSED_RETENTION_MS) => set((s) => {
+    const now = Date.now();
+    const entries = Object.entries(s.recentlyClosedMints || {});
+    if (entries.length === 0) return s;
+    const next: Record<string, RecentlyClosedMintMemoEntry> = {};
+    let changed = false;
+    for (const [k, v] of entries) {
+      const closedAt = Number((v as any)?.closedAt || 0);
+      if (!Number.isFinite(closedAt) || closedAt <= 0 || now - closedAt > maxAgeMs) {
+        changed = true;
+        continue;
+      }
+      next[k] = v;
+    }
+    return changed ? { recentlyClosedMints: next } : s;
+  }),
 
   // Watchlist
   watchlist: [],
@@ -1093,24 +1717,53 @@ export const useSniperStore = create<SniperState>()(
 
   snipeToken: (grad) => {
     const state = get();
-    const { config, positions, snipedMints, skippedMints, budget } = state;
+    const { config, positions, snipedMints, skippedMints, budget, mintCooldowns } = state;
 
     // Guard: budget not authorized
     if (!budget.authorized) return;
+    if (state.operationLock.active) return;
 
     // Guard: circuit breaker tripped (global or per-asset)
     if (state.circuitBreaker.tripped) return;
     const assetBreaker = state.circuitBreaker.perAsset[state.assetFilter];
-    if (assetBreaker?.tripped) return;
-
-    // Guard: already sniped
-    if (snipedMints.has(grad.mint)) return;
+    if (assetBreaker?.tripped) {
+      // Check cooldown expiry — auto-reset if cooldown has passed
+      if (assetBreaker.cooldownUntil > 0 && Date.now() >= assetBreaker.cooldownUntil) {
+        // Auto-reset this asset's breaker (cooldown expired)
+        set((s) => {
+          const cb = { ...s.circuitBreaker, perAsset: { ...s.circuitBreaker.perAsset } };
+          cb.perAsset[s.assetFilter] = {
+            ...makeDefaultAssetBreaker(),
+            dailyLossSol: assetBreaker.dailyLossSol,
+            dailyResetAt: assetBreaker.dailyResetAt,
+          };
+          return { circuitBreaker: cb };
+        });
+        // Don't return — allow the snipe to proceed after reset
+      } else {
+        return; // Still in cooldown, block the snipe
+      }
+    }
 
     // Guard: already evaluated and skipped — prevents skip-spam in logs
     if (skippedMints.has(grad.mint)) return;
 
+    // Guard: mint cooldown active (asset+wallet+mint scoped)
+    const fallbackWallet = state.tradeSignerMode === 'session'
+      ? state.sessionWalletPubkey
+      : 'phantom-shared';
+    const cooldownKey = buildMintCooldownKey(state.assetFilter, fallbackWallet, grad.mint);
+    const cooldownUntil = Number(mintCooldowns[cooldownKey] || 0);
+    if (cooldownUntil > Date.now()) return;
+
     // Guard: at capacity
-    const openCount = positions.filter(p => p.status === 'open').length;
+    const openCount = positions.filter((p) => {
+      if (p.status !== 'open') return false;
+      if (p.manualOnly) return false;
+      if (p.recoveredFrom === 'onchain-sync') return false;
+      if (p.isClosing) return false;
+      return true;
+    }).length;
     if (openCount >= config.maxConcurrentPositions) return;
 
     // Guard: insufficient budget remaining
@@ -1139,14 +1792,8 @@ export const useSniperStore = create<SniperState>()(
       }));
     };
 
-    // Gate 0: Trading hours — block entries during dead hours (11/24 hours have 0% WR)
-    if (config.tradingHoursGate) {
-      const nowUtcHour = new Date().getUTCHours();
-      if (DEAD_HOURS.includes(nowUtcHour)) {
-        logSkipOnce(`Dead hour (${nowUtcHour}:00 UTC) — ${DEAD_HOURS.length} hours blocked`);
-        return;
-      }
-    }
+    // Gate 0 (disabled): do not hard-block by UTC "dead hours".
+    // Requirement: continuous trading flow without hour-based hard pauses.
 
     // Gate 0.5: Smart entry delay — skip tokens that graduated too recently
     if (config.minAgeMinutes > 0) {
@@ -1265,6 +1912,144 @@ export const useSniperStore = create<SniperState>()(
   addExecution: (event) => set((s) => ({
     executionLog: [event, ...s.executionLog].slice(0, 200),
   })),
+  executionPaused: false,
+  autoResetRequired: false,
+  lastAutoResetAt: undefined,
+  automationState: 'idle',
+  setAutomationState: (state) => set({ automationState: state }),
+  automationHeartbeatAt: 0,
+  touchAutomationHeartbeat: () => set({ automationHeartbeatAt: Date.now() }),
+  operationLock: { active: false, reason: '', mode: 'none' },
+  acquireOperationLock: (reason, mode = 'maintenance') => set({
+    operationLock: { active: true, reason, mode },
+  }),
+  releaseOperationLock: () => set({
+    operationLock: { active: false, reason: '', mode: 'none' },
+  }),
+  pendingTxs: {},
+  txReconcilerRunning: false,
+  setTxReconcilerRunning: (running) => set({ txReconcilerRunning: running }),
+  registerPendingTx: (record) => set((s) => {
+    const signature = String(record.signature || '').trim();
+    if (!signature) return s;
+    const existing = s.pendingTxs[signature];
+    return {
+      pendingTxs: {
+        ...s.pendingTxs,
+        [signature]: {
+          signature,
+          kind: record.kind,
+          mint: record.mint || existing?.mint,
+          submittedAt: existing?.submittedAt || Number(record.submittedAt || Date.now()),
+          lastCheckedAt: record.lastCheckedAt || existing?.lastCheckedAt,
+          status: record.status || existing?.status || 'submitted',
+          error: record.error || existing?.error,
+          sourcePage: record.sourcePage || existing?.sourcePage,
+        },
+      },
+    };
+  }),
+  updatePendingTx: (signature, patch) => set((s) => {
+    const key = String(signature || '').trim();
+    if (!key || !s.pendingTxs[key]) return s;
+    return {
+      pendingTxs: {
+        ...s.pendingTxs,
+        [key]: {
+          ...s.pendingTxs[key],
+          ...patch,
+          signature: key,
+          lastCheckedAt: patch.lastCheckedAt ?? Date.now(),
+        },
+      },
+    };
+  }),
+  finalizePendingTx: (signature, status, error) => set((s) => {
+    const key = String(signature || '').trim();
+    const existing = s.pendingTxs[key];
+    if (!key || !existing) return s;
+    if (existing.status === 'confirmed' || existing.status === 'failed' || existing.status === 'unresolved') {
+      return s;
+    }
+    return {
+      pendingTxs: {
+        ...s.pendingTxs,
+        [key]: {
+          ...existing,
+          status,
+          error: error ?? existing.error,
+          lastCheckedAt: Date.now(),
+        },
+      },
+    };
+  }),
+  pruneOldPendingTxs: (maxAgeMs = 6 * 60 * 60 * 1000) => set((s) => {
+    const now = Date.now();
+    const next: Record<string, PendingTxRecord> = {};
+    for (const [sig, rec] of Object.entries(s.pendingTxs)) {
+      const age = now - Number(rec.submittedAt || 0);
+      const isFinal = rec.status === 'confirmed' || rec.status === 'failed' || rec.status === 'unresolved';
+      if (isFinal && age > maxAgeMs) continue;
+      next[sig] = rec;
+    }
+    return { pendingTxs: next };
+  }),
+  setExecutionPaused: (paused, reason) => set((s) => {
+    if (s.executionPaused === paused && !reason) return s;
+    const now = Date.now();
+    let nextLog = s.executionLog;
+    if (reason) {
+      execCounter++;
+      nextLog = [{
+        id: `exec-${now}-${execCounter}`,
+        type: 'info' as const,
+        symbol: 'SYSTEM',
+        mint: '',
+        amount: 0,
+        reason,
+        timestamp: now,
+      }, ...s.executionLog].slice(0, 200);
+    }
+    return {
+      executionPaused: paused,
+      // Do not mutate user intent (auto toggle). Pausing gates execution only.
+      config: s.config,
+      automationState: paused ? 'paused' : (s.automationState === 'paused' ? 'idle' : s.automationState),
+      executionLog: nextLog,
+    };
+  }),
+  resetAutoForRecovery: () => set((s) => {
+    const now = Date.now();
+    execCounter++;
+    const event: ExecutionEvent = {
+      id: `exec-${now}-${execCounter}`,
+      type: 'info',
+      symbol: 'SYSTEM',
+      mint: '',
+      amount: 0,
+      phase: 'failed',
+      reason: 'AUTO_STOP_RESET_AUTO: Auto + session mode disabled. Re-arm budget/max settings before enabling auto again.',
+      timestamp: now,
+    };
+    return {
+      config: { ...s.config, autoSnipe: false },
+      budget: { ...s.budget, authorized: false, spent: Math.max(0, Number(s.budget.spent || 0)) },
+      tradeSignerMode: 'phantom',
+      sessionWalletPubkey: null,
+      executionPaused: false,
+      operationLock: { active: false, reason: '', mode: 'none' },
+      pendingTxs: {},
+      txReconcilerRunning: false,
+      snipedMints: new Set(),
+      mintCooldowns: {},
+      skippedMints: new Set(),
+      autoResetRequired: true,
+      lastAutoResetAt: now,
+      automationState: 'idle',
+      automationHeartbeatAt: 0,
+      executionLog: [event, ...s.executionLog].slice(0, 200),
+    };
+  }),
 
   totalPnl: 0,
   winCount: 0,
@@ -1289,6 +2074,14 @@ export const useSniperStore = create<SniperState>()(
         backtested: r.backtested,
         dataSource: r.dataSource,
         underperformer: r.underperformer,
+        winRatePct: r.winRatePct,
+        winRateLower95Pct: r.winRateLower95Pct,
+        winRateUpper95Pct: r.winRateUpper95Pct,
+        totalTrades: r.totalTrades,
+        netPnlPct: r.netPnlPct,
+        profitFactorValue: r.profitFactorValue,
+        stage: r.stage,
+        promotionEligible: r.promotionEligible,
       };
     }
     return { backtestMeta: updated };
@@ -1298,14 +2091,25 @@ export const useSniperStore = create<SniperState>()(
     positions: [],
     executionLog: [],
     snipedMints: new Set(),
+    mintCooldowns: {},
     skippedMints: new Set(),
+    importedHoldingsMemo: {},
+    recentlyClosedMints: {},
     watchlist: [],
     selectedMint: null,
     // Safety defaults: do not resume automation after reset.
     tradeSignerMode: 'phantom',
     sessionWalletPubkey: null,
     config: { ...s.config, autoSnipe: false },
-    budget: { budgetSol: 0.1, authorized: false, spent: 0 },
+    executionPaused: false,
+    autoResetRequired: false,
+    lastAutoResetAt: undefined,
+    automationState: 'idle',
+    automationHeartbeatAt: 0,
+    operationLock: { active: false, reason: '', mode: 'none' },
+    pendingTxs: {},
+    txReconcilerRunning: false,
+    budget: { budgetSol: 0.5, authorized: false, spent: 0 },
     totalPnl: 0,
     winCount: 0,
     lossCount: 0,
@@ -1326,30 +2130,40 @@ export const useSniperStore = create<SniperState>()(
         }
         return localStorage;
       }),
-      // Only persist positions, config, budget, execution log, and stats
-      // snipedMints (Set) requires serialization
+      // Only persist durable session state (not transient in-flight dedupe sets).
       partialize: (state) => ({
         positions: state.positions,
         config: state.config,
         tradeSignerMode: state.tradeSignerMode,
         sessionWalletPubkey: state.sessionWalletPubkey,
         budget: state.budget,
+        autoResetRequired: state.autoResetRequired,
+        lastAutoResetAt: state.lastAutoResetAt,
         executionLog: state.executionLog.slice(0, 50), // Keep last 50
-        snipedMintsArray: Array.from(state.snipedMints), // Set → Array for JSON
         watchlist: state.watchlist,
         circuitBreaker: state.circuitBreaker,
+        mintCooldowns: state.mintCooldowns,
+        importedHoldingsMemo: state.importedHoldingsMemo,
+        recentlyClosedMints: state.recentlyClosedMints,
         totalPnl: state.totalPnl,
         winCount: state.winCount,
         lossCount: state.lossCount,
         totalTrades: state.totalTrades,
         backtestMeta: state.backtestMeta,
       }),
-      // Rehydrate: convert snipedMintsArray back to Set
+      // Rehydrate: restore durable fields + reset transient runtime state.
       onRehydrateStorage: () => (state) => {
         if (!state) return;
 
         // Migrate config defaults (new fields, etc.)
         state.config = { ...DEFAULT_CONFIG, ...(state.config as SniperConfig | undefined) };
+        state.autoResetRequired = !!state.autoResetRequired;
+        state.lastAutoResetAt = Number(state.lastAutoResetAt || 0) || undefined;
+        // Enforce upgraded circuit-breaker fail thresholds for existing persisted sessions.
+        state.config.maxConsecutiveLosses = Math.max(
+          Number(state.config.maxConsecutiveLosses || 0),
+          DEFAULT_CONFIG.maxConsecutiveLosses,
+        );
 
         // Migrate circuit breaker shape (per-asset counters were added after initial launch).
         const cbDefault = makeDefaultCircuitBreaker();
@@ -1367,12 +2181,45 @@ export const useSniperStore = create<SniperState>()(
             ...makeDefaultAssetBreaker(),
             ...((state.circuitBreaker.perAsset as any)[k] || {}),
           };
+          // Migrate cooldownUntil on existing per-asset breakers (Phase 2.3)
+          const ab = (state.circuitBreaker.perAsset as any)[k];
+          if (ab && typeof ab.cooldownUntil === 'undefined') {
+            ab.cooldownUntil = 0;
+          }
+        }
+
+        // Migrate perAssetBreakerConfig (Phase 2.3 hardening)
+        const defaultPAC = DEFAULT_CONFIG.perAssetBreakerConfig;
+        if (state.config.perAssetBreakerConfig) {
+          for (const k of Object.keys(defaultPAC) as AssetType[]) {
+            if (!state.config.perAssetBreakerConfig[k]) {
+              state.config.perAssetBreakerConfig[k] = defaultPAC[k];
+            } else {
+              state.config.perAssetBreakerConfig[k].maxConsecutiveLosses = Math.max(
+                Number(state.config.perAssetBreakerConfig[k].maxConsecutiveLosses || 0),
+                defaultPAC[k].maxConsecutiveLosses,
+              );
+            }
+          }
+        } else {
+          state.config.perAssetBreakerConfig = defaultPAC;
         }
 
         // Positions may contain non-persistable transient fields (Phantom prompts, etc.). Reset them.
         if (Array.isArray(state.positions)) {
           state.positions = state.positions.map((p) => ({
             ...p,
+            // Legacy recovery rows used "recovered-*" IDs before manualOnly/recoveredFrom
+            // flags existed. Mark them explicitly so they don't pollute W/L stats.
+            ...(isLegacyRecoveredPositionId((p as any).id) ? {
+              manualOnly: true,
+              recoveredFrom: 'onchain-sync' as const,
+            } : {}),
+            // Clamp persisted extreme percentages from earlier math/scale bugs.
+            pnlPercent: sanitizePnlPercent((p as any).pnlPercent),
+            realPnlPercent: typeof (p as any).realPnlPercent === 'number'
+              ? sanitizePnlPercent((p as any).realPnlPercent)
+              : (p as any).realPnlPercent,
             recommendedSl: (p as any).recommendedSl ?? DEFAULT_CONFIG.stopLossPct,
             recommendedTp: (p as any).recommendedTp ?? DEFAULT_CONFIG.takeProfitPct,
             highWaterMarkPct: (p as any).highWaterMarkPct ?? 0,
@@ -1382,9 +2229,70 @@ export const useSniperStore = create<SniperState>()(
           }));
         }
 
-        const arr = (state as unknown as Record<string, unknown>).snipedMintsArray;
-        if (Array.isArray(arr)) {
-          state.snipedMints = new Set(arr as string[]);
+        state.snipedMints = new Set();
+
+        // Migrate mint cooldown map; prune expired entries during hydration.
+        const rawCooldowns = (state as unknown as Record<string, unknown>).mintCooldowns;
+        if (!rawCooldowns || typeof rawCooldowns !== 'object') {
+          state.mintCooldowns = {};
+        } else {
+          const now = Date.now();
+          const next: Record<string, number> = {};
+          for (const [key, value] of Object.entries(rawCooldowns as Record<string, unknown>)) {
+            const ts = Number(value);
+            if (!Number.isFinite(ts) || ts <= now) continue;
+            next[String(key).toLowerCase()] = ts;
+          }
+          state.mintCooldowns = next;
+        }
+
+        // Migrate imported holdings prompt-suppression memo.
+        const rawMemo = (state as unknown as Record<string, unknown>).importedHoldingsMemo;
+        if (!rawMemo || typeof rawMemo !== 'object') {
+          state.importedHoldingsMemo = {};
+        } else {
+          const memoNext: Record<string, ImportedHoldingMemoEntry> = {};
+          for (const [rawKey, rawValue] of Object.entries(rawMemo as Record<string, unknown>)) {
+            const value = rawValue as Partial<ImportedHoldingMemoEntry> | null;
+            const wallet = normalizeWalletForKey(value?.wallet);
+            const mint = normalizeMint(value?.mint).toLowerCase();
+            if (!wallet || !mint) continue;
+            const key = buildImportedHoldingMemoKey(wallet, mint);
+            memoNext[key] = {
+              wallet,
+              mint,
+              amountLamports: String(value?.amountLamports || '0'),
+              importedAt: Number(value?.importedAt || Date.now()),
+              lastSeenAt: Number(value?.lastSeenAt || value?.importedAt || Date.now()),
+            };
+          }
+          state.importedHoldingsMemo = memoNext;
+        }
+
+        // Migrate recentlyClosedMints (post-sell dust suppression window).
+        const rawClosed = (state as unknown as Record<string, unknown>).recentlyClosedMints;
+        if (!rawClosed || typeof rawClosed !== 'object') {
+          state.recentlyClosedMints = {};
+        } else {
+          const now = Date.now();
+          const next: Record<string, RecentlyClosedMintMemoEntry> = {};
+          for (const [rawKey, rawValue] of Object.entries(rawClosed as Record<string, unknown>)) {
+            const value = rawValue as Partial<RecentlyClosedMintMemoEntry> | null;
+            const wallet = normalizeWalletForKey(value?.wallet) || 'unknown';
+            const mint = normalizeMint(value?.mint).toLowerCase();
+            const closedAt = Number(value?.closedAt || 0);
+            if (!mint || !Number.isFinite(closedAt) || closedAt <= 0) continue;
+            if (now - closedAt > RECENTLY_CLOSED_RETENTION_MS) continue;
+            const key = buildRecentlyClosedMintKey(wallet, mint);
+            next[key] = {
+              wallet,
+              mint,
+              closedAt,
+              amountLamports: value?.amountLamports ? String(value.amountLamports) : undefined,
+              uiAmount: Number.isFinite(Number(value?.uiAmount)) ? Number(value?.uiAmount) : undefined,
+            };
+          }
+          state.recentlyClosedMints = next;
         }
 
         // Migrate backtestMeta (added in Plan 02.1-03)

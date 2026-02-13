@@ -4,12 +4,28 @@
  * Simulates entries/exits using OHLCV candle data with realistic slippage
  * and fee models. Supports walk-forward optimization.
  *
+ * Mathematical foundations:
+ *   - CLT: Confidence intervals on mean return, win rate, Sharpe ratio
+ *   - Euler/e^x: EMA entry signals, EWMA volatility, log returns
+ *   - FTC-adjacent: Parkinson volatility from OHLCV range data
+ *
  * Usage:
  *   const engine = new BacktestEngine(candles, config);
  *   const result = engine.run();
  *
  * Fulfills: BACK-02 (Backtesting Engine)
  */
+
+import {
+  computeEMA,
+  logReturn as calcLogReturn,
+  cltMeanCI,
+  wilsonScoreCI,
+  bootstrapSharpeCI,
+  parkinsonVolatility,
+  ewmaVolatility,
+  logReturnSeries,
+} from './indicators';
 
 // ─── Types ───
 
@@ -52,6 +68,8 @@ export interface BacktestTrade {
   exitPrice: number;
   pnlPct: number;
   pnlNet: number;      // After fees/slippage
+  /** Log return: ln(exit/entry). Time-additive, better for statistical analysis. */
+  logReturn: number;
   exitReason: 'tp' | 'sl' | 'trail' | 'expired' | 'end_of_data';
   holdCandles: number;
   highWaterMark: number;   // Max price during hold
@@ -96,6 +114,29 @@ export interface BacktestResult {
   dataEndTime: number;
   /** Number of candles analyzed */
   totalCandles: number;
+
+  // ── Statistical Confidence (CLT + Bootstrap) ──
+
+  /** 95% CI on average return via CLT: [lower, upper] */
+  avgReturnCI95: [number, number];
+  /** 95% CI on win rate via Wilson score interval: [lower, upper] */
+  winRateCI95: [number, number];
+  /** 95% CI on Sharpe ratio via bootstrap resampling: [lower, upper] */
+  sharpeCI95: [number, number];
+  /** Whether N is large enough for CLT-based intervals to be trustworthy (N >= 50) */
+  cltReliable: boolean;
+
+  // ── Volatility Estimates ──
+
+  /** Parkinson volatility (high/low range-based, per-candle) */
+  parkinsonVol: number;
+  /** EWMA volatility of trade log returns */
+  ewmaVol: number;
+
+  // ── Display Helpers ──
+
+  /** Human-readable win rate with CI, e.g. "65% [58-72%]" */
+  winRateDisplay: string;
 }
 
 // ─── Default Entry Signals ───
@@ -185,6 +226,82 @@ export function squeezeBreakoutEntry(candle: OHLCVCandle, index: number, candles
   return prevBBWidth < 0.04 && bbWidth > prevBBWidth && candle.close > sma;
 }
 
+// ─── EMA-Based Entry Signals (Euler: exponential decay) ───
+
+/**
+ * EMA Mean Reversion entry: buy when price drops below EMA(20) then recovers.
+ * Uses exponential weighting — reacts faster to recent price changes than SMA.
+ */
+export function emaMeanReversionEntry(candle: OHLCVCandle, index: number, candles: OHLCVCandle[]): boolean {
+  if (index < 20) return false;
+  const ema20 = computeEMA(candles.slice(0, index + 1), 20);
+  const currentEma = ema20[ema20.length - 1];
+  const recentMin = Math.min(candles[index - 1].close, candles[index - 2].close, candle.close);
+  const oversold = recentMin < currentEma * 0.99;
+  const recovering = candle.close > candle.open; // Green candle
+  return oversold && recovering;
+}
+
+/**
+ * EMA Crossover entry: buy when EMA(9) crosses above EMA(21) with volume confirmation.
+ * Classic fast/slow EMA crossover — the exponential weighting gives earlier signals
+ * than the equivalent SMA crossover.
+ */
+export function emaCrossoverEntry(candle: OHLCVCandle, index: number, candles: OHLCVCandle[]): boolean {
+  if (index < 22) return false;
+  const slice = candles.slice(0, index + 1);
+  const ema9 = computeEMA(slice, 9);
+  const ema21 = computeEMA(slice, 21);
+  const prevFast = ema9[ema9.length - 2];
+  const prevSlow = ema21[ema21.length - 2];
+  const currFast = ema9[ema9.length - 1];
+  const currSlow = ema21[ema21.length - 1];
+
+  const crossedAbove = prevFast <= prevSlow && currFast > currSlow;
+  // Volume confirmation: current volume > 1.2x the 20-period average
+  const avgVol = candles.slice(index - 20, index).reduce((s, c) => s + c.volume, 0) / 20;
+  return crossedAbove && candle.volume > avgVol * 1.2;
+}
+
+/**
+ * EWMA Volatility Squeeze entry: buy when EWMA volatility contracts below
+ * its own moving average then expands. Uses exponential decay (λ=0.90)
+ * for faster regime detection than equal-weighted Bollinger Bands.
+ */
+export function ewmaSqueezeEntry(candle: OHLCVCandle, index: number, candles: OHLCVCandle[]): boolean {
+  if (index < 25) return false;
+  const slice = candles.slice(Math.max(0, index - 50), index + 1);
+  if (slice.length < 20) return false;
+
+  // Compute log returns for the slice
+  const logReturns: number[] = [];
+  for (let i = 1; i < slice.length; i++) {
+    if (slice[i - 1].close > 0) {
+      logReturns.push(Math.log(slice[i].close / slice[i - 1].close));
+    }
+  }
+  if (logReturns.length < 10) return false;
+
+  // Current EWMA vol vs average EWMA vol over the window
+  const volSeries: number[] = [];
+  let variance = logReturns[0] ** 2;
+  volSeries.push(Math.sqrt(variance));
+  for (let i = 1; i < logReturns.length; i++) {
+    variance = 0.90 * variance + 0.10 * logReturns[i] ** 2;
+    volSeries.push(Math.sqrt(variance));
+  }
+
+  const currentVol = volSeries[volSeries.length - 1];
+  const prevVol = volSeries[volSeries.length - 2];
+  const avgVol = volSeries.reduce((s, v) => s + v, 0) / volSeries.length;
+
+  // Squeeze: previous vol was below average, current is expanding, price above EMA
+  const ema20 = computeEMA(candles.slice(0, index + 1), 20);
+  const priceAboveEma = candle.close > ema20[ema20.length - 1];
+
+  return prevVol < avgVol * 0.8 && currentVol > prevVol && priceAboveEma;
+}
+
 // ─── Engine ───
 
 export class BacktestEngine {
@@ -256,6 +373,7 @@ export class BacktestEngine {
 
     // Sharpe (annualized for 1h candles: ~8760 candles/year)
     const returns = trades.map(t => t.pnlNet);
+    const logReturns = trades.map(t => t.logReturn);
     const meanReturn = returns.length > 0 ? returns.reduce((s, r) => s + r, 0) / returns.length : 0;
     const variance = returns.length > 1
       ? returns.reduce((s, r) => s + (r - meanReturn) ** 2, 0) / (returns.length - 1)
@@ -271,6 +389,22 @@ export class BacktestEngine {
     const avgWin = wins > 0 ? winningPnl / wins : 0;
     const avgLoss = losses > 0 ? losingPnl / losses : 0;
     const expectancy = (winRate * avgWin) - ((1 - winRate) * avgLoss);
+
+    // ── Statistical Confidence (CLT + Bootstrap) ──
+    const { ci: avgReturnCI95, reliable: cltReliable } = cltMeanCI(returns);
+    const winRateCI95 = wilsonScoreCI(wins, trades.length);
+    const sharpeCI95 = bootstrapSharpeCI(returns);
+
+    // ── Volatility Estimates ──
+    const parkinsonVol = parkinsonVolatility(candles);
+    const ewmaVol = logReturns.length > 0 ? ewmaVolatility(logReturns) : 0;
+
+    // ── Display Helpers ──
+    const wrLo = (winRateCI95[0] * 100).toFixed(0);
+    const wrHi = (winRateCI95[1] * 100).toFixed(0);
+    const winRateDisplay = trades.length > 0
+      ? `${(winRate * 100).toFixed(0)}% [${wrLo}-${wrHi}%]`
+      : 'N/A';
 
     return {
       strategyId: config.strategyId,
@@ -293,6 +427,16 @@ export class BacktestEngine {
       dataStartTime: candles[0]?.timestamp || 0,
       dataEndTime: candles[candles.length - 1]?.timestamp || 0,
       totalCandles: candles.length,
+      // Statistical confidence
+      avgReturnCI95,
+      winRateCI95,
+      sharpeCI95,
+      cltReliable,
+      // Volatility
+      parkinsonVol,
+      ewmaVol,
+      // Display
+      winRateDisplay,
     };
   }
 
@@ -385,6 +529,7 @@ export class BacktestEngine {
       entryTime, exitTime, entryPrice, exitPrice,
       pnlPct: grossPnl,
       pnlNet,
+      logReturn: calcLogReturn(entryPrice, exitPrice),
       exitReason,
       holdCandles,
       highWaterMark,
@@ -499,14 +644,28 @@ export function generateBacktestReport(results: BacktestResult[]): string {
     '',
     '## Summary',
     '',
-    '| Strategy | Token | Trades | Win Rate | Profit Factor | Sharpe | Max DD | Expectancy |',
-    '|----------|-------|--------|----------|---------------|--------|--------|------------|',
+    '| Strategy | Token | Trades | Win Rate (95% CI) | Profit Factor | Sharpe (95% CI) | Max DD | Expectancy |',
+    '|----------|-------|--------|-------------------|---------------|-----------------|--------|------------|',
   ];
 
   for (const r of results) {
+    const wrCI = `${(r.winRate * 100).toFixed(1)}% [${(r.winRateCI95[0] * 100).toFixed(0)}-${(r.winRateCI95[1] * 100).toFixed(0)}%]`;
+    const shCI = `${r.sharpeRatio.toFixed(2)} [${r.sharpeCI95[0].toFixed(2)},${r.sharpeCI95[1].toFixed(2)}]`;
     lines.push(
-      `| ${r.strategyId} | ${r.tokenSymbol} | ${r.totalTrades} | ${(r.winRate * 100).toFixed(1)}% | ${r.profitFactor.toFixed(2)} | ${r.sharpeRatio.toFixed(2)} | ${r.maxDrawdownPct.toFixed(1)}% | ${r.expectancy.toFixed(4)} |`
+      `| ${r.strategyId} | ${r.tokenSymbol} | ${r.totalTrades} | ${wrCI} | ${r.profitFactor.toFixed(2)} | ${shCI} | ${r.maxDrawdownPct.toFixed(1)}% | ${r.expectancy.toFixed(4)} |`
     );
+  }
+
+  lines.push('', '## Statistical Confidence', '');
+  for (const r of results) {
+    const reliability = r.cltReliable ? 'CLT reliable (N >= 50)' : `CLT unreliable (N=${r.totalTrades} < 50)`;
+    const avgCI = `[${r.avgReturnCI95[0].toFixed(2)}%, ${r.avgReturnCI95[1].toFixed(2)}%]`;
+    lines.push(`**${r.strategyId}:** Avg Return 95% CI = ${avgCI} | ${reliability}`);
+  }
+
+  lines.push('', '## Volatility Estimates', '');
+  for (const r of results) {
+    lines.push(`**${r.strategyId}:** Parkinson σ=${(r.parkinsonVol * 100).toFixed(2)}% | EWMA σ=${(r.ewmaVol * 100).toFixed(2)}%`);
   }
 
   lines.push('', '## Exit Distribution', '');

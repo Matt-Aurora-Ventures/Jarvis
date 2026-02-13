@@ -25,10 +25,11 @@ Open `http://localhost:3000`.
 Required (server):
 
 - `BAGS_API_KEY` (Bags API key used by server routes `/api/bags/quote` + `/api/bags/swap`)
+- `HELIUS_GATEKEEPER_RPC_URL` (server-only Helius Gatekeeper endpoint for production RPC)
 
 Recommended:
 
-- `SOLANA_RPC_URL` (server RPC for Bags SDK; falls back to `NEXT_PUBLIC_SOLANA_RPC`)
+- `SOLANA_RPC_URL` (legacy server RPC fallback; checked after `HELIUS_GATEKEEPER_RPC_URL`)
 - `NEXT_PUBLIC_SOLANA_RPC` (client RPC for reads/price checks; used by UI + risk worker)
 - `BAGS_REFERRAL_ACCOUNT` (optional referral account pubkey)
 - `ALLOWED_ORIGINS` (comma-separated list of allowed Origins for API CORS)
@@ -36,6 +37,7 @@ Recommended:
 Notes:
 
 - **Do not** prefix `BAGS_API_KEY` with `NEXT_PUBLIC_` (that would leak it to the browser bundle).
+- Production is **fail-closed** for server RPC routes (`/api/rpc`, `/api/bags/*`) when no valid Helius RPC URL is configured.
 - Hosting: set env vars in your hosting provider UI (Vercel/Railway/etc), not in git.
 
 ## Hosting Notes (50-100 Users)
@@ -50,4 +52,3 @@ Notes:
 ## Safety
 
 This project is early beta. Trades are real and you can lose 100% of funds used.
-

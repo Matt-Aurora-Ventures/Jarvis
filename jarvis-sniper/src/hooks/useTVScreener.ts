@@ -18,6 +18,9 @@ const POLL_INTERVALS: Record<MarketPhase, number> = {
   CLOSED: 300_000,
 };
 
+const MAX_CONSECUTIVE_ERRORS = 5;
+const BASE_BACKOFF_MS = 10_000;
+
 export interface UseTVScreenerReturn {
   data: Record<string, TVStockData>;
   loading: boolean;
@@ -25,6 +28,15 @@ export interface UseTVScreenerReturn {
   lastUpdated: Date | null;
   marketPhase: MarketPhase;
   refetch: () => Promise<void>;
+}
+
+function isMarketPhase(value: unknown): value is MarketPhase {
+  return (
+    value === 'PRE_MARKET'
+    || value === 'REGULAR'
+    || value === 'AFTER_HOURS'
+    || value === 'CLOSED'
+  );
 }
 
 /**
@@ -36,19 +48,24 @@ export interface UseTVScreenerReturn {
  * - On error the hook sets an error string but keeps stale data -- stale
  *   data is better than empty.
  */
-export function useTVScreener(): UseTVScreenerReturn {
+export function useTVScreener(enabled = true): UseTVScreenerReturn {
   const [data, setData] = useState<Record<string, TVStockData>>({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [marketPhase, setMarketPhase] = useState<MarketPhase>(getMarketPhase);
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const errorCountRef = useRef(0);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await fetch('/api/tv-screener');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15_000); // 15s timeout
+      const res = await fetch('/api/tv-screener', { signal: controller.signal });
+      clearTimeout(timer);
+
       if (!res.ok) {
         throw new Error(`TV screener API returned ${res.status}`);
       }
@@ -62,15 +79,24 @@ export function useTVScreener(): UseTVScreenerReturn {
       if (mountedRef.current) {
         setData(json.data ?? {});
         setError(null);
-        setLastUpdated(new Date());
-        setMarketPhase(getMarketPhase());
+        const timestamp = typeof json.timestamp === 'string' ? new Date(json.timestamp) : new Date();
+        setLastUpdated(Number.isFinite(timestamp.getTime()) ? timestamp : new Date());
+        setMarketPhase(isMarketPhase(json.marketPhase) ? json.marketPhase : getMarketPhase());
+        errorCountRef.current = 0; // Reset on success
       }
+      return true;
     } catch (err) {
       if (mountedRef.current) {
+        errorCountRef.current = Math.min(errorCountRef.current + 1, MAX_CONSECUTIVE_ERRORS);
         setError(err instanceof Error ? err.message : 'Failed to fetch TV data');
         // Intentionally do NOT clear existing data -- stale is better than empty
         setMarketPhase(getMarketPhase());
+        console.warn(
+          `[useTVScreener] Fetch failed (${errorCountRef.current}/${MAX_CONSECUTIVE_ERRORS}):`,
+          err instanceof Error ? err.message : err,
+        );
       }
+      return false;
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -78,8 +104,19 @@ export function useTVScreener(): UseTVScreenerReturn {
     }
   }, []);
 
-  // Polling loop via setTimeout chaining
+  // Polling loop via setTimeout chaining with exponential backoff on errors
   useEffect(() => {
+    if (!enabled) {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      setLoading(false);
+      setError(null);
+      setMarketPhase(getMarketPhase());
+      return;
+    }
+
     mountedRef.current = true;
 
     async function poll() {
@@ -87,9 +124,12 @@ export function useTVScreener(): UseTVScreenerReturn {
 
       if (!mountedRef.current) return;
 
-      // Schedule next poll based on current market phase
+      // Schedule next poll based on current market phase + error backoff
       const currentPhase = getMarketPhase();
-      const interval = POLL_INTERVALS[currentPhase];
+      const baseInterval = POLL_INTERVALS[currentPhase];
+      const interval = errorCountRef.current > 0
+        ? Math.min(BASE_BACKOFF_MS * Math.pow(2, errorCountRef.current - 1), baseInterval * 5)
+        : baseInterval;
       timeoutRef.current = setTimeout(poll, interval);
     }
 
@@ -103,12 +143,13 @@ export function useTVScreener(): UseTVScreenerReturn {
         timeoutRef.current = null;
       }
     };
-  }, [fetchData]);
+  }, [enabled, fetchData]);
 
   const refetch = useCallback(async () => {
+    if (!enabled) return;
     setLoading(true);
     await fetchData();
-  }, [fetchData]);
+  }, [enabled, fetchData]);
 
   return { data, loading, error, lastUpdated, marketPhase, refetch };
 }
