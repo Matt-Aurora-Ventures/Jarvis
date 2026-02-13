@@ -182,6 +182,7 @@ tests/__pycache__/
 *.bak
 *.tmp
 *.temp
+.tmp/
 .cache/
 *.cache
 
@@ -210,6 +211,9 @@ bots/buy_tracker/predictions_history.json
 # CRITICAL: Never commit wallet keys or trading state
 bots/treasury/.wallets/
 bots/treasury/.positions.json
+jarvis-sniper/.positions.json
+jarvis-sniper/scripts/.backtest-*.json
+jarvis-sniper/_tmp_npm/
 bots/treasury/.trade_history.json
 bots/treasury/.backtest_results/
 data/treasury_keypair.json
@@ -405,6 +409,7 @@ deploy/vps_remote_control_setup.md
 
 # === BUILD / CACHE ARTIFACTS ===
 .next/
+*.tsbuildinfo
 .venv-wsl/
 coverage_html*/
 htmlcov*/
@@ -455,6 +460,12 @@ bots/treasury/data/
 bots/treasury/.wallets-demo/
 tg_bot/data/
 web/data/
+
+# === FILES WITH EXPOSED SECRETS (untracked from git) ===
+JARVIS_TELEGRAM_CONSOLE_FIX_SUMMARY.md
+request.md
+docs/TREASURY_BOT_FIX_VERIFIED.md
+scripts/get_moltbook_claim.ps1
 
 # === ORPHAN DIRECTORIES (Unicode / path artifacts) ===
 C\357\200\272*/

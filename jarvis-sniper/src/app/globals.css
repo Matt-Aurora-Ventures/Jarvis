@@ -1,0 +1,447 @@
+@import "tailwindcss";
+
+/* Explicitly tell Tailwind v4 where to scan for class usage */
+@source "../../src";
+
+/* ============================================
+   JARVIS SNIPER - PREMIUM DARK TERMINAL THEME
+   Matches jarvis-web-terminal aesthetic
+   ============================================ */
+
+:root {
+  /* Backgrounds */
+  --bg-primary: #0B0C0D;
+  --bg-secondary: #111214;
+  --bg-tertiary: #1A1B1E;
+  --bg-card: rgba(17, 18, 20, 0.9);
+  --bg-card-hover: rgba(26, 27, 30, 1);
+
+  /* Text */
+  --text-primary: #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-muted: #64748B;
+
+  /* Borders */
+  --border-primary: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(34, 197, 94, 0.3);
+
+  /* Accents */
+  --accent-neon: #22c55e;
+  --accent-neon-glow: rgba(34, 197, 94, 0.5);
+  --accent-error: #EF4444;
+  --accent-error-glow: rgba(239, 68, 68, 0.5);
+  --accent-success: #10B981;
+  --accent-warning: #F59E0B;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4), 0 0 20px rgba(34, 197, 94, 0.05);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4), 0 0 30px rgba(34, 197, 94, 0.08);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.5), 0 0 40px rgba(34, 197, 94, 0.1);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(17, 18, 20, 0.8);
+  --glass-border: rgba(34, 197, 94, 0.1);
+  --glass-blur: blur(20px);
+
+  /* Card tokens */
+  --card-bg: rgba(17, 18, 20, 0.85);
+  --card-border: rgba(255, 255, 255, 0.06);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 12px rgba(34, 197, 94, 0.04);
+  --app-shell-max-width: 2400px;
+}
+
+/* ============================================
+   LIGHT THEME — AIRBNB B&W AESTHETIC
+   Pure white, prominent dark borders, high contrast.
+   No new colours — stays within existing accent variance.
+   ============================================ */
+
+[data-theme="light"] {
+  /* Backgrounds — pure white, no blue-gray tint */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F7F7F7;
+  --bg-tertiary: #EBEBEB;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F7F7F7;
+
+  /* Text — true black for maximum readability */
+  --text-primary: #222222;
+  --text-secondary: #484848;
+  --text-muted: #717171;
+
+  /* Borders — prominent and architectural */
+  --border-primary: #DDDDDD;
+  --border-hover: rgba(22, 163, 74, 0.5);
+
+  /* Accents — slightly deeper for contrast on white */
+  --accent-neon: #16a34a;
+  --accent-neon-glow: rgba(22, 163, 74, 0.15);
+  --accent-error: #DC2626;
+  --accent-error-glow: rgba(220, 38, 38, 0.15);
+  --accent-success: #059669;
+  --accent-warning: #D97706;
+
+  /* Shadows — clean, Airbnb-style elevation */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-xl: 0 8px 30px rgba(0, 0, 0, 0.15);
+
+  /* Glassmorphism — solid white in light mode */
+  --glass-bg: rgba(255, 255, 255, 0.97);
+  --glass-border: #DDDDDD;
+  --glass-blur: blur(20px);
+
+  /* Card tokens — white cards with prominent dark borders */
+  --card-bg: #FFFFFF;
+  --card-border: #DDDDDD;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* ============================================
+   TAILWIND THEME MAPPINGS
+   ============================================ */
+
+@theme {
+  --breakpoint-xs: 480px;
+
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-bg-card: var(--bg-card);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --color-border-primary: var(--border-primary);
+  --color-border-hover: var(--border-hover);
+
+  --color-accent-neon: var(--accent-neon);
+  --color-accent-error: var(--accent-error);
+  --color-accent-success: var(--accent-success);
+  --color-accent-warning: var(--accent-warning);
+
+  /* Local fonts (no build-time Google Fonts fetch) */
+  --font-dm-sans: 'DM Sans';
+  --font-jetbrains-mono: 'JetBrains Mono';
+
+  --font-display: 'Clash Display', sans-serif;
+  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'Fira Code', monospace;
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+@utility card-glass {
+  background: var(--card-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+
+  &:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+@utility btn-neon {
+  background: var(--accent-neon);
+  color: #000;
+  border-radius: 100px;
+  padding: 10px 24px;
+  font-weight: 600;
+  box-shadow: 0 4px 15px var(--accent-neon-glow);
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: none;
+  cursor: pointer;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px var(--accent-neon-glow), 0 0 30px var(--accent-neon-glow);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+}
+
+@utility btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-radius: 100px;
+  padding: 10px 24px;
+  font-weight: 500;
+  border: 1px solid var(--border-primary);
+  transition:
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-hover);
+  }
+}
+
+@utility btn-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--accent-error);
+  border-radius: 100px;
+  padding: 10px 24px;
+  font-weight: 600;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  transition:
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: var(--accent-error);
+  }
+}
+
+@utility custom-scrollbar {
+  &::-webkit-scrollbar { width: 6px; }
+  &::-webkit-scrollbar-track { background: var(--bg-secondary); border-radius: 3px; }
+  &::-webkit-scrollbar-thumb {
+    background: var(--border-primary);
+    border-radius: 3px;
+    &:hover { background: var(--accent-neon); }
+  }
+}
+
+.app-shell {
+  width: 100%;
+  max-width: var(--app-shell-max-width);
+  margin-inline: auto;
+  padding-inline: clamp(0.75rem, 1.4vw, 2.25rem);
+}
+
+@media (max-width: 1023px) {
+  .app-shell {
+    padding-inline: 0.75rem;
+  }
+}
+
+/* Badge tiers */
+@utility badge-exceptional {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+@utility badge-strong {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22C55E;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+@utility badge-average {
+  background: rgba(234, 179, 8, 0.1);
+  color: #EAB308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+@utility badge-weak {
+  background: rgba(249, 115, 22, 0.1);
+  color: #F97316;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+@utility badge-poor {
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* ============================================
+   LIGHT-MODE ELEMENT OVERRIDES
+   ============================================ */
+
+/* Hide ambient neon orbs in light mode — they muddy the clean white */
+[data-theme="light"] .ambient-orb,
+[data-theme="light"] .ambient-orb-2,
+[data-theme="light"] .ambient-orb-3 {
+  opacity: 0;
+}
+
+/* Cards get a stronger border + subtle shadow in light mode */
+[data-theme="light"] .card-glass {
+  border-color: #DDDDDD;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .card-glass:hover {
+  border-color: #BBBBBB;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* Scrollbar — darker thumb on white track */
+[data-theme="light"] .custom-scrollbar::-webkit-scrollbar-track {
+  background: #F7F7F7;
+}
+[data-theme="light"] .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #CCCCCC;
+}
+[data-theme="light"] .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #999999;
+}
+
+/* Skeleton shimmer — light mode variant */
+[data-theme="light"] .skeleton {
+  background: linear-gradient(90deg, #EBEBEB 25%, #F7F7F7 50%, #EBEBEB 75%);
+  background-size: 200% 100%;
+}
+
+/* Badge tiers — slightly stronger borders for light bg */
+[data-theme="light"] .badge-exceptional {
+  background: rgba(5, 150, 105, 0.08);
+  color: #059669;
+  border-color: rgba(5, 150, 105, 0.3);
+}
+[data-theme="light"] .badge-strong {
+  background: rgba(22, 163, 74, 0.08);
+  color: #16a34a;
+  border-color: rgba(22, 163, 74, 0.3);
+}
+[data-theme="light"] .badge-average {
+  background: rgba(217, 119, 6, 0.08);
+  color: #B45309;
+  border-color: rgba(217, 119, 6, 0.25);
+}
+[data-theme="light"] .badge-weak {
+  background: rgba(234, 88, 12, 0.08);
+  color: #C2410C;
+  border-color: rgba(234, 88, 12, 0.25);
+}
+[data-theme="light"] .badge-poor {
+  background: rgba(220, 38, 38, 0.08);
+  color: #DC2626;
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
+/* Selection — invert for light mode */
+[data-theme="light"] ::selection {
+  background: #222222;
+  color: #FFFFFF;
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+::selection { background: var(--accent-neon); color: #000; }
+
+:focus-visible { outline: 2px solid var(--accent-neon); outline-offset: 2px; }
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes float-slow {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(20px, -15px); }
+}
+
+@keyframes float-medium {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-15px, 10px); }
+}
+
+.ambient-orb { animation: float-slow 20s ease-in-out infinite; }
+.ambient-orb-2 { animation: float-medium 25s ease-in-out infinite; }
+.ambient-orb-3 { animation: float-slow 30s ease-in-out infinite reverse; }
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px var(--accent-neon-glow); }
+  50% { box-shadow: 0 0 20px var(--accent-neon-glow), 0 0 30px var(--accent-neon-glow); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+.animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
+.animate-slide-in { animation: slide-in-right 0.3s ease-out forwards; }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+@keyframes flash-green {
+  0%, 100% { background: transparent; }
+  50% { background: rgba(34, 197, 94, 0.15); }
+}
+
+@keyframes flash-red {
+  0%, 100% { background: transparent; }
+  50% { background: rgba(239, 68, 68, 0.15); }
+}
+
+.flash-green { animation: flash-green 0.6s ease; }
+.flash-red { animation: flash-red 0.6s ease; }
+
+/* Sniper-specific: new graduation flash */
+@keyframes new-grad-pulse {
+  0% { border-color: rgba(34, 197, 94, 0.6); box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); }
+  50% { border-color: rgba(34, 197, 94, 0.2); box-shadow: 0 0 5px rgba(34, 197, 94, 0.1); }
+  100% { border-color: rgba(34, 197, 94, 0.6); box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); }
+}
+
+.animate-new-grad { animation: new-grad-pulse 1.5s ease-in-out 3; }
+
+/* Auto-snipe active indicator */
+@keyframes sniper-active {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.2); }
+}
+
+.sniper-dot { animation: sniper-active 1s ease-in-out infinite; }

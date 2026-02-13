@@ -1,0 +1,213 @@
+{
+  "version": "1.0",
+  "title": "Jarvis Sniper - System Architecture",
+  "description": "Solana token sniping app with real-time scanning, scoring, and on-chain swap execution through Phantom wallet.",
+  "icons": [
+    { "id": "browser", "name": "Browser", "url": "https://cdn-icons-png.flaticon.com/128/888/888867.png", "collection": "Client", "isIsometric": false },
+    { "id": "nextjs", "name": "Next.js App", "url": "https://cdn-icons-png.flaticon.com/128/5968/5968322.png", "collection": "Client", "isIsometric": false },
+    { "id": "react", "name": "React Component", "url": "https://cdn-icons-png.flaticon.com/128/1126/1126012.png", "collection": "Client", "isIsometric": false },
+    { "id": "wallet", "name": "Phantom Wallet", "url": "https://cdn-icons-png.flaticon.com/128/2489/2489756.png", "collection": "Blockchain", "isIsometric": false },
+    { "id": "blockchain", "name": "Solana Network", "url": "https://cdn-icons-png.flaticon.com/128/2091/2091665.png", "collection": "Blockchain", "isIsometric": false },
+    { "id": "api", "name": "API", "url": "https://cdn-icons-png.flaticon.com/128/1493/1493169.png", "collection": "External APIs", "isIsometric": false },
+    { "id": "database", "name": "State Store", "url": "https://cdn-icons-png.flaticon.com/128/2906/2906274.png", "collection": "Client", "isIsometric": false },
+    { "id": "chart", "name": "Chart", "url": "https://cdn-icons-png.flaticon.com/128/3281/3281289.png", "collection": "Client", "isIsometric": false },
+    { "id": "shield", "name": "Security Gate", "url": "https://cdn-icons-png.flaticon.com/128/2345/2345338.png", "collection": "Client", "isIsometric": false },
+    { "id": "rocket", "name": "Jito MEV", "url": "https://cdn-icons-png.flaticon.com/128/3212/3212567.png", "collection": "Blockchain", "isIsometric": false }
+  ],
+  "colors": [
+    { "id": "green", "value": "#22c55e" },
+    { "id": "red", "value": "#ef4444" },
+    { "id": "blue", "value": "#3b82f6" },
+    { "id": "purple", "value": "#8b5cf6" },
+    { "id": "orange", "value": "#f59e0b" },
+    { "id": "gray", "value": "#64748b" },
+    { "id": "cyan", "value": "#06b6d4" }
+  ],
+  "items": [
+    { "id": "user-browser", "name": "User Browser", "description": "localhost:3005 — The user's browser running the sniper dashboard", "icon": "browser" },
+    { "id": "nextjs-app", "name": "Next.js 16 App", "description": "App Router with Turbopack dev server. Serves both the React SPA and API routes.", "icon": "nextjs" },
+    { "id": "graduation-feed", "name": "GraduationFeed", "description": "**Token Scanner** component.\n\nPolls `/api/graduations` every 30s. Shows scored token cards. Manual snipe buttons. Auto-snipe when enabled.\n\nFile: `src/components/GraduationFeed.tsx`", "icon": "react" },
+    { "id": "sniper-controls", "name": "SniperControls", "description": "**Strategy Config** component.\n\nBudget authorization (0.1/0.2/0.5/1.0 SOL presets), SL/TP config, auto-snipe toggle, Jito toggle, slippage BPS.\n\nFile: `src/components/SniperControls.tsx`", "icon": "react" },
+    { "id": "token-chart", "name": "TokenChart", "description": "**Chart Embed** component.\n\nBirdeye TV Widget (primary), DexScreener, GeckoTerminal fallbacks. Drag-to-resize. Provider switcher.\n\nFile: `src/components/TokenChart.tsx`", "icon": "chart" },
+    { "id": "positions-panel", "name": "PositionsPanel", "description": "**Position Tracker** component.\n\nOpen/closed positions, P&L, click-to-chart, manual close, per-position SL/TP, tx hash links.\n\nFile: `src/components/PositionsPanel.tsx`", "icon": "react" },
+    { "id": "execution-log", "name": "ExecutionLog", "description": "**Event Log** component.\n\nChronological feed of snipe, error, exit, skip events with timestamps.\n\nFile: `src/components/ExecutionLog.tsx`", "icon": "react" },
+    { "id": "zustand-store", "name": "Zustand Store", "description": "**useSniperStore** — Central state.\n\n- config (SL/TP/trailing/position size)\n- budget (authorized, spent, remaining)\n- positions[]\n- executionLog[]\n- graduations[]\n- snipedMints Set\n- selectedMint\n\nFile: `src/stores/useSniperStore.ts`", "icon": "database" },
+    { "id": "snipe-executor", "name": "useSnipeExecutor", "description": "**Swap Execution Hook**.\n\nWires wallet + connection + store. Guards (budget, capacity, dedup). Calls executeSwap(). Creates real positions with txHash on success.\n\nFile: `src/hooks/useSnipeExecutor.ts`", "icon": "shield" },
+    { "id": "phantom-wallet", "name": "Phantom Wallet", "description": "**Browser Extension**.\n\nInjected at `window.phantom.solana`. Provides connect, disconnect, signTransaction.\n\nHook: `src/hooks/usePhantomWallet.tsx`", "icon": "wallet" },
+    { "id": "api-graduations", "name": "/api/graduations", "description": "**Server-side API Route**.\n\n1. Fetch DexScreener boosted tokens\n2. Batch-fetch pair data (price, liquidity, volume)\n3. Score: liquidity + volume + socials + boosts + momentum\n4. Return as BagsGraduation[]\n\nFile: `src/app/api/graduations/route.ts`", "icon": "api" },
+    { "id": "dexscreener-api", "name": "DexScreener API", "description": "**External API — Token Discovery**.\n\n- Boosts: `api.dexscreener.com/token-boosts/latest/v1`\n- Tokens: `api.dexscreener.com/tokens/v1/solana/{addresses}`\n\nNo auth required. Rate limited.", "icon": "api" },
+    { "id": "jupiter-api", "name": "Jupiter v6 API", "description": "**External API — Swap Aggregator**.\n\n- Quote: `quote-api.jup.ag/v6/quote`\n- Swap: `quote-api.jup.ag/v6/swap`\n\nRoutes across Raydium, Orca, Meteora. No auth required.", "icon": "api" },
+    { "id": "birdeye-widget", "name": "Birdeye TV Widget", "description": "**External — Chart Embed**.\n\nTradingView-style candlestick charts for Solana tokens. Embedded via iframe.\n\n`birdeye.so/tv-widget/{mint}?chain=solana`", "icon": "chart" },
+    { "id": "solana-rpc", "name": "Solana RPC", "description": "**Solana Mainnet RPC**.\n\nCurrently: `api.mainnet-beta.solana.com` (public, rate-limited).\n\nUsed for: sendRawTransaction, confirmTransaction.\n\nEnv: `NEXT_PUBLIC_SOLANA_RPC`", "icon": "blockchain" },
+    { "id": "jito-engine", "name": "Jito Block Engine", "description": "**Optional MEV Bundle Submission**.\n\nFaster block inclusion via MEV auction.\n\n3 endpoints: mainnet, amsterdam, frankfurt.\n\nFalls back to standard RPC.", "icon": "rocket" },
+    { "id": "bags-trading", "name": "bags-trading.ts", "description": "**Swap Execution Module**.\n\ngetQuote() → Jupiter v6 (primary) + Bags.fm (fallback)\nexecuteSwap() → quote → build tx → sign → send → confirm\nsendWithJito() → MEV bundle submission\n\nFile: `src/lib/bags-trading.ts`", "icon": "api" }
+  ],
+  "views": [
+    {
+      "id": "main-view",
+      "name": "Full Architecture",
+      "description": "Complete system architecture showing data flow from DexScreener discovery through Jupiter swap execution to Solana on-chain confirmation.",
+      "items": [
+        { "id": "user-browser", "tile": { "x": 0, "y": 0 } },
+        { "id": "nextjs-app", "tile": { "x": 3, "y": 0 } },
+        { "id": "graduation-feed", "tile": { "x": 0, "y": 4 } },
+        { "id": "sniper-controls", "tile": { "x": 8, "y": 4 } },
+        { "id": "token-chart", "tile": { "x": 4, "y": 4 } },
+        { "id": "positions-panel", "tile": { "x": 8, "y": 8 } },
+        { "id": "execution-log", "tile": { "x": 4, "y": 8 } },
+        { "id": "zustand-store", "tile": { "x": 4, "y": 12 } },
+        { "id": "snipe-executor", "tile": { "x": 0, "y": 12 } },
+        { "id": "phantom-wallet", "tile": { "x": 0, "y": 16 } },
+        { "id": "api-graduations", "tile": { "x": 0, "y": 8 } },
+        { "id": "dexscreener-api", "tile": { "x": -4, "y": 8 } },
+        { "id": "jupiter-api", "tile": { "x": -4, "y": 14 } },
+        { "id": "birdeye-widget", "tile": { "x": 8, "y": 0 } },
+        { "id": "solana-rpc", "tile": { "x": 4, "y": 18 } },
+        { "id": "jito-engine", "tile": { "x": 8, "y": 18 } },
+        { "id": "bags-trading", "tile": { "x": -4, "y": 18 } }
+      ],
+      "rectangles": [
+        { "id": "rect-client", "color": "green", "from": { "x": -1, "y": -1 }, "to": { "x": 10, "y": 14 } },
+        { "id": "rect-external", "color": "blue", "from": { "x": -6, "y": 7 }, "to": { "x": -2, "y": 20 } },
+        { "id": "rect-blockchain", "color": "purple", "from": { "x": -1, "y": 15 }, "to": { "x": 10, "y": 20 } }
+      ],
+      "connectors": [
+        {
+          "id": "conn-browser-nextjs",
+          "description": "User accesses app",
+          "color": "gray",
+          "style": "SOLID",
+          "anchors": [
+            { "id": "a1", "ref": { "item": "user-browser" } },
+            { "id": "a2", "ref": { "item": "nextjs-app" } }
+          ]
+        },
+        {
+          "id": "conn-feed-api",
+          "description": "Polls every 30s",
+          "color": "green",
+          "style": "SOLID",
+          "anchors": [
+            { "id": "a3", "ref": { "item": "graduation-feed" } },
+            { "id": "a4", "ref": { "item": "api-graduations" } }
+          ]
+        },
+        {
+          "id": "conn-api-dexscreener",
+          "description": "Fetch boosts + pairs",
+          "color": "blue",
+          "style": "SOLID",
+          "anchors": [
+            { "id": "a5", "ref": { "item": "api-graduations" } },
+            { "id": "a6", "ref": { "item": "dexscreener-api" } }
+          ]
+        },
+        {
+          "id": "conn-feed-executor",
+          "description": "snipe(grad) — manual or auto",
+          "color": "green",
+          "style": "SOLID",
+          "anchors": [
+            { "id": "a7", "ref": { "item": "graduation-feed" } },
+            { "id": "a8", "ref": { "item": "snipe-executor" } }
+          ]
+        },
+        {
+          "id": "conn-executor-jupiter",
+          "description": "getQuote() + getSwapTransaction()",
+          "color": "blue",
+          "style": "SOLID",
+          "anchors": [
+            { "id": "a9", "ref": { "item": "snipe-executor" } },
+            { "id": "a10", "ref": { "item": "jupiter-api" } }
+          ]
+        },
+        {
+          "id": "conn-executor-phantom",
+          "description": "signTransaction(tx)",
+          "color": "orange",
+          "style": "SOLID",
+          "anchors": [
+            { "id": "a11", "ref": { "item": "snipe-executor" } },
+            { "id": "a12", "ref": { "item": "phantom-wallet" } }
+          ]
+        },
+        {
+          "id": "conn-executor-solana",
+          "description": "sendRawTransaction + confirmTransaction",
+          "color": "purple",
+          "style": "SOLID",
+          "anchors": [
+            { "id": "a13", "ref": { "item": "snipe-executor" } },
+            { "id": "a14", "ref": { "item": "solana-rpc" } }
+          ]
+        },
+        {
+          "id": "conn-executor-jito",
+          "description": "Optional MEV bundle",
+          "color": "purple",
+          "style": "DASHED",
+          "anchors": [
+            { "id": "a15", "ref": { "item": "snipe-executor" } },
+            { "id": "a16", "ref": { "item": "jito-engine" } }
+          ]
+        },
+        {
+          "id": "conn-executor-store",
+          "description": "addPosition, addExecution",
+          "color": "green",
+          "style": "SOLID",
+          "anchors": [
+            { "id": "a17", "ref": { "item": "snipe-executor" } },
+            { "id": "a18", "ref": { "item": "zustand-store" } }
+          ]
+        },
+        {
+          "id": "conn-chart-birdeye",
+          "description": "iframe embed",
+          "color": "cyan",
+          "style": "SOLID",
+          "anchors": [
+            { "id": "a19", "ref": { "item": "token-chart" } },
+            { "id": "a20", "ref": { "item": "birdeye-widget" } }
+          ]
+        },
+        {
+          "id": "conn-store-positions",
+          "description": "positions, selectedMint",
+          "color": "green",
+          "style": "DOTTED",
+          "anchors": [
+            { "id": "a21", "ref": { "item": "zustand-store" } },
+            { "id": "a22", "ref": { "item": "positions-panel" } }
+          ]
+        },
+        {
+          "id": "conn-store-execlog",
+          "description": "executionLog[]",
+          "color": "green",
+          "style": "DOTTED",
+          "anchors": [
+            { "id": "a23", "ref": { "item": "zustand-store" } },
+            { "id": "a24", "ref": { "item": "execution-log" } }
+          ]
+        },
+        {
+          "id": "conn-bags-jupiter",
+          "description": "Fallback route",
+          "color": "gray",
+          "style": "DASHED",
+          "anchors": [
+            { "id": "a25", "ref": { "item": "bags-trading" } },
+            { "id": "a26", "ref": { "item": "jupiter-api" } }
+          ]
+        }
+      ],
+      "textBoxes": [
+        { "id": "txt-client", "tile": { "x": 4, "y": -2 }, "content": "CLIENT (Next.js 16 + React 19)", "fontSize": 14 },
+        { "id": "txt-external", "tile": { "x": -5, "y": 6 }, "content": "EXTERNAL APIs", "fontSize": 12 },
+        { "id": "txt-blockchain", "tile": { "x": 4, "y": 15 }, "content": "BLOCKCHAIN LAYER", "fontSize": 12 }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+﻿{
+    "ok":  false,
+    "elapsedSec":  240.09,
+    "message":  "The operation has timed out",
+    "detail":  "Invoke-RestMethod : The operation has timed out\r\nAt C:\\Users\\lucid\\OneDrive\\Desktop\\Projects\\Jarvis\\jarvis-sniper\\scripts\\run-gsd-orchestrated-backtests.ps1:85 char:13\r\n+     $resp = Invoke-RestMethod `\r\n+             ~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : InvalidOperation: (System.Net.HttpWebRequest:HttpWebRequest) [Invoke-RestMethod], WebExc \r\n   eption\r\n    + FullyQualifiedErrorId : WebCmdletWebResponseException,Microsoft.PowerShell.Commands.InvokeRestMethodCommand\r\n \r\n"
+}

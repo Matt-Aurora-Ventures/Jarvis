@@ -1,0 +1,278 @@
+/** Risk level indicator for each strategy */
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+
+/** Rich strategy descriptions shown in the breakdown panel */
+export const STRATEGY_INFO: Record<string, {
+  summary: string;
+  optimal: string;
+  risk: string;
+  params: string;
+  /** One-line "Best for:" description aimed at beginners */
+  bestFor: string;
+  /** Risk level: LOW / MEDIUM / HIGH / EXTREME */
+  riskLevel: RiskLevel;
+  /** Expected hold time, e.g. "Usually exits within: 1-4 hours" */
+  holdTime: string;
+}> = {
+  momentum: {
+    summary: 'Looks for tokens with strong buying activity and real trading volume. Finds tokens where lots of people are buying, which often means the price will keep going up.',
+    optimal: 'Works best when the market is active and many new tokens are launching. High trading volume relative to the pool size shows genuine interest.',
+    risk: 'No minimum pool size means you might have trouble selling at the price you want. Use smaller trade sizes to stay safe.',
+    params: 'SL 18% | TP 45% | Trail 5% | Score 50+ | Vol/Liq 3+',
+    bestFor: 'Active traders who want more frequent trades during busy markets',
+    riskLevel: 'MEDIUM',
+    holdTime: 'Usually exits within: 1-6 hours',
+  },
+  insight_j: {
+    summary: 'Only picks tokens with real money behind them ($25K+ liquidity), that are still young (under 100 hours old), and already moving up in price. Very picky but very accurate.',
+    optimal: 'Great when you prefer fewer, higher-quality trades. The 86% win rate comes from only buying tokens that have real market depth behind them.',
+    risk: 'Very selective -- you may wait a while between trades. Patience is key with this strategy.',
+    params: 'SL 18% | TP 50% | Trail 5% | Liq $25K+ | Age <100h',
+    bestFor: 'Patient traders who want high-quality setups with strong win rates',
+    riskLevel: 'LOW',
+    holdTime: 'Usually exits within: 1-4 hours',
+  },
+  hot: {
+    summary: 'A balanced filter that requires both a good quality score (60+) and decent liquidity ($10K+). Produces the most trades of any strategy.',
+    optimal: 'Good for active sessions when you want plenty of action. More trades mean more chances, but expect some losses too.',
+    risk: 'Lower win rate (49%) means about half your trades will lose. Strict stop losses protect you from big drawdowns.',
+    params: 'SL 20% | TP 60% | Trail 8% | Score 60+ | Liq $10K+',
+    bestFor: 'Traders who want high activity and are comfortable with a balanced win/loss ratio',
+    riskLevel: 'MEDIUM',
+    holdTime: 'Usually exits within: 30 min - 4 hours',
+  },
+  hybrid_b: {
+    summary: 'The balanced all-rounder. Combines smart filters with a $40K+ liquidity requirement for steady, continuous 24/7 operation.',
+    optimal: 'A great general-purpose choice for most sessions. Strict enough to avoid scams, flexible enough to still find trades regularly.',
+    risk: 'Based on a smaller backtest sample (10 trades). Performance is strong but may vary as markets change.',
+    params: 'SL 18% | TP 50% | Trail 5% | Liq $40K+ | All filters on',
+    bestFor: 'Reliable everyday trading with balanced risk and reward',
+    riskLevel: 'LOW',
+    holdTime: 'Usually exits within: 1-4 hours',
+  },
+  let_it_ride: {
+    summary: 'Goes for big wins with a 100% take-profit target and a tight 5% trailing stop that locks in gains as the price rises. Built to catch big moves.',
+    optimal: 'Best in strong bull markets or when the scanner shows lots of upward momentum. The tight trailing stop protects your profits on any pullback.',
+    risk: 'The tight 5% trail means the bot will sell quickly if the price dips even slightly. Best when you are very confident about a token.',
+    params: 'SL 20% | TP 75% | Trail 3% | Liq $40K+ | Aggressive mode',
+    bestFor: 'Experienced traders looking to ride big winners in bull markets',
+    riskLevel: 'HIGH',
+    holdTime: 'Usually exits within: 30 min - 2 hours',
+  },
+  insight_i: {
+    summary: 'The most selective filter available: requires $50K+ liquidity, the token must be under 200 hours old, and the buy/sell ratio must be in the sweet spot (1-3x). Maximum quality.',
+    optimal: 'Use when you only want the absolute best setups. Only trades tokens with deep liquidity and balanced buying and selling activity.',
+    risk: 'Very few tokens pass all the filters. You may see zero trades for hours. Best paired with patience and slightly larger trade sizes.',
+    params: 'SL 20% | TP 60% | Trail 8% | Liq $50K+ | B/S 1-3 | Age <200h',
+    bestFor: 'Ultra-patient traders who want maximum quality over quantity',
+    riskLevel: 'LOW',
+    holdTime: 'Usually exits within: 1-6 hours',
+  },
+  pump_fresh_tight: {
+    summary: 'Targets brand-new tokens that just launched (under 24 hours old). This is the top-performing strategy with an 88.2% win rate in backtesting. It buys early when the potential is highest.',
+    optimal: 'Works best when new tokens are actively launching. Fresh tokens offer the most opportunity before the price settles.',
+    risk: 'Based on 17 trades in testing. Needs active token launches to find trades -- quiet periods mean no action.',
+    params: 'SL 18% | TP 45% | Trail 5% | Liq $5K+ | Score 40+ | Age <24h',
+    bestFor: 'New users who want the highest win rate and steady, reliable results',
+    riskLevel: 'MEDIUM',
+    holdTime: 'Usually exits within: 30 min - 4 hours',
+  },
+  micro_cap_surge: {
+    summary: 'Hunts for tiny tokens experiencing a sudden surge in buying volume (3x normal). Uses a wide stop loss (45%) and very high profit target (250%) to catch explosive moves on small tokens.',
+    optimal: 'When small tokens are pumping and you want the chance for massive returns. The volume filter makes sure the buying pressure is real.',
+    risk: 'Wide stop loss means each individual loss is large. The high profit target means most trades will be stopped out before reaching it. Not for the faint-hearted.',
+    params: 'SL 28% | TP 140% | Trail 12% | Liq $3K+ | Score 30+ | Age <24h',
+    bestFor: 'Aggressive traders chasing big wins who can handle larger individual losses',
+    riskLevel: 'EXTREME',
+    holdTime: 'Usually exits within: 1-8 hours',
+  },
+  elite: {
+    summary: 'The strictest automated filter: requires $100K+ liquidity, high volume, tokens under 100 hours old, and 10%+ price momentum.',
+    optimal: 'Use when you want absolute maximum selectivity. Only fires on the highest-conviction setups that pass every single check.',
+    risk: 'Extremely selective. You may not get any trades for extended periods. Requires a lot of patience.',
+    params: 'SL 15% | TP 45% | Trail 5% | Liq $100K+ | V/L 2+ | Mom 10%+',
+    bestFor: 'Patient, disciplined traders who only want the safest, most proven setups',
+    riskLevel: 'LOW',
+    holdTime: 'Usually exits within: 1-4 hours',
+  },
+  loose: {
+    summary: 'The widest net strategy. Low entry requirements ($25K liquidity), no momentum needed, no time restrictions. Catches the most tokens possible.',
+    optimal: 'Good when you want maximum trading activity. Useful for collecting data and understanding how the market moves.',
+    risk: '49% win rate means almost half of trades lose. The strategy relies on volume of trades rather than picking only winners.',
+    params: 'SL 22% | TP 45% | Trail 5% | Liq $25K+ | No gates',
+    bestFor: 'Data collectors and experienced traders who want maximum trade volume',
+    riskLevel: 'HIGH',
+    holdTime: 'Usually exits within: 30 min - 6 hours',
+  },
+  genetic_best: {
+    summary: 'AI-optimized strategy trained on 277 real tokens. Uses a wide stop loss (35%) and very high profit target (200%) with a 12% trailing stop. Targets brand-new small tokens.',
+    optimal: 'When fresh tokens are launching with strong initial momentum. The AI optimizer identified this as the highest expected value configuration.',
+    risk: 'Wide stop loss means significant risk per trade. Requires careful position sizing and emotional discipline.',
+    params: 'SL 24% | TP 120% | Trail 8% | Liq $3K+ | Score 43+ | Age <24h',
+    bestFor: 'Adventurous traders who trust AI optimization and can handle volatility',
+    riskLevel: 'HIGH',
+    holdTime: 'Usually exits within: 1-8 hours',
+  },
+  genetic_v2: {
+    summary: 'Second-generation AI-optimized strategy. Detects volume surges (2.5x normal buying) with wide stop loss (45%) and 207% profit target. Built for catching explosive moves on memecoins.',
+    optimal: 'When the market is volatile and you want to catch big moves. The wide stop loss gives tokens room to breathe while the 207% target captures massive runs.',
+    risk: 'Wide stop loss (45%) means each loss is significant. Best used with smaller position sizes to manage risk.',
+    params: 'SL 28% | TP 140% | Trail 8% | Liq $5K+ | Vol Surge 2.5x',
+    bestFor: 'Risk-tolerant traders seeking outsized returns on volatile memecoins',
+    riskLevel: 'EXTREME',
+    holdTime: 'Usually exits within: 1-12 hours',
+  },
+  xstock_intraday: {
+    summary: 'Trades tokenized US stocks with wider exits so net wins better clear fees and slippage while still targeting reliable intraday continuation.',
+    optimal: 'Works best in active sessions with clear trend follow-through. Built for continuous 24/7 token markets without dead-hour blocking.',
+    risk: 'Wider exits reduce overtrading but increase time-in-trade. Keep sizing disciplined and monitor liquidity.',
+    params: 'SL 3% | TP 10% | Trail 2.2% | Liq $10K+ | Score 40+',
+    bestFor: 'Stock traders who prefer steady, smaller gains over big swings',
+    riskLevel: 'LOW',
+    holdTime: 'Usually exits within: 2-12 hours',
+  },
+  xstock_swing: {
+    summary: 'Holds tokenized US stocks for multiple days, riding momentum with wider profit targets. Designed for catching bigger stock moves over days, not hours.',
+    optimal: 'Best when stocks are in a strong trend driven by news, earnings, or sector momentum.',
+    risk: 'Overnight and weekend gaps can cause sudden price changes. Exit prices may differ from target triggers.',
+    params: 'SL 6% | TP 18% | Trail 4% | Liq $10K+ | Score 50+',
+    bestFor: 'Swing traders who are comfortable holding positions for 1-5 days',
+    riskLevel: 'MEDIUM',
+    holdTime: 'Usually exits within: 1-5 days',
+  },
+  prestock_speculative: {
+    summary: 'Trades pre-IPO token proxies, which are more volatile than regular stocks but usually calmer than memecoins. Uses moderate stop loss and profit targets.',
+    optimal: 'Best when pre-IPO narratives are hot (upcoming IPOs, tech hype) and the token has stable liquidity.',
+    risk: 'Speculative instruments can have sudden large price swings. Do not oversize positions and do not assume liquidity will always be there.',
+    params: 'SL 8% | TP 24% | Trail 5% | Liq $5K+ | Score 30+',
+    bestFor: 'Speculative traders interested in pre-IPO exposure with moderate risk',
+    riskLevel: 'HIGH',
+    holdTime: 'Usually exits within: 2-48 hours',
+  },
+  index_intraday: {
+    summary: 'Scalps index token proxies (like SPY/QQQ equivalents) with wider exits to better absorb fees and short-term noise.',
+    optimal: 'Best in range-bound, sideways sessions where the price bounces between levels. Small consistent profits add up.',
+    risk: 'Still lower-vol than memecoins, but wider exits can hold through deeper swings before closing.',
+    params: 'SL 2.8% | TP 9% | Trail 2% | Liq $20K+ | Score 50+',
+    bestFor: 'Conservative traders who want the lowest volatility and most predictable outcomes',
+    riskLevel: 'LOW',
+    holdTime: 'Usually exits within: 30 min - 4 hours',
+  },
+  index_leveraged: {
+    summary: 'Trades leveraged index proxies (like 3x TQQQ-style tokens) with wider exits to account for the amplified price swings. Targets meaningful day-to-day moves.',
+    optimal: 'Best when indexes are trending strongly and overall market volatility is elevated.',
+    risk: 'Leveraged products amplify both gains AND losses. Keep your position sizes smaller and always respect the stop loss.',
+    params: 'SL 7% | TP 20% | Trail 4.5% | Liq $20K+ | Score 40+',
+    bestFor: 'Experienced index traders who understand leverage and want amplified returns',
+    riskLevel: 'HIGH',
+    holdTime: 'Usually exits within: 4-24 hours',
+  },
+  bluechip_mean_revert: {
+    summary: 'Trades established Solana blue chips (SOL, JUP, RAY, PYTH) by buying dips and selling on the bounce. Tight stop loss keeps losses small on each trade.',
+    optimal: 'Works best in choppy, sideways markets where blue chips regularly dip and recover. Great for consistent small wins.',
+    risk: 'Mean reversion does not work when the market is in a strong downtrend. Always respect the stop loss and do not oversize.',
+    params: 'SL 6% | TP 12% | Trail 3% | Liq $200K+ | Score 55+',
+    bestFor: 'Users who prefer stable, established tokens over new launches',
+    riskLevel: 'LOW',
+    holdTime: 'Usually exits within: 1-12 hours',
+  },
+  bluechip_trend_follow: {
+    summary: 'Rides momentum on established Solana tokens with wider profit targets. Designed to catch multi-hour or multi-day uptrends on tokens you already know and trust.',
+    optimal: 'Best when the broader crypto market is trending upward and blue chip tokens show sustained buying momentum.',
+    risk: 'Trailing stops can exit early during volatile chop. Use this strategy only when you see a clear, strong trend forming.',
+    params: 'SL 7% | TP 18% | Trail 5% | Liq $200K+ | Score 60+ | Mom 3%+',
+    bestFor: 'Trend followers who want to ride bigger moves on established Solana tokens',
+    riskLevel: 'MEDIUM',
+    holdTime: 'Usually exits within: 4 hours - 2 days',
+  },
+  bluechip_breakout: {
+    summary: 'Catches breakout moves on top Solana tokens when trading volume spikes and price breaks out of a range. Requires both momentum and a volume surge to confirm the breakout is real.',
+    optimal: 'Best when volume is rising sharply and price is clearly breaking above previous levels.',
+    risk: 'False breakouts are common. Expect occasional quick stop-outs. Keep your position sizes controlled.',
+    params: 'SL 6% | TP 16% | Trail 4% | Liq $200K+ | Score 65+ | V/L 1.5x+',
+    bestFor: 'Active traders who want to catch explosive moves on liquid, established tokens',
+    riskLevel: 'MEDIUM',
+    holdTime: 'Usually exits within: 1-8 hours',
+  },
+  // ─── Bags.fm Strategies ─────────────────────────────────────────────────────
+  bags_fresh_snipe: {
+    summary: 'Targets brand-new bags.fm token launches within their first 48 hours. All bags tokens have locked liquidity (enforced by bags.fm), making entry safer than typical memecoins.',
+    optimal: 'Best when new bags tokens are launching with active communities. Fresh launches on bags.fm tend to pump early, making fast entry valuable.',
+    risk: 'New tokens can still dump after initial hype. The 20% stop loss limits downside. Locked liquidity means you can always sell.',
+    params: 'SL 18% | TP 55% | Trail 5% | Score 35+ | Age <48h | Locked Liq',
+    bestFor: 'Traders who want early entry on bags.fm launches with the safety of locked liquidity',
+    riskLevel: 'MEDIUM',
+    holdTime: 'Usually exits within: 30 min - 6 hours',
+  },
+  bags_momentum: {
+    summary: 'Catches momentum surges on bags.fm tokens after they establish initial price discovery. Requires 5%+ hourly momentum as confirmation that buying pressure is real.',
+    optimal: 'Works when bags tokens show sustained buying after their initial launch period. Community-driven tokens often have momentum waves.',
+    risk: 'Wide 25% stop loss means larger individual losses. The 150% take profit target aims for outsized winners to compensate.',
+    params: 'SL 20% | TP 100% | Trail 8% | Score 30+ | Age <7d | Mom 5%+ | Locked Liq',
+    bestFor: 'Momentum traders who want to ride community-driven surges on bags tokens',
+    riskLevel: 'MEDIUM',
+    holdTime: 'Usually exits within: 1-12 hours',
+  },
+  bags_value: {
+    summary: 'Only enters high-quality bags tokens with a KR8TIV score of 55+. These are tokens with strong communities, active builders, and social presence. Patient entry with tight risk controls.',
+    optimal: 'Best for established bags tokens that have proven their community is real and the project has substance beyond just a launch.',
+    risk: 'Very selective — fewer trades but higher quality. The tight 15% stop loss keeps individual losses small.',
+    params: 'SL 12% | TP 30% | Trail 4% | Score 55+ | Age <30d | Locked Liq',
+    bestFor: 'Quality-focused traders who want the best bags.fm projects with strong fundamentals',
+    riskLevel: 'LOW',
+    holdTime: 'Usually exits within: 2-24 hours',
+  },
+  bags_dip_buyer: {
+    summary: 'Exploits the typical bags.fm pattern: tokens pump at launch, dump, then pump again on renewed community interest. Buys during the dip phase targeting the second wave.',
+    optimal: 'Best when bags tokens have completed their initial dump and show signs of stabilization. The second pump often equals or exceeds the first.',
+    risk: 'Not all tokens get a second pump. The 30% stop loss is wider to give tokens room to find their bottom. Position size carefully.',
+    params: 'SL 25% | TP 120% | Trail 8% | Score 25+ | Age <14d | Locked Liq',
+    bestFor: 'Contrarian traders who buy fear and sell greed on bags.fm tokens',
+    riskLevel: 'HIGH',
+    holdTime: 'Usually exits within: 4-48 hours',
+  },
+  bags_bluechip: {
+    summary: 'Trades established bags.fm tokens (30+ days old) that still have active trading volume. These are the "blue chips" of bags — proven projects with sustained communities.',
+    optimal: 'Best when established bags tokens show renewed interest. Old tokens with volume are rare and valuable, indicating real community.',
+    risk: 'Low risk due to tight exits and focus on proven tokens. The 10% stop loss and 30% take profit create a favorable 3:1 risk/reward.',
+    params: 'SL 12% | TP 28% | Trail 4% | Score 60+ | Established | Locked Liq',
+    bestFor: 'Conservative traders who want the safest bags.fm plays with proven track records',
+    riskLevel: 'LOW',
+    holdTime: 'Usually exits within: 2-12 hours',
+  },
+  bags_conservative: {
+    summary: 'Conservative bags profile focused on consistency, higher quality floor, and lower volatility exits.',
+    optimal: 'Best when you want controlled exposure to bags tokens with lower churn.',
+    risk: 'Fewer entries by design. Prioritizes survival and smoother equity over aggressive upside.',
+    params: 'SL 14% | TP 35% | Trail 5% | Score 40+ | Age <14d | Locked Liq',
+    bestFor: 'Traders prioritizing preservation and consistency in bags markets',
+    riskLevel: 'LOW',
+    holdTime: 'Usually exits within: 2-24 hours',
+  },
+  bags_aggressive: {
+    summary: 'Aggressive bags profile for high-volatility opportunities, with tempered but still large upside targets.',
+    optimal: 'Works when bags narratives are hot and volume/engagement are expanding quickly.',
+    risk: 'Higher volatility and wider stop profile can produce larger drawdowns. Use small sizing.',
+    params: 'SL 30% | TP 180% | Trail 12% | Score 10+ | Age <14d | Locked Liq',
+    bestFor: 'Risk-tolerant traders aiming for outsized bags moves',
+    riskLevel: 'EXTREME',
+    holdTime: 'Usually exits within: 1-48 hours',
+  },
+  bags_elite: {
+    summary: 'Strict high-score bags filter with controlled exits and high-quality admission criteria.',
+    optimal: 'Best in selective mode when only the strongest bags projects should pass.',
+    risk: 'Can go quiet in weak market regimes due to strict score gate.',
+    params: 'SL 14% | TP 45% | Trail 6% | Score 70+ | Age <14d | Locked Liq',
+    bestFor: 'Selective traders who want only top-quality bags candidates',
+    riskLevel: 'MEDIUM',
+    holdTime: 'Usually exits within: 2-24 hours',
+  },
+};
+
+const STRATEGY_SEED_STATUS = 'Status: Seed (Not Promoted).';
+for (const strategyId of Object.keys(STRATEGY_INFO)) {
+  const info = STRATEGY_INFO[strategyId];
+  if (!info.optimal.startsWith(STRATEGY_SEED_STATUS)) {
+    info.optimal = `${STRATEGY_SEED_STATUS} ${info.optimal}`;
+  }
+}
