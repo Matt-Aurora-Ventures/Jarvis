@@ -584,7 +584,7 @@ export function StatusBar() {
 
       {/* Reset Auto Modal */}
       {resetAutoOpen && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[999] flex items-start justify-center p-4 pt-16 sm:pt-20">
           <button
             type="button"
             className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer"
