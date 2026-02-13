@@ -49,7 +49,10 @@ function baseUrl(): string {
 }
 
 function apiKey(): string {
-  return String(process.env.XAI_API_KEY || '').trim();
+  // Secret Manager values can include stray whitespace/newlines; sanitize to avoid invalid header chars.
+  return String(process.env.XAI_API_KEY || '')
+    .replace(/[\x00-\x20\x7f]/g, '')
+    .trim();
 }
 
 function mustApiKey(): string {
