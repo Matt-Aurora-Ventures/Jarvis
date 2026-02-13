@@ -298,14 +298,24 @@ async function finalizePriorPendingBatch(state: AutonomyState, currentCycleId: s
   if (!pending) return state;
   if (pending.cycleId === currentCycleId) return state;
 
-  const batch = await getBatch(pending.batchId);
+  let batch: Awaited<ReturnType<typeof getBatch>>;
+  try {
+    batch = await getBatch(pending.batchId);
+  } catch {
+    // Keep pending; we'll try finalization on the next cycle.
+    return state;
+  }
   if (batch.status !== 'completed') {
     return state;
   }
 
-  const outputText = batch.output_file_id
-    ? await getFileContent(batch.output_file_id)
-    : '';
+  let outputText = '';
+  try {
+    outputText = batch.output_file_id ? await getFileContent(batch.output_file_id) : '';
+  } catch {
+    // If output fetch fails, keep pending and retry next cycle.
+    return state;
+  }
   const extracted = extractDecisionFromBatchOutput(outputText, pending.cycleId);
   const validated = parseAndValidateAutonomyDecision(extracted.decisionRaw);
   const critiqueValidated = parseAndValidateAutonomyDecision(extracted.critiqueRaw);
@@ -493,7 +503,12 @@ async function submitCurrentCycle(state: AutonomyState, cycleId: string): Promis
     return baseNoop(budget.reasonCode || 'AUTONOMY_NOOP_BUDGET_CAP');
   }
 
-  const frontier = await resolveFrontierModel();
+  let frontier: Awaited<ReturnType<typeof resolveFrontierModel>>;
+  try {
+    frontier = await resolveFrontierModel();
+  } catch {
+    return baseNoop('AUTONOMY_NOOP_XAI_UNAVAILABLE');
+  }
   if (!frontier.ok || !frontier.selectedModel) {
     return baseNoop('AUTONOMY_NOOP_MODEL_POLICY_FAIL');
   }
@@ -504,8 +519,15 @@ async function submitCurrentCycle(state: AutonomyState, cycleId: string): Promis
     decisionPrompt: buildDecisionPrompt(matrix),
     critiquePrompt: buildSelfCritiquePrompt(matrix),
   });
-  const inputFileId = await uploadBatchInputFile(batchJsonl);
-  const batchId = await createBatch(inputFileId, '/v1/chat/completions', '24h');
+
+  let inputFileId = '';
+  let batchId = '';
+  try {
+    inputFileId = await uploadBatchInputFile(batchJsonl);
+    batchId = await createBatch(inputFileId, '/v1/chat/completions', '24h');
+  } catch {
+    return baseNoop('AUTONOMY_NOOP_XAI_UNAVAILABLE');
+  }
 
   const pendingState = {
     ...state,
