@@ -583,7 +583,7 @@ export function StatusBar() {
 
       {/* Reset Auto Modal */}
       {resetAutoOpen && (
-        <div className="fixed inset-0 z-[999] flex items-start justify-center p-4 pt-24 sm:pt-28">
+        <div className="fixed inset-0 z-[999] flex items-start justify-center p-4 pt-32 sm:pt-36">
           <button
             type="button"
             className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer"
@@ -595,7 +595,7 @@ export function StatusBar() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="reset-auto-title"
-            className="relative w-full max-w-[540px] card-glass p-5 border border-border-primary shadow-xl"
+            className="relative w-full max-w-[540px] max-h-[calc(100vh-10rem)] overflow-y-auto card-glass p-5 border border-border-primary shadow-xl"
           >
             <div className="flex items-start gap-3">
               <div className="mt-0.5 w-9 h-9 rounded-full bg-accent-warning/10 border border-accent-warning/25 flex items-center justify-center">
