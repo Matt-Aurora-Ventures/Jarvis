@@ -4,17 +4,45 @@ param(
   [string]$Service = "ssrkr8tiv",
   [string]$TimeoutSeconds = "900",
   [string]$Memory = "1Gi",
-  [string]$TagPrefix = "fh-"
+  [string]$TagPrefix = "fh-",
+  # Keep autonomy + batch audit flags persistent across Firebase framework redeploys.
+  # These are intentionally NON-secret (secrets remain in Secret Manager bindings).
+  [string]$AutonomyAuditBucket = "kr8tiv-sniper-autonomy-audit",
+  [string]$AutonomyEnabled = "true",
+  [string]$AutonomyApplyOverrides = "false",
+  [string]$XaiBatchEnabled = "true",
+  [string]$XaiFrontierModel = "grok-4-1-fast-reasoning",
+  [string]$XaiDailyBudgetUsd = "10",
+  [string]$XaiHourlyMaxInputTokens = "150000",
+  [string]$XaiHourlyMaxOutputTokens = "30000",
+  [string]$XaiKeyRateQps = "0.2",
+  [string]$XaiKeyRateQpm = "12",
+  [string]$XaiKeyRateTpm = "120000"
 )
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "[hardening] Updating Cloud Run service $Service in $Project/$Region ..."
+$envVars = @(
+  "AUTONOMY_ENABLED=$AutonomyEnabled",
+  "AUTONOMY_APPLY_OVERRIDES=$AutonomyApplyOverrides",
+  "AUTONOMY_AUDIT_BUCKET=$AutonomyAuditBucket",
+  "XAI_BATCH_ENABLED=$XaiBatchEnabled",
+  "XAI_FRONTIER_MODEL=$XaiFrontierModel",
+  "XAI_DAILY_BUDGET_USD=$XaiDailyBudgetUsd",
+  "XAI_HOURLY_MAX_INPUT_TOKENS=$XaiHourlyMaxInputTokens",
+  "XAI_HOURLY_MAX_OUTPUT_TOKENS=$XaiHourlyMaxOutputTokens",
+  "XAI_KEY_RATE_QPS=$XaiKeyRateQps",
+  "XAI_KEY_RATE_QPM=$XaiKeyRateQpm",
+  "XAI_KEY_RATE_TPM=$XaiKeyRateTpm"
+) -join ","
+
 gcloud run services update $Service `
   --project $Project `
   --region $Region `
   --timeout $TimeoutSeconds `
   --memory $Memory `
+  --update-env-vars $envVars `
   --quiet | Out-Null
 
 Write-Host "[hardening] Verifying runtime settings..."
