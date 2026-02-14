@@ -567,8 +567,10 @@ async function sourceSolscan(wallet: string, forceFullScan = false): Promise<Sou
       source: 'solscan',
       records: [],
       status: {
-        ok: false,
+        // Treat as an optional source: missing key should not degrade overall portfolio sync.
+        ok: true,
         durationMs: nowMs() - startedAt,
+        skipped: true,
         error: 'SOLSCAN_API_KEY is not configured',
       },
     };

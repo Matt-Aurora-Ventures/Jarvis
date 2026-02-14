@@ -30,6 +30,7 @@ export async function GET() {
       rpcServer: !!process.env.SOLANA_RPC_URL,
       bagsApiKey: !!process.env.BAGS_API_KEY,
       bagsReferral: !!process.env.BAGS_REFERRAL_ACCOUNT,
+      solscanApiKey: !!process.env.SOLSCAN_API_KEY,
     },
     rpc: {
       configured: rpcConfig.ok,
