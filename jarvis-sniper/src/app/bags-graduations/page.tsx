@@ -29,6 +29,7 @@ import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { VersionedTransaction } from '@solana/web3.js';
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
 import { waitForSignatureStatus } from '@/lib/tx-confirmation';
+import { safeImageUrl } from '@/lib/safe-url';
 import {
   type BagsGraduation,
   type ScoreTier,
@@ -318,6 +319,7 @@ function GraduationCard({ grad }: { grad: BagsGraduation }) {
   const tier = getScoreTier(grad.score);
   const tierColor = TIER_CONFIG[tier].color;
   const [chartOpen, setChartOpen] = useState(false);
+  const safeLogoUri = safeImageUrl(grad.logo_uri);
   const chartUrl = (grad as any).chart_url || `https://dexscreener.com/solana/${grad.mint}`;
   const website = (grad as any).website as string | undefined;
   const twitter = grad.twitter as string | undefined;
@@ -330,9 +332,9 @@ function GraduationCard({ grad }: { grad: BagsGraduation }) {
       {/* Header: Logo + Name + Tier */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          {grad.logo_uri ? (
+          {safeLogoUri ? (
             <img
-              src={grad.logo_uri}
+              src={safeLogoUri}
               alt={grad.symbol}
               className="w-10 h-10 rounded-full bg-bg-tertiary object-cover shrink-0"
               onError={(e) => {

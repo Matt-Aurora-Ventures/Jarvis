@@ -3,6 +3,7 @@ import { Buffer } from 'buffer';
 import { ServerCache } from '@/lib/server-cache';
 import { fetchWithRetry } from '@/lib/fetch-utils';
 import { resolveServerRpcConfig } from './server-rpc-config';
+import { safeImageUrl } from './safe-url';
 const SOLSCAN_BASE = 'https://pro-api.solscan.io/v2.0';
 
 let _connection: Connection | null = null;
@@ -888,7 +889,7 @@ export async function buildWalletHoldingsConsensus(
       mint: item.mint,
       symbol: item.symbol || item.mint.slice(0, 6),
       name: item.name || item.symbol || item.mint.slice(0, 6),
-      icon: item.icon,
+      icon: safeImageUrl(item.icon),
       decimals,
       amountLamports: item.amountLamports.toString(),
       uiAmount,

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { graduationCache } from '@/lib/server-cache';
 import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
 import { ALL_BLUECHIPS } from '@/lib/bluechip-data';
+import { safeImageUrl } from '@/lib/safe-url';
 
 /**
  * Server-side graduation feed using DexScreener API
@@ -573,7 +574,7 @@ export async function GET(request: Request) {
         price_usd: priceUsd,
         liquidity: liq,
         volume_24h: vol24,
-        logo_uri: iconUrl,
+        logo_uri: safeImageUrl(iconUrl),
         website,
         twitter,
         telegram,
