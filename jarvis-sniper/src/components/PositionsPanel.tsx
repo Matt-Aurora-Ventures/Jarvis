@@ -5,11 +5,11 @@ import { X, DollarSign, Clock, ExternalLink, Shield, ShieldCheck, Target, BarCha
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
-import { executeSwapFromQuote, getSellQuote } from '@/lib/bags-trading';
+import { executeSwapFromQuote, getSellQuote, SOL_MINT } from '@/lib/bags-trading';
 import { withTimeout } from '@/lib/async-timeout';
 import { getOwnerTokenBalanceLamports, minLamportsString } from '@/lib/solana-tokens';
 import { computeTargetsFromEntryUsd, formatUsdPrice, isBlueChipLongConvictionSymbol } from '@/lib/trade-plan';
-import { loadSessionWalletByPublicKey, loadSessionWalletFromStorage, sweepExcessToMainWallet } from '@/lib/session-wallet';
+import { closeEmptyTokenAccountsForMint, loadSessionWalletByPublicKey, loadSessionWalletFromStorage, sweepExcessToMainWallet } from '@/lib/session-wallet';
 import { filterOpenPositionsForActiveWallet, filterTradeManagedOpenPositionsForActiveWallet, isPositionInActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
 import { DUST_VALUE_USD, isHoldingDustRecentlyClosed, partitionDustHoldings, type DustAwarePosition, type RecentlyClosedMintMemo } from '@/lib/dust-policy';
@@ -608,10 +608,17 @@ export function PositionsPanel() {
         amountLamports = bal.amountLamports;
         updatePosition(id, { amountLamports });
       } else if (bal && bal.amountLamports !== '0') {
-        const clamped = minLamportsString(amountLamports, bal.amountLamports);
-        if (clamped !== amountLamports) {
-          amountLamports = clamped;
+        // For auto-managed entries in the session wallet, sell the full wallet balance so we can
+        // reclaim rent by closing the token account.
+        if (canUseSession && pos.entrySource === 'auto') {
+          amountLamports = bal.amountLamports;
           updatePosition(id, { amountLamports });
+        } else {
+          const clamped = minLamportsString(amountLamports, bal.amountLamports);
+          if (clamped !== amountLamports) {
+            amountLamports = clamped;
+            updatePosition(id, { amountLamports });
+          }
         }
       }
       // Slippage waterfall:
@@ -664,6 +671,82 @@ export function PositionsPanel() {
         highWaterMarkPct: Math.max(pos.highWaterMarkPct ?? 0, realPnlPct),
       });
       closePosition(id, status, result.txHash, exitValueSol);
+
+      // If this position lives in the session wallet, reclaim rent immediately by closing the empty
+      // token account(s) for this mint (best-effort).
+      if (canUseSession) {
+        try {
+          const cleanup = await closeEmptyTokenAccountsForMint(session!.keypair, pos.mint);
+          if (cleanup.closedTokenAccounts > 0) {
+            addExecution({
+              id: `rent-${Date.now()}-${id.slice(-4)}`,
+              type: 'info',
+              symbol: pos.symbol,
+              mint: pos.mint,
+              amount: 0,
+              txHash: cleanup.closeSignatures[0],
+              reason: `Reclaimed ${(cleanup.reclaimedLamports / 1e9).toFixed(6)} SOL rent by closing ${cleanup.closedTokenAccounts} empty token account${cleanup.closedTokenAccounts === 1 ? '' : 's'}`,
+              timestamp: Date.now(),
+            });
+          }
+          if (cleanup.closedTokenAccounts === 0 && cleanup.skippedNonZeroTokenAccounts > 0) {
+            addExecution({
+              id: `rent-skip-${Date.now()}-${id.slice(-4)}`,
+              type: 'info',
+              symbol: pos.symbol,
+              mint: pos.mint,
+              amount: 0,
+              reason: `Rent reclaim skipped: ${cleanup.skippedNonZeroTokenAccounts} token account${cleanup.skippedNonZeroTokenAccounts === 1 ? '' : 's'} still had non-zero balance (dust/partial exit).`,
+              timestamp: Date.now(),
+            });
+          }
+          if (cleanup.failedToCloseTokenAccounts > 0) {
+            addExecution({
+              id: `rent-fail-${Date.now()}-${id.slice(-4)}`,
+              type: 'error',
+              symbol: pos.symbol,
+              mint: pos.mint,
+              amount: 0,
+              reason: `Rent reclaim incomplete: ${cleanup.failedToCloseTokenAccounts} empty token account${cleanup.failedToCloseTokenAccounts === 1 ? '' : 's'} failed to close; retry Sweep Back later.`,
+              timestamp: Date.now(),
+            });
+          }
+        } catch {
+          // ignore rent reclaim errors (trade already closed)
+        }
+
+        // Close any now-empty WSOL token accounts left behind by swap routing.
+        if (pos.mint !== SOL_MINT) {
+          try {
+            const wsolCleanup = await closeEmptyTokenAccountsForMint(session!.keypair, SOL_MINT);
+            if (wsolCleanup.closedTokenAccounts > 0) {
+              addExecution({
+                id: `rent-wsol-${Date.now()}-${id.slice(-4)}`,
+                type: 'info',
+                symbol: 'WSOL',
+                mint: SOL_MINT,
+                amount: 0,
+                txHash: wsolCleanup.closeSignatures[0],
+                reason: `Reclaimed ${(wsolCleanup.reclaimedLamports / 1e9).toFixed(6)} SOL rent by closing ${wsolCleanup.closedTokenAccounts} empty WSOL token account${wsolCleanup.closedTokenAccounts === 1 ? '' : 's'}`,
+                timestamp: Date.now(),
+              });
+            }
+            if (wsolCleanup.failedToCloseTokenAccounts > 0) {
+              addExecution({
+                id: `rent-wsol-fail-${Date.now()}-${id.slice(-4)}`,
+                type: 'error',
+                symbol: 'WSOL',
+                mint: SOL_MINT,
+                amount: 0,
+                reason: `WSOL rent reclaim incomplete: ${wsolCleanup.failedToCloseTokenAccounts} empty token account${wsolCleanup.failedToCloseTokenAccounts === 1 ? '' : 's'} failed to close; retry Sweep Back later.`,
+                timestamp: Date.now(),
+              });
+            }
+          } catch {
+            // ignore WSOL cleanup errors (trade already closed)
+          }
+        }
+      }
       // Best-effort post-close resync so post-sell dust gets hidden/reconciled quickly.
       void syncOnchainHoldings(false, true);
 

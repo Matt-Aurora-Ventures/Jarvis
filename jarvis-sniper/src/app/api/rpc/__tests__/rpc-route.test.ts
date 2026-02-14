@@ -7,10 +7,14 @@ vi.mock('@/lib/server-rpc-config', () => ({
   resolveServerRpcConfig: mockResolveServerRpcConfig,
 }));
 
-vi.mock('@/lib/rate-limiter', () => ({
-  rpcRateLimiter: { check: mockRateLimiterCheck },
-  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
-}));
+vi.mock('@/lib/rate-limiter', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/rate-limiter')>('@/lib/rate-limiter');
+  return {
+    ...actual,
+    rpcRateLimiter: { check: mockRateLimiterCheck },
+    getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
+  };
+});
 
 const originalFetch = globalThis.fetch;
 
@@ -96,4 +100,3 @@ describe('POST /api/rpc', () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 });
-

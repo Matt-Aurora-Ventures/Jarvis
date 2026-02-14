@@ -2,6 +2,12 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { BagsGraduation } from '@/lib/bags-api';
 import { isLegacyRecoveredPositionId, isReliableTradeForStats, sanitizePnlPercent } from '@/lib/position-reliability';
+import {
+  applyDiscountedOutcome,
+  type StrategyBelief,
+} from '@/lib/strategy-selector';
+import type { StrategyOverrideSnapshot } from '@/lib/autonomy/types';
+import { postTradeTelemetry } from '@/lib/autonomy/trade-telemetry-client';
 
 export type StrategyMode = 'conservative' | 'balanced' | 'aggressive';
 export type TradeSignerMode = 'phantom' | 'session';
@@ -656,6 +662,8 @@ export interface Position {
   name: string;
   /** Position creation source (used for automation dedupe/reporting). */
   entrySource?: 'auto' | 'manual';
+  /** Strategy preset ID used at entry time (for auto learning attribution). */
+  strategyId?: string;
   /** Wallet that holds the tokens (lets risk monitoring continue even if Phantom disconnects). */
   walletAddress?: string;
   entryPrice: number;
@@ -990,6 +998,8 @@ const DEFAULT_CONFIG: SniperConfig = {
   },
 };
 
+const STRATEGY_BELIEF_DECAY_GAMMA = 0.90;
+
 /** Monotonic counter to prevent duplicate keys when multiple snipes fire in same ms */
 let execCounter = 0;
 
@@ -1145,6 +1155,20 @@ interface SniperState {
     stage?: 'tiny' | 'sanity' | 'stability' | 'promotion';
     promotionEligible?: boolean;
   }>) => void;
+
+  // Discounted Thompson learning state (browser-persisted, no backend dependency).
+  strategyBeliefs: Record<string, StrategyBelief>;
+  recordStrategyOutcome: (args: {
+    strategyId?: string;
+    outcome: 'win' | 'loss';
+    txHash?: string;
+    entrySource?: Position['entrySource'];
+    decayGamma?: number;
+  }) => void;
+  resetStrategyBeliefs: () => void;
+  /** Server-provided runtime strategy overrides for auto mode (signed snapshot). */
+  strategyOverrideSnapshot: StrategyOverrideSnapshot | null;
+  setStrategyOverrideSnapshot: (snapshot: StrategyOverrideSnapshot | null) => void;
 
   // Reset — clears positions, executions, stats, sniped mints
   resetSession: () => void;
@@ -1341,6 +1365,7 @@ export const useSniperStore = create<SniperState>()(
     const state = get();
     const pos = state.positions.find((p) => p.id === id);
     if (!pos) return;
+    const closedAt = Date.now();
 
     execCounter++;
 
@@ -1376,6 +1401,18 @@ export const useSniperStore = create<SniperState>()(
     const countAsWin = hasReliableCostBasis && (exitType === 'tp_exit' || (exitType === 'manual_exit' && isWin));
     const countAsLoss = hasReliableCostBasis && (exitType === 'sl_exit' || (exitType === 'manual_exit' && !isWin));
     const countAsTrade = hasReliableCostBasis;
+    const strategyOutcome = (
+      pos.entrySource === 'auto' &&
+      !!pos.strategyId &&
+      !!txHash &&
+      (countAsWin || countAsLoss)
+    )
+      ? {
+          strategyId: pos.strategyId,
+          outcome: countAsWin ? 'win' as const : 'loss' as const,
+          decayGamma: Math.abs(Number(pos.highWaterMarkPct || 0)) >= 80 ? 0.85 : STRATEGY_BELIEF_DECAY_GAMMA,
+        }
+      : null;
 
     const pnlLabel = !hasReliableCostBasis
       ? 'cost basis unavailable (excluded from stats)'
@@ -1384,21 +1421,21 @@ export const useSniperStore = create<SniperState>()(
       : `${realPnlPct.toFixed(1)}% (est)`;
 
     const execEvent: ExecutionEvent = {
-      id: `exec-${Date.now()}-${execCounter}`,
+      id: `exec-${closedAt}-${execCounter}`,
       type: exitType,
       symbol: pos.symbol,
       mint: pos.mint,
       amount: pos.solInvested,
       pnlPercent: hasReliableCostBasis ? realPnlPct : undefined,
       txHash,
-      timestamp: Date.now(),
+      timestamp: closedAt,
       reason: `${status === 'trail_stop' ? 'TRAIL STOP' : status === 'expired' ? 'EXPIRED' : status.replace('_', ' ').toUpperCase()} — ${pnlLabel}`,
     };
 
     set((s) => {
       // ─── Circuit Breaker Update (global + per-asset) ───
       const cb = { ...s.circuitBreaker, perAsset: { ...s.circuitBreaker.perAsset } };
-      const now = Date.now();
+      const now = closedAt;
       const posAssetType: AssetType = pos.assetType || s.assetFilter;
 
       // Reset 24h window if expired (global)
@@ -1534,6 +1571,44 @@ export const useSniperStore = create<SniperState>()(
         // Breaker pauses execution but does not change user intent (auto toggle stays as-is).
         config: s.config,
       };
+    });
+
+    if (strategyOutcome) {
+      get().recordStrategyOutcome({
+        strategyId: strategyOutcome.strategyId,
+        outcome: strategyOutcome.outcome,
+        decayGamma: strategyOutcome.decayGamma,
+        txHash,
+        entrySource: pos.entrySource,
+      });
+    }
+
+    // Persist a minimal trade ledger record server-side so autonomy/backtests can
+    // learn from real executions across sessions/devices. Without this, swaps
+    // exist only in the executing browser's localStorage.
+    postTradeTelemetry({
+      schemaVersion: 1,
+      positionId: pos.id,
+      mint: pos.mint,
+      status,
+      symbol: pos.symbol,
+      walletAddress: pos.walletAddress,
+      strategyId: pos.strategyId ?? null,
+      entrySource: pos.entrySource,
+      entryTime: pos.entryTime,
+      exitTime: closedAt,
+      solInvested: pos.solInvested,
+      exitSolReceived: exitSolReceived ?? null,
+      pnlSol: hasReliableCostBasis ? realPnlSol : 0,
+      pnlPercent: hasReliableCostBasis ? realPnlPct : 0,
+      buyTxHash: pos.txHash ?? null,
+      sellTxHash: txHash ?? null,
+      includedInStats: hasReliableCostBasis,
+      manualOnly: !!pos.manualOnly,
+      recoveredFrom: pos.recoveredFrom ?? null,
+      tradeSignerMode: state.tradeSignerMode,
+      sessionWalletPubkey: state.sessionWalletPubkey,
+      activePreset: state.activePreset,
     });
   },
   reconcilePosition: (id, reason, opts) => {
@@ -1865,6 +1940,8 @@ export const useSniperStore = create<SniperState>()(
       mint: grad.mint,
       symbol: grad.symbol,
       name: grad.name,
+      entrySource: 'manual',
+      strategyId: state.activePreset,
       entryPrice: grad.price_usd || 0,
       currentPrice: grad.price_usd || 0,
       // Estimate token amount: (SOL * SOL_USD) / token_USD. Falls back to SOL/token_USD if no SOL price.
@@ -2086,6 +2163,32 @@ export const useSniperStore = create<SniperState>()(
     }
     return { backtestMeta: updated };
   }),
+  strategyBeliefs: {},
+  recordStrategyOutcome: (args) => set((s) => {
+    const strategyId = String(args.strategyId || '').trim();
+    const txHash = String(args.txHash || '').trim();
+    const gamma = Number.isFinite(args.decayGamma)
+      ? Math.max(0.5, Math.min(0.999, Number(args.decayGamma)))
+      : STRATEGY_BELIEF_DECAY_GAMMA;
+    if (!strategyId) return s;
+    // Fail-closed learning: only auto entries with confirmed signature evidence can update beliefs.
+    if (args.entrySource && args.entrySource !== 'auto') return s;
+    if (!txHash) return s;
+    return {
+      strategyBeliefs: applyDiscountedOutcome(
+        s.strategyBeliefs,
+        {
+          strategyId,
+          outcome: args.outcome,
+          gamma,
+          txHash,
+        },
+      ),
+    };
+  }),
+  resetStrategyBeliefs: () => set({ strategyBeliefs: {} }),
+  strategyOverrideSnapshot: null,
+  setStrategyOverrideSnapshot: (snapshot) => set({ strategyOverrideSnapshot: snapshot }),
 
   resetSession: () => set((s) => ({
     positions: [],
@@ -2150,6 +2253,8 @@ export const useSniperStore = create<SniperState>()(
         lossCount: state.lossCount,
         totalTrades: state.totalTrades,
         backtestMeta: state.backtestMeta,
+        strategyBeliefs: state.strategyBeliefs,
+        strategyOverrideSnapshot: state.strategyOverrideSnapshot,
       }),
       // Rehydrate: restore durable fields + reset transient runtime state.
       onRehydrateStorage: () => (state) => {
@@ -2298,6 +2403,36 @@ export const useSniperStore = create<SniperState>()(
         // Migrate backtestMeta (added in Plan 02.1-03)
         if (!state.backtestMeta || typeof state.backtestMeta !== 'object') {
           state.backtestMeta = {};
+        }
+
+        // Migrate strategyBeliefs (Discounted Thompson state).
+        if (!(state as any).strategyBeliefs || typeof (state as any).strategyBeliefs !== 'object') {
+          (state as any).strategyBeliefs = {};
+        } else {
+          const nextBeliefs: Record<string, StrategyBelief> = {};
+          for (const [rawId, rawBelief] of Object.entries((state as any).strategyBeliefs as Record<string, any>)) {
+            const strategyId = String(rawId || '').trim();
+            if (!strategyId) continue;
+            const b = rawBelief || {};
+            nextBeliefs[strategyId] = {
+              strategyId,
+              alpha: Math.max(0.1, Number(b.alpha || 1)),
+              beta: Math.max(0.1, Number(b.beta || 1)),
+              wins: Math.max(0, Math.floor(Number(b.wins || 0))),
+              losses: Math.max(0, Math.floor(Number(b.losses || 0))),
+              totalOutcomes: Math.max(0, Math.floor(Number(b.totalOutcomes || 0))),
+              lastOutcome: b.lastOutcome === 'win' || b.lastOutcome === 'loss' ? b.lastOutcome : undefined,
+              lastOutcomeAt: Number(b.lastOutcomeAt || 0) || undefined,
+              lastTxHash: b.lastTxHash ? String(b.lastTxHash) : undefined,
+              updatedAt: Number(b.updatedAt || Date.now()),
+            };
+          }
+          (state as any).strategyBeliefs = nextBeliefs;
+        }
+
+        // Migrate strategy override snapshot.
+        if (!(state as any).strategyOverrideSnapshot || typeof (state as any).strategyOverrideSnapshot !== 'object') {
+          (state as any).strategyOverrideSnapshot = null;
         }
 
         // If session signing was selected but the key isn't available, fall back safely

@@ -598,15 +598,16 @@ async function sourceSolscan(wallet: string, forceFullScan = false): Promise<Sou
         maxRetries: 1,
         baseDelayMs: 600,
         timeoutMs: 12_000,
-        fetchOptions: {
-          headers: {
-            Accept: 'application/json',
-            token: apiKey,
-            Authorization: `Bearer ${apiKey}`,
+          fetchOptions: {
+            headers: {
+              Accept: 'application/json',
+              // Solscan Pro v2 expects the API key in the `token` header.
+              // Avoid sending multiple auth headers (can trigger 401s).
+              token: apiKey,
+            },
           },
-        },
-      }),
-    );
+        }),
+      );
     if (!res.ok) {
       applySolscanFailureBackoff(res.status);
       const result: SourceResult = {

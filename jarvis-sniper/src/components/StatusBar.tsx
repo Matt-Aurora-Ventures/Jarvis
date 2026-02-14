@@ -12,7 +12,7 @@ const KR8TIV_LINKS = [
   { label: 'GitHub', href: 'https://github.com/kr8tivai' },
   { label: '@kr8tivai', href: 'https://x.com/kr8tivai' },
   { label: '@jarvis_lifeos', href: 'https://x.com/jarvis_lifeos' },
-  { label: 'Telegram', href: 'https://t.me/kr8tivai' },
+  { label: 'Telegram', href: 'https://t.me/kr8tivaisystems' },
 ];
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { useSniperStore } from '@/stores/useSniperStore';
@@ -584,7 +584,7 @@ export function StatusBar() {
 
       {/* Reset Auto Modal */}
       {resetAutoOpen && (
-        <div className="fixed inset-0 z-[999] flex items-start justify-center p-4 pt-16 sm:pt-20">
+        <div className="fixed inset-0 z-[999] flex items-start justify-center overflow-y-auto p-4 pt-32 sm:pt-36">
           <button
             type="button"
             className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer"
@@ -596,7 +596,7 @@ export function StatusBar() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="reset-auto-title"
-            className="relative w-full max-w-[540px] card-glass p-5 border border-border-primary shadow-xl"
+            className="relative w-full max-w-[540px] max-h-[calc(100vh-8rem)] overflow-y-auto card-glass p-5 border border-border-primary shadow-xl"
           >
             <div className="flex items-start gap-3">
               <div className="mt-0.5 w-9 h-9 rounded-full bg-accent-warning/10 border border-accent-warning/25 flex items-center justify-center">

@@ -321,7 +321,7 @@ export function SniperControls() {
   const suggestion = suggestStrategy(graduations as BagsGraduation[], assetFilter);
   const activePresetDef = STRATEGY_PRESETS.find((p) => p.id === activePreset);
   const activePresetLabel = activePresetDef?.name || activePreset?.toUpperCase() || 'CUSTOM';
-  const wrGatePolicy = `WR Gate: ${Math.round(config.autoWrPrimaryPct)}→${Math.round(config.autoWrFallbackPct)} | ${config.autoWrMethod === 'wilson95_lower' ? 'Wilson95' : 'Point'} | Min ${Math.max(0, Math.floor(config.autoWrMinTrades))}T | PFT primary 50`;
+  const wrGatePolicy = `WR Gate: ${Math.round(config.autoWrPrimaryPct)}→${Math.round(config.autoWrFallbackPct)} | ${config.autoWrMethod === 'wilson95_lower' ? 'Wilson95' : 'Point'} | Min ${Math.max(0, Math.floor(config.autoWrMinTrades))}T | PFT primary 50 | Thompson d=0.90`;
   const wrGateScopeActive =
     config.autoWrGateEnabled &&
     scopeAllowsAsset(config.autoWrScope, assetFilter) &&

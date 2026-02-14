@@ -33,12 +33,32 @@ Recommended:
 - `NEXT_PUBLIC_SOLANA_RPC` (client RPC for reads/price checks; used by UI + risk worker)
 - `BAGS_REFERRAL_ACCOUNT` (optional referral account pubkey)
 - `ALLOWED_ORIGINS` (comma-separated list of allowed Origins for API CORS)
+- `XAI_API_KEY` (server-only restricted runtime key for batch autonomy)
+- `AUTONOMY_JOB_TOKEN` (required for scheduler-triggered `/api/autonomy/hourly`)
+- `AUTONOMY_AUDIT_BUCKET` (GCS bucket for hourly audit artifacts)
 
 Notes:
 
 - **Do not** prefix `BAGS_API_KEY` with `NEXT_PUBLIC_` (that would leak it to the browser bundle).
 - Production is **fail-closed** for server RPC routes (`/api/rpc`, `/api/bags/*`) when no valid Helius RPC URL is configured.
 - Hosting: set env vars in your hosting provider UI (Vercel/Railway/etc), not in git.
+
+## Autonomy (Batch-Only Grok)
+
+Sniper web includes a batch-only xAI autonomy control plane with strict fail-closed behavior:
+
+- `POST /api/autonomy/hourly` (bearer token required)
+- `GET /api/autonomy/audit/latest`
+- `GET /api/autonomy/audit/[cycleId]`
+- `GET /api/strategy-overrides`
+
+Behavior:
+
+- Batch-only model usage (no per-trade sync dependency).
+- Frontier model policy (`grok-4-1-fast-reasoning` -> `grok-4-fast-reasoning` -> `grok-4`).
+- Hard budget limits (`$10/day` default + hourly token caps).
+- Hourly immutable decision matrix + rationale artifacts in GCS.
+- Runtime overrides are constrained to allowlisted strategy fields and bounded deltas.
 
 ## Hosting Notes (50-100 Users)
 

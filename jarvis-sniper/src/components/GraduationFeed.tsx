@@ -9,6 +9,7 @@ import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
 import { useTVScreener } from '@/hooks/useTVScreener';
 import { MarketStatus } from '@/components/MarketStatus';
 import { computeTargetsFromEntryUsd, formatUsdPrice, isBlueChipLongConviction } from '@/lib/trade-plan';
+import { safeImageUrl } from '@/lib/safe-url';
 
 const FILTER_LABELS: Record<string, { label: string; color: string }> = {
   memecoin: { label: 'MEME', color: 'bg-accent-neon/15 text-accent-neon' },
@@ -206,6 +207,7 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
   const volLiq = gradLiq > 0 ? vol24h / gradLiq : 0;
   const passesVolLiq = isTraditional ? true : (vol24h === 0 || volLiq >= minVolLiqRatio); // skip filter when no vol data
   const passesAll = passesLiq && passesBSRatio && passesAge && passesMomentum && passesVolLiq;
+  const logoUrl = safeImageUrl((grad as any).logo_uri);
   // Conviction-weighted sizing preview
   const { multiplier: conviction, factors: convFactors } = getConvictionMultiplier(grad as BagsGraduation & Record<string, any>);
   const convLabel = conviction >= 1.5 ? 'HIGH' : conviction >= 1.0 ? 'MED' : 'LOW';
@@ -233,8 +235,16 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
       {/* Header: logo + name + score */}
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <div className="flex items-center gap-2 min-w-0">
-          {grad.logo_uri ? (
-            <img src={grad.logo_uri} alt="" className="w-7 h-7 rounded-full bg-bg-tertiary shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              className="w-7 h-7 rounded-full bg-bg-tertiary shrink-0"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
           ) : (
             <div className="w-7 h-7 rounded-full bg-bg-tertiary flex items-center justify-center text-[10px] font-bold text-text-muted shrink-0">
               {grad.symbol.slice(0, 2)}

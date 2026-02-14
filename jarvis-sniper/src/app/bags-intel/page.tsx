@@ -33,6 +33,7 @@ import { type ScoreTier, getScoreTier, TIER_CONFIG } from '@/lib/bags-api';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
+import { safeImageUrl } from '@/lib/safe-url';
 import { waitForSignatureStatus } from '@/lib/tx-confirmation';
 
 /* ------------------------------------------------------------------ */
@@ -378,6 +379,9 @@ function TokenCard({ token }: { token: BagsIntelToken }) {
   const tier = getScoreTier(token.score);
   const tierColor = TIER_CONFIG[tier].color;
   const chartTarget = token.poolAddress || token.mint;
+  const safeLogoUri = safeImageUrl(token.logoUri);
+  const safeCreatorPfp = safeImageUrl(token.creatorPfp);
+  const safeRoyaltyPfp = safeImageUrl(token.royaltyPfp);
   const categoryLabel = token.category === 'recent'
     ? 'NEW'
     : token.category === 'aboutToGraduate'
@@ -393,9 +397,9 @@ function TokenCard({ token }: { token: BagsIntelToken }) {
         {/* Header row */}
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-3 min-w-0">
-            {token.logoUri ? (
+            {safeLogoUri ? (
               <img
-                src={token.logoUri}
+                src={safeLogoUri}
                 alt={token.symbol}
                 className="w-10 h-10 rounded-full bg-bg-tertiary object-cover shrink-0"
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
@@ -529,9 +533,9 @@ function TokenCard({ token }: { token: BagsIntelToken }) {
             <div className="flex flex-col gap-2">
               {/* Created by */}
               <div className="flex items-center gap-2">
-                {token.creatorPfp ? (
+                {safeCreatorPfp ? (
                   <img
-                    src={token.creatorPfp}
+                    src={safeCreatorPfp}
                     alt={token.creatorUsername || 'Creator'}
                     className="w-7 h-7 rounded-full bg-bg-tertiary object-cover"
                     onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
@@ -575,9 +579,9 @@ function TokenCard({ token }: { token: BagsIntelToken }) {
               {/* Royalties to */}
               {(token.royaltyUsername || token.royaltyWallet || token.royaltyBps != null) && (
                 <div className="flex items-center gap-2">
-                  {token.royaltyPfp ? (
+                  {safeRoyaltyPfp ? (
                     <img
-                      src={token.royaltyPfp}
+                      src={safeRoyaltyPfp}
                       alt={token.royaltyUsername || 'Royalty'}
                       className="w-7 h-7 rounded-full bg-bg-tertiary object-cover"
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}

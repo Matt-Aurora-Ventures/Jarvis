@@ -23,7 +23,15 @@ import { swapRateLimiter, getClientIp } from '@/lib/rate-limiter';
 import { checkSignerSolBalance } from '@/lib/solana-balance-guard';
 import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
 
-const BAGS_API_KEY = process.env.BAGS_API_KEY || '';
+function readBagsApiKey(): string {
+  // Secret Manager values can sometimes include trailing newlines/whitespace; Node will reject
+  // such values when used as HTTP header content (x-api-key). Sanitize defensively.
+  return String(process.env.BAGS_API_KEY || '')
+    .replace(/[\x00-\x20\x7f]/g, '')
+    .trim();
+}
+
+const BAGS_API_KEY = readBagsApiKey();
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const SOL_RESERVE_LAMPORTS = 3_000_000;
 

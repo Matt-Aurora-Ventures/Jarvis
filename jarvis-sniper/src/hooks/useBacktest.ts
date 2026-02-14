@@ -299,6 +299,8 @@ export function useBacktest() {
   const lastSeenTimestampRef = useRef<number>(0);
   const monitorMissCountRef = useRef<number>(0);
   const prevRunStatusRef = useRef<BacktestRunStatusView | null>(null);
+  const backtestBaseUrlRef = useRef<string>('');
+  const backtestBaseResolvedRef = useRef<boolean>(false);
 
   const POLL_INTERVAL_MS = 4000;
   const stallThresholdMsRef = useRef<number>(420000);
@@ -325,9 +327,34 @@ export function useBacktest() {
     return 600_000;
   }, []);
 
+  const resolveBacktestBaseUrl = useCallback(async (): Promise<string> => {
+    if (typeof window === 'undefined') return '';
+    if (backtestBaseResolvedRef.current) return backtestBaseUrlRef.current;
+
+    let base = '';
+    try {
+      const res = await fetch('/api/health', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        const candidate = String(json?.backend?.cloudRunTagUrl || '').trim();
+        // Only accept Cloud Run domains to bypass Firebase Hosting front-door timeouts.
+        if (/^https:\/\/.+\.a\.run\.app$/i.test(candidate)) {
+          base = candidate.replace(/\/+$/, '');
+        }
+      }
+    } catch {
+      // fall back to same-origin
+    }
+
+    backtestBaseUrlRef.current = base;
+    backtestBaseResolvedRef.current = true;
+    return base;
+  }, []);
+
   const fetchArtifacts = useCallback(async (runId: string): Promise<BacktestArtifactAvailability | null> => {
     try {
-      const res = await fetch(`/api/backtest/runs/${encodeURIComponent(runId)}/artifacts`, {
+      const base = await resolveBacktestBaseUrl();
+      const res = await fetch(`${base}/api/backtest/runs/${encodeURIComponent(runId)}/artifacts`, {
         cache: 'no-store',
       });
       if (!res.ok) return null;
@@ -343,7 +370,7 @@ export function useBacktest() {
     } catch {
       return null;
     }
-  }, []);
+  }, [resolveBacktestBaseUrl]);
 
   const readErrorFromResponse = useCallback(async (res: Response): Promise<ResponseErrorEnvelope> => {
     const fallback = `HTTP ${res.status}`;
@@ -373,7 +400,8 @@ export function useBacktest() {
 
   const pollRunStatusOnce = useCallback(async (runId: string): Promise<BacktestRunStatusView | null> => {
     try {
-      const res = await fetch(`/api/backtest/runs/${encodeURIComponent(runId)}`, { cache: 'no-store' });
+      const base = await resolveBacktestBaseUrl();
+      const res = await fetch(`${base}/api/backtest/runs/${encodeURIComponent(runId)}`, { cache: 'no-store' });
       if (!res.ok) {
         const errEnv = await readErrorFromResponse(res);
         const errMsg = errEnv.message;
@@ -622,7 +650,8 @@ export function useBacktest() {
       }));
 
       try {
-        const res = await fetch('/api/backtest', {
+        const base = await resolveBacktestBaseUrl();
+        const res = await fetch(`${base}/api/backtest`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
+import { safeImageUrl } from '@/lib/safe-url';
 
 /**
  * Bags Intel (Server API)
@@ -703,11 +704,12 @@ export async function GET(request: Request) {
         mint,
         symbol: info.symbol || '???',
         name: info.name || info.symbol || 'Unknown',
-        logoUri: info.icon || null,
+        // Prevent mixed-content/CSP breakage from upstream icon hosts.
+        logoUri: safeImageUrl(info.icon) || null,
         deployer: creator?.wallet || info.dev || null,
         royaltyWallet: royalty?.wallet || null,
         royaltyUsername,
-        royaltyPfp: royalty?.pfp || null,
+        royaltyPfp: safeImageUrl(royalty?.pfp) || null,
         poolAddress: c.poolAddress || mint,
         priceUsd: n(info.usdPrice, 0),
         marketCap,
@@ -729,7 +731,7 @@ export async function GET(request: Request) {
         isBags: true,
         category: c.category,
         creatorUsername,
-        creatorPfp: creator?.pfp || null,
+        creatorPfp: safeImageUrl(creator?.pfp) || null,
         royaltyBps,
         lifetimeFeesLamports: c.lifetimeFeesLamports,
         score: scoring.score,

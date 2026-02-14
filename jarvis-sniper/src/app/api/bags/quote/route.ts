@@ -12,7 +12,15 @@ import { quoteCache } from '@/lib/server-cache';
 import { quoteRateLimiter, getClientIp } from '@/lib/rate-limiter';
 import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
 
-const BAGS_API_KEY = process.env.BAGS_API_KEY || '';
+function readBagsApiKey(): string {
+  // Secret Manager values can sometimes include trailing newlines/whitespace; Node will reject
+  // such values when used as HTTP header content (x-api-key). Sanitize defensively.
+  return String(process.env.BAGS_API_KEY || '')
+    .replace(/[\x00-\x20\x7f]/g, '')
+    .trim();
+}
+
+const BAGS_API_KEY = readBagsApiKey();
 
 let _sdk: BagsSDK | null = null;
 let _connection: Connection | null = null;

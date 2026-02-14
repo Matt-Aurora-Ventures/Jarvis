@@ -4,9 +4,9 @@ import { useEffect, useRef } from 'react';
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { usePhantomWallet } from './usePhantomWallet';
 import { useSniperStore } from '@/stores/useSniperStore';
-import { executeSwapFromQuote, getSellQuote } from '@/lib/bags-trading';
+import { executeSwapFromQuote, getSellQuote, SOL_MINT } from '@/lib/bags-trading';
 import { getOwnerTokenBalanceLamports, minLamportsString } from '@/lib/solana-tokens';
-import { loadSessionWalletByPublicKey, loadSessionWalletFromStorage, sweepExcessToMainWallet } from '@/lib/session-wallet';
+import { closeEmptyTokenAccountsForMint, loadSessionWalletByPublicKey, loadSessionWalletFromStorage, sweepExcessToMainWallet } from '@/lib/session-wallet';
 import { isBlueChipLongConvictionSymbol } from '@/lib/trade-plan';
 import { filterOpenPositionsForActiveWallet, isPositionInActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
@@ -234,10 +234,17 @@ export function useAutomatedRiskManagement() {
         amountLamports = bal.amountLamports;
         updatePosition(id, { amountLamports });
       } else if (bal && bal.amountLamports !== '0') {
-        const clamped = minLamportsString(amountLamports, bal.amountLamports);
-        if (clamped !== amountLamports) {
-          amountLamports = clamped;
+        // For auto-managed entries, sell the full session-wallet balance so the token account can be closed.
+        // Manual entries may represent multiple lots; keep the conservative clamp in that case.
+        if (pos.entrySource === 'auto') {
+          amountLamports = bal.amountLamports;
           updatePosition(id, { amountLamports });
+        } else {
+          const clamped = minLamportsString(amountLamports, bal.amountLamports);
+          if (clamped !== amountLamports) {
+            amountLamports = clamped;
+            updatePosition(id, { amountLamports });
+          }
         }
       }
 
@@ -309,6 +316,81 @@ export function useAutomatedRiskManagement() {
       if (!result.success) throw new Error(result.error || 'Sell failed');
 
       closePosition(id, trigger, result.txHash, exitValueSol);
+
+      // Reclaim rent by closing the now-empty token account(s) for this mint (session wallet only).
+      // Best-effort: if the wallet still has non-zero balance (dust/partial), it will be skipped.
+      try {
+        const cleanup = await closeEmptyTokenAccountsForMint(session!.keypair, pos.mint);
+        if (cleanup.closedTokenAccounts > 0) {
+          addExecution({
+            id: `rent-${Date.now()}-${id.slice(-4)}`,
+            type: 'info',
+            symbol: pos.symbol,
+            mint: pos.mint,
+            amount: 0,
+            txHash: cleanup.closeSignatures[0],
+            reason: `Reclaimed ${(cleanup.reclaimedLamports / 1e9).toFixed(6)} SOL rent by closing ${cleanup.closedTokenAccounts} empty token account${cleanup.closedTokenAccounts === 1 ? '' : 's'}`,
+            timestamp: Date.now(),
+          });
+        }
+        if (cleanup.closedTokenAccounts === 0 && cleanup.skippedNonZeroTokenAccounts > 0) {
+          addExecution({
+            id: `rent-skip-${Date.now()}-${id.slice(-4)}`,
+            type: 'info',
+            symbol: pos.symbol,
+            mint: pos.mint,
+            amount: 0,
+            reason: `Rent reclaim skipped: ${cleanup.skippedNonZeroTokenAccounts} token account${cleanup.skippedNonZeroTokenAccounts === 1 ? '' : 's'} still had non-zero balance (dust/partial exit).`,
+            timestamp: Date.now(),
+          });
+        }
+        if (cleanup.failedToCloseTokenAccounts > 0) {
+          addExecution({
+            id: `rent-fail-${Date.now()}-${id.slice(-4)}`,
+            type: 'error',
+            symbol: pos.symbol,
+            mint: pos.mint,
+            amount: 0,
+            reason: `Rent reclaim incomplete: ${cleanup.failedToCloseTokenAccounts} empty token account${cleanup.failedToCloseTokenAccounts === 1 ? '' : 's'} failed to close; retry Sweep Back later.`,
+            timestamp: Date.now(),
+          });
+        }
+      } catch {
+        // ignore rent reclaim errors (trade already closed)
+      }
+
+      // Also close any now-empty WSOL temp accounts. Some swap routes may touch WSOL as an
+      // intermediate and leave behind a zero-balance account that can be closed for rent.
+      if (pos.mint !== SOL_MINT) {
+        try {
+          const wsolCleanup = await closeEmptyTokenAccountsForMint(session!.keypair, SOL_MINT);
+          if (wsolCleanup.closedTokenAccounts > 0) {
+            addExecution({
+              id: `rent-wsol-${Date.now()}-${id.slice(-4)}`,
+              type: 'info',
+              symbol: 'WSOL',
+              mint: SOL_MINT,
+              amount: 0,
+              txHash: wsolCleanup.closeSignatures[0],
+              reason: `Reclaimed ${(wsolCleanup.reclaimedLamports / 1e9).toFixed(6)} SOL rent by closing ${wsolCleanup.closedTokenAccounts} empty WSOL token account${wsolCleanup.closedTokenAccounts === 1 ? '' : 's'}`,
+              timestamp: Date.now(),
+            });
+          }
+          if (wsolCleanup.failedToCloseTokenAccounts > 0) {
+            addExecution({
+              id: `rent-wsol-fail-${Date.now()}-${id.slice(-4)}`,
+              type: 'error',
+              symbol: 'WSOL',
+              mint: SOL_MINT,
+              amount: 0,
+              reason: `WSOL rent reclaim incomplete: ${wsolCleanup.failedToCloseTokenAccounts} empty token account${wsolCleanup.failedToCloseTokenAccounts === 1 ? '' : 's'} failed to close; retry Sweep Back later.`,
+              timestamp: Date.now(),
+            });
+          }
+        } catch {
+          // ignore WSOL cleanup errors (trade already closed)
+        }
+      }
 
       // Auto-sweep profits back to the main wallet (banks gains, limits blast radius).
       // We leave enough SOL behind for remaining budget + fees.

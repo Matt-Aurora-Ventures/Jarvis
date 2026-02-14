@@ -31,6 +31,7 @@ import {
   persistFamilyDatasetManifest,
   type DatasetFamily,
 } from '@/lib/backtest-dataset-manifest';
+import { backtestCorsOptions, withBacktestCors } from '@/lib/backtest-cors';
 import {
   createBacktestRunStatus,
   failBacktestRun,
@@ -46,6 +47,10 @@ import {
 
 // Evidence downloads rely on Node.js filesystem fallback in dev/serverless.
 export const runtime = 'nodejs';
+
+export function OPTIONS(request: Request) {
+  return backtestCorsOptions(request);
+}
 
 /**
  * Backtest API Route -- Run strategy validation against historical data
@@ -852,6 +857,7 @@ const DEXSCREENER_BOOSTS = 'https://api.dexscreener.com/token-boosts/latest/v1';
 const DEXSCREENER_PROFILES = 'https://api.dexscreener.com/token-profiles/latest/v1';
 const DEXSCREENER_SOL_PAIRS =
   'https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112';
+const DEXSCREENER_SOL_TOKEN_PAIRS = 'https://api.dexscreener.com/tokens/v1/solana';
 const JUPITER_GEMS_URL = 'https://datapi.jup.ag/v1/pools/gems';
 const BAGS_TOP_FEES_URL = 'https://api2.bags.fm/api/v1/token-launch/top-tokens/lifetime-fees';
 
@@ -905,7 +911,16 @@ async function fetchDexScreenerSolanaMintUniverse(limit: number): Promise<string
       const json = await solPairsRes.value.json();
       const pairs: any[] = json?.pairs || [];
       for (const pair of pairs) {
-        push(pair?.baseToken?.address);
+        const chainId = String(pair?.chainId || '').trim().toLowerCase();
+        if (chainId && chainId !== 'solana') continue;
+
+        const baseMint = String(pair?.baseToken?.address || '').trim();
+        const quoteMint = String(pair?.quoteToken?.address || '').trim();
+        if (!baseMint || !quoteMint) continue;
+        const baseExcluded = EXCLUDE.has(baseMint);
+        const quoteExcluded = EXCLUDE.has(quoteMint);
+        if (baseExcluded && quoteExcluded) continue;
+        push(baseExcluded ? quoteMint : baseMint);
         if (out.length >= limit) return out.slice(0, limit);
       }
     } catch {
@@ -1003,11 +1018,99 @@ async function fetchBagsMintUniverse(limit: number): Promise<string[]> {
   return out.slice(0, limit);
 }
 
-type GeckoPoolCandidate = {
+interface GeckoPoolCandidate {
   baseMint: string;
   baseSymbol: string;
   poolAddress: string;
-};
+}
+
+function safeDexNumber(v: unknown): number {
+  const n = typeof v === 'number' ? v : Number.parseFloat(String(v ?? '0'));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * DexScreener universe discovery optimized for backtesting:
+ * - Pull SOL pairs once (WSOL pairs endpoint)
+ * - Keep the best-liquidity pool per base mint
+ * - Return pool candidates so fetchMintHistory can use pairAddressOverride (no per-mint Dex calls)
+ */
+async function fetchDexScreenerSolanaPoolUniverse(limit: number): Promise<GeckoPoolCandidate[]> {
+  const target = Math.max(10, Math.min(2000, Math.floor(limit || 0)));
+
+  const EXCLUDE = new Set([
+    // WSOL
+    'So11111111111111111111111111111111111111112',
+    // USDC / USDT
+    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+  ]);
+
+  // Step 1: get candidate mints (boosts + profiles + a few high-liq SOL pairs).
+  const candidateMints = await fetchDexScreenerSolanaMintUniverse(target);
+  if (candidateMints.length === 0) return [];
+  const mintSet = new Set(candidateMints);
+
+  // Step 2: resolve pool addresses in batches (DexScreener supports comma-separated mints).
+  const byMint = new Map<string, { pool: GeckoPoolCandidate; liquidityUsd: number }>();
+  const batchSize = 20; // keep URL lengths safe
+
+  for (let i = 0; i < candidateMints.length; i += batchSize) {
+    const batch = candidateMints.slice(i, i + batchSize);
+    const url = `${DEXSCREENER_SOL_TOKEN_PAIRS}/${batch.join(',')}`;
+
+    let pairs: any[] = [];
+    try {
+      const res = await fetchWithTimeout(url, 12_000);
+      if (!res.ok) continue;
+      const json = await res.json();
+      pairs = Array.isArray(json) ? json : [];
+    } catch {
+      continue;
+    }
+
+    for (const pair of pairs) {
+      const chainId = String(pair?.chainId || '').trim().toLowerCase();
+      if (chainId && chainId !== 'solana') continue;
+
+      const poolAddress = String(pair?.pairAddress || '').trim();
+      if (!poolAddress) continue;
+
+      const baseMint = String(pair?.baseToken?.address || '').trim();
+      const quoteMint = String(pair?.quoteToken?.address || '').trim();
+      if (!baseMint || !quoteMint) continue;
+
+      // Determine which side is a requested mint; prefer baseToken if both match.
+      let primaryMint = '';
+      let primarySym = '';
+      if (mintSet.has(baseMint)) {
+        primaryMint = baseMint;
+        primarySym = String(pair?.baseToken?.symbol || '').trim() || baseMint.slice(0, 6);
+      } else if (mintSet.has(quoteMint)) {
+        primaryMint = quoteMint;
+        primarySym = String(pair?.quoteToken?.symbol || '').trim() || quoteMint.slice(0, 6);
+      } else {
+        continue;
+      }
+
+      if (EXCLUDE.has(primaryMint)) continue;
+
+      const liquidityUsd = safeDexNumber(pair?.liquidity?.usd);
+      const existing = byMint.get(primaryMint);
+      if (!existing || liquidityUsd > existing.liquidityUsd) {
+        byMint.set(primaryMint, {
+          pool: { baseMint: primaryMint, baseSymbol: primarySym, poolAddress },
+          liquidityUsd,
+        });
+      }
+    }
+  }
+
+  return [...byMint.values()]
+    .sort((a, b) => b.liquidityUsd - a.liquidityUsd)
+    .slice(0, target)
+    .map((row) => row.pool);
+}
 
 async function fetchDatasetsForPools(
   pools: GeckoPoolCandidate[],
@@ -1342,7 +1445,7 @@ export async function POST(request: Request) {
     const ip = getClientIp(request);
     const limit = apiRateLimiter.check(ip);
     if (!limit.allowed) {
-      return NextResponse.json(
+      return withBacktestCors(request, NextResponse.json(
         { error: 'Rate limit exceeded' },
         {
           status: 429,
@@ -1351,7 +1454,7 @@ export async function POST(request: Request) {
             'X-RateLimit-Remaining': '0',
           },
         },
-      );
+      ));
     }
 
     const body = await request.json();
@@ -1611,34 +1714,69 @@ export async function POST(request: Request) {
       if (datasets.length === 0) {
         fallbacksTriggered += 1;
         const candidateLimit = Math.min(2000, Math.max(scaleCfg.memecoinMaxTokens * 30, 300));
-        heartbeatBacktestRun(runId, `Memecoin fallback discovery via DexScreener (${candidateLimit} candidates)`);
-        const fallbackMints = await fetchDexScreenerSolanaMintUniverse(candidateLimit);
-        const fallback = await fetchDatasetsForMints(
-          fallbackMints,
-          scaleCfg.memecoinMaxTokens,
-          (mint) => mint.slice(0, 6),
-          {
-            allowBirdeyeFallback,
-            attemptBirdeyeIfCandlesBelow: minCandles,
-            minCandles,
-            maxCandles,
-            resolution: '60',
-          },
-          fetchBatchSize,
-          ({ attempted, succeeded, failed, context }) => {
-            markBacktestDatasetBatch(runId, {
-              attemptedDelta: attempted,
-              succeededDelta: succeeded,
-              failedDelta: failed,
-              activity: `Memecoin fallback ${context}`,
-            });
-          },
-        );
+        heartbeatBacktestRun(runId, `Memecoin fallback discovery via DexScreener (WSOL pairs, target=${candidateLimit})`);
 
-        mints = fallbackMints;
-        datasets = fallback.datasets;
-        sources = fallback.sources;
-        attempted += fallback.attempted;
+        // Prefer pool candidates so we can skip per-mint DexScreener pair discovery.
+        const fallbackPools = await fetchDexScreenerSolanaPoolUniverse(candidateLimit);
+        if (fallbackPools.length > 0) {
+          const fallback = await fetchDatasetsForPools(
+            fallbackPools,
+            scaleCfg.memecoinMaxTokens,
+            {
+              allowBirdeyeFallback,
+              attemptBirdeyeIfCandlesBelow: minCandles,
+              minCandles,
+              maxCandles,
+              resolution: '60',
+            },
+            fetchBatchSize,
+            ({ attempted, succeeded, failed, context }) => {
+              markBacktestDatasetBatch(runId, {
+                attemptedDelta: attempted,
+                succeededDelta: succeeded,
+                failedDelta: failed,
+                activity: `Memecoin fallback ${context}`,
+              });
+            },
+          );
+
+          mints = fallbackPools.map((p) => p.baseMint);
+          datasets = fallback.datasets;
+          sources = fallback.sources;
+          attempted += fallback.attempted;
+        }
+
+        // Last-resort fallback: mint-only universe (slower; performs per-mint pair discovery).
+        if (datasets.length === 0) {
+          heartbeatBacktestRun(runId, `Memecoin fallback (last resort) via DexScreener token lists (${candidateLimit} mints)`);
+          const fallbackMints = await fetchDexScreenerSolanaMintUniverse(candidateLimit);
+          const fallback = await fetchDatasetsForMints(
+            fallbackMints,
+            scaleCfg.memecoinMaxTokens,
+            (mint) => mint.slice(0, 6),
+            {
+              allowBirdeyeFallback,
+              attemptBirdeyeIfCandlesBelow: minCandles,
+              minCandles,
+              maxCandles,
+              resolution: '60',
+            },
+            fetchBatchSize,
+            ({ attempted, succeeded, failed, context }) => {
+              markBacktestDatasetBatch(runId, {
+                attemptedDelta: attempted,
+                succeededDelta: succeeded,
+                failedDelta: failed,
+                activity: `Memecoin fallback ${context}`,
+              });
+            },
+          );
+
+          mints = fallbackMints;
+          datasets = fallback.datasets;
+          sources = fallback.sources;
+          attempted += fallback.attempted;
+        }
       }
 
       memecoinUniverse = { mints, datasets, sources, attempted };
@@ -1798,13 +1936,13 @@ export async function POST(request: Request) {
         ? requestedFamilyRaw.trim().toLowerCase()
         : '';
     if (requestedFamilyCandidate && !familySet.has(requestedFamilyCandidate as RequestedFamily)) {
-      return NextResponse.json(
+      return withBacktestCors(request, NextResponse.json(
         {
           error: `Unknown family "${requestedFamilyRaw}"`,
           knownFamilies: [...familySet.values()],
         },
         { status: 400 },
-      );
+      ));
     }
     const requestedFamily: RequestedFamily | null = requestedFamilyCandidate
       ? (requestedFamilyCandidate as RequestedFamily)
@@ -1829,20 +1967,20 @@ export async function POST(request: Request) {
 
     const unknownStrategyIds = strategyIds.filter((sid) => !STRATEGY_CONFIGS[sid]);
     if (unknownStrategyIds.length > 0) {
-      return NextResponse.json(
+      return withBacktestCors(request, NextResponse.json(
         {
           error: `Unknown strategyIds: ${unknownStrategyIds.join(', ')}`,
           knownStrategies: Object.keys(STRATEGY_CONFIGS),
         },
         { status: 400 },
-      );
+      ));
     }
 
     if (strategyIds.length === 0) {
-      return NextResponse.json(
+      return withBacktestCors(request, NextResponse.json(
         { error: 'No strategies resolved for request' },
         { status: 400 },
-      );
+      ));
     }
 
     const livenessBudgetSec = mode === 'quick' && dataScale === 'fast' ? 15 * 60 : 45 * 60;
@@ -1988,7 +2126,7 @@ export async function POST(request: Request) {
 
     if (!clientCandles && allRunResults.length === 0) {
       failBacktestRun(runId, 'No usable real-data datasets for requested strategy/source');
-      return NextResponse.json(
+      return withBacktestCors(request, NextResponse.json(
         {
           error: 'Backtest produced no results (no usable real-data datasets for requested strategy/source)',
           runId,
@@ -2007,21 +2145,21 @@ export async function POST(request: Request) {
           },
         },
         { status: 422 },
-      );
+      ));
     }
 
     if (strictNoSynthetic) {
       const disallowed = allRunResults.filter((r) => r.dataSource === 'client' || !r.dataSource);
       if (disallowed.length > 0) {
         failBacktestRun(runId, 'strictNoSynthetic gate failed: non-real data source detected');
-        return NextResponse.json(
+        return withBacktestCors(request, NextResponse.json(
           {
             error: 'strictNoSynthetic gate failed: non-real data source detected',
             runId,
             disallowedSources: disallowed.map((d) => d.dataSource),
           },
           { status: 422 },
-        );
+        ));
       }
     }
 
@@ -2145,7 +2283,7 @@ export async function POST(request: Request) {
     heartbeatBacktestRun(runId, 'Run completed');
     const runStatus = getBacktestRunStatus(runId);
 
-    return NextResponse.json({
+    return withBacktestCors(request, NextResponse.json({
       meta,
       runId,
       manifestId,
@@ -2182,15 +2320,15 @@ export async function POST(request: Request) {
             equityCurve: r.equityCurve.slice(-100), // Last 100 points
           }))
         : [],
-    });
+    }));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Backtest failed';
     if (runIdForError) {
       failBacktestRun(runIdForError, message);
     }
-    return NextResponse.json(
+    return withBacktestCors(request, NextResponse.json(
       { error: message, runId: runIdForError || null },
       { status: 500 }
-    );
+    ));
   }
 }

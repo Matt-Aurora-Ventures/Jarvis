@@ -667,6 +667,46 @@ async function fetchClosableTokenAccounts(
   return { closable, nonZeroAccounts };
 }
 
+async function fetchClosableTokenAccountsForMint(
+  connection: Connection,
+  owner: PublicKey,
+  mint: PublicKey,
+): Promise<{ closable: ClosableTokenAccount[]; nonZeroAccounts: number }> {
+  const mintStr = mint.toBase58();
+  const settled = await Promise.allSettled([
+    connection.getParsedTokenAccountsByOwner(owner, { programId: SPL_TOKEN_PROGRAM_ID }),
+    connection.getParsedTokenAccountsByOwner(owner, { programId: SPL_TOKEN_2022_PROGRAM_ID }),
+  ]);
+
+  const closable: ClosableTokenAccount[] = [];
+  let nonZeroAccounts = 0;
+
+  const ingest = (result: any, programId: PublicKey) => {
+    const rows = Array.isArray(result?.value) ? result.value : [];
+    for (const row of rows) {
+      const tokenAccount = toPublicKey(row?.pubkey);
+      if (!tokenAccount) continue;
+      const rowMint = String(row?.account?.data?.parsed?.info?.mint || '').trim();
+      if (!rowMint || rowMint !== mintStr) continue;
+      const amountRaw = parseTokenAmount(row);
+      if (amountRaw === '0') {
+        closable.push({
+          pubkey: tokenAccount,
+          lamports: Math.max(0, Number(row?.account?.lamports || 0)),
+          programId,
+        });
+      } else {
+        nonZeroAccounts += 1;
+      }
+    }
+  };
+
+  if (settled[0]?.status === 'fulfilled') ingest(settled[0].value, SPL_TOKEN_PROGRAM_ID);
+  if (settled[1]?.status === 'fulfilled') ingest(settled[1].value, SPL_TOKEN_2022_PROGRAM_ID);
+
+  return { closable, nonZeroAccounts };
+}
+
 /**
  * Close zero-balance SPL token accounts and reclaim their rent into destination.
  * Non-zero token accounts are intentionally skipped.
@@ -679,6 +719,92 @@ export async function closeEmptyTokenAccounts(
   const owner = sessionKeypair.publicKey;
   const destination = destinationWallet ? new PublicKey(destinationWallet) : owner;
   const { closable, nonZeroAccounts } = await fetchClosableTokenAccounts(connection, owner);
+
+  if (closable.length === 0) {
+    return {
+      closedTokenAccounts: 0,
+      failedToCloseTokenAccounts: 0,
+      skippedNonZeroTokenAccounts: nonZeroAccounts,
+      reclaimedLamports: 0,
+      closeSignatures: [],
+    };
+  }
+
+  let closedTokenAccounts = 0;
+  let failedToCloseTokenAccounts = 0;
+  let reclaimedLamports = 0;
+  const closeSignatures: string[] = [];
+  const chunks = chunkArray(closable, TOKEN_ACCOUNT_CLOSE_CHUNK);
+
+  for (const batch of chunks) {
+    try {
+      const instructions = batch.map((acc) =>
+        buildCloseTokenAccountIx(acc.pubkey, destination, owner, acc.programId),
+      );
+      const blockhash = await connection.getLatestBlockhash('confirmed');
+      const messageV0 = new TransactionMessage({
+        payerKey: owner,
+        recentBlockhash: blockhash.blockhash,
+        instructions,
+      }).compileToV0Message();
+      const tx = new VersionedTransaction(messageV0);
+      tx.sign([sessionKeypair]);
+
+      const sig = await connection.sendRawTransaction(tx.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: 'confirmed',
+        maxRetries: 3,
+      });
+
+      const status = await waitForSignatureStatus(connection, sig, { maxWaitMs: 45_000, pollMs: 2500 });
+      if (status.state === 'failed') {
+        failedToCloseTokenAccounts += batch.length;
+        continue;
+      }
+
+      closeSignatures.push(sig);
+      closedTokenAccounts += batch.length;
+      reclaimedLamports += batch.reduce((sum, acc) => sum + Math.max(0, acc.lamports), 0);
+    } catch {
+      failedToCloseTokenAccounts += batch.length;
+    }
+  }
+
+  return {
+    closedTokenAccounts,
+    failedToCloseTokenAccounts,
+    skippedNonZeroTokenAccounts: nonZeroAccounts,
+    reclaimedLamports,
+    closeSignatures,
+  };
+}
+
+/**
+ * Close zero-balance SPL token accounts for a specific mint and reclaim rent into destination.
+ * Non-zero token accounts for the mint are intentionally skipped.
+ *
+ * This is used after a successful sell so the session wallet immediately reclaims rent.
+ */
+export async function closeEmptyTokenAccountsForMint(
+  sessionKeypair: Keypair,
+  mint: string,
+  destinationWallet?: string,
+): Promise<SessionWalletCleanupResult> {
+  const mintKey = toPublicKey(mint);
+  if (!mintKey) {
+    return {
+      closedTokenAccounts: 0,
+      failedToCloseTokenAccounts: 0,
+      skippedNonZeroTokenAccounts: 0,
+      reclaimedLamports: 0,
+      closeSignatures: [],
+    };
+  }
+
+  const connection = getConnection();
+  const owner = sessionKeypair.publicKey;
+  const destination = destinationWallet ? new PublicKey(destinationWallet) : owner;
+  const { closable, nonZeroAccounts } = await fetchClosableTokenAccountsForMint(connection, owner, mintKey);
 
   if (closable.length === 0) {
     return {

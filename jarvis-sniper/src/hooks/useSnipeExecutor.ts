@@ -11,6 +11,7 @@ import { filterTradeManagedOpenPositionsForActiveWallet } from '@/lib/position-s
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
 import { getOwnerTokenBalanceLamportsWithRetry } from '@/lib/solana-tokens';
 import { checkSignerSolBalance } from '@/lib/solana-balance-guard';
+import { mergeRuntimeConfigWithStrategyOverride } from '@/lib/autonomy/override-policy';
 const DEXSCREENER_TOKENS = 'https://api.dexscreener.com/tokens/v1/solana';
 const POST_BUY_VERIFY_DELAY_MS = 20_000;
 const POST_BUY_VERIFY_ATTEMPTS = 4;
@@ -69,7 +70,20 @@ export function useSnipeExecutor() {
   }
 
   const snipe = useCallback(async (grad: BagsGraduation & Record<string, any>, expectedStrategyEpoch?: number): Promise<boolean> => {
-    const { config, positions, budget, addPosition, addExecution, circuitBreaker, assetFilter, operationLock, clearExpiredMintCooldowns } = useSniperStore.getState();
+    const {
+      config: rawConfig,
+      activePreset,
+      strategyOverrideSnapshot,
+      positions,
+      budget,
+      addPosition,
+      addExecution,
+      circuitBreaker,
+      assetFilter,
+      operationLock,
+      clearExpiredMintCooldowns,
+    } = useSniperStore.getState();
+    const config = mergeRuntimeConfigWithStrategyOverride(rawConfig, activePreset, strategyOverrideSnapshot);
     const strategyEpochAtStart = useSniperStore.getState().strategyEpoch;
     const entrySource: Position['entrySource'] = typeof expectedStrategyEpoch === 'number' ? 'auto' : 'manual';
     const isAutoEntry = entrySource === 'auto';
@@ -406,6 +420,7 @@ export function useSnipeExecutor() {
         name: displayName,
         assetType: useSniperStore.getState().assetFilter,
         walletAddress: signerAddress,
+        strategyId: useSniperStore.getState().activePreset,
         entryPrice,
         currentPrice: entryPrice,
         amount: result.outputAmount,
