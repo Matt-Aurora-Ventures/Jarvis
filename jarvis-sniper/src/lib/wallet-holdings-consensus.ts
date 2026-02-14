@@ -561,7 +561,9 @@ async function sourceSolscan(wallet: string, forceFullScan = false): Promise<Sou
     if (cached) return cached;
   }
   const startedAt = nowMs();
-  const apiKey = process.env.SOLSCAN_API_KEY;
+  const apiKey = String(process.env.SOLSCAN_API_KEY || '')
+    .replace(/[\x00-\x20\x7f]/g, '')
+    .trim();
   if (!apiKey) {
     const result: SourceResult = {
       source: 'solscan',
