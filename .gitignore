@@ -185,6 +185,7 @@ tests/__pycache__/
 .tmp/
 .cache/
 *.cache
+.jarvis-cache/
 
 # === LOCAL NOTES ===
 AUDIT_200_POINT_CHECKLIST.md

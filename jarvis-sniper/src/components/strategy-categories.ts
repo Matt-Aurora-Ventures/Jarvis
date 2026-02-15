@@ -15,19 +15,21 @@ export const STRATEGY_CATEGORIES: StrategyCategory[] = [
   {
     label: 'MEMECOIN',
     icon: 'Zap',
-    presetIds: ['elite', 'micro_cap_surge', 'momentum', 'hybrid_b', 'let_it_ride'],
+    // Profitable meme strategies only.
+    presetIds: ['elite', 'micro_cap_surge'],
   },
   {
     label: 'ESTABLISHED TOKENS',
     icon: 'Landmark',
-    presetIds: ['sol_veteran', 'volume_spike', 'established_breakout'],
+    // Profitable established strategies only.
+    presetIds: ['sol_veteran'],
   },
   {
     label: 'BAGS.FM',
     icon: 'Package',
     presetIds: [
       'bags_elite', 'bags_bluechip', 'bags_conservative', 'bags_value',
-      'bags_dip_buyer', 'bags_fresh_snipe', 'bags_momentum', 'bags_aggressive',
+      'bags_dip_buyer', 'bags_fresh_snipe', 'bags_aggressive',
     ],
   },
   {
@@ -36,8 +38,17 @@ export const STRATEGY_CATEGORIES: StrategyCategory[] = [
     presetIds: ['bluechip_trend_follow', 'bluechip_breakout'],
   },
   {
-    label: 'xSTOCK & INDEX',
-    icon: 'TrendingUp',
-    presetIds: ['xstock_intraday', 'xstock_swing', 'prestock_speculative', 'index_intraday', 'index_leveraged'],
+    label: 'EXPERIMENTAL',
+    icon: 'FlaskConical',
+    // Borderline or disabled presets. Hidden by default behind the "Experimental" toggle.
+    presetIds: [
+      // Borderline (currently losing in backtest)
+      'momentum', 'hybrid_b', 'let_it_ride',
+      'volume_spike', 'established_breakout',
+      'bags_momentum',
+      // Disabled (unprofitable in backtest)
+      'xstock_intraday', 'xstock_swing', 'prestock_speculative',
+      'index_intraday', 'index_leveraged',
+    ],
   },
 ];
