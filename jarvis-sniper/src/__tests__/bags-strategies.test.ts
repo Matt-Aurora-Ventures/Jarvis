@@ -7,7 +7,7 @@ import type { BagsStrategy } from '@/lib/bags-strategies';
 // Validates:
 // 1. All 5 required presets exist
 // 2. Each preset has correct shape and reasonable defaults
-// 3. Parameter ranges are sane (SL < TP, etc.)
+// 3. Parameter ranges are sane (TP > SL for profitable R:R)
 // 4. getStrategiesByRisk returns correct tiers
 // 5. Presets are exportable for UI consumption
 // ────────────────────────────────────────────────────────────────
@@ -54,10 +54,10 @@ describe('BAGS_STRATEGY_PRESETS', () => {
 });
 
 describe('preset parameter sanity', () => {
-  it('stopLossPct should always be less than takeProfitPct', async () => {
+  it('takeProfitPct should always be greater than stopLossPct (TP > SL for profitable R:R)', async () => {
     const { BAGS_STRATEGY_PRESETS } = await import('@/lib/bags-strategies');
     for (const preset of BAGS_STRATEGY_PRESETS) {
-      expect(preset.params.stopLossPct).toBeLessThan(preset.params.takeProfitPct);
+      expect(preset.params.takeProfitPct).toBeGreaterThan(preset.params.stopLossPct);
     }
   });
 
@@ -69,11 +69,11 @@ describe('preset parameter sanity', () => {
     }
   });
 
-  it('takeProfitPct should be between 10 and 600', async () => {
+  it('takeProfitPct should be between 10 and 25', async () => {
     const { BAGS_STRATEGY_PRESETS } = await import('@/lib/bags-strategies');
     for (const preset of BAGS_STRATEGY_PRESETS) {
       expect(preset.params.takeProfitPct).toBeGreaterThanOrEqual(10);
-      expect(preset.params.takeProfitPct).toBeLessThanOrEqual(600);
+      expect(preset.params.takeProfitPct).toBeLessThanOrEqual(25);
     }
   });
 
@@ -103,47 +103,48 @@ describe('preset parameter sanity', () => {
 });
 
 describe('individual preset defaults', () => {
-  it('BAGS CONSERVATIVE should have tight SL, moderate TP', async () => {
+  it('BAGS CONSERVATIVE should have TP > SL (proven profitable)', async () => {
     const { BAGS_STRATEGY_PRESETS } = await import('@/lib/bags-strategies');
     const p = BAGS_STRATEGY_PRESETS.find((s: BagsStrategy) => s.id === 'bags_conservative')!;
-    expect(p.params.stopLossPct).toBeLessThanOrEqual(20);
-    expect(p.params.takeProfitPct).toBeLessThanOrEqual(60);
-    expect(p.backtestWinRate).toBe('Unverified');
-    expect(p.backtestTrades).toBe(0);
+    expect(p.params.takeProfitPct).toBeGreaterThan(p.params.stopLossPct);
+    expect(p.params.stopLossPct).toBeLessThanOrEqual(12);
+    expect(p.backtestWinRate).toBe('49.3%');
+    expect(p.backtestTrades).toBe(75);
   });
 
-  it('BAGS MOMENTUM should have wider TP for catching pumps', async () => {
+  it('BAGS MOMENTUM should have TP > SL (proven profitable)', async () => {
     const { BAGS_STRATEGY_PRESETS } = await import('@/lib/bags-strategies');
     const p = BAGS_STRATEGY_PRESETS.find((s: BagsStrategy) => s.id === 'bags_momentum')!;
-    expect(p.params.takeProfitPct).toBeGreaterThanOrEqual(100);
-    expect(p.backtestWinRate).toBe('Unverified');
-    expect(p.backtestTrades).toBe(0);
+    expect(p.params.takeProfitPct).toBeGreaterThan(p.params.stopLossPct);
+    expect(p.params.takeProfitPct).toBeGreaterThanOrEqual(12);
+    expect(p.backtestWinRate).toBe('42.0%');
+    expect(p.backtestTrades).toBe(69);
   });
 
   it('BAGS VALUE should require high score, patient entry', async () => {
     const { BAGS_STRATEGY_PRESETS } = await import('@/lib/bags-strategies');
     const p = BAGS_STRATEGY_PRESETS.find((s: BagsStrategy) => s.id === 'bags_value')!;
     expect(p.params.minScore).toBeGreaterThanOrEqual(50);
-    expect(p.backtestWinRate).toBe('Unverified');
-    expect(p.backtestTrades).toBe(0);
+    expect(p.backtestWinRate).toBe('47.8%');
+    expect(p.backtestTrades).toBe(69);
   });
 
-  it('BAGS AGGRESSIVE should have wide SL and very high TP', async () => {
+  it('BAGS AGGRESSIVE should have widest TP for maximum upside', async () => {
     const { BAGS_STRATEGY_PRESETS } = await import('@/lib/bags-strategies');
     const p = BAGS_STRATEGY_PRESETS.find((s: BagsStrategy) => s.id === 'bags_aggressive')!;
-    expect(p.params.stopLossPct).toBeGreaterThanOrEqual(30);
-    expect(p.params.takeProfitPct).toBeGreaterThanOrEqual(200);
-    expect(p.backtestWinRate).toBe('Unverified');
-    expect(p.backtestTrades).toBe(0);
+    expect(p.params.takeProfitPct).toBeGreaterThanOrEqual(18);
+    expect(p.params.takeProfitPct).toBeGreaterThan(p.params.stopLossPct);
+    expect(p.backtestWinRate).toBe('42.7%');
+    expect(p.backtestTrades).toBe(110);
   });
 
   it('BAGS ELITE should require score > 70 and tight risk', async () => {
     const { BAGS_STRATEGY_PRESETS } = await import('@/lib/bags-strategies');
     const p = BAGS_STRATEGY_PRESETS.find((s: BagsStrategy) => s.id === 'bags_elite')!;
     expect(p.params.minScore).toBeGreaterThanOrEqual(70);
-    expect(p.params.stopLossPct).toBeLessThanOrEqual(15);
-    expect(p.backtestWinRate).toBe('Unverified');
-    expect(p.backtestTrades).toBe(0);
+    expect(p.params.stopLossPct).toBeLessThanOrEqual(10);
+    expect(p.backtestWinRate).toBe('48.6%');
+    expect(p.backtestTrades).toBe(37);
   });
 });
 
