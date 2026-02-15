@@ -21,10 +21,15 @@ import type { TradeResult, AlgoSummary, ExitReason, DataManifest } from './share
 // ─── All Algo IDs ───
 
 const ALL_ALGO_IDS = [
-  // 12 backtest-proven profitable strategies (v3, 2026-02-15)
-  'pump_fresh_tight', 'micro_cap_surge', 'elite', 'genetic_best',
+  // v5 (2026-02-15): 26 strategies — 6 memecoin, 5 established, 8 bags, 2 bluechip, 3 xstock, 2 index
+  'pump_fresh_tight', 'micro_cap_surge', 'elite', 'momentum',
+  'hybrid_b', 'let_it_ride',
+  'sol_veteran', 'utility_swing', 'established_breakout', 'meme_classic', 'volume_spike',
   'bags_fresh_snipe', 'bags_momentum', 'bags_value', 'bags_dip_buyer',
   'bags_bluechip', 'bags_conservative', 'bags_aggressive', 'bags_elite',
+  'bluechip_trend_follow', 'bluechip_breakout',
+  'xstock_intraday', 'xstock_swing', 'prestock_speculative',
+  'index_intraday', 'index_leveraged',
 ];
 
 // ─── Compute Algo Summary ───
@@ -80,6 +85,11 @@ function computeSummary(algoId: string, trades: TradeResult[]): AlgoSummary {
     exitDist[t.exit_reason]++;
   }
 
+  const dualTriggerBars = trades.reduce((s, t) => s + (t.dual_trigger_bar ? 1 : 0), 0);
+  const expiryExitsBelowEntry = trades.filter(
+    t => t.exit_reason === 'expired' && t.exit_price_usd < t.entry_price_usd,
+  ).length;
+
   // Monthly breakdown
   const monthlyMap = new Map<string, { trades: number; pnl: number; wins: number }>();
   for (const t of trades) {
@@ -130,6 +140,8 @@ function computeSummary(algoId: string, trades: TradeResult[]): AlgoSummary {
     total_return_pct: +totalPnl.toFixed(2),
     sharpe_ratio: +sharpe.toFixed(2),
     max_drawdown_pct: +(-maxDD).toFixed(2),
+    dual_trigger_bars: dualTriggerBars,
+    expiry_exits_below_entry: expiryExitsBelowEntry,
     exit_distribution: exitDist,
     monthly_breakdown: monthlyBreakdown,
     best_day: bestDay,
@@ -217,6 +229,8 @@ async function main(): Promise<void> {
     trail_stops: s.exit_distribution.trail_stop,
     expired: s.exit_distribution.expired,
     end_of_data: s.exit_distribution.end_of_data,
+    dual_trigger_bars: s.dual_trigger_bars,
+    expiry_exits_below_entry: s.expiry_exits_below_entry,
     best_day: s.best_day,
     worst_day: s.worst_day,
   }));

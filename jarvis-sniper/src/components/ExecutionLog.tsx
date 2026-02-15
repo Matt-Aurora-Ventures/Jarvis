@@ -108,7 +108,7 @@ function PnlSparkline({ events }: { events: ExecutionEvent[] }) {
 }
 
 /* ---------- Timeline View ---------- */
-function TimelineView({ events }: { events: ExecutionEvent[] }) {
+function TimelineView({ events, fitParent }: { events: ExecutionEvent[]; fitParent?: boolean }) {
   if (events.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-6 gap-2">
@@ -119,8 +119,8 @@ function TimelineView({ events }: { events: ExecutionEvent[] }) {
   }
 
   return (
-    <>
-      <div className="max-h-[240px] overflow-y-auto custom-scrollbar">
+    <div className={fitParent ? 'flex-1 min-h-0 flex flex-col' : ''}>
+      <div className={`${fitParent ? 'flex-1 min-h-0' : 'max-h-[240px]'} overflow-y-auto custom-scrollbar`}>
         {events.map((event, idx) => {
           const cfg = TYPE_CONFIG[event.type];
           const time = new Date(event.timestamp);
@@ -167,17 +167,18 @@ function TimelineView({ events }: { events: ExecutionEvent[] }) {
 
       {/* Sparkline */}
       <PnlSparkline events={events} />
-    </>
+    </div>
   );
 }
 
 /* ---------- Main Component ---------- */
-export function ExecutionLog() {
+export function ExecutionLog(props: { fitParent?: boolean } = {}) {
   const { executionLog } = useSniperStore();
   const [view, setView] = useState<'list' | 'timeline'>('list');
+  const fitParent = !!props.fitParent;
 
   return (
-    <div className="card-glass p-4">
+    <div className={`card-glass p-4 ${fitParent ? 'h-full flex flex-col min-h-0' : ''}`}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <ScrollText className="w-4 h-4 text-accent-neon" />
@@ -205,9 +206,10 @@ export function ExecutionLog() {
       </div>
 
       {view === 'timeline' ? (
-        <TimelineView events={executionLog} />
+        <TimelineView events={executionLog} fitParent={fitParent} />
       ) : (
-        <div className="max-h-[300px] overflow-y-auto custom-scrollbar space-y-1.5">
+        <div className={`${fitParent ? 'flex-1 min-h-0' : ''}`}>
+          <div className={`${fitParent ? 'h-full' : 'max-h-[300px]'} overflow-y-auto custom-scrollbar space-y-1.5`}>
           {executionLog.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-6 gap-2">
               <ScrollText className="w-5 h-5 text-text-muted" />
@@ -250,6 +252,7 @@ export function ExecutionLog() {
               );
             })
           )}
+          </div>
         </div>
       )}
     </div>

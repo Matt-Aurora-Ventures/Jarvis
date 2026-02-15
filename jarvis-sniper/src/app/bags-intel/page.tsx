@@ -238,13 +238,18 @@ function QuickBuyButton({ mint, symbol }: { mint: string; symbol: string }) {
     const solAmount = parseFloat(amount);
     if (isNaN(solAmount) || solAmount <= 0) return;
 
-    if (!connected || !publicKey) {
+    let userPublicKey = publicKey?.toBase58() || null;
+    if (!connected || !userPublicKey) {
       // Make the connect path discoverable from the buy widget.
-      try { await connect(); } catch {}
-      setResult('error');
-      setErrorMsg('Connect wallet first');
-      setTimeout(() => { setResult(null); setErrorMsg(null); }, 3000);
-      return;
+      // On mobile, this opens a modal with Phantom/Solflare deep links.
+      const addr = await connect();
+      userPublicKey = addr || null;
+      if (!userPublicKey) {
+        setResult('error');
+        setErrorMsg('Wallet not connected');
+        setTimeout(() => { setResult(null); setErrorMsg(null); }, 3000);
+        return;
+      }
     }
 
     setBuying(true);
@@ -255,7 +260,7 @@ function QuickBuyButton({ mint, symbol }: { mint: string; symbol: string }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userPublicKey: publicKey.toBase58(),
+          userPublicKey,
           inputMint: 'So11111111111111111111111111111111111111112',
           outputMint: mint,
           amount: Math.round(solAmount * 1e9), // SOL to lamports

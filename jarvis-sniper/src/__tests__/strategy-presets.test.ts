@@ -2,43 +2,34 @@ import { describe, it, expect } from 'vitest';
 import { STRATEGY_PRESETS } from '@/stores/useSniperStore';
 
 // ────────────────────────────────────────────────────────────────
-// Test Suite: Strategy Presets — v3 backtest-proven profitable
-// Only 12 strategies remain after removing 14 unprofitable ones.
-// All use TP > SL (traditional R:R, breakeven ~40-44% WR).
+// Test Suite: Strategy Presets — R4 params (realistic TP, trailing disabled)
+// NOTE: Not all presets are profitable; underperformers remain available but flagged.
 // ────────────────────────────────────────────────────────────────
 
 describe('STRATEGY_PRESETS', () => {
-  it('should have exactly 12 backtest-proven strategies', () => {
-    expect(STRATEGY_PRESETS.length).toBe(12);
+  it('should have exactly 26 sweep-optimized strategies', () => {
+    expect(STRATEGY_PRESETS.length).toBe(26);
   });
 
-  // ── All surviving presets exist ──
-  const survivingIds = [
-    'pump_fresh_tight', 'micro_cap_surge', 'elite', 'genetic_best',
+  // ── All 26 presets exist ──
+  const allIds = [
+    'pump_fresh_tight', 'micro_cap_surge', 'elite',
+    'momentum', 'hybrid_b', 'let_it_ride',
+    'sol_veteran', 'utility_swing', 'established_breakout', 'meme_classic', 'volume_spike',
     'bags_fresh_snipe', 'bags_momentum', 'bags_value', 'bags_dip_buyer',
     'bags_bluechip', 'bags_conservative', 'bags_aggressive', 'bags_elite',
+    'bluechip_trend_follow', 'bluechip_breakout',
+    'xstock_intraday', 'xstock_swing', 'prestock_speculative',
+    'index_intraday', 'index_leveraged',
   ];
-  for (const id of survivingIds) {
-    it(`should include backtest-proven preset: ${id}`, () => {
+  for (const id of allIds) {
+    it(`should include sweep-optimized preset: ${id}`, () => {
       expect(STRATEGY_PRESETS.find(p => p.id === id)).toBeDefined();
     });
   }
 
-  // ── Removed presets should NOT exist ──
-  const removedIds = [
-    'momentum', 'insight_j', 'hybrid_b', 'let_it_ride', 'loose', 'genetic_v2',
-    'xstock_intraday', 'xstock_swing', 'prestock_speculative',
-    'index_intraday', 'index_leveraged',
-    'bluechip_mean_revert', 'bluechip_trend_follow', 'bluechip_breakout',
-  ];
-  for (const id of removedIds) {
-    it(`should NOT include unprofitable preset: ${id}`, () => {
-      expect(STRATEGY_PRESETS.find(p => p.id === id)).toBeUndefined();
-    });
-  }
-
   // ── TP > SL for ALL strategies ──
-  it('every preset should have TP > SL (proven profitable R:R)', () => {
+  it('every preset should have TP > SL (positive R:R)', () => {
     for (const preset of STRATEGY_PRESETS) {
       expect(preset.config.takeProfitPct!).toBeGreaterThan(preset.config.stopLossPct!);
     }
@@ -73,9 +64,9 @@ describe('STRATEGY_CATEGORIES', () => {
     expect(Array.isArray(mod.STRATEGY_CATEGORIES)).toBe(true);
   });
 
-  it('should have 3 categories', async () => {
+  it('should have 6 categories', async () => {
     const { STRATEGY_CATEGORIES } = await import('@/components/strategy-categories');
-    expect(STRATEGY_CATEGORIES.length).toBe(3);
+    expect(STRATEGY_CATEGORIES.length).toBe(6);
   });
 
   it('should have correct category labels', async () => {
@@ -83,7 +74,10 @@ describe('STRATEGY_CATEGORIES', () => {
     const labels = STRATEGY_CATEGORIES.map((c: any) => c.label);
     expect(labels).toContain('TOP PERFORMERS');
     expect(labels).toContain('MEMECOIN');
+    expect(labels).toContain('ESTABLISHED TOKENS');
     expect(labels).toContain('BAGS.FM');
+    expect(labels).toContain('BLUE CHIP SOLANA');
+    expect(labels).toContain('xSTOCK & INDEX');
   });
 
   it('every preset ID in categories should exist in STRATEGY_PRESETS', async () => {

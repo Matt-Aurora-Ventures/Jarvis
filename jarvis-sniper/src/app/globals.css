@@ -151,6 +151,14 @@
   }
 }
 
+/* Mobile performance: backdrop-filter is expensive and causes scroll jank on older devices. */
+@media (max-width: 1023px) {
+  .card-glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 @utility btn-neon {
   background: var(--accent-neon);
   color: #000;
@@ -379,6 +387,15 @@ body {
 .ambient-orb { animation: float-slow 20s ease-in-out infinite; }
 .ambient-orb-2 { animation: float-medium 25s ease-in-out infinite; }
 .ambient-orb-3 { animation: float-slow 30s ease-in-out infinite reverse; }
+
+/* On mobile, continuous large-blur animations are a common source of scroll stutter. */
+@media (max-width: 1023px) {
+  .ambient-orb,
+  .ambient-orb-2,
+  .ambient-orb-3 {
+    animation: none;
+  }
+}
 
 @keyframes pulse-glow {
   0%, 100% { box-shadow: 0 0 5px var(--accent-neon-glow); }

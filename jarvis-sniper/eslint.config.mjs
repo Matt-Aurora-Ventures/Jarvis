@@ -5,6 +5,7 @@ export default [
   {
     ignores: [
       '.next/**',
+      '.firebase/**',
       'node_modules/**',
       'out/**',
       'dist/**',

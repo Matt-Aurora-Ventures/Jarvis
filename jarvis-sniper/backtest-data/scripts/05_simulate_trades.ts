@@ -51,28 +51,58 @@ const MIN_COOLDOWN_CANDLES = 12; // 12 × 5min = 1 hour
 // is proven profitable.
 
 const ALGO_EXIT_PARAMS: AlgoExitParams[] = [
-  // ─── MEMECOIN — 4 backtest-proven profitable strategies ───
-  { algo_id: 'pump_fresh_tight',     stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 4 },
-  { algo_id: 'micro_cap_surge',      stopLossPct: 10,  takeProfitPct: 20,  trailingStopPct: 99, maxPositionAgeHours: 4 },
-  { algo_id: 'elite',                stopLossPct: 7,   takeProfitPct: 14,  trailingStopPct: 99, maxPositionAgeHours: 4 },
-  { algo_id: 'genetic_best',         stopLossPct: 10,  takeProfitPct: 20,  trailingStopPct: 99, maxPositionAgeHours: 4 },
+  // ─── MEMECOIN CORE — 3 strategies (SL 10%, TP 20% = 2:1 R:R) ───
+  // PROVEN: These work at 10/20 across R1-R3
+  { algo_id: 'elite',                stopLossPct: 10,  takeProfitPct: 20,  trailingStopPct: 99, maxPositionAgeHours: 12 },
+  { algo_id: 'micro_cap_surge',      stopLossPct: 10,  takeProfitPct: 20,  trailingStopPct: 99, maxPositionAgeHours: 8 },
+  { algo_id: 'pump_fresh_tight',     stopLossPct: 10,  takeProfitPct: 20,  trailingStopPct: 99, maxPositionAgeHours: 8 },
 
-  // ─── BAGS.FM — 8 backtest-proven profitable strategies ───
-  { algo_id: 'bags_fresh_snipe',     stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 4 },
-  { algo_id: 'bags_momentum',        stopLossPct: 8,   takeProfitPct: 16,  trailingStopPct: 99, maxPositionAgeHours: 4 },
-  { algo_id: 'bags_value',           stopLossPct: 6,   takeProfitPct: 12,  trailingStopPct: 99, maxPositionAgeHours: 6 },
-  { algo_id: 'bags_dip_buyer',       stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 4 },
-  { algo_id: 'bags_bluechip',        stopLossPct: 6,   takeProfitPct: 12,  trailingStopPct: 99, maxPositionAgeHours: 6 },
-  { algo_id: 'bags_conservative',    stopLossPct: 6,   takeProfitPct: 12,  trailingStopPct: 99, maxPositionAgeHours: 6 },
-  { algo_id: 'bags_aggressive',      stopLossPct: 10,  takeProfitPct: 20,  trailingStopPct: 99, maxPositionAgeHours: 4 },
-  { algo_id: 'bags_elite',           stopLossPct: 7,   takeProfitPct: 14,  trailingStopPct: 99, maxPositionAgeHours: 4 },
+  // ─── MEMECOIN WIDE — 3 strategies (SL 10%, TP 25% = 2.5:1 R:R) ───
+  // FINAL: mean_reversion entry, SL 10/TP 25. PF 0.97 (borderline). Higher TP needed for profit.
+  { algo_id: 'momentum',             stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 24 },
+  { algo_id: 'hybrid_b',             stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 24 },
+  { algo_id: 'let_it_ride',          stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 48 },
+
+  // ─── ESTABLISHED TOKENS — 5 strategies (SL 7-8%, TP 15%) ───
+  // PROVEN: 8/15 works for sol_veteran, utility_swing, meme_classic
+  // volume_spike moves to mean_reversion entry at 8/15 (was dip_buy — failed at 10/20 and 8/20)
+  { algo_id: 'sol_veteran',          stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 168 },
+  { algo_id: 'utility_swing',        stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 168 },
+  { algo_id: 'established_breakout', stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 168 },
+  { algo_id: 'meme_classic',         stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 168 },
+  { algo_id: 'volume_spike',         stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 168 },
+
+  // ─── BAGS.FM — 8 strategies (mixed params, all optimized) ───
+  { algo_id: 'bags_fresh_snipe',     stopLossPct: 10,  takeProfitPct: 30,  trailingStopPct: 99, maxPositionAgeHours: 8 },
+  { algo_id: 'bags_momentum',        stopLossPct: 10,  takeProfitPct: 30,  trailingStopPct: 99, maxPositionAgeHours: 12 },
+  { algo_id: 'bags_aggressive',      stopLossPct: 7,   takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 12 },
+  { algo_id: 'bags_dip_buyer',       stopLossPct: 8,   takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 8 },
+  { algo_id: 'bags_elite',           stopLossPct: 5,   takeProfitPct: 9,   trailingStopPct: 99, maxPositionAgeHours: 4 },
+  { algo_id: 'bags_value',           stopLossPct: 5,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 4 },
+  { algo_id: 'bags_conservative',    stopLossPct: 5,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 4 },
+  { algo_id: 'bags_bluechip',        stopLossPct: 5,   takeProfitPct: 9,   trailingStopPct: 99, maxPositionAgeHours: 4 },
+
+  // ─── BLUE CHIP SOLANA — 2 strategies (SL 10%, TP 25% = 2.5:1 R:R) ───
+  // R4: mean_reversion entry + SL 10/TP 25. breakout entry failed in R3.
+  { algo_id: 'bluechip_trend_follow',stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 48 },
+  { algo_id: 'bluechip_breakout',    stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 48 },
+
+  // ─── xSTOCK & PRESTOCK — SL 4%, TP 10% = 2.5:1 R:R ───
+  // TESTED: SL 3/4/5/10%, TP 10/15/100%, 8 entry types. None profitable at TP ≤15%.
+  { algo_id: 'xstock_intraday',      stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
+  { algo_id: 'xstock_swing',         stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
+  { algo_id: 'prestock_speculative', stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
+
+  // ─── INDEX — SL 4%, TP 10% = 2.5:1 R:R ───
+  { algo_id: 'index_intraday',       stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
+  { algo_id: 'index_leveraged',      stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
 ];
 
 // ─── ENTRY SIGNAL SYSTEM ───
 // Strategy-specific entries that catch moves EARLY (not after they're extended).
 // Each strategy type has its own trigger optimized for that pattern.
 
-type EntryType = 'momentum' | 'fresh_pump' | 'aggressive' | 'mean_reversion' | 'trend_follow' | 'breakout' | 'dip_buy';
+type EntryType = 'momentum' | 'fresh_pump' | 'aggressive' | 'mean_reversion' | 'trend_follow' | 'breakout' | 'dip_buy' | 'strict_trend' | 'sma_crossover' | 'accumulation' | 'range_breakout' | 'pullback_buy' | 'vol_surge_scalp';
 
 interface EntrySignal {
   candleIndex: number;
@@ -97,14 +127,21 @@ function computeATR(candles: Candle[], endIdx: number, period: number): number {
 }
 
 function getEntryType(algoId: string): EntryType {
+  // Sweep-optimized entry types — some strategies changed from original
   if (['pump_fresh_tight', 'bags_fresh_snipe'].includes(algoId)) return 'fresh_pump';
-  if (['micro_cap_surge', 'genetic_best', 'genetic_v2', 'bags_aggressive'].includes(algoId)) return 'aggressive';
-  if (['elite', 'momentum', 'insight_j', 'hybrid_b', 'bags_momentum'].includes(algoId)) return 'momentum';
-  if (['let_it_ride', 'loose', 'bluechip_trend_follow', 'xstock_swing', 'index_leveraged', 'prestock_speculative'].includes(algoId)) return 'trend_follow';
-  if (['bluechip_mean_revert', 'bags_value', 'bags_bluechip', 'bags_elite', 'bags_conservative'].includes(algoId)) return 'mean_reversion';
-  if (['bluechip_breakout'].includes(algoId)) return 'breakout';
+  if (['micro_cap_surge', 'bags_aggressive'].includes(algoId)) return 'aggressive';
+  if (['elite', 'bags_momentum'].includes(algoId)) return 'momentum';
+  // Deep sweep found mean_reversion entry works for these (was momentum/aggressive/trend_follow)
+  // FINAL (R4): mean_reversion for memecoin wide, bluechip, xstock/index, volume_spike
+  // Tested: momentum, aggressive, breakout, range_breakout entries all worse (R3, R6)
+  if (['momentum', 'hybrid_b', 'let_it_ride', 'bluechip_trend_follow', 'bluechip_breakout'].includes(algoId)) return 'mean_reversion';
+  if (['bags_value', 'bags_bluechip', 'bags_elite', 'bags_conservative'].includes(algoId)) return 'mean_reversion';
+  if (['xstock_swing', 'xstock_intraday', 'index_intraday', 'index_leveraged'].includes(algoId)) return 'mean_reversion';
+  if (['prestock_speculative'].includes(algoId)) return 'mean_reversion';
+  if (['volume_spike'].includes(algoId)) return 'mean_reversion';
   if (['bags_dip_buyer'].includes(algoId)) return 'dip_buy';
-  if (['xstock_intraday', 'index_intraday'].includes(algoId)) return 'momentum';
+  // Established token strategies (sweep-optimized entry types)
+  if (['sol_veteran', 'utility_swing', 'established_breakout', 'meme_classic'].includes(algoId)) return 'mean_reversion';
   return 'momentum';
 }
 
@@ -167,6 +204,92 @@ function findAllEntrySignals(candles: Candle[], entryType: EntryType): EntrySign
           if (dip > 3 && c.close > c.open && pct > 0.5) triggered = true;
         }
         break;
+      case 'strict_trend': {
+        // Stricter trend: above SMA20, new high, 1%+ move, strong volume, 2 green candles
+        let st20 = 0;
+        const stLb = Math.min(20, i);
+        for (let j = i - stLb + 1; j <= i; j++) st20 += candles[j].close;
+        const stSma20 = st20 / stLb;
+        if (c.close > stSma20 && c.close > sma5 && c.high > prev.high && pct > 1.0 && volSpike > 1.5 &&
+            c.close > c.open && prev.close > prev.open) {
+          triggered = true;
+        }
+        break;
+      }
+      case 'sma_crossover': {
+        // SMA5 crosses above SMA20 with volume confirmation — classic trend start
+        if (i < 20) break;
+        let sc20 = 0;
+        for (let j = i - 19; j <= i; j++) sc20 += candles[j].close;
+        const scSma20 = sc20 / 20;
+        let prevS5 = 0;
+        for (let j = i - LB; j < i; j++) prevS5 += candles[j].close;
+        const prevSma5 = prevS5 / LB;
+        let prev20 = 0;
+        for (let j = i - 20; j < i; j++) prev20 += candles[j].close;
+        const prevSma20 = prev20 / 20;
+        // Cross: prev SMA5 <= SMA20, current SMA5 > SMA20, with volume
+        if (prevSma5 <= prevSma20 && sma5 > scSma20 && volSpike > 1.3 && c.close > c.open) {
+          triggered = true;
+        }
+        break;
+      }
+      case 'accumulation': {
+        // Volume increasing while price stable — accumulation before breakout
+        if (i < 10) break;
+        let avgVol10 = 0;
+        for (let j = i - 9; j <= i; j++) avgVol10 += candles[j].volume;
+        avgVol10 /= 10;
+        let avgVol5Prior = 0;
+        for (let j = i - 9; j <= i - 5; j++) avgVol5Prior += candles[j].volume;
+        avgVol5Prior /= 5;
+        let avgVol5Recent = 0;
+        for (let j = i - 4; j <= i; j++) avgVol5Recent += candles[j].volume;
+        avgVol5Recent /= 5;
+        // Price range is tight (<3%), volume is ramping up (1.5x+)
+        let rangeHi = 0, rangeLo = Infinity;
+        for (let j = i - 4; j <= i; j++) {
+          if (candles[j].high > rangeHi) rangeHi = candles[j].high;
+          if (candles[j].low < rangeLo) rangeLo = candles[j].low;
+        }
+        const rangeWidth = rangeLo > 0 ? ((rangeHi - rangeLo) / rangeLo) * 100 : 99;
+        if (rangeWidth < 5 && avgVol5Recent > avgVol5Prior * 1.5 && c.close > c.open && pct > 0.3) {
+          triggered = true;
+        }
+        break;
+      }
+      case 'range_breakout': {
+        // Price breaks above 20-candle high with 2x+ volume — confirmed breakout
+        if (i < 20) break;
+        let rbHigh = 0;
+        for (let j = i - 20; j < i; j++) if (candles[j].high > rbHigh) rbHigh = candles[j].high;
+        if (c.close > rbHigh * 1.005 && volSpike > 2.0 && c.close > c.open) {
+          triggered = true;
+        }
+        break;
+      }
+      case 'pullback_buy': {
+        // Price pulls back to SMA20 in an uptrend, then bounces
+        if (i < 20) break;
+        let pb20 = 0;
+        for (let j = i - 19; j <= i; j++) pb20 += candles[j].close;
+        const pbSma20 = pb20 / 20;
+        // Uptrend: SMA5 > SMA20
+        // Pullback: prev candle touched near SMA20 (within 1%)
+        // Bounce: current candle is green and above SMA5
+        const nearSma20 = Math.abs(prev.low - pbSma20) / pbSma20 < 0.015;
+        if (sma5 > pbSma20 && nearSma20 && c.close > sma5 && c.close > c.open && pct > 0.5) {
+          triggered = true;
+        }
+        break;
+      }
+      case 'vol_surge_scalp': {
+        // Sudden 3x+ volume spike with strong green candle — quick scalp
+        if (volSpike > 3.0 && pct > 1.5 && c.close > c.open && c.close > sma5) {
+          triggered = true;
+        }
+        break;
+      }
     }
 
     if (triggered) {
@@ -209,6 +332,7 @@ function simulateOneTrade(
   let exitReason: ExitReason = 'end_of_data';
   let candlesInTrade = 0;
   let exited = false;
+  let dualTriggerBar = false;
 
   for (let i = signal.candleIndex + 1; i < candles.length; i++) {
     const candle = candles[i];
@@ -216,21 +340,26 @@ function simulateOneTrade(
 
     if (candle.high > highWaterMark) highWaterMark = candle.high;
 
-    // Priority 1: TAKE PROFIT — check FIRST because we enter on momentum
-    // (uptrend bias means TP is more likely hit first on same-candle dual triggers)
-    if (candle.high >= tpPrice) {
-      exitPrice = tpPrice;
+    // Conservative intrabar ambiguity rule:
+    // If both TP and SL are hit in the same candle, count it as SL.
+    const slHit = candle.low <= slPrice;
+    const tpHit = candle.high >= tpPrice;
+
+    // Priority 1: STOP LOSS (SL-first)
+    if (slHit) {
+      dualTriggerBar = tpHit;
+      exitPrice = slPrice;
       exitTimestamp = candle.timestamp;
-      exitReason = 'tp_hit';
+      exitReason = 'sl_hit';
       exited = true;
       break;
     }
 
-    // Priority 2: STOP LOSS
-    if (candle.low <= slPrice) {
-      exitPrice = slPrice;
+    // Priority 2: TAKE PROFIT
+    if (tpHit) {
+      exitPrice = tpPrice;
       exitTimestamp = candle.timestamp;
-      exitReason = 'sl_hit';
+      exitReason = 'tp_hit';
       exited = true;
       break;
     }
@@ -247,28 +376,12 @@ function simulateOneTrade(
       }
     }
 
-    // Priority 4: EXPIRY — exit at breakeven or better (don't take a loss on expiry)
+    // Priority 4: EXPIRY — exit at market (candle close) at expiry
     if (candle.timestamp - entryTimestamp > maxAgeSeconds) {
-      if (candle.close >= entryPrice) {
-        exitPrice = candle.close; // exit at market (breakeven or small win)
-        exitTimestamp = candle.timestamp;
-        exitReason = 'expired';
-        exited = true;
-      } else {
-        // Price is below entry at expiry — hold ONE more candle for recovery
-        // (simulates limit order at breakeven)
-        if (i + 1 < candles.length && candles[i + 1].high >= entryPrice) {
-          exitPrice = entryPrice; // exit at breakeven
-          exitTimestamp = candles[i + 1].timestamp;
-          exitReason = 'expired';
-          exited = true;
-        } else {
-          exitPrice = candle.close; // forced exit at market
-          exitTimestamp = candle.timestamp;
-          exitReason = 'expired';
-          exited = true;
-        }
-      }
+      exitPrice = candle.close;
+      exitTimestamp = candle.timestamp;
+      exitReason = 'expired';
+      exited = true;
       break;
     }
   }
@@ -310,6 +423,7 @@ function simulateOneTrade(
     pnl_percent: +netPnlPct.toFixed(4),        // NET of all costs including JITO
     pnl_usd: +netPnlUsd.toFixed(4),            // actual USD on $10 position
     exit_reason: exitReason,
+    dual_trigger_bar: dualTriggerBar,
     high_water_mark_price: highWaterMark,
     high_water_mark_percent: +hwmPercent.toFixed(4),
     trade_duration_hours: +durationHours.toFixed(2),

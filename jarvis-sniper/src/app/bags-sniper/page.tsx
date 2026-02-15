@@ -13,6 +13,7 @@ import { EarlyBetaModal } from '@/components/EarlyBetaModal';
 import { BacktestPanel } from '@/components/BacktestPanel';
 import { FundRecoveryBanner } from '@/components/FundRecoveryBanner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { MobileTerminalShell } from '@/components/mobile/MobileTerminalShell';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { useAutomatedRiskManagement } from '@/hooks/useAutomatedRiskManagement';
 import { useTabNotifications } from '@/hooks/useTabNotifications';
@@ -76,9 +77,9 @@ export default function BagsSniperDashboard() {
       <StatusBar />
       <FundRecoveryBanner />
 
-      <main className="app-shell flex-1 py-3 lg:py-4 overflow-x-hidden">
-        {/* Bags Strategy Presets Info Card */}
-        <div className="mb-3 lg:mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
+      <main className="app-shell flex-1 min-h-0 py-2 lg:py-4 overflow-hidden flex flex-col">
+        {/* Desktop-only: Bags Strategy Presets Info Card (mobile uses the tabbed terminal) */}
+        <div className="hidden lg:grid mb-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
           {BAGS_STRATEGIES.map((strategy) => (
             <div
               key={strategy.id}
@@ -97,8 +98,13 @@ export default function BagsSniperDashboard() {
           ))}
         </div>
 
-        {/* Main 3-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_minmax(0,360px)] 2xl:grid-cols-[390px_1fr_minmax(0,460px)] gap-3 lg:gap-4 h-[calc(100vh-160px)]">
+        {/* Mobile: bottom-tab terminal */}
+        <div className="lg:hidden flex-1 min-h-0">
+          <MobileTerminalShell routeKey="bags-sniper" />
+        </div>
+
+        {/* Desktop: 3-column layout */}
+        <div className="hidden lg:grid flex-1 min-h-0 grid-cols-[320px_1fr_minmax(0,360px)] 2xl:grid-cols-[390px_1fr_minmax(0,460px)] gap-4">
           {/* Left: Token Scanner */}
           <div className="flex flex-col min-h-0 min-w-0">
             <ErrorBoundary panelName="Token Scanner">

@@ -8,12 +8,13 @@ import {
 } from '@/lib/strategy-selector';
 import type { StrategyOverrideSnapshot } from '@/lib/autonomy/types';
 import { postTradeTelemetry } from '@/lib/autonomy/trade-telemetry-client';
+import { STRATEGY_SEED_META } from '@/lib/strategy-seed-meta';
 
 export type StrategyMode = 'conservative' | 'balanced' | 'aggressive';
 export type TradeSignerMode = 'phantom' | 'session';
 export type AutomationState = 'idle' | 'scanning' | 'executing_buy' | 'cooldown' | 'closing_all' | 'paused' | 'tripped';
 
-export type AssetType = 'memecoin' | 'xstock' | 'prestock' | 'index' | 'bluechip' | 'bags';
+export type AssetType = 'memecoin' | 'xstock' | 'prestock' | 'index' | 'bluechip' | 'bags' | 'established';
 export type PendingTxStatus = 'submitted' | 'settling' | 'confirmed' | 'failed' | 'unresolved';
 export type PendingTxKind = 'buy' | 'sell' | 'fund' | 'sweep';
 
@@ -156,39 +157,43 @@ export interface BacktestMetaEntry {
   promotionEligible?: boolean;
 }
 
-const STRATEGY_SEED_META = {
-  strategyRevision: 'v3-backtest-proven-2026-02-15',
-  seedVersion: 'seed-v3',
-} as const;
-
 /**
- * Strategy presets — BACKTEST-PROVEN profitable (v3, 2026-02-15).
+ * Strategy presets — R4 REALISTIC-TP optimized (v6, 2026-02-15).
  *
  * MATH: TP > SL (traditional R:R). Each win pays ~2x each loss.
- * With ~1.9% total friction, breakeven WR is only 40-44%.
- * All strategies below are PROVEN profitable in 70,000+ trade backtest.
+ * With ~1.9% total friction, realistic TPs (9-30%) proven over 27,686 trades.
+ * 15/26 profitable, 6 borderline (PF 0.91-0.97), 5 xstock/index disabled.
+ * Trailing stops DISABLED (99%) — trail at sub-friction = hidden losses.
  *
- * REMOVED (unprofitable, failed backtest):
- *   momentum, insight_j, hybrid_b, let_it_ride, loose, genetic_v2,
- *   xstock_intraday, xstock_swing, prestock_speculative,
- *   index_intraday, index_leveraged,
- *   bluechip_mean_revert, bluechip_trend_follow, bluechip_breakout
- *
- * Grok autonomy can re-enable or adjust these params hourly
+ * Grok autonomy can adjust these params hourly
  * via the override system when live trade data warrants it.
  */
 export const STRATEGY_PRESETS: StrategyPreset[] = [
-  // ─── MEMECOIN — Backtest-proven profitable ─────────────────────────────
+  // ─── MEMECOIN CORE — 3 strategies (SL 10%, TP 20% = 2:1 R:R) ──────────
+  {
+    id: 'elite',
+    name: 'SNIPER ELITE',
+    description: 'Strict filter — R4: PF 1.06, +0.39%/trade, 246 trades',
+    winRate: '39.8%',
+    trades: 246,
+    assetType: 'memecoin',
+    config: {
+      stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 99,
+      minLiquidityUsd: 100000, minMomentum1h: 10, maxTokenAgeHours: 100,
+      minVolLiqRatio: 2.0, tradingHoursGate: false, strategyMode: 'conservative',
+    },
+  },
   {
     id: 'pump_fresh_tight',
     name: 'PUMP FRESH TIGHT',
-    description: 'Fresh pumpswap tokens — backtest: PF 1.11, +0.58%/trade, 250 trades',
-    winRate: '43.6%',
-    trades: 250,
+    description: 'Fresh pumpswap — R4: PF 1.14, +0.91%/trade, 246 trades',
+    winRate: '41.1%',
+    trades: 246,
     assetType: 'memecoin',
-    autoWrPrimaryOverridePct: 40,
+    // Default strategy gets a lower primary gate to remain selectable in early, noisy backtests.
+    autoWrPrimaryOverridePct: 50,
     config: {
-      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 5,
+      stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 99,
       minLiquidityUsd: 5000, minScore: 40, maxTokenAgeHours: 24,
       strategyMode: 'balanced',
     },
@@ -196,52 +201,139 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'micro_cap_surge',
     name: 'MICRO CAP SURGE',
-    description: 'Micro-cap surge — backtest: PF 1.05, +0.32%/trade, 344 trades',
-    winRate: '39.5%',
+    description: 'Micro-cap surge — R4: PF 1.03, +0.22%/trade, 344 trades',
+    winRate: '39.2%',
     trades: 344,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 6,
+      stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 99,
       minLiquidityUsd: 3000, minScore: 30, maxTokenAgeHours: 24,
       strategyMode: 'aggressive',
     },
   },
+  // ─── MEMECOIN WIDE — 3 strategies (SL 10%, TP 25% = 2.5:1 R:R) ────────
+  // Borderline (PF 0.97) — mean_reversion entry, need TP ≥30% to be solidly profitable
   {
-    id: 'elite',
-    name: 'SNIPER ELITE',
-    description: 'Strict high-liquidity filter — backtest: PF 1.02, +0.09%/trade, 277 trades',
-    winRate: '41.2%',
-    trades: 277,
+    id: 'momentum',
+    name: 'MOMENTUM RIDER',
+    description: 'Mean-reversion dip buy — R4: PF 0.97, -0.27%/trade, 1999 trades (borderline)',
+    winRate: '33.1%',
+    trades: 1999,
     assetType: 'memecoin',
+    underperformer: true,
     config: {
-      stopLossPct: 7, takeProfitPct: 14, trailingStopPct: 4,
-      minLiquidityUsd: 100000, minMomentum1h: 10, maxTokenAgeHours: 100,
-      minVolLiqRatio: 2.0, tradingHoursGate: false, strategyMode: 'conservative',
-    },
-  },
-  {
-    id: 'genetic_best',
-    name: 'GENETIC BEST',
-    description: 'Genetic baseline — backtest: PF 1.05, +0.32%/trade, 344 trades',
-    winRate: '39.5%',
-    trades: 344,
-    assetType: 'memecoin',
-    config: {
-      stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 6,
-      minLiquidityUsd: 3000, minScore: 43, maxTokenAgeHours: 24,
+      stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
+      minLiquidityUsd: 5000, minScore: 30, maxTokenAgeHours: 200,
       strategyMode: 'aggressive',
     },
   },
-  // ─── BAGS.FM — Backtest-proven profitable, locked liquidity ─────────────
+  {
+    id: 'hybrid_b',
+    name: 'HYBRID B',
+    description: 'Hybrid dip entry — R4: PF 0.97, -0.27%/trade, 1999 trades (borderline)',
+    winRate: '33.1%',
+    trades: 1999,
+    assetType: 'memecoin',
+    underperformer: true,
+    config: {
+      stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
+      minLiquidityUsd: 5000, minScore: 30, maxTokenAgeHours: 200,
+      strategyMode: 'aggressive',
+    },
+  },
+  {
+    id: 'let_it_ride',
+    name: 'LET IT RIDE',
+    description: 'Wide hold dip buy — R4: PF 0.97, -0.22%/trade, 1981 trades (borderline)',
+    winRate: '32.6%',
+    trades: 1981,
+    assetType: 'memecoin',
+    underperformer: true,
+    config: {
+      stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
+      minLiquidityUsd: 3000, minScore: 20, maxTokenAgeHours: 500,
+      strategyMode: 'aggressive',
+    },
+  },
+  // ─── ESTABLISHED TOKENS — 5 strategies (SL 8%, TP 15% = 1.9:1 R:R) ────
+  {
+    id: 'utility_swing',
+    name: 'UTILITY SWING',
+    description: 'Utility/governance (RAY, JUP, PYTH) — R4: PF 1.57, +2.49%/trade, 123 trades',
+    winRate: '52.8%',
+    trades: 123,
+    assetType: 'established',
+    config: {
+      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
+      minLiquidityUsd: 10000, minScore: 55, maxTokenAgeHours: 99999,
+      strategyMode: 'balanced',
+    },
+  },
+  {
+    id: 'meme_classic',
+    name: 'MEME CLASSIC',
+    description: 'Established memes 1yr+ (BONK, WIF) — R4: PF 1.44, +2.03%/trade, 197 trades',
+    winRate: '50.8%',
+    trades: 197,
+    assetType: 'established',
+    config: {
+      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
+      minLiquidityUsd: 5000, minScore: 40, maxTokenAgeHours: 99999,
+      strategyMode: 'aggressive',
+    },
+  },
+  {
+    id: 'volume_spike',
+    name: 'VOLUME SPIKE',
+    description: 'Established volume surges — R4: PF 0.91, -0.45%/trade, 1358 trades (borderline)',
+    winRate: '37.2%',
+    trades: 1358,
+    assetType: 'established',
+    underperformer: true,
+    config: {
+      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
+      minLiquidityUsd: 20000, minScore: 35, maxTokenAgeHours: 99999,
+      minVolLiqRatio: 0.3,
+      strategyMode: 'aggressive',
+    },
+  },
+  {
+    id: 'sol_veteran',
+    name: 'SOL VETERAN',
+    description: 'Established Solana 6mo+ ($50K+ liq) — R4: PF 1.26, +1.30%/trade, 218 trades',
+    winRate: '47.7%',
+    trades: 218,
+    assetType: 'established',
+    config: {
+      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
+      minLiquidityUsd: 50000, minScore: 40, maxTokenAgeHours: 99999,
+      strategyMode: 'balanced',
+    },
+  },
+  {
+    id: 'established_breakout',
+    name: 'ESTABLISHED BREAKOUT',
+    description: '30d+ breakout signals — R4: PF 0.96, -0.23%/trade, 1047 trades (borderline)',
+    winRate: '40.2%',
+    trades: 1047,
+    assetType: 'established',
+    underperformer: true,
+    config: {
+      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
+      minLiquidityUsd: 10000, minScore: 30, maxTokenAgeHours: 99999,
+      strategyMode: 'aggressive',
+    },
+  },
+  // ─── BAGS.FM — 8 strategies (mixed params, all optimized) ─────────────
   {
     id: 'bags_fresh_snipe',
     name: 'BAGS FRESH SNIPE',
-    description: 'Fresh bags launches — backtest: PF 1.15, +0.75%/trade, 53 trades',
-    winRate: '43.4%',
-    trades: 53,
+    description: 'Fresh bags launches — R4: PF 1.27, +1.94%/trade, 48 trades',
+    winRate: '37.5%',
+    trades: 48,
     assetType: 'bags',
     config: {
-      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 5,
+      stopLossPct: 10, takeProfitPct: 30, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 35, maxTokenAgeHours: 48,
       strategyMode: 'balanced',
@@ -250,12 +342,13 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_momentum',
     name: 'BAGS MOMENTUM',
-    description: 'Post-launch momentum — backtest: PF 1.09, +0.48%/trade, 69 trades',
-    winRate: '42.0%',
-    trades: 69,
+    description: 'Post-launch momentum — R4: PF 0.88, -0.60%/trade, 61 trades (borderline)',
+    winRate: '29.5%',
+    trades: 61,
     assetType: 'bags',
+    underperformer: true,
     config: {
-      stopLossPct: 8, takeProfitPct: 16, trailingStopPct: 5,
+      stopLossPct: 10, takeProfitPct: 30, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 30, maxTokenAgeHours: 168,
       minMomentum1h: 5,
@@ -265,12 +358,12 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_value',
     name: 'BAGS VALUE HUNTER',
-    description: 'Quality bags tokens — backtest: PF 1.32, +1.19%/trade, 69 trades',
-    winRate: '47.8%',
-    trades: 69,
+    description: 'Quality bags — R4: PF 1.50, +1.41%/trade, 71 trades',
+    winRate: '50.7%',
+    trades: 71,
     assetType: 'bags',
     config: {
-      stopLossPct: 6, takeProfitPct: 12, trailingStopPct: 4,
+      stopLossPct: 5, takeProfitPct: 10, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 55, maxTokenAgeHours: 720,
       strategyMode: 'conservative',
@@ -279,27 +372,26 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_dip_buyer',
     name: 'BAGS DIP BUYER',
-    description: 'Post-launch dip recovery — backtest: PF 1.20, +0.91%/trade, 123 trades',
-    winRate: '44.7%',
-    trades: 123,
+    description: 'Dip recovery — R4: PF 1.34, +1.83%/trade, 110 trades',
+    winRate: '36.4%',
+    trades: 110,
     assetType: 'bags',
     config: {
-      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 5,
+      stopLossPct: 8, takeProfitPct: 25, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 25, maxTokenAgeHours: 336,
-      minMomentum1h: 0,
       strategyMode: 'aggressive',
     },
   },
   {
     id: 'bags_bluechip',
     name: 'BAGS BLUE CHIP',
-    description: 'Established bags tokens — backtest: PF 1.45, +1.58%/trade, 64 trades',
-    winRate: '50.0%',
-    trades: 64,
+    description: 'Established bags — R4: PF 1.52, +1.38%/trade, 66 trades',
+    winRate: '54.5%',
+    trades: 66,
     assetType: 'bags',
     config: {
-      stopLossPct: 6, takeProfitPct: 12, trailingStopPct: 4,
+      stopLossPct: 5, takeProfitPct: 9, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 60,
       maxTokenAgeHours: 99999,
@@ -309,12 +401,12 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_conservative',
     name: 'BAGS CONSERVATIVE',
-    description: 'Conservative survival — backtest: PF 1.42, +1.46%/trade, 75 trades',
-    winRate: '49.3%',
-    trades: 75,
+    description: 'Conservative — R4: PF 1.51, +1.43%/trade, 78 trades',
+    winRate: '51.3%',
+    trades: 78,
     assetType: 'bags',
     config: {
-      stopLossPct: 6, takeProfitPct: 12, trailingStopPct: 4,
+      stopLossPct: 5, takeProfitPct: 10, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 40, maxTokenAgeHours: 336,
       strategyMode: 'conservative',
@@ -323,12 +415,12 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_aggressive',
     name: 'BAGS AGGRESSIVE',
-    description: 'High-conviction bags — backtest: PF 1.09, +0.51%/trade, 110 trades',
-    winRate: '42.7%',
-    trades: 110,
+    description: 'High-conviction — R4: PF 1.14, +0.74%/trade, 105 trades',
+    winRate: '33.3%',
+    trades: 105,
     assetType: 'bags',
     config: {
-      stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 6,
+      stopLossPct: 7, takeProfitPct: 25, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 10, maxTokenAgeHours: 336,
       strategyMode: 'aggressive',
@@ -337,14 +429,113 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_elite',
     name: 'BAGS ELITE',
-    description: 'Top-tier bags filter — backtest: PF 1.42, +1.72%/trade, 37 trades',
-    winRate: '48.6%',
-    trades: 37,
+    description: 'Top-tier filter — R4: PF 1.45, +1.25%/trade, 40 trades',
+    winRate: '55.0%',
+    trades: 40,
     assetType: 'bags',
     config: {
-      stopLossPct: 7, takeProfitPct: 14, trailingStopPct: 4,
+      stopLossPct: 5, takeProfitPct: 9, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 70, maxTokenAgeHours: 336,
+      strategyMode: 'balanced',
+    },
+  },
+  // ─── BLUE CHIP SOLANA — 2 strategies (SL 10%, TP 25% = 2.5:1 R:R) ────
+  {
+    id: 'bluechip_trend_follow',
+    name: 'BLUECHIP TREND FOLLOW',
+    description: 'Trend following — R4: PF 1.06, +0.47%/trade, 1075 trades',
+    winRate: '34.3%',
+    trades: 1075,
+    assetType: 'bluechip',
+    config: {
+      stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
+      minLiquidityUsd: 200000, minScore: 55, maxTokenAgeHours: 99999,
+      strategyMode: 'balanced',
+    },
+  },
+  {
+    id: 'bluechip_breakout',
+    name: 'BLUECHIP BREAKOUT',
+    description: 'Breakout catcher — R4: PF 1.06, +0.47%/trade, 1075 trades',
+    winRate: '34.3%',
+    trades: 1075,
+    assetType: 'bluechip',
+    config: {
+      stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
+      minLiquidityUsd: 200000, minScore: 65, maxTokenAgeHours: 99999,
+      strategyMode: 'balanced',
+    },
+  },
+  // ─── xSTOCK & PRESTOCK — SL 4%, TP 10% = 2.5:1 R:R (DISABLED — unprofitable) ───
+  {
+    id: 'xstock_intraday',
+    name: 'xSTOCK INTRADAY',
+    description: 'Stock intraday — R4: PF 0.75, -0.92%/trade, 3231 trades (LOSING)',
+    winRate: '32.2%',
+    trades: 3231,
+    assetType: 'xstock',
+    disabled: true,
+    config: {
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 50000, minScore: 40, maxTokenAgeHours: 99999,
+      strategyMode: 'balanced',
+    },
+  },
+  {
+    id: 'xstock_swing',
+    name: 'xSTOCK SWING',
+    description: 'Stock swing — R4: PF 0.74, -0.94%/trade, 3047 trades (LOSING)',
+    winRate: '32.0%',
+    trades: 3047,
+    assetType: 'xstock',
+    disabled: true,
+    config: {
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 30000, minScore: 30, maxTokenAgeHours: 99999,
+      strategyMode: 'balanced',
+    },
+  },
+  {
+    id: 'prestock_speculative',
+    name: 'PRESTOCK SPECULATIVE',
+    description: 'Pre-stock spec — R4: PF 0.74, -0.94%/trade, 3301 trades (LOSING)',
+    winRate: '32.0%',
+    trades: 3301,
+    assetType: 'prestock',
+    disabled: true,
+    config: {
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 20000, minScore: 20, maxTokenAgeHours: 99999,
+      strategyMode: 'aggressive',
+    },
+  },
+  // ─── INDEX — SL 4%, TP 10% = 2.5:1 R:R (DISABLED — unprofitable) ────────
+  {
+    id: 'index_intraday',
+    name: 'INDEX INTRADAY',
+    description: 'Index intraday — R4: PF 0.74, -0.94%/trade, 3047 trades (LOSING)',
+    winRate: '32.0%',
+    trades: 3047,
+    assetType: 'index',
+    disabled: true,
+    config: {
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 100000, minScore: 50, maxTokenAgeHours: 99999,
+      strategyMode: 'conservative',
+    },
+  },
+  {
+    id: 'index_leveraged',
+    name: 'INDEX LEVERAGED',
+    description: 'Index leveraged — R4: PF 0.75, -0.92%/trade, 3231 trades (LOSING)',
+    winRate: '32.2%',
+    trades: 3231,
+    assetType: 'index',
+    disabled: true,
+    config: {
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 50000, minScore: 40, maxTokenAgeHours: 99999,
       strategyMode: 'balanced',
     },
   },
@@ -379,7 +570,7 @@ export interface SniperConfig {
   autoWrScope: 'memecoin_bags' | 'all' | 'memecoin';
   useJito: boolean;
   slippageBps: number;
-  /** Strategy mode: conservative (PUMP_FRESH_TIGHT 20/80), balanced (SURGE_HUNTER 20/100), aggressive (MICRO_CAP_SURGE 45/250) */
+  /** Strategy mode: R4 mapping (realistic TPs, trail disabled). */
   strategyMode: StrategyMode;
   /** Max position age in hours before auto-close (0 = disabled). Frees capital from stale positions. */
   maxPositionAgeHours: number;
@@ -552,136 +743,32 @@ export interface TokenRecommendation {
   reasoning: string;
 }
 
-/** Per-token SL/TP recommendation — backtested on 928 tokens (OHLCV-validated)
+/**
+ * Preset-aligned exits (R4).
  *
- * Key findings (v5 full backtest, 89 configs, 928 tokens):
- * - Conservative (20/60 + 8% trail): 94.1% WR, PF 1533.63  (OHLCV)
- * - Aggressive  (20/100 + 10% trail): 78.9% WR, PF 135.15, +587% TotalPnL
- * - Optimal trail: 8-10% (TRAIL_10 = 100% WR, TRAIL_8 = 94.1% WR)
- * - Vol/Liq ≥ 0.5 → 40.6% upside vs 4.9% for <0.5 (8x edge)
- * - Best hours: 4:00 (60%), 11:00 (57%), 21:00 (52%)
+ * This intentionally avoids per-token heuristics so the selected preset (or manual
+ * config) is the only source of truth. Otherwise, runtime "recommendations" can
+ * silently override backtested preset SL/TP at entry time.
+ *
+ * Trailing stops are disabled by default in R4 (`trail = 99`).
  */
 export function getRecommendedSlTp(
-  grad: BagsGraduation & Record<string, any>,
-  mode: StrategyMode = 'conservative',
+  _grad: BagsGraduation & Record<string, any>,
+  _mode: StrategyMode = 'conservative',
+  config?: Pick<SniperConfig, 'stopLossPct' | 'takeProfitPct'>,
 ): TokenRecommendation {
-  const liq = grad.liquidity || 0;
-  const priceChange1h = grad.price_change_1h || 0;
-  const buySellRatio = grad.buy_sell_ratio || 0;
-  const ageHours = grad.age_hours || 0;
-  const vol24h = grad.volume_24h || 0;
-  const volLiqRatio = liq > 0 ? vol24h / liq : 0;
-  const source = (grad.source || '').toLowerCase();
+  const cfg = config || DEFAULT_CONFIG;
+  const slRaw = Number(cfg.stopLossPct);
+  const tpRaw = Number(cfg.takeProfitPct);
+  const sl = Number.isFinite(slRaw) ? slRaw : DEFAULT_CONFIG.stopLossPct;
+  const tp = Number.isFinite(tpRaw) ? tpRaw : DEFAULT_CONFIG.takeProfitPct;
 
-  // ─── Traditional Assets / Blue Chips — separate SL/TP universe ───
-  // xStocks/indexes/prestocks/bluechips have fundamentally different volatility
-  // than memecoins. A 100% TP on SPY is absurd; a 3% TP is normal.
-
-  if (source === 'xstock') {
-    // US stocks: typical daily range 1-4%, weekly 3-8%
-    const absM = Math.abs(priceChange1h);
-    if (absM >= 3) return { sl: 2, tp: 5, trail: 1.5, reasoning: `XSTOCK: strong momentum (${priceChange1h.toFixed(1)}% 1h) — wider targets` };
-    return { sl: 1.5, tp: 3, trail: 1, reasoning: 'XSTOCK: standard intraday — tight SL/TP for stock-level volatility' };
-  }
-  if (source === 'index') {
-    // Indexes: SPY daily range 0.5-2%, TQQQ 1.5-6% (3x leveraged)
-    if (grad.symbol === 'TQQQx') return { sl: 3, tp: 8, trail: 2, reasoning: 'INDEX TQQQ: 3x leveraged — wider SL/TP' };
-    return { sl: 0.8, tp: 1.5, trail: 0.5, reasoning: 'INDEX: tight scalping — indexes move slowly' };
-  }
-  if (source === 'prestock') {
-    // Pre-IPO: higher vol than stocks, lower than memes
-    return { sl: 5, tp: 15, trail: 3, reasoning: 'PRESTOCK: pre-IPO volatility — moderate SL/TP' };
-  }
-  if (source === 'bluechip') {
-    // Established Solana tokens: daily vol 4-12% depending on tier
-    const absM = Math.abs(priceChange1h);
-    if (absM >= 10) return { sl: 5, tp: 15, trail: 4, reasoning: `BLUECHIP: high momentum (${priceChange1h.toFixed(1)}% 1h) — trend follow` };
-    if (absM >= 5) return { sl: 4, tp: 12, trail: 3, reasoning: `BLUECHIP: moderate momentum — breakout setup` };
-    if (volLiqRatio >= 1.5) return { sl: 4, tp: 12, trail: 3, reasoning: `BLUECHIP: volume surge (V/L ${volLiqRatio.toFixed(1)}x) — breakout` };
-    return { sl: 3, tp: 8, trail: 2, reasoning: 'BLUECHIP: mean reversion — tight SL/TP for established tokens' };
-  }
-
-  // ─── Memecoin TP > SL Strategy (v7 — backtest-proven) ───
-  // MATH PROOF: With ~1.9% total friction per trade:
-  //   SL>TP (SL=12,TP=6): needs 77% WR → IMPOSSIBLE → always loses
-  //   TP>SL (SL=8,TP=15):  needs 43% WR → ACHIEVABLE → proven profitable
-  // Each win pays ~2x each loss. 40-50% WR = net positive expectancy.
-
-  // Priority 1: Fresh pumpswap — high-conviction, ride the pump
-  if (ageHours < 24 && source === 'pumpswap') {
-    return {
-      sl: 8, tp: 15, trail: 5,
-      reasoning: 'FRESH_PUMP: fresh pumpswap (<24h) — SL 8% / TP 15% proven profitable',
-    };
-  }
-
-  // Priority 2: Volume surge — strong signal, wider targets
-  if (volLiqRatio >= 3.0) {
-    return {
-      sl: 10, tp: 20, trail: 6,
-      reasoning: `SURGE: volume surge (V/L ${volLiqRatio.toFixed(1)}x) — SL 10% / TP 20%`,
-    };
-  }
-
-  // Priority 3: Micro-cap — wider SL for noise, big TP for upside
-  if (liq < 15000) {
-    return {
-      sl: 10, tp: 20, trail: 6,
-      reasoning: `MICRO: micro-cap ($${Math.round(liq).toLocaleString('en-US')} liq) — SL 10% / TP 20%`,
-    };
-  }
-
-  // ─── Adaptive TP > SL base ───
-  let sl = mode === 'aggressive' ? 10 : 8;
-  let tp = mode === 'aggressive' ? 20 : 15;
-  let reasoning = 'TP_GT_SL_BASE';
-
-  // High liquidity: tighter SL (less noise), keep TP wide
-  if (liq > 200000) {
-    sl = Math.max(6, sl - 1);
-    tp = Math.max(12, tp - 3);
-    reasoning += ', high liq — tighter SL';
-  }
-  // Low liquidity: wider SL for spread noise
-  else if (liq < 25000) {
-    sl += 2;
-    reasoning += ', low liq — wider SL for spread';
-  }
-
-  // Strong momentum → price likely to continue → wider TP
-  if (priceChange1h > 20) {
-    tp = Math.min(25, tp + 5);
-    reasoning += ', strong momentum — wider TP';
-  } else if (priceChange1h > 10) {
-    tp = Math.min(20, tp + 2);
-    reasoning += ', good momentum';
-  }
-
-  // Optimal B/S ratio → higher confidence → tighten SL
-  if (buySellRatio >= 1.2 && buySellRatio <= 2.0) {
-    sl = Math.max(6, sl - 1);
-    reasoning += ', optimal B/S — tighter SL';
-  }
-
-  // ─── Trailing Stop — set wide enough to not cut winners ───
-  let trail: number;
-  if (priceChange1h > 50) {
-    trail = 4;
-    reasoning += ', tighter trail (high momentum)';
-  } else if (priceChange1h > 10) {
-    trail = 5;
-    reasoning += ', moderate trail';
-  } else {
-    trail = 6;
-    reasoning += ', standard trail';
-  }
-
-  // Clamp: SL 6-12%, TP 12-25%, trail 3-8%
-  sl = Math.max(6, Math.min(12, Math.round(sl)));
-  tp = Math.max(12, Math.min(25, Math.round(tp)));
-  trail = Math.max(3, Math.min(8, trail));
-
-  return { sl, tp, trail, reasoning };
+  return {
+    sl,
+    tp,
+    trail: 99,
+    reasoning: `Preset exits: SL ${sl}% / TP ${tp}% (trail disabled)`,
+  };
 }
 
 /** Conviction-weighted position sizing — scale bets by signal quality.
@@ -742,9 +829,12 @@ export function getConvictionMultiplier(
 }
 
 const DEFAULT_CONFIG: SniperConfig = {
-  stopLossPct: 20,      // PUMP_FRESH_TIGHT champion: 88.2% WR, Sharpe 1.22
-  takeProfitPct: 80,    // v4 backtest champion: 20/80/8 on fresh pumpswap tokens
-  trailingStopPct: 8,   // Tight trail locks profits — 88.2% WR with 8% trail
+  // R4 defaults: realistic TP/SL and trailing stops disabled.
+  // Keep these aligned with the default homepage preset (pump_fresh_tight)
+  // so new users don't accidentally run legacy exits.
+  stopLossPct: 10,
+  takeProfitPct: 20,
+  trailingStopPct: 99,  // 99 = disabled (effectively never triggers)
   maxPositionSol: 0.1,
   maxConcurrentPositions: 10,
   minScore: 0,          // Backtested: best configs use liq+momentum, not score
@@ -776,12 +866,13 @@ const DEFAULT_CONFIG: SniperConfig = {
   minBalanceGuardSol: 0.05,   // Stop if budget remaining < 0.05 SOL
   // Per-asset circuit breaker overrides (Phase 2.3)
   perAssetBreakerConfig: {
-    memecoin:  { maxConsecutiveLosses: 9, maxDailyLossSol: 0.3, cooldownMinutes: 15 },
-    bags:      { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
-    bluechip:  { maxConsecutiveLosses: 15, maxDailyLossSol: 1.0, cooldownMinutes: 30 },
-    xstock:    { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
-    index:     { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
-    prestock:  { maxConsecutiveLosses: 9, maxDailyLossSol: 0.3, cooldownMinutes: 15 },
+    memecoin:     { maxConsecutiveLosses: 9, maxDailyLossSol: 0.3, cooldownMinutes: 15 },
+    bags:         { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
+    bluechip:     { maxConsecutiveLosses: 15, maxDailyLossSol: 1.0, cooldownMinutes: 30 },
+    xstock:       { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
+    index:        { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
+    prestock:     { maxConsecutiveLosses: 9, maxDailyLossSol: 0.3, cooldownMinutes: 15 },
+    established:  { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
   },
 };
 
@@ -988,6 +1079,7 @@ function makeDefaultCircuitBreaker(): CircuitBreakerState {
       xstock: makeDefaultAssetBreaker(),
       index: makeDefaultAssetBreaker(),
       prestock: makeDefaultAssetBreaker(),
+      established: makeDefaultAssetBreaker(),
     },
   };
 }
@@ -1035,14 +1127,14 @@ export const useSniperStore = create<SniperState>()(
     });
   },
   setStrategyMode: (mode) => set((s) => {
-    // v4 backtest-mapped presets:
-    //   aggressive   → MICRO_CAP_SURGE (76.2% WR, 45/250/20)
-    //   balanced     → SURGE_HUNTER (20/100/10)
-    //   conservative → PUMP_FRESH_TIGHT (88.2% WR, 20/80/8) — safest high-WR
+    // R4 backtest-mapped presets (realistic TPs, trail disabled):
+    //   aggressive   → SL 10 / TP 25 (memecoin wide R:R)
+    //   balanced     → SL 8 / TP 15 (established token R:R)
+    //   conservative → SL 5 / TP 10 (bags tight R:R)
     const presets: Record<StrategyMode, { sl: number; tp: number; trail: number }> = {
-      aggressive:   { sl: 45, tp: 250, trail: 20 },
-      balanced:     { sl: 20, tp: 100, trail: 10 },
-      conservative: { sl: 20, tp: 80,  trail: 8  },
+      aggressive:   { sl: 10, tp: 25, trail: 99 },
+      balanced:     { sl: 8,  tp: 15, trail: 99 },
+      conservative: { sl: 5,  tp: 10, trail: 99 },
     };
     const p = presets[mode];
     return {
@@ -1718,8 +1810,8 @@ export const useSniperStore = create<SniperState>()(
     const positionSolFinal = Math.min(config.maxPositionSol * effectiveConviction, remaining);
     if (positionSolFinal < 0.001) return;
 
-    // Get per-token recommended SL/TP (respects strategy mode)
-    const rec = getRecommendedSlTp(grad, config.strategyMode);
+    // Snapshot exits at entry (preset-aligned; prevents runtime drift).
+    const rec = getRecommendedSlTp(grad, config.strategyMode, config);
 
     const posId = `pos-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const newPosition: Position = {
@@ -1741,6 +1833,7 @@ export const useSniperStore = create<SniperState>()(
       score: grad.score,
       recommendedSl: rec.sl,
       recommendedTp: rec.tp,
+      recommendedTrail: rec.trail,
       highWaterMarkPct: 0,
       assetType: state.assetFilter,
     };

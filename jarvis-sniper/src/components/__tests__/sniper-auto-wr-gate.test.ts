@@ -36,7 +36,7 @@ describe('sniper auto WR gate strategy selection', () => {
         netPnlPct: 14.2,
         profitFactorValue: 1.7,
       },
-      bags_momentum: {
+      micro_cap_surge: {
         winRate: '74%',
         trades: 1600,
         totalTrades: 1600,
@@ -55,14 +55,14 @@ describe('sniper auto WR gate strategy selection', () => {
     const selection = selectBestWrGateStrategy(candidates, GATE_CONFIG);
 
     expect(selection.resolution.mode).toBe('primary');
-    expect(selection.selected?.strategyId).toBe('bags_momentum');
+    expect(selection.selected?.strategyId).toBe('micro_cap_surge');
     expect(selection.selectedThresholdSource).toBe('global_primary');
     expect(selection.selectedThresholdPct).toBe(70);
   });
 
   it('falls back from 70 to 50 when primary threshold has no candidates', () => {
     const meta = {
-      bags_momentum: {
+      micro_cap_surge: {
         winRate: '65%',
         trades: 1200,
         totalTrades: 1200,
@@ -82,7 +82,7 @@ describe('sniper auto WR gate strategy selection', () => {
 
     expect(selection.resolution.mode).toBe('fallback');
     expect(selection.resolution.usedThreshold).toBe(50);
-    expect(selection.selected?.strategyId).toBe('bags_momentum');
+    expect(selection.selected?.strategyId).toBe('micro_cap_surge');
     expect(selection.selectedThresholdSource).toBe('fallback');
   });
 

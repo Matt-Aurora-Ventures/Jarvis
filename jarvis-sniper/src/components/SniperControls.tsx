@@ -29,6 +29,7 @@ import { STRATEGY_INFO } from '@/components/strategy-info';
 import { filterOpenPositionsForActiveWallet, filterTradeManagedOpenPositionsForActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
 import { waitForSignatureStatus } from '@/lib/tx-confirmation';
+import { isProbablyMobile } from '@/lib/wallet-deeplinks';
 import {
   buildWrGateCandidates,
   gateStatusBadge,
@@ -98,14 +99,14 @@ function suggestStrategy(graduations: BagsGraduation[], assetType: AssetType = '
     return { presetId: 'let_it_ride', reason: `${Math.round(momPct * 100)}% momentum + ${highVolCount} high-vol tokens` };
   }
 
-  // 3. Many fresh tokens + decent liquidity → GENETIC V2 (88.1% WR)
+  // 3. Many fresh tokens + decent liquidity → VOLUME SPIKE (PF 2.31)
   if (freshCount >= 3 && above10k >= 3) {
-    return { presetId: 'genetic_v2', reason: `${freshCount} fresh tokens + active market` };
+    return { presetId: 'volume_spike', reason: `${freshCount} fresh tokens + active market` };
   }
 
-  // 4. Good liquidity cluster with momentum → INSIGHT-J (73% WR)
+  // 4. Good liquidity cluster with momentum → SOL VETERAN (PF 2.68)
   if (above25k >= 3 && momPct >= 0.3) {
-    return { presetId: 'insight_j', reason: `${above25k} tokens with $25K+ liq & ${Math.round(momPct * 100)}% momentum` };
+    return { presetId: 'sol_veteran', reason: `${above25k} tokens with $25K+ liq & ${Math.round(momPct * 100)}% momentum` };
   }
 
   // 5. Moderate liquidity → HYBRID-B (balanced)
@@ -137,12 +138,13 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 
 /** Map asset filter to visible strategy categories */
 const ASSET_CATEGORY_MAP: Record<AssetType, string[]> = {
-  memecoin: ['TOP PERFORMERS', 'BALANCED', 'AGGRESSIVE'],
-  bags: ['DEGEN'],
+  memecoin: ['TOP PERFORMERS', 'MEMECOIN'],
+  established: ['TOP PERFORMERS', 'ESTABLISHED TOKENS'],
+  bags: ['BAGS.FM'],
   bluechip: ['BLUE CHIP SOLANA'],
-  xstock: ['XSTOCK & INDEX'],
-  prestock: ['XSTOCK & INDEX'],
-  index: ['XSTOCK & INDEX'],
+  xstock: ['xSTOCK & INDEX'],
+  prestock: ['xSTOCK & INDEX'],
+  index: ['xSTOCK & INDEX'],
 };
 
 /** Risk level badge colors */
@@ -153,12 +155,53 @@ const RISK_COLORS: Record<string, string> = {
   EXTREME: 'text-accent-error bg-accent-error/15 border-accent-error/30',
 };
 
-/** Small info tooltip component — hover to see explanation */
+/** Small info tooltip component — hover (desktop) or tap (mobile) for explanation */
 function InfoTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      const el = ref.current;
+      if (!el) return;
+      if (!el.contains(e.target as Node)) setOpen(false);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('pointerdown', onPointerDown, true);
+    };
+  }, [open]);
+
   return (
-    <span className="relative group inline-flex items-center ml-1 cursor-help">
-      <HelpCircle className="w-3 h-3 text-text-muted/50 group-hover:text-text-muted transition-colors" />
-      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border-primary text-[10px] text-text-secondary leading-relaxed whitespace-normal w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 shadow-lg z-50 pointer-events-none">
+    <span ref={ref} className="relative inline-flex items-center ml-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        className="inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-bg-tertiary/80 border border-transparent hover:border-border-primary transition-colors cursor-help"
+        aria-label="Info"
+        aria-expanded={open}
+      >
+        <HelpCircle className="w-3 h-3 text-text-muted/60" />
+      </button>
+      <span
+        role="tooltip"
+        className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border-primary text-[10px] text-text-secondary leading-relaxed whitespace-normal w-56 shadow-lg z-50 pointer-events-none transition-all duration-150 ${
+          open ? 'opacity-100 visible' : 'opacity-0 invisible'
+        }`}
+      >
         {text}
       </span>
     </span>
@@ -170,8 +213,10 @@ export function SniperControls() {
   const { connected, connecting, connect, address, signTransaction, signMessage, publicKey } = usePhantomWallet();
   const { snipe, ready: walletReady } = useSnipeExecutor();
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isMobileUi, setIsMobileUi] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const [strategyOpen, setStrategyOpen] = useState(false);
+  const [strategyDetailsOpen, setStrategyDetailsOpen] = useState(true);
   const [bestEverLoaded, setBestEverLoaded] = useState(false);
   const [customBudget, setCustomBudget] = useState('');
   const [budgetFocused, setBudgetFocused] = useState(false);
@@ -218,6 +263,19 @@ export function SniperControls() {
 
   useEffect(() => {
     setIsHydrated(true);
+  }, []);
+
+  // Mobile defaults: keep the control surface less overwhelming on first load.
+  useEffect(() => {
+    try {
+      if (isProbablyMobile()) {
+        setIsMobileUi(true);
+        setExpanded(false);
+        setStrategyDetailsOpen(false);
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
   // Sync session wallet pubkey scoped to the currently connected main wallet.
@@ -384,6 +442,23 @@ export function SniperControls() {
   function closeActivate() {
     setActivateOpen(false);
     setActivateError(null);
+  }
+
+  function setAutoSnipeEnabled(next: boolean) {
+    if (next && autoResetRequired) {
+      addExecution({
+        id: `auto-rearm-required-${Date.now()}`,
+        type: 'error',
+        symbol: 'AUTO',
+        mint: '',
+        amount: 0,
+        reason: 'AUTO_STOP_RESET_AUTO: Re-arm required. Open Activate Auto Wallet and set total budget, max trades, and max SOL per trade.',
+        timestamp: Date.now(),
+      });
+      openActivate();
+      return;
+    }
+    setConfig({ autoSnipe: next });
   }
 
   // Allow StatusBar (top wallet chip) to open the activation modal.
@@ -1156,6 +1231,99 @@ export function SniperControls() {
         </span>
       </div>
 
+      {/* Mobile: first-run checklist (keeps primary actions obvious) */}
+      {isMobileUi && isHydrated && (
+        <div className="mb-4 p-3 rounded-lg bg-bg-secondary border border-border-primary">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-accent-neon" />
+              <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-text-muted">
+                First Run Checklist
+              </span>
+            </div>
+            <span className="text-[9px] font-mono text-text-muted">
+              {budget.authorized ? 'Budget OK' : 'Budget OFF'}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`w-2 h-2 rounded-full ${connected ? 'bg-accent-neon' : 'bg-accent-warning'}`} />
+                <span className="text-[11px] font-semibold text-text-primary">1) Connect wallet</span>
+              </div>
+              {connected ? (
+                <span className="text-[10px] font-mono text-accent-neon">OK</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { void connect(); }}
+                  disabled={connecting}
+                  className="px-2.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider border border-accent-warning/30 text-accent-warning hover:bg-accent-warning/10 transition-colors disabled:opacity-50"
+                >
+                  {connecting ? '...' : 'Connect'}
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`w-2 h-2 rounded-full ${
+                  usingSession ? (sessionReady ? 'bg-accent-neon' : 'bg-accent-warning') : 'bg-text-muted/50'
+                }`} />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[11px] font-semibold text-text-primary">2) Session wallet (auto)</span>
+                  <span className="text-[9px] text-text-muted/70 leading-tight">
+                    {usingSession ? 'Required for auto-exits' : 'Optional for manual'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSessionWalletModalOpen(true)}
+                className="px-2.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider border border-border-primary text-text-secondary hover:border-border-hover hover:bg-bg-tertiary transition-colors"
+              >
+                Open
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`w-2 h-2 rounded-full ${
+                  budget.authorized && config.autoSnipe ? 'bg-accent-neon' : 'bg-accent-warning'
+                }`} />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[11px] font-semibold text-text-primary">3) Authorize + arm</span>
+                  <span className="text-[9px] text-text-muted/70 leading-tight">
+                    {budget.authorized ? 'Budget authorized' : 'Budget not authorized'} · {config.autoSnipe ? 'Auto ON' : 'Auto OFF'}
+                  </span>
+                </div>
+              </div>
+              {!budget.authorized ? (
+                <button
+                  type="button"
+                  onClick={() => { void handleAuthorize(); }}
+                  disabled={!connected || authLoading}
+                  className="px-2.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider border border-accent-neon/30 text-accent-neon hover:bg-accent-neon/10 transition-colors disabled:opacity-50"
+                >
+                  {authLoading ? '...' : 'Authorize'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAutoSnipeEnabled(true)}
+                  disabled={config.autoSnipe || !canTradeNow}
+                  className="px-2.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider border border-accent-neon/30 text-accent-neon hover:bg-accent-neon/10 transition-colors disabled:opacity-50"
+                  title={!canTradeNow ? 'Connect wallet + prepare session wallet (auto) before arming' : 'Enable auto sniping'}
+                >
+                  Arm
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── QUICK START — One-click setup for new users ─── */}
       {!config.autoSnipe && !budget.authorized && (
         <div className="mb-4 p-3 rounded-lg border border-accent-neon/20 bg-accent-neon/[0.03]">
@@ -1212,7 +1380,8 @@ export function SniperControls() {
               const meta: any = (backtestMeta as any)?.[activePreset];
               const wr = meta?.backtested ? String(meta.winRate || '').trim() : '';
               const trades = meta?.backtested ? Number(meta.trades || 0) : 0;
-              const under = !!meta?.underperformer;
+              const disabled = !!activePresetDef?.disabled;
+              const under = !!meta?.underperformer || !!activePresetDef?.underperformer;
               const stageTag =
                 meta?.stage === 'promotion' ? 'S3' :
                 meta?.stage === 'stability' ? 'S2' :
@@ -1221,7 +1390,7 @@ export function SniperControls() {
               const promo = !!meta?.promotionEligible;
               return (
                 <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${
-                  under
+                  (disabled || under)
                     ? 'bg-accent-error/10 text-accent-error border-accent-error/20'
                     : wr
                       ? 'bg-accent-neon/10 text-accent-neon border-accent-neon/20'
@@ -1288,6 +1457,15 @@ export function SniperControls() {
                               Suggested
                             </span>
                           )}
+                          {preset.disabled ? (
+                            <span className="text-[7px] font-bold uppercase tracking-wider bg-accent-error/20 text-accent-error px-1 py-0.5 rounded-full leading-none flex-shrink-0">
+                              Disabled
+                            </span>
+                          ) : preset.underperformer ? (
+                            <span className="text-[7px] font-bold uppercase tracking-wider bg-accent-error/20 text-accent-error px-1 py-0.5 rounded-full leading-none flex-shrink-0">
+                              Losing
+                            </span>
+                          ) : null}
                         </div>
                         <span className="text-[8px] opacity-50 line-clamp-1">{preset.description}</span>
                       </div>
@@ -1296,7 +1474,8 @@ export function SniperControls() {
                         const meta: any = (backtestMeta as any)?.[preset.id];
                         const wr = meta?.backtested ? String(meta.winRate || '').trim() : '';
                         const trades = meta?.backtested ? Number(meta.trades || 0) : 0;
-                        const under = !!meta?.underperformer;
+                        const disabled = !!preset.disabled;
+                        const under = !!meta?.underperformer || !!preset.underperformer;
                         const gateBadge = gateStatusBadge(meta, config, preset.autoWrPrimaryOverridePct);
                         const stageTag =
                           meta?.stage === 'promotion' ? 'S3' :
@@ -1305,7 +1484,7 @@ export function SniperControls() {
                           '';
                         const promo = !!meta?.promotionEligible;
 
-                        const style = under
+                        const style = (disabled || under)
                           ? 'bg-accent-error/10 text-accent-error'
                           : isActive
                             ? isAggressive
@@ -1377,15 +1556,26 @@ export function SniperControls() {
       {STRATEGY_INFO[activePreset] && (() => {
         const info = STRATEGY_INFO[activePreset];
         const preset = STRATEGY_PRESETS.find(p => p.id === activePreset);
+        const meta: any = (backtestMeta as any)?.[activePreset];
+        const isUnder = !!meta?.underperformer || !!preset?.underperformer;
+        const isDisabled = !!preset?.disabled;
         const isAgg = preset?.config.strategyMode === 'aggressive';
         return (
           <div className={`mb-4 rounded-lg border overflow-hidden ${isAgg ? 'border-accent-warning/20 bg-accent-warning/[0.03]' : 'border-accent-neon/20 bg-accent-neon/[0.03]'}`}>
             <div className={`flex items-center gap-2 px-3 py-2 border-b ${isAgg ? 'border-accent-warning/10' : 'border-accent-neon/10'}`}>
               <Info className={`w-3.5 h-3.5 ${isAgg ? 'text-accent-warning' : 'text-accent-neon'}`} />
               <span className={`text-[11px] font-bold ${isAgg ? 'text-accent-warning' : 'text-accent-neon'}`}>{preset?.name}</span>
+              {isDisabled ? (
+                <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-accent-error/10 text-accent-error border-accent-error/25">
+                  disabled
+                </span>
+              ) : isUnder ? (
+                <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-accent-error/10 text-accent-error border-accent-error/25">
+                  losing
+                </span>
+              ) : null}
               <span className={`ml-auto text-[9px] font-mono max-w-[220px] leading-tight break-words whitespace-normal text-right ${isAgg ? 'text-accent-warning/70' : 'text-accent-neon/70'}`}>
                 {(() => {
-                  const meta: any = (backtestMeta as any)?.[activePreset];
                   const wr = meta?.backtested ? String(meta.winRate || '').trim() : '';
                   const trades = meta?.backtested ? Number(meta.trades || 0) : 0;
                   const stageTag =
@@ -1397,7 +1587,24 @@ export function SniperControls() {
                   return wr ? `${wr}${trades > 0 ? ` (${trades}T${stageTag ? ` ${stageTag}` : ''}${promo ? ' PROMO' : ''})` : ''}` : 'Unverified';
                 })()}
               </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setStrategyDetailsOpen((v) => !v);
+                }}
+                className="ml-1 w-7 h-7 rounded-lg border border-border-primary bg-bg-tertiary/60 hover:border-border-hover flex items-center justify-center text-text-muted hover:text-text-primary transition-colors"
+                aria-label={strategyDetailsOpen ? 'Hide strategy details' : 'Show strategy details'}
+                title={strategyDetailsOpen ? 'Hide details' : 'Show details'}
+              >
+                {strategyDetailsOpen ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </button>
             </div>
+            {strategyDetailsOpen && (
             <div className="px-3 py-2.5 space-y-2.5">
               {/* Risk Level + Hold Time badges */}
               <div className="flex flex-wrap items-center gap-1.5">
@@ -1442,6 +1649,7 @@ export function SniperControls() {
                 <span className="text-[9px] font-mono text-text-muted/70">{info.params}</span>
               </div>
             </div>
+            )}
           </div>
         );
       })()}
@@ -1450,6 +1658,14 @@ export function SniperControls() {
         <div className="flex items-center gap-2 p-2.5 rounded-lg bg-accent-warning/10 border border-accent-warning/20 mb-4">
           <AlertTriangle className="w-4 h-4 text-accent-warning flex-shrink-0" />
           <span className="text-[11px] text-accent-warning">Connect wallet to enable trading</span>
+          <button
+            type="button"
+            onClick={() => { void connect(); }}
+            disabled={connecting}
+            className="ml-auto px-2.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider border border-accent-warning/30 text-accent-warning hover:bg-accent-warning/10 transition-colors disabled:opacity-50"
+          >
+            {connecting ? '...' : 'Connect'}
+          </button>
         </div>
       )}
 
@@ -1494,6 +1710,7 @@ export function SniperControls() {
               type="text"
               inputMode="decimal"
               placeholder="Custom amount..."
+              aria-label="Custom budget amount (SOL)"
               value={budgetFocused ? customBudget : (customBudget || '')}
               disabled={budget.authorized}
               onFocus={() => setBudgetFocused(true)}
@@ -1924,6 +2141,7 @@ export function SniperControls() {
                     type="text"
                     inputMode="decimal"
                     placeholder={`Fund (ex: ${budget.budgetSol} SOL)`}
+                    aria-label="Fund session wallet amount (SOL)"
                     value={sessionFundSol}
                     onChange={(e) => setSessionFundSol(e.target.value)}
                     disabled={sessionBusy}
@@ -2152,6 +2370,7 @@ export function SniperControls() {
           <input
             type="text"
             placeholder="Paste token mint address..."
+            aria-label="Token mint address"
             value={snipeMint}
             onChange={(e) => setSnipeMint(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleManualSnipe(); }}
@@ -2199,7 +2418,7 @@ export function SniperControls() {
                     : autoResetRequired
                     ? 'Reset Auto active — re-arm budget/max settings in Activate Auto Wallet first'
                     : config.autoSnipe
-                    ? `${activePresetLabel}: Liq≥$${Math.round(config.minLiquidityUsd).toLocaleString('en-US')} + V/L≥0.5 + B/S 1-3 + Age<500h + Mom↑ + TOD | ${useRecommendedExits ? 'REC SL/TP' : `${config.stopLossPct}/${config.takeProfitPct}`}+${config.trailingStopPct}t${config.maxPositionAgeHours > 0 ? ` | ${config.maxPositionAgeHours}h expiry` : ''}`
+                    ? `${activePresetLabel}: Liq≥$${Math.round(config.minLiquidityUsd).toLocaleString('en-US')} + V/L≥0.5 + B/S 1-3 + Age<500h + Mom↑ + TOD | ${useRecommendedExits ? 'LOCKED EXITS' : `${config.stopLossPct}/${config.takeProfitPct}`}+${config.trailingStopPct}t${config.maxPositionAgeHours > 0 ? ` | ${config.maxPositionAgeHours}h expiry` : ''}`
                     : 'Manual mode — click to snipe'}
               </p>
               <p className={`text-[9px] font-mono mt-1 ${
@@ -2216,23 +2435,7 @@ export function SniperControls() {
             </div>
           </div>
         <button
-          onClick={() => {
-            const next = !config.autoSnipe;
-            if (next && autoResetRequired) {
-              addExecution({
-                id: `auto-rearm-required-${Date.now()}`,
-                type: 'error',
-                symbol: 'AUTO',
-                mint: '',
-                amount: 0,
-                reason: 'AUTO_STOP_RESET_AUTO: Re-arm required. Open Activate Auto Wallet and set total budget, max trades, and max SOL per trade.',
-                timestamp: Date.now(),
-              });
-              openActivate();
-              return;
-            }
-            setConfig({ autoSnipe: next });
-          }}
+          onClick={() => setAutoSnipeEnabled(!config.autoSnipe)}
           disabled={!canTradeNow}
           className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
             config.autoSnipe ? 'bg-accent-neon' : 'bg-bg-tertiary border border-border-primary'
@@ -2266,7 +2469,7 @@ export function SniperControls() {
 
       {expanded && (
         <div className="space-y-3 animate-fade-in">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <ConfigField
               icon={<Shield className="w-3.5 h-3.5 text-accent-error" />}
               label="Stop Loss"
@@ -2294,8 +2497,8 @@ export function SniperControls() {
               suffix="%"
               onChange={(v) => setConfig({ trailingStopPct: v })}
               min={1}
-              max={30}
-              tooltip="Locks in profits by selling if price drops this % from its highest point. Follows the price up but never down."
+              max={99}
+              tooltip="Locks in profits by selling if price drops this % from its highest point. Set to 99 to effectively disable."
             />
             <ConfigField
               icon={<Zap className="w-3.5 h-3.5 text-accent-neon" />}
@@ -2310,7 +2513,7 @@ export function SniperControls() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <ConfigField
               label="Min Score"
               value={config.minScore}
@@ -2333,8 +2536,8 @@ export function SniperControls() {
             <div className="flex items-center gap-2">
               <Target className="w-3.5 h-3.5 text-accent-neon" />
               <div className="flex flex-col">
-                <span className="text-xs font-medium">Use recommended exits</span>
-                <span className="text-[9px] text-text-muted/70">Per-token backtested SL/TP. Turn off to force global SL/TP.</span>
+                <span className="text-xs font-medium">Lock exits on entry</span>
+                <span className="text-[9px] text-text-muted/70">When ON, each position stores SL/TP at entry (from the current preset) and keeps them stable.</span>
               </div>
             </div>
             <button
@@ -2448,7 +2651,7 @@ function PerAssetBreakerPanel() {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
-  const AL: Record<AssetType, string> = { memecoin: 'Meme', bags: 'Bags', bluechip: 'Blue Chip', xstock: 'xStock', index: 'Index', prestock: 'PreStock' };
+  const AL: Record<AssetType, string> = { memecoin: 'Meme', bags: 'Bags', bluechip: 'Blue Chip', xstock: 'xStock', index: 'Index', prestock: 'PreStock', established: 'Established' };
   const resetAB = (t: AssetType) => { useSniperStore.setState((s) => { const cb = { ...s.circuitBreaker, perAsset: { ...s.circuitBreaker.perAsset } }; cb.perAsset[t] = makeDefaultAssetBreaker(); return { circuitBreaker: cb }; }); };
   const updateAC = (t: AssetType, p: Partial<PerAssetBreakerConfig>) => { const c = config.perAssetBreakerConfig || ({} as Record<AssetType, PerAssetBreakerConfig>); setConfig({ perAssetBreakerConfig: { ...c, [t]: { ...c[t], ...p } } }); };
   if (!config.circuitBreakerEnabled) return null;
@@ -2459,7 +2662,7 @@ function PerAssetBreakerPanel() {
         <span className="font-medium uppercase tracking-wider">Circuit Breakers</span>
         {limitsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
       </button>
-      <div className="grid grid-cols-5 gap-1 mb-2">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-2">
         {ats.map((at) => {
           const ab = circuitBreaker.perAsset[at]; const acfg = config.perAssetBreakerConfig?.[at]; const maxL = acfg?.maxConsecutiveLosses || config.maxConsecutiveLosses;
           const inCD = ab.tripped && ab.cooldownUntil > 0 && now < ab.cooldownUntil;
@@ -2552,6 +2755,7 @@ function ConfigField({
         <input
           type="text"
           inputMode="decimal"
+          aria-label={label}
           value={localValue}
           onFocus={() => setFocused(true)}
           onBlur={() => { setFocused(false); commit(localValue); }}

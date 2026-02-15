@@ -3,6 +3,7 @@
 import { createContext, useContext, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { PublicKey, VersionedTransaction, Transaction } from '@solana/web3.js';
 import { withTimeout } from '@/lib/async-timeout';
+import { WalletConnectModal } from '@/components/wallet/WalletConnectModal';
 
 type WalletKind = 'phantom' | 'solflare' | 'unknown';
 
@@ -31,7 +32,7 @@ interface PhantomWalletState {
   address: string | null;
   walletInstalled: boolean;
   walletKind: WalletKind;
-  connect: () => Promise<void>;
+  connect: () => Promise<string | null>;
   disconnect: () => Promise<void>;
   signTransaction: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>;
   signAllTransactions: <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>;
@@ -45,7 +46,7 @@ const PhantomWalletContext = createContext<PhantomWalletState>({
   address: null,
   walletInstalled: false,
   walletKind: 'unknown',
-  connect: async () => {},
+  connect: async () => null,
   disconnect: async () => {},
   signTransaction: async () => { throw new Error('Wallet not connected'); },
   signAllTransactions: async () => { throw new Error('Wallet not connected'); },
@@ -77,6 +78,7 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
   const [publicKey, setPublicKey] = useState<PublicKey | null>(null);
   const [walletInstalled, setWalletInstalled] = useState(false);
   const [walletKind, setWalletKind] = useState<WalletKind>('unknown');
+  const [connectModalOpen, setConnectModalOpen] = useState(false);
 
   // Detect Phantom on mount
   useEffect(() => {
@@ -189,6 +191,7 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const connect = useCallback(async () => {
+    setConnectModalOpen(false);
     try {
       setConnecting(true);
 
@@ -202,27 +205,23 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
       if (!provider) {
         setWalletInstalled(false);
         setWalletKind('unknown');
-
-        // Avoid opening an infinite number of "install" tabs if the user keeps clicking.
-        try {
-          const k = 'jarvis-sniper:wallet-help-opened';
-          if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(k) !== '1') {
-            sessionStorage.setItem(k, '1');
-            window.open('https://phantom.app/', '_blank', 'noopener,noreferrer');
-          }
-        } catch {
-          // ignore
-        }
-
+        setConnectModalOpen(true);
         console.warn('No Solana wallet provider detected (extension not installed / not injected).');
-        return;
+        return null;
       }
 
       const { publicKey } = await provider.connect();
       setPublicKey(publicKey);
       setConnected(true);
+      setWalletInstalled(true);
+      if (provider?.isPhantom) setWalletKind('phantom');
+      else if (provider?.isSolflare) setWalletKind('solflare');
+      else setWalletKind('unknown');
+      setConnectModalOpen(false);
+      return publicKey?.toBase58?.() ?? null;
     } catch (err) {
       console.warn('Wallet connect rejected:', err);
+      return null;
     } finally {
       setConnecting(false);
     }
@@ -239,21 +238,24 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
 
   const signTransaction = useCallback(async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
     const provider = getProvider();
-    if (!provider || !connected) throw new Error('Wallet not connected');
+    if (!provider) throw new Error('Wallet provider not found');
+    if (!provider.isConnected || !provider.publicKey) throw new Error('Wallet not connected');
     // Timeout after 180s to prevent infinite hang if popup blocked or user ignores.
     // (60s was too aggressive for manual close flows; users often approve after a minute.)
     return await withTimeout(provider.signTransaction(tx), 180_000, 'Phantom wallet approval timeout (180s)') as T;
-  }, [connected]);
+  }, []);
 
   const signAllTransactions = useCallback(async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
     const provider = getProvider();
-    if (!provider || !connected) throw new Error('Wallet not connected');
+    if (!provider) throw new Error('Wallet provider not found');
+    if (!provider.isConnected || !provider.publicKey) throw new Error('Wallet not connected');
     return provider.signAllTransactions(txs);
-  }, [connected]);
+  }, []);
 
   const signMessage = useCallback(async (message: Uint8Array): Promise<Uint8Array> => {
     const provider = getProvider();
-    if (!provider || !connected) throw new Error('Wallet not connected');
+    if (!provider) throw new Error('Wallet provider not found');
+    if (!provider.isConnected || !provider.publicKey) throw new Error('Wallet not connected');
     const fn: unknown = (provider as any).signMessage;
     if (typeof fn !== 'function') throw new Error('Phantom signMessage not available');
 
@@ -267,13 +269,18 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
     if (sig instanceof Uint8Array) return sig;
     if (Array.isArray(sig)) return Uint8Array.from(sig.map((n: any) => Number(n)));
     throw new Error('Unknown signMessage response');
-  }, [connected]);
+  }, []);
 
   const address = publicKey?.toBase58() ?? null;
 
   return (
     <PhantomWalletContext.Provider value={{ connected, connecting, publicKey, address, walletInstalled, walletKind, connect, disconnect, signTransaction, signAllTransactions, signMessage }}>
       {children}
+      <WalletConnectModal
+        open={connectModalOpen}
+        onClose={() => setConnectModalOpen(false)}
+        preferredKind={walletKind === 'solflare' ? 'solflare' : 'phantom'}
+      />
     </PhantomWalletContext.Provider>
   );
 }

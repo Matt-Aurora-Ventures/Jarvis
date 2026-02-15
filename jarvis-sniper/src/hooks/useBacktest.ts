@@ -620,7 +620,7 @@ export function useBacktest() {
     async (
       strategyId: string,
       mode: 'quick' | 'full' | 'grid' = 'quick',
-      dataScale: BacktestDataScale = 'thorough',
+      dataScale: BacktestDataScale = 'fast',
     ) => {
       stallThresholdMsRef.current = stallThresholdFor(mode, dataScale);
       const runId = `ui-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -781,7 +781,7 @@ export function useBacktest() {
    * Convenience: run all strategies in quick mode.
    */
   const runAllStrategies = useCallback(
-    (dataScale: BacktestDataScale = 'thorough') => {
+    (dataScale: BacktestDataScale = 'fast') => {
       return runBacktest('all', 'quick', dataScale);
     },
     [runBacktest],

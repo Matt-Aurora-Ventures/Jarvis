@@ -116,7 +116,7 @@ export function useAutomatedRiskManagement() {
       // but never trigger automated exits.
       const sl = isBlueChip ? 0 : (useRec ? (p.recommendedSl ?? config.stopLossPct) : config.stopLossPct);
       const tp = isBlueChip ? 0 : (useRec ? (p.recommendedTp ?? config.takeProfitPct) : config.takeProfitPct);
-      const trail = isBlueChip ? 0 : (p.recommendedTrail ?? config.trailingStopPct);
+      const trail = isBlueChip ? 0 : (useRec ? (p.recommendedTrail ?? config.trailingStopPct) : config.trailingStopPct);
       const maxAgeHours = isBlueChip ? 0 : (config.maxPositionAgeHours ?? 0);
 
       return {
@@ -160,7 +160,7 @@ export function useAutomatedRiskManagement() {
     const useRec = state.config.useRecommendedExits !== false;
     const sl = useRec ? (pos.recommendedSl ?? state.config.stopLossPct) : state.config.stopLossPct;
     const tp = useRec ? (pos.recommendedTp ?? state.config.takeProfitPct) : state.config.takeProfitPct;
-    const trailPct = pos.recommendedTrail ?? state.config.trailingStopPct;
+    const trailPct = useRec ? (pos.recommendedTrail ?? state.config.trailingStopPct) : state.config.trailingStopPct;
 
     // If we're not using session wallet signing, we can't auto-execute: mark exit pending.
     const session = tradeSignerMode === 'session'

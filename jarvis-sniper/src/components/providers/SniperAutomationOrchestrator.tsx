@@ -603,6 +603,12 @@ export function SniperAutomationOrchestrator() {
         const volLiqRatio = liq > 0 ? vol24h / liq : 0;
         const ageHours = grad.age_hours || 0;
         const mom1h = grad.price_change_1h || 0;
+        if (assetFilter === 'memecoin' || assetFilter === 'bags') {
+          const buys = grad.txn_buys_1h || 0;
+          const sells = grad.txn_sells_1h || 0;
+          const bsRatio = sells > 0 ? buys / sells : buys;
+          if (buys + sells > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) return false;
+        }
         return (
           liq >= runtimeConfig.minLiquidityUsd &&
           volLiqRatio >= runtimeConfig.minVolLiqRatio &&
@@ -618,6 +624,12 @@ export function SniperAutomationOrchestrator() {
         }
         if (scopedOpen.some((p) => p.mint === grad.mint)) return false;
         if (grad.score < runtimeConfig.minScore) return false;
+        if (assetFilter === 'memecoin' || assetFilter === 'bags') {
+          const buys = grad.txn_buys_1h || 0;
+          const sells = grad.txn_sells_1h || 0;
+          const bsRatio = sells > 0 ? buys / sells : buys;
+          if (buys + sells > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) return false;
+        }
         return (grad.liquidity || 0) >= runtimeConfig.minLiquidityUsd;
       });
       const fallbackMinScore = Math.max(25, Math.floor(runtimeConfig.minScore * 0.8));
@@ -629,6 +641,12 @@ export function SniperAutomationOrchestrator() {
               if (cooldownUntil > Date.now()) return false;
             }
             if (scopedOpen.some((p) => p.mint === grad.mint)) return false;
+            if (assetFilter === 'memecoin' || assetFilter === 'bags') {
+              const buys = grad.txn_buys_1h || 0;
+              const sells = grad.txn_sells_1h || 0;
+              const bsRatio = sells > 0 ? buys / sells : buys;
+              if (buys + sells > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) return false;
+            }
             return (grad.score || 0) >= fallbackMinScore;
           })
         : null;
@@ -673,15 +691,16 @@ export function SniperAutomationOrchestrator() {
       autoCycleInFlightRef.current = true;
       setAutomationState('executing_buy');
       try {
-        const ok = await snipe(resolvedCandidate as any, epochAtScanStart);
+        const outcome = await snipe(resolvedCandidate as any, epochAtScanStart);
         await new Promise((resolve) => setTimeout(resolve, 2500));
+        const ok = outcome === 'success';
         const staleEpochAbort = !ok && useSniperStore.getState().strategyEpoch !== epochAtScanStart;
         nextAutoAllowedAtRef.current = Date.now() + (
           ok
             ? AUTO_MIN_GAP_SUCCESS_MS
-            : staleEpochAbort
-              ? 1_500
-              : AUTO_MIN_GAP_FAIL_MS
+            : outcome === 'fail'
+              ? (staleEpochAbort ? 1_500 : AUTO_MIN_GAP_FAIL_MS)
+              : 2_500
         );
         setAutomationState('cooldown');
       } finally {

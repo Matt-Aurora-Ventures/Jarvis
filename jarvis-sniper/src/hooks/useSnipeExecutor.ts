@@ -22,6 +22,8 @@ const AUTO_MINT_LOCK_TTL_MS = 90_000;
 
 let execCounter = 0;
 
+export type SnipeOutcome = 'success' | 'skip' | 'fail';
+
 // Track failed snipe attempts per mint to prevent infinite retry loops.
 // After MAX_RETRIES failures within RETRY_WINDOW_MS, the mint is blocked until the window expires.
 const MAX_RETRIES = 2;
@@ -69,7 +71,7 @@ export function useSnipeExecutor() {
     return connectionRef.current;
   }
 
-  const snipe = useCallback(async (grad: BagsGraduation & Record<string, any>, expectedStrategyEpoch?: number): Promise<boolean> => {
+  const snipe = useCallback(async (grad: BagsGraduation & Record<string, any>, expectedStrategyEpoch?: number): Promise<SnipeOutcome> => {
     const {
       config: rawConfig,
       activePreset,
@@ -92,7 +94,7 @@ export function useSnipeExecutor() {
 
     if (typeof expectedStrategyEpoch === 'number' && strategyEpochAtStart !== expectedStrategyEpoch) {
       addExecution(makeExecEvent(grad, 'skip', 0, 'AUTO_STOP_STRATEGY_SWITCH: Strategy changed before execution; retrying with latest algorithm'));
-      return false;
+      return 'skip';
     }
 
     // --- Pre-flight guards ---
@@ -123,7 +125,7 @@ export function useSnipeExecutor() {
         0,
         'Session wallet selected but key is unavailable in this browser. Re-upload key file or switch to Phantom.',
       ));
-      return false;
+      return 'fail';
     }
 
     if (!signerAddress || !signerSignTransaction) {
@@ -135,23 +137,23 @@ export function useSnipeExecutor() {
           ? 'Session wallet not ready (create + fund it in controls)'
           : 'Wallet not connected',
       ));
-      return false;
+      return 'fail';
     }
     if (!budget.authorized) {
       addExecution(makeExecEvent(grad, 'error', 0, 'Budget not authorized'));
-      return false;
+      return 'fail';
     }
     if (operationLock.active) {
       addExecution(makeExecEvent(grad, 'skip', 0, `Execution locked: ${operationLock.reason || operationLock.mode}`));
-      return false;
+      return 'skip';
     }
     if (useSniperStore.getState().executionPaused) {
       addExecution(makeExecEvent(grad, 'skip', 0, 'AUTO_STOP_EXECUTION_PAUSED: Close All / safety lock active'));
-      return false;
+      return 'skip';
     }
     if (circuitBreaker.tripped) {
       addExecution(makeExecEvent(grad, 'skip', 0, `Circuit breaker active: ${circuitBreaker.reason || 'global halt'}`));
-      return false;
+      return 'skip';
     }
     const assetBreaker = circuitBreaker.perAsset[assetFilter];
     if (assetBreaker?.tripped) {
@@ -171,7 +173,7 @@ export function useSnipeExecutor() {
         });
       } else {
         addExecution(makeExecEvent(grad, 'skip', 0, `Circuit breaker (${assetFilter}) active: ${assetBreaker.reason || 'cooldown'}`));
-        return false;
+        return 'skip';
       }
     }
     clearExpiredMintCooldowns();
@@ -180,15 +182,15 @@ export function useSnipeExecutor() {
     if (cooldownUntil > Date.now()) {
       const remainingSec = Math.ceil((cooldownUntil - Date.now()) / 1000);
       addExecution(makeExecEvent(grad, 'skip', 0, `Mint cooldown active (${remainingSec}s left)`));
-      return false;
+      return 'skip';
     }
     if (pendingRef.current.has(grad.mint)) {
       if (isAutoEntry) {
         addExecution(makeExecEvent(grad, 'skip', 0, 'AUTO_STOP_DUPLICATE_MINT: mint already in-flight in this tab'));
       }
-      return false;
+      return 'skip';
     }
-    if (isMintCoolingDown(grad.mint)) return false; // too many recent failures
+    if (isMintCoolingDown(grad.mint)) return 'skip'; // too many recent failures
 
     const managedOpen = filterTradeManagedOpenPositionsForActiveWallet(positions, signerAddress);
     if (isAutoEntry) {
@@ -204,13 +206,13 @@ export function useSnipeExecutor() {
           0,
           `AUTO_STOP_DUPLICATE_MINT: existing open/closing position for ${grad.mint.slice(0, 6)}...`,
         ));
-        return false;
+        return 'skip';
       }
     }
     const openCount = managedOpen.length;
     if (openCount >= config.maxConcurrentPositions) {
       addExecution(makeExecEvent(grad, 'skip', 0, `At max managed positions (${openCount}/${config.maxConcurrentPositions})`));
-      return false;
+      return 'skip';
     }
 
     const remaining = budget.budgetSol - budget.spent;
@@ -226,7 +228,7 @@ export function useSnipeExecutor() {
     const positionSol = Math.min(desiredSol, config.maxPositionSol, remaining, autoHardCapSol);
     if (positionSol < 0.001) {
       addExecution(makeExecEvent(grad, 'skip', 0, 'Insufficient budget'));
-      return false;
+      return 'skip';
     }
 
     // ??? INSIGHT-DRIVEN FILTERS ???
@@ -241,7 +243,7 @@ export function useSnipeExecutor() {
         0,
         `Low liquidity: $${Math.round(liq).toLocaleString()} < $${Math.round(config.minLiquidityUsd).toLocaleString()}`,
       ));
-      return false;
+      return 'skip';
     }
 
     // Memecoin-specific filters ? do NOT apply to blue chips, xStocks, indexes, prestocks, or commodities.
@@ -254,28 +256,28 @@ export function useSnipeExecutor() {
       const bsRatio = sells > 0 ? buys / sells : buys;
       if (buys + sells > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) {
         addExecution(makeExecEvent(grad, 'skip', 0, `B/S ratio ${bsRatio.toFixed(1)} outside 1.0-3.0`));
-        return false;
+        return 'skip';
       }
       const ageHours = grad.age_hours || 0;
       if (config.maxTokenAgeHours > 0 && ageHours > config.maxTokenAgeHours) {
         addExecution(makeExecEvent(grad, 'skip', 0, `Too old: ${Math.round(ageHours)}h > ${config.maxTokenAgeHours}h`));
-        return false;
+        return 'skip';
       }
       const change1h = grad.price_change_1h || 0;
       if (change1h < config.minMomentum1h) {
         addExecution(makeExecEvent(grad, 'skip', 0, `Momentum ${change1h.toFixed(1)}% < ${config.minMomentum1h}%`));
-        return false;
+        return 'skip';
       }
       const vol24h = grad.volume_24h || 0;
       const volLiqRatio = liq > 0 ? vol24h / liq : 0;
       if (vol24h > 0 && volLiqRatio < config.minVolLiqRatio) {
         addExecution(makeExecEvent(grad, 'skip', 0, `Low Vol/Liq: ${volLiqRatio.toFixed(2)} < ${config.minVolLiqRatio}`));
-        return false;
+        return 'skip';
       }
     }
     // ═══ All filters passed ═══
 
-    const rec = getRecommendedSlTp(grad, config.strategyMode);
+    const rec = getRecommendedSlTp(grad, config.strategyMode, config);
     const displaySymbol = normalizeDisplaySymbol(grad.symbol, grad.mint);
     const displayName = normalizeDisplayName(grad.name, displaySymbol, grad.mint);
 
@@ -292,7 +294,7 @@ export function useSnipeExecutor() {
         ...makeExecEvent(grad, 'error', positionSol, reason),
         phase: 'failed',
       });
-      return false;
+      return 'fail';
     }
 
     if (isAutoEntry) {
@@ -300,7 +302,7 @@ export function useSnipeExecutor() {
       const lockOk = acquireAutoMintLock(autoLockKey, autoLockOwner, AUTO_MINT_LOCK_TTL_MS);
       if (!lockOk) {
         addExecution(makeExecEvent(grad, 'skip', 0, 'AUTO_STOP_DUPLICATE_MINT: cross-tab auto lock active for this mint'));
-        return false;
+        return 'skip';
       }
     }
 
@@ -330,7 +332,7 @@ export function useSnipeExecutor() {
           const revertEarly = new Set(useSniperStore.getState().snipedMints);
           revertEarly.delete(grad.mint);
           useSniperStore.setState({ snipedMints: revertEarly });
-          return false;
+          return 'skip';
         }
       }
 
@@ -406,7 +408,7 @@ export function useSnipeExecutor() {
         const revert = new Set(useSniperStore.getState().snipedMints);
         revert.delete(grad.mint);
         useSniperStore.setState({ snipedMints: revert });
-        return false;
+        return 'fail';
       }
 
       // Success — create real position
@@ -496,7 +498,7 @@ export function useSnipeExecutor() {
           isAutoMode ? 'AUTO-SELL enabled (session wallet)' : 'Manual mode — approve exits in Positions'
         }`,
       ));
-      return true;
+      return 'success';
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       recordMintFailure(grad.mint);
@@ -508,7 +510,7 @@ export function useSnipeExecutor() {
       const revert = new Set(useSniperStore.getState().snipedMints);
       revert.delete(grad.mint);
       useSniperStore.setState({ snipedMints: revert });
-      return false;
+      return 'fail';
     } finally {
       pendingRef.current.delete(grad.mint);
       if (isAutoEntry && autoLockKey) {

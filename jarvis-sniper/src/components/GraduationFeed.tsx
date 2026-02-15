@@ -10,6 +10,7 @@ import { useTVScreener } from '@/hooks/useTVScreener';
 import { MarketStatus } from '@/components/MarketStatus';
 import { computeTargetsFromEntryUsd, formatUsdPrice, isBlueChipLongConviction } from '@/lib/trade-plan';
 import { safeImageUrl } from '@/lib/safe-url';
+import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 
 const FILTER_LABELS: Record<string, { label: string; color: string }> = {
   memecoin: { label: 'MEME', color: 'bg-accent-neon/15 text-accent-neon' },
@@ -84,7 +85,7 @@ export function GraduationFeed() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 max-h-[calc(100vh-260px)]">
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2">
         {dedupedGraduations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <div className="w-10 h-10 rounded-full bg-bg-tertiary flex items-center justify-center">
@@ -115,6 +116,8 @@ export function GraduationFeed() {
                 minMomentum1h={config.minMomentum1h}
                 maxTokenAgeHours={config.maxTokenAgeHours}
                 minVolLiqRatio={config.minVolLiqRatio}
+                stopLossPct={config.stopLossPct}
+                takeProfitPct={config.takeProfitPct}
                 strategyMode={config.strategyMode}
                 assetFilter={assetFilter}
               />
@@ -157,7 +160,7 @@ function CopyableAddress({ mint }: { mint: string }) {
   );
 }
 
-function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnipe, onChart, isWatched, onWatch, budgetAuthorized, walletReady, minLiquidityUsd, minMomentum1h, maxTokenAgeHours, minVolLiqRatio, strategyMode, assetFilter }: {
+function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnipe, onChart, isWatched, onWatch, budgetAuthorized, walletReady, minLiquidityUsd, minMomentum1h, maxTokenAgeHours, minVolLiqRatio, stopLossPct, takeProfitPct, strategyMode, assetFilter }: {
   grad: BagsGraduation;
   isNew: boolean;
   meetsThreshold: boolean;
@@ -173,9 +176,13 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
   minMomentum1h: number;
   maxTokenAgeHours: number;
   minVolLiqRatio: number;
+  stopLossPct: number;
+  takeProfitPct: number;
   strategyMode: StrategyMode;
   assetFilter: string;
 }) {
+  const { connect, connecting } = usePhantomWallet();
+  const tradeSignerMode = useSniperStore((s) => s.tradeSignerMode);
   const tier = getScoreTier(grad.score);
   const tierCfg = TIER_CONFIG[tier];
   const age = Math.floor((Date.now() / 1000 - grad.graduation_time) / 60);
@@ -190,7 +197,7 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
   // For equities, override age display with sector/category info
   const isEquity = assetFilter !== 'memecoin';
   const totalTxns = grad.total_txns_1h ?? 0;
-  const rec = getRecommendedSlTp(grad as any, strategyMode);
+  const rec = getRecommendedSlTp(grad as any, strategyMode, { stopLossPct, takeProfitPct });
   const isBlueChip = isBlueChipLongConviction(grad);
   const targets = computeTargetsFromEntryUsd(grad.price_usd, rec.sl, rec.tp);
 
@@ -349,8 +356,67 @@ function TokenCard({ grad, isNew, meetsThreshold, rejectReason, isSniped, onSnip
         </div>
       )}
 
+      {/* Mobile action row (touch devices have no hover) */}
+      <div className="mt-2 flex md:hidden items-center gap-1.5">
+        {isSniped ? (
+          <span className="flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-2.5 py-2 rounded-md bg-accent-neon/15 text-accent-neon border border-accent-neon/30">
+            <Check className="w-3 h-3" /> Sniped
+          </span>
+        ) : !walletReady ? (
+          tradeSignerMode === 'session' ? (
+            <span className="flex-1 flex items-center justify-center gap-1 text-[10px] font-medium px-2.5 py-2 rounded-md bg-accent-warning/15 text-accent-warning border border-accent-warning/30">
+              Session not ready
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); void connect(); }}
+              disabled={connecting}
+              className="flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-2.5 py-2 rounded-md bg-accent-warning/15 text-accent-warning border border-accent-warning/30 disabled:opacity-60"
+            >
+              {connecting ? 'Connecting...' : 'Connect wallet'}
+            </button>
+          )
+        ) : !budgetAuthorized ? (
+          <span className="flex-1 flex items-center justify-center gap-1 text-[10px] font-medium px-2.5 py-2 rounded-md bg-accent-warning/15 text-accent-warning border border-accent-warning/30">
+            Authorize budget
+          </span>
+        ) : !meetsThreshold ? (
+          <span className="flex-1 flex items-center justify-center gap-1 text-[10px] font-medium px-2.5 py-2 rounded-md bg-bg-tertiary text-text-secondary border border-border-primary">
+            Filtered
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onSnipe(); }}
+            className="flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold px-2.5 py-2 rounded-md bg-accent-neon text-black hover:shadow-lg transition-all cursor-pointer"
+          >
+            <Crosshair className="w-3 h-3" /> Snipe
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onChart(); }}
+          className="flex items-center justify-center gap-1 text-[10px] font-medium px-2.5 py-2 rounded-md bg-bg-tertiary text-text-secondary border border-border-primary hover:border-border-hover transition-all cursor-pointer"
+        >
+          <ExternalLink className="w-3 h-3" /> Chart
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onWatch(); }}
+          className={`flex items-center justify-center gap-1 text-[10px] font-medium px-2.5 py-2 rounded-md border transition-all cursor-pointer ${
+            isWatched
+              ? 'bg-accent-warning/15 text-accent-warning border-accent-warning/30'
+              : 'bg-bg-tertiary text-text-secondary border-border-primary hover:border-border-hover'
+          }`}
+        >
+          <Eye className="w-3 h-3" /> {isWatched ? 'Watching' : 'Watch'}
+        </button>
+      </div>
+
       {/* Action overlay on hover */}
-      <div className="absolute inset-0 rounded-lg flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-bg-primary/90">
+      <div className="hidden md:flex absolute inset-0 rounded-lg items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-bg-primary/90">
         {isSniped ? (
           <span className="flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1.5 rounded-md bg-accent-neon/15 text-accent-neon border border-accent-neon/30">
             <Check className="w-3 h-3" /> Sniped

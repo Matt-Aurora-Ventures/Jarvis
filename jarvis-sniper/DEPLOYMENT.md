@@ -71,6 +71,28 @@ Notes:
 - Same-origin requests work without `ALLOWED_ORIGINS`; add it if you serve multiple origins.
 - Production RPC endpoints are fail-closed: if Helius RPC config is missing/invalid, `/api/rpc` and `/api/bags/*` return `503` instead of falling back to public RPC.
 
+## WWW Hostname Note (Firebase Hosting)
+
+The default Firebase Hosting domain is `https://<project>.web.app` (for this app: `https://kr8tiv.web.app`).
+
+`https://www.kr8tiv.web.app` is a different hostname and will fail TLS with a certificate name mismatch (DNS resolves, but the cert does not include `www.*`). This cannot be fixed with an app-level redirect, because the TLS handshake fails before any HTTP request reaches the app.
+
+Recommended options:
+
+1. Use the canonical non-`www` URL: `https://kr8tiv.web.app`
+2. Add a custom domain in Firebase Hosting (ex: `sniper.jarvislife.io`) and configure both apex + `www` if you want `www` support with a valid certificate.
+
+Quick verification (Windows curl):
+
+```bash
+curl.exe -I --ssl-no-revoke https://kr8tiv.web.app
+curl.exe -I --ssl-no-revoke https://www.kr8tiv.web.app
+```
+
+Expected:
+- `kr8tiv.web.app` returns `HTTP/1.1 200 OK`
+- `www.kr8tiv.web.app` fails with `SEC_E_WRONG_PRINCIPAL` / certificate name mismatch
+
 ## Operational Notes (V1)
 
 - For a small beta (50–100 users), the built-in in-memory rate limiting is sufficient.
