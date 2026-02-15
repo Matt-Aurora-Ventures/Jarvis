@@ -13,6 +13,7 @@ import { EarlyBetaModal } from '@/components/EarlyBetaModal';
 import { BacktestPanel } from '@/components/BacktestPanel';
 import { FundRecoveryBanner } from '@/components/FundRecoveryBanner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { MobileTerminalShell } from '@/components/mobile/MobileTerminalShell';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { useAutomatedRiskManagement } from '@/hooks/useAutomatedRiskManagement';
 import { useTabNotifications } from '@/hooks/useTabNotifications';
@@ -49,9 +50,14 @@ export default function SniperDashboard() {
       <StatusBar />
       <FundRecoveryBanner />
 
-      <main className="app-shell flex-1 py-3 lg:py-4 overflow-x-hidden">
-        {/* Main 3-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_minmax(0,360px)] 2xl:grid-cols-[390px_1fr_minmax(0,460px)] gap-3 lg:gap-4 h-[calc(100vh-76px)]">
+      <main className="app-shell flex-1 min-h-0 py-2 lg:py-4 overflow-hidden flex flex-col">
+        {/* Mobile: bottom-tab terminal (avoid stacked, congested UI) */}
+        <div className="lg:hidden flex-1 min-h-0">
+          <MobileTerminalShell routeKey="sniper" />
+        </div>
+
+        {/* Desktop: 3-column layout */}
+        <div className="hidden lg:grid flex-1 min-h-0 grid-cols-[320px_1fr_minmax(0,360px)] 2xl:grid-cols-[390px_1fr_minmax(0,460px)] gap-4">
           {/* Left: Token Scanner */}
           <div className="flex flex-col min-h-0 min-w-0">
             <ErrorBoundary panelName="Token Scanner">

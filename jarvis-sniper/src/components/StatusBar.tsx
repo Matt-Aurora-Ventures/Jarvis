@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Crosshair, Zap, Shield, TrendingUp, Wifi, WifiOff, Flame, Sun, Moon, ExternalLink, Download, Package, Rocket, Building2, RotateCcw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Crosshair, Zap, Shield, TrendingUp, Wifi, WifiOff, Flame, Sun, Moon, ExternalLink, Download, Package, Rocket, Building2, RotateCcw, MoreHorizontal } from 'lucide-react';
 import { downloadSessionReport } from '@/lib/session-export';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { isProbablyMobile } from '@/lib/wallet-deeplinks';
 
 const KR8TIV_LINKS = [
   { label: 'Help Beta Test - Join Here', href: 'https://t.me/kr8tivaisystems' },
@@ -64,6 +65,12 @@ export function StatusBar() {
   const [parsing, setParsing] = useState(false);
   const [resetAutoOpen, setResetAutoOpen] = useState(false);
   const [resettingAuto, setResettingAuto] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    setIsMobile(isProbablyMobile());
+  }, []);
 
   const storedSessionWalletCount = useMemo(() => {
     try {
@@ -246,9 +253,9 @@ export function StatusBar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border-primary bg-bg-secondary/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-border-primary bg-bg-secondary/95 lg:bg-bg-secondary/80 lg:backdrop-blur-xl">
       {/* KR8TIV Links Top Bar */}
-      <div className="hidden sm:flex items-center justify-center gap-3 px-4 py-1.5 bg-bg-tertiary/40 border-b border-border-primary/30">
+      <div className="hidden lg:flex items-center justify-center gap-3 px-4 py-1.5 bg-bg-tertiary/40 border-b border-border-primary/30">
         <button
           type="button"
           onClick={async () => {
@@ -267,7 +274,7 @@ export function StatusBar() {
         <span className="text-border-primary/50 select-none">|</span>
         {KR8TIV_LINKS.map((link) => (
           <a
-            key={link.href}
+            key={`${link.href}:${link.label}`}
             href={link.href}
             target="_blank"
             rel="noopener noreferrer"
@@ -279,7 +286,121 @@ export function StatusBar() {
         ))}
       </div>
 
-      <div className="app-shell py-3 flex items-center justify-between gap-4">
+      {/* Mobile header (decongested) */}
+      <div className="lg:hidden app-shell py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Crosshair className="w-5 h-5 text-accent-neon flex-shrink-0" />
+            <h1 className="min-w-0 font-display text-base font-bold tracking-tight text-text-primary truncate">
+              JARVIS <span className="text-accent-neon">SNIPER</span>
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-bg-tertiary border border-border-primary hover:border-border-hover transition-colors cursor-pointer"
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-text-secondary" />
+              ) : (
+                <Moon className="w-4 h-4 text-text-secondary" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-bg-tertiary border border-border-primary hover:border-border-hover transition-colors cursor-pointer"
+              title="Menu"
+              aria-label="Open menu"
+            >
+              <MoreHorizontal className="w-4 h-4 text-text-secondary" />
+            </button>
+
+            <div className={`w-2 h-2 rounded-full ${connected ? 'bg-accent-neon' : 'bg-accent-error'}`} aria-hidden="true" />
+
+            {connected ? (
+              <button
+                type="button"
+                onClick={disconnect}
+                className="flex items-center gap-2 px-3 h-9 rounded-full bg-bg-tertiary border border-border-primary hover:border-accent-neon/40 transition-colors cursor-pointer"
+              >
+                <PhantomIcon />
+                <span className="text-xs font-mono font-medium text-text-primary">{shortAddr}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={connect}
+                disabled={connecting}
+                className="flex items-center gap-2 px-3 h-9 rounded-full bg-bg-tertiary border border-border-primary hover:border-accent-neon/40 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {walletInstalled ? (
+                  <>
+                    <PhantomIcon />
+                    <span className="text-xs font-mono font-medium text-text-secondary">
+                      {connecting ? 'Connecting...' : 'Connect Wallet'}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-xs font-mono font-medium text-accent-warning">
+                    {isMobile ? 'Connect Wallet' : 'Install Wallet'}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {config.autoSnipe ? (
+            <span className="flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full bg-accent-neon/15 text-accent-neon border border-accent-neon/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-neon sniper-dot" />
+              AUTO
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full bg-bg-tertiary text-text-muted border border-border-primary">
+              MANUAL
+            </span>
+          )}
+
+          {macro.regime && (
+            <span className={`flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border ${
+              macro.regime === 'risk_on' ? 'bg-accent-neon/10 text-accent-neon border-accent-neon/20' :
+              macro.regime === 'risk_off' ? 'bg-accent-error/10 text-accent-error border-accent-error/20' :
+              'bg-bg-tertiary text-text-muted border-border-primary'
+            }`}>
+              {macro.regime === 'risk_on' ? '\u2191 RISK ON' : macro.regime === 'risk_off' ? '\u2193 RISK OFF' : '\u2014 NEUTRAL'}
+            </span>
+          )}
+
+          {sessionWalletPubkey && (
+            <button
+              type="button"
+              onClick={() => {
+                try { window.dispatchEvent(new CustomEvent('jarvis-sniper:open-activate')); } catch {}
+              }}
+              className={`flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border transition-colors ${
+                autoActive
+                  ? 'bg-accent-warning/10 text-accent-warning border-accent-warning/25 hover:border-accent-warning/40'
+                  : 'bg-bg-tertiary text-text-muted border-border-primary hover:border-border-hover'
+              }`}
+              title={autoActive ? 'Auto wallet active' : 'Activate auto wallet'}
+              aria-label={autoActive ? 'Auto wallet active' : 'Activate auto wallet'}
+            >
+              <Flame className="w-3.5 h-3.5" />
+              {autoActive ? 'AUTO' : 'ACT'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Desktop header */}
+      <div className="hidden lg:flex app-shell py-3 items-center justify-between gap-4">
         {/* Left: Branding */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -474,13 +595,108 @@ export function StatusBar() {
                 </>
               ) : (
                 <span className="text-xs font-mono font-medium text-accent-warning">
-                  Install Wallet
+                  {isMobile ? 'Open Wallet' : 'Install Wallet'}
                 </span>
               )}
             </button>
           )}
         </div>
       </div>
+
+      {/* Mobile actions sheet */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-end justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+          />
+
+          <div className="relative w-full max-w-[620px] card-glass p-4 border border-border-primary shadow-xl">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col">
+                <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-text-muted">
+                  Menu
+                </div>
+                <div className="text-sm font-display font-semibold text-text-primary">
+                  Session tools
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-9 h-9 rounded-full bg-bg-tertiary border border-border-primary hover:border-border-hover transition-colors text-text-muted"
+                aria-label="Close menu"
+                title="Close"
+              >
+                X
+              </button>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { setMobileMenuOpen(false); setResetAutoOpen(true); }}
+                className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-[11px] font-semibold transition-colors ${
+                  autoResetRequired
+                    ? 'bg-accent-warning/12 text-accent-warning border-accent-warning/35 hover:border-accent-warning/50'
+                    : 'bg-bg-tertiary text-text-secondary border-border-primary hover:border-accent-warning/35'
+                }`}
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reset Auto
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setMobileMenuOpen(false); setParseOpen(true); }}
+                className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-[11px] font-semibold bg-bg-tertiary text-text-secondary border-border-primary hover:border-border-hover transition-colors"
+              >
+                <Package className="w-4 h-4" />
+                Parse Data
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setMobileMenuOpen(false);
+                  await downloadSessionReport({
+                    config, positions, executionLog, totalPnl, winCount, lossCount,
+                    totalTrades, budget, circuitBreaker, activePreset, assetFilter,
+                    tradeSignerMode, sessionWalletPubkey, lastSolPriceUsd,
+                  });
+                }}
+                className="col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-[11px] font-semibold bg-bg-tertiary text-text-secondary border-border-primary hover:border-border-hover transition-colors"
+                title="Download session trading report (.md)"
+              >
+                <Download className="w-4 h-4" />
+                Download Session Report
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-text-muted">
+                Links
+              </div>
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {KR8TIV_LINKS.map((link) => (
+                  <a
+                    key={`${link.href}:${link.label}`}
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-bg-tertiary border border-border-primary hover:border-border-hover transition-colors text-[11px] text-text-secondary"
+                  >
+                    <span className="truncate">{link.label}</span>
+                    <ExternalLink className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Parse Data Modal */}
       {parseOpen && (
@@ -690,32 +906,34 @@ export function StatusBar() {
       )}
 
       {/* Mobile navigation — visible only on small screens */}
-      <nav className="lg:hidden flex items-center justify-center gap-1 px-4 py-1.5 border-t border-border-primary/50">
-        <Link href="/" className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
-          pathname === '/' ? 'bg-accent-neon/15 text-accent-neon' : 'text-text-muted'
-        }`}>
-          <Crosshair className="w-3 h-3" />Sniper
-        </Link>
-        <Link href="/bags-sniper" className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
-          pathname === '/bags-sniper' ? 'bg-purple-500/15 text-purple-400' : 'text-text-muted'
-        }`}>
-          <Package className="w-3 h-3" />Bags
-        </Link>
-        <Link href="/tradfi-sniper" className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
-          pathname === '/tradfi-sniper' ? 'bg-blue-500/15 text-blue-400' : 'text-text-muted'
-        }`}>
-          <Building2 className="w-3 h-3" />TradFi
-        </Link>
-        <Link href="/bags-intel" className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
-          pathname === '/bags-intel' ? 'bg-purple-500/15 text-purple-400' : 'text-text-muted'
-        }`}>
-          <Package className="w-3 h-3" />Intel
-        </Link>
-        <Link href="/bags-graduations" className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
-          pathname === '/bags-graduations' ? 'bg-amber-500/15 text-amber-400' : 'text-text-muted'
-        }`}>
-          <Rocket className="w-3 h-3" />Launches
-        </Link>
+      <nav className="lg:hidden border-t border-border-primary/50" aria-label="App pages">
+        <div className="app-shell py-1.5 flex items-center gap-2 overflow-x-auto">
+          <Link href="/" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
+            pathname === '/' ? 'bg-accent-neon/12 text-accent-neon border-accent-neon/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+          }`}>
+            <Crosshair className="w-3 h-3" />Sniper
+          </Link>
+          <Link href="/bags-sniper" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
+            pathname === '/bags-sniper' ? 'bg-purple-500/12 text-purple-300 border-purple-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+          }`}>
+            <Package className="w-3 h-3" />Bags Sniper
+          </Link>
+          <Link href="/tradfi-sniper" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
+            pathname === '/tradfi-sniper' ? 'bg-blue-500/12 text-blue-300 border-blue-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+          }`}>
+            <Building2 className="w-3 h-3" />TradFi
+          </Link>
+          <Link href="/bags-intel" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
+            pathname === '/bags-intel' ? 'bg-purple-500/12 text-purple-300 border-purple-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+          }`}>
+            <Package className="w-3 h-3" />Intel
+          </Link>
+          <Link href="/bags-graduations" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
+            pathname === '/bags-graduations' ? 'bg-amber-500/12 text-amber-300 border-amber-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+          }`}>
+            <Rocket className="w-3 h-3" />Launches
+          </Link>
+        </div>
       </nav>
     </header>
   );

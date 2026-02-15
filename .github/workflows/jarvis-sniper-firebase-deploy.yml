@@ -1,0 +1,61 @@
+name: Deploy Jarvis Sniper (Firebase Hosting)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "jarvis-sniper/**"
+      - ".github/workflows/jarvis-sniper-firebase-deploy.yml"
+
+concurrency:
+  group: jarvis-sniper-firebase-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FIREBASE_PROJECT: kr8tiv
+  CANONICAL_HOST: kr8tiv.web.app
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: jarvis-sniper/package-lock.json
+
+      - name: Install
+        working-directory: jarvis-sniper
+        run: npm ci
+
+      - name: Test
+        working-directory: jarvis-sniper
+        run: npm test
+
+      - name: Auth (GCP Service Account)
+        run: |
+          mkdir -p "$HOME/.gcp"
+          printf '%s' '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KR8TIV }}' > "$HOME/.gcp/firebase-sa.json"
+        shell: bash
+
+      - name: Deploy
+        working-directory: jarvis-sniper
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.home }}/.gcp/firebase-sa.json
+          NEXT_PUBLIC_BUILD_SHA: ${{ github.sha }}
+          NEXT_PUBLIC_BUILT_AT: ${{ github.event.head_commit.timestamp }}
+        run: |
+          npx firebase-tools deploy --only hosting --project "$FIREBASE_PROJECT" --non-interactive
+
+      - name: Smoke Check
+        run: |
+          curl -fsS "https://${CANONICAL_HOST}/api/health" > /dev/null
+          curl -fsS "https://${CANONICAL_HOST}/api/version" > /dev/null
+

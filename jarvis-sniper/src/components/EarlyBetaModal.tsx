@@ -46,34 +46,68 @@ export function EarlyBetaModal() {
     <>
       {/* Always-on warning strip so risk language is permanently visible in-app */}
       {bannerVisible && (
-        <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-[520] w-[min(96vw,980px)]">
-          <div className="rounded-lg border border-accent-error/35 bg-bg-primary/90 backdrop-blur px-3 py-2 text-[10px] sm:text-[11px] leading-relaxed text-text-secondary shadow-lg">
-            <div className="flex items-start gap-3">
-              <p className="flex-1">
-                <span className="font-semibold text-accent-error">PRE-ALPHA WARNING:</span>{' '}
-                This is an early showcase. Many algorithms are still being tuned and may perform badly. You can lose all SOL used here.
-                Use a burner wallet and tiny size (example: 0.01 SOL). No guarantees. No liability assumed.
-              </p>
-              <div className="shrink-0 flex items-center gap-1">
+        <>
+          {/* Mobile: compact pill so it doesn't cover the bottom terminal tabs. */}
+          <div className="lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+112px)] left-1/2 -translate-x-1/2 z-[520] w-[min(96vw,560px)]">
+            <div className="rounded-full border border-accent-error/35 bg-bg-primary/90 px-3 py-2 text-[10px] leading-tight text-text-secondary shadow-lg">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-accent-error whitespace-nowrap">PRE-ALPHA</span>
+                <span className="flex-1 truncate">
+                  You can lose SOL. Use a burner wallet.
+                </span>
                 <button
-                  onClick={dismissBanner}
-                  className="px-2 py-1 rounded border border-accent-warning/35 text-accent-warning hover:bg-accent-warning/10 transition-colors text-[10px] font-semibold"
-                  title="Dismiss this warning for this browser session"
+                  type="button"
+                  onClick={() => setOpen(true)}
+                  className="px-2 py-1 rounded border border-border-primary text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors text-[10px] font-semibold"
+                  title="View details"
                 >
-                  I accept
+                  Details
                 </button>
                 <button
+                  type="button"
                   onClick={dismissBanner}
-                  className="w-6 h-6 rounded border border-border-primary text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors text-[12px] leading-none"
-                  title="Close"
+                  className="w-7 h-7 rounded-full border border-border-primary text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors text-[11px] leading-none"
+                  title="Dismiss for this session"
                   aria-label="Close warning banner"
                 >
-                  ×
+                  X
                 </button>
               </div>
             </div>
           </div>
-        </div>
+
+          {/* Desktop: full strip stays visible without being disruptive. */}
+          <div className="hidden lg:block fixed bottom-3 left-1/2 -translate-x-1/2 z-[520] w-[min(96vw,980px)]">
+            <div className="rounded-lg border border-accent-error/35 bg-bg-primary/90 backdrop-blur px-3 py-2 text-[11px] leading-relaxed text-text-secondary shadow-lg">
+              <div className="flex items-start gap-3">
+                <p className="flex-1">
+                  <span className="font-semibold text-accent-error">PRE-ALPHA WARNING:</span>{' '}
+                  This is an early showcase. Many algorithms are still being tuned and may perform badly. You can lose all SOL used here.
+                  Use a burner wallet and tiny size (example: 0.01 SOL). No guarantees. No liability assumed.
+                </p>
+                <div className="shrink-0 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={dismissBanner}
+                    className="px-2 py-1 rounded border border-accent-warning/35 text-accent-warning hover:bg-accent-warning/10 transition-colors text-[10px] font-semibold"
+                    title="Dismiss this warning for this browser session"
+                  >
+                    I accept
+                  </button>
+                  <button
+                    type="button"
+                    onClick={dismissBanner}
+                    className="w-7 h-7 rounded border border-border-primary text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors text-[12px] leading-none"
+                    title="Close"
+                    aria-label="Close warning banner"
+                  >
+                    X
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {open && (

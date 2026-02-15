@@ -28,9 +28,10 @@ const MIN_HEIGHT = 200;
 const MAX_HEIGHT = 800;
 const DEFAULT_HEIGHT = 420;
 
-export function TokenChart() {
+export function TokenChart(props: { fitParent?: boolean } = {}) {
   const { selectedMint, setSelectedMint, graduations, positions } = useSniperStore();
   const { theme } = useTheme();
+  const fitParent = !!props.fitParent;
   const [expanded, setExpanded] = useState(false);
   const [provider, setProvider] = useState<ChartProvider>('dexscreener');
   const [iframeKey, setIframeKey] = useState(0);
@@ -98,9 +99,9 @@ export function TokenChart() {
     <div
       ref={containerRef}
       className={`card-glass overflow-hidden flex flex-col ${
-        expanded ? 'fixed inset-4 z-[100]' : ''
+        expanded ? 'fixed inset-4 z-[100]' : fitParent ? 'h-full' : ''
       }`}
-      style={expanded ? undefined : { height: `${height}px` }}
+      style={expanded ? undefined : fitParent ? undefined : { height: `${height}px` }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-primary bg-bg-secondary/60">
@@ -151,13 +152,15 @@ export function TokenChart() {
           >
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="w-7 h-7 rounded-lg flex items-center justify-center bg-bg-tertiary text-text-muted hover:text-text-primary hover:bg-bg-tertiary/80 transition-colors"
-            title={expanded ? 'Minimize' : 'Maximize'}
-          >
-            {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-          </button>
+          {!fitParent && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="w-7 h-7 rounded-lg flex items-center justify-center bg-bg-tertiary text-text-muted hover:text-text-primary hover:bg-bg-tertiary/80 transition-colors"
+              title={expanded ? 'Minimize' : 'Maximize'}
+            >
+              {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
+          )}
           <button
             onClick={() => { setSelectedMint(null); setExpanded(false); }}
             className="w-7 h-7 rounded-lg flex items-center justify-center bg-bg-tertiary text-text-muted hover:text-accent-error hover:bg-accent-error/10 transition-colors"
@@ -189,7 +192,7 @@ export function TokenChart() {
       </div>
 
       {/* Drag-to-resize handle */}
-      {!expanded && (
+      {!expanded && !fitParent && (
         <div
           onMouseDown={handleDragStart}
           className="h-3 flex items-center justify-center cursor-ns-resize bg-bg-secondary/80 border-t border-border-primary hover:bg-accent-neon/10 transition-colors group"

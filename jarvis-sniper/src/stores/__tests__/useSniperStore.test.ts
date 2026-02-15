@@ -1,6 +1,6 @@
 /**
  * Tests for sniper algorithm improvements:
- * 1. Adaptive trailing stop in getRecommendedSlTp()
+ * 1. Preset-aligned exits in getRecommendedSlTp()
  * 2. Smart entry delay (minAgeMinutes)
  * 3. Volume spike / pump detection
  * 4. getConvictionMultiplier negative factors
@@ -40,33 +40,20 @@ function makeGrad(overrides: Partial<BagsGraduation> & Record<string, any> = {})
 }
 
 // ──────────────────────────────────────────
-// 1. Adaptive Trailing Stop
+// 1. Preset-Aligned Exits
 // ──────────────────────────────────────────
-describe('getRecommendedSlTp — adaptive trailing stop', () => {
-  it('returns a trail field in the recommendation', () => {
-    const rec = getRecommendedSlTp(makeGrad());
-    expect(rec).toHaveProperty('trail');
-    expect(typeof rec.trail).toBe('number');
+describe('getRecommendedSlTp — preset-aligned exits', () => {
+  it('returns SL/TP from the provided config and disables trailing (99)', () => {
+    const rec = getRecommendedSlTp(makeGrad(), 'balanced', { stopLossPct: 7, takeProfitPct: 18 });
+    expect(rec.sl).toBe(7);
+    expect(rec.tp).toBe(18);
+    expect(rec.trail).toBe(99);
   });
 
-  it('high momentum (>50% 1h) produces tighter trail (5%)', () => {
-    const rec = getRecommendedSlTp(makeGrad({ price_change_1h: 80 }));
-    expect(rec.trail).toBe(5);
-  });
-
-  it('low momentum (5-20%) produces wider trail (12%)', () => {
-    const rec = getRecommendedSlTp(makeGrad({ price_change_1h: 10 }));
-    expect(rec.trail).toBe(12);
-  });
-
-  it('medium momentum (20-50%) uses default trail (8%)', () => {
-    const rec = getRecommendedSlTp(makeGrad({ price_change_1h: 35 }));
-    expect(rec.trail).toBe(8);
-  });
-
-  it('reasoning mentions trail choice', () => {
-    const rec = getRecommendedSlTp(makeGrad({ price_change_1h: 80 }));
-    expect(rec.reasoning).toContain('trail');
+  it('reasoning is present and short', () => {
+    const rec = getRecommendedSlTp(makeGrad(), 'balanced', { stopLossPct: 10, takeProfitPct: 20 });
+    expect(typeof rec.reasoning).toBe('string');
+    expect(rec.reasoning.length).toBeGreaterThan(0);
   });
 });
 

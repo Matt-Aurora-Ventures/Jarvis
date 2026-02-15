@@ -55,7 +55,7 @@ export function BacktestPanel() {
   const [collapsed, setCollapsed] = useState(true);
   const [selectedStrategy, setSelectedStrategy] = useState('all');
   const [mode, setMode] = useState<'quick' | 'full' | 'grid'>('quick');
-  const [dataScale, setDataScale] = useState<BacktestDataScale>('thorough');
+  const [dataScale, setDataScale] = useState<BacktestDataScale>('fast');
 
   const handleRun = () => {
     if (selectedStrategy === 'all') {

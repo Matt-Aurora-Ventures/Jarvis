@@ -20,9 +20,12 @@ import {
   scopeAllowsAsset,
   selectBestWrGateStrategy,
 } from '@/lib/auto-wr-gate';
+import { selectStrategyWithThompson } from '@/lib/strategy-selector';
+import { mergeRuntimeConfigWithStrategyOverride } from '@/lib/autonomy/override-policy';
 
 const SIGNER_SOL_RESERVE_LAMPORTS = 3_000_000;
 const BALANCE_GATE_CACHE_MS = 10_000;
+const THOMPSON_STICKY_WINDOW_MS = 60_000;
 
 async function fetchFromApi(assetFilter: AssetType): Promise<BagsGraduation[]> {
   try {
@@ -86,6 +89,9 @@ export function SniperAutomationOrchestrator() {
     config,
     activePreset,
     backtestMeta,
+    strategyBeliefs,
+    strategyOverrideSnapshot,
+    setStrategyOverrideSnapshot,
     loadPreset,
     mintCooldowns,
     clearExpiredMintCooldowns,
@@ -114,6 +120,7 @@ export function SniperAutomationOrchestrator() {
   const autoCycleInFlightRef = useRef(false);
   const nextAutoAllowedAtRef = useRef(0);
   const lastWalletNotReadyLogAtRef = useRef(0);
+  const lastBudgetNotAuthorizedLogAtRef = useRef(0);
   const lastNoCandidateLogAtRef = useRef(0);
   const lastFallbackLogAtRef = useRef(0);
   const lastNoSolLogAtRef = useRef(0);
@@ -121,7 +128,9 @@ export function SniperAutomationOrchestrator() {
   const lastWrGatePrimaryLogAtRef = useRef(0);
   const lastWrGateFallbackLogAtRef = useRef(0);
   const lastWrGateNoEligibleLogAtRef = useRef(0);
+  const lastThompsonLogAtRef = useRef(0);
   const wrGateSelectionSigRef = useRef('');
+  const thompsonStickyRef = useRef<{ strategyId: string; selectedAt: number } | null>(null);
   const activeFeedAssetRef = useRef<AssetType | null>(null);
   const balanceGateRef = useRef<{
     wallet: string;
@@ -154,6 +163,40 @@ export function SniperAutomationOrchestrator() {
     config.autoWrPrimaryPct,
     config.autoWrScope,
   ]);
+
+  const runtimeConfig = useMemo(
+    () => mergeRuntimeConfigWithStrategyOverride(config, activePreset, strategyOverrideSnapshot),
+    [activePreset, config, strategyOverrideSnapshot],
+  );
+
+  // Pull server-side strategy overrides periodically. Fail-open on fetch errors.
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const res = await fetch('/api/strategy-overrides', { cache: 'no-store' });
+        if (!res.ok || cancelled) return;
+        const payload = await res.json();
+        if (cancelled) return;
+        if (!payload || typeof payload !== 'object') return;
+        setStrategyOverrideSnapshot({
+          version: Number(payload.version || 0),
+          updatedAt: String(payload.updatedAt || new Date(0).toISOString()),
+          cycleId: String(payload.cycleId || ''),
+          signature: String(payload.signature || ''),
+          patches: Array.isArray(payload.patches) ? payload.patches : [],
+        });
+      } catch {
+        // keep last known snapshot
+      }
+    };
+    void refresh();
+    const timer = setInterval(() => { void refresh(); }, 300_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [setStrategyOverrideSnapshot]);
 
   // Persistent feed refresh — decoupled from page components so automation survives route switches.
   useEffect(() => {
@@ -207,7 +250,7 @@ export function SniperAutomationOrchestrator() {
     // When the wallet isn't ready (missing session key, Phantom disconnected, etc.)
     // we still want the tick loop to run so it can surface the pause reason in the
     // execution log instead of silently going idle.
-    if (!config.autoSnipe || !budget.authorized) {
+    if (!runtimeConfig.autoSnipe) {
       setAutomationState('idle');
       return;
     }
@@ -220,6 +263,24 @@ export function SniperAutomationOrchestrator() {
     const tick = async () => {
       if (cancelled) return;
       touchAutomationHeartbeat();
+
+      if (!budget.authorized) {
+        setAutomationState('paused');
+        const nowLog = Date.now();
+        if (nowLog - lastBudgetNotAuthorizedLogAtRef.current > 60_000) {
+          addExecution({
+            id: `auto-budget-not-authorized-${nowLog}`,
+            type: 'info',
+            symbol: 'AUTO',
+            mint: '',
+            amount: 0,
+            reason: 'AUTO_STOP_BUDGET_NOT_AUTHORIZED: Activate Auto Wallet (budget/max settings) before enabling auto trading.',
+            timestamp: nowLog,
+          });
+          lastBudgetNotAuthorizedLogAtRef.current = nowLog;
+        }
+        return;
+      }
 
       if (!walletReady) {
         setAutomationState('paused');
@@ -324,13 +385,13 @@ export function SniperAutomationOrchestrator() {
       const remaining = budget.budgetSol - managedSpent;
       if (remaining < 0.001) return;
 
-      if (scopedOpen.length >= config.maxConcurrentPositions) return;
+      if (scopedOpen.length >= runtimeConfig.maxConcurrentPositions) return;
       if (scopedOpen.some((p) => p.isClosing)) return;
 
       if (activeWallet) {
         const nowBalance = Date.now();
         const cached = balanceGateRef.current;
-        const plannedPositionSol = Math.max(0.001, Math.min(config.maxPositionSol, remaining));
+        const plannedPositionSol = Math.max(0.001, Math.min(runtimeConfig.maxPositionSol, remaining));
         if (
           !cached ||
           cached.wallet !== activeWallet ||
@@ -379,15 +440,15 @@ export function SniperAutomationOrchestrator() {
       }
 
       const wrGateApplies =
-        config.autoWrGateEnabled &&
-        scopeAllowsAsset(config.autoWrScope, assetFilter) &&
+        runtimeConfig.autoWrGateEnabled &&
+        scopeAllowsAsset(runtimeConfig.autoWrScope, assetFilter) &&
         (assetFilter === 'memecoin' || assetFilter === 'bags');
       if (wrGateApplies) {
         const selection = wrGateSelection;
-        const selected = selection?.selected;
         const resolution = selection?.resolution;
 
-        if (!selected || !resolution) {
+        if (!resolution || resolution.eligible.length === 0) {
+          setAutomationState('scanning');
           const nowLog = Date.now();
           if (nowLog - lastWrGateNoEligibleLogAtRef.current > 60_000) {
             addExecution({
@@ -396,17 +457,64 @@ export function SniperAutomationOrchestrator() {
               symbol: 'AUTO',
               mint: '',
               amount: 0,
-              reason: `AUTO_INFO_WR_GATE_FAIL_OPEN_NO_ELIGIBLE: no strategy passed WR gate (${config.autoWrMethod === 'wilson95_lower' ? 'Wilson95 lower' : 'point WR'} ${config.autoWrPrimaryPct}% -> ${config.autoWrFallbackPct}%, min ${config.autoWrMinTrades} trades). Continuing with current preset.`,
+              reason: `AUTO_INFO_WR_GATE_FAIL_OPEN_NO_ELIGIBLE: no strategy passed WR gate (${runtimeConfig.autoWrMethod === 'wilson95_lower' ? 'Wilson95 lower' : 'point WR'} ${runtimeConfig.autoWrPrimaryPct}% -> ${runtimeConfig.autoWrFallbackPct}%, min ${runtimeConfig.autoWrMinTrades} trades); continuing with current preset ${activePreset}`,
               timestamp: nowLog,
             });
             lastWrGateNoEligibleLogAtRef.current = nowLog;
           }
           wrGateSelectionSigRef.current = '';
+          thompsonStickyRef.current = null;
         } else {
-          const selectionSig = `${selected.strategyId}:${resolution.mode}:${resolution.usedThreshold}:${resolution.eligibleCount}`;
+          const eligibleSet = new Set(resolution.eligible.map((c) => c.strategyId));
+          const nowLog = Date.now();
+          const sticky = thompsonStickyRef.current;
+          const stickyValid = !!sticky
+            && eligibleSet.has(sticky.strategyId)
+            && nowLog - sticky.selectedAt < THOMPSON_STICKY_WINDOW_MS;
+
+          let chosenStrategyId = selection?.selected?.strategyId || resolution.eligible[0]?.strategyId || '';
+          let thompsonDecision: ReturnType<typeof selectStrategyWithThompson> | null = null;
+          if (resolution.eligible.length > 1) {
+            if (stickyValid && sticky) {
+              chosenStrategyId = sticky.strategyId;
+            } else {
+              thompsonDecision = selectStrategyWithThompson(
+                resolution.eligible.map((c) => ({ strategyId: c.strategyId })),
+                strategyBeliefs,
+              );
+              if (thompsonDecision?.selected?.strategyId) {
+                chosenStrategyId = thompsonDecision.selected.strategyId;
+              }
+              thompsonStickyRef.current = chosenStrategyId
+                ? { strategyId: chosenStrategyId, selectedAt: nowLog }
+                : null;
+            }
+          } else {
+            thompsonStickyRef.current = chosenStrategyId
+              ? { strategyId: chosenStrategyId, selectedAt: nowLog }
+              : null;
+          }
+
+          if (!chosenStrategyId) {
+            wrGateSelectionSigRef.current = '';
+            thompsonStickyRef.current = null;
+          }
+
+          const chosenCandidate = resolution.eligible.find((c) => c.strategyId === chosenStrategyId);
+          const selectedThresholdPct = resolution.mode === 'fallback'
+            ? Math.max(0, Math.floor(runtimeConfig.autoWrFallbackPct))
+            : Number.isFinite(chosenCandidate?.primaryThresholdOverridePct)
+              ? Math.max(0, Math.floor(Number(chosenCandidate?.primaryThresholdOverridePct)))
+              : Math.max(0, Math.floor(runtimeConfig.autoWrPrimaryPct));
+          const selectedThresholdSource = resolution.mode === 'fallback'
+            ? 'fallback'
+            : Number.isFinite(chosenCandidate?.primaryThresholdOverridePct)
+              ? 'primary_override'
+              : 'global_primary';
+
+          const selectionSig = `${chosenStrategyId}:${resolution.mode}:${selectedThresholdPct}:${resolution.eligibleCount}`;
           const shouldLogSelection = selectionSig !== wrGateSelectionSigRef.current;
           const logSelectionEvent = () => {
-            const nowLog = Date.now();
             if (resolution.mode === 'fallback') {
               if (
                 shouldLogSelection ||
@@ -418,7 +526,7 @@ export function SniperAutomationOrchestrator() {
                   symbol: 'AUTO',
                   mint: '',
                   amount: 0,
-                  reason: `AUTO_INFO_WR_GATE_FALLBACK: selected ${selected.strategyId} @ ${selection.selectedThresholdPct ?? resolution.usedThreshold}% (source=${selection.selectedThresholdSource || 'fallback'}, eligible=${resolution.eligibleCount}, rank=max net P&L)`,
+                  reason: `AUTO_INFO_WR_GATE_FALLBACK: selected ${chosenStrategyId} @ ${selectedThresholdPct}% (source=${selectedThresholdSource}, eligible=${resolution.eligibleCount})`,
                   timestamp: nowLog,
                 });
                 lastWrGateFallbackLogAtRef.current = nowLog;
@@ -436,7 +544,7 @@ export function SniperAutomationOrchestrator() {
                 symbol: 'AUTO',
                 mint: '',
                 amount: 0,
-                reason: `AUTO_INFO_WR_GATE_PRIMARY: selected ${selected.strategyId} @ ${selection.selectedThresholdPct ?? resolution.usedThreshold}% (source=${selection.selectedThresholdSource || 'global_primary'}, eligible=${resolution.eligibleCount}, rank=max net P&L)`,
+                reason: `AUTO_INFO_WR_GATE_PRIMARY: selected ${chosenStrategyId} @ ${selectedThresholdPct}% (source=${selectedThresholdSource}, eligible=${resolution.eligibleCount})`,
                 timestamp: nowLog,
               });
               lastWrGatePrimaryLogAtRef.current = nowLog;
@@ -444,9 +552,26 @@ export function SniperAutomationOrchestrator() {
             }
           };
 
-          if (activePreset !== selected.strategyId) {
+          if (
+            thompsonDecision &&
+            (shouldLogSelection || nowLog - lastThompsonLogAtRef.current > 120_000)
+          ) {
+            const top = thompsonDecision.selected;
+            addExecution({
+              id: `auto-thompson-${nowLog}`,
+              type: 'info',
+              symbol: 'AUTO',
+              mint: '',
+              amount: 0,
+              reason: `AUTO_INFO_THOMPSON_SELECT: ${top.strategyId} sample=${top.sample.toFixed(3)} mean=${top.mean.toFixed(3)} alpha=${top.alpha.toFixed(2)} beta=${top.beta.toFixed(2)} (pool=${resolution.eligibleCount})`,
+              timestamp: nowLog,
+            });
+            lastThompsonLogAtRef.current = nowLog;
+          }
+
+          if (chosenStrategyId && activePreset !== chosenStrategyId) {
             logSelectionEvent();
-            loadPreset(selected.strategyId);
+            loadPreset(chosenStrategyId);
             setAutomationState('scanning');
             return;
           }
@@ -455,6 +580,7 @@ export function SniperAutomationOrchestrator() {
         }
       } else {
         wrGateSelectionSigRef.current = '';
+        thompsonStickyRef.current = null;
       }
 
       const now = Date.now();
@@ -471,17 +597,23 @@ export function SniperAutomationOrchestrator() {
           if (cooldownUntil > Date.now()) return false;
         }
         if (scopedOpen.some((p) => p.mint === grad.mint)) return false;
-        if (grad.score < config.minScore) return false;
+        if (grad.score < runtimeConfig.minScore) return false;
         const liq = grad.liquidity || 0;
         const vol24h = grad.volume_24h || 0;
         const volLiqRatio = liq > 0 ? vol24h / liq : 0;
         const ageHours = grad.age_hours || 0;
         const mom1h = grad.price_change_1h || 0;
+        if (assetFilter === 'memecoin' || assetFilter === 'bags') {
+          const buys = grad.txn_buys_1h || 0;
+          const sells = grad.txn_sells_1h || 0;
+          const bsRatio = sells > 0 ? buys / sells : buys;
+          if (buys + sells > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) return false;
+        }
         return (
-          liq >= config.minLiquidityUsd &&
-          volLiqRatio >= config.minVolLiqRatio &&
-          ageHours <= config.maxTokenAgeHours &&
-          mom1h >= config.minMomentum1h
+          liq >= runtimeConfig.minLiquidityUsd &&
+          volLiqRatio >= runtimeConfig.minVolLiqRatio &&
+          ageHours <= runtimeConfig.maxTokenAgeHours &&
+          mom1h >= runtimeConfig.minMomentum1h
         );
       });
       const candidate = strictCandidate || dedupedGraduations.find((grad) => {
@@ -491,10 +623,16 @@ export function SniperAutomationOrchestrator() {
           if (cooldownUntil > Date.now()) return false;
         }
         if (scopedOpen.some((p) => p.mint === grad.mint)) return false;
-        if (grad.score < config.minScore) return false;
-        return (grad.liquidity || 0) >= config.minLiquidityUsd;
+        if (grad.score < runtimeConfig.minScore) return false;
+        if (assetFilter === 'memecoin' || assetFilter === 'bags') {
+          const buys = grad.txn_buys_1h || 0;
+          const sells = grad.txn_sells_1h || 0;
+          const bsRatio = sells > 0 ? buys / sells : buys;
+          if (buys + sells > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) return false;
+        }
+        return (grad.liquidity || 0) >= runtimeConfig.minLiquidityUsd;
       });
-      const fallbackMinScore = Math.max(25, Math.floor(config.minScore * 0.8));
+      const fallbackMinScore = Math.max(25, Math.floor(runtimeConfig.minScore * 0.8));
       const fallbackCandidate = !candidate
         ? dedupedGraduations.find((grad) => {
             if (activeWallet) {
@@ -503,6 +641,12 @@ export function SniperAutomationOrchestrator() {
               if (cooldownUntil > Date.now()) return false;
             }
             if (scopedOpen.some((p) => p.mint === grad.mint)) return false;
+            if (assetFilter === 'memecoin' || assetFilter === 'bags') {
+              const buys = grad.txn_buys_1h || 0;
+              const sells = grad.txn_sells_1h || 0;
+              const bsRatio = sells > 0 ? buys / sells : buys;
+              if (buys + sells > 10 && (bsRatio < 1.0 || bsRatio > 3.0)) return false;
+            }
             return (grad.score || 0) >= fallbackMinScore;
           })
         : null;
@@ -516,7 +660,7 @@ export function SniperAutomationOrchestrator() {
             symbol: 'AUTO',
             mint: '',
             amount: 0,
-            reason: `No eligible targets after filters (feed=${dedupedGraduations.length}, open=${scopedOpen.length}, minScore=${config.minScore})`,
+            reason: `No eligible targets after filters (feed=${dedupedGraduations.length}, open=${scopedOpen.length}, minScore=${runtimeConfig.minScore})`,
             timestamp: nowLog,
           });
           lastNoCandidateLogAtRef.current = nowLog;
@@ -547,15 +691,16 @@ export function SniperAutomationOrchestrator() {
       autoCycleInFlightRef.current = true;
       setAutomationState('executing_buy');
       try {
-        const ok = await snipe(resolvedCandidate as any, epochAtScanStart);
+        const outcome = await snipe(resolvedCandidate as any, epochAtScanStart);
         await new Promise((resolve) => setTimeout(resolve, 2500));
+        const ok = outcome === 'success';
         const staleEpochAbort = !ok && useSniperStore.getState().strategyEpoch !== epochAtScanStart;
         nextAutoAllowedAtRef.current = Date.now() + (
           ok
             ? AUTO_MIN_GAP_SUCCESS_MS
-            : staleEpochAbort
-              ? 1_500
-              : AUTO_MIN_GAP_FAIL_MS
+            : outcome === 'fail'
+              ? (staleEpochAbort ? 1_500 : AUTO_MIN_GAP_FAIL_MS)
+              : 2_500
         );
         setAutomationState('cooldown');
       } finally {
@@ -572,13 +717,19 @@ export function SniperAutomationOrchestrator() {
     };
   }, [
     dedupedGraduations,
-    config.autoSnipe,
-    config.maxConcurrentPositions,
-    config.maxTokenAgeHours,
-    config.minLiquidityUsd,
-    config.minMomentum1h,
-    config.minScore,
-    config.minVolLiqRatio,
+    runtimeConfig.autoSnipe,
+    runtimeConfig.maxConcurrentPositions,
+    runtimeConfig.maxTokenAgeHours,
+    runtimeConfig.minLiquidityUsd,
+    runtimeConfig.minMomentum1h,
+    runtimeConfig.minScore,
+    runtimeConfig.minVolLiqRatio,
+    runtimeConfig.autoWrGateEnabled,
+    runtimeConfig.autoWrMethod,
+    runtimeConfig.autoWrPrimaryPct,
+    runtimeConfig.autoWrFallbackPct,
+    runtimeConfig.autoWrMinTrades,
+    runtimeConfig.autoWrScope,
     graduations.length,
     walletReady,
     budget.authorized,
@@ -598,6 +749,7 @@ export function SniperAutomationOrchestrator() {
     strategyEpoch,
     activePreset,
     backtestMeta,
+    strategyBeliefs,
     loadPreset,
     wrGateSelection,
     snipe,

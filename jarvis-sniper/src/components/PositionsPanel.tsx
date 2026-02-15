@@ -1253,8 +1253,12 @@ function PositionRow({ pos, isSelected, onClose, onWriteOff, onSelect }: {
   const tp = useRecommendedExits ? (pos.recommendedTp ?? cfg.takeProfitPct) : cfg.takeProfitPct;
   const isBlueChip = isBlueChipLongConvictionSymbol(pos.symbol);
   const targets = computeTargetsFromEntryUsd(pos.entryPrice, sl, tp);
-  // Per-position adaptive trailing stop — matches risk management hook logic
-  const trailPct = pos.recommendedTrail ?? cfg.trailingStopPct;
+  // Trailing stop display should match the risk manager semantics.
+  const trailPct = isBlueChip
+    ? 0
+    : useRecommendedExits
+    ? (pos.recommendedTrail ?? cfg.trailingStopPct)
+    : cfg.trailingStopPct;
   const hwm = pos.highWaterMarkPct ?? 0;
 
   // Trigger proximity detection (trail only arms when HWM >= trail%, matching risk manager fix)

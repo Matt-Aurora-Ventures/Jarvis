@@ -38,8 +38,8 @@ export const runtime = 'nodejs';
  * Fulfills: BACK-04 (Continuous Strategy Validation)
  */
 
-// Allow up to 120 seconds for Vercel serverless
-export const maxDuration = 120;
+// Allow up to 300 seconds for Vercel serverless (full run can be compute-heavy)
+export const maxDuration = 300;
 
 // ─── Strategy Classification ───
 
@@ -47,20 +47,21 @@ type StrategyCategory = 'bluechip' | 'memecoin' | 'xstock_index';
 
 const STRATEGY_CATEGORY: Record<string, StrategyCategory> = {
   // Blue chip strategies
-  bluechip_mean_revert: 'bluechip',
   bluechip_trend_follow: 'bluechip',
   bluechip_breakout: 'bluechip',
   // Memecoin strategies
   pump_fresh_tight: 'memecoin',
   momentum: 'memecoin',
-  insight_j: 'memecoin',
   micro_cap_surge: 'memecoin',
   elite: 'memecoin',
   hybrid_b: 'memecoin',
   let_it_ride: 'memecoin',
-  loose: 'memecoin',
-  genetic_best: 'memecoin',
-  genetic_v2: 'memecoin',
+  // Established token strategies
+  sol_veteran: 'memecoin',
+  utility_swing: 'memecoin',
+  established_breakout: 'memecoin',
+  meme_classic: 'memecoin',
+  volume_spike: 'memecoin',
   // xStock / index / prestock
   xstock_intraday: 'xstock_index',
   xstock_swing: 'xstock_index',
@@ -69,132 +70,58 @@ const STRATEGY_CATEGORY: Record<string, StrategyCategory> = {
   index_leveraged: 'xstock_index',
 };
 
-// Entry signals mapped to preset IDs
+// Entry signals — R4 realistic-TP (2026-02-15)
 const ENTRY_SIGNALS: Record<string, BacktestConfig['entrySignal']> = {
-  bluechip_mean_revert: meanReversionEntry,
-  bluechip_trend_follow: trendFollowingEntry,
-  bluechip_breakout: breakoutEntry,
-  momentum_factor: momentumEntry,
-  squeeze_breakout: squeezeBreakoutEntry,
-  mean_reversion_rsi: meanReversionEntry,
-  trend_adx: trendFollowingEntry,
+  // Memecoin core
+  elite: momentumEntry,
+  pump_fresh_tight: momentumEntry,
+  micro_cap_surge: momentumEntry,
+  // Memecoin wide
+  momentum: meanReversionEntry,
+  hybrid_b: meanReversionEntry,
+  let_it_ride: meanReversionEntry,
+  // Established
+  sol_veteran: meanReversionEntry,
+  utility_swing: meanReversionEntry,
+  established_breakout: meanReversionEntry,
+  meme_classic: meanReversionEntry,
+  volume_spike: meanReversionEntry,
+  // Bluechip
+  bluechip_trend_follow: meanReversionEntry,
+  bluechip_breakout: meanReversionEntry,
+  // xStock / Index / Prestock
+  xstock_intraday: meanReversionEntry,
+  xstock_swing: meanReversionEntry,
+  prestock_speculative: meanReversionEntry,
+  index_intraday: meanReversionEntry,
+  index_leveraged: meanReversionEntry,
 };
 
-// Full strategy configs (all 18)
+// Strategy configs — R4 realistic-TP optimized (2026-02-15)
 const STRATEGY_CONFIGS: Record<string, Omit<BacktestConfig, 'entrySignal'>> = {
-  // Blue chip strategies
-  bluechip_mean_revert: {
-    strategyId: 'bluechip_mean_revert',
-    stopLossPct: 3, takeProfitPct: 8, trailingStopPct: 2,
-    minScore: 0, minLiquidityUsd: 50000,
-    slippagePct: 0.3, feePct: 0.25, maxHoldCandles: 48,
-  },
-  bluechip_trend_follow: {
-    strategyId: 'bluechip_trend_follow',
-    stopLossPct: 5, takeProfitPct: 15, trailingStopPct: 4,
-    minScore: 0, minLiquidityUsd: 50000,
-    slippagePct: 0.3, feePct: 0.25, maxHoldCandles: 168,
-  },
-  bluechip_breakout: {
-    strategyId: 'bluechip_breakout',
-    stopLossPct: 4, takeProfitPct: 12, trailingStopPct: 3,
-    minScore: 0, minLiquidityUsd: 50000,
-    slippagePct: 0.3, feePct: 0.25, maxHoldCandles: 72,
-  },
-  // Memecoin strategies
-  pump_fresh_tight: {
-    strategyId: 'pump_fresh_tight',
-    stopLossPct: 20, takeProfitPct: 80, trailingStopPct: 8,
-    minScore: 40, minLiquidityUsd: 5000,
-    slippagePct: 1.0, feePct: 0.25, maxHoldCandles: 4,
-  },
-  momentum: {
-    strategyId: 'momentum',
-    stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
-    minScore: 0, minLiquidityUsd: 50000,
-    slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 8,
-  },
-  insight_j: {
-    strategyId: 'insight_j',
-    stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
-    minScore: 0, minLiquidityUsd: 50000,
-    slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 8,
-  },
-  micro_cap_surge: {
-    strategyId: 'micro_cap_surge',
-    stopLossPct: 45, takeProfitPct: 250, trailingStopPct: 20,
-    minScore: 30, minLiquidityUsd: 3000,
-    slippagePct: 1.5, feePct: 0.25, maxHoldCandles: 24,
-  },
-  elite: {
-    strategyId: 'elite',
-    stopLossPct: 15, takeProfitPct: 60, trailingStopPct: 8,
-    minScore: 0, minLiquidityUsd: 100000,
-    slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 8,
-  },
-  hybrid_b: {
-    strategyId: 'hybrid_b',
-    stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
-    minScore: 0, minLiquidityUsd: 50000,
-    slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 8,
-  },
-  let_it_ride: {
-    strategyId: 'let_it_ride',
-    stopLossPct: 20, takeProfitPct: 100, trailingStopPct: 5,
-    minScore: 0, minLiquidityUsd: 50000,
-    slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 24,
-  },
-  loose: {
-    strategyId: 'loose',
-    stopLossPct: 20, takeProfitPct: 60, trailingStopPct: 8,
-    minScore: 0, minLiquidityUsd: 25000,
-    slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 8,
-  },
-  genetic_best: {
-    strategyId: 'genetic_best',
-    stopLossPct: 35, takeProfitPct: 200, trailingStopPct: 12,
-    minScore: 43, minLiquidityUsd: 3000,
-    slippagePct: 1.0, feePct: 0.25, maxHoldCandles: 24,
-  },
-  genetic_v2: {
-    strategyId: 'genetic_v2',
-    stopLossPct: 45, takeProfitPct: 207, trailingStopPct: 10,
-    minScore: 0, minLiquidityUsd: 5000,
-    slippagePct: 1.0, feePct: 0.25, maxHoldCandles: 24,
-  },
-  // xStock strategies
-  xstock_intraday: {
-    strategyId: 'xstock_intraday',
-    stopLossPct: 1.5, takeProfitPct: 3, trailingStopPct: 1,
-    minScore: 0, minLiquidityUsd: 10000,
-    slippagePct: 0.2, feePct: 0.25, maxHoldCandles: 8,
-  },
-  xstock_swing: {
-    strategyId: 'xstock_swing',
-    stopLossPct: 3, takeProfitPct: 8, trailingStopPct: 2,
-    minScore: 0, minLiquidityUsd: 10000,
-    slippagePct: 0.2, feePct: 0.25, maxHoldCandles: 120,
-  },
-  // Prestock strategy
-  prestock_speculative: {
-    strategyId: 'prestock_speculative',
-    stopLossPct: 5, takeProfitPct: 15, trailingStopPct: 3,
-    minScore: 30, minLiquidityUsd: 5000,
-    slippagePct: 0.3, feePct: 0.25, maxHoldCandles: 120,
-  },
-  // Index strategies
-  index_intraday: {
-    strategyId: 'index_intraday',
-    stopLossPct: 0.8, takeProfitPct: 1.5, trailingStopPct: 0.5,
-    minScore: 0, minLiquidityUsd: 10000,
-    slippagePct: 0.15, feePct: 0.25, maxHoldCandles: 8,
-  },
-  index_leveraged: {
-    strategyId: 'index_leveraged',
-    stopLossPct: 3, takeProfitPct: 8, trailingStopPct: 2,
-    minScore: 0, minLiquidityUsd: 10000,
-    slippagePct: 0.2, feePct: 0.25, maxHoldCandles: 120,
-  },
+  // Memecoin core (SL 10%, TP 20%)
+  elite: { strategyId: 'elite', stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 99, minScore: 0, minLiquidityUsd: 100000, slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 12 },
+  pump_fresh_tight: { strategyId: 'pump_fresh_tight', stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 99, minScore: 40, minLiquidityUsd: 5000, slippagePct: 1.0, feePct: 0.25, maxHoldCandles: 8 },
+  micro_cap_surge: { strategyId: 'micro_cap_surge', stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 99, minScore: 30, minLiquidityUsd: 3000, slippagePct: 1.5, feePct: 0.25, maxHoldCandles: 8 },
+  // Memecoin wide (SL 10%, TP 25%)
+  momentum: { strategyId: 'momentum', stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99, minScore: 0, minLiquidityUsd: 50000, slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 24 },
+  hybrid_b: { strategyId: 'hybrid_b', stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99, minScore: 0, minLiquidityUsd: 50000, slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 24 },
+  let_it_ride: { strategyId: 'let_it_ride', stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99, minScore: 0, minLiquidityUsd: 50000, slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 48 },
+  // Established (SL 8%, TP 15%)
+  sol_veteran: { strategyId: 'sol_veteran', stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99, minScore: 40, minLiquidityUsd: 50000, slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 168 },
+  utility_swing: { strategyId: 'utility_swing', stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99, minScore: 55, minLiquidityUsd: 10000, slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 168 },
+  established_breakout: { strategyId: 'established_breakout', stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99, minScore: 30, minLiquidityUsd: 10000, slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 168 },
+  meme_classic: { strategyId: 'meme_classic', stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99, minScore: 40, minLiquidityUsd: 5000, slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 168 },
+  volume_spike: { strategyId: 'volume_spike', stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99, minScore: 35, minLiquidityUsd: 20000, slippagePct: 0.5, feePct: 0.25, maxHoldCandles: 168 },
+  // Bluechip (SL 10%, TP 25%)
+  bluechip_trend_follow: { strategyId: 'bluechip_trend_follow', stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99, minScore: 0, minLiquidityUsd: 50000, slippagePct: 0.3, feePct: 0.25, maxHoldCandles: 48 },
+  bluechip_breakout: { strategyId: 'bluechip_breakout', stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99, minScore: 0, minLiquidityUsd: 50000, slippagePct: 0.3, feePct: 0.25, maxHoldCandles: 48 },
+  // xStock / Prestock / Index (SL 4%, TP 10%)
+  xstock_intraday: { strategyId: 'xstock_intraday', stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99, minScore: 0, minLiquidityUsd: 10000, slippagePct: 0.2, feePct: 0.25, maxHoldCandles: 96 },
+  xstock_swing: { strategyId: 'xstock_swing', stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99, minScore: 0, minLiquidityUsd: 10000, slippagePct: 0.2, feePct: 0.25, maxHoldCandles: 96 },
+  prestock_speculative: { strategyId: 'prestock_speculative', stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99, minScore: 30, minLiquidityUsd: 5000, slippagePct: 0.3, feePct: 0.25, maxHoldCandles: 96 },
+  index_intraday: { strategyId: 'index_intraday', stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99, minScore: 0, minLiquidityUsd: 10000, slippagePct: 0.15, feePct: 0.25, maxHoldCandles: 96 },
+  index_leveraged: { strategyId: 'index_leveraged', stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99, minScore: 0, minLiquidityUsd: 10000, slippagePct: 0.2, feePct: 0.25, maxHoldCandles: 96 },
 };
 
 // ─── Drift Report Types ───

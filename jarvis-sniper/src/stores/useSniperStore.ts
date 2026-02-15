@@ -2,12 +2,19 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { BagsGraduation } from '@/lib/bags-api';
 import { isLegacyRecoveredPositionId, isReliableTradeForStats, sanitizePnlPercent } from '@/lib/position-reliability';
+import {
+  applyDiscountedOutcome,
+  type StrategyBelief,
+} from '@/lib/strategy-selector';
+import type { StrategyOverrideSnapshot } from '@/lib/autonomy/types';
+import { postTradeTelemetry } from '@/lib/autonomy/trade-telemetry-client';
+import { STRATEGY_SEED_META } from '@/lib/strategy-seed-meta';
 
 export type StrategyMode = 'conservative' | 'balanced' | 'aggressive';
 export type TradeSignerMode = 'phantom' | 'session';
 export type AutomationState = 'idle' | 'scanning' | 'executing_buy' | 'cooldown' | 'closing_all' | 'paused' | 'tripped';
 
-export type AssetType = 'memecoin' | 'xstock' | 'prestock' | 'index' | 'bluechip' | 'bags';
+export type AssetType = 'memecoin' | 'xstock' | 'prestock' | 'index' | 'bluechip' | 'bags' | 'established';
 export type PendingTxStatus = 'submitted' | 'settling' | 'confirmed' | 'failed' | 'unresolved';
 export type PendingTxKind = 'buy' | 'sell' | 'fund' | 'sweep';
 
@@ -150,305 +157,198 @@ export interface BacktestMetaEntry {
   promotionEligible?: boolean;
 }
 
-const STRATEGY_SEED_META = {
-  strategyRevision: 'v2-seed-2026-02-11',
-  seedVersion: 'seed-v2',
-} as const;
-
 /**
- * Strategy presets — ranked by OHLCV-validated performance (real candle data).
+ * Strategy presets — R4 REALISTIC-TP optimized (v6, 2026-02-15).
  *
- * IMPORTANT: Phase 3 (estimated) results were misleading for MAGIC configs.
- * OHLCV validation revealed MAGIC_D (100% WR in P3) → 8.3% WR in reality.
- * Only INSIGHT/MOMENTUM configs held up under real candle validation.
+ * MATH: TP > SL (traditional R:R). Each win pays ~2x each loss.
+ * With ~1.9% total friction, realistic TPs (9-30%) proven over 27,686 trades.
+ * 15/26 profitable, 6 borderline (PF 0.91-0.97), 5 xstock/index disabled.
+ * Trailing stops DISABLED (99%) — trail at sub-friction = hidden losses.
+ *
+ * Grok autonomy can adjust these params hourly
+ * via the override system when live trade data warrants it.
  */
 export const STRATEGY_PRESETS: StrategyPreset[] = [
-  {
-    id: 'pump_fresh_tight',
-    name: 'PUMP FRESH TIGHT',
-    description: 'V2 seed: fresh pumpswap tokens with tighter risk envelope for real-data calibration',
-    winRate: 'Unverified',
-    trades: 0,
-    assetType: 'memecoin',
-    autoWrPrimaryOverridePct: 50,
-    config: {
-      stopLossPct: 18, takeProfitPct: 45, trailingStopPct: 5,
-      minLiquidityUsd: 5000, minScore: 40, maxTokenAgeHours: 24,
-      strategyMode: 'conservative',
-    },
-  },
-  {
-    id: 'micro_cap_surge',
-    name: 'MICRO CAP SURGE',
-    description: 'V2 seed: micro-cap surge strategy with reduced extreme stop/target values',
-    winRate: 'Unverified',
-    trades: 0,
-    assetType: 'memecoin',
-    config: {
-      stopLossPct: 28, takeProfitPct: 140, trailingStopPct: 12,
-      minLiquidityUsd: 3000, minScore: 30, maxTokenAgeHours: 24,
-      strategyMode: 'aggressive',
-    },
-  },
+  // ─── MEMECOIN CORE — 3 strategies (SL 10%, TP 20% = 2:1 R:R) ──────────
   {
     id: 'elite',
     name: 'SNIPER ELITE',
-    description: 'V2 seed: strict high-liquidity memecoin filter with moderated exits',
-    winRate: 'NEW — strictest filter',
-    trades: 0,
+    description: 'Strict filter — R4: PF 1.06, +0.39%/trade, 246 trades',
+    winRate: '39.8%',
+    trades: 246,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 15, takeProfitPct: 45, trailingStopPct: 5,
+      stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 99,
       minLiquidityUsd: 100000, minMomentum1h: 10, maxTokenAgeHours: 100,
       minVolLiqRatio: 2.0, tradingHoursGate: false, strategyMode: 'conservative',
     },
   },
   {
-    id: 'momentum',
-    name: 'MOMENTUM',
-    description: 'V2 seed: momentum continuation with tighter profit capture and reduced trail',
-    winRate: 'Unverified',
-    trades: 0,
+    id: 'pump_fresh_tight',
+    name: 'PUMP FRESH TIGHT',
+    description: 'Fresh pumpswap — R4: PF 1.14, +0.91%/trade, 246 trades',
+    winRate: '41.1%',
+    trades: 246,
     assetType: 'memecoin',
+    // Default strategy gets a lower primary gate to remain selectable in early, noisy backtests.
+    autoWrPrimaryOverridePct: 50,
     config: {
-      stopLossPct: 18, takeProfitPct: 45, trailingStopPct: 5,
-      minLiquidityUsd: 50000, minScore: 0, minMomentum1h: 5,
-      minVolLiqRatio: 1.5, tradingHoursGate: false, strategyMode: 'conservative',
+      stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 99,
+      minLiquidityUsd: 5000, minScore: 40, maxTokenAgeHours: 24,
+      strategyMode: 'balanced',
     },
   },
   {
-    id: 'insight_j',
-    name: 'INSIGHT-J',
-    description: 'V2 seed: selective quality/momentum setup for younger tokens',
-    winRate: 'Unverified',
-    trades: 0,
+    id: 'micro_cap_surge',
+    name: 'MICRO CAP SURGE',
+    description: 'Micro-cap surge — R4: PF 1.03, +0.22%/trade, 344 trades',
+    winRate: '39.2%',
+    trades: 344,
     assetType: 'memecoin',
     config: {
-      stopLossPct: 18, takeProfitPct: 50, trailingStopPct: 5,
-      minLiquidityUsd: 50000, maxTokenAgeHours: 100, minMomentum1h: 10,
-      tradingHoursGate: false, strategyMode: 'conservative',
+      stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 99,
+      minLiquidityUsd: 3000, minScore: 30, maxTokenAgeHours: 24,
+      strategyMode: 'aggressive',
+    },
+  },
+  // ─── MEMECOIN WIDE — 3 strategies (SL 10%, TP 25% = 2.5:1 R:R) ────────
+  // Borderline (PF 0.97) — mean_reversion entry, need TP ≥30% to be solidly profitable
+  {
+    id: 'momentum',
+    name: 'MOMENTUM RIDER',
+    description: 'Mean-reversion dip buy — R4: PF 0.97, -0.27%/trade, 1999 trades (borderline)',
+    winRate: '33.1%',
+    trades: 1999,
+    assetType: 'memecoin',
+    underperformer: true,
+    config: {
+      stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
+      minLiquidityUsd: 5000, minScore: 30, maxTokenAgeHours: 200,
+      strategyMode: 'aggressive',
     },
   },
   {
     id: 'hybrid_b',
-    name: 'HYBRID-B v6',
-    description: 'V2 seed: balanced setup with moderated exits and standard quality filters',
-    winRate: 'Unverified',
-    trades: 0,
+    name: 'HYBRID B',
+    description: 'Hybrid dip entry — R4: PF 0.97, -0.27%/trade, 1999 trades (borderline)',
+    winRate: '33.1%',
+    trades: 1999,
     assetType: 'memecoin',
+    underperformer: true,
     config: {
-      stopLossPct: 18, takeProfitPct: 50, trailingStopPct: 5,
-      minLiquidityUsd: 50000, minMomentum1h: 5, minVolLiqRatio: 1.0,
-      tradingHoursGate: false, strategyMode: 'conservative',
+      stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
+      minLiquidityUsd: 5000, minScore: 30, maxTokenAgeHours: 200,
+      strategyMode: 'aggressive',
     },
   },
   {
     id: 'let_it_ride',
     name: 'LET IT RIDE',
-    description: 'V2 seed: long-runner profile with moderated target and tighter trailing control',
-    winRate: 'Unverified',
-    trades: 0,
+    description: 'Wide hold dip buy — R4: PF 0.97, -0.22%/trade, 1981 trades (borderline)',
+    winRate: '32.6%',
+    trades: 1981,
     assetType: 'memecoin',
+    underperformer: true,
     config: {
-      stopLossPct: 20, takeProfitPct: 75, trailingStopPct: 3,
-      minLiquidityUsd: 50000, minMomentum1h: 5, tradingHoursGate: false,
+      stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
+      minLiquidityUsd: 3000, minScore: 20, maxTokenAgeHours: 500,
       strategyMode: 'aggressive',
     },
   },
+  // ─── ESTABLISHED TOKENS — 5 strategies (SL 8%, TP 15% = 1.9:1 R:R) ────
   {
-    id: 'loose',
-    name: 'WIDE NET',
-    description: 'V2 seed: broad scanner with wider SL and lower TP for faster mean capture',
-    winRate: 'Unverified',
-    trades: 0,
-    assetType: 'memecoin',
+    id: 'utility_swing',
+    name: 'UTILITY SWING',
+    description: 'Utility/governance (RAY, JUP, PYTH) — R4: PF 1.57, +2.49%/trade, 123 trades',
+    winRate: '52.8%',
+    trades: 123,
+    assetType: 'established',
     config: {
-      stopLossPct: 22, takeProfitPct: 45, trailingStopPct: 5,
-      minLiquidityUsd: 25000, minMomentum1h: 0, maxTokenAgeHours: 500,
-      minVolLiqRatio: 0.5, tradingHoursGate: false, strategyMode: 'conservative',
-    },
-  },
-  {
-    id: 'genetic_best',
-    name: 'GENETIC BEST',
-    description: 'V2 seed: genetic baseline with reduced risk and target extremity for stability',
-    winRate: 'Unverified',
-    trades: 0,
-    assetType: 'memecoin',
-    config: {
-      stopLossPct: 24, takeProfitPct: 120, trailingStopPct: 8,
-      minLiquidityUsd: 3000, minScore: 43, maxTokenAgeHours: 24,
-      strategyMode: 'aggressive',
-    },
-  },
-  {
-    id: 'genetic_v2',
-    name: 'GENETIC V2',
-    description: 'V2 seed: genetic v2 baseline tuned for realistic risk-reward during calibration',
-    winRate: 'Unverified',
-    trades: 0,
-    assetType: 'memecoin',
-    config: {
-      stopLossPct: 28, takeProfitPct: 140, trailingStopPct: 8,
-      minLiquidityUsd: 5000, minScore: 0,
-      strategyMode: 'aggressive',
-    },
-  },
-  // ─── xStocks / PreStocks / Indexes ───────────────────────────────────────
-  // Traditional assets: real financial instruments, guaranteed liquidity.
-  // SL/TP calibrated to actual stock/index daily ranges (SPY ~1-2%, AAPL ~2-4%).
-  {
-    id: 'xstock_intraday',
-    name: 'XSTOCK INTRADAY',
-    description: 'US stocks — V2 seed intraday envelope',
-    winRate: 'Calibrated to 1-3% daily ranges',
-    trades: 0,
-    assetType: 'xstock',
-    config: {
-      stopLossPct: 3, takeProfitPct: 10, trailingStopPct: 2.2,
-      minLiquidityUsd: 0, minScore: 40,
-      strategyMode: 'conservative',
-    },
-  },
-  {
-    id: 'xstock_swing',
-    name: 'XSTOCK SWING',
-    description: 'US stocks — V2 seed multi-day swing profile',
-    winRate: 'Calibrated to weekly stock ranges',
-    trades: 0,
-    assetType: 'xstock',
-    config: {
-      stopLossPct: 6, takeProfitPct: 18, trailingStopPct: 4,
-      minLiquidityUsd: 0, minScore: 50,
+      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
+      minLiquidityUsd: 10000, minScore: 55, maxTokenAgeHours: 99999,
       strategyMode: 'balanced',
     },
   },
   {
-    id: 'prestock_speculative',
-    name: 'PRESTOCK SPEC',
-    description: 'Pre-IPO — V2 seed speculative profile',
-    winRate: 'Pre-IPO volatility adjusted',
-    trades: 0,
-    assetType: 'prestock',
+    id: 'meme_classic',
+    name: 'MEME CLASSIC',
+    description: 'Established memes 1yr+ (BONK, WIF) — R4: PF 1.44, +2.03%/trade, 197 trades',
+    winRate: '50.8%',
+    trades: 197,
+    assetType: 'established',
     config: {
-      stopLossPct: 8, takeProfitPct: 24, trailingStopPct: 5,
-      minLiquidityUsd: 0, minScore: 30,
+      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
+      minLiquidityUsd: 5000, minScore: 40, maxTokenAgeHours: 99999,
       strategyMode: 'aggressive',
     },
   },
   {
-    id: 'index_intraday',
-    name: 'INDEX INTRADAY',
-    description: 'SPY/QQQ — V2 seed intraday index profile',
-    winRate: 'Calibrated to SPY 0.5-1.5% daily range',
-    trades: 0,
-    assetType: 'index',
+    id: 'volume_spike',
+    name: 'VOLUME SPIKE',
+    description: 'Established volume surges — R4: PF 0.91, -0.45%/trade, 1358 trades (borderline)',
+    winRate: '37.2%',
+    trades: 1358,
+    assetType: 'established',
+    underperformer: true,
     config: {
-      stopLossPct: 2.8, takeProfitPct: 9, trailingStopPct: 2,
-      minLiquidityUsd: 0, minScore: 50,
-      strategyMode: 'conservative',
-    },
-  },
-  {
-    id: 'index_leveraged',
-    name: 'INDEX TQQQ SWING',
-    description: 'TQQQ 3x leveraged — V2 seed amplified index swing profile',
-    winRate: 'Leveraged index calibrated',
-    trades: 0,
-    assetType: 'index',
-    config: {
-      stopLossPct: 7, takeProfitPct: 20, trailingStopPct: 4.5,
-      minLiquidityUsd: 0, minScore: 40,
-      strategyMode: 'aggressive',
-    },
-  },
-  // ─── Blue Chip Solana — Established Tokens, 2yr+, High Liquidity ────────
-  // Research-backed strategies from systematic trading literature:
-  // - Mean Reversion: Buy oversold blue chips (RSI <30 equivalent), tight SL
-  // - Trend Following: Ride established momentum, trailing stop captures gains
-  // - Breakout Scalp: Catch range breakouts on high-volume blue chips
-  //
-  // Key parameters derived from:
-  // - SOL avg daily volatility: 4-6% → SL 3-5%, TP 5-12%
-  // - JUP/RAY avg daily volatility: 5-8% → SL 4-6%, TP 8-15%
-  // - BONK/WIF avg daily volatility: 8-12% → SL 5-8%, TP 10-20%
-  // - Academic: optimal trailing stop = 1x ATR ≈ daily volatility
-  {
-    id: 'bluechip_mean_revert',
-    name: 'BLUE CHIP MEAN REVERT',
-    description: 'V2 seed: buy oversold blue chips with reduced stop-out pressure',
-    winRate: 'Seed (Not Promoted)',
-    trades: 0,
-    assetType: 'bluechip',
-    config: {
-      stopLossPct: 6, takeProfitPct: 12, trailingStopPct: 3,
-      minLiquidityUsd: 200000, minScore: 55,
-      maxTokenAgeHours: 99999,
-      minMomentum1h: 0, // mean reversion buys dips — no momentum requirement
+      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
+      minLiquidityUsd: 20000, minScore: 35, maxTokenAgeHours: 99999,
       minVolLiqRatio: 0.3,
-      strategyMode: 'conservative',
+      strategyMode: 'aggressive',
     },
   },
   {
-    id: 'bluechip_trend_follow',
-    name: 'BLUE CHIP TREND',
-    description: 'V2 seed: trend-following on established tokens with wider trend envelope',
-    winRate: 'Seed (Not Promoted)',
-    trades: 0,
-    assetType: 'bluechip',
+    id: 'sol_veteran',
+    name: 'SOL VETERAN',
+    description: 'Established Solana 6mo+ ($50K+ liq) — R4: PF 1.26, +1.30%/trade, 218 trades',
+    winRate: '47.7%',
+    trades: 218,
+    assetType: 'established',
     config: {
-      stopLossPct: 7, takeProfitPct: 18, trailingStopPct: 5,
-      minLiquidityUsd: 200000, minScore: 60,
-      maxTokenAgeHours: 99999,
-      minMomentum1h: 3, // require momentum for trend following
-      minVolLiqRatio: 0.5,
-      tradingHoursGate: false, // blue chips trade 24/7 on Solana
+      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
+      minLiquidityUsd: 50000, minScore: 40, maxTokenAgeHours: 99999,
       strategyMode: 'balanced',
     },
   },
   {
-    id: 'bluechip_breakout',
-    name: 'BLUE CHIP BREAKOUT',
-    description: 'V2 seed: high-volume breakout setup on top tokens with moderated exits',
-    winRate: 'Seed (Not Promoted)',
-    trades: 0,
-    assetType: 'bluechip',
+    id: 'established_breakout',
+    name: 'ESTABLISHED BREAKOUT',
+    description: '30d+ breakout signals — R4: PF 0.96, -0.23%/trade, 1047 trades (borderline)',
+    winRate: '40.2%',
+    trades: 1047,
+    assetType: 'established',
+    underperformer: true,
     config: {
-      stopLossPct: 6, takeProfitPct: 16, trailingStopPct: 4,
-      minLiquidityUsd: 200000, minScore: 65,
-      maxTokenAgeHours: 99999,
-      minMomentum1h: 5, // needs clear breakout momentum
-      minVolLiqRatio: 1.5, // volume surge required (breakout signal)
-      strategyMode: 'balanced',
+      stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
+      minLiquidityUsd: 10000, minScore: 30, maxTokenAgeHours: 99999,
+      strategyMode: 'aggressive',
     },
   },
-  // ─── Bags.fm — Locked Liquidity, Community-Driven Tokens ─────────────────
-  // All bags.fm tokens have locked liquidity (enforced by the platform).
-  // Liquidity is NOT a risk factor — we focus on community, momentum, longevity.
-  // Typical bags pattern: pump at launch → dump → second pump on community/builder activity.
+  // ─── BAGS.FM — 8 strategies (mixed params, all optimized) ─────────────
   {
     id: 'bags_fresh_snipe',
     name: 'BAGS FRESH SNIPE',
-    description: 'V2 seed: snipes fresh bags launches with moderated risk envelope.',
-    winRate: 'Bags: locked liq, community-driven',
-    trades: 0,
+    description: 'Fresh bags launches — R4: PF 1.27, +1.94%/trade, 48 trades',
+    winRate: '37.5%',
+    trades: 48,
     assetType: 'bags',
     config: {
-      stopLossPct: 18, takeProfitPct: 55, trailingStopPct: 5,
-      minLiquidityUsd: 0, // bags locks liquidity — no minimum needed
+      stopLossPct: 10, takeProfitPct: 30, trailingStopPct: 99,
+      minLiquidityUsd: 0,
       minScore: 35, maxTokenAgeHours: 48,
-      strategyMode: 'conservative',
+      strategyMode: 'balanced',
     },
   },
   {
     id: 'bags_momentum',
     name: 'BAGS MOMENTUM',
-    description: 'V2 seed: catches post-launch momentum on bags tokens with balanced exits.',
-    winRate: 'Bags: momentum-driven entries',
-    trades: 0,
+    description: 'Post-launch momentum — R4: PF 0.88, -0.60%/trade, 61 trades (borderline)',
+    winRate: '29.5%',
+    trades: 61,
     assetType: 'bags',
+    underperformer: true,
     config: {
-      stopLossPct: 20, takeProfitPct: 100, trailingStopPct: 8,
+      stopLossPct: 10, takeProfitPct: 30, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 30, maxTokenAgeHours: 168,
       minMomentum1h: 5,
@@ -458,12 +358,12 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_value',
     name: 'BAGS VALUE HUNTER',
-    description: 'V2 seed: high-quality bags tokens with stable, lower-volatility exit profile.',
-    winRate: 'Bags: quality-focused',
-    trades: 0,
+    description: 'Quality bags — R4: PF 1.50, +1.41%/trade, 71 trades',
+    winRate: '50.7%',
+    trades: 71,
     assetType: 'bags',
     config: {
-      stopLossPct: 12, takeProfitPct: 30, trailingStopPct: 4,
+      stopLossPct: 5, takeProfitPct: 10, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 55, maxTokenAgeHours: 720,
       strategyMode: 'conservative',
@@ -472,27 +372,26 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_dip_buyer',
     name: 'BAGS DIP BUYER',
-    description: 'V2 seed: buys post-launch dips targeting second-cycle recovery moves.',
-    winRate: 'Bags: mean-reversion play',
-    trades: 0,
+    description: 'Dip recovery — R4: PF 1.34, +1.83%/trade, 110 trades',
+    winRate: '36.4%',
+    trades: 110,
     assetType: 'bags',
     config: {
-      stopLossPct: 25, takeProfitPct: 120, trailingStopPct: 8,
+      stopLossPct: 8, takeProfitPct: 25, trailingStopPct: 99,
       minLiquidityUsd: 0,
-      minScore: 25, maxTokenAgeHours: 336, // 2 weeks
-      minMomentum1h: 0, // buys dips — no momentum needed
+      minScore: 25, maxTokenAgeHours: 336,
       strategyMode: 'aggressive',
     },
   },
   {
     id: 'bags_bluechip',
     name: 'BAGS BLUE CHIP',
-    description: 'V2 seed: established bags tokens with defensive exits and quality gating.',
-    winRate: 'Bags: established tokens',
-    trades: 0,
+    description: 'Established bags — R4: PF 1.52, +1.38%/trade, 66 trades',
+    winRate: '54.5%',
+    trades: 66,
     assetType: 'bags',
     config: {
-      stopLossPct: 12, takeProfitPct: 28, trailingStopPct: 4,
+      stopLossPct: 5, takeProfitPct: 9, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 60,
       maxTokenAgeHours: 99999,
@@ -502,12 +401,12 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_conservative',
     name: 'BAGS CONSERVATIVE',
-    description: 'V2 seed: conservative bags profile prioritizing survival and consistency.',
-    winRate: 'Seed (Not Promoted)',
-    trades: 0,
+    description: 'Conservative — R4: PF 1.51, +1.43%/trade, 78 trades',
+    winRate: '51.3%',
+    trades: 78,
     assetType: 'bags',
     config: {
-      stopLossPct: 14, takeProfitPct: 35, trailingStopPct: 5,
+      stopLossPct: 5, takeProfitPct: 10, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 40, maxTokenAgeHours: 336,
       strategyMode: 'conservative',
@@ -516,12 +415,12 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_aggressive',
     name: 'BAGS AGGRESSIVE',
-    description: 'V2 seed: aggressive bags profile with tempered but still high-conviction reward targets.',
-    winRate: 'Seed (Not Promoted)',
-    trades: 0,
+    description: 'High-conviction — R4: PF 1.14, +0.74%/trade, 105 trades',
+    winRate: '33.3%',
+    trades: 105,
     assetType: 'bags',
     config: {
-      stopLossPct: 30, takeProfitPct: 180, trailingStopPct: 12,
+      stopLossPct: 7, takeProfitPct: 25, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 10, maxTokenAgeHours: 336,
       strategyMode: 'aggressive',
@@ -530,14 +429,113 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_elite',
     name: 'BAGS ELITE',
-    description: 'V2 seed: strict high-score bags filter with controlled exits.',
-    winRate: 'Seed (Not Promoted)',
-    trades: 0,
+    description: 'Top-tier filter — R4: PF 1.45, +1.25%/trade, 40 trades',
+    winRate: '55.0%',
+    trades: 40,
     assetType: 'bags',
     config: {
-      stopLossPct: 14, takeProfitPct: 45, trailingStopPct: 6,
+      stopLossPct: 5, takeProfitPct: 9, trailingStopPct: 99,
       minLiquidityUsd: 0,
       minScore: 70, maxTokenAgeHours: 336,
+      strategyMode: 'balanced',
+    },
+  },
+  // ─── BLUE CHIP SOLANA — 2 strategies (SL 10%, TP 25% = 2.5:1 R:R) ────
+  {
+    id: 'bluechip_trend_follow',
+    name: 'BLUECHIP TREND FOLLOW',
+    description: 'Trend following — R4: PF 1.06, +0.47%/trade, 1075 trades',
+    winRate: '34.3%',
+    trades: 1075,
+    assetType: 'bluechip',
+    config: {
+      stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
+      minLiquidityUsd: 200000, minScore: 55, maxTokenAgeHours: 99999,
+      strategyMode: 'balanced',
+    },
+  },
+  {
+    id: 'bluechip_breakout',
+    name: 'BLUECHIP BREAKOUT',
+    description: 'Breakout catcher — R4: PF 1.06, +0.47%/trade, 1075 trades',
+    winRate: '34.3%',
+    trades: 1075,
+    assetType: 'bluechip',
+    config: {
+      stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
+      minLiquidityUsd: 200000, minScore: 65, maxTokenAgeHours: 99999,
+      strategyMode: 'balanced',
+    },
+  },
+  // ─── xSTOCK & PRESTOCK — SL 4%, TP 10% = 2.5:1 R:R (DISABLED — unprofitable) ───
+  {
+    id: 'xstock_intraday',
+    name: 'xSTOCK INTRADAY',
+    description: 'Stock intraday — R4: PF 0.75, -0.92%/trade, 3231 trades (LOSING)',
+    winRate: '32.2%',
+    trades: 3231,
+    assetType: 'xstock',
+    disabled: true,
+    config: {
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 50000, minScore: 40, maxTokenAgeHours: 99999,
+      strategyMode: 'balanced',
+    },
+  },
+  {
+    id: 'xstock_swing',
+    name: 'xSTOCK SWING',
+    description: 'Stock swing — R4: PF 0.74, -0.94%/trade, 3047 trades (LOSING)',
+    winRate: '32.0%',
+    trades: 3047,
+    assetType: 'xstock',
+    disabled: true,
+    config: {
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 30000, minScore: 30, maxTokenAgeHours: 99999,
+      strategyMode: 'balanced',
+    },
+  },
+  {
+    id: 'prestock_speculative',
+    name: 'PRESTOCK SPECULATIVE',
+    description: 'Pre-stock spec — R4: PF 0.74, -0.94%/trade, 3301 trades (LOSING)',
+    winRate: '32.0%',
+    trades: 3301,
+    assetType: 'prestock',
+    disabled: true,
+    config: {
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 20000, minScore: 20, maxTokenAgeHours: 99999,
+      strategyMode: 'aggressive',
+    },
+  },
+  // ─── INDEX — SL 4%, TP 10% = 2.5:1 R:R (DISABLED — unprofitable) ────────
+  {
+    id: 'index_intraday',
+    name: 'INDEX INTRADAY',
+    description: 'Index intraday — R4: PF 0.74, -0.94%/trade, 3047 trades (LOSING)',
+    winRate: '32.0%',
+    trades: 3047,
+    assetType: 'index',
+    disabled: true,
+    config: {
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 100000, minScore: 50, maxTokenAgeHours: 99999,
+      strategyMode: 'conservative',
+    },
+  },
+  {
+    id: 'index_leveraged',
+    name: 'INDEX LEVERAGED',
+    description: 'Index leveraged — R4: PF 0.75, -0.92%/trade, 3231 trades (LOSING)',
+    winRate: '32.2%',
+    trades: 3231,
+    assetType: 'index',
+    disabled: true,
+    config: {
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 50000, minScore: 40, maxTokenAgeHours: 99999,
       strategyMode: 'balanced',
     },
   },
@@ -572,7 +570,7 @@ export interface SniperConfig {
   autoWrScope: 'memecoin_bags' | 'all' | 'memecoin';
   useJito: boolean;
   slippageBps: number;
-  /** Strategy mode: conservative (PUMP_FRESH_TIGHT 20/80), balanced (SURGE_HUNTER 20/100), aggressive (MICRO_CAP_SURGE 45/250) */
+  /** Strategy mode: R4 mapping (realistic TPs, trail disabled). */
   strategyMode: StrategyMode;
   /** Max position age in hours before auto-close (0 = disabled). Frees capital from stale positions. */
   maxPositionAgeHours: number;
@@ -656,6 +654,8 @@ export interface Position {
   name: string;
   /** Position creation source (used for automation dedupe/reporting). */
   entrySource?: 'auto' | 'manual';
+  /** Strategy preset ID used at entry time (for auto learning attribution). */
+  strategyId?: string;
   /** Wallet that holds the tokens (lets risk monitoring continue even if Phantom disconnects). */
   walletAddress?: string;
   entryPrice: number;
@@ -743,150 +743,32 @@ export interface TokenRecommendation {
   reasoning: string;
 }
 
-/** Per-token SL/TP recommendation — backtested on 928 tokens (OHLCV-validated)
+/**
+ * Preset-aligned exits (R4).
  *
- * Key findings (v5 full backtest, 89 configs, 928 tokens):
- * - Conservative (20/60 + 8% trail): 94.1% WR, PF 1533.63  (OHLCV)
- * - Aggressive  (20/100 + 10% trail): 78.9% WR, PF 135.15, +587% TotalPnL
- * - Optimal trail: 8-10% (TRAIL_10 = 100% WR, TRAIL_8 = 94.1% WR)
- * - Vol/Liq ≥ 0.5 → 40.6% upside vs 4.9% for <0.5 (8x edge)
- * - Best hours: 4:00 (60%), 11:00 (57%), 21:00 (52%)
+ * This intentionally avoids per-token heuristics so the selected preset (or manual
+ * config) is the only source of truth. Otherwise, runtime "recommendations" can
+ * silently override backtested preset SL/TP at entry time.
+ *
+ * Trailing stops are disabled by default in R4 (`trail = 99`).
  */
 export function getRecommendedSlTp(
-  grad: BagsGraduation & Record<string, any>,
-  mode: StrategyMode = 'conservative',
+  _grad: BagsGraduation & Record<string, any>,
+  _mode: StrategyMode = 'conservative',
+  config?: Pick<SniperConfig, 'stopLossPct' | 'takeProfitPct'>,
 ): TokenRecommendation {
-  const liq = grad.liquidity || 0;
-  const priceChange1h = grad.price_change_1h || 0;
-  const buySellRatio = grad.buy_sell_ratio || 0;
-  const ageHours = grad.age_hours || 0;
-  const vol24h = grad.volume_24h || 0;
-  const volLiqRatio = liq > 0 ? vol24h / liq : 0;
-  const source = (grad.source || '').toLowerCase();
+  const cfg = config || DEFAULT_CONFIG;
+  const slRaw = Number(cfg.stopLossPct);
+  const tpRaw = Number(cfg.takeProfitPct);
+  const sl = Number.isFinite(slRaw) ? slRaw : DEFAULT_CONFIG.stopLossPct;
+  const tp = Number.isFinite(tpRaw) ? tpRaw : DEFAULT_CONFIG.takeProfitPct;
 
-  // ─── Traditional Assets / Blue Chips — separate SL/TP universe ───
-  // xStocks/indexes/prestocks/bluechips have fundamentally different volatility
-  // than memecoins. A 100% TP on SPY is absurd; a 3% TP is normal.
-
-  if (source === 'xstock') {
-    // US stocks: typical daily range 1-4%, weekly 3-8%
-    const absM = Math.abs(priceChange1h);
-    if (absM >= 3) return { sl: 2, tp: 5, trail: 1.5, reasoning: `XSTOCK: strong momentum (${priceChange1h.toFixed(1)}% 1h) — wider targets` };
-    return { sl: 1.5, tp: 3, trail: 1, reasoning: 'XSTOCK: standard intraday — tight SL/TP for stock-level volatility' };
-  }
-  if (source === 'index') {
-    // Indexes: SPY daily range 0.5-2%, TQQQ 1.5-6% (3x leveraged)
-    if (grad.symbol === 'TQQQx') return { sl: 3, tp: 8, trail: 2, reasoning: 'INDEX TQQQ: 3x leveraged — wider SL/TP' };
-    return { sl: 0.8, tp: 1.5, trail: 0.5, reasoning: 'INDEX: tight scalping — indexes move slowly' };
-  }
-  if (source === 'prestock') {
-    // Pre-IPO: higher vol than stocks, lower than memes
-    return { sl: 5, tp: 15, trail: 3, reasoning: 'PRESTOCK: pre-IPO volatility — moderate SL/TP' };
-  }
-  if (source === 'bluechip') {
-    // Established Solana tokens: daily vol 4-12% depending on tier
-    const absM = Math.abs(priceChange1h);
-    if (absM >= 10) return { sl: 5, tp: 15, trail: 4, reasoning: `BLUECHIP: high momentum (${priceChange1h.toFixed(1)}% 1h) — trend follow` };
-    if (absM >= 5) return { sl: 4, tp: 12, trail: 3, reasoning: `BLUECHIP: moderate momentum — breakout setup` };
-    if (volLiqRatio >= 1.5) return { sl: 4, tp: 12, trail: 3, reasoning: `BLUECHIP: volume surge (V/L ${volLiqRatio.toFixed(1)}x) — breakout` };
-    return { sl: 3, tp: 8, trail: 2, reasoning: 'BLUECHIP: mean reversion — tight SL/TP for established tokens' };
-  }
-
-  // ─── Memecoin Strategy Selection (v4 backtest champion logic) ───
-  // Priority 1: Fresh pumpswap tokens → PUMP_FRESH_TIGHT (88.2% WR champion)
-  if (ageHours < 24 && source === 'pumpswap') {
-    return {
-      sl: 20, tp: 80, trail: 8,
-      reasoning: 'PUMP_FRESH_TIGHT: fresh pumpswap token (<24h) — 88.2% WR v4 champion',
-    };
-  }
-
-  // Priority 2: Volume surge (3x+ Vol/Liq) → SURGE_HUNTER
-  if (volLiqRatio >= 3.0) {
-    return {
-      sl: 20, tp: 100, trail: 10,
-      reasoning: `SURGE_HUNTER: volume surge detected (V/L ${volLiqRatio.toFixed(1)}x)`,
-    };
-  }
-
-  // Priority 3: Micro-cap (liquidity < $15K) → MICRO_CAP_SURGE (76.2% WR)
-  if (liq < 15000) {
-    return {
-      sl: 45, tp: 250, trail: 20,
-      reasoning: `MICRO_CAP_SURGE: micro-cap ($${Math.round(liq).toLocaleString('en-US')} liq) — 76.2% WR, high TP`,
-    };
-  }
-
-  // ─── Fallback: Adaptive FRESH_DEGEN base ───
-  let sl = 20;
-  let tp = mode === 'aggressive' ? 100 : 80;
-  let reasoning = 'FRESH_DEGEN fallback';
-
-  // Liquidity tier adjustments (high liq = less slippage, can tighten SL)
-  if (liq > 200000) {
-    sl = 15;
-    reasoning += ', high liq ($200K+) — tighter SL';
-  } else if (liq > 100000) {
-    sl = 18;
-    reasoning += ', strong liq ($100K+)';
-  }
-  // Low liquidity = wider SL to absorb spread
-  else if (liq < 25000) {
-    sl = 25; tp = mode === 'aggressive' ? 80 : 50;
-    reasoning += ', low liq — wider SL';
-  }
-
-  // Strong momentum = extend TP (let winners run even more)
-  if (priceChange1h > 20) {
-    tp += 20;
-    reasoning += ', strong momentum (+20%+1h)';
-  } else if (priceChange1h > 10) {
-    tp += 10;
-    reasoning += ', good momentum';
-  }
-
-  // Young + active = higher potential
-  if (ageHours < 100 && buySellRatio >= 1.2 && buySellRatio <= 2.5) {
-    tp += 10;
-    reasoning += ', young+active';
-  }
-
-  // Sweet spot B/S ratio = highest confidence
-  if (buySellRatio >= 1.2 && buySellRatio <= 2.0) {
-    sl -= 2;
-    reasoning += ', optimal B/S range';
-  }
-
-  // Time-of-day adjustments (928-token OHLCV backtest: good hours > 50% WR)
-  const nowUtcHour = new Date().getUTCHours();
-  const GOOD_HOURS = [14, 20]; // OHLCV-validated: 20:00 (43.5% WR), 14:00 (25% WR)
-  if (GOOD_HOURS.includes(nowUtcHour)) {
-    // During high-WR hours: tighten SL (less drawdown), widen TP (let winners run)
-    sl -= 3;
-    tp += 15;
-    reasoning += `, TOD boost (${nowUtcHour}h)`;
-  }
-
-  // ─── Adaptive Trailing Stop ───
-  // High momentum → tighter trail (fast movers reverse quickly)
-  // Low momentum → wider trail (give room to develop)
-  let trail: number;
-  if (priceChange1h > 50) {
-    trail = 5;
-    reasoning += ', tight trail (high momentum)';
-  } else if (priceChange1h <= 20) {
-    trail = 12;
-    reasoning += ', wide trail (low momentum)';
-  } else {
-    trail = 8;
-    reasoning += ', default trail';
-  }
-
-  // Clamp values — aggressive allows higher TP cap
-  sl = Math.max(10, Math.min(30, Math.round(sl)));
-  tp = Math.max(30, Math.min(mode === 'aggressive' ? 200 : 120, Math.round(tp)));
-
-  return { sl, tp, trail, reasoning };
+  return {
+    sl,
+    tp,
+    trail: 99,
+    reasoning: `Preset exits: SL ${sl}% / TP ${tp}% (trail disabled)`,
+  };
 }
 
 /** Conviction-weighted position sizing — scale bets by signal quality.
@@ -947,9 +829,12 @@ export function getConvictionMultiplier(
 }
 
 const DEFAULT_CONFIG: SniperConfig = {
-  stopLossPct: 20,      // PUMP_FRESH_TIGHT champion: 88.2% WR, Sharpe 1.22
-  takeProfitPct: 80,    // v4 backtest champion: 20/80/8 on fresh pumpswap tokens
-  trailingStopPct: 8,   // Tight trail locks profits — 88.2% WR with 8% trail
+  // R4 defaults: realistic TP/SL and trailing stops disabled.
+  // Keep these aligned with the default homepage preset (pump_fresh_tight)
+  // so new users don't accidentally run legacy exits.
+  stopLossPct: 10,
+  takeProfitPct: 20,
+  trailingStopPct: 99,  // 99 = disabled (effectively never triggers)
   maxPositionSol: 0.1,
   maxConcurrentPositions: 10,
   minScore: 0,          // Backtested: best configs use liq+momentum, not score
@@ -981,14 +866,17 @@ const DEFAULT_CONFIG: SniperConfig = {
   minBalanceGuardSol: 0.05,   // Stop if budget remaining < 0.05 SOL
   // Per-asset circuit breaker overrides (Phase 2.3)
   perAssetBreakerConfig: {
-    memecoin:  { maxConsecutiveLosses: 9, maxDailyLossSol: 0.3, cooldownMinutes: 15 },
-    bags:      { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
-    bluechip:  { maxConsecutiveLosses: 15, maxDailyLossSol: 1.0, cooldownMinutes: 30 },
-    xstock:    { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
-    index:     { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
-    prestock:  { maxConsecutiveLosses: 9, maxDailyLossSol: 0.3, cooldownMinutes: 15 },
+    memecoin:     { maxConsecutiveLosses: 9, maxDailyLossSol: 0.3, cooldownMinutes: 15 },
+    bags:         { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
+    bluechip:     { maxConsecutiveLosses: 15, maxDailyLossSol: 1.0, cooldownMinutes: 30 },
+    xstock:       { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
+    index:        { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
+    prestock:     { maxConsecutiveLosses: 9, maxDailyLossSol: 0.3, cooldownMinutes: 15 },
+    established:  { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
   },
 };
+
+const STRATEGY_BELIEF_DECAY_GAMMA = 0.90;
 
 /** Monotonic counter to prevent duplicate keys when multiple snipes fire in same ms */
 let execCounter = 0;
@@ -1146,6 +1034,20 @@ interface SniperState {
     promotionEligible?: boolean;
   }>) => void;
 
+  // Discounted Thompson learning state (browser-persisted, no backend dependency).
+  strategyBeliefs: Record<string, StrategyBelief>;
+  recordStrategyOutcome: (args: {
+    strategyId?: string;
+    outcome: 'win' | 'loss';
+    txHash?: string;
+    entrySource?: Position['entrySource'];
+    decayGamma?: number;
+  }) => void;
+  resetStrategyBeliefs: () => void;
+  /** Server-provided runtime strategy overrides for auto mode (signed snapshot). */
+  strategyOverrideSnapshot: StrategyOverrideSnapshot | null;
+  setStrategyOverrideSnapshot: (snapshot: StrategyOverrideSnapshot | null) => void;
+
   // Reset — clears positions, executions, stats, sniped mints
   resetSession: () => void;
 }
@@ -1177,6 +1079,7 @@ function makeDefaultCircuitBreaker(): CircuitBreakerState {
       xstock: makeDefaultAssetBreaker(),
       index: makeDefaultAssetBreaker(),
       prestock: makeDefaultAssetBreaker(),
+      established: makeDefaultAssetBreaker(),
     },
   };
 }
@@ -1224,14 +1127,14 @@ export const useSniperStore = create<SniperState>()(
     });
   },
   setStrategyMode: (mode) => set((s) => {
-    // v4 backtest-mapped presets:
-    //   aggressive   → MICRO_CAP_SURGE (76.2% WR, 45/250/20)
-    //   balanced     → SURGE_HUNTER (20/100/10)
-    //   conservative → PUMP_FRESH_TIGHT (88.2% WR, 20/80/8) — safest high-WR
+    // R4 backtest-mapped presets (realistic TPs, trail disabled):
+    //   aggressive   → SL 10 / TP 25 (memecoin wide R:R)
+    //   balanced     → SL 8 / TP 15 (established token R:R)
+    //   conservative → SL 5 / TP 10 (bags tight R:R)
     const presets: Record<StrategyMode, { sl: number; tp: number; trail: number }> = {
-      aggressive:   { sl: 45, tp: 250, trail: 20 },
-      balanced:     { sl: 20, tp: 100, trail: 10 },
-      conservative: { sl: 20, tp: 80,  trail: 8  },
+      aggressive:   { sl: 10, tp: 25, trail: 99 },
+      balanced:     { sl: 8,  tp: 15, trail: 99 },
+      conservative: { sl: 5,  tp: 10, trail: 99 },
     };
     const p = presets[mode];
     return {
@@ -1341,6 +1244,7 @@ export const useSniperStore = create<SniperState>()(
     const state = get();
     const pos = state.positions.find((p) => p.id === id);
     if (!pos) return;
+    const closedAt = Date.now();
 
     execCounter++;
 
@@ -1376,6 +1280,18 @@ export const useSniperStore = create<SniperState>()(
     const countAsWin = hasReliableCostBasis && (exitType === 'tp_exit' || (exitType === 'manual_exit' && isWin));
     const countAsLoss = hasReliableCostBasis && (exitType === 'sl_exit' || (exitType === 'manual_exit' && !isWin));
     const countAsTrade = hasReliableCostBasis;
+    const strategyOutcome = (
+      pos.entrySource === 'auto' &&
+      !!pos.strategyId &&
+      !!txHash &&
+      (countAsWin || countAsLoss)
+    )
+      ? {
+          strategyId: pos.strategyId,
+          outcome: countAsWin ? 'win' as const : 'loss' as const,
+          decayGamma: Math.abs(Number(pos.highWaterMarkPct || 0)) >= 80 ? 0.85 : STRATEGY_BELIEF_DECAY_GAMMA,
+        }
+      : null;
 
     const pnlLabel = !hasReliableCostBasis
       ? 'cost basis unavailable (excluded from stats)'
@@ -1384,21 +1300,21 @@ export const useSniperStore = create<SniperState>()(
       : `${realPnlPct.toFixed(1)}% (est)`;
 
     const execEvent: ExecutionEvent = {
-      id: `exec-${Date.now()}-${execCounter}`,
+      id: `exec-${closedAt}-${execCounter}`,
       type: exitType,
       symbol: pos.symbol,
       mint: pos.mint,
       amount: pos.solInvested,
       pnlPercent: hasReliableCostBasis ? realPnlPct : undefined,
       txHash,
-      timestamp: Date.now(),
+      timestamp: closedAt,
       reason: `${status === 'trail_stop' ? 'TRAIL STOP' : status === 'expired' ? 'EXPIRED' : status.replace('_', ' ').toUpperCase()} — ${pnlLabel}`,
     };
 
     set((s) => {
       // ─── Circuit Breaker Update (global + per-asset) ───
       const cb = { ...s.circuitBreaker, perAsset: { ...s.circuitBreaker.perAsset } };
-      const now = Date.now();
+      const now = closedAt;
       const posAssetType: AssetType = pos.assetType || s.assetFilter;
 
       // Reset 24h window if expired (global)
@@ -1534,6 +1450,44 @@ export const useSniperStore = create<SniperState>()(
         // Breaker pauses execution but does not change user intent (auto toggle stays as-is).
         config: s.config,
       };
+    });
+
+    if (strategyOutcome) {
+      get().recordStrategyOutcome({
+        strategyId: strategyOutcome.strategyId,
+        outcome: strategyOutcome.outcome,
+        decayGamma: strategyOutcome.decayGamma,
+        txHash,
+        entrySource: pos.entrySource,
+      });
+    }
+
+    // Persist a minimal trade ledger record server-side so autonomy/backtests can
+    // learn from real executions across sessions/devices. Without this, swaps
+    // exist only in the executing browser's localStorage.
+    postTradeTelemetry({
+      schemaVersion: 1,
+      positionId: pos.id,
+      mint: pos.mint,
+      status,
+      symbol: pos.symbol,
+      walletAddress: pos.walletAddress,
+      strategyId: pos.strategyId ?? null,
+      entrySource: pos.entrySource,
+      entryTime: pos.entryTime,
+      exitTime: closedAt,
+      solInvested: pos.solInvested,
+      exitSolReceived: exitSolReceived ?? null,
+      pnlSol: hasReliableCostBasis ? realPnlSol : 0,
+      pnlPercent: hasReliableCostBasis ? realPnlPct : 0,
+      buyTxHash: pos.txHash ?? null,
+      sellTxHash: txHash ?? null,
+      includedInStats: hasReliableCostBasis,
+      manualOnly: !!pos.manualOnly,
+      recoveredFrom: pos.recoveredFrom ?? null,
+      tradeSignerMode: state.tradeSignerMode,
+      sessionWalletPubkey: state.sessionWalletPubkey,
+      activePreset: state.activePreset,
     });
   },
   reconcilePosition: (id, reason, opts) => {
@@ -1856,8 +1810,8 @@ export const useSniperStore = create<SniperState>()(
     const positionSolFinal = Math.min(config.maxPositionSol * effectiveConviction, remaining);
     if (positionSolFinal < 0.001) return;
 
-    // Get per-token recommended SL/TP (respects strategy mode)
-    const rec = getRecommendedSlTp(grad, config.strategyMode);
+    // Snapshot exits at entry (preset-aligned; prevents runtime drift).
+    const rec = getRecommendedSlTp(grad, config.strategyMode, config);
 
     const posId = `pos-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const newPosition: Position = {
@@ -1865,6 +1819,8 @@ export const useSniperStore = create<SniperState>()(
       mint: grad.mint,
       symbol: grad.symbol,
       name: grad.name,
+      entrySource: 'manual',
+      strategyId: state.activePreset,
       entryPrice: grad.price_usd || 0,
       currentPrice: grad.price_usd || 0,
       // Estimate token amount: (SOL * SOL_USD) / token_USD. Falls back to SOL/token_USD if no SOL price.
@@ -1877,6 +1833,7 @@ export const useSniperStore = create<SniperState>()(
       score: grad.score,
       recommendedSl: rec.sl,
       recommendedTp: rec.tp,
+      recommendedTrail: rec.trail,
       highWaterMarkPct: 0,
       assetType: state.assetFilter,
     };
@@ -2086,6 +2043,32 @@ export const useSniperStore = create<SniperState>()(
     }
     return { backtestMeta: updated };
   }),
+  strategyBeliefs: {},
+  recordStrategyOutcome: (args) => set((s) => {
+    const strategyId = String(args.strategyId || '').trim();
+    const txHash = String(args.txHash || '').trim();
+    const gamma = Number.isFinite(args.decayGamma)
+      ? Math.max(0.5, Math.min(0.999, Number(args.decayGamma)))
+      : STRATEGY_BELIEF_DECAY_GAMMA;
+    if (!strategyId) return s;
+    // Fail-closed learning: only auto entries with confirmed signature evidence can update beliefs.
+    if (args.entrySource && args.entrySource !== 'auto') return s;
+    if (!txHash) return s;
+    return {
+      strategyBeliefs: applyDiscountedOutcome(
+        s.strategyBeliefs,
+        {
+          strategyId,
+          outcome: args.outcome,
+          gamma,
+          txHash,
+        },
+      ),
+    };
+  }),
+  resetStrategyBeliefs: () => set({ strategyBeliefs: {} }),
+  strategyOverrideSnapshot: null,
+  setStrategyOverrideSnapshot: (snapshot) => set({ strategyOverrideSnapshot: snapshot }),
 
   resetSession: () => set((s) => ({
     positions: [],
@@ -2150,6 +2133,8 @@ export const useSniperStore = create<SniperState>()(
         lossCount: state.lossCount,
         totalTrades: state.totalTrades,
         backtestMeta: state.backtestMeta,
+        strategyBeliefs: state.strategyBeliefs,
+        strategyOverrideSnapshot: state.strategyOverrideSnapshot,
       }),
       // Rehydrate: restore durable fields + reset transient runtime state.
       onRehydrateStorage: () => (state) => {
@@ -2298,6 +2283,36 @@ export const useSniperStore = create<SniperState>()(
         // Migrate backtestMeta (added in Plan 02.1-03)
         if (!state.backtestMeta || typeof state.backtestMeta !== 'object') {
           state.backtestMeta = {};
+        }
+
+        // Migrate strategyBeliefs (Discounted Thompson state).
+        if (!(state as any).strategyBeliefs || typeof (state as any).strategyBeliefs !== 'object') {
+          (state as any).strategyBeliefs = {};
+        } else {
+          const nextBeliefs: Record<string, StrategyBelief> = {};
+          for (const [rawId, rawBelief] of Object.entries((state as any).strategyBeliefs as Record<string, any>)) {
+            const strategyId = String(rawId || '').trim();
+            if (!strategyId) continue;
+            const b = rawBelief || {};
+            nextBeliefs[strategyId] = {
+              strategyId,
+              alpha: Math.max(0.1, Number(b.alpha || 1)),
+              beta: Math.max(0.1, Number(b.beta || 1)),
+              wins: Math.max(0, Math.floor(Number(b.wins || 0))),
+              losses: Math.max(0, Math.floor(Number(b.losses || 0))),
+              totalOutcomes: Math.max(0, Math.floor(Number(b.totalOutcomes || 0))),
+              lastOutcome: b.lastOutcome === 'win' || b.lastOutcome === 'loss' ? b.lastOutcome : undefined,
+              lastOutcomeAt: Number(b.lastOutcomeAt || 0) || undefined,
+              lastTxHash: b.lastTxHash ? String(b.lastTxHash) : undefined,
+              updatedAt: Number(b.updatedAt || Date.now()),
+            };
+          }
+          (state as any).strategyBeliefs = nextBeliefs;
+        }
+
+        // Migrate strategy override snapshot.
+        if (!(state as any).strategyOverrideSnapshot || typeof (state as any).strategyOverrideSnapshot !== 'object') {
+          (state as any).strategyOverrideSnapshot = null;
         }
 
         // If session signing was selected but the key isn't available, fall back safely

@@ -3,8 +3,48 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: 'standalone',
   reactStrictMode: true,
+  experimental: {
+    // Next 16 enables isolated dev builds by default. On Windows (especially under OneDrive),
+    // this can generate types/build artifacts in temp folders where module resolution breaks.
+    isolatedDevBuild: false,
+  },
   turbopack: {
     root: __dirname,
+  },
+  webpack: (config, { dev }) => {
+    // Keep dev server stable while running Playwright smoke tests (screenshots/logs land in .jarvis-cache).
+    if (dev) {
+      const watchOptions = config.watchOptions || {};
+      const base = watchOptions.ignored;
+      const nextIgnored: string[] = ['**/.next/**', '**/node_modules/**'];
+
+      const pushString = (v: unknown) => {
+        if (typeof v !== 'string') return;
+        const s = v.trim();
+        if (!s) return;
+        nextIgnored.push(s);
+      };
+
+      if (Array.isArray(base)) {
+        for (const it of base) pushString(it);
+      } else {
+        pushString(base);
+      }
+
+      nextIgnored.push('**/.jarvis-cache/**', '**/.planning/**', '**/.firebase/**', '**/debug/**');
+
+      // De-dupe while preserving order.
+      const deduped: string[] = [];
+      const seen = new Set<string>();
+      for (const it of nextIgnored) {
+        if (seen.has(it)) continue;
+        seen.add(it);
+        deduped.push(it);
+      }
+
+      config.watchOptions = { ...watchOptions, ignored: deduped };
+    }
+    return config;
   },
   async headers() {
     return [

@@ -9,40 +9,35 @@ export const STRATEGY_CATEGORIES: StrategyCategory[] = [
   {
     label: 'TOP PERFORMERS',
     icon: 'Trophy',
-    presetIds: ['pump_fresh_tight', 'insight_j', 'genetic_best', 'genetic_v2'],
+    // Profitable presets only (default recommendations).
+    presetIds: ['pump_fresh_tight', 'utility_swing', 'meme_classic'],
   },
   {
-    label: 'BALANCED',
-    icon: 'Shield',
-    presetIds: ['hybrid_b', 'momentum', 'let_it_ride'],
-  },
-  {
-    label: 'AGGRESSIVE',
+    label: 'MEMECOIN',
     icon: 'Zap',
-    presetIds: ['micro_cap_surge', 'elite', 'loose'],
+    presetIds: ['elite', 'micro_cap_surge', 'momentum', 'hybrid_b', 'let_it_ride'],
   },
   {
-    label: 'DEGEN',
+    label: 'ESTABLISHED TOKENS',
+    icon: 'Landmark',
+    presetIds: ['sol_veteran', 'volume_spike', 'established_breakout'],
+  },
+  {
+    label: 'BAGS.FM',
     icon: 'Package',
     presetIds: [
-      'bags_fresh_snipe',
-      'bags_momentum',
-      'bags_value',
-      'bags_dip_buyer',
-      'bags_bluechip',
-      'bags_conservative',
-      'bags_aggressive',
-      'bags_elite',
+      'bags_elite', 'bags_bluechip', 'bags_conservative', 'bags_value',
+      'bags_dip_buyer', 'bags_fresh_snipe', 'bags_momentum', 'bags_aggressive',
     ],
   },
   {
     label: 'BLUE CHIP SOLANA',
-    icon: 'Gem',
-    presetIds: ['bluechip_mean_revert', 'bluechip_trend_follow', 'bluechip_breakout'],
+    icon: 'Shield',
+    presetIds: ['bluechip_trend_follow', 'bluechip_breakout'],
   },
   {
-    label: 'XSTOCK & INDEX',
-    icon: 'BarChart3',
+    label: 'xSTOCK & INDEX',
+    icon: 'TrendingUp',
     presetIds: ['xstock_intraday', 'xstock_swing', 'prestock_speculative', 'index_intraday', 'index_leveraged'],
   },
 ];
