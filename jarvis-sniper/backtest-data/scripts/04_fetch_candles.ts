@@ -4,7 +4,7 @@
  * For every qualifying token across all algos (deduplicated),
  * fetches 5m, 15m, and 1h candle data from GeckoTerminal.
  * 
- * Input:  qualified/qualified_{algo_id}.json (all 25)
+ * Input:  qualified/qualified_{algo_id}.json (all active algos)
  * Output: candles/{mint}_{timeframe}.json + candles/candles_index.json
  * 
  * Resumable: tracks completed mints in candle_fetch_progress.json.
@@ -121,15 +121,11 @@ async function fetchDeepCandles(
 // ─── Collect All Unique Mints + Pool Addresses ───
 
 function collectAllQualifiedTokens(): Map<string, { mint: string; pool_address: string; symbol: string }> {
-  const algoIds = [
-    'pump_fresh_tight', 'micro_cap_surge', 'elite', 'momentum', 'insight_j',
-    'hybrid_b', 'let_it_ride', 'loose', 'genetic_best', 'genetic_v2',
-    'bags_fresh_snipe', 'bags_momentum', 'bags_value', 'bags_dip_buyer',
-    'bags_bluechip', 'bags_conservative', 'bags_aggressive', 'bags_elite',
-    'bluechip_mean_revert', 'bluechip_trend_follow', 'bluechip_breakout',
-    'xstock_intraday', 'xstock_swing', 'prestock_speculative',
-    'index_intraday', 'index_leveraged',
-  ];
+  const filterSummary = readJSON<Array<{ algo_id: string }>>('qualified/filter_summary.json');
+  const algoIds = filterSummary?.map(s => s.algo_id) || [];
+  if (algoIds.length === 0) {
+    log('Warning: qualified/filter_summary.json missing or empty; no algo files will be scanned.');
+  }
 
   const mintMap = new Map<string, { mint: string; pool_address: string; symbol: string }>();
 
@@ -161,11 +157,20 @@ async function main(): Promise<void> {
   // Collect all unique mints
   const mintMap = collectAllQualifiedTokens();
   const allMints = Array.from(mintMap.values());
+  const MAX_CANDLE_MINTS = (() => {
+    const raw = process.env.MAX_CANDLE_MINTS;
+    const n = raw ? parseInt(raw, 10) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  })();
+  const targetMints = MAX_CANDLE_MINTS > 0 ? allMints.slice(0, MAX_CANDLE_MINTS) : allMints;
   log(`Total unique mints with pool addresses: ${allMints.length}`);
+  if (MAX_CANDLE_MINTS > 0) {
+    log(`MAX_CANDLE_MINTS active: processing ${targetMints.length}/${allMints.length}`);
+  }
 
   // Load progress
   const progress = new ProgressTracker<CandleFetchProgress>('candle_fetch_progress.json', {
-    total_mints: allMints.length,
+    total_mints: targetMints.length,
     completed_mints: [],
     failed_mints: [],
     last_updated: new Date().toISOString(),
@@ -178,7 +183,7 @@ async function main(): Promise<void> {
   // Load or initialize candle index
   const candleIndex: CandleIndex = readJSON<CandleIndex>('candles/candles_index.json') || {};
 
-  const remaining = allMints.filter(m => !completedSet.has(m.mint) && !failedSet.has(m.mint));
+  const remaining = targetMints.filter(m => !completedSet.has(m.mint) && !failedSet.has(m.mint));
   log(`Already completed: ${completedSet.size}`);
   log(`Previously failed: ${failedSet.size}`);
   log(`Remaining to fetch: ${remaining.length}`);
@@ -240,8 +245,8 @@ async function main(): Promise<void> {
     // Progress logging
     if ((completed + failed) % 10 === 0) {
       const totalDone = completedSet.size + failedSet.size;
-      const pct = ((totalDone / allMints.length) * 100).toFixed(1);
-      log(`Progress: ${totalDone}/${allMints.length} (${pct}%) | ✓${completedSet.size} ✗${failedSet.size}`);
+      const pct = targetMints.length > 0 ? ((totalDone / targetMints.length) * 100).toFixed(1) : '0.0';
+      log(`Progress: ${totalDone}/${targetMints.length} (${pct}%) | ✓${completedSet.size} ✗${failedSet.size}`);
     }
 
     // Save progress periodically
@@ -257,7 +262,7 @@ async function main(): Promise<void> {
 
   // Final save
   progress.update({
-    total_mints: allMints.length,
+    total_mints: targetMints.length,
     completed_mints: Array.from(completedSet),
     failed_mints: p.failed_mints,
   });
@@ -266,7 +271,8 @@ async function main(): Promise<void> {
   // Stats
   log('');
   log('═══════════════════════════════════════════════════════');
-  log(`Total mints: ${allMints.length}`);
+  log(`Total mints (target set): ${targetMints.length}`);
+  log(`Universe mints available: ${allMints.length}`);
   log(`Completed: ${completedSet.size}`);
   log(`Failed: ${failedSet.size}`);
 

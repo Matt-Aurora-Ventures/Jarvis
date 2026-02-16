@@ -1,11 +1,11 @@
 /**
- * Phase 3: Filter Tokens Through All 25 Algos
+ * Phase 3: Filter Tokens Through All 26 Algos
  * 
  * For each algo, filter the scored universe by exact acceptance criteria.
- * Produce exactly 5,000 qualifying tokens per algo (most recent first).
+ * Produce exactly TARGET_PER_ALGO qualifying tokens per algo (most recent first).
  * 
  * Input:  universe/universe_scored.json
- * Output: qualified/qualified_{algo_id}.json + .csv (25 pairs)
+ * Output: qualified/qualified_{algo_id}.json + .csv (26 pairs)
  * 
  * Run: npx tsx backtest-data/scripts/03_filter_by_algo.ts
  */
@@ -13,7 +13,11 @@
 import { log, logError, readJSON, writeJSON, writeCSV, ensureDir } from './shared/utils';
 import type { ScoredToken, AlgoFilter } from './shared/types';
 
-const TARGET_PER_ALGO = 5000;
+const TARGET_PER_ALGO = (() => {
+  const raw = process.env.TARGET_PER_ALGO;
+  const n = raw ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 5000;
+})();
 
 // ─── Algo Filter Definitions (source of truth from prompt) ───
 
@@ -27,8 +31,8 @@ const ALGO_FILTERS: AlgoFilter[] = [
   { algo_id: 'pump_fresh_tight',   category: 'memecoin', min_score: 35, min_liquidity_usd: 5000,   max_age_hours: 48 },
   { algo_id: 'micro_cap_surge',    category: 'memecoin', min_score: 25, min_liquidity_usd: 3000,   max_age_hours: 48 },
   { algo_id: 'elite',              category: 'memecoin', min_liquidity_usd: 50000, max_age_hours: 168 },
-  { algo_id: 'momentum',           category: 'memecoin', min_score: 0,  min_liquidity_usd: 25000 },
-  { algo_id: 'hybrid_b',           category: 'memecoin', min_liquidity_usd: 25000 },
+  { algo_id: 'momentum',           category: 'memecoin', min_score: 40, min_liquidity_usd: 25000, min_source_count: 2 },
+  { algo_id: 'hybrid_b',           category: 'memecoin', min_score: 40, min_liquidity_usd: 25000, min_source_count: 2 },
   { algo_id: 'let_it_ride',        category: 'memecoin', min_liquidity_usd: 25000 },
 
   // ESTABLISHED TOKEN STRATEGIES (5) — proven tokens with volume + liquidity
@@ -36,7 +40,7 @@ const ALGO_FILTERS: AlgoFilter[] = [
   { algo_id: 'utility_swing',          category: 'established', min_score: 55, min_liquidity_usd: 10000,  min_age_hours: 4380 },
   { algo_id: 'established_breakout',   category: 'established', min_score: 30, min_liquidity_usd: 10000,  min_age_hours: 720 },
   { algo_id: 'meme_classic',           category: 'established', min_score: 40, min_liquidity_usd: 5000,   min_age_hours: 8760 },
-  { algo_id: 'volume_spike',           category: 'established', min_score: 35, min_liquidity_usd: 20000,  min_age_hours: 720, min_vol_liq_ratio: 0.3 },
+  { algo_id: 'volume_spike',           category: 'established', min_score: 55, min_liquidity_usd: 100000, min_age_hours: 720, min_vol_liq_ratio: 0.8, min_source_count: 2 },
 
   // BAGS.FM STRATEGIES (8) — liquidity always 0 for bags (locked by design)
   { algo_id: 'bags_fresh_snipe',   category: 'bags', min_score: 30, max_age_hours: 72 },
@@ -53,8 +57,8 @@ const ALGO_FILTERS: AlgoFilter[] = [
   { algo_id: 'bluechip_breakout',     category: 'bluechip', min_score: 50, min_liquidity_usd: 50000 },
 
   // xSTOCK STRATEGIES (3)
-  { algo_id: 'xstock_intraday',      category: 'xstock', min_score: 30 },
-  { algo_id: 'xstock_swing',         category: 'xstock', min_score: 40 },
+  { algo_id: 'xstock_intraday',      category: 'xstock', min_score: 35, min_liquidity_usd: 10000, min_source_count: 2 },
+  { algo_id: 'xstock_swing',         category: 'xstock', min_score: 55, min_liquidity_usd: 50000, min_age_hours: 168, min_source_count: 2 },
   { algo_id: 'prestock_speculative', category: 'xstock', min_score: 25 },
 
   // INDEX STRATEGIES (2)
@@ -93,6 +97,11 @@ function tokenPassesFilter(token: ScoredToken, filter: AlgoFilter): boolean {
     if (ratio < filter.min_vol_liq_ratio) return false;
   }
 
+  // Source confirmation check (quality of lead provenance)
+  if (filter.min_source_count !== undefined) {
+    if ((token.source_count || 1) < filter.min_source_count) return false;
+  }
+
   return true;
 }
 
@@ -105,7 +114,7 @@ function isBagsToken(token: ScoredToken): boolean {
 
 async function main(): Promise<void> {
   log('═══════════════════════════════════════════════════════');
-  log('Phase 3: Filter Tokens Through All 25 Algos');
+  log(`Phase 3: Filter Tokens Through All ${ALGO_FILTERS.length} Algos (TARGET_PER_ALGO=${TARGET_PER_ALGO})`);
   log('═══════════════════════════════════════════════════════');
 
   const scored = readJSON<ScoredToken[]>('universe/universe_scored.json');
@@ -183,8 +192,8 @@ async function main(): Promise<void> {
   const full = summary.filter(s => s.qualified >= TARGET_PER_ALGO).length;
   const partial = summary.filter(s => s.qualified > 0 && s.qualified < TARGET_PER_ALGO).length;
   const empty = summary.filter(s => s.qualified === 0).length;
-  log(`Full (5000 tokens): ${full}/${ALGO_FILTERS.length} algos`);
-  log(`Partial (<5000):    ${partial}/${ALGO_FILTERS.length} algos`);
+  log(`Full (${TARGET_PER_ALGO} tokens): ${full}/${ALGO_FILTERS.length} algos`);
+  log(`Partial (<${TARGET_PER_ALGO}):    ${partial}/${ALGO_FILTERS.length} algos`);
   log(`Empty (0 tokens):   ${empty}/${ALGO_FILTERS.length} algos`);
 
   // Count unique mints across all algos (for candle fetch dedup)

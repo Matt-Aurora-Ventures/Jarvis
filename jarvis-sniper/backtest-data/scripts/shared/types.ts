@@ -16,11 +16,19 @@ export interface TokenRecord {
   has_twitter: boolean;
   has_website: boolean;
   has_telegram: boolean;
-  source: 'geckoterminal' | 'dexscreener' | 'jupiter_gems';
+  source: 'geckoterminal' | 'dexscreener' | 'jupiter_gems' | 'birdeye';
+  source_count?: number;
+  seen_on_geckoterminal?: boolean;
+  seen_on_dexscreener?: boolean;
+  seen_on_jupiter_gems?: boolean;
+  seen_on_birdeye?: boolean;
+  interest_is_boosted?: boolean;
+  interest_is_trending?: boolean;
 }
 
 export interface ScoredToken extends TokenRecord {
   score: number;
+  score_interest: number;
   score_bonding: number;
   score_holders: number;
   score_social: number;
@@ -38,6 +46,7 @@ export interface AlgoFilter {
   max_age_hours?: number;
   min_age_hours?: number;
   min_vol_liq_ratio?: number;
+  min_source_count?: number;
 }
 
 export interface AlgoExitParams {

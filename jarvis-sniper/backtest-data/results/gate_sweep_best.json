@@ -1,0 +1,21 @@
+{
+  "algo_id": "volume_spike",
+  "minTrades": 50,
+  "generated_at": "2026-02-16T08:56:42.616Z",
+  "best": {
+    "scoreMin": 35,
+    "liqMin": 150000,
+    "momMin": 5,
+    "vlrMin": 0.2,
+    "trades": 11,
+    "winRate": 63.64,
+    "profitFactor": 2.96,
+    "expectancyPct": 5.676,
+    "totalReturnPct": 62.43,
+    "minPosFrac": 1,
+    "avgPosFrac": 1,
+    "robust": false,
+    "profitable": true,
+    "ranking": 1694.157
+  }
+}

@@ -10,12 +10,24 @@ Write-Host "  BACKTEST DATA PIPELINE" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
+$viteNode = Join-Path $root "node_modules/.bin/vite-node.cmd"
+$useViteNode = Test-Path $viteNode
+if ($useViteNode) {
+    Write-Host "Runner: vite-node ($viteNode)" -ForegroundColor Cyan
+} else {
+    Write-Host "Runner: npx tsx (vite-node not found)" -ForegroundColor Cyan
+}
+
 function Run-Phase {
     param([string]$Phase, [string]$Script, [string]$Description)
     Write-Host ""
     Write-Host "--- Phase $Phase`: $Description ---" -ForegroundColor Yellow
     $startTime = Get-Date
-    npx tsx "backtest-data/scripts/$Script"
+    if ($useViteNode) {
+        & $viteNode "backtest-data/scripts/$Script"
+    } else {
+        npx tsx "backtest-data/scripts/$Script"
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Host "FAILED: Phase $Phase ($Script) exited with code $LASTEXITCODE" -ForegroundColor Red
         exit $LASTEXITCODE
@@ -32,7 +44,7 @@ Run-Phase "1" "01_discover_universe.ts" "Token Universe Discovery"
 # Phase 2: Score all tokens (CPU only, ~1 min)
 Run-Phase "2" "02_score_universe.ts" "Score Universe"
 
-# Phase 3: Filter through 25 algos (CPU only, ~1 min)
+# Phase 3: Filter through 26 algos (CPU only, ~1 min)
 Run-Phase "3" "03_filter_by_algo.ts" "Filter by Algo"
 
 # Phase 4: Fetch OHLCV candles (API-heavy, ~24-48 hours)
@@ -44,6 +56,9 @@ Run-Phase "5" "05_simulate_trades.ts" "Trade Simulation"
 
 # Phase 6: Generate reports (CPU only, ~1 min)
 Run-Phase "6" "06_generate_reports.ts" "Generate Reports"
+
+# Phase 5f: Optimize volume_spike gates from simulated trades
+Run-Phase "5f" "05f_volume_gate_sweep.ts" "Volume Gate Sweep"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green

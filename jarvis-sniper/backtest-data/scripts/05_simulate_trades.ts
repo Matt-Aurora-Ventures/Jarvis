@@ -87,10 +87,12 @@ const ALGO_EXIT_PARAMS: AlgoExitParams[] = [
   { algo_id: 'bluechip_trend_follow',stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 48 },
   { algo_id: 'bluechip_breakout',    stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 48 },
 
-  // ─── xSTOCK & PRESTOCK — SL 4%, TP 10% = 2.5:1 R:R ───
-  // TESTED: SL 3/4/5/10%, TP 10/15/100%, 8 entry types. None profitable at TP ≤15%.
-  { algo_id: 'xstock_intraday',      stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
-  { algo_id: 'xstock_swing',         stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
+  // ─── xSTOCK & PRESTOCK ───
+  // Sweep-backed on current dataset:
+  // - xstock_intraday: 5m equity_mean_reversion, SL 8 / TP 100 / Max 336h
+  // - xstock_swing:    5m mean_reversion,        SL 10 / TP 100 / Max 48h
+  { algo_id: 'xstock_intraday',      stopLossPct: 8,   takeProfitPct: 100, trailingStopPct: 99, maxPositionAgeHours: 336 },
+  { algo_id: 'xstock_swing',         stopLossPct: 10,  takeProfitPct: 100, trailingStopPct: 99, maxPositionAgeHours: 48 },
   { algo_id: 'prestock_speculative', stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
 
   // ─── INDEX — SL 4%, TP 10% = 2.5:1 R:R ───
@@ -102,7 +104,21 @@ const ALGO_EXIT_PARAMS: AlgoExitParams[] = [
 // Strategy-specific entries that catch moves EARLY (not after they're extended).
 // Each strategy type has its own trigger optimized for that pattern.
 
-type EntryType = 'momentum' | 'fresh_pump' | 'aggressive' | 'mean_reversion' | 'trend_follow' | 'breakout' | 'dip_buy' | 'strict_trend' | 'sma_crossover' | 'accumulation' | 'range_breakout' | 'pullback_buy' | 'vol_surge_scalp';
+type EntryType =
+  | 'momentum'
+  | 'fresh_pump'
+  | 'aggressive'
+  | 'mean_reversion'
+  | 'equity_mean_reversion'
+  | 'trend_follow'
+  | 'breakout'
+  | 'dip_buy'
+  | 'strict_trend'
+  | 'sma_crossover'
+  | 'accumulation'
+  | 'range_breakout'
+  | 'pullback_buy'
+  | 'vol_surge_scalp';
 
 interface EntrySignal {
   candleIndex: number;
@@ -136,7 +152,8 @@ function getEntryType(algoId: string): EntryType {
   // Tested: momentum, aggressive, breakout, range_breakout entries all worse (R3, R6)
   if (['momentum', 'hybrid_b', 'let_it_ride', 'bluechip_trend_follow', 'bluechip_breakout'].includes(algoId)) return 'mean_reversion';
   if (['bags_value', 'bags_bluechip', 'bags_elite', 'bags_conservative'].includes(algoId)) return 'mean_reversion';
-  if (['xstock_swing', 'xstock_intraday', 'index_intraday', 'index_leveraged'].includes(algoId)) return 'mean_reversion';
+  if (['xstock_intraday'].includes(algoId)) return 'equity_mean_reversion';
+  if (['xstock_swing', 'index_intraday', 'index_leveraged'].includes(algoId)) return 'mean_reversion';
   if (['prestock_speculative'].includes(algoId)) return 'mean_reversion';
   if (['volume_spike'].includes(algoId)) return 'mean_reversion';
   if (['bags_dip_buyer'].includes(algoId)) return 'dip_buy';
@@ -186,6 +203,10 @@ function findAllEntrySignals(candles: Candle[], entryType: EntryType): EntrySign
         break;
       case 'mean_reversion':
         if (c.close < sma5 * 0.97 && c.close > c.open && prev.close < prev.open) triggered = true;
+        break;
+      case 'equity_mean_reversion':
+        // Softer threshold for lower-vol tokenized equities.
+        if (c.close < sma5 * 0.998 && c.close > c.open && prev.close < prev.open) triggered = true;
         break;
       case 'trend_follow':
         if (c.close > sma5 && c.high > prev.high && pct > 0.5 && volSpike > 1.2) triggered = true;

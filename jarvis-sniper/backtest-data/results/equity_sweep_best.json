@@ -1,0 +1,48 @@
+{
+  "xstock_intraday": {
+    "algo_id": "xstock_intraday",
+    "timeframe": "5m",
+    "entryType": "equity_mean_reversion",
+    "sl": 8,
+    "tp": 100,
+    "maxAge": 336,
+    "metrics": {
+      "trades": 503,
+      "winRate": 18.3,
+      "profitFactor": 1.73,
+      "expectancyPct": 5.535,
+      "totalReturnPct": 2784.22,
+      "posFracByWindow": {
+        "10": 0.735,
+        "25": 0.76,
+        "50": 0.78,
+        "100": 0.832
+      },
+      "minPosFrac": 0.735
+    },
+    "score": 1152.2813597011186
+  },
+  "xstock_swing": {
+    "algo_id": "xstock_swing",
+    "timeframe": "5m",
+    "entryType": "mean_reversion",
+    "sl": 10,
+    "tp": 100,
+    "maxAge": 48,
+    "metrics": {
+      "trades": 155,
+      "winRate": 26.5,
+      "profitFactor": 2.474,
+      "expectancyPct": 12.036,
+      "totalReturnPct": 1865.54,
+      "posFracByWindow": {
+        "10": 0.753,
+        "25": 0.809,
+        "50": 0.925,
+        "100": 1
+      },
+      "minPosFrac": 0.753
+    },
+    "score": 1522.3066339634058
+  }
+}
