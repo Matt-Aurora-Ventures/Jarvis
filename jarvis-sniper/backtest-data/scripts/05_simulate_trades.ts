@@ -70,7 +70,7 @@ const ALGO_EXIT_PARAMS: AlgoExitParams[] = [
   { algo_id: 'utility_swing',        stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 168 },
   { algo_id: 'established_breakout', stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 168 },
   { algo_id: 'meme_classic',         stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 168 },
-  { algo_id: 'volume_spike',         stopLossPct: 8,   takeProfitPct: 15,  trailingStopPct: 99, maxPositionAgeHours: 168 },
+  { algo_id: 'volume_spike',         stopLossPct: 7,   takeProfitPct: 16,  trailingStopPct: 99, maxPositionAgeHours: 120 },
 
   // ─── BAGS.FM — 8 strategies (mixed params, all optimized) ───
   { algo_id: 'bags_fresh_snipe',     stopLossPct: 10,  takeProfitPct: 30,  trailingStopPct: 99, maxPositionAgeHours: 8 },
@@ -90,7 +90,7 @@ const ALGO_EXIT_PARAMS: AlgoExitParams[] = [
   // ─── xSTOCK & PRESTOCK — SL 4%, TP 10% = 2.5:1 R:R ───
   // TESTED: SL 3/4/5/10%, TP 10/15/100%, 8 entry types. None profitable at TP ≤15%.
   { algo_id: 'xstock_intraday',      stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
-  { algo_id: 'xstock_swing',         stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
+  { algo_id: 'xstock_swing',         stopLossPct: 5,   takeProfitPct: 12,  trailingStopPct: 99, maxPositionAgeHours: 72 },
   { algo_id: 'prestock_speculative', stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
 
   // ─── INDEX — SL 4%, TP 10% = 2.5:1 R:R ───
@@ -136,7 +136,8 @@ function getEntryType(algoId: string): EntryType {
   // Tested: momentum, aggressive, breakout, range_breakout entries all worse (R3, R6)
   if (['momentum', 'hybrid_b', 'let_it_ride', 'bluechip_trend_follow', 'bluechip_breakout'].includes(algoId)) return 'mean_reversion';
   if (['bags_value', 'bags_bluechip', 'bags_elite', 'bags_conservative'].includes(algoId)) return 'mean_reversion';
-  if (['xstock_swing', 'xstock_intraday', 'index_intraday', 'index_leveraged'].includes(algoId)) return 'mean_reversion';
+  if (['xstock_swing'].includes(algoId)) return 'strict_trend';
+  if (['xstock_intraday', 'index_intraday', 'index_leveraged'].includes(algoId)) return 'mean_reversion';
   if (['prestock_speculative'].includes(algoId)) return 'mean_reversion';
   if (['volume_spike'].includes(algoId)) return 'mean_reversion';
   if (['bags_dip_buyer'].includes(algoId)) return 'dip_buy';
@@ -465,8 +466,12 @@ function simulateAllTrades(
 
 // ─── Choose Best Timeframe ───
 
-function loadBestCandles(mint: string): Candle[] | null {
-  for (const tf of ['5m', '15m'] as const) {
+function loadBestCandles(mint: string, algoId: string): Candle[] | null {
+  const preferred: Array<'5m' | '15m' | '1h'> = algoId === 'xstock_swing'
+    ? ['1h', '15m', '5m']
+    : ['5m', '15m', '1h'];
+
+  for (const tf of preferred) {
     const candles = readJSON<Candle[]>(`candles/${mint}_${tf}.json`);
     if (candles && candles.length >= 25) return candles;
   }
@@ -506,7 +511,7 @@ async function main(): Promise<void> {
     let skipped = 0;
 
     for (const token of tokens) {
-      const candles = loadBestCandles(token.mint);
+      const candles = loadBestCandles(token.mint, algo_id);
       if (!candles) { skipped++; continue; }
 
       const trades = simulateAllTrades(token, candles, params);
