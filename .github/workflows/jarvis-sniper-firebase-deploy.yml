@@ -33,7 +33,12 @@ jobs:
 
       - name: Install
         working-directory: jarvis-sniper
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
 
       - name: Test
         working-directory: jarvis-sniper
