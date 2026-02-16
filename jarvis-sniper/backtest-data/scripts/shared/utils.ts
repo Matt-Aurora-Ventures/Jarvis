@@ -3,20 +3,23 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 
 // ─── Load .env for API keys ───
-const ENV_PATH = path.resolve(__dirname, '..', '..', '.env');
-if (fs.existsSync(ENV_PATH)) {
-  const envContent = fs.readFileSync(ENV_PATH, 'utf-8');
+function loadEnvFile(filePath: string): void {
+  if (!fs.existsSync(filePath)) return;
+  const envContent = fs.readFileSync(filePath, 'utf-8');
   for (const line of envContent.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
     const eqIdx = trimmed.indexOf('=');
-    if (eqIdx > 0) {
-      const key = trimmed.slice(0, eqIdx).trim();
-      const val = trimmed.slice(eqIdx + 1).trim();
-      if (!process.env[key]) process.env[key] = val;
-    }
+    if (eqIdx <= 0) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const val = trimmed.slice(eqIdx + 1).trim();
+    if (!process.env[key]) process.env[key] = val;
   }
 }
+
+// Priority: backtest-data/.env (documented), then project root .env fallback.
+loadEnvFile(path.resolve(__dirname, '..', '..', 'backtest-data', '.env'));
+loadEnvFile(path.resolve(__dirname, '..', '..', '.env'));
 
 export function getCoinGeckoApiKey(): string | undefined {
   return process.env.COINGECKO_API_KEY;
