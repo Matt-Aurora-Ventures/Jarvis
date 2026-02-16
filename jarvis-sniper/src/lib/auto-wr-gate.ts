@@ -268,7 +268,7 @@ export function buildWrGateCandidates(
   scope: SniperConfig['autoWrScope'],
 ): WrGateCandidate[] {
   return presets
-    .filter((p) => !p.disabled && !p.underperformer)
+    .filter((p) => !p.disabled && !p.underperformer && !p.experimental)
     .filter((p) => scopeAllowsAsset(scope, p.assetType))
     .map((p) => ({
       strategyId: p.id,

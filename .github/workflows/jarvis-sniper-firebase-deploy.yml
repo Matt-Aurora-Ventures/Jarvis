@@ -28,10 +28,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: jarvis-sniper/package-lock.json
 
       - name: Install
         working-directory: jarvis-sniper
-        run: npm install --no-audit --no-fund
+        run: npm ci
 
       - name: Test
         working-directory: jarvis-sniper
@@ -49,7 +51,6 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.home }}/.gcp/firebase-sa.json
           NEXT_PUBLIC_BUILD_SHA: ${{ github.sha }}
           NEXT_PUBLIC_BUILT_AT: ${{ github.event.head_commit.timestamp }}
-          NEXT_PUBLIC_CANONICAL_ORIGIN: https://${{ env.CANONICAL_HOST }}
         run: |
           npx firebase-tools deploy --only hosting --project "$FIREBASE_PROJECT" --non-interactive
 

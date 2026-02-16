@@ -241,8 +241,8 @@ type StrategyRuntimeConfig = Omit<BacktestConfig, 'entrySignal'> & {
 };
 
 const STRATEGY_SEED_METADATA: Pick<StrategyRuntimeConfig, 'strategyRevision' | 'seedVersion'> = {
-  strategyRevision: 'v3-backtest-proven-2026-02-15',
-  seedVersion: 'seed-v3',
+  strategyRevision: 'v4-backtest-2026-02-16',
+  seedVersion: 'seed-v4',
 };
 
 // Strategy configs — R4 realistic-TP optimized (2026-02-15).
@@ -2221,9 +2221,14 @@ export async function POST(request: Request) {
       };
     });
 
-    // Detect underperformers: win rate < 40% OR profit factor < 1.0
+    // Detect underperformers using profitability-first criteria.
+    // Avoid raw WR-only flags: low-WR/high-R setups can still be profitable.
     const underperformers = allRunResults
-      .filter(r => r.result.winRate < 0.40 || r.result.profitFactor < 1.0)
+      .filter((r) => {
+        const pf = Number(r.result.profitFactor || 0);
+        const netPnlPct = Number((r.result.avgReturnPct || 0) * (r.result.totalTrades || 0));
+        return pf < 1.0 || netPnlPct <= 0;
+      })
       .map(r => r.result.strategyId);
     // Deduplicate
     const uniqueUnderperformers = [...new Set(underperformers)];

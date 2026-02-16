@@ -64,9 +64,9 @@ describe('STRATEGY_CATEGORIES', () => {
     expect(Array.isArray(mod.STRATEGY_CATEGORIES)).toBe(true);
   });
 
-  it('should have 6 categories', async () => {
+  it('should have 5 categories', async () => {
     const { STRATEGY_CATEGORIES } = await import('@/components/strategy-categories');
-    expect(STRATEGY_CATEGORIES.length).toBe(6);
+    expect(STRATEGY_CATEGORIES.length).toBe(5);
   });
 
   it('should have correct category labels', async () => {
@@ -76,7 +76,6 @@ describe('STRATEGY_CATEGORIES', () => {
     expect(labels).toContain('MEMECOIN');
     expect(labels).toContain('ESTABLISHED TOKENS');
     expect(labels).toContain('BAGS.FM');
-    expect(labels).toContain('BLUE CHIP SOLANA');
     expect(labels).toContain('EXPERIMENTAL');
   });
 
