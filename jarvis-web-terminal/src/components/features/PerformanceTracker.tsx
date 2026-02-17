@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useTradingData } from '@/context/TradingContext';
+import { useToast } from '@/components/ui/Toast';
 import {
     TrendingUp,
     TrendingDown,
@@ -12,7 +13,9 @@ import {
     ChevronUp,
     BarChart3,
     Brain,
-    Lightbulb
+    Lightbulb,
+    Download,
+    RotateCcw
 } from 'lucide-react';
 
 interface PerformanceMetrics {
@@ -47,10 +50,21 @@ interface TradeWithSentiment {
     txHash?: string;
 }
 
+const TIME_FILTERS = ['all', '24h', '7d', '30d'] as const;
+type TimeFilter = typeof TIME_FILTERS[number];
+
+const TIME_FILTER_LABELS: Record<TimeFilter, string> = {
+    all: 'All',
+    '24h': '24H',
+    '7d': '7D',
+    '30d': '30D',
+};
+
 export function PerformanceTracker() {
     const { state } = useTradingData();
+    const { success, info } = useToast();
     const [expanded, setExpanded] = useState(true);
-    const [timeFilter, setTimeFilter] = useState<'all' | '24h' | '7d' | '30d'>('all');
+    const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
 
     // Calculate performance metrics
     const metrics = useMemo<PerformanceMetrics>(() => {
@@ -193,54 +207,154 @@ export function PerformanceTracker() {
         return recs.length > 0 ? recs : ['Keep trading to build more performance data'];
     }, [metrics]);
 
+    // Export handler -- defined after metrics so it can reference them
+    const handleExport = useCallback(() => {
+        const csv = [
+            'Metric,Value',
+            `Win Rate,${metrics.winRate.toFixed(1)}%`,
+            `Total P&L,${metrics.totalPnL.toFixed(4)}`,
+            `Profit Factor,${metrics.profitFactor === Infinity ? 'Infinity' : metrics.profitFactor.toFixed(2)}`,
+            `Total Trades,${metrics.totalTrades}`,
+            `Wins,${metrics.winCount}`,
+            `Losses,${metrics.lossCount}`,
+            `Avg Win,${metrics.avgWin.toFixed(4)}`,
+            `Avg Loss,${metrics.avgLoss.toFixed(4)}`,
+            `Best Trade,${metrics.bestTrade ? `${metrics.bestTrade.symbol} (${metrics.bestTrade.pnlPercent.toFixed(1)}%)` : 'N/A'}`,
+            `Worst Trade,${metrics.worstTrade ? `${metrics.worstTrade.symbol} (${metrics.worstTrade.pnlPercent.toFixed(1)}%)` : 'N/A'}`,
+            `Time Filter,${timeFilter}`,
+        ].join('\n');
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `jarvis-performance-${timeFilter}-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        success('Performance data exported');
+    }, [metrics, timeFilter, success]);
+
+    const handleReset = useCallback(() => {
+        setTimeFilter('all');
+        info('Filters reset');
+    }, [info]);
+
     return (
         <div className="card-glass p-3">
-            {/* Header */}
-            <div className="flex items-center gap-2 mb-3">
-                <BarChart3 className="w-4 h-4 text-accent-neon" />
-                <span className="text-xs font-mono uppercase tracking-wider text-text-muted">PERFORMANCE</span>
-            </div>
-
-            {/* Compact 2x2 Grid */}
-            <div className="grid grid-cols-2 gap-2">
-                {/* Win Rate */}
-                <div className="bg-bg-tertiary/50 rounded-lg p-2">
-                    <div className="text-[10px] text-text-muted font-mono uppercase">Win Rate</div>
-                    <div className={`text-sm font-mono font-bold ${
-                        metrics.winRate >= 50 ? 'text-accent-success' : 'text-accent-error'
-                    }`}>
-                        {metrics.winRate.toFixed(1)}%
-                    </div>
+            {/* Header with expand/collapse toggle */}
+            <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-accent-neon" />
+                    <span className="text-xs font-mono uppercase tracking-wider text-text-muted">PERFORMANCE</span>
                 </div>
-
-                {/* Total P&L */}
-                <div className="bg-bg-tertiary/50 rounded-lg p-2">
-                    <div className="text-[10px] text-text-muted font-mono uppercase">Total P&L</div>
-                    <div className={`text-sm font-mono font-bold ${
-                        metrics.totalPnL >= 0 ? 'text-accent-success' : 'text-accent-error'
-                    }`}>
-                        {metrics.totalPnL >= 0 ? '+' : ''}{metrics.totalPnL.toFixed(4)}
-                    </div>
-                </div>
-
-                {/* Profit Factor */}
-                <div className="bg-bg-tertiary/50 rounded-lg p-2">
-                    <div className="text-[10px] text-text-muted font-mono uppercase">Profit Factor</div>
-                    <div className={`text-sm font-mono font-bold ${
-                        metrics.profitFactor >= 1 ? 'text-accent-success' : 'text-accent-error'
-                    }`}>
-                        {metrics.profitFactor === Infinity ? '∞' : metrics.profitFactor.toFixed(2)}
-                    </div>
-                </div>
-
-                {/* Trades */}
-                <div className="bg-bg-tertiary/50 rounded-lg p-2">
-                    <div className="text-[10px] text-text-muted font-mono uppercase">Trades</div>
-                    <div className="text-sm font-mono font-bold text-text-primary">
-                        {metrics.totalTrades}
-                    </div>
+                <div className="flex items-center gap-1">
+                    {/* Export Button */}
+                    <button
+                        onClick={handleExport}
+                        className="p-1.5 rounded-lg hover:bg-bg-tertiary transition-all"
+                        title="Export performance data as CSV"
+                    >
+                        <Download className="w-3.5 h-3.5 text-text-muted hover:text-accent-neon transition-colors" />
+                    </button>
+                    {/* Reset Button */}
+                    <button
+                        onClick={handleReset}
+                        className="p-1.5 rounded-lg hover:bg-bg-tertiary transition-all"
+                        title="Reset filters"
+                    >
+                        <RotateCcw className="w-3.5 h-3.5 text-text-muted hover:text-accent-neon transition-colors" />
+                    </button>
+                    {/* Expand/Collapse */}
+                    <button
+                        onClick={() => setExpanded(!expanded)}
+                        className="p-1.5 rounded-lg hover:bg-bg-tertiary transition-all"
+                        title={expanded ? 'Collapse' : 'Expand'}
+                    >
+                        {expanded ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-text-muted" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-text-muted" />
+                        )}
+                    </button>
                 </div>
             </div>
+
+            {/* Time Filter Tabs */}
+            <div className="flex items-center gap-1 mb-3">
+                {TIME_FILTERS.map((filter) => (
+                    <button
+                        key={filter}
+                        onClick={() => setTimeFilter(filter)}
+                        className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase transition-all ${
+                            timeFilter === filter
+                                ? 'bg-accent-neon/20 text-accent-neon border border-accent-neon/30'
+                                : 'bg-bg-tertiary/50 text-text-muted hover:text-text-primary hover:bg-bg-tertiary border border-transparent'
+                        }`}
+                    >
+                        {TIME_FILTER_LABELS[filter]}
+                    </button>
+                ))}
+            </div>
+
+            {expanded && (
+                <>
+                    {/* Compact 2x2 Grid */}
+                    <div className="grid grid-cols-2 gap-2">
+                        {/* Win Rate */}
+                        <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                            <div className="text-[10px] text-text-muted font-mono uppercase">Win Rate</div>
+                            <div className={`text-sm font-mono font-bold ${
+                                metrics.winRate >= 50 ? 'text-accent-success' : 'text-accent-error'
+                            }`}>
+                                {metrics.winRate.toFixed(1)}%
+                            </div>
+                        </div>
+
+                        {/* Total P&L */}
+                        <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                            <div className="text-[10px] text-text-muted font-mono uppercase">Total P&L</div>
+                            <div className={`text-sm font-mono font-bold ${
+                                metrics.totalPnL >= 0 ? 'text-accent-success' : 'text-accent-error'
+                            }`}>
+                                {metrics.totalPnL >= 0 ? '+' : ''}{metrics.totalPnL.toFixed(4)}
+                            </div>
+                        </div>
+
+                        {/* Profit Factor */}
+                        <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                            <div className="text-[10px] text-text-muted font-mono uppercase">Profit Factor</div>
+                            <div className={`text-sm font-mono font-bold ${
+                                metrics.profitFactor >= 1 ? 'text-accent-success' : 'text-accent-error'
+                            }`}>
+                                {metrics.profitFactor === Infinity ? '∞' : metrics.profitFactor.toFixed(2)}
+                            </div>
+                        </div>
+
+                        {/* Trades */}
+                        <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                            <div className="text-[10px] text-text-muted font-mono uppercase">Trades</div>
+                            <div className="text-sm font-mono font-bold text-text-primary">
+                                {metrics.totalTrades}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Recommendations (shown if there are trades) */}
+                    {recommendations.length > 0 && metrics.totalTrades > 0 && (
+                        <div className="mt-3 p-2 rounded-lg bg-accent-neon/5 border border-accent-neon/10">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                                <Lightbulb className="w-3 h-3 text-accent-neon" />
+                                <span className="text-[10px] font-mono text-accent-neon uppercase">AI Insight</span>
+                            </div>
+                            {recommendations.map((rec, i) => (
+                                <p key={i} className="text-[11px] text-text-secondary leading-relaxed">
+                                    {rec}
+                                </p>
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
         </div>
     );
 }

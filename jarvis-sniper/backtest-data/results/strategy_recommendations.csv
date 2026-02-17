@@ -1,0 +1,27 @@
+algo_id,status_label,recommendation,reason,trades,win_rate,profit_factor,expectancy_pct,total_return_pct,min_pos_frac,walkforward_pass_rate,sample_band,gate_pf_gt_1_15,gate_expectancy_gt_0,gate_trades_gte_100,gate_min_pos_frac_gte_0_70,gate_walkforward_pass_rate_gte_0_60
+"xstock_intraday","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",40,25,3.26,15.37,614.82,1,1,"MEDIUM",true,true,false,true,true
+"bluechip_trend_follow","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",42,42.9,3.36,8.11,340.43,1,0,"MEDIUM",true,true,false,true,false
+"bluechip_breakout","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",42,42.9,3.36,8.11,340.43,1,0,"MEDIUM",true,true,false,true,false
+"micro_cap_surge","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",94,57.4,2.01,4.87,457.48,0.871,0.8,"ROBUST",true,true,false,true,true
+"sol_veteran","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",71,60.6,2.27,4.52,320.96,0.903,1,"ROBUST",true,true,false,true,true
+"utility_swing","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",71,60.6,2.27,4.52,320.96,0.903,1,"ROBUST",true,true,false,true,true
+"momentum","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",68,45.6,1.69,4.12,279.95,0.729,0.8,"ROBUST",true,true,false,true,true
+"hybrid_b","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",68,45.6,1.69,4.12,279.95,0.729,0.8,"ROBUST",true,true,false,true,true
+"prestock_speculative","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",23,69.6,2.64,3.93,90.32,0.857,0,"THIN",true,true,false,true,false
+"elite","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",89,50.6,1.63,3.55,316.02,0.938,1,"ROBUST",true,true,false,true,true
+"let_it_ride","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",56,44.6,1.56,3.51,196.49,0.723,1,"ROBUST",true,true,false,true,true
+"bags_dip_buyer","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",65,47.7,1.75,3.45,224.55,0.929,0.8,"ROBUST",true,true,false,true,true
+"established_breakout","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",18,55.6,1.8,3.33,59.89,0.778,0,"THIN",true,true,false,true,false
+"meme_classic","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",73,56.2,1.8,3.29,240.21,0.828,1,"ROBUST",true,true,false,true,true
+"bags_fresh_snipe","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",28,35.7,1.41,2.95,82.58,1,0,"MEDIUM",true,true,false,true,false
+"volume_spike","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",80,53.8,1.67,2.92,233.24,0.69,0.8,"ROBUST",true,true,false,false,true
+"bags_momentum","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",23,34.8,1.36,2.6,59.88,1,0,"THIN",true,true,false,true,false
+"pump_fresh_tight","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",98,45.9,1.39,2.34,229.32,0.809,0.8,"ROBUST",true,true,false,true,true
+"bags_aggressive","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",58,34.5,1.31,1.67,96.7,0.816,0,"ROBUST",true,true,false,true,false
+"bags_value","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",40,52.5,1.43,1.29,51.49,0.774,1,"MEDIUM",true,true,false,true,true
+"bags_conservative","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",40,52.5,1.43,1.29,51.49,0.774,1,"MEDIUM",true,true,false,true,true
+"bags_elite","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",40,52.5,1.26,0.79,31.65,0.774,1,"MEDIUM",true,true,false,true,true
+"bags_bluechip","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",51,51,1.2,0.59,30.28,0.738,1,"ROBUST",true,true,false,true,true
+"index_intraday","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",10,40,1.09,0.22,2.22,1,0,"THIN",false,true,false,true,false
+"index_leveraged","EXPERIMENTAL","keep_experimental","Insufficient robustness for promotion gate",10,40,1.09,0.22,2.22,1,0,"THIN",false,true,false,true,false
+"xstock_swing","EXPERIMENTAL_DISABLED","disable_experimental","Losing or non-positive expectancy",47,10.6,0.16,-2.48,-116.78,0,0,"MEDIUM",false,false,false,false,false

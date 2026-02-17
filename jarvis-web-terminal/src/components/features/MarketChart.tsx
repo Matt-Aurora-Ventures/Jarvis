@@ -52,7 +52,7 @@ export const MarketChart = () => {
 
                 // 3. Fetch Data (SOL) - Try bags.fm first, fallback to Jupiter
                 const mint = TOKENS.SOL;
-                let candles = await bagsClient.getChartData(mint, '1h', 100);
+                const candles = await bagsClient.getChartData(mint, '1h', 100);
 
                 if (candles && candles.length > 0) {
                     const formattedData = candles.map(c => ({

@@ -53,6 +53,9 @@ cd jarvis-sniper
 # Run the full pipeline (24-48 hours total, mostly Phase 4)
 powershell -ExecutionPolicy Bypass -File backtest-data/scripts/run_all.ps1
 
+# CI/cloud runner (deterministic order + run log)
+bash backtest-data/scripts/run_pipeline_ci.sh
+
 # Or run phases individually:
 npx tsx backtest-data/scripts/01_discover_universe.ts
 npx tsx backtest-data/scripts/02_score_universe.ts
@@ -60,6 +63,9 @@ npx tsx backtest-data/scripts/03_filter_by_algo.ts
 npx tsx backtest-data/scripts/04_fetch_candles.ts
 npx tsx backtest-data/scripts/05_simulate_trades.ts
 npx tsx backtest-data/scripts/06_generate_reports.ts
+npx tsx backtest-data/scripts/07b_consistency_report.ts
+npx tsx backtest-data/scripts/08_walkforward_validate.ts
+npx tsx backtest-data/scripts/09_generate_recommendations_and_provenance.ts
 ```
 
 ## Scaling / API Key
@@ -67,20 +73,28 @@ npx tsx backtest-data/scripts/06_generate_reports.ts
 Set these in `backtest-data/.env` (ignored by git):
 
 - `COINGECKO_API_KEY`: Enables CoinGecko Pro onchain endpoints (higher rate limits).
+- `HELIUS_API_KEY`: Enables Helius DAS enrichment (`getAssetBatch`).
+- `BIRDEYE_API_KEY`: Enables Birdeye token-list expansion.
+- `PUMPFUN_API_KEY`: Optional auth header for Pump.fun feed.
 - `GECKO_MAX_PAGES_NEW_POOLS` (default `200`): Pages to pull from GeckoTerminal `new_pools`.
 - `GECKO_MAX_PAGES_TOP_POOLS` (default `200`): Pages to pull from GeckoTerminal top pools (24h volume).
-- `GECKO_MAX_PAGES_MISC` (default `10`): Pages for additional endpoints (trending, tx-count sorts).
+- `GECKO_MAX_PAGES_MISC` (default `25`): Pages for additional endpoints (trending, tx-count sorts).
+- `BIRDEYE_MAX_PAGES` (default `20`), `PUMPFUN_MAX_PAGES` (default `20`): Source intake expansion.
+- `WALKFORWARD_FOLDS` (default `5`), `WALKFORWARD_MIN_VALIDATE_TRADES` (default `10`): Robustness settings.
 
 ## Phases
 
 | Phase | Script | Time Estimate | API Calls | Description |
 |-------|--------|---------------|-----------|-------------|
-| 1 | `01_discover_universe.ts` | 30-60 min | ~200 | Pull 50K+ tokens from GeckoTerminal, DexScreener, Jupiter |
+| 1 | `01_discover_universe.ts` | 45-90 min | variable | Pull tokens from GeckoTerminal, DexScreener, Jupiter, Birdeye, Pump.fun + Helius enrichment |
 | 2 | `02_score_universe.ts` | ~1 min | 0 | Compute local scores (0-100) for all tokens |
 | 3 | `03_filter_by_algo.ts` | ~1 min | 0 | Filter through 25 algo criteria, 5000 per algo |
 | 4 | `04_fetch_candles.ts` | 24-48 hours | ~90K | Fetch 5m/15m/1h OHLCV candles for all unique mints |
 | 5 | `05_simulate_trades.ts` | ~5 min | 0 | Simulate trades with SL/TP/trailing stop rules |
 | 6 | `06_generate_reports.ts` | ~1 min | 0 | Generate summaries, comparisons, manifests |
+| 7 | `07b_consistency_report.ts` | ~1 min | 0 | Rolling-window consistency and status labeling |
+| 8 | `08_walkforward_validate.ts` | ~1 min | 0 | Chronological fold validation (out-of-sample robustness) |
+| 9 | `09_generate_recommendations_and_provenance.ts` | ~1 min | 0 | Strict-gate recommendations + provenance artifacts |
 
 ## Resumability
 
@@ -106,11 +120,14 @@ Every script saves progress and can be safely interrupted and restarted:
 ### Index (2)
 `index_intraday`, `index_leveraged`
 
-## Data Sources (All Free)
+## Data Sources
 
 - **GeckoTerminal** — New pools, top pools, trending, OHLCV candles (30 req/min)
 - **DexScreener** — Token profiles, boosted tokens, pair details (300 req/min)
 - **Jupiter Gems** — Graduation feed with scoring data
+- **Birdeye** — Solana token list expansion
+- **Pump.fun** — Launch feed expansion
+- **Helius DAS** — Metadata enrichment for discovered mints
 
 ## Re-running Backtests
 

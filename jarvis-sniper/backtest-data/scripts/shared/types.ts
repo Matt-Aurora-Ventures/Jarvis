@@ -16,7 +16,16 @@ export interface TokenRecord {
   has_twitter: boolean;
   has_website: boolean;
   has_telegram: boolean;
-  source: 'geckoterminal' | 'dexscreener' | 'jupiter_gems';
+  source: 'geckoterminal' | 'dexscreener' | 'jupiter_gems' | 'birdeye' | 'pumpfun' | 'helius';
+  /**
+   * Confidence score for this record's source data in [0,1].
+   * Optional to keep compatibility with old cached datasets.
+   */
+  source_confidence?: number;
+  /**
+   * Free-form source metadata useful for provenance (endpoint, flags, etc).
+   */
+  source_details?: Record<string, unknown>;
 }
 
 export interface ScoredToken extends TokenRecord {
@@ -66,6 +75,7 @@ export interface CandleIndex {
       '5m'?: { count: number; file: string };
       '15m'?: { count: number; file: string };
       '1h'?: { count: number; file: string };
+      '1d'?: { count: number; file: string };
     };
   };
 }
@@ -134,6 +144,9 @@ export interface DiscoveryProgress {
   dexscreener_profiles_done: boolean;
   dexscreener_boosts_done: boolean;
   jupiter_gems_done: boolean;
+  birdeye_done?: boolean;
+  pumpfun_done?: boolean;
+  helius_enrichment_done?: boolean;
   total_tokens_discovered: number;
   last_updated: string;
 }
@@ -156,4 +169,50 @@ export interface DataManifest {
       files: { path: string; rows?: number; sha256: string }[];
     };
   };
+}
+
+export type SampleBand = 'ROBUST' | 'MEDIUM' | 'THIN';
+export type StrategyStatusLabel = 'PROVEN' | 'EXPERIMENTAL' | 'EXPERIMENTAL_DISABLED';
+
+export interface ConsistencyReportRow {
+  algo_id: string;
+  trades: number;
+  win_rate: number;
+  profit_factor: number;
+  expectancy_pct: number;
+  total_return_pct: number;
+  min_pos_frac: number;
+  avg_pos_frac: number;
+  sample_band: SampleBand;
+  status_label: StrategyStatusLabel;
+  pos10?: number;
+  pos25?: number;
+  pos50?: number;
+  pos100?: number;
+  pos250?: number;
+  pos500?: number;
+  pos1000?: number;
+}
+
+export interface WalkforwardFoldMetrics {
+  fold: number;
+  train_trades: number;
+  validate_trades: number;
+  validate_win_rate: number;
+  validate_profit_factor: number;
+  validate_expectancy_pct: number;
+  validate_total_return_pct: number;
+}
+
+export interface WalkforwardSummary {
+  algo_id: string;
+  folds: number;
+  total_trades: number;
+  validated_trades: number;
+  pass_folds: number;
+  fail_folds: number;
+  pass_rate: number;
+  sample_band: SampleBand;
+  status_label: StrategyStatusLabel;
+  fold_metrics: WalkforwardFoldMetrics[];
 }

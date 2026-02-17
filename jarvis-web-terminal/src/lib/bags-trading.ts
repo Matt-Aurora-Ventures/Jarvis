@@ -35,7 +35,7 @@ export interface SwapResult {
     priceImpact: number;
     fee: number;
     partnerFee: number;
-    winCommission: number; // 0.5% commission on wins only
+    winCommission?: number; // 0.5% commission on wins only
     error?: string;
     timestamp: number;
 }

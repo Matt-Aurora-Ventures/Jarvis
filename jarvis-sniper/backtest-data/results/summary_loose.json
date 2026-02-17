@@ -1,0 +1,41 @@
+{
+  "algo_id": "loose",
+  "total_trades": 2098,
+  "wins": 575,
+  "losses": 1523,
+  "win_rate": 27.4,
+  "avg_win_pct": 34.03,
+  "avg_loss_pct": -12.02,
+  "max_win_pct": 58.11,
+  "max_loss_pct": -13.32,
+  "avg_trade_duration_hours": 3.31,
+  "median_trade_duration_hours": 1.67,
+  "profit_factor": 1.07,
+  "expectancy_per_trade_pct": 0.6,
+  "total_return_pct": 1255.63,
+  "sharpe_ratio": 0.39,
+  "max_drawdown_pct": -50.6,
+  "exit_distribution": {
+    "sl_hit": 1293,
+    "tp_hit": 270,
+    "trail_stop": 0,
+    "expired": 464,
+    "end_of_data": 71
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-01",
+      "trades": 9,
+      "pnl_pct": 9.87,
+      "win_rate": 33.3
+    },
+    {
+      "month": "2026-02",
+      "trades": 2089,
+      "pnl_pct": 1245.76,
+      "win_rate": 27.4
+    }
+  ],
+  "best_day": "2026-02-10",
+  "worst_day": "2026-02-08"
+}

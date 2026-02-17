@@ -7,7 +7,7 @@ Why:
 - Many "Chat not found" errors come from bots not being members of the target group.
 
 Usage:
-  python scripts/telegram_invite_to_group.py --chat-id -1003408655098 --username @TGTOKEN_BUY_BOT
+  python scripts/telegram_invite_to_group.py --chat-id -5003286623 --username @TGTOKEN_BUY_BOT
 
 Auth:
 - Uses TELEGRAM_API_ID / TELEGRAM_API_HASH from env or .env
@@ -23,7 +23,9 @@ import sys
 from pathlib import Path
 
 from telethon import TelegramClient
+from telethon.errors.rpcerrorlist import UserAlreadyParticipantError
 from telethon.tl.functions.channels import InviteToChannelRequest
+from telethon.tl.functions.messages import AddChatUserRequest
 
 
 BASE = Path.home() / ".telegram_dl"
@@ -66,8 +68,19 @@ async def _run(chat_id: int, username: str) -> dict:
         chat = await client.get_entity(chat_id)
         user = await client.get_entity(username)
 
-        res = await client(InviteToChannelRequest(chat, [user]))
-        return {"ok": True, "chat_id": chat_id, "username": username, "result": str(res)[:5000]}
+        cls = chat.__class__.__name__
+        try:
+            if cls == "Channel":
+                res = await client(InviteToChannelRequest(chat, [user]))
+            elif cls == "Chat":
+                # Basic groups use a different RPC method than channels/supergroups.
+                res = await client(AddChatUserRequest(chat_id=int(chat.id), user_id=user, fwd_limit=0))
+            else:
+                raise RuntimeError(f"Unsupported chat entity type: {cls}")
+        except UserAlreadyParticipantError:
+            res = "already_participant"
+
+        return {"ok": True, "chat_id": chat_id, "username": username, "entity_type": cls, "result": str(res)[:5000]}
     finally:
         await client.disconnect()
 
@@ -91,4 +104,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

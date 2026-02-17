@@ -318,7 +318,7 @@ export function AlgoConfig() {
             <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm font-bold text-text-muted">
                     <Target className="w-4 h-4" />
-                    BAGS.FM GRADUATION
+                    DEGEN GRADUATION
                 </div>
 
                 <SliderInput

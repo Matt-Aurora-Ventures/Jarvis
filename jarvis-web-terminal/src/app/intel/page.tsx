@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { NewsDashboard } from '@/components/features/NewsDashboard';
-import { NeuralLattice } from '@/components/visuals/NeuralLattice';
 import { getDexterIntelClient, StockAnalysis, SectorAnalysis } from '@/lib/dexter-intel';
 import {
     Brain,
@@ -72,10 +71,15 @@ export default function IntelPage() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col relative overflow-hidden">
-            <NeuralLattice />
+        <>
+            {/* Ambient Background */}
+            <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+                <div className="ambient-orb absolute top-1/4 left-1/4 w-96 h-96 bg-accent-neon/[0.04] rounded-full blur-[128px]" />
+                <div className="ambient-orb-2 absolute bottom-1/3 right-1/4 w-80 h-80 bg-accent-neon/[0.03] rounded-full blur-[128px]" />
+                <div className="ambient-orb-3 absolute top-2/3 left-1/2 w-64 h-64 bg-accent-success/[0.02] rounded-full blur-[128px]" />
+            </div>
 
-            <div className="relative z-10 pt-24 pb-12 px-4 max-w-7xl mx-auto w-full">
+            <div className="pt-[100px] pb-4 px-3 lg:px-6 max-w-[1920px] mx-auto w-full">
                 {/* Header */}
                 <section className="text-center mb-8">
                     <div className="flex items-center justify-center gap-2 mb-2">
@@ -295,6 +299,6 @@ export default function IntelPage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }

@@ -1,0 +1,49 @@
+{
+  "generated_at": "2026-02-16T17:24:38.387Z",
+  "no_synthetic_data_assertion": true,
+  "strict_gate": {
+    "profit_factor_gt": 1.15,
+    "expectancy_gt": 0,
+    "min_trades_gte": 100,
+    "min_pos_frac_gte": 0.7,
+    "walkforward_pass_rate_gte": 0.6
+  },
+  "run_summary": {
+    "strategies_total": 26,
+    "proven": 0,
+    "experimental": 25,
+    "experimental_disabled": 1,
+    "promotion_eligible": [],
+    "promotion_eligible_count": 0
+  },
+  "sources": {
+    "generated_at": "2026-02-16T17:24:38.341Z",
+    "requests_total": 0,
+    "coverage_complete": false,
+    "required_providers": [
+      "gecko",
+      "dexscreener",
+      "jupiter",
+      "birdeye",
+      "pumpfun",
+      "helius"
+    ],
+    "missing_providers": [
+      "gecko",
+      "dexscreener",
+      "jupiter",
+      "birdeye",
+      "pumpfun",
+      "helius"
+    ],
+    "min_requests_per_provider": 1,
+    "requests_by_provider": {},
+    "status_distribution": {},
+    "avg_duration_ms_by_provider": {},
+    "universe_tokens_by_source": {
+      "geckoterminal": 623,
+      "dexscreener": 753
+    }
+  },
+  "dataset_hashes_ref": "results/dataset_hashes.json"
+}

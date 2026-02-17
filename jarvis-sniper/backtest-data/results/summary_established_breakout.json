@@ -1,0 +1,37 @@
+{
+  "algo_id": "established_breakout",
+  "total_trades": 18,
+  "wins": 10,
+  "losses": 8,
+  "win_rate": 55.6,
+  "avg_win_pct": 13.47,
+  "avg_loss_pct": -9.35,
+  "max_win_pct": 13.47,
+  "max_loss_pct": -9.35,
+  "avg_trade_duration_hours": 3.89,
+  "median_trade_duration_hours": 2.17,
+  "profit_factor": 1.8,
+  "expectancy_per_trade_pct": 3.33,
+  "total_return_pct": 59.89,
+  "sharpe_ratio": 4.66,
+  "max_drawdown_pct": -2.36,
+  "dual_trigger_bars": 0,
+  "expiry_exits_below_entry": 0,
+  "exit_distribution": {
+    "sl_hit": 8,
+    "tp_hit": 10,
+    "trail_stop": 0,
+    "expired": 0,
+    "end_of_data": 0
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-02",
+      "trades": 18,
+      "pnl_pct": 59.89,
+      "win_rate": 55.6
+    }
+  ],
+  "best_day": "2026-02-13",
+  "worst_day": "2026-02-15"
+}

@@ -1,0 +1,43 @@
+{
+  "algo_id": "bluechip_breakout",
+  "total_trades": 42,
+  "wins": 18,
+  "losses": 24,
+  "win_rate": 42.9,
+  "avg_win_pct": 26.91,
+  "avg_loss_pct": -6,
+  "max_win_pct": 28.35,
+  "max_loss_pct": -6.37,
+  "avg_trade_duration_hours": 28.19,
+  "median_trade_duration_hours": 1.25,
+  "profit_factor": 3.36,
+  "expectancy_per_trade_pct": 8.11,
+  "total_return_pct": 340.43,
+  "sharpe_ratio": 7.78,
+  "max_drawdown_pct": -2.28,
+  "dual_trigger_bars": 0,
+  "expiry_exits_below_entry": 0,
+  "exit_distribution": {
+    "sl_hit": 22,
+    "tp_hit": 16,
+    "trail_stop": 0,
+    "expired": 0,
+    "end_of_data": 4
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-01",
+      "trades": 15,
+      "pnl_pct": 112.74,
+      "win_rate": 40
+    },
+    {
+      "month": "2026-02",
+      "trades": 27,
+      "pnl_pct": 227.69,
+      "win_rate": 44.4
+    }
+  ],
+  "best_day": "2026-02-06",
+  "worst_day": "2026-02-05"
+}

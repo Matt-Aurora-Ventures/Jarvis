@@ -12,7 +12,7 @@ import { TrendingTokensPanel } from '@/components/features/TrendingTokensPanel';
 import { MarketRegimeIndicator } from '@/components/features/MarketRegimeIndicator';
 import { ConvictionPicksGrid } from '@/components/features/ConvictionPicksGrid';
 import { MacroEventsTimeline } from '@/components/features/MacroEventsTimeline';
-import { xStocksPanel as XStocksPanel } from '@/components/features/xStocksPanel';
+import { XStocksPanel } from '@/components/features/xStocksPanel';
 import { CommoditiesPanel } from '@/components/features/CommoditiesPanel';
 import { PerpetualsSection } from '@/components/features/PerpetualsSection';
 import { RefreshCw, Clock, Zap, Brain } from 'lucide-react';
@@ -117,10 +117,7 @@ export function SentimentDashboard() {
                     />
 
                     {/* xStocks */}
-                    <XStocksPanel
-                        stocks={data.stockPicks}
-                        isLoading={data.isLoading}
-                    />
+                    <XStocksPanel />
 
                     {/* Commodities */}
                     <CommoditiesPanel

@@ -26,6 +26,8 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+# Never log full request URLs (they include bot tokens).
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 configure_component_logger("bots.treasury", "treasury_bot")
 

@@ -29,8 +29,8 @@ load_dotenv(Path(__file__).parent.parent / "tg_bot" / ".env")
 load_dotenv(Path(__file__).parent.parent / "bots" / "twitter" / ".env")
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TG_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_BROADCAST_CHAT_ID", "-1003408655098")
-ADMIN_ID = os.getenv("TELEGRAM_ADMIN_IDS", "8527130908")
+CHAT_ID = os.getenv("TELEGRAM_BROADCAST_CHAT_ID", "-5003286623")
+ADMIN_ID = os.getenv("TELEGRAM_ADMIN_IDS", "8527368699")
 
 # State
 last_twitter_post = 0

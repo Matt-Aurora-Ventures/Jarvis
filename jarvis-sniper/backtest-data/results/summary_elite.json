@@ -1,0 +1,37 @@
+{
+  "algo_id": "elite",
+  "total_trades": 89,
+  "wins": 45,
+  "losses": 44,
+  "win_rate": 50.6,
+  "avg_win_pct": 18.1,
+  "avg_loss_pct": -11.33,
+  "max_win_pct": 18.43,
+  "max_loss_pct": -11.33,
+  "avg_trade_duration_hours": 0.63,
+  "median_trade_duration_hours": 0.25,
+  "profit_factor": 1.63,
+  "expectancy_per_trade_pct": 3.55,
+  "total_return_pct": 316.02,
+  "sharpe_ratio": 3.81,
+  "max_drawdown_pct": -5.31,
+  "dual_trigger_bars": 2,
+  "expiry_exits_below_entry": 0,
+  "exit_distribution": {
+    "sl_hit": 44,
+    "tp_hit": 44,
+    "trail_stop": 0,
+    "expired": 0,
+    "end_of_data": 1
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-02",
+      "trades": 89,
+      "pnl_pct": 316.02,
+      "win_rate": 50.6
+    }
+  ],
+  "best_day": "2026-02-14",
+  "worst_day": "2026-02-13"
+}

@@ -4,7 +4,6 @@ import { TradePanel } from '@/components/features/TradePanel';
 import { SnipePanel } from '@/components/features/SnipePanel';
 import { MarketChart } from '@/components/features/MarketChart';
 import { TradingGuard, ConfidenceBadge } from '@/components/features/TradingGuard';
-import { NeuralLattice } from '@/components/visuals/NeuralLattice';
 import { AlgoConfig } from '@/components/features/AlgoConfig';
 import { useSentimentData } from '@/hooks/useSentimentData';
 import {
@@ -18,10 +17,15 @@ export default function TradePage() {
     const { marketRegime } = useSentimentData({ autoRefresh: true, refreshInterval: 5 * 60 * 1000 });
 
     return (
-        <div className="min-h-screen flex flex-col relative overflow-hidden">
-            <NeuralLattice />
+        <>
+            {/* Ambient Background */}
+            <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+                <div className="ambient-orb absolute top-1/4 left-1/4 w-96 h-96 bg-accent-neon/[0.04] rounded-full blur-[128px]" />
+                <div className="ambient-orb-2 absolute bottom-1/3 right-1/4 w-80 h-80 bg-accent-neon/[0.03] rounded-full blur-[128px]" />
+                <div className="ambient-orb-3 absolute top-2/3 left-1/2 w-64 h-64 bg-accent-success/[0.02] rounded-full blur-[128px]" />
+            </div>
 
-            <div className="relative z-10 pt-24 pb-12 px-4 max-w-7xl mx-auto w-full">
+            <div className="pt-[100px] pb-4 px-3 lg:px-6 max-w-[1920px] mx-auto w-full">
                 {/* Header */}
                 <section className="flex items-center justify-between mb-6">
                     <div>
@@ -96,6 +100,6 @@ export default function TradePage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }

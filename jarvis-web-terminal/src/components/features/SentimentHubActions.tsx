@@ -57,10 +57,7 @@ function QuickBuyButton({ amount, onBuy, disabled }: QuickBuyButtonProps) {
     );
 }
 
-interface ActionGridButtonProps extends ActionButton {
-}
-
-function ActionGridButton({ icon, label, onClick, href, color = 'text-text-secondary', badge, disabled }: ActionGridButtonProps) {
+function ActionGridButton({ icon, label, onClick, href, color = 'text-text-secondary', badge, disabled }: ActionButton) {
     const content = (
         <div className={`
             flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all
@@ -240,7 +237,7 @@ export function SentimentHubActions() {
                 />
                 <ActionGridButton
                     icon={<Activity className="w-4 h-4" />}
-                    label="Bags Intel"
+                    label="DeGen Intel"
                     color="text-accent-success"
                     href="/bags-intel"
                 />

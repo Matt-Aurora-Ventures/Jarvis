@@ -1,0 +1,132 @@
+[
+  {
+    "algo_id": "pump_fresh_tight",
+    "qualified": 246,
+    "lookback_note": "Only 246/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "micro_cap_surge",
+    "qualified": 179,
+    "lookback_note": "Only 179/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "elite",
+    "qualified": 154,
+    "lookback_note": "Only 154/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "momentum",
+    "qualified": 56,
+    "lookback_note": "Only 56/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "hybrid_b",
+    "qualified": 56,
+    "lookback_note": "Only 56/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "let_it_ride",
+    "qualified": 24,
+    "lookback_note": "Only 24/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "sol_veteran",
+    "qualified": 71,
+    "lookback_note": "Only 71/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "utility_swing",
+    "qualified": 71,
+    "lookback_note": "Only 71/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "established_breakout",
+    "qualified": 8,
+    "lookback_note": "Only 8/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "meme_classic",
+    "qualified": 30,
+    "lookback_note": "Only 30/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "volume_spike",
+    "qualified": 6,
+    "lookback_note": "Only 6/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "bags_fresh_snipe",
+    "qualified": 154,
+    "lookback_note": "Only 154/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "bags_momentum",
+    "qualified": 21,
+    "lookback_note": "Only 21/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "bags_value",
+    "qualified": 22,
+    "lookback_note": "Only 22/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "bags_dip_buyer",
+    "qualified": 174,
+    "lookback_note": "Only 174/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "bags_bluechip",
+    "qualified": 25,
+    "lookback_note": "Only 25/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "bags_conservative",
+    "qualified": 22,
+    "lookback_note": "Only 22/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "bags_aggressive",
+    "qualified": 95,
+    "lookback_note": "Only 95/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "bags_elite",
+    "qualified": 22,
+    "lookback_note": "Only 22/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "bluechip_trend_follow",
+    "qualified": 15,
+    "lookback_note": "Only 15/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "bluechip_breakout",
+    "qualified": 15,
+    "lookback_note": "Only 15/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "xstock_intraday",
+    "qualified": 18,
+    "lookback_note": "Only 18/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "xstock_swing",
+    "qualified": 11,
+    "lookback_note": "Only 11/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "prestock_speculative",
+    "qualified": 7,
+    "lookback_note": "Only 7/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "index_intraday",
+    "qualified": 2,
+    "lookback_note": "Only 2/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  },
+  {
+    "algo_id": "index_leveraged",
+    "qualified": 2,
+    "lookback_note": "Only 2/5000 qualifying tokens found in 1376-token universe. Need larger universe or broader lookback."
+  }
+]

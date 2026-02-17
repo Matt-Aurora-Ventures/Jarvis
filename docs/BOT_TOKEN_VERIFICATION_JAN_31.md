@@ -9,7 +9,7 @@
 ### Tokens Provided by User (Screenshots)
 
 **1. X_TELEGRAM_KR8TIV_BOT**
-- Token: `7968869100:AAEanuTRjH4eHTOGvssn8BV71ChsuPrz6Hc`
+- Token: `***X_BOT_TELEGRAM_TOKEN_REDACTED***`
 - Bot: t.me/X_TELEGRAM_KR8TIV_BOT
 - **Usage**: Only in documentation files (not in bot code)
 - **Conflicts**: ✅ NONE
@@ -71,7 +71,7 @@ This is the CORRECT token to deploy to VPS.
 - Twitter API Key in `/home/lucid/.clawdbot/clawdbot.json`:
   ```json
   "twitter-api": {
-    "apiKey": "o1eyd4vadrDsEJuaIZeNxDJaT"
+    "apiKey": "***TWITTER_API_KEY_REDACTED***"
   }
   ```
 - **NOTE**: This is an API key, NOT OAuth 2.0 tokens
@@ -119,7 +119,7 @@ This is the CORRECT token to deploy to VPS.
 1. **X_BOT_TELEGRAM_TOKEN** ✅ VERIFIED SAFE
    ```bash
    # VPS 72.61.7.126
-   X_BOT_TELEGRAM_TOKEN=7968869100:AAEanuTRjH4eHTOGvssn8BV71ChsuPrz6Hc
+   X_BOT_TELEGRAM_TOKEN=***X_BOT_TELEGRAM_TOKEN_REDACTED***
    ```
 
 2. **TREASURY_BOT_TOKEN** ✅ VERIFIED SAFE (CORRECTED)
@@ -135,7 +135,7 @@ ssh root@72.61.7.126
 nano /home/jarvis/Jarvis/lifeos/config/.env
 
 # Add these two lines:
-X_BOT_TELEGRAM_TOKEN=7968869100:AAEanuTRjH4eHTOGvssn8BV71ChsuPrz6Hc
+X_BOT_TELEGRAM_TOKEN=***X_BOT_TELEGRAM_TOKEN_REDACTED***
 TREASURY_BOT_TOKEN=***TREASURY_BOT_TOKEN_REDACTED***
 
 # Save and restart

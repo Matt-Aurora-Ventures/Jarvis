@@ -72,7 +72,7 @@ const CATEGORY_CONFIG: Record<AssetCategory, { label: string; icon: React.ReactN
         label: 'New Launches',
         icon: <Gem className="w-4 h-4" />,
         color: 'text-pink-400',
-        description: 'Fresh bags.fm graduations'
+        description: 'Fresh degen graduations'
     }
 };
 

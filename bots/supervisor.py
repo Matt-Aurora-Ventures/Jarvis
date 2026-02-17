@@ -218,6 +218,8 @@ if sys.platform == "win32":
             stream.reconfigure(encoding='utf-8', errors='replace')
 
 logger = logging.getLogger("jarvis.supervisor")
+# Never log full request URLs (they may include API keys or Telegram bot tokens).
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def track_supervisor_error(exc: Exception, component: str, context: str = "") -> None:
@@ -646,8 +648,29 @@ def load_env():
                         os.environ.setdefault(key.strip(), value.strip())
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    """Parse a boolean-ish env var with a safe default.
+
+    - Unset or empty: default
+    - "1/true/yes/on": True
+    - everything else: False
+    """
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _cooldown_mode() -> bool:
+    """Master kill-switch for cost-heavy / risky components."""
+    return _env_flag("JARVIS_COOLDOWN_MODE", False)
+
+
 async def create_buy_bot():
     """Create and run the buy bot."""
+    if _cooldown_mode() or not _env_flag("BUY_BOT_ENABLED", True):
+        logger.info("[buy_bot] DISABLED (cooldown mode or BUY_BOT_ENABLED=0)")
+        return
     from bots.buy_tracker.bot import JarvisBuyBot
     bot = JarvisBuyBot()
     await bot.start()
@@ -655,6 +678,9 @@ async def create_buy_bot():
 
 async def create_sentiment_reporter():
     """Create and run the sentiment reporter (1 hour interval)."""
+    if _cooldown_mode() or not _env_flag("SENTIMENT_REPORTER_ENABLED", True):
+        logger.info("[sentiment_reporter] DISABLED (cooldown mode or SENTIMENT_REPORTER_ENABLED=0)")
+        return
     from bots.buy_tracker.sentiment_report import SentimentReportGenerator
 
     reporter = SentimentReportGenerator(
@@ -668,6 +694,9 @@ async def create_sentiment_reporter():
 
 async def create_twitter_poster():
     """Create and run the Twitter sentiment poster."""
+    if _cooldown_mode() or not _env_flag("TWITTER_POSTER_ENABLED", True):
+        logger.info("[twitter_poster] DISABLED (cooldown mode or TWITTER_POSTER_ENABLED=0)")
+        return
     from bots.twitter.sentiment_poster import SentimentTwitterPoster
     from bots.twitter.twitter_client import TwitterClient, TwitterCredentials
     from bots.twitter.claude_content import ClaudeContentGenerator
@@ -799,6 +828,9 @@ async def create_telegram_bot():
 
 async def create_autonomous_x_engine():
     """Create and run the autonomous X (Twitter) posting engine."""
+    if _cooldown_mode() or not _env_flag("AUTONOMOUS_X_ENABLED", True):
+        logger.info("[autonomous_x] DISABLED (cooldown mode or AUTONOMOUS_X_ENABLED=0)")
+        return
     from bots.twitter.autonomous_engine import get_autonomous_engine
     from bots.twitter.x_claude_cli_handler import get_x_claude_cli_handler
 
@@ -859,6 +891,21 @@ async def create_public_trading_bot():
         # Start the bot
         logger.info("[public_bot] Public trading bot initialized, starting polling...")
         await supervisor.start()
+
+        # Keep this component alive so PTB polling/background tasks keep running.
+        # The supervisor expects component coroutines to be long-lived.
+        if not supervisor.running:
+            raise RuntimeError("[public_bot] Public trading bot failed to start polling")
+
+        try:
+            while supervisor.running:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            logger.info("[public_bot] Cancelled; shutting down public trading bot...")
+            try:
+                await supervisor.shutdown()
+            finally:
+                raise
 
     except Exception as e:
         logger.error(f"[public_bot] Public trading bot error: {e}", exc_info=True)
@@ -959,7 +1006,10 @@ async def create_autonomous_manager():
         logger.info("[autonomous_manager] Vibe coding initialized")
 
         # Get shared services
-        grok_client = get_grok_client()
+        # In cooldown mode (or when XAI is explicitly disabled), do not initialize Grok.
+        # This prevents background loops from pinging xAI and draining credits.
+        xai_enabled = _env_flag("XAI_ENABLED", True) and not _cooldown_mode()
+        grok_client = get_grok_client() if xai_enabled else None
         sentiment_agg = get_sentiment_aggregator()
 
         # Get or create autonomous manager
@@ -1200,6 +1250,12 @@ async def main():
 
     # Ensure logs directory exists
     (project_root / "logs").mkdir(exist_ok=True)
+
+    # Global automation pause flag (used to temporarily stop scheduled tasks safely).
+    pause_flag = project_root / "PAUSE_AUTOMATIONS"
+    if pause_flag.exists() or os.getenv("JARVIS_PAUSE_AUTOMATIONS", "").strip().lower() in ("1", "true", "yes", "y", "on"):
+        print(f"[Jarvis] Automations paused. Supervisor will not start. ({pause_flag})")
+        return
 
     # ==========================================================
     # SINGLE INSTANCE ENFORCEMENT: Prevent dual supervisor race

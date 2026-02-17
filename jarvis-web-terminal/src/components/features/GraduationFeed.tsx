@@ -535,7 +535,7 @@ export function GraduationFeed() {
                                 Graduation Feed
                             </h3>
                             <p className="text-xs text-text-muted">
-                                bags.fm launches • {graduations.length} tokens
+                                degen launches • {graduations.length} tokens
                             </p>
                         </div>
                     </div>

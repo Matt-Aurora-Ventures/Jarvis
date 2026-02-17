@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+winning/
+logs/
+*.log

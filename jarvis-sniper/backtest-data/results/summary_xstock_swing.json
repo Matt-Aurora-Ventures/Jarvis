@@ -1,0 +1,55 @@
+{
+  "algo_id": "xstock_swing",
+  "total_trades": 47,
+  "wins": 5,
+  "losses": 42,
+  "win_rate": 10.6,
+  "avg_win_pct": 4.28,
+  "avg_loss_pct": -3.29,
+  "max_win_pct": 6.71,
+  "max_loss_pct": -3.4,
+  "avg_trade_duration_hours": 19.53,
+  "median_trade_duration_hours": 4,
+  "profit_factor": 0.16,
+  "expectancy_per_trade_pct": -2.48,
+  "total_return_pct": -116.78,
+  "sharpe_ratio": -16,
+  "max_drawdown_pct": -11.68,
+  "dual_trigger_bars": 0,
+  "expiry_exits_below_entry": 0,
+  "exit_distribution": {
+    "sl_hit": 40,
+    "tp_hit": 0,
+    "trail_stop": 0,
+    "expired": 6,
+    "end_of_data": 1
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2025-11",
+      "trades": 5,
+      "pnl_pct": -11,
+      "win_rate": 20
+    },
+    {
+      "month": "2025-12",
+      "trades": 8,
+      "pnl_pct": -17.06,
+      "win_rate": 12.5
+    },
+    {
+      "month": "2026-01",
+      "trades": 19,
+      "pnl_pct": -56.33,
+      "win_rate": 5.3
+    },
+    {
+      "month": "2026-02",
+      "trades": 15,
+      "pnl_pct": -32.39,
+      "win_rate": 13.3
+    }
+  ],
+  "best_day": "2025-12-01",
+  "worst_day": "2026-01-05"
+}

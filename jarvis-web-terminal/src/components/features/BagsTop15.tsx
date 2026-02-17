@@ -307,7 +307,7 @@ export function BagsTop15() {
                     </div>
                     <div>
                         <h2 className="font-display font-bold text-lg text-text-primary">BAGS TOP 15</h2>
-                        <p className="text-[10px] font-mono text-text-muted">bags.fm graduations with AI scoring</p>
+                        <p className="text-[10px] font-mono text-text-muted">degen graduations with AI scoring</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -413,7 +413,7 @@ export function BagsTop15() {
 
             {/* Footer */}
             <div className="text-center text-[10px] text-text-muted pt-2 border-t border-border-primary">
-                <p>Live bags.fm graduation feed with AI-powered scoring</p>
+                <p>Live degen graduation feed with AI-powered scoring</p>
                 <p>0.5% commission on winning trades goes to stakers</p>
             </div>
         </div>

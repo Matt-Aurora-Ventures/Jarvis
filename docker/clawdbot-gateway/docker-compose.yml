@@ -472,6 +472,12 @@ services:
             echo "[Watchdog] Jarvis unhealthy, restarting..."
             docker restart clawdbot-jarvis 2>/dev/null || true
           fi
+
+          # Check Yoda
+          if ! curl -sf http://localhost:18792/health >/dev/null 2>&1; then
+            echo "[Watchdog] Yoda unhealthy, restarting..."
+            docker restart clawdbot-yoda 2>/dev/null || true
+          fi
         done
       '
 

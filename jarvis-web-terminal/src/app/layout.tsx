@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/context/ThemeContext';
 import { ToastProvider } from '@/components/ui/Toast';
 import { HolographicField } from "@/components/visuals/HolographicField";
 import { Header } from "@/components/layout/Header";
+import { MarketTicker } from "@/components/layout/MarketTicker";
 import { Footer } from "@/components/layout/Footer";
 import { Buffer } from "buffer";
 
@@ -28,8 +29,8 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Jarvis Control Deck | KR8TIV AI",
-  description: "Premium trading terminal with real-time Solana intelligence, Bags.fm graduations, and advanced analytics.",
-  keywords: ["solana", "trading", "bags.fm", "crypto", "defi", "terminal"],
+  description: "Premium trading terminal with real-time Solana intelligence, degen graduations, and advanced analytics.",
+  keywords: ["solana", "trading", "degen", "crypto", "defi", "terminal"],
 };
 
 export default function RootLayout({
@@ -52,6 +53,9 @@ export default function RootLayout({
                 <div className="opacity-[0.02]"><HolographicField /></div>
                 <div className="relative z-10 flex min-h-screen flex-col">
                   <Header />
+                  <div className="fixed top-14 lg:top-16 left-0 right-0 z-40">
+                    <MarketTicker />
+                  </div>
                   <main className="flex-1 w-full max-w-[1920px] mx-auto px-2 sm:px-3 lg:px-4 py-2 relative">
                     {children}
                   </main>

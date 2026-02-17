@@ -7,7 +7,6 @@ import { GraduationFeed } from '@/components/features/GraduationFeed';
 import { getBagsTradingClient } from '@/lib/bags-trading';
 import { bagsClient, getScoreTier, TIER_COLORS, BagsGraduation } from '@/lib/bags-api';
 import { getGrokSentimentClient } from '@/lib/grok-sentiment';
-import { NeuralLattice } from '@/components/visuals/NeuralLattice';
 import {
     Rocket,
     Zap,
@@ -33,7 +32,7 @@ const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const REWARDS_RECIPIENT = {
     twitter: '@bags_fm',
     handle: 'bags_fm',
-    name: 'bags.fm',
+    name: 'DeGen',
     avatar: 'https://pbs.twimg.com/profile_images/bags_fm.jpg',
     totalRewards: 12847.50,
     weeklyRewards: 1250.00,
@@ -104,10 +103,15 @@ export default function LaunchesPage() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col relative overflow-hidden">
-            <NeuralLattice />
+        <>
+            {/* Ambient Background */}
+            <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+                <div className="ambient-orb absolute top-1/4 left-1/4 w-96 h-96 bg-accent-neon/[0.04] rounded-full blur-[128px]" />
+                <div className="ambient-orb-2 absolute bottom-1/3 right-1/4 w-80 h-80 bg-accent-neon/[0.03] rounded-full blur-[128px]" />
+                <div className="ambient-orb-3 absolute top-2/3 left-1/2 w-64 h-64 bg-accent-success/[0.02] rounded-full blur-[128px]" />
+            </div>
 
-            <div className="relative z-10 pt-24 pb-12 px-4 max-w-7xl mx-auto w-full">
+            <div className="pt-[100px] pb-4 px-3 lg:px-6 max-w-[1920px] mx-auto w-full">
                 {/* Header */}
                 <section className="text-center mb-8">
                     <div className="flex items-center justify-center gap-2 mb-2">
@@ -115,7 +119,7 @@ export default function LaunchesPage() {
                         <span className="text-sm text-accent-neon font-mono">LIVE LAUNCHES</span>
                     </div>
                     <h1 className="font-display text-4xl md:text-5xl font-bold text-text-primary mb-4">
-                        bags.fm Graduations
+                        DeGen Graduations
                     </h1>
                     <p className="text-text-secondary text-lg max-w-2xl mx-auto">
                         Real-time token launches with AI-powered scoring and instant swaps
@@ -189,7 +193,7 @@ export default function LaunchesPage() {
                             </div>
 
                             <p className="text-xs text-text-muted mt-3 text-center">
-                                Trade via bags.fm to earn partner rewards
+                                Trade to earn partner rewards
                             </p>
                         </div>
 
@@ -342,6 +346,6 @@ export default function LaunchesPage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }

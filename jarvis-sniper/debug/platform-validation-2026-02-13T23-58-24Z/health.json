@@ -1,0 +1,39 @@
+{
+  "status": "ok",
+  "timestamp": "2026-02-14T05:58:45.487Z",
+  "uptime": 401.848892294,
+  "env": {
+    "rpcGatekeeper": true,
+    "rpcPublic": true,
+    "rpcServer": true,
+    "bagsApiKey": true,
+    "bagsReferral": true,
+    "solscanApiKey": true
+  },
+  "rpc": {
+    "configured": true,
+    "source": "helius_gatekeeper",
+    "productionMode": true,
+    "url": "https://mainnet.helius-rpc.com/?api-key=***",
+    "diagnostic": "Using helius_gatekeeper: https://mainnet.helius-rpc.com/?api-key=***"
+  },
+  "autonomy": {
+    "enabled": true,
+    "applyOverrides": false
+  },
+  "xai": {
+    "configured": true,
+    "batchEnabled": true,
+    "modelPolicy": "grok-4-1-fast-reasoning",
+    "dailyBudgetUsd": 10,
+    "keyRatePolicy": {
+      "qps": 0.2,
+      "qpm": 12,
+      "tpm": 120000
+    }
+  },
+  "memory": {
+    "heapUsedMB": 45,
+    "rssUsedMB": 199
+  }
+}
