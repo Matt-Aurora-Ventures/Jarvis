@@ -1395,12 +1395,12 @@ export function SniperControls() {
       <div className="mb-4 p-3 rounded-lg border border-border-primary bg-bg-secondary">
         <div className="flex items-center gap-2 mb-1.5">
           <FlaskConical className="w-3.5 h-3.5 text-text-muted" />
-          <span className="text-[10px] font-mono uppercase tracking-wide text-text-muted">AI Assist Status</span>
+          <span className="text-[10px] font-mono uppercase tracking-wide text-text-muted">Xai Grok assist Status</span>
         </div>
         {autonomyRuntime ? (
           <>
             <p className="text-[10px] text-text-secondary leading-relaxed">
-              AI Assist {autonomyRuntime.autonomyEnabled && autonomyRuntime.applyOverridesEnabled && autonomyRuntime.xaiConfigured ? 'ON' : 'OFF'} (runtime tuning only; no code changes) | engine {autonomyRuntime.autonomyEnabled ? 'enabled' : 'disabled'} | overrides {autonomyRuntime.applyOverridesEnabled ? 'on' : 'off'} | xAI key {autonomyRuntime.xaiConfigured ? 'configured' : 'missing'}.
+              Xai Grok assist {autonomyRuntime.autonomyEnabled && autonomyRuntime.applyOverridesEnabled && autonomyRuntime.xaiConfigured ? 'ON' : 'OFF'} (runtime tuning only; no code changes) | engine {autonomyRuntime.autonomyEnabled ? 'enabled' : 'disabled'} | overrides {autonomyRuntime.applyOverridesEnabled ? 'on' : 'off'} | xAI key {autonomyRuntime.xaiConfigured ? 'configured' : 'missing'}.
             </p>
             <p className="text-[9px] text-text-muted mt-1">
               Cycle: {autonomyRuntime.latestCycleId || 'none'}{autonomyRuntime.latestReasonCode ? ` (${autonomyRuntime.latestReasonCode})` : ''} | override v{autonomyRuntime.overrideVersion} | updated {autonomyRuntime.overrideUpdatedAt ? new Date(autonomyRuntime.overrideUpdatedAt).toLocaleString() : 'never'}
