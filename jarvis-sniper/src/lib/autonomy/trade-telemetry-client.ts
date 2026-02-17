@@ -1,5 +1,6 @@
 export interface TradeTelemetryEvent {
   schemaVersion: number;
+  eventType?: 'trade_closed' | 'sell_attempt';
   positionId: string;
   mint: string;
   status: string;
@@ -16,6 +17,11 @@ export interface TradeTelemetryEvent {
   buyTxHash?: string | null;
   sellTxHash?: string | null;
   includedInStats?: boolean;
+  includedInExecutionStats?: boolean;
+  executionOutcome?: 'confirmed' | 'failed' | 'unresolved' | 'no_route';
+  failureCode?: string | null;
+  failureReason?: string | null;
+  attemptIndex?: number | null;
   manualOnly?: boolean;
   recoveredFrom?: string | null;
   tradeSignerMode?: string;

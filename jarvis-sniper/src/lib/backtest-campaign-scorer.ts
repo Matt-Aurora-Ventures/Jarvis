@@ -11,6 +11,7 @@ export interface StrategyMetrics {
   netPnl: number;
   sharpe?: number;
   stability?: number;
+  executionReliabilityPct?: number;
   sourceDiagnostics?: Record<string, unknown>;
 }
 
@@ -101,6 +102,12 @@ export function evaluatePromotion(metric: StrategyMetrics): PromotionDecision {
   if (!(metric.winRate >= wrGate)) {
     return { promoted: false, reason: `winRate ${(metric.winRate * 100).toFixed(2)}% < ${(wrGate * 100).toFixed(0)}%` };
   }
+  const execReliability = Number.isFinite(metric.executionReliabilityPct ?? NaN)
+    ? Number(metric.executionReliabilityPct)
+    : 0;
+  if (!(execReliability >= 80)) {
+    return { promoted: false, reason: `executionReliabilityPct ${execReliability.toFixed(2)} < 80` };
+  }
   return { promoted: true, reason: 'passed promotion gates' };
 }
 
@@ -115,6 +122,7 @@ export function aggregateRunSummaries(
     maxDrawdownPct: number;
     netPnl: number;
     sharpe?: number;
+    executionReliabilityPct?: number;
   }>,
 ): StrategyMetrics {
   if (rows.length === 0) {
@@ -145,6 +153,7 @@ export function aggregateRunSummaries(
     maxDrawdownPct: Math.max(...rows.map((r) => Number(r.maxDrawdownPct) || 0)),
     netPnl: rows.reduce((s, r) => s + (Number(r.netPnl) || 0), 0),
     sharpe: weighted('sharpe'),
+    executionReliabilityPct: weighted('executionReliabilityPct'),
   };
 }
 

@@ -55,6 +55,13 @@ export interface BacktestEvidenceTradeRow {
   feePct: number;
   minScore: number;
   minLiquidityUsd: number;
+  executionReliabilityPct?: number;
+  noRouteRate?: number;
+  unresolvedRate?: number;
+  failedRate?: number;
+  executionAdjustedPnlNet?: number;
+  degraded?: boolean;
+  degradedReasons?: string;
 }
 
 export interface BacktestEvidenceBundle {
@@ -201,6 +208,13 @@ export function evidenceTradesToCsv(bundle: BacktestEvidenceBundle): string {
     'feePct',
     'minScore',
     'minLiquidityUsd',
+    'executionReliabilityPct',
+    'noRouteRate',
+    'unresolvedRate',
+    'failedRate',
+    'executionAdjustedPnlNet',
+    'degraded',
+    'degradedReasons',
   ];
 
   const lines: string[] = [];

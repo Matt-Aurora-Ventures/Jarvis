@@ -10,7 +10,10 @@ import { closeEmptyTokenAccountsForMint, loadSessionWalletByPublicKey, loadSessi
 import { isBlueChipLongConvictionSymbol } from '@/lib/trade-plan';
 import { filterOpenPositionsForActiveWallet, isPositionInActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
+import { postTradeTelemetry } from '@/lib/autonomy/trade-telemetry-client';
 const WORKER_INTERVAL_MS = 1500;
+const EXIT_RETRY_BASE_MS = 1200;
+const EXIT_RETRY_MAX_MS = 10_000;
 
 type TriggerType = 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired';
 
@@ -36,6 +39,8 @@ export function useAutomatedRiskManagement() {
   const updatePosition = useSniperStore((s) => s.updatePosition);
   const closePosition = useSniperStore((s) => s.closePosition);
   const addExecution = useSniperStore((s) => s.addExecution);
+  const registerPendingTx = useSniperStore((s) => s.registerPendingTx);
+  const finalizePendingTx = useSniperStore((s) => s.finalizePendingTx);
 
   const connectionRef = useRef<Connection | null>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -143,6 +148,10 @@ export function useAutomatedRiskManagement() {
     });
   }, [positions, config, tradeSignerMode, sessionWalletPubkey, address]);
 
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   async function handleTrigger(id: string, trigger: TriggerType, pnlPct: number) {
     const state = useSniperStore.getState();
     if (state.operationLock.active && state.operationLock.mode === 'close_all') return;
@@ -153,15 +162,51 @@ export function useAutomatedRiskManagement() {
     if (pos.isClosing) return;
     if (pos.manualOnly) return;
     if (inFlightRef.current.has(id)) return;
-
     if (isBlueChipLongConvictionSymbol(pos.symbol)) return;
 
     const useRec = state.config.useRecommendedExits !== false;
-    const sl = useRec ? (pos.recommendedSl ?? state.config.stopLossPct) : state.config.stopLossPct;
-    const tp = useRec ? (pos.recommendedTp ?? state.config.takeProfitPct) : state.config.takeProfitPct;
     const trailPct = useRec ? (pos.recommendedTrail ?? state.config.trailingStopPct) : state.config.trailingStopPct;
+    const triggerText = triggerLabel(trigger, trailPct, pos.highWaterMarkPct);
+    const isEmergencyExit = trigger === 'sl_hit' || trigger === 'trail_stop' || trigger === 'expired';
+    const maxAttempts = isEmergencyExit ? 3 : 2;
 
-    // If we're not using session wallet signing, we can't auto-execute: mark exit pending.
+    const emitSellAttemptTelemetry = (args: {
+      outcome: 'confirmed' | 'failed' | 'unresolved' | 'no_route';
+      attempt: number;
+      failureCode?: string | null;
+      failureReason?: string | null;
+      sellTxHash?: string | null;
+    }) => {
+      const s = useSniperStore.getState();
+      postTradeTelemetry({
+        schemaVersion: 1,
+        eventType: 'sell_attempt',
+        positionId: pos.id,
+        mint: pos.mint,
+        status: trigger,
+        symbol: pos.symbol,
+        walletAddress: pos.walletAddress ?? null,
+        strategyId: pos.strategyId ?? null,
+        entrySource: pos.entrySource ?? null,
+        entryTime: pos.entryTime,
+        exitTime: Date.now(),
+        solInvested: pos.solInvested,
+        executionOutcome: args.outcome,
+        failureCode: args.failureCode || null,
+        failureReason: args.failureReason || null,
+        sellTxHash: args.sellTxHash || null,
+        attemptIndex: args.attempt,
+        includedInExecutionStats: true,
+        tradeSignerMode: s.tradeSignerMode,
+        sessionWalletPubkey: s.sessionWalletPubkey,
+        activePreset: s.activePreset,
+      });
+    };
+
+    const sessionOnlyAutoEnabled = String(
+      process.env.NEXT_PUBLIC_SNIPER_SESSION_ONLY_AUTO || process.env.SNIPER_SESSION_ONLY_AUTO || 'true',
+    ).toLowerCase() !== 'false';
+
     const session = tradeSignerMode === 'session'
       ? (
           sessionWalletPubkey
@@ -184,19 +229,24 @@ export function useAutomatedRiskManagement() {
     }
 
     if (!canAuto) {
-      // Manual mode: show activation clearly, but avoid spamming the store/log every tick.
       const now = Date.now();
       const existing = pos.exitPending;
       const sameTrigger = !!existing && existing.trigger === trigger;
       const recentlyUpdated = sameTrigger && now - existing.updatedAt < 5_000;
+      const reason = sessionOnlyAutoEnabled
+        ? 'Auto-exec requires Session Wallet mode with a valid session key. Click Approve to sell with Phantom.'
+        : 'Auto-exec unavailable in current signer mode. Click Approve to sell with Phantom.';
 
       if (!recentlyUpdated) {
         updatePosition(id, {
+          exitLifecycle: 'trigger_detected',
+          lastExitAttemptAt: now,
+          lastExitError: reason,
           exitPending: {
             trigger,
             pnlPercent: pnlPct,
             quoteAvailable: false,
-            reason: 'Auto-exec requires Session Wallet mode. Click Approve to sell with Phantom.',
+            reason,
             updatedAt: now,
           },
         });
@@ -210,17 +260,20 @@ export function useAutomatedRiskManagement() {
           mint: pos.mint,
           amount: pos.solInvested,
           pnlPercent: pnlPct,
-          reason: `${triggerLabel(trigger, trailPct, pos.highWaterMarkPct)} hit at ${pnlPct.toFixed(1)}% — click Approve in Positions to sell`,
+          reason: `${triggerText} hit at ${pnlPct.toFixed(1)}% — click Approve in Positions to sell`,
           timestamp: Date.now(),
         });
       }
       return;
     }
 
-    // Auto-execute via Bags (session wallet signs).
     inFlightRef.current.add(id);
     setPositionClosing(id, true);
-    updatePosition(id, { exitPending: undefined });
+    updatePosition(id, {
+      exitPending: undefined,
+      exitLifecycle: 'trigger_detected',
+      lastExitError: undefined,
+    });
 
     try {
       const connection = getConnection();
@@ -233,8 +286,6 @@ export function useAutomatedRiskManagement() {
         amountLamports = bal.amountLamports;
         updatePosition(id, { amountLamports });
       } else if (bal && bal.amountLamports !== '0') {
-        // For auto-managed entries, sell the full session-wallet balance so the token account can be closed.
-        // Manual entries may represent multiple lots; keep the conservative clamp in that case.
         if (pos.entrySource === 'auto') {
           amountLamports = bal.amountLamports;
           updatePosition(id, { amountLamports });
@@ -247,8 +298,6 @@ export function useAutomatedRiskManagement() {
         }
       }
 
-      // Fetch a realizable sell quote (slippage waterfall).
-      // For SL/Trail/Expiry, we allow more slippage to maximize exit probability on micro-caps.
       const slippageBase = state.config.slippageBps;
       const waterfall = [
         slippageBase,
@@ -256,147 +305,300 @@ export function useAutomatedRiskManagement() {
         Math.max(slippageBase, 500),
         Math.max(slippageBase, 1000),
         1500,
-        ...(trigger === 'sl_hit' || trigger === 'trail_stop' || trigger === 'expired'
-          ? [3000, 5000, 10_000]
-          : []),
+        ...(isEmergencyExit ? [3000, 5000, 10_000] : []),
       ]
         .filter((n, i, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === i)
         .sort((a, b) => a - b);
-
-      let quote = null as Awaited<ReturnType<typeof getSellQuote>>;
-      for (const bps of waterfall) {
-        quote = await getSellQuote(pos.mint, amountLamports, bps);
-        if (quote) break;
-      }
-
-      if (!quote) {
-        updatePosition(id, {
-          exitPending: {
-            trigger,
-            pnlPercent: pnlPct,
-            quoteAvailable: false,
-            reason: 'Quote unavailable (no route / liquidity pulled). Try Write Off or manual exit.',
-            updatedAt: Date.now(),
-          },
-          isClosing: false,
-        });
-        addExecution({
-          id: `auto-quote-${Date.now()}-${id.slice(-4)}`,
-          type: 'error',
-          symbol: pos.symbol,
-          mint: pos.mint,
-          amount: pos.solInvested,
-          reason: `${triggerLabel(trigger, trailPct, pos.highWaterMarkPct)} reached but no sell quote found (liquidity may be gone).`,
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      const exitValueSol = Number(BigInt(quote.outAmount)) / 1e9;
 
       const signWithSession = async (tx: VersionedTransaction) => {
         tx.sign([session!.keypair]);
         return tx;
       };
+      const priorityFeeMicroLamports = trigger === 'tp_hit' ? 200_000 : 350_000;
+      let lastError = 'Auto-exit failed';
 
-      // Priority fee: small bump on emergency exits to reduce timeout risk.
-      const priorityFeeMicroLamports =
-        trigger === 'tp_hit' ? 200_000 : 350_000;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const attemptAt = Date.now();
+        updatePosition(id, {
+          exitLifecycle: 'quote_attempting',
+          exitAttempts: attempt,
+          lastExitAttemptAt: attemptAt,
+          lastExitError: undefined,
+        });
 
-      const result = await executeSwapFromQuote(
-        connection,
-        sessionWalletPubkey!,
-        quote,
-        signWithSession,
-        state.config.useJito,
-        priorityFeeMicroLamports,
-      );
-
-      if (!result.success) throw new Error(result.error || 'Sell failed');
-
-      closePosition(id, trigger, result.txHash, exitValueSol);
-
-      // Reclaim rent by closing the now-empty token account(s) for this mint (session wallet only).
-      // Best-effort: if the wallet still has non-zero balance (dust/partial), it will be skipped.
-      try {
-        const cleanup = await closeEmptyTokenAccountsForMint(session!.keypair, pos.mint);
-        if (cleanup.closedTokenAccounts > 0) {
-          addExecution({
-            id: `rent-${Date.now()}-${id.slice(-4)}`,
-            type: 'info',
-            symbol: pos.symbol,
-            mint: pos.mint,
-            amount: 0,
-            txHash: cleanup.closeSignatures[0],
-            reason: `Reclaimed ${(cleanup.reclaimedLamports / 1e9).toFixed(6)} SOL rent by closing ${cleanup.closedTokenAccounts} empty token account${cleanup.closedTokenAccounts === 1 ? '' : 's'}`,
-            timestamp: Date.now(),
-          });
+        let quote = null as Awaited<ReturnType<typeof getSellQuote>>;
+        for (const bps of waterfall) {
+          quote = await getSellQuote(pos.mint, amountLamports, bps);
+          if (quote) break;
         }
-        if (cleanup.closedTokenAccounts === 0 && cleanup.skippedNonZeroTokenAccounts > 0) {
-          addExecution({
-            id: `rent-skip-${Date.now()}-${id.slice(-4)}`,
-            type: 'info',
-            symbol: pos.symbol,
-            mint: pos.mint,
-            amount: 0,
-            reason: `Rent reclaim skipped: ${cleanup.skippedNonZeroTokenAccounts} token account${cleanup.skippedNonZeroTokenAccounts === 1 ? '' : 's'} still had non-zero balance (dust/partial exit).`,
-            timestamp: Date.now(),
+
+        if (!quote) {
+          lastError = 'Quote unavailable (no route / liquidity pulled).';
+          emitSellAttemptTelemetry({
+            outcome: 'no_route',
+            attempt,
+            failureCode: 'no_route',
+            failureReason: lastError,
           });
-        }
-        if (cleanup.failedToCloseTokenAccounts > 0) {
+          if (attempt < maxAttempts) {
+            const delayMs = Math.min(EXIT_RETRY_MAX_MS, EXIT_RETRY_BASE_MS * (2 ** (attempt - 1)));
+            addExecution({
+              id: `auto-retry-${Date.now()}-${id.slice(-4)}`,
+              type: 'info',
+              symbol: pos.symbol,
+              mint: pos.mint,
+              amount: pos.solInvested,
+              reason: `${triggerText}: no quote route on attempt ${attempt}/${maxAttempts}, retrying in ${(delayMs / 1000).toFixed(1)}s`,
+              timestamp: Date.now(),
+            });
+            await sleep(delayMs);
+            continue;
+          }
+
+          setPositionClosing(id, false);
+          updatePosition(id, {
+            exitLifecycle: 'swap_failed',
+            lastExitError: lastError,
+            pendingSellState: undefined,
+            exitPending: {
+              trigger,
+              pnlPercent: pnlPct,
+              quoteAvailable: false,
+              reason: `${lastError} Try Write Off or manual exit.`,
+              updatedAt: Date.now(),
+            },
+          });
           addExecution({
-            id: `rent-fail-${Date.now()}-${id.slice(-4)}`,
+            id: `auto-quote-${Date.now()}-${id.slice(-4)}`,
             type: 'error',
             symbol: pos.symbol,
             mint: pos.mint,
-            amount: 0,
-            reason: `Rent reclaim incomplete: ${cleanup.failedToCloseTokenAccounts} empty token account${cleanup.failedToCloseTokenAccounts === 1 ? '' : 's'} failed to close; retry Sweep Back later.`,
+            amount: pos.solInvested,
+            reason: `${triggerText} reached but no sell quote found after ${attempt} attempt${attempt === 1 ? '' : 's'} (liquidity may be gone).`,
             timestamp: Date.now(),
           });
+          return;
         }
-      } catch {
-        // ignore rent reclaim errors (trade already closed)
-      }
 
-      // Also close any now-empty WSOL temp accounts. Some swap routes may touch WSOL as an
-      // intermediate and leave behind a zero-balance account that can be closed for rent.
-      if (pos.mint !== SOL_MINT) {
-        try {
-          const wsolCleanup = await closeEmptyTokenAccountsForMint(session!.keypair, SOL_MINT);
-          if (wsolCleanup.closedTokenAccounts > 0) {
-            addExecution({
-              id: `rent-wsol-${Date.now()}-${id.slice(-4)}`,
-              type: 'info',
-              symbol: 'WSOL',
-              mint: SOL_MINT,
-              amount: 0,
-              txHash: wsolCleanup.closeSignatures[0],
-              reason: `Reclaimed ${(wsolCleanup.reclaimedLamports / 1e9).toFixed(6)} SOL rent by closing ${wsolCleanup.closedTokenAccounts} empty WSOL token account${wsolCleanup.closedTokenAccounts === 1 ? '' : 's'}`,
-              timestamp: Date.now(),
-            });
+        const exitValueSol = Number(BigInt(quote.outAmount)) / 1e9;
+        const result = await executeSwapFromQuote(
+          connection,
+          sessionWalletPubkey!,
+          quote,
+          signWithSession,
+          state.config.useJito,
+          priorityFeeMicroLamports,
+        );
+
+        const txHash = String(result.txHash || '').trim();
+        if (txHash) {
+          registerPendingTx({
+            signature: txHash,
+            kind: 'sell',
+            mint: pos.mint,
+            positionId: id,
+            submittedAt: Date.now(),
+            status: 'submitted',
+            sourcePage: 'risk:auto',
+          });
+          updatePosition(id, {
+            exitLifecycle: 'swap_submitted',
+            pendingSellTxHash: txHash,
+            pendingSellSubmittedAt: Date.now(),
+            pendingSellState: 'submitted',
+            lastExitAttemptAt: Date.now(),
+          });
+        }
+
+        if (result.success) {
+          if (txHash) {
+            finalizePendingTx(txHash, 'confirmed');
           }
-          if (wsolCleanup.failedToCloseTokenAccounts > 0) {
+          closePosition(id, trigger, result.txHash, exitValueSol);
+          emitSellAttemptTelemetry({
+            outcome: 'confirmed',
+            attempt,
+            sellTxHash: txHash || null,
+          });
+
+          // Reclaim rent by closing the now-empty token account(s) for this mint (session wallet only).
+          try {
+            const cleanup = await closeEmptyTokenAccountsForMint(session!.keypair, pos.mint);
+            if (cleanup.closedTokenAccounts > 0) {
+              addExecution({
+                id: `rent-${Date.now()}-${id.slice(-4)}`,
+                type: 'info',
+                symbol: pos.symbol,
+                mint: pos.mint,
+                amount: 0,
+                txHash: cleanup.closeSignatures[0],
+                reason: `Reclaimed ${(cleanup.reclaimedLamports / 1e9).toFixed(6)} SOL rent by closing ${cleanup.closedTokenAccounts} empty token account${cleanup.closedTokenAccounts === 1 ? '' : 's'}`,
+                timestamp: Date.now(),
+              });
+            }
+            if (cleanup.closedTokenAccounts === 0 && cleanup.skippedNonZeroTokenAccounts > 0) {
+              addExecution({
+                id: `rent-skip-${Date.now()}-${id.slice(-4)}`,
+                type: 'info',
+                symbol: pos.symbol,
+                mint: pos.mint,
+                amount: 0,
+                reason: `Rent reclaim skipped: ${cleanup.skippedNonZeroTokenAccounts} token account${cleanup.skippedNonZeroTokenAccounts === 1 ? '' : 's'} still had non-zero balance (dust/partial exit).`,
+                timestamp: Date.now(),
+              });
+            }
+            if (cleanup.failedToCloseTokenAccounts > 0) {
+              addExecution({
+                id: `rent-fail-${Date.now()}-${id.slice(-4)}`,
+                type: 'error',
+                symbol: pos.symbol,
+                mint: pos.mint,
+                amount: 0,
+                reason: `Rent reclaim incomplete: ${cleanup.failedToCloseTokenAccounts} empty token account${cleanup.failedToCloseTokenAccounts === 1 ? '' : 's'} failed to close; retry Sweep Back later.`,
+                timestamp: Date.now(),
+              });
+            }
+          } catch {
+            // ignore rent reclaim errors (trade already closed)
+          }
+
+          // Also close any now-empty WSOL temp accounts.
+          if (pos.mint !== SOL_MINT) {
+            try {
+              const wsolCleanup = await closeEmptyTokenAccountsForMint(session!.keypair, SOL_MINT);
+              if (wsolCleanup.closedTokenAccounts > 0) {
+                addExecution({
+                  id: `rent-wsol-${Date.now()}-${id.slice(-4)}`,
+                  type: 'info',
+                  symbol: 'WSOL',
+                  mint: SOL_MINT,
+                  amount: 0,
+                  txHash: wsolCleanup.closeSignatures[0],
+                  reason: `Reclaimed ${(wsolCleanup.reclaimedLamports / 1e9).toFixed(6)} SOL rent by closing ${wsolCleanup.closedTokenAccounts} empty WSOL token account${wsolCleanup.closedTokenAccounts === 1 ? '' : 's'}`,
+                  timestamp: Date.now(),
+                });
+              }
+              if (wsolCleanup.failedToCloseTokenAccounts > 0) {
+                addExecution({
+                  id: `rent-wsol-fail-${Date.now()}-${id.slice(-4)}`,
+                  type: 'error',
+                  symbol: 'WSOL',
+                  mint: SOL_MINT,
+                  amount: 0,
+                  reason: `WSOL rent reclaim incomplete: ${wsolCleanup.failedToCloseTokenAccounts} empty token account${wsolCleanup.failedToCloseTokenAccounts === 1 ? '' : 's'} failed to close; retry Sweep Back later.`,
+                  timestamp: Date.now(),
+                });
+              }
+            } catch {
+              // ignore WSOL cleanup errors
+            }
+          }
+          return;
+        }
+
+        lastError = result.error || result.failureDetail || 'Sell failed';
+        const confirmationState = result.confirmationState || (result.failureCode === 'unresolved' ? 'unresolved' : undefined);
+
+        if (txHash) {
+          if (confirmationState === 'unresolved') {
+            finalizePendingTx(txHash, 'unresolved', lastError);
+            updatePosition(id, {
+              exitLifecycle: 'swap_unresolved',
+              pendingSellTxHash: txHash,
+              pendingSellSubmittedAt: Date.now(),
+              pendingSellState: 'unresolved',
+              lastExitError: lastError,
+              exitPending: {
+                trigger,
+                pnlPercent: pnlPct,
+                quoteAvailable: true,
+                reason: `Sell submitted (${txHash.slice(0, 8)}...) but unresolved. Awaiting reconciliation.`,
+                updatedAt: Date.now(),
+              },
+            });
+            setPositionClosing(id, false);
+            emitSellAttemptTelemetry({
+              outcome: 'unresolved',
+              attempt,
+              failureCode: result.failureCode || 'unresolved',
+              failureReason: lastError,
+              sellTxHash: txHash,
+            });
             addExecution({
-              id: `rent-wsol-fail-${Date.now()}-${id.slice(-4)}`,
+              id: `auto-unresolved-${Date.now()}-${id.slice(-4)}`,
               type: 'error',
-              symbol: 'WSOL',
-              mint: SOL_MINT,
-              amount: 0,
-              reason: `WSOL rent reclaim incomplete: ${wsolCleanup.failedToCloseTokenAccounts} empty token account${wsolCleanup.failedToCloseTokenAccounts === 1 ? '' : 's'} failed to close; retry Sweep Back later.`,
+              symbol: pos.symbol,
+              mint: pos.mint,
+              amount: pos.solInvested,
+              txHash,
+              reason: `${triggerText} sell unresolved; holding row open until balance reconciliation confirms exit.`,
               timestamp: Date.now(),
             });
+            return;
           }
-        } catch {
-          // ignore WSOL cleanup errors (trade already closed)
+          finalizePendingTx(txHash, 'failed', lastError);
+          updatePosition(id, {
+            exitLifecycle: 'swap_failed',
+            pendingSellTxHash: txHash,
+            pendingSellSubmittedAt: Date.now(),
+            pendingSellState: 'failed',
+            lastExitError: lastError,
+          });
         }
-      }
 
-      // Keep realized SOL inside the session wallet by default.
-      // Operators can move funds manually using "Sweep Back".
+        emitSellAttemptTelemetry({
+          outcome: 'failed',
+          attempt,
+          failureCode: result.failureCode || 'swap_failed',
+          failureReason: lastError,
+          sellTxHash: txHash || null,
+        });
+
+        if (attempt < maxAttempts) {
+          const delayMs = Math.min(EXIT_RETRY_MAX_MS, EXIT_RETRY_BASE_MS * (2 ** (attempt - 1)));
+          addExecution({
+            id: `auto-retry-${Date.now()}-${id.slice(-4)}`,
+            type: 'info',
+            symbol: pos.symbol,
+            mint: pos.mint,
+            amount: pos.solInvested,
+            txHash: txHash || undefined,
+            reason: `${triggerText}: sell failed on attempt ${attempt}/${maxAttempts} (${lastError}). Retrying in ${(delayMs / 1000).toFixed(1)}s.`,
+            timestamp: Date.now(),
+          });
+          await sleep(delayMs);
+          continue;
+        }
+
+        setPositionClosing(id, false);
+        updatePosition(id, {
+          exitLifecycle: 'swap_failed',
+          lastExitError: lastError,
+          exitPending: {
+            trigger,
+            pnlPercent: pnlPct,
+            quoteAvailable: true,
+            reason: `Auto-exit failed after ${attempt} attempts: ${lastError}`,
+            updatedAt: Date.now(),
+          },
+        });
+        addExecution({
+          id: `auto-fail-${Date.now()}-${id.slice(-4)}`,
+          type: 'error',
+          symbol: pos.symbol,
+          mint: pos.mint,
+          amount: pos.solInvested,
+          reason: `Auto-exit failed after ${attempt} attempts: ${lastError}`,
+          timestamp: Date.now(),
+        });
+        return;
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       setPositionClosing(id, false);
       updatePosition(id, {
+        exitLifecycle: 'swap_failed',
+        lastExitError: msg,
         exitPending: {
           trigger,
           pnlPercent: pnlPct,
@@ -404,6 +606,12 @@ export function useAutomatedRiskManagement() {
           reason: `Auto-exit failed: ${msg}`,
           updatedAt: Date.now(),
         },
+      });
+      emitSellAttemptTelemetry({
+        outcome: 'failed',
+        attempt: Math.max(1, Number(pos.exitAttempts || 0)),
+        failureCode: 'exception',
+        failureReason: msg,
       });
       addExecution({
         id: `auto-fail-${Date.now()}-${id.slice(-4)}`,

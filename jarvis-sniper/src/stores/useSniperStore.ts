@@ -17,11 +17,27 @@ export type AutomationState = 'idle' | 'scanning' | 'executing_buy' | 'cooldown'
 export type AssetType = 'memecoin' | 'xstock' | 'prestock' | 'index' | 'bluechip' | 'bags' | 'established';
 export type PendingTxStatus = 'submitted' | 'settling' | 'confirmed' | 'failed' | 'unresolved';
 export type PendingTxKind = 'buy' | 'sell' | 'fund' | 'sweep';
+export type ExitLifecycleState =
+  | 'open'
+  | 'trigger_detected'
+  | 'quote_attempting'
+  | 'swap_submitted'
+  | 'swap_confirmed'
+  | 'swap_failed'
+  | 'swap_unresolved'
+  | 'sell_reconciled';
+export type PositionReconcileReason =
+  | 'no_onchain_balance'
+  | 'buy_tx_unresolved'
+  | 'buy_tx_failed'
+  | 'sell_tx_unresolved_balance_zero'
+  | 'sell_tx_failed';
 
 export interface PendingTxRecord {
   signature: string;
   kind: PendingTxKind;
   mint?: string;
+  positionId?: string;
   submittedAt: number;
   lastCheckedAt?: number;
   status: PendingTxStatus;
@@ -681,6 +697,24 @@ export interface Position {
   status: 'open' | 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' | 'closed';
   /** Lock flag — prevents duplicate sell attempts while tx is in-flight */
   isClosing?: boolean;
+  /** Explicit sell lifecycle state for truthful exit telemetry and UI. */
+  exitLifecycle?: ExitLifecycleState;
+  /** Number of sell attempts made for this position. */
+  exitAttempts?: number;
+  /** Timestamp of latest sell attempt (ms). */
+  lastExitAttemptAt?: number;
+  /** Last sell error message (if any). */
+  lastExitError?: string;
+  /** Pending sell signature if submission occurred but close not finalized yet. */
+  pendingSellTxHash?: string;
+  /** Timestamp when pending sell signature was first submitted (ms). */
+  pendingSellSubmittedAt?: number;
+  /** Current pending sell tx state for reconciliation. */
+  pendingSellState?: PendingTxStatus;
+  /** Timestamp when unresolved/failed sell was reconciled via balance checks. */
+  sellReconciledAt?: number;
+  /** Reason for sell-side reconciliation. */
+  sellReconcileReason?: Extract<PositionReconcileReason, 'sell_tx_unresolved_balance_zero' | 'sell_tx_failed'>;
   /** Exit was triggered (SL/TP/trail/expiry) and is waiting for user approval in Phantom. */
   exitPending?: {
     trigger: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired';
@@ -726,7 +760,7 @@ export interface Position {
   /** Reconciled by on-chain sync because no live balance exists for active wallet. */
   reconciled?: boolean;
   /** Reconciliation reason enum for auditability. */
-  reconciledReason?: 'no_onchain_balance' | 'buy_tx_unresolved' | 'buy_tx_failed';
+  reconciledReason?: PositionReconcileReason;
   /** Reconciliation timestamp (ms). */
   reconciledAt?: number;
 }
@@ -945,7 +979,7 @@ interface SniperState {
    */
   reconcilePosition: (
     id: string,
-    reason: 'no_onchain_balance' | 'buy_tx_unresolved' | 'buy_tx_failed',
+    reason: PositionReconcileReason,
     opts?: { releaseBudget?: boolean },
   ) => void;
 
@@ -1213,7 +1247,20 @@ export const useSniperStore = create<SniperState>()(
   })),
 
   positions: [],
-  addPosition: (pos) => set((s) => ({ positions: [pos, ...s.positions] })),
+  addPosition: (pos) => set((s) => ({
+    positions: [{
+      ...pos,
+      exitLifecycle: pos.exitLifecycle ?? 'open',
+      exitAttempts: Number.isFinite(Number(pos.exitAttempts)) ? Number(pos.exitAttempts) : 0,
+      pendingSellState: pos.pendingSellState,
+      pendingSellTxHash: pos.pendingSellTxHash,
+      pendingSellSubmittedAt: pos.pendingSellSubmittedAt,
+      lastExitAttemptAt: pos.lastExitAttemptAt,
+      lastExitError: pos.lastExitError,
+      sellReconciledAt: pos.sellReconciledAt,
+      sellReconcileReason: pos.sellReconcileReason,
+    }, ...s.positions],
+  })),
   updatePosition: (id, update) => set((s) => ({
     positions: s.positions.map((p) => p.id === id ? { ...p, ...update } : p),
   })),
@@ -1445,12 +1492,20 @@ export const useSniperStore = create<SniperState>()(
           ...p,
           status,
           isClosing: false,
+          exitLifecycle: txHash ? 'swap_confirmed' : (p.exitLifecycle || 'open'),
+          exitAttempts: Number.isFinite(Number(p.exitAttempts)) ? Number(p.exitAttempts) : 0,
+          lastExitError: undefined,
           exitPending: undefined,
           exitSolReceived,
           realPnlSol,
           realPnlPercent: realPnlPct,
           pnlSol: realPnlSol,
           pnlPercent: realPnlPct,
+          pendingSellTxHash: txHash || undefined,
+          pendingSellSubmittedAt: txHash ? (p.pendingSellSubmittedAt || Date.now()) : p.pendingSellSubmittedAt,
+          pendingSellState: txHash ? 'confirmed' : p.pendingSellState,
+          sellReconciledAt: p.sellReconciledAt,
+          sellReconcileReason: p.sellReconcileReason,
         } : p),
         executionLog: [execEvent, ...s.executionLog].slice(0, 200),
         totalPnl: s.totalPnl + realPnlSol,
@@ -1480,8 +1535,17 @@ export const useSniperStore = create<SniperState>()(
     // Persist a minimal trade ledger record server-side so autonomy/backtests can
     // learn from real executions across sessions/devices. Without this, swaps
     // exist only in the executing browser's localStorage.
+    const executionOutcome =
+      txHash
+        ? 'confirmed'
+        : pos.pendingSellState === 'unresolved'
+          ? 'unresolved'
+          : pos.pendingSellState === 'failed'
+            ? 'failed'
+            : undefined;
     postTradeTelemetry({
       schemaVersion: 1,
+      eventType: 'trade_closed',
       positionId: pos.id,
       mint: pos.mint,
       status,
@@ -1498,6 +1562,14 @@ export const useSniperStore = create<SniperState>()(
       buyTxHash: pos.txHash ?? null,
       sellTxHash: txHash ?? null,
       includedInStats: hasReliableCostBasis,
+      includedInExecutionStats: !!txHash,
+      executionOutcome,
+      failureCode: executionOutcome === 'failed' || executionOutcome === 'unresolved'
+        ? (pos.lastExitError || 'sell_unverified')
+        : null,
+      failureReason: executionOutcome === 'failed' || executionOutcome === 'unresolved'
+        ? (pos.lastExitError || null)
+        : null,
       manualOnly: !!pos.manualOnly,
       recoveredFrom: pos.recoveredFrom ?? null,
       tradeSignerMode: state.tradeSignerMode,
@@ -1526,10 +1598,27 @@ export const useSniperStore = create<SniperState>()(
               realPnlPercent: 0,
               realPnlSol: 0,
               isClosing: false,
+              exitLifecycle: reason === 'sell_tx_unresolved_balance_zero' || reason === 'sell_tx_failed'
+                ? 'sell_reconciled'
+                : (p.exitLifecycle || 'open'),
+              lastExitError: reason === 'sell_tx_failed'
+                ? (p.lastExitError || 'Sell transaction failed; reconciled by policy')
+                : p.lastExitError,
               exitPending: undefined,
+              pendingSellState: reason === 'sell_tx_unresolved_balance_zero'
+                ? 'unresolved'
+                : reason === 'sell_tx_failed'
+                  ? 'failed'
+                  : p.pendingSellState,
               reconciled: true,
               reconciledReason: reason,
               reconciledAt: now,
+              sellReconciledAt: reason === 'sell_tx_unresolved_balance_zero' || reason === 'sell_tx_failed'
+                ? now
+                : p.sellReconciledAt,
+              sellReconcileReason: reason === 'sell_tx_unresolved_balance_zero' || reason === 'sell_tx_failed'
+                ? reason
+                : p.sellReconcileReason,
             }
           : p
       )),
@@ -1908,15 +1997,16 @@ export const useSniperStore = create<SniperState>()(
     return {
       pendingTxs: {
         ...s.pendingTxs,
-        [signature]: {
-          signature,
-          kind: record.kind,
-          mint: record.mint || existing?.mint,
-          submittedAt: existing?.submittedAt || Number(record.submittedAt || Date.now()),
-          lastCheckedAt: record.lastCheckedAt || existing?.lastCheckedAt,
-          status: record.status || existing?.status || 'submitted',
-          error: record.error || existing?.error,
-          sourcePage: record.sourcePage || existing?.sourcePage,
+          [signature]: {
+            signature,
+            kind: record.kind,
+            mint: record.mint || existing?.mint,
+            positionId: record.positionId || existing?.positionId,
+            submittedAt: existing?.submittedAt || Number(record.submittedAt || Date.now()),
+            lastCheckedAt: record.lastCheckedAt || existing?.lastCheckedAt,
+            status: record.status || existing?.status || 'submitted',
+            error: record.error || existing?.error,
+            sourcePage: record.sourcePage || existing?.sourcePage,
         },
       },
     };
@@ -2225,6 +2315,25 @@ export const useSniperStore = create<SniperState>()(
             recommendedSl: (p as any).recommendedSl ?? DEFAULT_CONFIG.stopLossPct,
             recommendedTp: (p as any).recommendedTp ?? DEFAULT_CONFIG.takeProfitPct,
             highWaterMarkPct: (p as any).highWaterMarkPct ?? 0,
+            exitLifecycle: (p as any).status === 'open'
+              ? (((p as any).exitLifecycle as ExitLifecycleState | undefined) || 'open')
+              : ((p as any).exitLifecycle as ExitLifecycleState | undefined),
+            exitAttempts: Number.isFinite(Number((p as any).exitAttempts))
+              ? Number((p as any).exitAttempts)
+              : 0,
+            pendingSellTxHash: typeof (p as any).pendingSellTxHash === 'string' ? (p as any).pendingSellTxHash : undefined,
+            pendingSellSubmittedAt: Number.isFinite(Number((p as any).pendingSellSubmittedAt))
+              ? Number((p as any).pendingSellSubmittedAt)
+              : undefined,
+            pendingSellState: (p as any).pendingSellState as PendingTxStatus | undefined,
+            sellReconciledAt: Number.isFinite(Number((p as any).sellReconciledAt))
+              ? Number((p as any).sellReconciledAt)
+              : undefined,
+            sellReconcileReason: (p as any).sellReconcileReason as Position['sellReconcileReason'],
+            lastExitAttemptAt: Number.isFinite(Number((p as any).lastExitAttemptAt))
+              ? Number((p as any).lastExitAttemptAt)
+              : undefined,
+            lastExitError: typeof (p as any).lastExitError === 'string' ? String((p as any).lastExitError) : undefined,
             // Derived / in-flight state should not survive reloads.
             isClosing: false,
             exitPending: undefined,

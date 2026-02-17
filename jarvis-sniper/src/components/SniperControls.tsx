@@ -209,6 +209,16 @@ function InfoTip({ text }: { text: string }) {
   );
 }
 
+interface AutonomyRuntimeStatus {
+  autonomyEnabled: boolean;
+  applyOverridesEnabled: boolean;
+  xaiConfigured: boolean;
+  latestCycleId: string | null;
+  latestReasonCode: string | null;
+  overrideVersion: number;
+  overrideUpdatedAt: string | null;
+}
+
 export function SniperControls() {
   const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining, graduations, tradeSignerMode, setTradeSignerMode, sessionWalletPubkey, setSessionWalletPubkey, assetFilter, backtestMeta, addExecution, autoResetRequired, showExperimentalStrategies, setShowExperimentalStrategies } = useSniperStore();
   const { connected, connecting, connect, address, signTransaction, signMessage, publicKey } = usePhantomWallet();
@@ -245,6 +255,8 @@ export function SniperControls() {
   const [activatePerTrade, setActivatePerTrade] = useState('');
   const [activateAutoSnipe, setActivateAutoSnipe] = useState(true);
   const [activateError, setActivateError] = useState<string | null>(null);
+  const [autonomyRuntime, setAutonomyRuntime] = useState<AutonomyRuntimeStatus | null>(null);
+  const [autonomyRuntimeError, setAutonomyRuntimeError] = useState<string | null>(null);
 
   // Safety watchdog: if Phantom/signature flows hang (popup blocked, route switch, extension bug),
   // sessionBusy can remain stuck and lock the entire session wallet UI. Auto-clear after 90s.
@@ -256,6 +268,30 @@ export function SniperControls() {
     }, 90_000);
     return () => window.clearTimeout(timer);
   }, [sessionBusy]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadAutonomyRuntime = async () => {
+      try {
+        const res = await fetch('/api/autonomy/status', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json() as AutonomyRuntimeStatus;
+        if (cancelled) return;
+        setAutonomyRuntime(json);
+        setAutonomyRuntimeError(null);
+      } catch (err) {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : 'Autonomy status unavailable';
+        setAutonomyRuntimeError(msg);
+      }
+    };
+    void loadAutonomyRuntime();
+    const timer = window.setInterval(() => { void loadAutonomyRuntime(); }, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   // Load BEST_EVER on mount
   useEffect(() => {
@@ -1355,6 +1391,27 @@ export function SniperControls() {
       )}
 
       {/* ─── STRATEGY PRESET SELECTOR (Grouped Dropdown) ─── */}
+      {/* Runtime autonomy status (shows if overrides can be active right now) */}
+      <div className="mb-4 p-3 rounded-lg border border-border-primary bg-bg-secondary">
+        <div className="flex items-center gap-2 mb-1.5">
+          <FlaskConical className="w-3.5 h-3.5 text-text-muted" />
+          <span className="text-[10px] font-mono uppercase tracking-wide text-text-muted">AI Assist Status</span>
+        </div>
+        {autonomyRuntime ? (
+          <>
+            <p className="text-[10px] text-text-secondary leading-relaxed">
+              AI Assist {autonomyRuntime.autonomyEnabled && autonomyRuntime.applyOverridesEnabled && autonomyRuntime.xaiConfigured ? 'ON' : 'OFF'} (runtime tuning only; no code changes) | engine {autonomyRuntime.autonomyEnabled ? 'enabled' : 'disabled'} | overrides {autonomyRuntime.applyOverridesEnabled ? 'on' : 'off'} | xAI key {autonomyRuntime.xaiConfigured ? 'configured' : 'missing'}.
+            </p>
+            <p className="text-[9px] text-text-muted mt-1">
+              Cycle: {autonomyRuntime.latestCycleId || 'none'}{autonomyRuntime.latestReasonCode ? ` (${autonomyRuntime.latestReasonCode})` : ''} | override v{autonomyRuntime.overrideVersion} | updated {autonomyRuntime.overrideUpdatedAt ? new Date(autonomyRuntime.overrideUpdatedAt).toLocaleString() : 'never'}
+            </p>
+          </>
+        ) : (
+          <p className="text-[10px] text-text-muted">{autonomyRuntimeError ? `Unavailable: ${autonomyRuntimeError}` : 'Loading runtime status...'}</p>
+        )}
+      </div>
+
+      {/* Strategy preset selector (grouped dropdown) */}
       <div className="relative mb-4">
         {/* Dropdown trigger button */}
         <button
@@ -2804,7 +2861,3 @@ function ConfigField({
     </div>
   );
 }
-
-
-
-

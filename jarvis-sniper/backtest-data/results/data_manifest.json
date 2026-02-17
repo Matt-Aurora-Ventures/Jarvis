@@ -1,0 +1,52 @@
+{
+  "created_at": "2026-02-16T16:29:19.149Z",
+  "pipeline_version": "1.0.0",
+  "phases": {
+    "universe": {
+      "completed_at": "2026-02-16T16:29:19.149Z",
+      "files": [
+        {
+          "path": "universe/universe_raw.json",
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      ]
+    },
+    "qualified": {
+      "completed_at": "2026-02-16T16:29:19.149Z",
+      "files": []
+    },
+    "results": {
+      "completed_at": "2026-02-16T16:29:19.149Z",
+      "files": [
+        {
+          "path": "results/consistency_report.csv",
+          "rows": 18,
+          "sha256": "f860d095da46322916d53ab0a44c3611bf7318194892ffc8acba44c97f0328c3"
+        },
+        {
+          "path": "results/consistency_report.json",
+          "sha256": "af5262851ecfd4dd366e00bf56dbeb5db7d061a298878751a3b09caf936c9f71"
+        },
+        {
+          "path": "results/equity_sweep_best.json",
+          "sha256": "cdca3407f31d66b6fa6f4388782c1610b327084c5b73b920c0d8b1ad61cdf8db"
+        },
+        {
+          "path": "results/gate_sweep_best.json",
+          "sha256": "b986c2e38ea3eb875a70782e641af5e56d6f4bd7dfd1e319b267d4d95c328536"
+        },
+        {
+          "path": "results/master_comparison.csv",
+          "rows": 18,
+          "sha256": "d554377de965a00adc9deb4a2f01776055deaebcb86b949f658d5980c1bb13d8"
+        },
+        {
+          "path": "results/master_comparison.json",
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      ]
+    }
+  }
+}

@@ -7,16 +7,26 @@ import { resolveActiveWallet } from '@/lib/position-scope';
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
 import { getOwnerTokenBalanceLamportsWithRetry } from '@/lib/solana-tokens';
 import { reconcileSignatureStatuses, type SignatureStatusResult } from '@/lib/tx-confirmation';
+import type { PositionReconcileReason, PendingTxStatus } from '@/stores/useSniperStore';
 
 const RECONCILE_INTERVAL_MS = 5 * 60 * 1000;
 const RECONCILE_GRACE_MS = 5 * 60 * 1000;
 
-type ReconcileReason = 'no_onchain_balance' | 'buy_tx_unresolved' | 'buy_tx_failed';
+type ReconcileReason = PositionReconcileReason;
 
-function signatureReason(status: SignatureStatusResult | undefined): ReconcileReason | null {
+function buySignatureReason(status: SignatureStatusResult | undefined): Extract<ReconcileReason, 'buy_tx_unresolved' | 'buy_tx_failed'> | null {
   if (!status) return null;
   if (status.state === 'failed') return 'buy_tx_failed';
   if (status.state === 'unresolved') return 'buy_tx_unresolved';
+  return null;
+}
+
+function toPendingTxStatus(status: SignatureStatusResult | undefined): PendingTxStatus | null {
+  if (!status) return null;
+  if (status.state === 'settling') return 'settling';
+  if (status.state === 'confirmed') return 'confirmed';
+  if (status.state === 'failed') return 'failed';
+  if (status.state === 'unresolved') return 'unresolved';
   return null;
 }
 
@@ -26,6 +36,7 @@ export function usePositionReconciliation() {
   const sessionWalletPubkey = useSniperStore((s) => s.sessionWalletPubkey);
   const addExecution = useSniperStore((s) => s.addExecution);
   const setTxReconcilerRunning = useSniperStore((s) => s.setTxReconcilerRunning);
+  const sellReconcileEnabled = String(process.env.NEXT_PUBLIC_SNIPER_SELL_RECONCILIATION || process.env.SNIPER_SELL_RECONCILIATION || 'true').toLowerCase() !== 'false';
   const inFlightRef = useRef(false);
 
   useEffect(() => {
@@ -56,7 +67,10 @@ export function usePositionReconciliation() {
       try {
         const signatures = [...new Set(
           candidates
-            .map((p) => String(p.txHash || '').trim())
+            .flatMap((p) => [
+              String(p.txHash || '').trim(),
+              String(p.pendingSellTxHash || '').trim(),
+            ])
             .filter(Boolean),
         )];
 
@@ -78,7 +92,41 @@ export function usePositionReconciliation() {
           if (!latest || latest.status !== 'open' || latest.isClosing) continue;
 
           const txHash = String(latest.txHash || '').trim();
-          const txReason = signatureReason(txHash ? statusBySig[txHash] : undefined);
+          const txReason = buySignatureReason(txHash ? statusBySig[txHash] : undefined);
+          const pendingSellTxHash = String(latest.pendingSellTxHash || '').trim();
+          const pendingSellStatus = toPendingTxStatus(pendingSellTxHash ? statusBySig[pendingSellTxHash] : undefined);
+          const pendingSellState = pendingSellStatus || latest.pendingSellState;
+
+          if (pendingSellTxHash && pendingSellStatus) {
+            const store = useSniperStore.getState();
+            if (pendingSellStatus === 'settling') {
+              store.updatePendingTx(pendingSellTxHash, {
+                status: 'settling',
+                lastCheckedAt: Date.now(),
+              });
+            } else if (pendingSellStatus === 'confirmed' || pendingSellStatus === 'failed' || pendingSellStatus === 'unresolved') {
+              store.finalizePendingTx(
+                pendingSellTxHash,
+                pendingSellStatus,
+                statusBySig[pendingSellTxHash]?.error,
+              );
+            }
+            if (pendingSellStatus !== latest.pendingSellState) {
+              store.updatePosition(latest.id, {
+                pendingSellState: pendingSellStatus,
+                exitLifecycle: pendingSellStatus === 'confirmed'
+                  ? 'swap_confirmed'
+                  : pendingSellStatus === 'failed'
+                    ? 'swap_failed'
+                    : pendingSellStatus === 'unresolved'
+                      ? 'swap_unresolved'
+                      : latest.exitLifecycle,
+                lastExitError: pendingSellStatus === 'failed' || pendingSellStatus === 'unresolved'
+                  ? (statusBySig[pendingSellTxHash]?.error || latest.lastExitError || 'Sell signature not finalized')
+                  : latest.lastExitError,
+              });
+            }
+          }
 
           const bal = await getOwnerTokenBalanceLamportsWithRetry(
             connection,
@@ -88,7 +136,17 @@ export function usePositionReconciliation() {
           );
           const noBalance = !bal || bal.amountLamports === '0';
 
-          const reason: ReconcileReason | null = txReason || (noBalance ? 'no_onchain_balance' : null);
+          const sellReason: ReconcileReason | null =
+            sellReconcileEnabled && noBalance && pendingSellTxHash
+              ? (
+                  pendingSellState === 'failed'
+                    ? 'sell_tx_failed'
+                    : pendingSellState === 'unresolved'
+                      ? 'sell_tx_unresolved_balance_zero'
+                      : null
+                )
+              : null;
+          const reason: ReconcileReason | null = sellReason || txReason || (noBalance ? 'no_onchain_balance' : null);
           if (!reason) continue;
 
           useSniperStore.getState().reconcilePosition(latest.id, reason);
@@ -106,6 +164,8 @@ export function usePositionReconciliation() {
             no_onchain_balance: 0,
             buy_tx_unresolved: 0,
             buy_tx_failed: 0,
+            sell_tx_unresolved_balance_zero: 0,
+            sell_tx_failed: 0,
           });
           const sample = [...new Set(reconciled.map((r) => r.symbol))].slice(0, 6).join(', ');
           addExecution({
@@ -114,7 +174,7 @@ export function usePositionReconciliation() {
             symbol: 'SYNC',
             mint: '',
             amount: 0,
-            reason: `Reconciled ${reconciled.length} position(s): ${byReason.no_onchain_balance} no-balance, ${byReason.buy_tx_unresolved} unresolved, ${byReason.buy_tx_failed} failed${sample ? ` (${sample})` : ''}`,
+            reason: `Reconciled ${reconciled.length} position(s): ${byReason.no_onchain_balance} no-balance, ${byReason.buy_tx_unresolved} buy-unresolved, ${byReason.buy_tx_failed} buy-failed, ${byReason.sell_tx_unresolved_balance_zero} sell-unresolved(balance=0), ${byReason.sell_tx_failed} sell-failed(balance=0)${sample ? ` (${sample})` : ''}`,
             timestamp: Date.now(),
           });
         }
