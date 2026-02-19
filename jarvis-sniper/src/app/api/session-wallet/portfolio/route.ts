@@ -134,7 +134,7 @@ async function buildPortfolio(wallet: string, forceFullScan: boolean): Promise<W
 
 export async function GET(request: Request) {
   const ip = getClientIp(request);
-  const limit = apiRateLimiter.check(ip);
+  const limit = await apiRateLimiter.check(ip);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: 'Too many requests', retryAfterMs: limit.retryAfterMs },

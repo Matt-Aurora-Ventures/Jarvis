@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { loadAutonomyState } from '@/lib/autonomy/audit-store';
 import { getStrategyOverrideSnapshot } from '@/lib/autonomy/override-store';
+import { requireAutonomyAuth } from '@/lib/autonomy/auth';
 
 export const runtime = 'nodejs';
 
@@ -9,7 +10,13 @@ function asBoolEnv(value: string | undefined, fallback = false): boolean {
   return String(value).trim().toLowerCase() === 'true';
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authError = requireAutonomyAuth(request, {
+    envKeys: ['AUTONOMY_READ_TOKEN', 'AUTONOMY_JOB_TOKEN'],
+    allowWhenUnconfigured: false,
+  });
+  if (authError) return authError;
+
   try {
     const [state, override] = await Promise.all([
       loadAutonomyState(),

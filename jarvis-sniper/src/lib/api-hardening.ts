@@ -66,7 +66,7 @@ export function withApiHardening(
       // Rate limiting
       if (rateLimiter) {
         const ip = getClientIp(request);
-        const limit = rateLimiter.check(ip);
+        const limit = await rateLimiter.check(ip);
         if (!limit.allowed) {
           return NextResponse.json(
             { error: 'Rate limit exceeded' },

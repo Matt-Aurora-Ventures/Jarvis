@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { ALL_BLUECHIPS, type BlueChipToken } from '@/lib/bluechip-data';
-import { ServerCache } from '@/lib/server-cache';
+import { AsyncServerCache } from '@/lib/server-cache';
 import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
+import { buildDataPointProvenance } from '@/lib/data-plane/provenance';
+import { deriveRedundancyState, scoreSourceReliability } from '@/lib/data-plane/reliability';
+import { recordSourceHealth } from '@/lib/data-plane/health-store';
+import { buildDatasetManifestV2, persistDatasetManifestV2 } from '@/lib/data-plane/manifest-v2';
 
 /**
  * Blue Chip Solana Tokens API route
@@ -18,7 +22,7 @@ import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
  */
 
 const DEXSCREENER_TOKENS = 'https://api.dexscreener.com/tokens/v1/solana';
-const bluechipCache = new ServerCache<any>();
+const bluechipCache = new AsyncServerCache<any>('bluechip-feed');
 const CACHE_TTL_MS = 30_000;
 
 async function fetchWithTimeout(url: string, timeoutMs = 10000): Promise<Response> {
@@ -133,7 +137,7 @@ export async function GET(request: Request) {
   try {
     // Rate limit check
     const ip = getClientIp(request);
-    const limit = apiRateLimiter.check(ip);
+    const limit = await apiRateLimiter.check(ip);
     if (!limit.allowed) {
       return NextResponse.json(
         { graduations: [], error: 'Rate limit exceeded' },
@@ -167,7 +171,7 @@ export async function GET(request: Request) {
     }
 
     const cacheKey = `bluechips:${tier}:${category || 'all'}`;
-    const cached = bluechipCache.get(cacheKey);
+    const cached = await bluechipCache.get(cacheKey);
     if (cached) {
       return NextResponse.json(cached, { headers: { 'X-Cache': 'HIT' } });
     }
@@ -175,11 +179,18 @@ export async function GET(request: Request) {
     // Fetch pair data from DexScreener
     const pairsByMint = new Map<string, any>();
     const mintAddresses = tokens.map(t => t.mintAddress);
+    const fetchStartedAt = Date.now();
+    let dexLatencyMsTotal = 0;
+    let dexCalls = 0;
+    let dexFailures = 0;
 
     for (let i = 0; i < mintAddresses.length; i += 30) {
       const chunk = mintAddresses.slice(i, i + 30);
+      const chunkStartedAt = Date.now();
       try {
         const res = await fetchWithTimeout(`${DEXSCREENER_TOKENS}/${chunk.join(',')}`);
+        dexCalls += 1;
+        dexLatencyMsTotal += Date.now() - chunkStartedAt;
         if (res.ok) {
           const pairs: any[] = await res.json();
           for (const pair of pairs) {
@@ -191,11 +202,38 @@ export async function GET(request: Request) {
               pairsByMint.set(mint, { ...pair, _liq: liq });
             }
           }
+        } else {
+          dexFailures += 1;
         }
       } catch {
+        dexCalls += 1;
+        dexFailures += 1;
+        dexLatencyMsTotal += Date.now() - chunkStartedAt;
         // continue with partial data
       }
     }
+
+    const nowIso = new Date().toISOString();
+    const dexLatencyMs = dexCalls > 0 ? Math.round(dexLatencyMsTotal / dexCalls) : (Date.now() - fetchStartedAt);
+    const dexOk = dexCalls === 0 ? true : dexFailures < dexCalls;
+    const dexReliability = scoreSourceReliability({
+      ok: dexOk,
+      latencyMs: dexLatencyMs,
+      httpStatus: dexOk ? 200 : 500,
+      freshnessMs: 0,
+      errorBudgetBurn: dexCalls > 0 ? (dexFailures / dexCalls) : 0,
+    });
+    await recordSourceHealth({
+      source: 'dexscreener:bluechips',
+      checkedAt: nowIso,
+      ok: dexOk,
+      freshnessMs: 0,
+      latencyMs: dexLatencyMs,
+      httpStatus: dexOk ? 200 : 500,
+      reliabilityScore: dexReliability,
+      errorBudgetBurn: dexCalls > 0 ? (dexFailures / dexCalls) : 0,
+      redundancyState: deriveRedundancyState(2),
+    });
 
     const graduations = tokens.map(token => {
       const pair = pairsByMint.get(token.mintAddress);
@@ -231,13 +269,48 @@ export async function GET(request: Request) {
         fdv: pair?.fdv || 0,
         description: token.description,
         logo_uri: undefined,
+        provenance: buildDataPointProvenance({
+          source: 'dexscreener',
+          fetchedAt: nowIso,
+          latencyMs: dexLatencyMs,
+          httpStatus: dexOk ? 200 : 500,
+          reliabilityScore: dexReliability,
+          raw: { mint: token.mintAddress, pairAddress: pair?.pairAddress || null },
+        }),
       };
     });
 
     graduations.sort((a, b) => b.score - a.score);
 
-    const responseData = { graduations };
-    bluechipCache.set(cacheKey, responseData, CACHE_TTL_MS);
+    const manifest = buildDatasetManifestV2({
+      family: 'bluechips',
+      surface: 'main',
+      timeRange: {
+        from: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        to: nowIso,
+      },
+      records: graduations.map((g) => ({
+        mint: g.mint,
+        symbol: g.symbol,
+        score: g.score,
+        source: g.source,
+        provenance: g.provenance,
+      })),
+    });
+    const manifestPersisted = await persistDatasetManifestV2(manifest).catch(() => null);
+
+    const responseData = {
+      graduations,
+      meta: {
+        datasetManifestId: manifest.datasetId,
+        datasetManifestSha256: manifest.sha256,
+        datasetManifestPath: manifestPersisted?.path || null,
+        sourceReliability: {
+          dexscreener: dexReliability,
+        },
+      },
+    };
+    await bluechipCache.set(cacheKey, responseData, CACHE_TTL_MS);
 
     return NextResponse.json(responseData, {
       headers: {
