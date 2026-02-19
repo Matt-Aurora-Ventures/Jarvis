@@ -1,0 +1,70 @@
+name: P0 Readiness Gates
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  perps-ingress-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pytest-asyncio
+      - name: Run perps ingress and queue gates
+        run: |
+          python -m pytest \
+            tests/test_execution_intent.py \
+            tests/test_runner_external_queue.py \
+            tests/test_perps_api_ingress.py \
+            -q
+
+  distributed-state-gate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jarvis-sniper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: jarvis-sniper/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run distributed state tests
+        run: |
+          npm run test -- \
+            src/lib/__tests__/cache-provider.test.ts \
+            src/lib/__tests__/rate-limit-provider.test.ts \
+            src/lib/__tests__/server-cache.test.ts
+
+  npm-audit-prod-gate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jarvis-sniper
+    env:
+      PROD_AUDIT_HIGH_BASELINE: "19"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: jarvis-sniper/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Capture production audit
+        run: npm audit --omit=dev --json > npm-audit-prod.json || true
+      - name: Enforce non-regressive production risk gate
+        run: |
+          node -e "const fs=require('fs'); const p='npm-audit-prod.json'; const d=JSON.parse(fs.readFileSync(p,'utf8')); const v=d.metadata?.vulnerabilities||{}; const high=Number(v.high||0); const critical=Number(v.critical||0); const baseline=Number(process.env.PROD_AUDIT_HIGH_BASELINE||19); if (critical>0) { console.error('Critical vulnerabilities present in production dependencies:', critical); process.exit(1);} if (high>baseline){ console.error('High vulnerability count regressed. high=',high,' baseline=',baseline); process.exit(1);} console.log('Production audit gate passed. high=',high,' critical=',critical,' baseline=',baseline);"

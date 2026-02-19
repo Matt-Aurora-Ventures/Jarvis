@@ -1,5 +1,5 @@
 /**
- * Server-side Bags SDK proxy — Swap endpoint
+ * Server-side Bags SDK proxy - Swap endpoint
  *
  * 1. Gets quote (if needed) + builds swap transaction via Bags SDK
  * 2. Injects priority fees (ComputeBudgetProgram) to prevent timeouts
@@ -7,7 +7,7 @@
  * 4. Returns serialized VersionedTransaction as base64 for client signing
  *
  * Rate limiting: 20 req/min per IP (involves transaction building).
- * No caching — swap transactions are unique per user/nonce.
+ * No caching - swap transactions are unique per user/nonce.
  */
 import { NextResponse } from 'next/server';
 import { BagsSDK } from '@bagsfm/bags-sdk';
@@ -22,6 +22,8 @@ import {
 import { swapRateLimiter, getClientIp } from '@/lib/rate-limiter';
 import { checkSignerSolBalance } from '@/lib/solana-balance-guard';
 import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
+import { upsertTradeEvidence } from '@/lib/execution/evidence';
+import type { TradeEvidenceV2 } from '@/lib/data-plane/types';
 
 function readBagsApiKey(): string {
   // Secret Manager values can include trailing newlines/whitespace; Node will reject such values
@@ -79,7 +81,7 @@ async function injectPriorityFee(
     }),
   );
 
-  // Decompile → inject → recompile
+  // Decompile -> inject -> recompile
   const message = TransactionMessage.decompile(tx.message, {
     addressLookupTableAccounts: altAccounts,
   });
@@ -101,10 +103,18 @@ async function injectPriorityFee(
 }
 
 export async function POST(request: Request) {
+  let evidenceTradeId = `swap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  let evidenceSurface: TradeEvidenceV2['surface'] = 'unknown';
+  let evidenceStrategyId = 'unknown';
+  let evidenceInputMint = '';
+  let evidenceOutputMint = '';
+  let evidencePriorityFeeMicroLamports = 0;
+  let evidenceSlippageBps: number | null = null;
+
   try {
-    // Rate limit — swap involves transaction building, strict limit
+    // Rate limit - swap involves transaction building, strict limit
     const ip = getClientIp(request);
-    const limit = swapRateLimiter.check(ip);
+    const limit = await swapRateLimiter.check(ip);
     if (!limit.allowed) {
       return NextResponse.json(
         { error: 'Rate limit exceeded. Try again shortly.' },
@@ -127,14 +137,66 @@ export async function POST(request: Request) {
       amount,
       slippageBps,
       priorityFeeMicroLamports,
+      tradeId,
+      strategyId,
+      surface,
     } = body;
 
+    evidenceInputMint = String(inputMint || '');
+    evidenceOutputMint = String(outputMint || '');
+    evidencePriorityFeeMicroLamports = Number(priorityFeeMicroLamports || 0);
+    evidenceSlippageBps = Number.isFinite(Number(slippageBps)) ? Number(slippageBps) : null;
+    evidenceTradeId = String(tradeId || evidenceTradeId).trim() || evidenceTradeId;
+    evidenceSurface =
+      surface === 'main' || surface === 'bags' || surface === 'tradfi'
+        ? surface
+        : 'unknown';
+    evidenceStrategyId = String(strategyId || 'unknown').trim() || 'unknown';
+
+    const persistEvidence = async (args: {
+      outcome: TradeEvidenceV2['outcome'];
+      expectedPrice?: number | null;
+      slippageBpsValue?: number | null;
+      metadata?: Record<string, unknown>;
+    }) => {
+      await upsertTradeEvidence({
+        tradeId: evidenceTradeId,
+        surface: evidenceSurface,
+        strategyId: evidenceStrategyId,
+        decisionTs: new Date().toISOString(),
+        route: 'bags_sdk_proxy',
+        expectedPrice: Number.isFinite(Number(args.expectedPrice)) ? Number(args.expectedPrice) : null,
+        executedPrice: null,
+        slippageBps: Number.isFinite(Number(args.slippageBpsValue)) ? Number(args.slippageBpsValue) : null,
+        priorityFeeLamports: null,
+        jitoUsed: false,
+        mevRiskTag: 'unknown',
+        datasetRefs: [],
+        outcome: args.outcome,
+        metadata: {
+          inputMint: evidenceInputMint,
+          outputMint: evidenceOutputMint,
+          priorityFeeMicroLamports: evidencePriorityFeeMicroLamports,
+          ...args.metadata,
+        },
+      }).catch(() => undefined);
+    };
+
     if (!userPublicKey) {
+      await persistEvidence({ outcome: 'failed', metadata: { error: 'Missing userPublicKey' } });
       return NextResponse.json({ error: 'Missing userPublicKey' }, { status: 400 });
     }
 
     const rpcConfig = resolveServerRpcConfig();
     if (!rpcConfig.ok || !rpcConfig.url) {
+      await persistEvidence({
+        outcome: 'failed',
+        metadata: {
+          code: 'RPC_PROVIDER_UNAVAILABLE',
+          diagnostic: rpcConfig.diagnostic,
+          source: rpcConfig.source,
+        },
+      });
       return NextResponse.json(
         {
           code: 'RPC_PROVIDER_UNAVAILABLE',
@@ -163,6 +225,14 @@ export async function POST(request: Request) {
         console.warn(
           `[API /bags/swap] INSUFFICIENT_SIGNER_SOL wallet=${userPublicKey} available=${balance.availableLamports} required=${balance.requiredLamports}`,
         );
+        await persistEvidence({
+          outcome: 'failed',
+          metadata: {
+            code: 'INSUFFICIENT_SIGNER_SOL',
+            availableLamports: balance.availableLamports,
+            requiredLamports: balance.requiredLamports,
+          },
+        });
         return NextResponse.json(
           {
             code: 'INSUFFICIENT_SIGNER_SOL',
@@ -183,6 +253,10 @@ export async function POST(request: Request) {
     let quote = preQuote;
     if (!quote) {
       if (!inputMint || !outputMint || !amount) {
+        await persistEvidence({
+          outcome: 'failed',
+          metadata: { error: 'Missing quote inputs' },
+        });
         return NextResponse.json(
           { error: 'Must provide either quote or inputMint/outputMint/amount' },
           { status: 400 },
@@ -207,7 +281,7 @@ export async function POST(request: Request) {
     // Serialize base transaction
     let txBytes = result.transaction.serialize();
 
-    // Inject priority fee to prevent timeout (default 200k microLamports ≈ $0.0002)
+    // Inject priority fee to prevent timeout (default 200k microLamports ~ $0.0002)
     const fee = priorityFeeMicroLamports ?? 200_000;
     if (fee > 0) {
       try {
@@ -220,10 +294,39 @@ export async function POST(request: Request) {
     }
 
     const txBase64 = Buffer.from(txBytes).toString('base64');
-    return NextResponse.json({ transaction: txBase64, quote });
+    const expectedPrice = Number(quote?.inAmount || 0) > 0 && Number(quote?.outAmount || 0) > 0
+      ? Number(quote.inAmount) / Number(quote.outAmount)
+      : null;
+    await persistEvidence({
+      outcome: 'unresolved',
+      expectedPrice,
+      slippageBpsValue: Number(slippageBps || quote?.slippageBps || 0),
+      metadata: {
+        stage: 'swap_tx_built',
+        quoteInAmount: quote?.inAmount || null,
+        quoteOutAmount: quote?.outAmount || null,
+      },
+    });
+    return NextResponse.json({ transaction: txBase64, quote, tradeId: evidenceTradeId });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Swap failed';
     console.error('[API /bags/swap]', msg);
+    await upsertTradeEvidence({
+      tradeId: evidenceTradeId,
+      surface: evidenceSurface,
+      strategyId: evidenceStrategyId,
+      decisionTs: new Date().toISOString(),
+      route: 'bags_sdk_proxy',
+      expectedPrice: null,
+      executedPrice: null,
+      slippageBps: evidenceSlippageBps,
+      priorityFeeLamports: null,
+      jitoUsed: false,
+      mevRiskTag: 'unknown',
+      datasetRefs: [],
+      outcome: 'failed',
+      metadata: { error: msg, inputMint: evidenceInputMint, outputMint: evidenceOutputMint },
+    }).catch(() => undefined);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

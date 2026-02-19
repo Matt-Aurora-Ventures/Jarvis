@@ -448,7 +448,7 @@ async function sourceHeliusDas(wallet: string, forceFullScan = false): Promise<S
               limit: 1000,
               displayOptions: {
                 showFungible: true,
-                showNativeBalance: false,
+                showNativeCurrency: false,
               },
             },
           }),

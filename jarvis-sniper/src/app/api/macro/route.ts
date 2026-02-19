@@ -71,7 +71,7 @@ async function fetchJupiterSolPrice(timeoutMs = 6000): Promise<number | null> {
 export async function GET(request: Request) {
   try {
     // Check cache first (cache hits should never be rate-limited).
-    const cached = graduationCache.get(MACRO_CACHE_KEY);
+    const cached = await graduationCache.get(MACRO_CACHE_KEY);
     if (cached) {
       return NextResponse.json(cached, {
         headers: {
@@ -80,7 +80,7 @@ export async function GET(request: Request) {
       });
     }
 
-    const stale = graduationCache.get(MACRO_STALE_KEY);
+    const stale = await graduationCache.get(MACRO_STALE_KEY);
     if (stale) {
       return NextResponse.json({ ...stale, _stale: true }, {
         headers: { 'X-Cache': 'STALE' },
@@ -89,7 +89,7 @@ export async function GET(request: Request) {
 
     // Rate limit check (only for upstream refresh attempts)
     const ip = getClientIp(request);
-    const limit = apiRateLimiter.check(ip);
+    const limit = await apiRateLimiter.check(ip);
     if (!limit.allowed) {
       // Graceful degradation: avoid 429 breaking UI; return a fallback payload.
       const solPrice = await fetchJupiterSolPrice();
@@ -155,8 +155,8 @@ export async function GET(request: Request) {
     };
 
     // Cache the response
-    graduationCache.set(MACRO_CACHE_KEY, payload, MACRO_TTL_MS);
-    graduationCache.set(MACRO_STALE_KEY, payload, MACRO_STALE_TTL_MS);
+    await graduationCache.set(MACRO_CACHE_KEY, payload, MACRO_TTL_MS);
+    await graduationCache.set(MACRO_STALE_KEY, payload, MACRO_STALE_TTL_MS);
 
     return NextResponse.json(payload, {
       headers: {
