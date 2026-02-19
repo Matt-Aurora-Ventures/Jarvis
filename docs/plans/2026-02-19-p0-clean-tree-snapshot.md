@@ -1,0 +1,194 @@
+﻿# P0 Clean-Tree Snapshot
+
+- Timestamp: 2026-02-19 05:07:56-06:00
+- Source workspace: C:/Users/lucid/Desktop/Jarvis
+- Source HEAD: 0e4342a5
+- origin/main HEAD: 08661be0
+- Status counts:
+  - ' D' = 1
+  - ' M' = 65
+  - '??' = 109
+
+## Source Changed Files
+- .github/workflows/ci.yml
+- .mcp.json
+- README.md
+- core/__init__.py
+- core/api_server.py
+- core/backtesting/__init__.py
+- core/jupiter_perps.py
+- core/trading_coliseum.py
+- core/utils/__init__.py
+- jarvis-sniper/README.md
+- jarvis-sniper/package.json
+- jarvis-sniper/scripts/post-deploy-cloud-run-hardening.ps1
+- jarvis-sniper/src/__tests__/backtest-route-execution-realism.test.ts
+- jarvis-sniper/src/__tests__/bags-swap-route.test.ts
+- jarvis-sniper/src/__tests__/production-hardening.test.ts
+- jarvis-sniper/src/__tests__/session-wallet-portfolio-route.test.ts
+- jarvis-sniper/src/app/api/autonomy/audit/[cycleId]/route.ts
+- jarvis-sniper/src/app/api/autonomy/audit/latest/route.ts
+- jarvis-sniper/src/app/api/autonomy/hourly/route.ts
+- jarvis-sniper/src/app/api/autonomy/status/__tests__/route.test.ts
+- jarvis-sniper/src/app/api/autonomy/status/route.ts
+- jarvis-sniper/src/app/api/autonomy/trade-telemetry/__tests__/route.test.ts
+- jarvis-sniper/src/app/api/autonomy/trade-telemetry/route.ts
+- jarvis-sniper/src/app/api/backtest/continuous/route.ts
+- jarvis-sniper/src/app/api/backtest/evidence/route.ts
+- jarvis-sniper/src/app/api/backtest/hyperliquid/route.ts
+- jarvis-sniper/src/app/api/backtest/route.ts
+- jarvis-sniper/src/app/api/backtest/runs/[runId]/artifacts/route.ts
+- jarvis-sniper/src/app/api/bags-backtest/route.ts
+- jarvis-sniper/src/app/api/bags/intel/route.ts
+- jarvis-sniper/src/app/api/bags/quote/route.ts
+- jarvis-sniper/src/app/api/bags/swap/route.ts
+- jarvis-sniper/src/app/api/bluechips/route.ts
+- jarvis-sniper/src/app/api/graduations/route.ts
+- jarvis-sniper/src/app/api/health/route.ts
+- jarvis-sniper/src/app/api/jito/bundle/route.ts
+- jarvis-sniper/src/app/api/macro/route.ts
+- jarvis-sniper/src/app/api/rpc/route.ts
+- jarvis-sniper/src/app/api/session-wallet/portfolio/route.ts
+- jarvis-sniper/src/app/api/strategy-overrides/__tests__/route.test.ts
+- jarvis-sniper/src/app/api/strategy-overrides/route.ts
+- jarvis-sniper/src/app/api/tv-screener/route.ts
+- jarvis-sniper/src/app/api/xstocks/route.ts
+- jarvis-sniper/src/app/bags-sniper/page.tsx
+- jarvis-sniper/src/app/page.tsx
+- jarvis-sniper/src/app/tradfi-sniper/page.tsx
+- jarvis-sniper/src/components/SniperControls.tsx
+- jarvis-sniper/src/components/providers/SniperAutomationOrchestrator.tsx
+- jarvis-sniper/src/hooks/useSnipeExecutor.ts
+- jarvis-sniper/src/lib/__tests__/autonomy-apply-gate.test.ts
+- jarvis-sniper/src/lib/__tests__/server-cache.test.ts
+- jarvis-sniper/src/lib/api-hardening.ts
+- jarvis-sniper/src/lib/autonomy/trade-telemetry-client.ts
+- jarvis-sniper/src/lib/autonomy/trade-telemetry-store.ts
+- jarvis-sniper/src/lib/bags-trading.ts
+- jarvis-sniper/src/lib/gecko-fetch.ts
+- jarvis-sniper/src/lib/gecko-universe.ts
+- jarvis-sniper/src/lib/historical-data.ts
+- jarvis-sniper/src/lib/rate-limiter.ts
+- jarvis-sniper/src/lib/server-cache.ts
+- jarvis-sniper/src/lib/strategy-selector.ts
+- jarvis-sniper/src/stores/__tests__/useSniperStore.test.ts
+- jarvis-sniper/src/stores/useSniperStore.ts
+- web/README.md
+- web/templates/trading.html
+- web/trading_web.py
+- .github/workflows/canonical-surface-guard.yml
+- .github/workflows/hardening-guardrails.yml
+- .github/workflows/integrity.yml
+- .github/workflows/p0-readiness-gates.yml
+- .github/workflows/sniper-real-data-guard.yml
+- .runtime/
+- START_TRADING.bat
+- core/backtesting/jupiter_fee_adapter.py
+- core/jupiter_perps/
+- core/legacy/
+- core/utils/secret_store.py
+- deploy/nginx/
+- deployment/firewall_zone_c.sh
+- deployment/requirements_per_zone.md
+- deployment/zone_a.dockerfile
+- deployment/zone_b.dockerfile
+- deployment/zone_c.dockerfile
+- docker-compose.trading.yml
+- docs/branch-worktree-policy.md
+- docs/canonical-surface-policy.md
+- docs/jupiter_perps_migration.md
+- docs/plans/
+- docs/ralph_wiggum_parallel_loop.md
+- docs/vanguard_control_board.md
+- docs/vanguard_standalone.md
+- jarvis-sniper/docs/dependency-risk-register.json
+- jarvis-sniper/docs/dependency-risk-register.md
+- jarvis-sniper/docs/scaling-playbook.md
+- jarvis-sniper/scripts/check-real-data-only.mjs
+- jarvis-sniper/src/app/api/autonomy/status/__tests__/route.auth.test.ts
+- jarvis-sniper/src/app/api/autonomy/trade-telemetry/__tests__/route.auth.test.ts
+- jarvis-sniper/src/app/api/backtest/result/
+- jarvis-sniper/src/app/api/backtest/runs/[runId]/artifacts/__tests__/
+- jarvis-sniper/src/app/api/backtest/status/
+- jarvis-sniper/src/app/api/data/
+- jarvis-sniper/src/app/api/execution/
+- jarvis-sniper/src/app/api/strategy-overrides/__tests__/route.auth.test.ts
+- jarvis-sniper/src/hooks/useSpotProtectionLifecycle.ts
+- jarvis-sniper/src/lib/__tests__/cache-provider.test.ts
+- jarvis-sniper/src/lib/__tests__/client-auth.test.ts
+- jarvis-sniper/src/lib/__tests__/data-plane-manifest-v2.test.ts
+- jarvis-sniper/src/lib/__tests__/onchain-protection-config.test.ts
+- jarvis-sniper/src/lib/__tests__/rate-limit-provider.test.ts
+- jarvis-sniper/src/lib/__tests__/real-data-guard.test.ts
+- jarvis-sniper/src/lib/autonomy/auth.ts
+- jarvis-sniper/src/lib/autonomy/client-auth.ts
+- jarvis-sniper/src/lib/cache-provider.ts
+- jarvis-sniper/src/lib/data-plane/
+- jarvis-sniper/src/lib/execution/
+- jarvis-sniper/src/lib/onchain-protection-config.ts
+- jarvis-sniper/src/lib/rate-limit-provider.ts
+- jarvis-sniper/src/lib/real-data-guard.ts
+- policies/
+- requirements/
+- scripts/bootstrap.py
+- scripts/check_notebooklm_mcp.py
+- scripts/compute_discriminators.py
+- scripts/fetch_idl.py
+- scripts/freeze_deps.py
+- scripts/freeze_deps.sh
+- scripts/gen_ssh_key.py
+- scripts/generate_anchorpy_bindings.py
+- scripts/generate_vanguard_control_token.py
+- scripts/notebooklm_bootstrap.js
+- scripts/perps_quickstart.py
+- scripts/ralph_wiggum_parallel_loop.py
+- scripts/ralph_wiggum_watchdog.py
+- scripts/setup_openclaw_vps.ps1
+- scripts/start_ralph_wiggum_parallel_loop.ps1
+- scripts/start_vanguard_control_board.ps1
+- scripts/start_vanguard_control_board.py
+- scripts/start_vanguard_standalone_loop.ps1
+- scripts/status_ralph_wiggum_parallel_loop.ps1
+- scripts/status_vanguard_control_board.ps1
+- scripts/status_vanguard_standalone_loop.ps1
+- scripts/stop_ralph_wiggum_parallel_loop.ps1
+- scripts/stop_vanguard_control_board.ps1
+- scripts/stop_vanguard_standalone_loop.ps1
+- scripts/test_vanguard_standalone.py
+- scripts/trading_launcher_mcp.js
+- scripts/trading_launcher_mcp.py
+- scripts/validate_custody_mints.py
+- scripts/validate_execution_path_quarantine.py
+- scripts/validate_notebooklm_mcp_security.py
+- scripts/verify_deps.py
+- scripts/verify_deps.sh
+- start_sniper_preview.ps1
+- start_trading_ui.ps1
+- status_sniper_preview.ps1
+- stop_sniper_preview.ps1
+- tests/test_ai_signal_bridge.py
+- tests/test_control_board_security.py
+- tests/test_cost_gate.py
+- tests/test_event_journal_idempotency.py
+- tests/test_execution_intent.py
+- tests/test_execution_service_standalone.py
+- tests/test_idl_integrity.py
+- tests/test_jupiter_fee_adapter.py
+- tests/test_live_control.py
+- tests/test_pda_derivation.py
+- tests/test_perps_api_ingress.py
+- tests/test_position_manager.py
+- tests/test_runner_external_queue.py
+- tests/test_self_adjuster.py
+- tests/test_signer_loader.py
+- tmp_ps_test.txt
+- web/Dockerfile
+- web/api_adapter.py
+- web/perps_api.py
+
+## Baseline Verification Commands (to run on integration branch)
+- pytest -q tests/test_execution_intent.py tests/test_execution_service_standalone.py tests/test_runner_external_queue.py tests/test_perps_api_ingress.py tests/test_signer_loader.py
+- python scripts/test_vanguard_standalone.py --runtime-seconds 30
+- cd jarvis-sniper && npm run test -- src/lib/__tests__/cache-provider.test.ts src/lib/__tests__/rate-limit-provider.test.ts src/lib/__tests__/server-cache.test.ts src/lib/__tests__/onchain-protection-config.test.ts
+- cd jarvis-sniper && npm run build
+- cd jarvis-sniper && npm audit --omit=dev
