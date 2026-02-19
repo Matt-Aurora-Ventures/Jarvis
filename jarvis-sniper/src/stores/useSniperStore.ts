@@ -9,6 +9,7 @@ import {
 import type { StrategyOverrideSnapshot } from '@/lib/autonomy/types';
 import { postTradeTelemetry } from '@/lib/autonomy/trade-telemetry-client';
 import { STRATEGY_SEED_META } from '@/lib/strategy-seed-meta';
+import { resolveOnChainProtectionConfig } from '@/lib/onchain-protection-config';
 
 export type StrategyMode = 'conservative' | 'balanced' | 'aggressive';
 export type TradeSignerMode = 'phantom' | 'session';
@@ -32,6 +33,7 @@ export type PositionReconcileReason =
   | 'buy_tx_failed'
   | 'sell_tx_unresolved_balance_zero'
   | 'sell_tx_failed';
+export type ProtectionStatus = 'pending' | 'active' | 'failed' | 'cancelled';
 
 export interface PendingTxRecord {
   signature: string;
@@ -747,6 +749,16 @@ export interface Position {
   jupSlOrderKey?: string;
   /** Whether SL/TP orders are placed on-chain */
   onChainSlTp?: boolean;
+  /** Unified protection lifecycle state for spot entries. */
+  protectionStatus?: ProtectionStatus;
+  /** Canonical TP trigger order key (maps from legacy jupTpOrderKey). */
+  tpOrderKey?: string;
+  /** Canonical SL trigger order key (maps from legacy jupSlOrderKey). */
+  slOrderKey?: string;
+  /** Epoch ms of latest protection lifecycle update. */
+  protectionUpdatedAt?: number;
+  /** Last reason protection failed (if protectionStatus=failed). */
+  protectionFailureReason?: string;
   /** Asset class this position belongs to (for per-asset circuit breakers) */
   assetType?: AssetType;
   /**
@@ -763,6 +775,88 @@ export interface Position {
   reconciledReason?: PositionReconcileReason;
   /** Reconciliation timestamp (ms). */
   reconciledAt?: number;
+}
+
+const ONCHAIN_PROTECTION_CONFIG = resolveOnChainProtectionConfig();
+const EXPERIMENTAL_ONCHAIN_SLTP_ENABLED = ONCHAIN_PROTECTION_CONFIG.enabled;
+
+function sanitizeOnChainSlTpFields<T extends object>(input: T): T {
+  if (EXPERIMENTAL_ONCHAIN_SLTP_ENABLED) return input;
+  const next = { ...input } as T & {
+    onChainSlTp?: boolean;
+    jupTpOrderKey?: string;
+    jupSlOrderKey?: string;
+    tpOrderKey?: string;
+    slOrderKey?: string;
+    protectionStatus?: ProtectionStatus;
+    protectionUpdatedAt?: number;
+    protectionFailureReason?: string;
+  };
+  const hadProtectionFields =
+    Boolean(next.onChainSlTp)
+    || Boolean(next.jupTpOrderKey)
+    || Boolean(next.jupSlOrderKey)
+    || Boolean(next.tpOrderKey)
+    || Boolean(next.slOrderKey)
+    || next.protectionStatus === 'pending'
+    || next.protectionStatus === 'active';
+  if (next.onChainSlTp) next.onChainSlTp = false;
+  delete next.jupTpOrderKey;
+  delete next.jupSlOrderKey;
+  delete next.tpOrderKey;
+  delete next.slOrderKey;
+  if (hadProtectionFields) {
+    next.protectionStatus = 'failed';
+    next.protectionUpdatedAt = Date.now();
+    next.protectionFailureReason = ONCHAIN_PROTECTION_CONFIG.reason
+      || 'On-chain protection is disabled for this build.';
+  }
+  return next as T;
+}
+
+function withProtectionLifecycleDefaults<T extends Partial<Position>>(input: T): T {
+  const next = { ...input } as T & {
+    protectionStatus?: ProtectionStatus;
+    protectionUpdatedAt?: number;
+    protectionFailureReason?: string;
+    tpOrderKey?: string;
+    slOrderKey?: string;
+    jupTpOrderKey?: string;
+    jupSlOrderKey?: string;
+    onChainSlTp?: boolean;
+    status?: Position['status'];
+    manualOnly?: boolean;
+  };
+
+  const tpOrderKey = String(next.tpOrderKey || next.jupTpOrderKey || '').trim();
+  const slOrderKey = String(next.slOrderKey || next.jupSlOrderKey || '').trim();
+  if (tpOrderKey) next.tpOrderKey = tpOrderKey;
+  if (slOrderKey) next.slOrderKey = slOrderKey;
+
+  const status = next.status;
+  const requiresProtection = status === 'open' && !next.manualOnly;
+
+  if (status && status !== 'open') {
+    next.protectionStatus = 'cancelled';
+    next.protectionUpdatedAt = next.protectionUpdatedAt ?? Date.now();
+    next.protectionFailureReason = undefined;
+    return next as T;
+  }
+
+  if (tpOrderKey && slOrderKey) {
+    next.protectionStatus = 'active';
+    next.protectionUpdatedAt = next.protectionUpdatedAt ?? Date.now();
+    next.protectionFailureReason = undefined;
+    next.onChainSlTp = true;
+    return next as T;
+  }
+
+  if (requiresProtection && !next.protectionStatus) {
+    next.protectionStatus = 'pending';
+    next.protectionUpdatedAt = next.protectionUpdatedAt ?? Date.now();
+  }
+
+  return next as T;
 }
 
 export interface ExecutionEvent {
@@ -1247,23 +1341,42 @@ export const useSniperStore = create<SniperState>()(
   })),
 
   positions: [],
-  addPosition: (pos) => set((s) => ({
-    positions: [{
-      ...pos,
-      exitLifecycle: pos.exitLifecycle ?? 'open',
-      exitAttempts: Number.isFinite(Number(pos.exitAttempts)) ? Number(pos.exitAttempts) : 0,
-      pendingSellState: pos.pendingSellState,
-      pendingSellTxHash: pos.pendingSellTxHash,
-      pendingSellSubmittedAt: pos.pendingSellSubmittedAt,
-      lastExitAttemptAt: pos.lastExitAttemptAt,
-      lastExitError: pos.lastExitError,
-      sellReconciledAt: pos.sellReconciledAt,
-      sellReconcileReason: pos.sellReconcileReason,
-    }, ...s.positions],
-  })),
-  updatePosition: (id, update) => set((s) => ({
-    positions: s.positions.map((p) => p.id === id ? { ...p, ...update } : p),
-  })),
+  addPosition: (pos: Position) => set((s) => {
+    const sanitizedPos = withProtectionLifecycleDefaults(
+      sanitizeOnChainSlTpFields<Position>(pos),
+    );
+    return {
+      positions: [{
+        ...sanitizedPos,
+        exitLifecycle: sanitizedPos.exitLifecycle ?? 'open',
+        exitAttempts: Number.isFinite(Number(sanitizedPos.exitAttempts)) ? Number(sanitizedPos.exitAttempts) : 0,
+        pendingSellState: sanitizedPos.pendingSellState,
+        pendingSellTxHash: sanitizedPos.pendingSellTxHash,
+        pendingSellSubmittedAt: sanitizedPos.pendingSellSubmittedAt,
+        lastExitAttemptAt: sanitizedPos.lastExitAttemptAt,
+        lastExitError: sanitizedPos.lastExitError,
+        sellReconciledAt: sanitizedPos.sellReconciledAt,
+        sellReconcileReason: sanitizedPos.sellReconcileReason,
+        protectionStatus: sanitizedPos.protectionStatus,
+        tpOrderKey: sanitizedPos.tpOrderKey,
+        slOrderKey: sanitizedPos.slOrderKey,
+        protectionUpdatedAt: sanitizedPos.protectionUpdatedAt,
+        protectionFailureReason: sanitizedPos.protectionFailureReason,
+      }, ...s.positions],
+    };
+  }),
+  updatePosition: (id: string, update: Partial<Position>) => set((s) => {
+    const safeUpdate = withProtectionLifecycleDefaults(
+      sanitizeOnChainSlTpFields<Partial<Position>>(update),
+    );
+    return {
+      positions: s.positions.map((p) => (
+        p.id === id
+          ? withProtectionLifecycleDefaults({ ...p, ...safeUpdate })
+          : p
+      )),
+    };
+  }),
   removePosition: (id) => set((s) => ({
     positions: s.positions.filter((p) => p.id !== id),
   })),
@@ -1506,6 +1619,14 @@ export const useSniperStore = create<SniperState>()(
           pendingSellState: txHash ? 'confirmed' : p.pendingSellState,
           sellReconciledAt: p.sellReconciledAt,
           sellReconcileReason: p.sellReconcileReason,
+          protectionStatus: 'cancelled',
+          protectionUpdatedAt: Date.now(),
+          protectionFailureReason: undefined,
+          tpOrderKey: undefined,
+          slOrderKey: undefined,
+          jupTpOrderKey: undefined,
+          jupSlOrderKey: undefined,
+          onChainSlTp: false,
         } : p),
         executionLog: [execEvent, ...s.executionLog].slice(0, 200),
         totalPnl: s.totalPnl + realPnlSol,
