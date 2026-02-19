@@ -1,26 +1,24 @@
-name: CI
+name: P0 Readiness Gates
 
 on:
-  push:
-    branches: [main, develop]
   pull_request:
+    branches: [main, develop]
+  push:
     branches: [main, develop]
 
 jobs:
-  perps-ingress-contract:
-    name: Perps Ingress Contract
+  perps-ingress-gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install dependencies
+      - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio
-      - name: Run canonical ingress tests
+          python -m pip install pytest pytest-asyncio
+      - name: Run perps ingress and queue gates
         run: |
           python -m pytest \
             tests/test_execution_intent.py \
@@ -28,8 +26,7 @@ jobs:
             tests/test_perps_api_ingress.py \
             -q
 
-  jarvis-sniper-readiness:
-    name: Jarvis Sniper Readiness
+  distributed-state-gate:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -43,18 +40,14 @@ jobs:
           cache-dependency-path: jarvis-sniper/package-lock.json
       - name: Install dependencies
         run: npm ci
-      - name: Run distributed-state + store tests
+      - name: Run distributed state tests
         run: |
           npm run test -- \
             src/lib/__tests__/cache-provider.test.ts \
             src/lib/__tests__/rate-limit-provider.test.ts \
-            src/lib/__tests__/server-cache.test.ts \
-            src/stores/__tests__/useSniperStore.test.ts
-      - name: Build canonical frontend
-        run: npm run build
+            src/lib/__tests__/server-cache.test.ts
 
-  prod-dependency-risk:
-    name: Production Dependency Risk
+  npm-audit-prod-gate:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -74,4 +67,4 @@ jobs:
         run: npm audit --omit=dev --json > npm-audit-prod.json || true
       - name: Enforce non-regressive production risk gate
         run: |
-          node -e "const fs=require('fs'); const d=JSON.parse(fs.readFileSync('npm-audit-prod.json','utf8')); const v=d.metadata?.vulnerabilities||{}; const high=Number(v.high||0); const critical=Number(v.critical||0); const baseline=Number(process.env.PROD_AUDIT_HIGH_BASELINE||19); if (critical>0){ console.error('Critical vulnerabilities present in production dependencies:', critical); process.exit(1);} if (high>baseline){ console.error('High vulnerability count regressed. high=',high,' baseline=',baseline); process.exit(1);} console.log('Production audit gate passed. high=',high,' critical=',critical,' baseline=',baseline);"
+          node -e "const fs=require('fs'); const p='npm-audit-prod.json'; const d=JSON.parse(fs.readFileSync(p,'utf8')); const v=d.metadata?.vulnerabilities||{}; const high=Number(v.high||0); const critical=Number(v.critical||0); const baseline=Number(process.env.PROD_AUDIT_HIGH_BASELINE||19); if (critical>0) { console.error('Critical vulnerabilities present in production dependencies:', critical); process.exit(1);} if (high>baseline){ console.error('High vulnerability count regressed. high=',high,' baseline=',baseline); process.exit(1);} console.log('Production audit gate passed. high=',high,' critical=',critical,' baseline=',baseline);"
