@@ -15,6 +15,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Environment Diagnostics
+        run: |
+          python --version
+          pip --version
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -41,6 +45,12 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: jarvis-sniper/package-lock.json
+      - name: Environment Diagnostics
+        run: |
+          node -v
+          npm -v
+          test -f jarvis-sniper/package-lock.json
+          echo "lockfile=present"
       - name: Install dependencies
         run: npm ci
       - name: Run distributed-state + store tests
@@ -68,6 +78,12 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: jarvis-sniper/package-lock.json
+      - name: Environment Diagnostics
+        run: |
+          node -v
+          npm -v
+          test -f jarvis-sniper/package-lock.json
+          echo "lockfile=present"
       - name: Install dependencies
         run: npm ci
       - name: Capture production audit

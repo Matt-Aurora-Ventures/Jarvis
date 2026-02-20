@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLoadAutonomyState = vi.fn();
 const mockGetStrategyOverrideSnapshot = vi.fn();
@@ -18,6 +18,11 @@ describe('GET /api/autonomy/status', () => {
     process.env.AUTONOMY_ENABLED = 'true';
     process.env.AUTONOMY_APPLY_OVERRIDES = 'true';
     process.env.XAI_API_KEY = 'xai-test-key';
+    process.env.AUTONOMY_READ_TOKEN = 'autonomy-read-token-test';
+  });
+
+  afterEach(() => {
+    delete process.env.AUTONOMY_READ_TOKEN;
   });
 
   it('returns sanitized runtime truth fields', async () => {
@@ -39,7 +44,10 @@ describe('GET /api/autonomy/status', () => {
     });
 
     const route = await import('@/app/api/autonomy/status/route');
-    const res = await route.GET();
+    const req = new Request('http://localhost/api/autonomy/status', {
+      headers: { authorization: 'Bearer autonomy-read-token-test' },
+    });
+    const res = await route.GET(req);
     const body = await res.json();
 
     expect(res.status).toBe(200);

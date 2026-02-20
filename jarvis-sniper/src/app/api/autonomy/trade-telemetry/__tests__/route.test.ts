@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockAppendTradeTelemetryEvent = vi.fn();
 
@@ -10,13 +10,21 @@ describe('POST /api/autonomy/trade-telemetry', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    process.env.AUTONOMY_TELEMETRY_TOKEN = 'autonomy-telemetry-token-test';
+  });
+
+  afterEach(() => {
+    delete process.env.AUTONOMY_TELEMETRY_TOKEN;
   });
 
   it('rejects invalid payloads', async () => {
     const route = await import('@/app/api/autonomy/trade-telemetry/route');
     const req = new Request('http://localhost/api/autonomy/trade-telemetry', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        authorization: 'Bearer autonomy-telemetry-token-test',
+      },
       body: JSON.stringify({ mint: 'abc', status: 'open' }),
     });
     const res = await route.POST(req);
@@ -38,7 +46,10 @@ describe('POST /api/autonomy/trade-telemetry', () => {
     const route = await import('@/app/api/autonomy/trade-telemetry/route');
     const req = new Request('http://localhost/api/autonomy/trade-telemetry', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        authorization: 'Bearer autonomy-telemetry-token-test',
+      },
       body: JSON.stringify({
         positionId: 'pos-1',
         mint: 'mint-1',

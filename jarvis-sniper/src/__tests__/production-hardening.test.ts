@@ -120,14 +120,14 @@ describe('fetchWithRetry', () => {
 describe('Rate limiter coverage', () => {
   it('apiRateLimiter should be exported and functional', async () => {
     const { apiRateLimiter } = await import('@/lib/rate-limiter');
-    const result = apiRateLimiter.check('test-ip-hardening-1');
+    const result = await apiRateLimiter.check('test-ip-hardening-1');
     expect(result.allowed).toBe(true);
     expect(typeof result.remaining).toBe('number');
   });
 
   it('quoteRateLimiter should have stricter limits', async () => {
     const { quoteRateLimiter } = await import('@/lib/rate-limiter');
-    const result = quoteRateLimiter.check('test-ip-hardening-2');
+    const result = await quoteRateLimiter.check('test-ip-hardening-2');
     expect(result.allowed).toBe(true);
     // Quote limiter has maxRequests=30 vs apiRateLimiter maxRequests=60
     expect(result.remaining).toBeLessThanOrEqual(30);
@@ -135,7 +135,7 @@ describe('Rate limiter coverage', () => {
 
   it('swapRateLimiter should have strictest limits', async () => {
     const { swapRateLimiter } = await import('@/lib/rate-limiter');
-    const result = swapRateLimiter.check('test-ip-hardening-3');
+    const result = await swapRateLimiter.check('test-ip-hardening-3');
     expect(result.allowed).toBe(true);
     // Swap limiter has maxRequests=20
     expect(result.remaining).toBeLessThanOrEqual(20);

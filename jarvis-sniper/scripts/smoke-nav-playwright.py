@@ -150,6 +150,19 @@ def main() -> int:
         log(f"FAIL: page errors detected ({len(page_errors)}). See {out_dir / 'console.json'}")
         return 2
 
+    api_parse_warning = re.compile(
+        r"(Unexpected token '<'.*not valid JSON|\[useMacroData\] Fetch failed|\[useTVScreener\] Fetch failed)",
+        re.IGNORECASE,
+    )
+    api_warning_logs = [
+        l for l in logs
+        if l.get("type") in {"warning", "error"}
+        and api_parse_warning.search(str(l.get("text") or ""))
+    ]
+    if api_warning_logs:
+        log(f"FAIL: API parse/backend wiring warnings detected ({len(api_warning_logs)}). See {out_dir / 'console.json'}")
+        return 3
+
     log(f"OK: navigation smoke test complete. Artifacts in {out_dir}")
     return 0
 

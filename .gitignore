@@ -141,6 +141,7 @@ yarn-error.log*
 .pnpm-debug.log*
 package-lock.json
 yarn.lock
+!jarvis-sniper/package-lock.json
 
 # === OS FILES ===
 # macOS

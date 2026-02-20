@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetStrategyOverrideSnapshot = vi.fn();
 
@@ -10,6 +10,11 @@ describe('GET /api/strategy-overrides', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    process.env.AUTONOMY_READ_TOKEN = 'autonomy-read-token-test';
+  });
+
+  afterEach(() => {
+    delete process.env.AUTONOMY_READ_TOKEN;
   });
 
   it('returns stable schema with versioned snapshot', async () => {
@@ -31,7 +36,10 @@ describe('GET /api/strategy-overrides', () => {
       ],
     });
     const route = await import('@/app/api/strategy-overrides/route');
-    const res = await route.GET();
+    const req = new Request('http://localhost/api/strategy-overrides', {
+      headers: { authorization: 'Bearer autonomy-read-token-test' },
+    });
+    const res = await route.GET(req);
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.version).toBe(3);

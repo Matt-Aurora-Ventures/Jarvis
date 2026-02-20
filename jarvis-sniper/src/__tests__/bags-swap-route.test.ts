@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@bagsfm/bags-sdk', () => ({
+  BagsSDK: vi.fn(),
+}));
+
 vi.mock('@/lib/rate-limiter', () => ({
-  swapRateLimiter: { check: vi.fn().mockReturnValue({ allowed: true }) },
+  swapRateLimiter: { check: vi.fn().mockResolvedValue({ allowed: true }) },
   getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
 }));
 

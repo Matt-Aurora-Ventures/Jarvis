@@ -29,26 +29,41 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: jarvis-sniper/package.json
+          cache-dependency-path: jarvis-sniper/package-lock.json
+
+      - name: Environment Diagnostics
+        working-directory: jarvis-sniper
+        run: |
+          node -v
+          npm -v
+          test -f package-lock.json
+          echo "lockfile=present"
 
       - name: Install
         working-directory: jarvis-sniper
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install --no-audit --no-fund
-          fi
+        run: npm ci
 
       - name: Test
         working-directory: jarvis-sniper
         run: npm test
+
+      - name: Build
+        working-directory: jarvis-sniper
+        run: npm run build
+
+      - name: Verify Hosting Runtime Mode
+        working-directory: jarvis-sniper
+        run: |
+          node -e "const fs=require('fs'); const cfg=JSON.parse(fs.readFileSync('firebase.json','utf8')); const hosting=cfg.hosting||{}; if (hosting.public==='out') { console.error('Static export hosting mode detected (public=out). Refusing deploy.'); process.exit(1);} if (!hosting.frameworksBackend) { console.error('Missing frameworksBackend in firebase.json. Refusing deploy.'); process.exit(1);} console.log('hosting_mode=frameworks');"
 
       - name: Auth (GCP Service Account)
         run: |
           mkdir -p "$HOME/.gcp"
           printf '%s' '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KR8TIV }}' > "$HOME/.gcp/firebase-sa.json"
         shell: bash
+
+      - name: Ensure Firebase Web Frameworks Support
+        run: npx firebase-tools experiments:enable webframeworks --non-interactive
 
       - name: Deploy
         working-directory: jarvis-sniper
@@ -61,6 +76,42 @@ jobs:
 
       - name: Smoke Check
         run: |
-          curl -fsS "https://${CANONICAL_HOST}/api/health" > /dev/null
-          curl -fsS "https://${CANONICAL_HOST}/api/version" > /dev/null
+          node <<'NODE'
+          const base = `https://${process.env.CANONICAL_HOST}`;
+          const getPaths = [
+            "/api/health",
+            "/api/version",
+            "/api/macro",
+            "/api/tv-screener",
+            "/api/backtest/runs/nonexistent",
+          ];
+
+          const expectJson = async (path, init = {}) => {
+            const res = await fetch(`${base}${path}`, init);
+            const ct = (res.headers.get("content-type") || "").toLowerCase();
+            const body = await res.text();
+            if (!ct.includes("application/json")) {
+              throw new Error(`Expected JSON for ${path}; got content-type=${ct} body=${body.slice(0, 120)}`);
+            }
+            try {
+              JSON.parse(body);
+            } catch {
+              throw new Error(`Invalid JSON for ${path}: ${body.slice(0, 120)}`);
+            }
+            if (res.status >= 500) {
+              throw new Error(`Server error for ${path}: status=${res.status}`);
+            }
+          };
+
+          const main = async () => {
+            for (const path of getPaths) {
+              await expectJson(path);
+            }
+          };
+
+          main().catch((err) => {
+            console.error(err);
+            process.exit(1);
+          });
+          NODE
 

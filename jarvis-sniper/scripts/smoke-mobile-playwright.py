@@ -142,6 +142,13 @@ def main() -> int:
                 ),
             )
             modal_title = page.get_by_role("heading", name=re.compile(r"Connect Wallet", re.I))
+            connected_hint = page.get_by_text(
+                re.compile(r"(Session Wallet On|Wallet On|Connected)", re.I)
+            )
+
+            if btn.count() == 0 and connected_hint.count() > 0:
+                steps.append({"step": "wallet_already_connected", "url": page.url})
+                return
 
             # Hydration can be slow on CI/old devices; retry opening the modal a few times.
             opened = False
@@ -158,6 +165,9 @@ def main() -> int:
                     page.wait_for_timeout(250)
 
             if not opened:
+                if connected_hint.count() > 0:
+                    steps.append({"step": "wallet_already_connected", "url": page.url})
+                    return
                 snap("_wallet-modal-missing.png")
                 raise RuntimeError("Wallet connect modal did not open")
 
@@ -179,38 +189,39 @@ def main() -> int:
                 page.get_by_label("Close").first.click()
             page.wait_for_timeout(250)
 
-        # Sniper (mobile terminal)
-        goto("/", "01-home-mobile.png")
-        ack_beta_modal_if_present()
-        assert_mobile_tabs_present()
-        open_wallet_modal()
-        for label in ["Trade", "Positions", "Log", "Chart", "Scan"]:
-            click_mobile_tab(label)
-            snap(f"01-tab-{label.lower()}.png")
+        try:
+            # Sniper (mobile terminal)
+            goto("/", "01-home-mobile.png")
+            ack_beta_modal_if_present()
+            assert_mobile_tabs_present()
+            open_wallet_modal()
+            for label in ["Trade", "Positions", "Log", "Chart", "Scan"]:
+                click_mobile_tab(label)
+                snap(f"01-tab-{label.lower()}.png")
 
-        # Bags sniper (mobile terminal)
-        goto("/bags-sniper", "02-bags-sniper-mobile.png")
-        ack_beta_modal_if_present()
-        assert_mobile_tabs_present()
-        for label in ["Trade", "Positions", "Log", "Chart", "Scan"]:
-            click_mobile_tab(label)
-            snap(f"02-bags-tab-{label.lower()}.png")
+            # Bags sniper (mobile terminal)
+            goto("/bags-sniper", "02-bags-sniper-mobile.png")
+            ack_beta_modal_if_present()
+            assert_mobile_tabs_present()
+            for label in ["Trade", "Positions", "Log", "Chart", "Scan"]:
+                click_mobile_tab(label)
+                snap(f"02-bags-tab-{label.lower()}.png")
 
-        # TradFi sniper (mobile terminal)
-        goto("/tradfi-sniper", "03-tradfi-sniper-mobile.png")
-        ack_beta_modal_if_present()
-        assert_mobile_tabs_present()
-        for label in ["Trade", "Positions", "Log", "Chart", "Scan"]:
-            click_mobile_tab(label)
-            snap(f"03-tradfi-tab-{label.lower()}.png")
+            # TradFi sniper (mobile terminal)
+            goto("/tradfi-sniper", "03-tradfi-sniper-mobile.png")
+            ack_beta_modal_if_present()
+            assert_mobile_tabs_present()
+            for label in ["Trade", "Positions", "Log", "Chart", "Scan"]:
+                click_mobile_tab(label)
+                snap(f"03-tradfi-tab-{label.lower()}.png")
 
-        # Intel + graduations (non-terminal pages)
-        goto("/bags-intel", "04-bags-intel-mobile.png")
-        goto("/bags-graduations", "05-bags-graduations-mobile.png")
-
-        (out_dir / "console.json").write_text(json.dumps(logs, indent=2), encoding="utf-8")
-        (out_dir / "steps.json").write_text(json.dumps(steps, indent=2), encoding="utf-8")
-        browser.close()
+            # Intel + graduations (non-terminal pages)
+            goto("/bags-intel", "04-bags-intel-mobile.png")
+            goto("/bags-graduations", "05-bags-graduations-mobile.png")
+        finally:
+            (out_dir / "console.json").write_text(json.dumps(logs, indent=2), encoding="utf-8")
+            (out_dir / "steps.json").write_text(json.dumps(steps, indent=2), encoding="utf-8")
+            browser.close()
 
     # Treat non-ignored page errors as failures, but ignore common third-party iframe noise.
     fast_refresh_full_reload = any(
@@ -241,6 +252,19 @@ def main() -> int:
     if page_errors:
         log(f"FAIL: page errors detected ({len(page_errors)}). See {out_dir / 'console.json'}")
         return 2
+
+    api_parse_warning = re.compile(
+        r"(Unexpected token '<'.*not valid JSON|\[useMacroData\] Fetch failed|\[useTVScreener\] Fetch failed)",
+        re.IGNORECASE,
+    )
+    api_warning_logs = [
+        l for l in logs
+        if l.get("type") in {"warning", "error"}
+        and api_parse_warning.search(str(l.get("text") or ""))
+    ]
+    if api_warning_logs:
+        log(f"FAIL: API parse/backend wiring warnings detected ({len(api_warning_logs)}). See {out_dir / 'console.json'}")
+        return 3
 
     log(f"OK: mobile smoke test complete. Artifacts in {out_dir}")
     return 0
