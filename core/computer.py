@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from core import guardian, safe_subprocess
+from core.command_dsl.executor import execute_typed_command, parse_typed_command
 
 # Detect platform
 PLATFORM = platform.system().lower()
@@ -39,7 +40,10 @@ def _run_applescript(script: str, timeout: int = 10) -> Tuple[bool, str]:
             ["osascript", "-e", script],
             timeout=timeout,
         )
-        return result.returncode == 0, result.stdout.strip() or result.stderr.strip()
+        return (
+            result.get("returncode") == 0,
+            (result.get("stdout", "").strip() or result.get("stderr", "").strip()),
+        )
     except Exception as e:
         return False, str(e)
 
@@ -75,7 +79,8 @@ def type_text(text: str) -> Tuple[bool, str]:
         pass
 
     if IS_MACOS:
-        escaped_text = text.replace('"', '\\"')
+        # Properly escape for AppleScript string literals: backslash first, then quote
+        escaped_text = text.replace("\\", "\\\\").replace('"', '\\"')
         script = f'''
         tell application "System Events"
             keystroke "{escaped_text}"
@@ -212,7 +217,9 @@ def open_app(app_name: str) -> Tuple[bool, str]:
     """Open an application."""
     if IS_WINDOWS:
         try:
-            subprocess.Popen(["start", "", app_name], shell=True)
+            # Use ShellExecuteW via os.startfile to avoid shell=True injection risk
+            import os
+            os.startfile(app_name)
             return True, f"Opening {app_name}"
         except Exception as e:
             return False, str(e)
@@ -296,13 +303,15 @@ def run_shell(command: str, cwd: str = None, timeout: int = None) -> Tuple[bool,
         return False, f"Blocked dangerous command: {reason}"
 
     try:
-        result = safe_subprocess.run_command_safe(
-            command,
+        typed = parse_typed_command(
+            command=command,
             timeout=timeout,
-            shell=True,
-            capture_output=True,
             cwd=cwd,
         )
+        result = execute_typed_command(typed, capture_output=True)
+
+        if result.get("blocked"):
+            return False, result.get("stderr", "Command blocked by typed DSL")
 
         if result.get("timed_out"):
             return False, f"Command timed out after {result.get('timeout')}s"

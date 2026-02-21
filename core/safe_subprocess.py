@@ -187,6 +187,30 @@ def run_command_safe(
     return result
 
 
+def run_allowlisted_command(
+    command: str,
+    timeout: Optional[int] = None,
+    capture_output: bool = True,
+    check: bool = False,
+    cwd: Optional[str] = None,
+    env: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Execute command text through the typed allowlisted command DSL."""
+    from core.command_dsl.executor import execute_typed_command, parse_typed_command
+
+    typed = parse_typed_command(
+        command=command,
+        timeout=timeout,
+        cwd=cwd,
+        env_overrides=env or {},
+    )
+    return execute_typed_command(
+        typed,
+        capture_output=capture_output,
+        check=check,
+    )
+
+
 async def run_command_async(
     command: str,
     timeout: Optional[int] = None,

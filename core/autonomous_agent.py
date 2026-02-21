@@ -17,11 +17,11 @@ from core import (
     config,
     providers,
     research_engine,
-    safe_subprocess,
     self_healing,
     storage_utils,
     vision_client,
 )
+from core.command_dsl.executor import execute_typed_command, parse_typed_command
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT_PATH = ROOT / "data" / "autonomous_agents"
@@ -284,16 +284,26 @@ Example format:
         command = parameters.get("command", "")
         if not command:
             return {"error": "No command specified"}
-        
+
         try:
-            # Use safe_subprocess with auto-timeout detection
-            result = safe_subprocess.run_command_safe(
-                command,
-                timeout=parameters.get("timeout"),  # Auto-determined if None
-                shell=True,
+            typed = parse_typed_command(
+                command=command,
+                timeout=parameters.get("timeout"),
+                cwd=parameters.get("cwd"),
+            )
+            result = execute_typed_command(
+                typed,
                 capture_output=True,
             )
-            
+
+            if result.get("blocked"):
+                return {
+                    "error": result.get("stderr", "Command blocked"),
+                    "returncode": result.get("returncode", -1),
+                    "stdout": result.get("stdout", ""),
+                    "stderr": result.get("stderr", ""),
+                }
+
             if result["timed_out"]:
                 return {
                     "error": f"Command timed out after {result['timeout']}s and was killed",

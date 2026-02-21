@@ -6,6 +6,7 @@ Warns about or blocks commands that are likely to hang.
 import logging
 import re
 from typing import List, Optional, Tuple
+import shlex
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,23 @@ class CommandValidator:
             )
         
         return (True, None, warnings)
+
+    def validate_argv(self, argv: List[str]) -> Tuple[bool, Optional[str], List[str]]:
+        """Validate a tokenized command list with shell metachar blocking."""
+        if not argv:
+            return False, "Command argv is empty", []
+
+        shell_meta = ["&&", "||", ";", "|", "`", "$(", ">", "<"]
+        for token in argv:
+            if any(meta in token for meta in shell_meta):
+                return (
+                    False,
+                    f"Command token contains blocked shell metacharacters: {token}",
+                    [],
+                )
+
+        command = " ".join(shlex.quote(part) for part in argv)
+        return self.validate_command(command)
     
     def _count_chains(self, command: str) -> int:
         """Count the number of chained operations."""
@@ -208,4 +226,18 @@ def validate_before_run(command: str) -> Tuple[bool, Optional[str], List[str]]:
     if error:
         logger.error(f"Command blocked: {error}")
     
+    return is_safe, error, warnings
+
+
+def validate_argv_before_run(argv: List[str]) -> Tuple[bool, Optional[str], List[str]]:
+    """Convenience function to validate tokenized commands."""
+    validator = get_validator()
+    is_safe, error, warnings = validator.validate_argv(argv)
+
+    for warning in warnings:
+        logger.warning(f"Command warning: {warning}")
+
+    if error:
+        logger.error(f"Command blocked: {error}")
+
     return is_safe, error, warnings

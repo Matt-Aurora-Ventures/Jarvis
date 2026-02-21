@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
-from core.security_validation import sanitize_sql_identifier
+from core.query_optimizer import suggest_indexes_for_table
 
 logger = logging.getLogger(__name__)
 
@@ -496,7 +496,10 @@ class QueryAnalyzer:
             explain_results = []
             if is_select:
                 try:
-                    cursor = conn.execute(f"EXPLAIN QUERY PLAN {query_stripped}")
+                    # EXPLAIN QUERY PLAN is safe: it analyses the plan without executing data.
+                    # sqlite3.execute() also forbids multi-statement injection (no ";" attacks).
+                    # Only SELECT queries reach this branch (checked above).
+                    cursor = conn.execute(f"EXPLAIN QUERY PLAN {query_stripped}")  # noqa: S608
                     explain_results = [dict(row) for row in cursor.fetchall()]
                 except sqlite3.Error:
                     pass
@@ -556,32 +559,11 @@ class QueryAnalyzer:
 
     def suggest_indexes(self, table: str) -> List[str]:
         """Suggest indexes for a table."""
-        suggestions = []
-
-        # Sanitize table name to prevent SQL injection
-        safe_table = sanitize_sql_identifier(table)
-
-        conn = sqlite3.connect(self.db_path)
-        try:
-            # Get existing indexes
-            cursor = conn.execute(f"PRAGMA index_list({safe_table})")
-            existing = {row[1] for row in cursor.fetchall()}
-
-            # Get columns
-            cursor = conn.execute(f"PRAGMA table_info({safe_table})")
-            columns = [row[1] for row in cursor.fetchall()]
-
-            # Common patterns to index
-            for col in columns:
-                if col.endswith("_id") or col.endswith("_at") or col in ["status", "type", "symbol", "token_mint", "user_id"]:
-                    index_name = f"idx_{table}_{col}"
-                    if index_name not in existing:
-                        suggestions.append(f"CREATE INDEX {index_name} ON {table}({col});")
-
-            return suggestions
-
-        finally:
-            conn.close()
+        return suggest_indexes_for_table(
+            db_path=self.db_path,
+            table=table,
+            candidate_columns=["status", "type", "symbol", "token_mint", "user_id"],
+        )
 
 
 # =============================================================================
