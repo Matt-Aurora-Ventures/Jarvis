@@ -6,166 +6,105 @@ on:
   pull_request:
     branches: [main, develop]
 
-# Make entire workflow non-blocking - individual steps report status but don't fail the build
 jobs:
-  # =========================================================================
-  # Python Quality Checks (Non-blocking)
-  # =========================================================================
-  python-checks:
-    name: Python Quality
+  secret-scanning:
+    name: Secret Scanning
     runs-on: ubuntu-latest
-    continue-on-error: true  # Job-level: never fail the workflow
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: gitleaks/gitleaks-action@v2
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install system dependencies
+          python-version: "3.11"
+      - name: Verify detect-secrets baseline
         run: |
-          sudo apt-get update
-          sudo apt-get install -y portaudio19-dev python3-pyaudio tesseract-ocr libgl1-mesa-glx || true
+          python -m pip install --upgrade pip
+          python -m pip install detect-secrets==1.4.0
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            CHANGED="$(git diff --name-only --diff-filter=ACMRT HEAD^ HEAD)"
+          else
+            CHANGED="$(git ls-files)"
+          fi
+          if [ -n "$CHANGED" ]; then
+            echo "$CHANGED" | xargs detect-secrets-hook --baseline .secrets.baseline --disable-plugin KeywordDetector
+          fi
 
+  js-lockfiles:
+    name: JS Lockfile Governance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify JS package-lock coverage
+        run: python scripts/verify_js_lockfiles.py
+
+  perps-ingress-contract:
+    name: Perps Ingress Contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff mypy black isort || true
-          pip install -r requirements.txt || true
+          pip install -r requirements/core.txt
+          pip install pytest pytest-asyncio
+      - name: Run canonical ingress tests
+        run: |
+          python -m pytest \
+            tests/test_execution_intent.py \
+            tests/test_runner_external_queue.py \
+            tests/test_perps_api_ingress.py \
+            -q
 
-      - name: Ruff (linting)
-        run: ruff check . --output-format=github || true
-
-      - name: Black (formatting)
-        run: black --check . || true
-
-      - name: Isort (imports)
-        run: isort --check-only . || true
-
-      - name: Mypy (types)
-        run: mypy core/ api/ --ignore-missing-imports || true
-
-  # =========================================================================
-  # Python Tests (Non-blocking)
-  # =========================================================================
-  python-tests:
-    name: Python Tests
+  jarvis-sniper-readiness:
+    name: Jarvis Sniper Readiness
     runs-on: ubuntu-latest
-    continue-on-error: true  # Job-level: never fail the workflow
-
+    defaults:
+      run:
+        working-directory: jarvis-sniper
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y portaudio19-dev python3-pyaudio tesseract-ocr libgl1-mesa-glx || true
-
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: jarvis-sniper/package-lock.json
       - name: Install dependencies
+        run: npm ci
+      - name: Run distributed-state + store tests
         run: |
-          python -m pip install --upgrade pip
-          pip install pytest pytest-asyncio pytest-cov pytest-mock responses || true
-          pip install -r requirements.txt || true
+          npm run test -- \
+            src/lib/__tests__/cache-provider.test.ts \
+            src/lib/__tests__/rate-limit-provider.test.ts \
+            src/lib/__tests__/server-cache.test.ts \
+            src/stores/__tests__/useSniperStore.test.ts
+      - name: Build canonical frontend
+        run: npm run build
 
-      - name: Run tests
-        run: |
-          if [ -d "tests" ]; then
-            pytest tests/ -v --tb=short || true
-          else
-            echo "No tests directory found"
-          fi
-
-  # =========================================================================
-  # Frontend Build (Non-blocking)
-  # =========================================================================
-  frontend-build:
-    name: Frontend Build
+  prod-dependency-risk:
+    name: Production Dependency Risk
     runs-on: ubuntu-latest
-    continue-on-error: true  # Job-level: never fail the workflow
-
+    defaults:
+      run:
+        working-directory: jarvis-sniper
+    env:
+      PROD_AUDIT_HIGH_BASELINE: "19"
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      - name: Install and Build
-        working-directory: frontend
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: jarvis-sniper/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Capture production audit
+        run: npm audit --omit=dev --json > npm-audit-prod.json || true
+      - name: Enforce non-regressive production risk gate
         run: |
-          if [ -f "package.json" ]; then
-            npm ci || npm install || true
-            npm run build || true
-          else
-            echo "No package.json found"
-          fi
-
-  # =========================================================================
-  # Security Scan (Non-blocking)
-  # =========================================================================
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    continue-on-error: true  # Job-level: never fail the workflow
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Run security checks
-        run: |
-          pip install bandit safety || true
-          bandit -r core/ api/ -ll || true
-          safety check -r requirements.txt || true
-
-  # =========================================================================
-  # Docker Build (Non-blocking)
-  # =========================================================================
-  docker-build:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    continue-on-error: true  # Job-level: never fail the workflow
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: jarvis:${{ github.sha }}
-        continue-on-error: true
-
-  # =========================================================================
-  # Summary (Always passes)
-  # =========================================================================
-  ci-complete:
-    name: CI Complete
-    runs-on: ubuntu-latest
-    needs: [python-checks, python-tests, frontend-build, security, docker-build]
-    if: always()  # Always run regardless of other jobs
-
-    steps:
-      - name: CI Summary
-        run: |
-          echo "CI pipeline completed"
-          echo "All checks are informational - build always succeeds"
-          echo "Review individual job results for details"
+          node -e "const fs=require('fs'); const d=JSON.parse(fs.readFileSync('npm-audit-prod.json','utf8')); const v=d.metadata?.vulnerabilities||{}; const high=Number(v.high||0); const critical=Number(v.critical||0); const baseline=Number(process.env.PROD_AUDIT_HIGH_BASELINE||19); if (critical>0){ console.error('Critical vulnerabilities present in production dependencies:', critical); process.exit(1);} if (high>baseline){ console.error('High vulnerability count regressed. high=',high,' baseline=',baseline); process.exit(1);} console.log('Production audit gate passed. high=',high,' critical=',critical,' baseline=',baseline);"

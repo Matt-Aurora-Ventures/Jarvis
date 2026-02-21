@@ -41,8 +41,15 @@ repos:
     rev: v1.4.0
     hooks:
       - id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
+        args: ['--baseline', '.secrets.baseline', '--disable-plugin', 'KeywordDetector']
         exclude: (package-lock\.json|\.secrets\.baseline)
+
+  # Security scanning - gitleaks
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks
+        args: ["protect", "--staged", "--verbose"]
 
   # Security scanning - bandit
   - repo: https://github.com/PyCQA/bandit

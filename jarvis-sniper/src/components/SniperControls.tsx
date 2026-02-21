@@ -36,93 +36,14 @@ import {
   scopeAllowsAsset,
   selectBestWrGateStrategy,
 } from '@/lib/auto-wr-gate';
+import { buildAutonomyReadHeaders } from '@/lib/autonomy/client-auth';
+import { suggestStrategy } from '@/components/sniper-controls/strategy';
+import type { AutonomyRuntimeStatus } from '@/components/sniper-controls/types';
 
 /**
  * Analyze the current scanner feed and suggest the best strategy preset.
  * Pure function — no side effects, no store writes.
  */
-function suggestStrategy(graduations: BagsGraduation[], assetType: AssetType = 'memecoin'): { presetId: string; reason: string } | null {
-  if (graduations.length < 3) return null; // need enough data to decide
-
-  // ── Bags.fm-specific suggestion logic ──
-  if (assetType === 'bags') {
-    const freshCount = graduations.filter(g => (g.age_hours ?? 999) < 48).length;
-    const highScoreCount = graduations.filter(g => g.score >= 55).length;
-    const momPositive = graduations.filter(g => (g.price_change_1h ?? 0) > 0).length;
-    const momPct = momPositive / graduations.length;
-
-    // Many high-score established tokens -> quality-focused play
-    if (highScoreCount >= 5) {
-      return { presetId: 'bags_bluechip', reason: `${highScoreCount} high-score (55+) bags tokens — quality focus` };
-    }
-    // Strong momentum across the board -> aggressive play
-    if (momPct >= 0.4 && graduations.length >= 10) {
-      return { presetId: 'bags_aggressive', reason: `${Math.round(momPct * 100)}% positive momentum across ${graduations.length} tokens` };
-    }
-    // Fresh launches available -> rebound-focused entry
-    if (freshCount >= 3) {
-      return { presetId: 'bags_dip_buyer', reason: `${freshCount} fresh bags launches (<48h)` };
-    }
-    // Default for bags
-    return { presetId: 'bags_bluechip', reason: 'Default safe bags strategy — established tokens' };
-  }
-
-  // ── Memecoin / general suggestion logic ──
-  const liqs = graduations.map(g => g.liquidity || 0).filter(l => l > 0);
-
-  const momPositive = graduations.filter(g => (g.price_change_1h ?? 0) > 0).length;
-  const momPct = momPositive / graduations.length;
-
-  const highVolCount = graduations.filter(g => {
-    const l = g.liquidity || 0;
-    const v = g.volume_24h || 0;
-    return l > 0 && v / l >= 3;
-  }).length;
-
-  const freshCount = graduations.filter(g => (g.age_hours ?? 999) < 24).length;
-
-  // Count tokens passing each preset's minimum liquidity gate
-  const countAbove = (usd: number) => liqs.filter(l => l >= usd).length;
-  const above10k = countAbove(10000);
-  const above25k = countAbove(25000);
-  const above40k = countAbove(40000);
-  const above100k = countAbove(100000);
-
-  // Decision tree tuned for current live presets and real-time feed conditions.
-  // 1. Elite conditions: high-liq tokens with strong momentum
-  if (above100k >= 2 && momPct >= 0.4) {
-    return { presetId: 'elite', reason: `${above100k} tokens above $100K liq + ${Math.round(momPct * 100)}% momentum` };
-  }
-
-  // 2. Strong bull momentum + volume -> LET IT RIDE
-  if (momPct >= 0.45 && highVolCount >= 2 && above40k >= 2) {
-    return { presetId: 'let_it_ride', reason: `${Math.round(momPct * 100)}% momentum + ${highVolCount} high-vol tokens` };
-  }
-
-  // 3. Many fresh tokens + decent liquidity -> PUMP FRESH TIGHT
-  if (freshCount >= 3 && above10k >= 3) {
-    return { presetId: 'pump_fresh_tight', reason: `${freshCount} fresh tokens + active market` };
-  }
-
-  // 4. Good liquidity cluster with momentum -> SOL VETERAN
-  if (above25k >= 3 && momPct >= 0.3) {
-    return { presetId: 'sol_veteran', reason: `${above25k} tokens with $25K+ liq & ${Math.round(momPct * 100)}% momentum` };
-  }
-
-  // 5. Moderate liquidity → HYBRID-B (balanced)
-  if (above40k >= 2) {
-    return { presetId: 'hybrid_b', reason: `${above40k} tokens above $40K liq — balanced approach` };
-  }
-
-  // 6. Lots of fresh micro-cap activity -> MICRO CAP SURGE
-  if (freshCount >= 4 && above10k >= 2) {
-    return { presetId: 'micro_cap_surge', reason: `${freshCount} fresh micro-caps detected` };
-  }
-
-  // 7. Default: PUMP FRESH TIGHT
-  return { presetId: 'pump_fresh_tight', reason: 'Default safe strategy for mixed launch conditions' };
-}
-
 const BUDGET_PRESETS = [0.1, 0.2, 0.5, 1.0];
 const LIQUIDITY_PRESETS_USD = [10000, 25000, 40000, 50000];
 
@@ -209,16 +130,6 @@ function InfoTip({ text }: { text: string }) {
   );
 }
 
-interface AutonomyRuntimeStatus {
-  autonomyEnabled: boolean;
-  applyOverridesEnabled: boolean;
-  xaiConfigured: boolean;
-  latestCycleId: string | null;
-  latestReasonCode: string | null;
-  overrideVersion: number;
-  overrideUpdatedAt: string | null;
-}
-
 export function SniperControls() {
   const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining, graduations, tradeSignerMode, setTradeSignerMode, sessionWalletPubkey, setSessionWalletPubkey, assetFilter, backtestMeta, addExecution, autoResetRequired, showExperimentalStrategies, setShowExperimentalStrategies } = useSniperStore();
   const { connected, connecting, connect, address, signTransaction, signMessage, publicKey } = usePhantomWallet();
@@ -273,7 +184,10 @@ export function SniperControls() {
     let cancelled = false;
     const loadAutonomyRuntime = async () => {
       try {
-        const res = await fetch('/api/autonomy/status', { cache: 'no-store' });
+        const res = await fetch('/api/autonomy/status', {
+          cache: 'no-store',
+          headers: buildAutonomyReadHeaders(),
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json() as AutonomyRuntimeStatus;
         if (cancelled) return;
@@ -626,7 +540,7 @@ export function SniperControls() {
         }),
       );
       // Memo instruction — records authorization on-chain
-      const MEMO_PROGRAM = new PK('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
+      const MEMO_PROGRAM = new PK('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'); // pragma: allowlist secret
       tx.add({
         keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
         programId: MEMO_PROGRAM,
@@ -2861,3 +2775,5 @@ function ConfigField({
     </div>
   );
 }
+
+

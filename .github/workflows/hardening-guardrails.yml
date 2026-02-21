@@ -1,0 +1,109 @@
+name: Hardening Guardrails
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, develop]
+
+jobs:
+  secret-scan-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gitleaks/gitleaks-action@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify detect-secrets baseline coverage
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install detect-secrets==1.4.0
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            CHANGED="$(git diff --name-only --diff-filter=ACMRT HEAD^ HEAD)"
+          else
+            CHANGED="$(git ls-files)"
+          fi
+          if [ -n "$CHANGED" ]; then
+            echo "$CHANGED" | xargs detect-secrets-hook --baseline .secrets.baseline --disable-plugin KeywordDetector
+          fi
+
+  dependency-lock-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify dependency lock governance
+        run: python scripts/verify_deps.py
+
+  js-lockfile-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify JS lockfiles are tracked
+        run: python scripts/verify_js_lockfiles.py
+
+  signer-profile-surface-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify signer profile constraints
+        run: python scripts/verify_deps.py --max-signer-packages 10
+
+  idl-integrity-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify IDL integrity
+        run: |
+          python -c "from core.jupiter_perps.integrity import verify_idl; verify_idl(fatal=False)"
+
+  execution-path-quarantine-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate execution-path quarantine policy
+        run: python scripts/validate_execution_path_quarantine.py
+
+  ralph-runner-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install signer runtime deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install anchorpy==0.21.0 solders==0.26.0 solana==0.36.6 base58==2.1.1 borsh-construct==0.1.0
+      - name: Ralph wrapper smoke test
+        run: |
+          python scripts/test_vanguard_standalone.py --runtime-seconds 12 --heartbeat-seconds 2
+
+  notebooklm-mcp-config-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate NotebookLM MCP config (non-interactive)
+        run: |
+          python scripts/check_notebooklm_mcp.py --skip-probe

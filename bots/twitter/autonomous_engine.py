@@ -17,7 +17,6 @@ OAuth Setup:
 
 import asyncio
 import json
-import os
 import random
 import sqlite3
 import time
@@ -35,6 +34,11 @@ from core.memory.dedup_store import (
     get_memory_store
 )
 from bots.twitter.telegram_sync import sync_tweet_to_telegram
+from bots.twitter.autonomous.state import (
+    get_duplicate_detection_hours,
+    get_duplicate_similarity_threshold,
+    load_env_file,
+)
 from core.context_engine import context
 from core.async_utils import fire_and_forget
 
@@ -84,36 +88,18 @@ THREAD_SCHEDULE = {
 }
 
 # Load env
-def _load_env():
-    env_path = Path(__file__).parent / ".env"
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            if line.strip() and not line.startswith('#') and '=' in line:
-                k, v = line.split('=', 1)
-                os.environ.setdefault(k.strip(), v.strip().strip('"'))
-
-_load_env()
+load_env_file(Path(__file__).parent / ".env")
 
 
 def _get_duplicate_detection_hours() -> int:
-    raw = os.getenv("X_DUPLICATE_DETECTION_HOURS", "48").strip()
-    try:
-        value = int(raw)
-    except ValueError:
-        value = 48
-    return max(1, min(value, 168))
+    return get_duplicate_detection_hours(default=48)
 
 
 def _get_duplicate_similarity_threshold() -> float:
-    raw = os.getenv("X_DUPLICATE_SIMILARITY", "0.4").strip()
-    try:
-        value = float(raw)
-    except ValueError:
-        value = 0.4
-    return max(0.1, min(value, 0.95))
+    return get_duplicate_similarity_threshold(default=0.4)
 
 
-DUPLICATE_DETECTION_HOURS = _get_duplicate_detection_hours()
+DUPLICATE_DETECTION_HOURS = get_duplicate_detection_hours(default=48)
 
 # =============================================================================
 # JARVIS VOICE FOR X

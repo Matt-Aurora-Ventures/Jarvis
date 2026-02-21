@@ -66,6 +66,12 @@ from tg_bot.handlers.demo.demo_callbacks import (
     DemoContextLoader,
     get_callback_router,
 )
+from tg_bot.handlers.demo.interfaces import (
+    DemoMenuService,
+    DemoRequestContext,
+    DemoStateStore,
+    DemoTradingService,
+)
 
 __all__ = [
     # Main handlers
@@ -102,4 +108,9 @@ __all__ = [
     "CallbackRouter",
     "DemoContextLoader",
     "get_callback_router",
+    # Domain interfaces
+    "DemoRequestContext",
+    "DemoStateStore",
+    "DemoTradingService",
+    "DemoMenuService",
 ]
