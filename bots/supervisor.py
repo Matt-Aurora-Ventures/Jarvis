@@ -677,6 +677,11 @@ def _cooldown_mode() -> bool:
     return _env_flag("JARVIS_COOLDOWN_MODE", False)
 
 
+def _arena_mode_enabled() -> bool:
+    """Enable consensus arena routing for complex LLM tasks."""
+    return _env_flag("JARVIS_USE_ARENA", True)
+
+
 async def create_buy_bot():
     """Create and run the buy bot."""
     if _cooldown_mode() or not _env_flag("BUY_BOT_ENABLED", True):
@@ -1547,6 +1552,9 @@ async def main():
         sys.exit(1)
 
     load_env()
+    arena_enabled = _arena_mode_enabled()
+    os.environ["JARVIS_USE_ARENA"] = "1" if arena_enabled else "0"
+    logger.info("Consensus arena routing: %s", "ENABLED" if arena_enabled else "DISABLED")
 
     # ==========================================================
     # MCP SERVERS: Optional MCP toolchain for local agents
