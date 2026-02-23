@@ -461,6 +461,76 @@ class TestJarvisChat:
 
         await jarvis.stop()
 
+    @pytest.mark.asyncio
+    async def test_chat_injects_supermemory_pre_recall_into_system_prompt(self):
+        """Should append dual-profile supermemory context to system prompt."""
+        jarvis = Jarvis()
+        await jarvis.start()
+
+        captured = {"system_prompt": None}
+
+        class DummyResponse:
+            def __init__(self):
+                self.content = "test-response"
+                self.model = "dummy-model"
+
+        class DummyLLM:
+            async def chat(self, *, messages, system_prompt, config):
+                captured["system_prompt"] = system_prompt
+                return DummyResponse()
+
+        jarvis._llm = DummyLLM()
+
+        memory_client = AsyncMock()
+        memory_client.pre_recall = AsyncMock(
+            return_value={
+                "prompt_block": (
+                    "## Static Profile\n- Solana-only user\n"
+                    "## Dynamic Profile\n- Comparing stake vs LP"
+                )
+            }
+        )
+        memory_client.post_response = AsyncMock(return_value=True)
+
+        with patch("lifeos.jarvis.get_memory_client", return_value=memory_client):
+            await jarvis.chat("What should I do with SOL today?")
+            await asyncio.sleep(0)
+
+        assert "Static Profile" in (captured["system_prompt"] or "")
+        assert "Dynamic Profile" in (captured["system_prompt"] or "")
+        memory_client.pre_recall.assert_awaited_once()
+
+        await jarvis.stop()
+
+    @pytest.mark.asyncio
+    async def test_chat_triggers_supermemory_post_response_hook(self):
+        """Should enqueue the postResponse memory capture hook."""
+        jarvis = Jarvis()
+        await jarvis.start()
+
+        class DummyResponse:
+            def __init__(self):
+                self.content = "assistant-output"
+                self.model = "dummy-model"
+
+        class DummyLLM:
+            async def chat(self, *, messages, system_prompt, config):
+                return DummyResponse()
+
+        jarvis._llm = DummyLLM()
+
+        memory_client = AsyncMock()
+        memory_client.pre_recall = AsyncMock(return_value={"prompt_block": ""})
+        memory_client.post_response = AsyncMock(return_value=True)
+
+        with patch("lifeos.jarvis.get_memory_client", return_value=memory_client):
+            await jarvis.chat("Remember that I use Phantom.")
+            await asyncio.sleep(0)
+
+        memory_client.post_response.assert_awaited_once()
+
+        await jarvis.stop()
+
 
 # =============================================================================
 # Test Configuration Integration
