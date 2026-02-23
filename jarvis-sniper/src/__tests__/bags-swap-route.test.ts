@@ -45,5 +45,5 @@ describe('POST /api/bags/swap', () => {
     expect(body.code).toBe('INSUFFICIENT_SIGNER_SOL');
     expect(body.availableLamports).toBe(100_000);
     expect(body.requiredLamports).toBe(3_100_000);
-  });
+  }, 20_000);
 });

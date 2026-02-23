@@ -38,6 +38,7 @@ from .input_validator import InputValidator, validate_token, validate_amount, va
 from .sql_safety import SafeQueryBuilder, SQLSafetyChecker, SQLCodeScanner, check_query_safety
 from .encryption import SecureEncryption, EncryptedConfigValue, get_encryption
 from .audit_logger import AuditLogger, get_audit_logger, audit_admin_action, audit_key_rotation, audit_trade
+from .skill_vetter import SkillVetter, VetResult, SecuritySeverity, SecurityFinding
 
 __all__ = [
     # Audit
@@ -114,6 +115,11 @@ __all__ = [
     "audit_admin_action",
     "audit_key_rotation",
     "audit_trade",
+    # Skill Vetter
+    "SkillVetter",
+    "VetResult",
+    "SecuritySeverity",
+    "SecurityFinding",
 ]
 
 # Credential loader (lazy import)

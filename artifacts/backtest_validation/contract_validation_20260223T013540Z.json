@@ -1,0 +1,27 @@
+{
+  "checks": [
+    {
+      "details": "Expected canonical JS test invocation present",
+      "name": "ps1_has_expected_js_command",
+      "ok": true
+    },
+    {
+      "details": "Expected canonical Python test invocation present",
+      "name": "ps1_has_expected_py_command",
+      "ok": true
+    },
+    {
+      "details": "Jest-only flags are absent",
+      "name": "ps1_no_jest_flags",
+      "ok": true
+    },
+    {
+      "details": "jarvis-sniper test script=\"vitest run\"",
+      "name": "jarvis_sniper_test_is_vitest",
+      "ok": true
+    }
+  ],
+  "generated_at": "2026-02-23T01:35:40.184465+00:00",
+  "overall_ok": true,
+  "strict_mode": true
+}

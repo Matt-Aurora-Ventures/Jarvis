@@ -22,6 +22,13 @@ Recommended:
 - `NEXT_PUBLIC_SOLANA_RPC` (client-side; use a **public** endpoint)
 - `ALLOWED_ORIGINS` (CORS allowlist for `/api/*` routes; comma-separated)
 - `BAGS_REFERRAL_ACCOUNT` (optional referral account for Bags)
+- `PERPS_SERVICE_BASE_URL` (default `http://127.0.0.1:5001`, used by `/api/perps/*`)
+- `INVESTMENTS_SERVICE_BASE_URL` (default `http://127.0.0.1:8770`, used by `/api/investments/*`)
+- `INVESTMENTS_ADMIN_TOKEN` (required for `/api/investments/*` write actions; fail-closed when missing)
+- `INVESTMENTS_SERVICE_BUILD_SHA` (optional deployed container SHA label; used for drift warning)
+- `NEXT_PUBLIC_ENABLE_INVESTMENTS` (`true|false`, canonical UI tab gate; production default off)
+- `NEXT_PUBLIC_ENABLE_PERPS` (`true|false`, canonical UI tab gate; production default off)
+- `NEXT_PUBLIC_INVESTMENTS_ADMIN_TOKEN` (optional internal-beta operator token; must match `INVESTMENTS_ADMIN_TOKEN` for UI write actions)
 
 ## Local Run
 
@@ -32,6 +39,15 @@ npm run dev
 ```
 
 Then open `http://localhost:3001`.
+
+### Investments / Perps Internal Beta Dependencies
+
+Canonical `/investments` and `/trading` now proxy to local upstream services:
+
+- Perps service: `PERPS_SERVICE_BASE_URL` (default `http://127.0.0.1:5001`)
+- Investments service: `INVESTMENTS_SERVICE_BASE_URL` (default `http://127.0.0.1:8770`)
+
+Write actions under `/api/investments/*` are gated server-side by `INVESTMENTS_ADMIN_TOKEN`.
 
 ## Deploy: Docker (Hetzner/VPS)
 

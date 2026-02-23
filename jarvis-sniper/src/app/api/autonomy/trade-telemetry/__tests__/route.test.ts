@@ -10,13 +10,17 @@ describe('POST /api/autonomy/trade-telemetry', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    process.env.AUTONOMY_TELEMETRY_TOKEN = 'telemetry-token';
   });
 
   it('rejects invalid payloads', async () => {
     const route = await import('@/app/api/autonomy/trade-telemetry/route');
     const req = new Request('http://localhost/api/autonomy/trade-telemetry', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer telemetry-token',
+      },
       body: JSON.stringify({ mint: 'abc', status: 'open' }),
     });
     const res = await route.POST(req);
@@ -38,7 +42,10 @@ describe('POST /api/autonomy/trade-telemetry', () => {
     const route = await import('@/app/api/autonomy/trade-telemetry/route');
     const req = new Request('http://localhost/api/autonomy/trade-telemetry', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer telemetry-token',
+      },
       body: JSON.stringify({
         positionId: 'pos-1',
         mint: 'mint-1',

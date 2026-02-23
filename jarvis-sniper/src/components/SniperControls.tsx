@@ -30,6 +30,7 @@ import { filterOpenPositionsForActiveWallet, filterTradeManagedOpenPositionsForA
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
 import { waitForSignatureStatus } from '@/lib/tx-confirmation';
 import { isProbablyMobile } from '@/lib/wallet-deeplinks';
+import { buildAutonomyReadHeaders, getAutonomyReadToken } from '@/lib/autonomy/client-auth';
 import {
   buildWrGateCandidates,
   gateStatusBadge,
@@ -257,6 +258,7 @@ export function SniperControls() {
   const [activateError, setActivateError] = useState<string | null>(null);
   const [autonomyRuntime, setAutonomyRuntime] = useState<AutonomyRuntimeStatus | null>(null);
   const [autonomyRuntimeError, setAutonomyRuntimeError] = useState<string | null>(null);
+  const autonomyReadToken = useMemo(() => getAutonomyReadToken(), []);
 
   // Safety watchdog: if Phantom/signature flows hang (popup blocked, route switch, extension bug),
   // sessionBusy can remain stuck and lock the entire session wallet UI. Auto-clear after 90s.
@@ -270,10 +272,19 @@ export function SniperControls() {
   }, [sessionBusy]);
 
   useEffect(() => {
+    if (!autonomyReadToken) {
+      setAutonomyRuntime(null);
+      setAutonomyRuntimeError('Autonomy read token not configured for this client runtime.');
+      return;
+    }
+
     let cancelled = false;
     const loadAutonomyRuntime = async () => {
       try {
-        const res = await fetch('/api/autonomy/status', { cache: 'no-store' });
+        const res = await fetch('/api/autonomy/status', {
+          cache: 'no-store',
+          headers: buildAutonomyReadHeaders(),
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json() as AutonomyRuntimeStatus;
         if (cancelled) return;
@@ -291,7 +302,7 @@ export function SniperControls() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [autonomyReadToken]);
 
   // Load BEST_EVER on mount
   useEffect(() => {
