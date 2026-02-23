@@ -24,6 +24,9 @@ cat > "$CRON_FILE" << EOF
 # Nightly backup - 3:00 AM UTC
 0 3 * * * $SCRIPT_DIR/nightly-backup.sh >> $LOG_DIR/clawdbot-backup.log 2>&1
 
+# Weekly model upgrade scan (scheduled daily at 3:00 AM UTC, guarded in script)
+0 3 * * * [ -f /root/clawd/jobs/model_upgrader.py ] && /usr/bin/env python3 /root/clawd/jobs/model_upgrader.py --weekly-scan >> $LOG_DIR/clawdbot-model-upgrader.log 2>&1 || true
+
 # Self-evolution reflection - 4:00 AM UTC
 0 4 * * * $SCRIPT_DIR/self-evolution-reflect.sh >> $LOG_DIR/clawdbot-reflection.log 2>&1
 

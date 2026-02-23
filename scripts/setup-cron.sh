@@ -30,6 +30,9 @@ JARVIS_HOME=/home/jarvis/Jarvis
 # Daily log rotation at 3:00 AM UTC
 0 3 * * * jarvis find ${JARVIS_HOME}/logs -name "*.log" -size +100M -exec gzip {} \; 2>/dev/null
 
+# Weekly model upgrade scan (scheduled daily at 3:00 AM UTC, guarded to run once/week)
+0 3 * * * jarvis /usr/bin/env python3 ${JARVIS_HOME}/jobs/model_upgrader.py --weekly-scan >> ${JARVIS_HOME}/logs/cron-model-upgrader.log 2>&1
+
 # Weekly backup of critical state at 2:00 AM Sunday
 0 2 * * 0 jarvis tar -czf ${JARVIS_HOME}/backups/state_$(date +\%Y\%m\%d).tar.gz ${JARVIS_HOME}/data ${JARVIS_HOME}/bots/treasury/.positions.json ${JARVIS_HOME}/bots/twitter/.grok_state.json 2>/dev/null || true
 
@@ -45,6 +48,7 @@ echo "Scheduled tasks:"
 echo "  - Nightly reflection: 4:00 AM UTC"
 echo "  - Hourly health check: Every hour"
 echo "  - Daily log rotation: 3:00 AM UTC"
+echo "  - Weekly model upgrade scan: 3:00 AM UTC (guarded)"
 echo "  - Weekly backup: 2:00 AM Sunday"
 echo "  - Redis hydration: Every 6 hours"
 echo ""
