@@ -77,3 +77,37 @@ def test_open_ingress_audits_invalid_payload(perps_client):
     assert audit_lines
     latest = json.loads(audit_lines[-1])
     assert latest["event"] == "ingress_rejected"
+
+
+def test_history_uses_browser_like_headers(perps_client, monkeypatch):
+    client, _ = perps_client
+    captured: dict[str, str] = {}
+
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b'{"s":"ok","t":[],"o":[],"h":[],"l":[],"c":[]}'
+
+    def _fake_urlopen(req, timeout=15):
+        for key, value in req.header_items():
+            captured[key.lower()] = value
+        return _FakeResponse()
+
+    monkeypatch.setattr(perps_api.urllib.request, "urlopen", _fake_urlopen)
+
+    response = client.get("/api/perps/history/SOL-USD?resolution=15")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["market"] == "SOL-USD"
+    assert isinstance(payload["candles"], list)
+
+    assert captured.get("accept") == "application/json"
+    assert captured.get("user-agent")
+    assert captured.get("referer") == "https://www.tradingview.com/"
+    assert captured.get("origin") == "https://www.tradingview.com"
+    assert captured.get("accept-language", "").startswith("en-US")

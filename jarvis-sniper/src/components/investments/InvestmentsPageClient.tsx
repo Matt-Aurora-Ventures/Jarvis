@@ -4,7 +4,6 @@ import React, { useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { StatusBar } from '@/components/StatusBar';
 import { EarlyBetaModal } from '@/components/EarlyBetaModal';
-import { FundRecoveryBanner } from '@/components/FundRecoveryBanner';
 import { AlvaraBasketPanel } from '@/components/investments/AlvaraBasketPanel';
 import { PerpsSniperPanel } from '@/components/perps/PerpsSniperPanel';
 import { isInvestmentsEnabled, isPerpsEnabled } from '@/lib/investments-perps-flags';
@@ -42,7 +41,6 @@ export function InvestmentsPageClient() {
     <div className="min-h-screen flex flex-col overflow-x-hidden">
       <EarlyBetaModal />
       <StatusBar />
-      <FundRecoveryBanner />
 
       <main className="app-shell flex-1 py-6 space-y-4">
         <section className="rounded-xl border border-border-primary bg-bg-secondary p-4">

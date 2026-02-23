@@ -27,8 +27,6 @@ export function PerpsSniperPanel() {
     loadingHistory,
     historyError,
     apiError,
-    isArmed,
-    isLive,
     setHistoryMarket,
     setHistoryResolution,
     openPosition,
@@ -43,8 +41,6 @@ export function PerpsSniperPanel() {
   const [tpPct, setTpPct] = useState('10');
   const [slPct, setSlPct] = useState('5');
   const [orderState, setOrderState] = useState<string>('');
-
-  const canTrade = isArmed && isLive;
 
   const runnerStatusLabel = useMemo(() => {
     if (!status) return 'Unknown';
@@ -172,7 +168,6 @@ export function PerpsSniperPanel() {
 
           <button
             type="button"
-            disabled={!canTrade}
             className="mt-3 w-full rounded border border-accent-neon/40 bg-accent-neon/15 px-3 py-2 text-xs font-semibold text-accent-neon disabled:opacity-50"
             onClick={async () => {
               setOrderState('Submitting...');
@@ -194,10 +189,6 @@ export function PerpsSniperPanel() {
           >
             Open {side.toUpperCase()} {market}
           </button>
-
-          {!canTrade && (
-            <p className="mt-2 text-xs text-accent-warning">Live order entry requires mode=LIVE and arm stage=ARMED.</p>
-          )}
 
           {orderState && <p className="mt-2 text-xs text-text-muted">{orderState}</p>}
         </div>

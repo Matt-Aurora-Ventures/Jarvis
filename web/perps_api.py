@@ -67,6 +67,12 @@ _HTTP_HEADERS = {
         "Mozilla/5.0 (compatible; JarvisPerps/1.0; +https://kr8tiv.web.app)",
     ),
 }
+_BENCHMARKS_HTTP_HEADERS = {
+    **_HTTP_HEADERS,
+    "Referer": os.environ.get("PERPS_HTTP_REFERER", "https://www.tradingview.com/"),
+    "Origin": os.environ.get("PERPS_HTTP_ORIGIN", "https://www.tradingview.com"),
+    "Accept-Language": os.environ.get("PERPS_HTTP_ACCEPT_LANGUAGE", "en-US,en;q=0.9"),
+}
 
 _PYTH_FEED_IDS = {
     "SOL-USD": "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
@@ -186,7 +192,7 @@ def price_history(market: str):
         f"&resolution={resolution}&from={from_ts}&to={now}"
     )
     try:
-        req = urllib.request.Request(url, headers=_HTTP_HEADERS)
+        req = urllib.request.Request(url, headers=_BENCHMARKS_HTTP_HEADERS)
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
         # TradingView format: {t:[], o:[], h:[], l:[], c:[], v:[], s:"ok"}
