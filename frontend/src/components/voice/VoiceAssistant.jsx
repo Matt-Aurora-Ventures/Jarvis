@@ -6,7 +6,7 @@ import {
   VolumeX,
   Settings,
   Loader2,
-  Waveform,
+  AudioLines,
   Command,
   AlertCircle,
   CheckCircle2
@@ -471,7 +471,7 @@ export default function VoiceAssistant({ onCommand, onNavigate, compact = false 
       {/* Transcript display */}
       <div className="transcript-section">
         <div className="transcript-label">
-          <Waveform size={16} />
+          <AudioLines size={16} />
           <span>Transcript</span>
         </div>
 

@@ -35,6 +35,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
@@ -59,6 +60,13 @@ _INTENT_AUDIT = _RUNTIME_DIR / "intent_audit.log"
 _PYTH_HERMES = os.environ.get("PERPS_PYTH_HERMES_URL", "https://hermes.pyth.network")
 _PYTH_BENCHMARKS = "https://benchmarks.pyth.network"
 _DEFAULT_COLLATERAL_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+_HTTP_HEADERS = {
+    "Accept": "application/json",
+    "User-Agent": os.environ.get(
+        "PERPS_HTTP_USER_AGENT",
+        "Mozilla/5.0 (compatible; JarvisPerps/1.0; +https://kr8tiv.web.app)",
+    ),
+}
 
 _PYTH_FEED_IDS = {
     "SOL-USD": "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
@@ -96,13 +104,21 @@ def _audit_intent(event: str, **fields: Any) -> None:
 
 # ── Price Feed ────────────────────────────────────────────────────────────────
 
+def _exception_meta(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, urllib.error.HTTPError):
+        return {"status": int(exc.code), "reason": str(exc.reason)}
+    if isinstance(exc, urllib.error.URLError):
+        return {"status": None, "reason": str(getattr(exc, "reason", exc))}
+    return {"status": None, "reason": str(exc)}
+
+
 def _fetch_price(market: str) -> dict[str, Any]:
     feed_id = _PYTH_FEED_IDS.get(market)
     if not feed_id:
         return {"error": f"Unknown market {market}"}
     url = f"{_PYTH_HERMES}/v2/updates/price/latest?ids[]={feed_id}"
     try:
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        req = urllib.request.Request(url, headers=_HTTP_HEADERS)
         with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read().decode())
         parsed = data.get("parsed") or []
@@ -118,7 +134,21 @@ def _fetch_price(market: str) -> dict[str, Any]:
             return {"market": market, "price": price, "confidence": conf, "age_seconds": age}
     except Exception as exc:
         logger.warning("Price fetch failed for %s: %s", market, exc)
-    return {"market": market, "price": 0.0, "error": "fetch_failed"}
+        meta = _exception_meta(exc)
+        return {
+            "market": market,
+            "price": 0.0,
+            "error": "fetch_failed",
+            "status": meta["status"],
+            "reason": meta["reason"],
+        }
+    return {
+        "market": market,
+        "price": 0.0,
+        "error": "fetch_failed",
+        "status": None,
+        "reason": "unknown",
+    }
 
 
 @perps_bp.route("/price/<market>")
@@ -156,7 +186,7 @@ def price_history(market: str):
         f"&resolution={resolution}&from={from_ts}&to={now}"
     )
     try:
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        req = urllib.request.Request(url, headers=_HTTP_HEADERS)
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
         # TradingView format: {t:[], o:[], h:[], l:[], c:[], v:[], s:"ok"}
@@ -171,10 +201,23 @@ def price_history(market: str):
                     "close": data["c"][i],
                 })
             return jsonify({"market": m, "resolution": resolution, "candles": candles})
-        return jsonify({"market": m, "candles": [], "error": data.get("s", "no_data")})
+        return jsonify({
+            "market": m,
+            "candles": [],
+            "error": data.get("s", "no_data"),
+            "status": None,
+            "reason": data.get("s", "no_data"),
+        })
     except Exception as exc:
         logger.warning("History fetch failed for %s: %s", m, exc)
-        return jsonify({"market": m, "candles": [], "error": str(exc)})
+        meta = _exception_meta(exc)
+        return jsonify({
+            "market": m,
+            "candles": [],
+            "error": "fetch_failed",
+            "status": meta["status"],
+            "reason": meta["reason"],
+        })
 
 
 # ── Runtime Status ────────────────────────────────────────────────────────────

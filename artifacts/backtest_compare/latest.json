@@ -1,0 +1,6 @@
+{
+  "contract_artifact": "artifacts/backtest_validation/contract_validation_20260223T013540Z.json",
+  "generated_at": "2026-02-23T01:35:40.213432+00:00",
+  "notes": "Backtest compare artifact placeholder for local/CI governance.",
+  "status": "pass"
+}
