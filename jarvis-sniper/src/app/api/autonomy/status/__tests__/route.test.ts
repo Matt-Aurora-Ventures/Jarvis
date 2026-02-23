@@ -15,6 +15,7 @@ describe('GET /api/autonomy/status', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    process.env.AUTONOMY_READ_TOKEN = 'read-token';
     process.env.AUTONOMY_ENABLED = 'true';
     process.env.AUTONOMY_APPLY_OVERRIDES = 'true';
     process.env.XAI_API_KEY = 'xai-test-key';
@@ -39,7 +40,10 @@ describe('GET /api/autonomy/status', () => {
     });
 
     const route = await import('@/app/api/autonomy/status/route');
-    const res = await route.GET();
+    const req = new Request('http://localhost/api/autonomy/status', {
+      headers: { Authorization: 'Bearer read-token' },
+    });
+    const res = await route.GET(req);
     const body = await res.json();
 
     expect(res.status).toBe(200);

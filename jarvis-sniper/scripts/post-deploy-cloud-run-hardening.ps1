@@ -4,6 +4,7 @@ param(
   [string]$Service = "ssrkr8tiv",
   [string]$TimeoutSeconds = "900",
   [string]$Memory = "1Gi",
+  [string]$MaxInstances = "1",
   [string]$TagPrefix = "fh-",
   # Keep autonomy + batch audit flags persistent across Firebase framework redeploys.
   # These are intentionally NON-secret (secrets remain in Secret Manager bindings).
@@ -42,6 +43,7 @@ gcloud run services update $Service `
   --region $Region `
   --timeout $TimeoutSeconds `
   --memory $Memory `
+  --max-instances $MaxInstances `
   --update-env-vars $envVars `
   --quiet | Out-Null
 
@@ -55,10 +57,11 @@ $svc = $svcJson | ConvertFrom-Json
 $latestReadyRevision = [string]$svc.status.latestReadyRevisionName
 $actualTimeout = [string]$svc.spec.template.spec.timeoutSeconds
 $actualMemory = [string]$svc.spec.template.spec.containers[0].resources.limits.memory
+$actualMaxScale = [string]$svc.spec.template.metadata.annotations."autoscaling.knative.dev/maxScale"
 
-Write-Host "[hardening] latestReadyRevision=$latestReadyRevision timeoutSeconds=$actualTimeout memory=$actualMemory"
-if ($actualTimeout -ne $TimeoutSeconds -or $actualMemory -ne $Memory) {
-  throw "Cloud Run hardening validation failed (expected timeout=$TimeoutSeconds, memory=$Memory)"
+Write-Host "[hardening] latestReadyRevision=$latestReadyRevision timeoutSeconds=$actualTimeout memory=$actualMemory maxScale=$actualMaxScale"
+if ($actualTimeout -ne $TimeoutSeconds -or $actualMemory -ne $Memory -or $actualMaxScale -ne $MaxInstances) {
+  throw "Cloud Run hardening validation failed (expected timeout=$TimeoutSeconds, memory=$Memory, maxScale=$MaxInstances)"
 }
 
 if ([string]::IsNullOrWhiteSpace($latestReadyRevision)) {

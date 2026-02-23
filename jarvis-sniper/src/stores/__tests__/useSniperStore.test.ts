@@ -238,3 +238,72 @@ describe('TokenRecommendation — trail field', () => {
     expect(Object.keys(rec)).toContain('trail');
   });
 });
+
+describe('on-chain SL/TP safety guard', () => {
+  beforeEach(() => {
+    useSniperStore.getState().resetSession();
+  });
+
+  it('strips unsupported on-chain SL/TP fields when adding a position', () => {
+    useSniperStore.getState().addPosition({
+      id: 'pos-sltp-add',
+      mint: 'SLTP1',
+      symbol: 'SLTP1',
+      name: 'SLTP Position',
+      entryPrice: 1,
+      currentPrice: 1,
+      amount: 1,
+      solInvested: 0.1,
+      pnlPercent: 0,
+      pnlSol: 0,
+      entryTime: Date.now(),
+      status: 'open',
+      score: 50,
+      recommendedSl: 10,
+      recommendedTp: 20,
+      highWaterMarkPct: 0,
+      onChainSlTp: true,
+      jupTpOrderKey: 'tp-order',
+      jupSlOrderKey: 'sl-order',
+    });
+
+    const stored = useSniperStore.getState().positions.find((p) => p.id === 'pos-sltp-add');
+    expect(stored).toBeDefined();
+    expect(stored?.onChainSlTp).toBe(false);
+    expect(stored?.jupTpOrderKey).toBeUndefined();
+    expect(stored?.jupSlOrderKey).toBeUndefined();
+  });
+
+  it('strips unsupported on-chain SL/TP fields when updating a position', () => {
+    useSniperStore.getState().addPosition({
+      id: 'pos-sltp-update',
+      mint: 'SLTP2',
+      symbol: 'SLTP2',
+      name: 'SLTP Position 2',
+      entryPrice: 1,
+      currentPrice: 1,
+      amount: 1,
+      solInvested: 0.1,
+      pnlPercent: 0,
+      pnlSol: 0,
+      entryTime: Date.now(),
+      status: 'open',
+      score: 50,
+      recommendedSl: 10,
+      recommendedTp: 20,
+      highWaterMarkPct: 0,
+    });
+
+    useSniperStore.getState().updatePosition('pos-sltp-update', {
+      onChainSlTp: true,
+      jupTpOrderKey: 'tp-order',
+      jupSlOrderKey: 'sl-order',
+    });
+
+    const stored = useSniperStore.getState().positions.find((p) => p.id === 'pos-sltp-update');
+    expect(stored).toBeDefined();
+    expect(stored?.onChainSlTp).toBe(false);
+    expect(stored?.jupTpOrderKey).toBeUndefined();
+    expect(stored?.jupSlOrderKey).toBeUndefined();
+  });
+});

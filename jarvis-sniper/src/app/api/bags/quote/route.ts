@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit — quote is the most expensive upstream call
     const ip = getClientIp(request);
-    const limit = quoteRateLimiter.check(ip);
+    const limit = await quoteRateLimiter.check(ip);
     if (!limit.allowed) {
       return NextResponse.json(
         { error: 'Rate limit exceeded. Try again shortly.' },
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
 
     // Cache key: same pair + amount = same quote (within TTL)
     const cacheKey = `quote:${inputMint}:${outputMint}:${amount}:${slippageBps || 'auto'}`;
-    const cached = quoteCache.get(cacheKey);
+    const cached = await quoteCache.get(cacheKey);
     if (cached) {
       return NextResponse.json(cached, {
         headers: {
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
     });
 
     const responseData = { quote };
-    quoteCache.set(cacheKey, responseData, QUOTE_TTL_MS);
+    await quoteCache.set(cacheKey, responseData, QUOTE_TTL_MS);
 
     return NextResponse.json(responseData, {
       headers: {

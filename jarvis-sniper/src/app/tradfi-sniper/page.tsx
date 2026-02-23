@@ -16,6 +16,7 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { MobileTerminalShell } from '@/components/mobile/MobileTerminalShell';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { useAutomatedRiskManagement } from '@/hooks/useAutomatedRiskManagement';
+import { useSpotProtectionLifecycle } from '@/hooks/useSpotProtectionLifecycle';
 import { useTabNotifications } from '@/hooks/useTabNotifications';
 const TRADFI_PRESETS = ['xstock_intraday', 'xstock_swing', 'prestock_speculative', 'index_intraday', 'index_leveraged'];
 
@@ -70,6 +71,7 @@ export default function TradFiSniperDashboard() {
   }, []);
 
   useAutomatedRiskManagement();
+  useSpotProtectionLifecycle();
   useTabNotifications();
 
   return (

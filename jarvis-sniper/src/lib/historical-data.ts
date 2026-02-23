@@ -17,6 +17,9 @@ import { ALL_BLUECHIPS, type BlueChipToken } from './bluechip-data';
 import { geckoFetchPaced as geckoFetchPacedShared } from './gecko-fetch';
 import { ServerCache } from './server-cache';
 import { createHash } from 'crypto';
+import { buildDataPointProvenance } from '@/lib/data-plane/provenance';
+import { scoreSourceReliability, deriveRedundancyState } from '@/lib/data-plane/reliability';
+import { recordSourceHealth } from '@/lib/data-plane/health-store';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -32,6 +35,7 @@ export interface HistoricalDataSet {
   candles: OHLCVCandle[];
   fetchedAt: number;
   source: OHLCVSource;
+  provenance?: import('@/lib/data-plane/types').DataPointProvenance;
 }
 
 export interface FetchMintHistoryOptions {
@@ -544,6 +548,14 @@ export async function fetchTokenHistory(
     throw new Error(`Insufficient real OHLCV for ${token.ticker} (${candles.length} candles)`);
   }
 
+  const fetchedAtIso = new Date().toISOString();
+  const sourceReliability = scoreSourceReliability({
+    ok: true,
+    latencyMs: null,
+    httpStatus: 200,
+    freshnessMs: 0,
+    errorBudgetBurn: 0,
+  });
   const dataset: HistoricalDataSet = {
     tokenSymbol: token.ticker,
     mintAddress: token.mintAddress,
@@ -551,7 +563,33 @@ export async function fetchTokenHistory(
     candles,
     fetchedAt: Date.now(),
     source,
+    provenance: buildDataPointProvenance({
+      source,
+      fetchedAt: fetchedAtIso,
+      latencyMs: null,
+      httpStatus: 200,
+      reliabilityScore: sourceReliability,
+      raw: {
+        token: token.ticker,
+        mint: token.mintAddress,
+        pairAddress: pairAddress || null,
+        candles: candles.length,
+        source,
+      },
+    }),
   };
+
+  await recordSourceHealth({
+    source,
+    checkedAt: fetchedAtIso,
+    ok: true,
+    freshnessMs: 0,
+    latencyMs: null,
+    httpStatus: 200,
+    reliabilityScore: sourceReliability,
+    errorBudgetBurn: 0,
+    redundancyState: deriveRedundancyState(2),
+  });
 
   setCachedData(cacheKey, dataset);
   return dataset;
@@ -614,6 +652,14 @@ export async function fetchMintHistory(
     throw new Error(`Insufficient real OHLCV for ${tokenSymbol} (${candles.length} candles)`);
   }
 
+  const fetchedAtIso = new Date().toISOString();
+  const sourceReliability = scoreSourceReliability({
+    ok: true,
+    latencyMs: null,
+    httpStatus: 200,
+    freshnessMs: 0,
+    errorBudgetBurn: 0,
+  });
   const dataset: HistoricalDataSet = {
     tokenSymbol,
     mintAddress,
@@ -621,7 +667,33 @@ export async function fetchMintHistory(
     candles,
     fetchedAt: Date.now(),
     source,
+    provenance: buildDataPointProvenance({
+      source,
+      fetchedAt: fetchedAtIso,
+      latencyMs: null,
+      httpStatus: 200,
+      reliabilityScore: sourceReliability,
+      raw: {
+        token: tokenSymbol,
+        mint: mintAddress,
+        pairAddress: pairAddress || null,
+        candles: candles.length,
+        source,
+      },
+    }),
   };
+
+  await recordSourceHealth({
+    source,
+    checkedAt: fetchedAtIso,
+    ok: true,
+    freshnessMs: 0,
+    latencyMs: null,
+    httpStatus: 200,
+    reliabilityScore: sourceReliability,
+    errorBudgetBurn: 0,
+    redundancyState: deriveRedundancyState(2),
+  });
 
   setCachedData(cacheKey, dataset);
   return dataset;

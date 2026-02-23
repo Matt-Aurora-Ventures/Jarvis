@@ -35,7 +35,7 @@ const ALLOWED_METHODS = new Set([
 export async function POST(request: Request) {
   // Rate limit
   const ip = getClientIp(request);
-  const limit = rpcRateLimiter.check(ip);
+  const limit = await rpcRateLimiter.check(ip);
   if (!limit.allowed) {
     return NextResponse.json(
       { jsonrpc: '2.0', error: { code: 429, message: 'Rate limit exceeded' }, id: null },

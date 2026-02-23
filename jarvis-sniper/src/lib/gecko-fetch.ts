@@ -58,3 +58,25 @@ export async function geckoFetchPaced(url: string): Promise<Response> {
 
   return runPaced(url);
 }
+
+
+export interface GeckoFetchProbe {
+  source: 'geckoterminal';
+  fetchedAt: string;
+  latencyMs: number;
+  httpStatus: number;
+}
+
+export async function geckoFetchWithProbe(url: string): Promise<{ response: Response; probe: GeckoFetchProbe }> {
+  const startedAt = Date.now();
+  const response = await geckoFetchPaced(url);
+  return {
+    response,
+    probe: {
+      source: 'geckoterminal',
+      fetchedAt: new Date().toISOString(),
+      latencyMs: Date.now() - startedAt,
+      httpStatus: response.status,
+    },
+  };
+}

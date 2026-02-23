@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
+import { getCacheProviderDiagnostics } from '@/lib/cache-provider';
+import { getRateLimitProviderDiagnostics } from '@/lib/rate-limit-provider';
 
 /**
  * Health check endpoint for production monitoring.
@@ -9,6 +11,8 @@ import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
  */
 export async function GET() {
   const rpcConfig = resolveServerRpcConfig();
+  const cacheProvider = getCacheProviderDiagnostics();
+  const rateLimiterProvider = getRateLimitProviderDiagnostics();
   const xaiConfigured = String(process.env.XAI_API_KEY || '').trim().length > 0;
   const xaiBatchEnabled = String(process.env.XAI_BATCH_ENABLED || 'false').toLowerCase() === 'true';
   const xaiModel = String(process.env.XAI_FRONTIER_MODEL || 'grok-4-1-fast-reasoning').trim();
@@ -50,6 +54,10 @@ export async function GET() {
       dailyBudgetUsd: Number.isFinite(xaiDailyBudget) ? xaiDailyBudget : 10,
       keyRatePolicy,
     },
+    distributedState: {
+      cacheProvider,
+      rateLimiterProvider,
+    },
     memory: {
       heapUsedMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
       rssUsedMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
@@ -58,6 +66,9 @@ export async function GET() {
 
   // Degraded if missing critical env vars
   if (!checks.env.bagsApiKey || !checks.rpc.configured) {
+    checks.status = 'degraded';
+  }
+  if (cacheProvider.warning || rateLimiterProvider.warning) {
     checks.status = 'degraded';
   }
 

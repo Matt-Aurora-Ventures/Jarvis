@@ -1,20 +1,19 @@
+import { createRateLimitProvider, type RateLimitProvider } from './rate-limit-provider';
+
 /**
  * Simple in-memory IP-based rate limiter using a sliding window algorithm.
  *
  * Tracks individual request timestamps per IP, so the window slides naturally.
- * Designed for single-process Next.js with 50-100 concurrent users.
- *
- * No Redis dependency — in-memory Map is sufficient for this scale.
  */
 
-interface RateLimiterConfig {
+export interface RateLimiterConfig {
   /** Maximum requests allowed per window. Default: 60 */
   maxRequests?: number;
   /** Window duration in milliseconds. Default: 60_000 (1 minute) */
   windowMs?: number;
 }
 
-interface RateLimitResult {
+export interface RateLimitResult {
   /** Whether the request is allowed */
   allowed: boolean;
   /** Remaining requests in the current window */
@@ -51,7 +50,7 @@ export class RateLimiter {
     timestamps = timestamps.filter((t) => t > windowStart);
 
     if (timestamps.length >= this.maxRequests) {
-      // Blocked — calculate when the oldest request in window expires
+      // Blocked - calculate when the oldest request in window expires
       const oldestInWindow = timestamps[0];
       const retryAfterMs = oldestInWindow + this.windowMs - now;
 
@@ -65,7 +64,7 @@ export class RateLimiter {
       };
     }
 
-    // Allowed — record this request
+    // Allowed - record this request
     timestamps.push(now);
     this.requests.set(ip, timestamps);
 
@@ -95,25 +94,46 @@ export class RateLimiter {
   }
 }
 
+export interface SharedRateLimiter {
+  mode: 'memory' | 'redis';
+  check(ip: string): Promise<RateLimitResult>;
+}
+
+function createSharedRateLimiter(
+  keyPrefix: string,
+  config: Required<RateLimiterConfig>,
+): SharedRateLimiter {
+  const provider: RateLimitProvider = createRateLimitProvider({
+    keyPrefix,
+    maxRequests: config.maxRequests,
+    windowMs: config.windowMs,
+  });
+
+  return {
+    mode: provider.mode,
+    check: async (ip: string) => provider.check(ip),
+  };
+}
+
 /**
  * Shared rate limiter instances for API routes.
  * Different routes can have different limits.
  */
 
 /** General API rate limiter: 60 req/min per IP */
-export const apiRateLimiter = new RateLimiter({ maxRequests: 60, windowMs: 60_000 });
+export const apiRateLimiter = createSharedRateLimiter('api', { maxRequests: 60, windowMs: 60_000 });
 
 /** RPC proxy limiter: higher cap because web3 polling/subscriptions are chatty */
-export const rpcRateLimiter = new RateLimiter({ maxRequests: 300, windowMs: 60_000 });
+export const rpcRateLimiter = createSharedRateLimiter('rpc', { maxRequests: 300, windowMs: 60_000 });
 
-/** Bags quote endpoint: stricter limit (30 req/min) — most expensive upstream call */
-export const quoteRateLimiter = new RateLimiter({ maxRequests: 30, windowMs: 60_000 });
+/** Bags quote endpoint: stricter limit (30 req/min) - most expensive upstream call */
+export const quoteRateLimiter = createSharedRateLimiter('quote', { maxRequests: 30, windowMs: 60_000 });
 
-/** Bags swap endpoint: strict limit (20 req/min) — involves transaction building */
-export const swapRateLimiter = new RateLimiter({ maxRequests: 20, windowMs: 60_000 });
+/** Bags swap endpoint: strict limit (20 req/min) - involves transaction building */
+export const swapRateLimiter = createSharedRateLimiter('swap', { maxRequests: 20, windowMs: 60_000 });
 
 /** Autonomy control routes: very low throughput by design (scheduler + manual checks). */
-export const autonomyRateLimiter = new RateLimiter({ maxRequests: 6, windowMs: 60_000 });
+export const autonomyRateLimiter = createSharedRateLimiter('autonomy', { maxRequests: 6, windowMs: 60_000 });
 
 /**
  * Helper to extract client IP from a Next.js request.
@@ -125,7 +145,7 @@ export const autonomyRateLimiter = new RateLimiter({ maxRequests: 6, windowMs: 6
 export function getClientIp(request: Request): string {
   const forwarded = request.headers.get('x-forwarded-for');
   if (forwarded) {
-    const ips = forwarded.split(',').map(ip => ip.trim()).filter(Boolean);
+    const ips = forwarded.split(',').map((ip) => ip.trim()).filter(Boolean);
     if (ips.length > 0) return ips[0];
   }
   const realIp = request.headers.get('x-real-ip');

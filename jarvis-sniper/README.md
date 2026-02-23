@@ -18,7 +18,7 @@ npm i
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3001`.
 
 ## Environment Variables
 
@@ -33,6 +33,17 @@ Recommended:
 - `NEXT_PUBLIC_SOLANA_RPC` (client RPC for reads/price checks; used by UI + risk worker)
 - `BAGS_REFERRAL_ACCOUNT` (optional referral account pubkey)
 - `ALLOWED_ORIGINS` (comma-separated list of allowed Origins for API CORS)
+- `NEXT_PUBLIC_SNIPER_FAIL_CLOSED_PROTECTION` (`true` by default; blocks live entry when on-chain protection is unavailable in production)
+- `NEXT_PUBLIC_SNIPER_ALLOW_UNPROTECTED_INTERNAL` (set `true` only for controlled internal testing when fail-closed is enabled)
+
+Experimental on-chain protection gating:
+
+- `NEXT_PUBLIC_ENABLE_EXPERIMENTAL_ONCHAIN_SLTP=true` alone is **not sufficient**.
+- On-chain protection is considered enabled only when **all three** flags are true:
+  - `NEXT_PUBLIC_ENABLE_EXPERIMENTAL_ONCHAIN_SLTP=true`
+  - `NEXT_PUBLIC_ONCHAIN_SLTP_RUNTIME_READY=true`
+  - `NEXT_PUBLIC_ONCHAIN_SLTP_LIFECYCLE_READY=true`
+- If runtime-ready or lifecycle-ready is missing, protection remains disabled and positions are marked with a failed protection reason.
 
 Notes:
 
@@ -52,3 +63,4 @@ Notes:
 ## Safety
 
 This project is early beta. Trades are real and you can lose 100% of funds used.
+

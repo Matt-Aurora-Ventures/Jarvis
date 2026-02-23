@@ -11,8 +11,10 @@
  *   are only used to build the candidate list (OHLCV is fetched separately).
  */
 
-import { geckoFetchPaced } from './gecko-fetch';
+import { geckoFetchWithProbe } from './gecko-fetch';
 import { ServerCache } from './server-cache';
+import { recordSourceHealth } from '@/lib/data-plane/health-store';
+import { deriveRedundancyState, scoreSourceReliability } from '@/lib/data-plane/reliability';
 
 export interface GeckoPoolCandidate {
   poolAddress: string;
@@ -58,9 +60,28 @@ function safeNumber(v: unknown): number {
 
 async function fetchJson(url: string): Promise<any | null> {
   try {
-    const res = await geckoFetchPaced(url);
-    if (!res.ok) return null;
-    return await res.json();
+    const { response, probe } = await geckoFetchWithProbe(url);
+    const ok = response.ok;
+    const reliabilityScore = scoreSourceReliability({
+      ok,
+      latencyMs: probe.latencyMs,
+      httpStatus: probe.httpStatus,
+      freshnessMs: 0,
+      errorBudgetBurn: ok ? 0 : 1,
+    });
+    await recordSourceHealth({
+      source: 'geckoterminal:universe',
+      checkedAt: probe.fetchedAt,
+      ok,
+      freshnessMs: 0,
+      latencyMs: probe.latencyMs,
+      httpStatus: probe.httpStatus,
+      reliabilityScore,
+      errorBudgetBurn: ok ? 0 : 1,
+      redundancyState: deriveRedundancyState(2),
+    });
+    if (!ok) return null;
+    return await response.json();
   } catch {
     return null;
   }

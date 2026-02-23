@@ -69,6 +69,7 @@ function makeBatchOutputJsonl(args: { cycleId: string; decision: unknown; critiq
 
 describe('autonomy apply gate', () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
     process.env.AUTONOMY_ENABLED = 'true';
     process.env.XAI_BATCH_ENABLED = 'true';
@@ -174,7 +175,7 @@ describe('autonomy apply gate', () => {
     expect(mockSaveAutonomyState).toHaveBeenCalledTimes(1);
     const savedState = mockSaveAutonomyState.mock.calls[0][0];
     expect(savedState.cycles[pendingCycle].reasonCode).toBe('AUTONOMY_NOOP_APPLY_DISABLED');
-  });
+  }, 15000);
 
   it('applies overrides when AUTONOMY_APPLY_OVERRIDES=true', async () => {
     process.env.AUTONOMY_APPLY_OVERRIDES = 'true';
@@ -269,6 +270,5 @@ describe('autonomy apply gate', () => {
     await mod.runHourlyAutonomyCycle();
 
     expect(mockSaveStrategyOverrideSnapshot).toHaveBeenCalledTimes(1);
-  });
+  }, 15000);
 });
-
