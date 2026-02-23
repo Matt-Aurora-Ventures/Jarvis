@@ -26,6 +26,18 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 
+from core.consensus import ConsensusArena
+
+try:
+    from litellm import acompletion
+except Exception:  # pragma: no cover
+    acompletion = None
+
+try:
+    from nosana_client import NosanaClient
+except Exception:  # pragma: no cover
+    NosanaClient = None
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
@@ -188,22 +200,35 @@ class ResilientProviderChain:
             use_for=["chat", "code", "sentiment"],
         ),
         ProviderConfig(
-            name="xai",
+            name="consensus",
             priority=3,
+            is_free=False,
+            use_for=["chat", "code", "sentiment", "complex"],
+        ),
+        ProviderConfig(
+            name="nosana",
+            priority=4,
+            api_key_env="NOSANA_API_KEY",
+            is_free=False,
+            use_for=["chat", "code", "research", "complex"],
+        ),
+        ProviderConfig(
+            name="xai",
+            priority=5,
             api_key_env="XAI_API_KEY",
             is_free=False,
             use_for=["sentiment"],  # Strictly reserved for sentiment
         ),
         ProviderConfig(
             name="groq",
-            priority=4,
+            priority=6,
             api_key_env="GROQ_API_KEY",
             is_free=True,  # Free tier
             use_for=["chat", "code"],
         ),
         ProviderConfig(
             name="openrouter",
-            priority=5,
+            priority=7,
             api_key_env="OPENROUTER_API_KEY",
             is_free=False,
             use_for=["chat", "code", "sentiment"],
@@ -216,6 +241,92 @@ class ResilientProviderChain:
             p.name: CircuitBreaker(p) for p in self.providers
         }
         self._lock = asyncio.Lock()
+
+    async def _execute_builtin_provider(
+        self,
+        provider_name: str,
+        prompt: str,
+        *,
+        models: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Built-in execution path for providers managed directly by Jarvis."""
+        metadata = metadata or {}
+
+        if provider_name == "consensus":
+            arena = ConsensusArena(models=models or ["openai/gpt-4o-mini", "groq/llama3-70b-8192"])
+            synthesis = await arena.run(prompt)
+            return self._normalize_prompt_result("consensus", synthesis)
+
+        if provider_name == "nosana":
+            if NosanaClient is None:
+                raise RuntimeError("nosana_client module unavailable")
+            client = NosanaClient(api_key=os.environ.get("NOSANA_API_KEY"))
+            job_spec = {
+                "name": metadata.get("job_name", "jarvis-nosana-inference"),
+                "input": {"prompt": prompt},
+                "metadata": metadata,
+            }
+            result = await client.submit_job(job_spec)
+            return self._normalize_prompt_result("nosana", result)
+
+        if acompletion is None:
+            raise RuntimeError("litellm unavailable for direct provider execution")
+
+        completion = await acompletion(
+            model=provider_name,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=metadata.get("timeout", 45),
+        )
+        content = completion.choices[0].message.content or ""
+        return self._normalize_prompt_result(provider_name, content)
+
+    def _normalize_prompt_result(self, provider_name: str, raw_result: Any) -> Dict[str, Any]:
+        """Normalize provider-specific responses into a consistent shape."""
+        if provider_name == "consensus":
+            synthesis = raw_result if isinstance(raw_result, dict) else {"raw": raw_result}
+            winner = synthesis.get("winner") or {}
+            return {
+                "provider": provider_name,
+                "mode": "consensus",
+                "result": synthesis,
+                "winner_provider": winner.get("provider"),
+                "winner_score": winner.get("score"),
+            }
+
+        if provider_name == "nosana":
+            return {
+                "provider": provider_name,
+                "mode": "job",
+                "result": raw_result,
+                "job_id": (raw_result or {}).get("id") if isinstance(raw_result, dict) else None,
+            }
+
+        return {
+            "provider": provider_name,
+            "mode": "completion",
+            "result": raw_result,
+        }
+
+    async def execute_prompt(
+        self,
+        prompt: str,
+        *,
+        task_type: str = "chat",
+        models: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Execute a plain-text prompt through resilient provider routing."""
+
+        async def _call(provider_name: str) -> Dict[str, Any]:
+            return await self._execute_builtin_provider(
+                provider_name,
+                prompt,
+                models=models,
+                metadata=metadata,
+            )
+
+        return await self.execute(task_type=task_type, call_fn=_call, fallback_value=None)
 
     def get_available_provider(self, task_type: str = "chat") -> Optional[str]:
         """

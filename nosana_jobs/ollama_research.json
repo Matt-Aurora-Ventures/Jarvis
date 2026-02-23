@@ -1,0 +1,14 @@
+{
+  "name": "jarvis-ollama-research",
+  "image": "ollama/ollama:latest",
+  "resources": {
+    "gpu": 1,
+    "cpu": 4,
+    "memory": "16Gi"
+  },
+  "env": {
+    "OLLAMA_MODEL": "llama3.1:8b",
+    "TASK_TYPE": "research"
+  },
+  "command": ["/bin/sh", "-lc", "ollama run $OLLAMA_MODEL \"$PROMPT\""]
+}
