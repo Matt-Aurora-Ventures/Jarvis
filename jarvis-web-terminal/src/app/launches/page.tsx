@@ -7,7 +7,6 @@ import { GraduationFeed } from '@/components/features/GraduationFeed';
 import { getBagsTradingClient } from '@/lib/bags-trading';
 import { bagsClient, getScoreTier, TIER_COLORS, BagsGraduation } from '@/lib/bags-api';
 import { getGrokSentimentClient } from '@/lib/grok-sentiment';
-import { NeuralLattice } from '@/components/visuals/NeuralLattice';
 import {
     Rocket,
     Zap,
@@ -33,7 +32,7 @@ const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const REWARDS_RECIPIENT = {
     twitter: '@bags_fm',
     handle: 'bags_fm',
-    name: 'bags.fm',
+    name: 'DeGen',
     avatar: 'https://pbs.twimg.com/profile_images/bags_fm.jpg',
     totalRewards: 12847.50,
     weeklyRewards: 1250.00,
@@ -104,10 +103,15 @@ export default function LaunchesPage() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col relative overflow-hidden">
-            <NeuralLattice />
+        <>
+            {/* Ambient Background */}
+            <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+                <div className="ambient-orb absolute top-1/4 left-1/4 w-96 h-96 bg-accent-neon/[0.04] rounded-full blur-[128px]" />
+                <div className="ambient-orb-2 absolute bottom-1/3 right-1/4 w-80 h-80 bg-accent-neon/[0.03] rounded-full blur-[128px]" />
+                <div className="ambient-orb-3 absolute top-2/3 left-1/2 w-64 h-64 bg-accent-success/[0.02] rounded-full blur-[128px]" />
+            </div>
 
-            <div className="relative z-10 pt-24 pb-12 px-4 max-w-7xl mx-auto w-full">
+            <div className="pt-[100px] pb-4 px-3 lg:px-6 max-w-[1920px] mx-auto w-full">
                 {/* Header */}
                 <section className="text-center mb-8">
                     <div className="flex items-center justify-center gap-2 mb-2">
@@ -115,7 +119,7 @@ export default function LaunchesPage() {
                         <span className="text-sm text-accent-neon font-mono">LIVE LAUNCHES</span>
                     </div>
                     <h1 className="font-display text-4xl md:text-5xl font-bold text-text-primary mb-4">
-                        bags.fm Graduations
+                        DeGen Graduations
                     </h1>
                     <p className="text-text-secondary text-lg max-w-2xl mx-auto">
                         Real-time token launches with AI-powered scoring and instant swaps
@@ -134,7 +138,7 @@ export default function LaunchesPage() {
                     </div>
                     <div className="card-glass p-4 text-center">
                         <p className="text-[10px] text-text-muted uppercase mb-1">Strong</p>
-                        <p className="font-display font-bold text-2xl text-green-400">{stats.strong}</p>
+                        <p className="font-display font-bold text-2xl text-accent-success">{stats.strong}</p>
                     </div>
                     <div className="card-glass p-4 text-center">
                         <p className="text-[10px] text-text-muted uppercase mb-1">Avg Score</p>
@@ -156,8 +160,8 @@ export default function LaunchesPage() {
                             </div>
 
                             <div className="flex items-center gap-4 p-4 rounded-xl bg-accent-neon/10 border border-accent-neon/30 mb-4">
-                                <div className="w-12 h-12 rounded-full bg-theme-dark flex items-center justify-center overflow-hidden">
-                                    <Twitter className="w-6 h-6 text-blue-400" />
+                                <div className="w-12 h-12 rounded-full bg-bg-secondary flex items-center justify-center overflow-hidden">
+                                    <Twitter className="w-6 h-6 text-accent-neon" />
                                 </div>
                                 <div className="flex-1">
                                     <a
@@ -174,13 +178,13 @@ export default function LaunchesPage() {
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
-                                <div className="p-3 rounded-lg bg-theme-dark/50">
+                                <div className="p-3 rounded-lg bg-bg-secondary/50">
                                     <p className="text-[10px] text-text-muted">Total Earned</p>
                                     <p className="font-mono font-bold text-accent-success">
                                         ${REWARDS_RECIPIENT.totalRewards.toLocaleString()}
                                     </p>
                                 </div>
-                                <div className="p-3 rounded-lg bg-theme-dark/50">
+                                <div className="p-3 rounded-lg bg-bg-secondary/50">
                                     <p className="text-[10px] text-text-muted">This Week</p>
                                     <p className="font-mono font-bold text-accent-neon">
                                         ${REWARDS_RECIPIENT.weeklyRewards.toLocaleString()}
@@ -189,7 +193,7 @@ export default function LaunchesPage() {
                             </div>
 
                             <p className="text-xs text-text-muted mt-3 text-center">
-                                Trade via bags.fm to earn partner rewards
+                                Trade to earn partner rewards
                             </p>
                         </div>
 
@@ -212,7 +216,7 @@ export default function LaunchesPage() {
                                         onChange={(e) => setSwapAmount(e.target.value)}
                                         step="0.1"
                                         min="0.01"
-                                        className="w-full px-4 py-3 rounded-lg bg-theme-dark/50 border border-theme-border/30 text-text-primary focus:border-accent-neon/50 focus:outline-none font-mono"
+                                        className="w-full px-4 py-3 rounded-lg bg-bg-secondary/50 border border-border-primary/30 text-text-primary focus:border-accent-neon/50 focus:outline-none font-mono"
                                         placeholder="0.1"
                                     />
                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
@@ -220,7 +224,7 @@ export default function LaunchesPage() {
                                             <button
                                                 key={amt}
                                                 onClick={() => setSwapAmount(String(amt))}
-                                                className="px-2 py-1 rounded bg-theme-dark text-text-muted text-xs hover:bg-accent-neon/20 hover:text-accent-neon"
+                                                className="px-2 py-1 rounded bg-bg-secondary text-text-muted text-xs hover:bg-accent-neon/20 hover:text-accent-neon"
                                             >
                                                 {amt}
                                             </button>
@@ -265,7 +269,7 @@ export default function LaunchesPage() {
                             </div>
 
                             {!connected && (
-                                <p className="text-xs text-yellow-400 text-center mt-3">
+                                <p className="text-xs text-text-muted text-center mt-3">
                                     Connect wallet to swap
                                 </p>
                             )}
@@ -275,12 +279,12 @@ export default function LaunchesPage() {
                         <div className="card-glass p-6">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="font-display font-bold text-text-primary flex items-center gap-2">
-                                    <Star className="w-4 h-4 text-yellow-400" />
+                                    <Star className="w-4 h-4 text-text-muted" />
                                     Top Launches
                                 </h3>
                                 <button
                                     onClick={refresh}
-                                    className="p-1 hover:bg-theme-dark/50 rounded"
+                                    className="p-1 hover:bg-bg-secondary/50 rounded"
                                 >
                                     <RefreshCw className="w-4 h-4 text-text-muted" />
                                 </button>
@@ -342,6 +346,6 @@ export default function LaunchesPage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }

@@ -1,0 +1,3 @@
+mint,symbol,name,pool_address,creation_timestamp,liquidity_usd,volume_24h_usd,price_change_1h,price_usd,buy_txn_count_24h,sell_txn_count_24h,holder_count,has_twitter,has_website,has_telegram,source,score,score_bonding,score_holders,score_social,score_liquidity,vol_liq_ratio,age_hours
+"Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ","QQQx","Nasdaq xStock","FknDV1F5n6QaA7rLmjquDjuU6wcPMNm5RYq7zWbqhpZw",1751447749,599359.19,143076.12,0,602.0074,82,765,0,false,false,false,"dexscreener",50,15,10,0,25,0.239,5493.1
+"XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W","SPYx","SP500 xStock","Fae5dWVntUt6zbWu2voXxioDpMii7SqQwtsxBmoVCsHR",1751473811,72183.55,11677.6,0.01,684.73,526,392,0,false,false,false,"dexscreener",50,17,17,0,16,0.162,5485.9

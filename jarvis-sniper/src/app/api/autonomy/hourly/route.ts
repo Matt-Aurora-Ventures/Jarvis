@@ -1,13 +1,21 @@
 import { NextResponse } from 'next/server';
 import { getClientIp, autonomyRateLimiter } from '@/lib/rate-limiter';
 import { runHourlyAutonomyCycle } from '@/lib/autonomy/hourly-cycle';
-import { requireAutonomyAuth } from '@/lib/autonomy/auth';
 
 export const runtime = 'nodejs';
 
+function isAuthorized(request: Request): boolean {
+  const expected = String(process.env.AUTONOMY_JOB_TOKEN || '').trim();
+  if (!expected) return false;
+  const auth = String(request.headers.get('authorization') || '').trim();
+  if (!auth.toLowerCase().startsWith('bearer ')) return false;
+  const token = auth.slice(7).trim();
+  return token === expected;
+}
+
 export async function POST(request: Request) {
   const ip = getClientIp(request);
-  const limit = await autonomyRateLimiter.check(ip);
+  const limit = autonomyRateLimiter.check(ip);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: 'Rate limit exceeded. Try again shortly.' },
@@ -20,12 +28,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const authError = requireAutonomyAuth(request, {
-    envKeys: ['AUTONOMY_JOB_TOKEN'],
-    allowWhenUnconfigured: false,
-    unconfiguredStatus: 401,
-  });
-  if (authError) return authError;
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   try {
     const result = await runHourlyAutonomyCycle();

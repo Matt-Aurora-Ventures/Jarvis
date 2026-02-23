@@ -1,0 +1,27 @@
+{
+  "btc": {
+    "price": 69639,
+    "change24h": -1.8932130299774506,
+    "change7d": 0
+  },
+  "eth": {
+    "price": 2063.74,
+    "change24h": -1.2087161526906702
+  },
+  "sol": {
+    "price": 86.27,
+    "change24h": -0.9233867503708901
+  },
+  "dxy": {
+    "value": 118.90606420927467,
+    "change24h": 0
+  },
+  "gold": {
+    "price": 5025.02,
+    "change24h": 0.039054044314573995
+  },
+  "regime": "neutral",
+  "btcTrend": "flat",
+  "memeExposureMultiplier": 1,
+  "fetchedAt": 1770698802917
+}

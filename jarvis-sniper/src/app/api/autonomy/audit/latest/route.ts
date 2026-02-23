@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getLatestAuditBundle } from '@/lib/autonomy/hourly-cycle';
 import { autonomyRateLimiter, getClientIp } from '@/lib/rate-limiter';
-import { requireAutonomyAuth } from '@/lib/autonomy/auth';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   const ip = getClientIp(request);
-  const limit = await autonomyRateLimiter.check(ip);
+  const limit = autonomyRateLimiter.check(ip);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: 'Rate limit exceeded. Try again shortly.' },
@@ -19,12 +18,6 @@ export async function GET(request: Request) {
       },
     );
   }
-
-  const authError = requireAutonomyAuth(request, {
-    envKeys: ['AUTONOMY_READ_TOKEN', 'AUTONOMY_JOB_TOKEN'],
-    allowWhenUnconfigured: false,
-  });
-  if (authError) return authError;
   try {
     const latest = await getLatestAuditBundle();
     if (!latest.cycleId || !latest.bundle) {

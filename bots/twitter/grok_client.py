@@ -66,6 +66,14 @@ class GrokClient:
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("XAI_API_KEY", "")
+        # Respect global kill-switches so we don't accidentally drain credits.
+        try:
+            from core.feature_flags import is_xai_enabled
+            if not is_xai_enabled(default=True):
+                self.api_key = ""
+        except Exception:
+            # Conservative: treat as disabled if flags can't be evaluated.
+            self.api_key = ""
         self._session: Optional[aiohttp.ClientSession] = None
         self._daily_image_count = 0
         self._last_image_date: Optional[str] = None

@@ -1,0 +1,1510 @@
+{
+  "pump_fresh_tight": {
+    "algo_id": "pump_fresh_tight",
+    "folds": 5,
+    "total_trades": 98,
+    "validated_trades": 82,
+    "pass_folds": 4,
+    "fail_folds": 1,
+    "pass_rate": 0.8,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 16,
+        "validate_trades": 16,
+        "validate_win_rate": 43.8,
+        "validate_profit_factor": 1.215,
+        "validate_expectancy_pct": 1.368,
+        "validate_total_return_pct": 21.88
+      },
+      {
+        "fold": 2,
+        "train_trades": 32,
+        "validate_trades": 16,
+        "validate_win_rate": 43.8,
+        "validate_profit_factor": 1.265,
+        "validate_expectancy_pct": 1.688,
+        "validate_total_return_pct": 27.01
+      },
+      {
+        "fold": 3,
+        "train_trades": 48,
+        "validate_trades": 16,
+        "validate_win_rate": 56.3,
+        "validate_profit_factor": 2.091,
+        "validate_expectancy_pct": 5.408,
+        "validate_total_return_pct": 86.53
+      },
+      {
+        "fold": 4,
+        "train_trades": 64,
+        "validate_trades": 16,
+        "validate_win_rate": 31.3,
+        "validate_profit_factor": 0.702,
+        "validate_expectancy_pct": -2.324,
+        "validate_total_return_pct": -37.19
+      },
+      {
+        "fold": 5,
+        "train_trades": 80,
+        "validate_trades": 18,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.812,
+        "validate_expectancy_pct": 4.129,
+        "validate_total_return_pct": 74.33
+      }
+    ]
+  },
+  "micro_cap_surge": {
+    "algo_id": "micro_cap_surge",
+    "folds": 5,
+    "total_trades": 94,
+    "validated_trades": 79,
+    "pass_folds": 4,
+    "fail_folds": 1,
+    "pass_rate": 0.8,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 15,
+        "validate_trades": 15,
+        "validate_win_rate": 73.3,
+        "validate_profit_factor": 3.932,
+        "validate_expectancy_pct": 8.861,
+        "validate_total_return_pct": 132.91
+      },
+      {
+        "fold": 2,
+        "train_trades": 30,
+        "validate_trades": 15,
+        "validate_win_rate": 33.3,
+        "validate_profit_factor": 0.662,
+        "validate_expectancy_pct": -2.557,
+        "validate_total_return_pct": -38.36
+      },
+      {
+        "fold": 3,
+        "train_trades": 45,
+        "validate_trades": 15,
+        "validate_win_rate": 53.3,
+        "validate_profit_factor": 1.712,
+        "validate_expectancy_pct": 3.766,
+        "validate_total_return_pct": 56.5
+      },
+      {
+        "fold": 4,
+        "train_trades": 60,
+        "validate_trades": 15,
+        "validate_win_rate": 46.7,
+        "validate_profit_factor": 1.423,
+        "validate_expectancy_pct": 2.556,
+        "validate_total_return_pct": 38.34
+      },
+      {
+        "fold": 5,
+        "train_trades": 75,
+        "validate_trades": 19,
+        "validate_win_rate": 63.2,
+        "validate_profit_factor": 2.396,
+        "validate_expectancy_pct": 5.827,
+        "validate_total_return_pct": 110.71
+      }
+    ]
+  },
+  "elite": {
+    "algo_id": "elite",
+    "folds": 5,
+    "total_trades": 89,
+    "validated_trades": 75,
+    "pass_folds": 5,
+    "fail_folds": 0,
+    "pass_rate": 1,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 14,
+        "validate_trades": 14,
+        "validate_win_rate": 64.3,
+        "validate_profit_factor": 2.927,
+        "validate_expectancy_pct": 7.799,
+        "validate_total_return_pct": 109.19
+      },
+      {
+        "fold": 2,
+        "train_trades": 28,
+        "validate_trades": 14,
+        "validate_win_rate": 42.9,
+        "validate_profit_factor": 1.22,
+        "validate_expectancy_pct": 1.422,
+        "validate_total_return_pct": 19.91
+      },
+      {
+        "fold": 3,
+        "train_trades": 42,
+        "validate_trades": 14,
+        "validate_win_rate": 42.9,
+        "validate_profit_factor": 1.22,
+        "validate_expectancy_pct": 1.422,
+        "validate_total_return_pct": 19.91
+      },
+      {
+        "fold": 4,
+        "train_trades": 56,
+        "validate_trades": 14,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.626,
+        "validate_expectancy_pct": 3.548,
+        "validate_total_return_pct": 49.67
+      },
+      {
+        "fold": 5,
+        "train_trades": 70,
+        "validate_trades": 19,
+        "validate_win_rate": 63.2,
+        "validate_profit_factor": 2.603,
+        "validate_expectancy_pct": 6.694,
+        "validate_total_return_pct": 127.19
+      }
+    ]
+  },
+  "momentum": {
+    "algo_id": "momentum",
+    "folds": 5,
+    "total_trades": 68,
+    "validated_trades": 57,
+    "pass_folds": 4,
+    "fail_folds": 1,
+    "pass_rate": 0.8,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 11,
+        "validate_trades": 11,
+        "validate_win_rate": 18.2,
+        "validate_profit_factor": 0.459,
+        "validate_expectancy_pct": -5.02,
+        "validate_total_return_pct": -55.22
+      },
+      {
+        "fold": 2,
+        "train_trades": 22,
+        "validate_trades": 11,
+        "validate_win_rate": 45.5,
+        "validate_profit_factor": 1.72,
+        "validate_expectancy_pct": 4.45,
+        "validate_total_return_pct": 48.95
+      },
+      {
+        "fold": 3,
+        "train_trades": 33,
+        "validate_trades": 11,
+        "validate_win_rate": 36.4,
+        "validate_profit_factor": 1.361,
+        "validate_expectancy_pct": 2.255,
+        "validate_total_return_pct": 24.8
+      },
+      {
+        "fold": 4,
+        "train_trades": 44,
+        "validate_trades": 11,
+        "validate_win_rate": 63.6,
+        "validate_profit_factor": 3.361,
+        "validate_expectancy_pct": 9.73,
+        "validate_total_return_pct": 107.03
+      },
+      {
+        "fold": 5,
+        "train_trades": 55,
+        "validate_trades": 13,
+        "validate_win_rate": 61.5,
+        "validate_profit_factor": 3.378,
+        "validate_expectancy_pct": 9.425,
+        "validate_total_return_pct": 122.53
+      }
+    ]
+  },
+  "hybrid_b": {
+    "algo_id": "hybrid_b",
+    "folds": 5,
+    "total_trades": 68,
+    "validated_trades": 57,
+    "pass_folds": 4,
+    "fail_folds": 1,
+    "pass_rate": 0.8,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 11,
+        "validate_trades": 11,
+        "validate_win_rate": 18.2,
+        "validate_profit_factor": 0.459,
+        "validate_expectancy_pct": -5.02,
+        "validate_total_return_pct": -55.22
+      },
+      {
+        "fold": 2,
+        "train_trades": 22,
+        "validate_trades": 11,
+        "validate_win_rate": 45.5,
+        "validate_profit_factor": 1.72,
+        "validate_expectancy_pct": 4.45,
+        "validate_total_return_pct": 48.95
+      },
+      {
+        "fold": 3,
+        "train_trades": 33,
+        "validate_trades": 11,
+        "validate_win_rate": 36.4,
+        "validate_profit_factor": 1.361,
+        "validate_expectancy_pct": 2.255,
+        "validate_total_return_pct": 24.8
+      },
+      {
+        "fold": 4,
+        "train_trades": 44,
+        "validate_trades": 11,
+        "validate_win_rate": 63.6,
+        "validate_profit_factor": 3.361,
+        "validate_expectancy_pct": 9.73,
+        "validate_total_return_pct": 107.03
+      },
+      {
+        "fold": 5,
+        "train_trades": 55,
+        "validate_trades": 13,
+        "validate_win_rate": 61.5,
+        "validate_profit_factor": 3.378,
+        "validate_expectancy_pct": 9.425,
+        "validate_total_return_pct": 122.53
+      }
+    ]
+  },
+  "let_it_ride": {
+    "algo_id": "let_it_ride",
+    "folds": 5,
+    "total_trades": 56,
+    "validated_trades": 11,
+    "pass_folds": 1,
+    "fail_folds": 0,
+    "pass_rate": 1,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 9,
+        "validate_trades": 9,
+        "validate_win_rate": 33.3,
+        "validate_profit_factor": 1.032,
+        "validate_expectancy_pct": 0.241,
+        "validate_total_return_pct": 2.17
+      },
+      {
+        "fold": 2,
+        "train_trades": 18,
+        "validate_trades": 9,
+        "validate_win_rate": 22.2,
+        "validate_profit_factor": 0.59,
+        "validate_expectancy_pct": -3.617,
+        "validate_total_return_pct": -32.55
+      },
+      {
+        "fold": 3,
+        "train_trades": 27,
+        "validate_trades": 9,
+        "validate_win_rate": 44.4,
+        "validate_profit_factor": 1.352,
+        "validate_expectancy_pct": 2.218,
+        "validate_total_return_pct": 19.96
+      },
+      {
+        "fold": 4,
+        "train_trades": 36,
+        "validate_trades": 9,
+        "validate_win_rate": 66.7,
+        "validate_profit_factor": 4.128,
+        "validate_expectancy_pct": 11.815,
+        "validate_total_return_pct": 106.33
+      },
+      {
+        "fold": 5,
+        "train_trades": 45,
+        "validate_trades": 11,
+        "validate_win_rate": 54.5,
+        "validate_profit_factor": 2.124,
+        "validate_expectancy_pct": 5.79,
+        "validate_total_return_pct": 63.69
+      }
+    ]
+  },
+  "sol_veteran": {
+    "algo_id": "sol_veteran",
+    "folds": 5,
+    "total_trades": 71,
+    "validated_trades": 60,
+    "pass_folds": 5,
+    "fail_folds": 0,
+    "pass_rate": 1,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 11,
+        "validate_trades": 11,
+        "validate_win_rate": 45.5,
+        "validate_profit_factor": 1.201,
+        "validate_expectancy_pct": 1.023,
+        "validate_total_return_pct": 11.25
+      },
+      {
+        "fold": 2,
+        "train_trades": 22,
+        "validate_trades": 11,
+        "validate_win_rate": 90.9,
+        "validate_profit_factor": 14.407,
+        "validate_expectancy_pct": 11.394,
+        "validate_total_return_pct": 125.33
+      },
+      {
+        "fold": 3,
+        "train_trades": 33,
+        "validate_trades": 11,
+        "validate_win_rate": 45.5,
+        "validate_profit_factor": 1.424,
+        "validate_expectancy_pct": 1.824,
+        "validate_total_return_pct": 20.07
+      },
+      {
+        "fold": 4,
+        "train_trades": 44,
+        "validate_trades": 11,
+        "validate_win_rate": 45.5,
+        "validate_profit_factor": 1.201,
+        "validate_expectancy_pct": 1.023,
+        "validate_total_return_pct": 11.25
+      },
+      {
+        "fold": 5,
+        "train_trades": 55,
+        "validate_trades": 16,
+        "validate_win_rate": 87.5,
+        "validate_profit_factor": 9.805,
+        "validate_expectancy_pct": 10.289,
+        "validate_total_return_pct": 164.62
+      }
+    ]
+  },
+  "utility_swing": {
+    "algo_id": "utility_swing",
+    "folds": 5,
+    "total_trades": 71,
+    "validated_trades": 60,
+    "pass_folds": 5,
+    "fail_folds": 0,
+    "pass_rate": 1,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 11,
+        "validate_trades": 11,
+        "validate_win_rate": 45.5,
+        "validate_profit_factor": 1.201,
+        "validate_expectancy_pct": 1.023,
+        "validate_total_return_pct": 11.25
+      },
+      {
+        "fold": 2,
+        "train_trades": 22,
+        "validate_trades": 11,
+        "validate_win_rate": 90.9,
+        "validate_profit_factor": 14.407,
+        "validate_expectancy_pct": 11.394,
+        "validate_total_return_pct": 125.33
+      },
+      {
+        "fold": 3,
+        "train_trades": 33,
+        "validate_trades": 11,
+        "validate_win_rate": 45.5,
+        "validate_profit_factor": 1.424,
+        "validate_expectancy_pct": 1.824,
+        "validate_total_return_pct": 20.07
+      },
+      {
+        "fold": 4,
+        "train_trades": 44,
+        "validate_trades": 11,
+        "validate_win_rate": 45.5,
+        "validate_profit_factor": 1.201,
+        "validate_expectancy_pct": 1.023,
+        "validate_total_return_pct": 11.25
+      },
+      {
+        "fold": 5,
+        "train_trades": 55,
+        "validate_trades": 16,
+        "validate_win_rate": 87.5,
+        "validate_profit_factor": 9.805,
+        "validate_expectancy_pct": 10.289,
+        "validate_total_return_pct": 164.62
+      }
+    ]
+  },
+  "established_breakout": {
+    "algo_id": "established_breakout",
+    "folds": 5,
+    "total_trades": 18,
+    "validated_trades": 0,
+    "pass_folds": 0,
+    "fail_folds": 0,
+    "pass_rate": 0,
+    "sample_band": "THIN",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 3,
+        "validate_trades": 3,
+        "validate_win_rate": 33.3,
+        "validate_profit_factor": 0.72,
+        "validate_expectancy_pct": -1.743,
+        "validate_total_return_pct": -5.23
+      },
+      {
+        "fold": 2,
+        "train_trades": 6,
+        "validate_trades": 3,
+        "validate_win_rate": 66.7,
+        "validate_profit_factor": 2.881,
+        "validate_expectancy_pct": 5.863,
+        "validate_total_return_pct": 17.59
+      },
+      {
+        "fold": 3,
+        "train_trades": 9,
+        "validate_trades": 3,
+        "validate_win_rate": 66.7,
+        "validate_profit_factor": 2.881,
+        "validate_expectancy_pct": 5.863,
+        "validate_total_return_pct": 17.59
+      },
+      {
+        "fold": 4,
+        "train_trades": 12,
+        "validate_trades": 3,
+        "validate_win_rate": 66.7,
+        "validate_profit_factor": 2.881,
+        "validate_expectancy_pct": 5.863,
+        "validate_total_return_pct": 17.59
+      },
+      {
+        "fold": 5,
+        "train_trades": 15,
+        "validate_trades": 3,
+        "validate_win_rate": 66.7,
+        "validate_profit_factor": 2.881,
+        "validate_expectancy_pct": 5.863,
+        "validate_total_return_pct": 17.59
+      }
+    ]
+  },
+  "meme_classic": {
+    "algo_id": "meme_classic",
+    "folds": 5,
+    "total_trades": 73,
+    "validated_trades": 61,
+    "pass_folds": 5,
+    "fail_folds": 0,
+    "pass_rate": 1,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 12,
+        "validate_trades": 12,
+        "validate_win_rate": 75,
+        "validate_profit_factor": 4.322,
+        "validate_expectancy_pct": 7.764,
+        "validate_total_return_pct": 93.17
+      },
+      {
+        "fold": 2,
+        "train_trades": 24,
+        "validate_trades": 12,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.441,
+        "validate_expectancy_pct": 2.06,
+        "validate_total_return_pct": 24.72
+      },
+      {
+        "fold": 3,
+        "train_trades": 36,
+        "validate_trades": 12,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.441,
+        "validate_expectancy_pct": 2.06,
+        "validate_total_return_pct": 24.72
+      },
+      {
+        "fold": 4,
+        "train_trades": 48,
+        "validate_trades": 12,
+        "validate_win_rate": 75,
+        "validate_profit_factor": 4.322,
+        "validate_expectancy_pct": 7.764,
+        "validate_total_return_pct": 93.17
+      },
+      {
+        "fold": 5,
+        "train_trades": 60,
+        "validate_trades": 13,
+        "validate_win_rate": 53.8,
+        "validate_profit_factor": 1.452,
+        "validate_expectancy_pct": 1.95,
+        "validate_total_return_pct": 25.35
+      }
+    ]
+  },
+  "volume_spike": {
+    "algo_id": "volume_spike",
+    "folds": 5,
+    "total_trades": 80,
+    "validated_trades": 67,
+    "pass_folds": 4,
+    "fail_folds": 1,
+    "pass_rate": 0.8,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 13,
+        "validate_trades": 13,
+        "validate_win_rate": 30.8,
+        "validate_profit_factor": 0.64,
+        "validate_expectancy_pct": -2.328,
+        "validate_total_return_pct": -30.26
+      },
+      {
+        "fold": 2,
+        "train_trades": 26,
+        "validate_trades": 13,
+        "validate_win_rate": 53.8,
+        "validate_profit_factor": 1.681,
+        "validate_expectancy_pct": 2.937,
+        "validate_total_return_pct": 38.19
+      },
+      {
+        "fold": 3,
+        "train_trades": 39,
+        "validate_trades": 13,
+        "validate_win_rate": 61.5,
+        "validate_profit_factor": 2.305,
+        "validate_expectancy_pct": 4.693,
+        "validate_total_return_pct": 61
+      },
+      {
+        "fold": 4,
+        "train_trades": 52,
+        "validate_trades": 13,
+        "validate_win_rate": 61.5,
+        "validate_profit_factor": 2.305,
+        "validate_expectancy_pct": 4.693,
+        "validate_total_return_pct": 61
+      },
+      {
+        "fold": 5,
+        "train_trades": 65,
+        "validate_trades": 15,
+        "validate_win_rate": 73.3,
+        "validate_profit_factor": 3.962,
+        "validate_expectancy_pct": 7.384,
+        "validate_total_return_pct": 110.76
+      }
+    ]
+  },
+  "bags_fresh_snipe": {
+    "algo_id": "bags_fresh_snipe",
+    "folds": 5,
+    "total_trades": 28,
+    "validated_trades": 0,
+    "pass_folds": 0,
+    "fail_folds": 0,
+    "pass_rate": 0,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 4,
+        "validate_trades": 4,
+        "validate_win_rate": 75,
+        "validate_profit_factor": 7.505,
+        "validate_expectancy_pct": 18.428,
+        "validate_total_return_pct": 73.71
+      },
+      {
+        "fold": 2,
+        "train_trades": 8,
+        "validate_trades": 4,
+        "validate_win_rate": 25,
+        "validate_profit_factor": 0.834,
+        "validate_expectancy_pct": -1.412,
+        "validate_total_return_pct": -5.65
+      },
+      {
+        "fold": 3,
+        "train_trades": 12,
+        "validate_trades": 4,
+        "validate_win_rate": 25,
+        "validate_profit_factor": 0.834,
+        "validate_expectancy_pct": -1.412,
+        "validate_total_return_pct": -5.65
+      },
+      {
+        "fold": 4,
+        "train_trades": 16,
+        "validate_trades": 4,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 2.502,
+        "validate_expectancy_pct": 8.508,
+        "validate_total_return_pct": 34.03
+      },
+      {
+        "fold": 5,
+        "train_trades": 20,
+        "validate_trades": 8,
+        "validate_win_rate": 25,
+        "validate_profit_factor": 0.873,
+        "validate_expectancy_pct": -1.027,
+        "validate_total_return_pct": -8.22
+      }
+    ]
+  },
+  "bags_momentum": {
+    "algo_id": "bags_momentum",
+    "folds": 5,
+    "total_trades": 23,
+    "validated_trades": 0,
+    "pass_folds": 0,
+    "fail_folds": 0,
+    "pass_rate": 0,
+    "sample_band": "THIN",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 3,
+        "validate_trades": 3,
+        "validate_win_rate": 100,
+        "validate_profit_factor": 999,
+        "validate_expectancy_pct": 28.349,
+        "validate_total_return_pct": 85.05
+      },
+      {
+        "fold": 2,
+        "train_trades": 6,
+        "validate_trades": 3,
+        "validate_win_rate": 33.3,
+        "validate_profit_factor": 1.251,
+        "validate_expectancy_pct": 1.895,
+        "validate_total_return_pct": 5.68
+      },
+      {
+        "fold": 3,
+        "train_trades": 9,
+        "validate_trades": 3,
+        "validate_win_rate": 33.3,
+        "validate_profit_factor": 1.251,
+        "validate_expectancy_pct": 1.895,
+        "validate_total_return_pct": 5.68
+      },
+      {
+        "fold": 4,
+        "train_trades": 12,
+        "validate_trades": 3,
+        "validate_win_rate": 66.7,
+        "validate_profit_factor": 5.003,
+        "validate_expectancy_pct": 15.122,
+        "validate_total_return_pct": 45.36
+      },
+      {
+        "fold": 5,
+        "train_trades": 15,
+        "validate_trades": 8,
+        "validate_win_rate": 12.5,
+        "validate_profit_factor": 0.372,
+        "validate_expectancy_pct": -5.987,
+        "validate_total_return_pct": -47.9
+      }
+    ]
+  },
+  "bags_value": {
+    "algo_id": "bags_value",
+    "folds": 5,
+    "total_trades": 40,
+    "validated_trades": 10,
+    "pass_folds": 1,
+    "fail_folds": 0,
+    "pass_rate": 1,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 6,
+        "validate_trades": 6,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.335,
+        "validate_expectancy_pct": 1.068,
+        "validate_total_return_pct": 6.41
+      },
+      {
+        "fold": 2,
+        "train_trades": 12,
+        "validate_trades": 6,
+        "validate_win_rate": 33.3,
+        "validate_profit_factor": 0.668,
+        "validate_expectancy_pct": -1.412,
+        "validate_total_return_pct": -8.47
+      },
+      {
+        "fold": 3,
+        "train_trades": 18,
+        "validate_trades": 6,
+        "validate_win_rate": 83.3,
+        "validate_profit_factor": 5.718,
+        "validate_expectancy_pct": 5.011,
+        "validate_total_return_pct": 30.07
+      },
+      {
+        "fold": 4,
+        "train_trades": 24,
+        "validate_trades": 6,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.335,
+        "validate_expectancy_pct": 1.068,
+        "validate_total_return_pct": 6.41
+      },
+      {
+        "fold": 5,
+        "train_trades": 30,
+        "validate_trades": 10,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.335,
+        "validate_expectancy_pct": 1.068,
+        "validate_total_return_pct": 10.68
+      }
+    ]
+  },
+  "bags_dip_buyer": {
+    "algo_id": "bags_dip_buyer",
+    "folds": 5,
+    "total_trades": 65,
+    "validated_trades": 55,
+    "pass_folds": 4,
+    "fail_folds": 1,
+    "pass_rate": 0.8,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 10,
+        "validate_trades": 10,
+        "validate_win_rate": 30,
+        "validate_profit_factor": 1.112,
+        "validate_expectancy_pct": 0.709,
+        "validate_total_return_pct": 7.09
+      },
+      {
+        "fold": 2,
+        "train_trades": 20,
+        "validate_trades": 10,
+        "validate_win_rate": 70,
+        "validate_profit_factor": 4.339,
+        "validate_expectancy_pct": 9.365,
+        "validate_total_return_pct": 93.65
+      },
+      {
+        "fold": 3,
+        "train_trades": 30,
+        "validate_trades": 10,
+        "validate_win_rate": 60,
+        "validate_profit_factor": 2.074,
+        "validate_expectancy_pct": 4.017,
+        "validate_total_return_pct": 40.17
+      },
+      {
+        "fold": 4,
+        "train_trades": 40,
+        "validate_trades": 10,
+        "validate_win_rate": 60,
+        "validate_profit_factor": 2.682,
+        "validate_expectancy_pct": 5.216,
+        "validate_total_return_pct": 52.16
+      },
+      {
+        "fold": 5,
+        "train_trades": 50,
+        "validate_trades": 15,
+        "validate_win_rate": 33.3,
+        "validate_profit_factor": 0.836,
+        "validate_expectancy_pct": -1.01,
+        "validate_total_return_pct": -15.16
+      }
+    ]
+  },
+  "bags_bluechip": {
+    "algo_id": "bags_bluechip",
+    "folds": 5,
+    "total_trades": 51,
+    "validated_trades": 11,
+    "pass_folds": 1,
+    "fail_folds": 0,
+    "pass_rate": 1,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 8,
+        "validate_trades": 8,
+        "validate_win_rate": 62.5,
+        "validate_profit_factor": 1.607,
+        "validate_expectancy_pct": 1.452,
+        "validate_total_return_pct": 11.61
+      },
+      {
+        "fold": 2,
+        "train_trades": 16,
+        "validate_trades": 8,
+        "validate_win_rate": 37.5,
+        "validate_profit_factor": 0.708,
+        "validate_expectancy_pct": -1.164,
+        "validate_total_return_pct": -9.31
+      },
+      {
+        "fold": 3,
+        "train_trades": 24,
+        "validate_trades": 8,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.179,
+        "validate_expectancy_pct": 0.572,
+        "validate_total_return_pct": 4.57
+      },
+      {
+        "fold": 4,
+        "train_trades": 32,
+        "validate_trades": 8,
+        "validate_win_rate": 62.5,
+        "validate_profit_factor": 1.699,
+        "validate_expectancy_pct": 1.669,
+        "validate_total_return_pct": 13.35
+      },
+      {
+        "fold": 5,
+        "train_trades": 40,
+        "validate_trades": 11,
+        "validate_win_rate": 54.5,
+        "validate_profit_factor": 1.415,
+        "validate_expectancy_pct": 1.203,
+        "validate_total_return_pct": 13.23
+      }
+    ]
+  },
+  "bags_conservative": {
+    "algo_id": "bags_conservative",
+    "folds": 5,
+    "total_trades": 40,
+    "validated_trades": 10,
+    "pass_folds": 1,
+    "fail_folds": 0,
+    "pass_rate": 1,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 6,
+        "validate_trades": 6,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.335,
+        "validate_expectancy_pct": 1.068,
+        "validate_total_return_pct": 6.41
+      },
+      {
+        "fold": 2,
+        "train_trades": 12,
+        "validate_trades": 6,
+        "validate_win_rate": 33.3,
+        "validate_profit_factor": 0.668,
+        "validate_expectancy_pct": -1.412,
+        "validate_total_return_pct": -8.47
+      },
+      {
+        "fold": 3,
+        "train_trades": 18,
+        "validate_trades": 6,
+        "validate_win_rate": 83.3,
+        "validate_profit_factor": 5.718,
+        "validate_expectancy_pct": 5.011,
+        "validate_total_return_pct": 30.07
+      },
+      {
+        "fold": 4,
+        "train_trades": 24,
+        "validate_trades": 6,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.335,
+        "validate_expectancy_pct": 1.068,
+        "validate_total_return_pct": 6.41
+      },
+      {
+        "fold": 5,
+        "train_trades": 30,
+        "validate_trades": 10,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.335,
+        "validate_expectancy_pct": 1.068,
+        "validate_total_return_pct": 10.68
+      }
+    ]
+  },
+  "bags_aggressive": {
+    "algo_id": "bags_aggressive",
+    "folds": 5,
+    "total_trades": 58,
+    "validated_trades": 13,
+    "pass_folds": 0,
+    "fail_folds": 1,
+    "pass_rate": 0,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 9,
+        "validate_trades": 9,
+        "validate_win_rate": 44.4,
+        "validate_profit_factor": 1.842,
+        "validate_expectancy_pct": 3.91,
+        "validate_total_return_pct": 35.19
+      },
+      {
+        "fold": 2,
+        "train_trades": 18,
+        "validate_trades": 9,
+        "validate_win_rate": 44.4,
+        "validate_profit_factor": 1.768,
+        "validate_expectancy_pct": 3.564,
+        "validate_total_return_pct": 32.07
+      },
+      {
+        "fold": 3,
+        "train_trades": 27,
+        "validate_trades": 9,
+        "validate_win_rate": 44.4,
+        "validate_profit_factor": 2.239,
+        "validate_expectancy_pct": 5.752,
+        "validate_total_return_pct": 51.77
+      },
+      {
+        "fold": 4,
+        "train_trades": 36,
+        "validate_trades": 9,
+        "validate_win_rate": 33.3,
+        "validate_profit_factor": 1.449,
+        "validate_expectancy_pct": 2.415,
+        "validate_total_return_pct": 21.73
+      },
+      {
+        "fold": 5,
+        "train_trades": 45,
+        "validate_trades": 13,
+        "validate_win_rate": 23.1,
+        "validate_profit_factor": 0.612,
+        "validate_expectancy_pct": -2.488,
+        "validate_total_return_pct": -32.34
+      }
+    ]
+  },
+  "bags_elite": {
+    "algo_id": "bags_elite",
+    "folds": 5,
+    "total_trades": 40,
+    "validated_trades": 10,
+    "pass_folds": 1,
+    "fail_folds": 0,
+    "pass_rate": 1,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 6,
+        "validate_trades": 6,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.179,
+        "validate_expectancy_pct": 0.572,
+        "validate_total_return_pct": 3.43
+      },
+      {
+        "fold": 2,
+        "train_trades": 12,
+        "validate_trades": 6,
+        "validate_win_rate": 33.3,
+        "validate_profit_factor": 0.59,
+        "validate_expectancy_pct": -1.743,
+        "validate_total_return_pct": -10.46
+      },
+      {
+        "fold": 3,
+        "train_trades": 18,
+        "validate_trades": 6,
+        "validate_win_rate": 83.3,
+        "validate_profit_factor": 5.096,
+        "validate_expectancy_pct": 4.35,
+        "validate_total_return_pct": 26.1
+      },
+      {
+        "fold": 4,
+        "train_trades": 24,
+        "validate_trades": 6,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.179,
+        "validate_expectancy_pct": 0.572,
+        "validate_total_return_pct": 3.43
+      },
+      {
+        "fold": 5,
+        "train_trades": 30,
+        "validate_trades": 10,
+        "validate_win_rate": 50,
+        "validate_profit_factor": 1.179,
+        "validate_expectancy_pct": 0.572,
+        "validate_total_return_pct": 5.72
+      }
+    ]
+  },
+  "bluechip_trend_follow": {
+    "algo_id": "bluechip_trend_follow",
+    "folds": 5,
+    "total_trades": 42,
+    "validated_trades": 0,
+    "pass_folds": 0,
+    "fail_folds": 0,
+    "pass_rate": 0,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 7,
+        "validate_trades": 7,
+        "validate_win_rate": 28.6,
+        "validate_profit_factor": 1.779,
+        "validate_expectancy_pct": 3.548,
+        "validate_total_return_pct": 24.84
+      },
+      {
+        "fold": 2,
+        "train_trades": 14,
+        "validate_trades": 7,
+        "validate_win_rate": 28.6,
+        "validate_profit_factor": 1.779,
+        "validate_expectancy_pct": 3.548,
+        "validate_total_return_pct": 24.84
+      },
+      {
+        "fold": 3,
+        "train_trades": 21,
+        "validate_trades": 7,
+        "validate_win_rate": 57.1,
+        "validate_profit_factor": 5.932,
+        "validate_expectancy_pct": 13.468,
+        "validate_total_return_pct": 94.28
+      },
+      {
+        "fold": 4,
+        "train_trades": 28,
+        "validate_trades": 7,
+        "validate_win_rate": 42.9,
+        "validate_profit_factor": 2.324,
+        "validate_expectancy_pct": 4.82,
+        "validate_total_return_pct": 33.74
+      },
+      {
+        "fold": 5,
+        "train_trades": 35,
+        "validate_trades": 7,
+        "validate_win_rate": 42.9,
+        "validate_profit_factor": 5.13,
+        "validate_expectancy_pct": 9.781,
+        "validate_total_return_pct": 68.47
+      }
+    ]
+  },
+  "bluechip_breakout": {
+    "algo_id": "bluechip_breakout",
+    "folds": 5,
+    "total_trades": 42,
+    "validated_trades": 0,
+    "pass_folds": 0,
+    "fail_folds": 0,
+    "pass_rate": 0,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 7,
+        "validate_trades": 7,
+        "validate_win_rate": 28.6,
+        "validate_profit_factor": 1.779,
+        "validate_expectancy_pct": 3.548,
+        "validate_total_return_pct": 24.84
+      },
+      {
+        "fold": 2,
+        "train_trades": 14,
+        "validate_trades": 7,
+        "validate_win_rate": 28.6,
+        "validate_profit_factor": 1.779,
+        "validate_expectancy_pct": 3.548,
+        "validate_total_return_pct": 24.84
+      },
+      {
+        "fold": 3,
+        "train_trades": 21,
+        "validate_trades": 7,
+        "validate_win_rate": 57.1,
+        "validate_profit_factor": 5.932,
+        "validate_expectancy_pct": 13.468,
+        "validate_total_return_pct": 94.28
+      },
+      {
+        "fold": 4,
+        "train_trades": 28,
+        "validate_trades": 7,
+        "validate_win_rate": 42.9,
+        "validate_profit_factor": 2.324,
+        "validate_expectancy_pct": 4.82,
+        "validate_total_return_pct": 33.74
+      },
+      {
+        "fold": 5,
+        "train_trades": 35,
+        "validate_trades": 7,
+        "validate_win_rate": 42.9,
+        "validate_profit_factor": 5.13,
+        "validate_expectancy_pct": 9.781,
+        "validate_total_return_pct": 68.47
+      }
+    ]
+  },
+  "xstock_intraday": {
+    "algo_id": "xstock_intraday",
+    "folds": 5,
+    "total_trades": 40,
+    "validated_trades": 10,
+    "pass_folds": 1,
+    "fail_folds": 0,
+    "pass_rate": 1,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 6,
+        "validate_trades": 6,
+        "validate_win_rate": 16.7,
+        "validate_profit_factor": 2.092,
+        "validate_expectancy_pct": 8.508,
+        "validate_total_return_pct": 51.05
+      },
+      {
+        "fold": 2,
+        "train_trades": 12,
+        "validate_trades": 6,
+        "validate_win_rate": 16.7,
+        "validate_profit_factor": 2.571,
+        "validate_expectancy_pct": 9.959,
+        "validate_total_return_pct": 59.75
+      },
+      {
+        "fold": 3,
+        "train_trades": 18,
+        "validate_trades": 6,
+        "validate_win_rate": 16.7,
+        "validate_profit_factor": 2.092,
+        "validate_expectancy_pct": 8.508,
+        "validate_total_return_pct": 51.05
+      },
+      {
+        "fold": 4,
+        "train_trades": 24,
+        "validate_trades": 6,
+        "validate_win_rate": 33.3,
+        "validate_profit_factor": 2.788,
+        "validate_expectancy_pct": 11.141,
+        "validate_total_return_pct": 66.85
+      },
+      {
+        "fold": 5,
+        "train_trades": 30,
+        "validate_trades": 10,
+        "validate_win_rate": 30,
+        "validate_profit_factor": 4.483,
+        "validate_expectancy_pct": 22.793,
+        "validate_total_return_pct": 227.93
+      }
+    ]
+  },
+  "xstock_swing": {
+    "algo_id": "xstock_swing",
+    "folds": 5,
+    "total_trades": 47,
+    "validated_trades": 12,
+    "pass_folds": 0,
+    "fail_folds": 1,
+    "pass_rate": 0,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL_DISABLED",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 7,
+        "validate_trades": 7,
+        "validate_win_rate": 0,
+        "validate_profit_factor": 0,
+        "validate_expectancy_pct": -3.396,
+        "validate_total_return_pct": -23.77
+      },
+      {
+        "fold": 2,
+        "train_trades": 14,
+        "validate_trades": 7,
+        "validate_win_rate": 14.3,
+        "validate_profit_factor": 0.105,
+        "validate_expectancy_pct": -2.225,
+        "validate_total_return_pct": -15.58
+      },
+      {
+        "fold": 3,
+        "train_trades": 21,
+        "validate_trades": 7,
+        "validate_win_rate": 0,
+        "validate_profit_factor": 0,
+        "validate_expectancy_pct": -3.396,
+        "validate_total_return_pct": -23.77
+      },
+      {
+        "fold": 4,
+        "train_trades": 28,
+        "validate_trades": 7,
+        "validate_win_rate": 0,
+        "validate_profit_factor": 0,
+        "validate_expectancy_pct": -3.396,
+        "validate_total_return_pct": -23.77
+      },
+      {
+        "fold": 5,
+        "train_trades": 35,
+        "validate_trades": 12,
+        "validate_win_rate": 16.7,
+        "validate_profit_factor": 0.317,
+        "validate_expectancy_pct": -1.85,
+        "validate_total_return_pct": -22.2
+      }
+    ]
+  },
+  "prestock_speculative": {
+    "algo_id": "prestock_speculative",
+    "folds": 5,
+    "total_trades": 23,
+    "validated_trades": 0,
+    "pass_folds": 0,
+    "fail_folds": 0,
+    "pass_rate": 0,
+    "sample_band": "THIN",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 3,
+        "validate_trades": 3,
+        "validate_win_rate": 100,
+        "validate_profit_factor": 999,
+        "validate_expectancy_pct": 10.492,
+        "validate_total_return_pct": 31.48
+      },
+      {
+        "fold": 2,
+        "train_trades": 6,
+        "validate_trades": 3,
+        "validate_win_rate": 66.7,
+        "validate_profit_factor": 1.852,
+        "validate_expectancy_pct": 3.217,
+        "validate_total_return_pct": 9.65
+      },
+      {
+        "fold": 3,
+        "train_trades": 9,
+        "validate_trades": 3,
+        "validate_win_rate": 100,
+        "validate_profit_factor": 999,
+        "validate_expectancy_pct": 7.706,
+        "validate_total_return_pct": 23.12
+      },
+      {
+        "fold": 4,
+        "train_trades": 12,
+        "validate_trades": 3,
+        "validate_win_rate": 66.7,
+        "validate_profit_factor": 1.852,
+        "validate_expectancy_pct": 3.217,
+        "validate_total_return_pct": 9.65
+      },
+      {
+        "fold": 5,
+        "train_trades": 15,
+        "validate_trades": 8,
+        "validate_win_rate": 37.5,
+        "validate_profit_factor": 0.533,
+        "validate_expectancy_pct": -1.882,
+        "validate_total_return_pct": -15.05
+      }
+    ]
+  },
+  "index_intraday": {
+    "algo_id": "index_intraday",
+    "folds": 5,
+    "total_trades": 10,
+    "validated_trades": 0,
+    "pass_folds": 0,
+    "fail_folds": 0,
+    "pass_rate": 0,
+    "sample_band": "THIN",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 1,
+        "validate_trades": 1,
+        "validate_win_rate": 0,
+        "validate_profit_factor": 0,
+        "validate_expectancy_pct": -7.364,
+        "validate_total_return_pct": -7.36
+      },
+      {
+        "fold": 2,
+        "train_trades": 2,
+        "validate_trades": 1,
+        "validate_win_rate": 100,
+        "validate_profit_factor": 999,
+        "validate_expectancy_pct": 18.428,
+        "validate_total_return_pct": 18.43
+      },
+      {
+        "fold": 3,
+        "train_trades": 3,
+        "validate_trades": 1,
+        "validate_win_rate": 100,
+        "validate_profit_factor": 999,
+        "validate_expectancy_pct": 0.721,
+        "validate_total_return_pct": 0.72
+      },
+      {
+        "fold": 4,
+        "train_trades": 4,
+        "validate_trades": 1,
+        "validate_win_rate": 0,
+        "validate_profit_factor": 0,
+        "validate_expectancy_pct": -7.364,
+        "validate_total_return_pct": -7.36
+      },
+      {
+        "fold": 5,
+        "train_trades": 5,
+        "validate_trades": 5,
+        "validate_win_rate": 20,
+        "validate_profit_factor": 0.311,
+        "validate_expectancy_pct": -1.371,
+        "validate_total_return_pct": -6.85
+      }
+    ]
+  },
+  "index_leveraged": {
+    "algo_id": "index_leveraged",
+    "folds": 5,
+    "total_trades": 10,
+    "validated_trades": 0,
+    "pass_folds": 0,
+    "fail_folds": 0,
+    "pass_rate": 0,
+    "sample_band": "THIN",
+    "status_label": "EXPERIMENTAL",
+    "fold_metrics": [
+      {
+        "fold": 1,
+        "train_trades": 1,
+        "validate_trades": 1,
+        "validate_win_rate": 0,
+        "validate_profit_factor": 0,
+        "validate_expectancy_pct": -7.364,
+        "validate_total_return_pct": -7.36
+      },
+      {
+        "fold": 2,
+        "train_trades": 2,
+        "validate_trades": 1,
+        "validate_win_rate": 100,
+        "validate_profit_factor": 999,
+        "validate_expectancy_pct": 18.428,
+        "validate_total_return_pct": 18.43
+      },
+      {
+        "fold": 3,
+        "train_trades": 3,
+        "validate_trades": 1,
+        "validate_win_rate": 100,
+        "validate_profit_factor": 999,
+        "validate_expectancy_pct": 0.721,
+        "validate_total_return_pct": 0.72
+      },
+      {
+        "fold": 4,
+        "train_trades": 4,
+        "validate_trades": 1,
+        "validate_win_rate": 0,
+        "validate_profit_factor": 0,
+        "validate_expectancy_pct": -7.364,
+        "validate_total_return_pct": -7.36
+      },
+      {
+        "fold": 5,
+        "train_trades": 5,
+        "validate_trades": 5,
+        "validate_win_rate": 20,
+        "validate_profit_factor": 0.311,
+        "validate_expectancy_pct": -1.371,
+        "validate_total_return_pct": -6.85
+      }
+    ]
+  }
+}

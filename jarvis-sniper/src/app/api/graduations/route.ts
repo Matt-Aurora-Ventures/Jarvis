@@ -2,11 +2,6 @@ import { NextResponse } from 'next/server';
 import { graduationCache } from '@/lib/server-cache';
 import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
 import { ALL_BLUECHIPS } from '@/lib/bluechip-data';
-import { safeImageUrl } from '@/lib/safe-url';
-import { buildDataPointProvenance } from '@/lib/data-plane/provenance';
-import { recordSourceHealth } from '@/lib/data-plane/health-store';
-import { deriveRedundancyState, scoreSourceReliability } from '@/lib/data-plane/reliability';
-import { buildDatasetManifestV2, persistDatasetManifestV2 } from '@/lib/data-plane/manifest-v2';
 
 /**
  * Server-side graduation feed using DexScreener API
@@ -370,7 +365,7 @@ export async function GET(request: Request) {
       : GRADUATION_CACHE_KEY;
     // Rate limit check
     const ip = getClientIp(request);
-    const limit = await apiRateLimiter.check(ip);
+    const limit = apiRateLimiter.check(ip);
     if (!limit.allowed) {
       return NextResponse.json(
         { graduations: [], error: 'Rate limit exceeded' },
@@ -385,7 +380,7 @@ export async function GET(request: Request) {
     }
 
     // Check cache first — all users share the same cached response
-    const cached = await graduationCache.get(cacheKey);
+    const cached = graduationCache.get(cacheKey);
     if (cached) {
       return NextResponse.json(cached, {
         headers: {
@@ -396,30 +391,12 @@ export async function GET(request: Request) {
     }
 
     // 1. Fetch Solana token candidates from ALL sources (merged, not winner-takes-all).
-    const boostsStartedAt = Date.now();
-    const profilesStartedAt = Date.now();
-    const solPairsStartedAt = Date.now();
-    const jupiterStartedAt = Date.now();
-
-    const boostsPromise = fetchBoostedTokens();
-    const profilesPromise = fetchProfileTokens();
-    const solPairsPromise = fetchSolPairsAsTokens();
-    const jupiterPromise = fetchJupiterLaunchpadTokens();
-
     const [boostResult, profileResult, pairsResult, jupiterResult] = await Promise.allSettled([
-      boostsPromise,
-      profilesPromise,
-      solPairsPromise,
-      jupiterPromise,
+      fetchBoostedTokens(),
+      fetchProfileTokens(),
+      fetchSolPairsAsTokens(),
+      fetchJupiterLaunchpadTokens(),
     ]);
-
-    const sourceLatencies = {
-      dexscreenerBoosts: Date.now() - boostsStartedAt,
-      dexscreenerProfiles: Date.now() - profilesStartedAt,
-      dexscreenerSolPairs: Date.now() - solPairsStartedAt,
-      jupiter: Date.now() - jupiterStartedAt,
-    };
-
 
     // Resolve all sources (best effort).
     const boosts = boostResult.status === 'fulfilled' ? boostResult.value : [];
@@ -476,104 +453,6 @@ export async function GET(request: Request) {
       postQualityFilter: qualityFiltered.length,
     };
     console.log('[Graduations] source mix', sourceCounts);
-
-    const nowIso = new Date().toISOString();
-    const sourceStatus = {
-      dexscreenerBoosts: boostResult.status === 'fulfilled' ? 200 : 500,
-      dexscreenerProfiles: profileResult.status === 'fulfilled' ? 200 : 500,
-      dexscreenerSolPairs: pairsResult.status === 'fulfilled' ? 200 : 500,
-      jupiter: jupiterResult.status === 'fulfilled' ? 200 : 500,
-      bluechipRegistry: 200,
-    };
-    const sourceReliability = {
-      dexscreenerBoosts: scoreSourceReliability({
-        ok: boostResult.status === 'fulfilled',
-        latencyMs: sourceLatencies.dexscreenerBoosts,
-        httpStatus: sourceStatus.dexscreenerBoosts,
-        freshnessMs: 0,
-        errorBudgetBurn: boostResult.status === 'fulfilled' ? 0 : 1,
-      }),
-      dexscreenerProfiles: scoreSourceReliability({
-        ok: profileResult.status === 'fulfilled',
-        latencyMs: sourceLatencies.dexscreenerProfiles,
-        httpStatus: sourceStatus.dexscreenerProfiles,
-        freshnessMs: 0,
-        errorBudgetBurn: profileResult.status === 'fulfilled' ? 0 : 1,
-      }),
-      dexscreenerSolPairs: scoreSourceReliability({
-        ok: pairsResult.status === 'fulfilled',
-        latencyMs: sourceLatencies.dexscreenerSolPairs,
-        httpStatus: sourceStatus.dexscreenerSolPairs,
-        freshnessMs: 0,
-        errorBudgetBurn: pairsResult.status === 'fulfilled' ? 0 : 1,
-      }),
-      jupiter: scoreSourceReliability({
-        ok: jupiterResult.status === 'fulfilled',
-        latencyMs: sourceLatencies.jupiter,
-        httpStatus: sourceStatus.jupiter,
-        freshnessMs: 0,
-        errorBudgetBurn: jupiterResult.status === 'fulfilled' ? 0 : 1,
-      }),
-      bluechipRegistry: 1,
-    };
-
-    await Promise.allSettled([
-      recordSourceHealth({
-        source: 'dexscreener:boosts',
-        checkedAt: nowIso,
-        ok: boostResult.status === 'fulfilled',
-        freshnessMs: 0,
-        latencyMs: sourceLatencies.dexscreenerBoosts,
-        httpStatus: sourceStatus.dexscreenerBoosts,
-        reliabilityScore: sourceReliability.dexscreenerBoosts,
-        errorBudgetBurn: boostResult.status === 'fulfilled' ? 0 : 1,
-        redundancyState: deriveRedundancyState(3),
-      }),
-      recordSourceHealth({
-        source: 'dexscreener:profiles',
-        checkedAt: nowIso,
-        ok: profileResult.status === 'fulfilled',
-        freshnessMs: 0,
-        latencyMs: sourceLatencies.dexscreenerProfiles,
-        httpStatus: sourceStatus.dexscreenerProfiles,
-        reliabilityScore: sourceReliability.dexscreenerProfiles,
-        errorBudgetBurn: profileResult.status === 'fulfilled' ? 0 : 1,
-        redundancyState: deriveRedundancyState(3),
-      }),
-      recordSourceHealth({
-        source: 'dexscreener:sol_pairs',
-        checkedAt: nowIso,
-        ok: pairsResult.status === 'fulfilled',
-        freshnessMs: 0,
-        latencyMs: sourceLatencies.dexscreenerSolPairs,
-        httpStatus: sourceStatus.dexscreenerSolPairs,
-        reliabilityScore: sourceReliability.dexscreenerSolPairs,
-        errorBudgetBurn: pairsResult.status === 'fulfilled' ? 0 : 1,
-        redundancyState: deriveRedundancyState(3),
-      }),
-      recordSourceHealth({
-        source: 'jupiter:launchpad',
-        checkedAt: nowIso,
-        ok: jupiterResult.status === 'fulfilled',
-        freshnessMs: 0,
-        latencyMs: sourceLatencies.jupiter,
-        httpStatus: sourceStatus.jupiter,
-        reliabilityScore: sourceReliability.jupiter,
-        errorBudgetBurn: jupiterResult.status === 'fulfilled' ? 0 : 1,
-        redundancyState: deriveRedundancyState(3),
-      }),
-      recordSourceHealth({
-        source: 'internal:bluechip_registry',
-        checkedAt: nowIso,
-        ok: true,
-        freshnessMs: 0,
-        latencyMs: 0,
-        httpStatus: 200,
-        reliabilityScore: sourceReliability.bluechipRegistry,
-        errorBudgetBurn: 0,
-        redundancyState: deriveRedundancyState(2),
-      }),
-    ]);
 
     // Launches mode: strict recency window and no bluechip registry carry-over.
     const launchFiltered = launchesOnly
@@ -694,7 +573,7 @@ export async function GET(request: Request) {
         price_usd: priceUsd,
         liquidity: liq,
         volume_24h: vol24,
-        logo_uri: safeImageUrl(iconUrl),
+        logo_uri: iconUrl,
         website,
         twitter,
         telegram,
@@ -711,54 +590,11 @@ export async function GET(request: Request) {
         buy_sell_ratio: Math.round(buySellRatio * 100) / 100,
         total_txns_1h: txnBuys + txnSells,
         dex_id: pair?.dexId || 'unknown',
-        provenance: buildDataPointProvenance({
-          source: boost.sourceTag === 'jupiter-launchpad' ? 'jupiter' : 'dexscreener',
-          fetchedAt: nowIso,
-          latencyMs: boost.sourceTag === 'jupiter-launchpad'
-            ? sourceLatencies.jupiter
-            : (boost.sourceTag === 'sol-pairs'
-              ? sourceLatencies.dexscreenerSolPairs
-              : (boost.sourceTag === 'profiles'
-                ? sourceLatencies.dexscreenerProfiles
-                : sourceLatencies.dexscreenerBoosts)),
-          httpStatus: boost.sourceTag === 'jupiter-launchpad' ? sourceStatus.jupiter : 200,
-          reliabilityScore: boost.sourceTag === 'jupiter-launchpad'
-            ? sourceReliability.jupiter
-            : (boost.sourceTag === 'sol-pairs'
-              ? sourceReliability.dexscreenerSolPairs
-              : (boost.sourceTag === 'profiles'
-                ? sourceReliability.dexscreenerProfiles
-                : sourceReliability.dexscreenerBoosts)),
-          raw: {
-            mint: boost.tokenAddress,
-            pairAddress: pair?.pairAddress || null,
-            sourceTag: boost.sourceTag || 'unknown',
-          },
-        }),
       };
     });
 
     // Sort by score descending
     graduations.sort((a, b) => b.score - a.score);
-
-    const manifest = buildDatasetManifestV2({
-      family: launchesOnly ? 'graduations_launches' : 'graduations',
-      surface: 'main',
-      timeRange: {
-        from: launchesOnly
-          ? new Date(Date.now() - maxLaunchAgeHours * 60 * 60 * 1000).toISOString()
-          : new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        to: nowIso,
-      },
-      records: graduations.slice(0, TARGET_FEED_SIZE).map((g) => ({
-        mint: g.mint,
-        symbol: g.symbol,
-        score: g.score,
-        source: g.source,
-        provenance: g.provenance,
-      })),
-    });
-    const manifestPersisted = await persistDatasetManifestV2(manifest).catch(() => null);
 
     // Cache the response so all concurrent users share this result
     const responseData = {
@@ -769,12 +605,9 @@ export async function GET(request: Request) {
         maxLaunchAgeHours: launchesOnly ? maxLaunchAgeHours : undefined,
         postLaunchFilter: launchesOnly ? launchFiltered.length : undefined,
         feedSize: Math.min(TARGET_FEED_SIZE, graduations.length),
-        datasetManifestId: manifest.datasetId,
-        datasetManifestSha256: manifest.sha256,
-        datasetManifestPath: manifestPersisted?.path || null,
       },
     };
-    await graduationCache.set(cacheKey, responseData, GRADUATION_TTL_MS);
+    graduationCache.set(cacheKey, responseData, GRADUATION_TTL_MS);
 
     return NextResponse.json(responseData, {
       headers: {

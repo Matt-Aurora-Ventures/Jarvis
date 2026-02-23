@@ -104,12 +104,12 @@ function SliderInput({
                     {icon}
                     <span className="font-medium">{label}</span>
                 </div>
-                <span className="text-sm font-mono text-theme-cyan">
+                <span className="text-sm font-mono text-accent-neon">
                     {unit === '$' ? `$${value.toLocaleString()}` : `${value}${unit}`}
                 </span>
             </div>
             {description && (
-                <p className="text-xs text-theme-muted">{description}</p>
+                <p className="text-xs text-text-muted">{description}</p>
             )}
             <input
                 type="range"
@@ -118,9 +118,9 @@ function SliderInput({
                 step={step}
                 value={value}
                 onChange={(e) => onChange(Number(e.target.value))}
-                className="w-full h-1 bg-theme-dark/50 rounded-lg appearance-none cursor-pointer accent-theme-cyan"
+                className="w-full h-1 bg-bg-secondary/50 rounded-lg appearance-none cursor-pointer accent-accent-neon"
             />
-            <div className="flex justify-between text-xs text-theme-muted">
+            <div className="flex justify-between text-xs text-text-muted">
                 <span>{unit === '$' ? `$${min.toLocaleString()}` : `${min}${unit}`}</span>
                 <span>{unit === '$' ? `$${max.toLocaleString()}` : `${max}${unit}`}</span>
             </div>
@@ -186,18 +186,18 @@ export function AlgoConfig() {
     return (
         <div className="card-glass p-4 space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-theme-border/30">
+            <div className="flex items-center justify-between pb-3 border-b border-border-primary/30">
                 <div className="flex items-center gap-2">
-                    <Sliders className="w-4 h-4 text-theme-cyan" />
+                    <Sliders className="w-4 h-4 text-accent-neon" />
                     <span className="font-display font-bold">ALGO CONFIGURATION</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <button
                         onClick={resetToDefaults}
-                        className="p-1.5 rounded hover:bg-theme-dark/50 transition-colors"
+                        className="p-1.5 rounded hover:bg-bg-secondary/50 transition-colors"
                         title="Reset to defaults"
                     >
-                        <RotateCcw className="w-4 h-4 text-theme-muted" />
+                        <RotateCcw className="w-4 h-4 text-text-muted" />
                     </button>
                     <button
                         onClick={saveParams}
@@ -206,7 +206,7 @@ export function AlgoConfig() {
                             flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-all
                             ${hasChanges
                                 ? 'bg-accent-neon text-black hover:bg-accent-neon/80'
-                                : 'bg-theme-dark/30 text-theme-muted cursor-not-allowed'}
+                                : 'bg-bg-secondary/30 text-text-muted cursor-not-allowed'}
                         `}
                     >
                         <Save className="w-3 h-3" />
@@ -217,7 +217,7 @@ export function AlgoConfig() {
 
             {/* Presets */}
             <div className="space-y-2">
-                <label className="text-xs font-mono text-theme-muted uppercase">Presets</label>
+                <label className="text-xs font-mono text-text-muted uppercase">Presets</label>
                 <div className="flex gap-2">
                     {PRESETS.map((preset) => (
                         <button
@@ -226,8 +226,8 @@ export function AlgoConfig() {
                             className={`
                                 flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all
                                 ${activePreset === preset.name
-                                    ? 'bg-theme-cyan text-black'
-                                    : 'bg-theme-dark/30 border border-theme-border/50 hover:border-theme-cyan'}
+                                    ? 'bg-accent-neon text-black'
+                                    : 'bg-bg-secondary/30 border border-border-primary/50 hover:border-accent-neon'}
                             `}
                         >
                             {preset.name}
@@ -235,7 +235,7 @@ export function AlgoConfig() {
                     ))}
                 </div>
                 {activePreset !== 'Custom' && (
-                    <p className="text-xs text-theme-muted">
+                    <p className="text-xs text-text-muted">
                         {PRESETS.find(p => p.name === activePreset)?.description}
                     </p>
                 )}
@@ -248,7 +248,7 @@ export function AlgoConfig() {
 
             {/* Sentiment Section */}
             <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-bold text-theme-muted">
+                <div className="flex items-center gap-2 text-sm font-bold text-text-muted">
                     <Zap className="w-4 h-4" />
                     SENTIMENT THRESHOLDS
                 </div>
@@ -286,7 +286,7 @@ export function AlgoConfig() {
 
             {/* Liquidity/Volume Section */}
             <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-bold text-theme-muted">
+                <div className="flex items-center gap-2 text-sm font-bold text-text-muted">
                     <TrendingUp className="w-4 h-4" />
                     VOLUME & LIQUIDITY
                 </div>
@@ -316,9 +316,9 @@ export function AlgoConfig() {
 
             {/* Graduation Section */}
             <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-bold text-theme-muted">
+                <div className="flex items-center gap-2 text-sm font-bold text-text-muted">
                     <Target className="w-4 h-4" />
-                    BAGS.FM GRADUATION
+                    DEGEN GRADUATION
                 </div>
 
                 <SliderInput
@@ -344,7 +344,7 @@ export function AlgoConfig() {
 
             {/* Risk Management Section */}
             <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-bold text-theme-muted">
+                <div className="flex items-center gap-2 text-sm font-bold text-text-muted">
                     <Shield className="w-4 h-4" />
                     RISK MANAGEMENT
                 </div>
@@ -381,14 +381,14 @@ export function AlgoConfig() {
             </div>
 
             {/* Live Preview */}
-            <div className="bg-theme-dark/30 rounded-lg p-4 border border-theme-border/30">
-                <div className="text-xs font-mono text-theme-muted mb-2">SIGNAL PREVIEW</div>
+            <div className="bg-bg-secondary/30 rounded-lg p-4 border border-border-primary/30">
+                <div className="text-xs font-mono text-text-muted mb-2">SIGNAL PREVIEW</div>
                 <div className="text-sm space-y-1">
                     <p>
-                        <span className="text-theme-green">BUY</span> when sentiment ≥ {params.sentimentBuyThreshold} and confidence ≥ {params.minConfidenceScore}
+                        <span className="text-accent-success">BUY</span> when sentiment ≥ {params.sentimentBuyThreshold} and confidence ≥ {params.minConfidenceScore}
                     </p>
                     <p>
-                        <span className="text-theme-red">SELL</span> when sentiment ≤ {params.sentimentSellThreshold}
+                        <span className="text-accent-error">SELL</span> when sentiment ≤ {params.sentimentSellThreshold}
                     </p>
                     <p>
                         <span className="text-accent-neon">SNIPE</span> graduations with score ≥ {params.graduationScoreCutoff} and liquidity ≥ ${params.minLiquidityUsd.toLocaleString()}

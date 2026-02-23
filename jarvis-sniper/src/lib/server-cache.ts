@@ -1,64 +1,75 @@
-import { createCacheProvider, type CacheProvider } from './cache-provider';
-
 /**
- * Legacy synchronous in-memory cache used by callsites that cannot switch to
- * async semantics in one migration.
+ * Simple in-memory server-side cache for API responses.
+ *
+ * Designed for single-process Next.js deployments with 50-100 concurrent users.
+ * All users share the same cached response, avoiding redundant upstream API calls.
+ *
+ * No Redis dependency — keeps deployment simple.
  */
+
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
 export class ServerCache<T> {
-  readonly mode = 'memory' as const;
-  private readonly store = new Map<string, { value: T; expiresAt: number }>();
+  private cache = new Map<string, CacheEntry<T>>();
+  private lastCleanup = Date.now();
+  private readonly cleanupIntervalMs = 60_000; // Run cleanup at most every 60s
 
-  constructor(_namespace: string = 'default') {}
-
+  /**
+   * Retrieve a cached value. Returns null if the key is missing or expired.
+   */
   get(key: string): T | null {
-    const item = this.store.get(key);
-    if (!item) return null;
-    if (Date.now() >= item.expiresAt) {
-      this.store.delete(key);
+    this.maybeCleanup();
+
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+
+    if (Date.now() >= entry.expiresAt) {
+      this.cache.delete(key);
       return null;
     }
-    return item.value;
+
+    return entry.data;
   }
 
+  /**
+   * Store a value with a time-to-live in milliseconds.
+   */
   set(key: string, data: T, ttlMs: number): void {
-    this.store.set(key, {
-      value: data,
-      expiresAt: Date.now() + Math.max(1, Math.floor(ttlMs || 0)),
+    this.cache.set(key, {
+      data,
+      expiresAt: Date.now() + ttlMs,
     });
   }
 
+  /**
+   * Immediately remove a cached entry.
+   */
   invalidate(key: string): void {
-    this.store.delete(key);
-  }
-}
-
-/**
- * Provider-backed async cache for distributed runtime paths.
- */
-export class AsyncServerCache<T> {
-  readonly mode: 'memory' | 'redis';
-  private readonly provider: CacheProvider<T>;
-
-  constructor(namespace: string = 'default') {
-    this.provider = createCacheProvider<T>({ namespace });
-    this.mode = this.provider.mode;
+    this.cache.delete(key);
   }
 
-  async get(key: string): Promise<T | null> {
-    return this.provider.get(key);
-  }
+  /**
+   * Periodic cleanup of expired entries to prevent unbounded memory growth.
+   * Runs at most once per cleanupIntervalMs.
+   */
+  private maybeCleanup(): void {
+    const now = Date.now();
+    if (now - this.lastCleanup < this.cleanupIntervalMs) return;
+    this.lastCleanup = now;
 
-  async set(key: string, data: T, ttlMs: number): Promise<void> {
-    await this.provider.set(key, data, ttlMs);
-  }
-
-  async invalidate(key: string): Promise<void> {
-    await this.provider.invalidate(key);
+    for (const [key, entry] of this.cache) {
+      if (now >= entry.expiresAt) {
+        this.cache.delete(key);
+      }
+    }
   }
 }
 
 /** Shared cache for graduation feed data (TTL: 5 seconds). */
-export const graduationCache = new AsyncServerCache<any>('graduation-feed');
+export const graduationCache = new ServerCache<any>();
 
 /** Shared cache for quote responses (TTL: 3 seconds). */
-export const quoteCache = new AsyncServerCache<any>('quote-feed');
+export const quoteCache = new ServerCache<any>();

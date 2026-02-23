@@ -1,58 +1,75 @@
 'use client';
 
-import { SentimentHub } from '@/components/features/SentimentHub';
 import { useMarketData } from '@/hooks/useMarketData';
-import { useSentimentData } from '@/hooks/useSentimentData';
-import { MarketChart } from '@/components/features/MarketChart';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { PriceChart } from '@/components/features/PriceChart';
 import { TradePanel } from '@/components/features/TradePanel';
 import { DashboardGrid } from '@/components/features/DashboardGrid';
-import { NeuralLattice } from '@/components/visuals/NeuralLattice';
-import { TradingGuard, ConfidenceBadge } from '@/components/features/TradingGuard';
-import { SentimentDisplay } from '@/components/features/StatGlyph';
-import { AIPicks } from '@/components/features/AIPicks';
 import { PerformanceTracker } from '@/components/features/PerformanceTracker';
-import { QuickBuyTable } from '@/components/features/QuickBuyTable';
 import { AIMarketReport } from '@/components/features/AIMarketReport';
 import { AIConvictionPicks } from '@/components/features/AIConvictionPicks';
 import { BagsTop15 } from '@/components/features/BagsTop15';
-import { SentimentHubActions } from '@/components/features/SentimentHubActions';
-import { ModelSwitcher } from '@/components/features/ModelSwitcher';
-import { CollapsiblePanel } from '@/components/ui/CollapsiblePanel';
+import { XStocksPanel } from '@/components/features/xStocksPanel';
 import { GrokLiveBar } from '@/components/features/GrokLiveBar';
+import { TokenSearch } from '@/components/features/TokenSearch';
+import { SLTPMonitor } from '@/components/features/SLTPMonitor';
+import { PositionsPanel } from '@/components/features/PositionsPanel';
+import { AITradeSignals } from '@/components/features/AITradeSignals';
+import { TrendingTokens } from '@/components/features/TrendingTokens';
+import { WatchlistPanel } from '@/components/features/WatchlistPanel';
+import { TokenDrawer } from '@/components/features/TokenDrawer';
+import { TokenCompare } from '@/components/features/TokenCompare';
+import { MarketNewsPanel } from '@/components/features/MarketNewsPanel';
 import { useGrokLive } from '@/hooks/useGrokLive';
-import {
-  Brain,
-  BarChart3,
-  TrendingUp,
-  Zap,
-  Target,
-  Newspaper,
-  Activity,
-  Crosshair,
-  Rocket,
-  LineChart,
-} from 'lucide-react';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useTokenStore } from '@/stores/useTokenStore';
+import { POOLS } from '@/lib/chart-data';
+
+// Default SOL pool address used when no token is selected
+const DEFAULT_POOL = POOLS.SOL;
 
 export default function Home() {
-  const { data: marketData, loading } = useMarketData();
-  const { marketRegime, stats } = useSentimentData({ autoRefresh: true, refreshInterval: 5 * 60 * 1000 });
+  useMarketData();
 
   const {
-    scores: grokScores,
     countdown,
     isRefreshing,
     lastRefreshed,
     budgetStatus,
+    scores: grokScores,
     forceRefresh,
   } = useGrokLive({ enabled: true });
 
+  // Global token selection from TokenSearch
+  const selectedToken = useTokenStore((s) => s.selectedToken);
+
+  // Derive pool address and symbol from selected token (default to SOL)
+  const activePoolAddress = selectedToken?.poolAddress ?? DEFAULT_POOL;
+  const activeTokenSymbol = selectedToken?.symbol ?? 'SOL';
+
+  // Global keyboard shortcuts for power users
+  useKeyboardShortcuts({
+    onSearch: () => {
+      document.getElementById('token-search-input')?.focus();
+    },
+  });
+
   return (
-    <div className="min-h-screen flex flex-col relative overflow-hidden font-sans">
-      <NeuralLattice />
+    <div className="min-h-screen flex flex-col">
+      {/* Ambient Background */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div className="ambient-orb absolute top-1/4 left-1/4 w-96 h-96 bg-accent-neon/[0.04] rounded-full blur-[128px]" />
+        <div className="ambient-orb-2 absolute bottom-1/3 right-1/4 w-80 h-80 bg-accent-neon/[0.03] rounded-full blur-[128px]" />
+        <div className="ambient-orb-3 absolute top-2/3 left-1/2 w-64 h-64 bg-accent-success/[0.02] rounded-full blur-[128px]" />
+      </div>
 
-      <main className="flex-1 flex flex-col pt-[68px] pb-2 gap-3 relative z-10 w-full px-3 lg:px-4">
+      <SLTPMonitor />
 
-        {/* Grok 4.1 Live Engine Bar */}
+      <div className="flex-1 pt-[100px] pb-4 px-2 sm:px-3 lg:px-6 max-w-[1920px] mx-auto w-full">
+        {/* Token Search */}
+        <TokenSearch />
+
+        {/* Grok Live Engine Bar */}
         <GrokLiveBar
           countdown={countdown}
           isRefreshing={isRefreshing}
@@ -62,148 +79,61 @@ export default function Home() {
           onRefresh={forceRefresh}
         />
 
-        {/* Stats Row - Compact Metrics */}
-        <section className="w-full">
-          <DashboardGrid />
-        </section>
-
-        {/* Main 3-Column Trading Layout */}
-        <section className="grid grid-cols-1 xl:grid-cols-[280px_1fr_320px] gap-3 w-full flex-1">
-
-          {/* LEFT COLUMN: Signals + Market Overview */}
-          <div className="flex flex-col gap-3 max-h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar pr-1">
-
-            {/* Trading Guard */}
-            <TradingGuard symbol="SOL" />
-
-            {/* Live Signals */}
-            <CollapsiblePanel
-              title="LIVE SIGNALS"
-              icon={<Activity className="w-4 h-4" />}
-              badge="LIVE"
-              defaultExpanded={true}
-            >
-              {loading ? (
-                <div className="text-center py-8 font-mono text-text-muted animate-pulse text-sm">
-                  INITIALIZING BAGS.FM UPLINK...
-                </div>
-              ) : (
-                <SentimentHub data={marketData} />
-              )}
-            </CollapsiblePanel>
-
-            {/* Market Sentiment */}
-            <CollapsiblePanel
-              title="SENTIMENT"
-              icon={<Brain className="w-4 h-4" />}
-              defaultExpanded={true}
-            >
-              <SentimentDisplay
-                overall={Math.round(stats.avgBuySellRatio * 25)}
-                social={Math.min(100, stats.bullishCount * 10)}
-                market={marketRegime.solChange24h > 0 ? Math.min(100, 50 + marketRegime.solChange24h * 5) : Math.max(0, 50 + marketRegime.solChange24h * 5)}
-                technical={Math.round(stats.avgBuySellRatio * 20)}
-              />
-            </CollapsiblePanel>
-
-            {/* Quick Buy */}
-            <CollapsiblePanel
-              title="QUICK BUY"
-              icon={<Zap className="w-4 h-4" />}
-              defaultExpanded={false}
-            >
-              <QuickBuyTable />
-            </CollapsiblePanel>
-
-            {/* Sentiment Actions */}
-            <CollapsiblePanel
-              title="ACTIONS"
-              icon={<Crosshair className="w-4 h-4" />}
-              defaultExpanded={false}
-            >
-              <SentimentHubActions />
-            </CollapsiblePanel>
+        {/* Main 2-column: Content + Trade */}
+        <section className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 mt-4">
+          {/* Left: Chart + Scrollable Content (buyable items up, strategies down) */}
+          <div className="flex flex-col gap-4">
+            <ErrorBoundary name="Price Chart">
+              <PriceChart poolAddress={activePoolAddress} tokenSymbol={activeTokenSymbol} />
+            </ErrorBoundary>
+            <ErrorBoundary name="Trending Tokens">
+              <TrendingTokens />
+            </ErrorBoundary>
+            <ErrorBoundary name="AI Conviction Picks">
+              <AIConvictionPicks />
+            </ErrorBoundary>
+            <ErrorBoundary name="Market News">
+              <MarketNewsPanel />
+            </ErrorBoundary>
+            <ErrorBoundary name="Bags Top 15">
+              <BagsTop15 />
+            </ErrorBoundary>
+            <ErrorBoundary name="Dashboard">
+              <DashboardGrid />
+            </ErrorBoundary>
+            <ErrorBoundary name="Positions">
+              <PositionsPanel />
+            </ErrorBoundary>
+            <ErrorBoundary name="XStocks">
+              <XStocksPanel />
+            </ErrorBoundary>
+            <ErrorBoundary name="AI Market Report">
+              <AIMarketReport />
+            </ErrorBoundary>
+            <ErrorBoundary name="AI Trade Signals">
+              <AITradeSignals poolAddress={activePoolAddress} tokenSymbol={activeTokenSymbol} />
+            </ErrorBoundary>
+            <ErrorBoundary name="Token Compare">
+              <TokenCompare />
+            </ErrorBoundary>
           </div>
 
-          {/* CENTER COLUMN: Chart + AI Intelligence */}
-          <div className="flex flex-col gap-3">
-            {/* Main Chart */}
-            <div className="card-glass p-0 overflow-hidden min-h-[420px] relative">
-              <div className="absolute top-3 left-3 z-10 flex gap-3 items-center">
-                <div className="flex flex-col">
-                  <span className="font-display font-bold text-xl text-text-primary">SOL/USDC</span>
-                  <span className="font-mono text-[10px] text-text-muted">JUPITER AGGREGATOR</span>
-                </div>
-                <div className="h-8 w-[1px] bg-border-primary" />
-                <div className="flex flex-col">
-                  <span className="font-mono font-bold text-accent-neon text-sm">
-                    {marketRegime.solPrice > 0 ? `$${marketRegime.solPrice.toFixed(2)}` : '...'}
-                  </span>
-                  <span className={`font-mono text-[10px] ${marketRegime.solChange24h >= 0 ? 'text-accent-success' : 'text-accent-error'}`}>
-                    {marketRegime.solChange24h >= 0 ? '+' : ''}{marketRegime.solChange24h.toFixed(1)}%
-                  </span>
-                </div>
-                <ConfidenceBadge symbol="SOL" />
-              </div>
-              <MarketChart />
-            </div>
-
-            {/* AI Intelligence Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <CollapsiblePanel
-                title="AI MARKET REPORT"
-                icon={<Newspaper className="w-4 h-4" />}
-                badge="GROK"
-                defaultExpanded={true}
-              >
-                <AIMarketReport />
-              </CollapsiblePanel>
-
-              <CollapsiblePanel
-                title="CONVICTION PICKS"
-                icon={<Target className="w-4 h-4" />}
-                badge={`${grokScores.size}`}
-                defaultExpanded={true}
-              >
-                <AIConvictionPicks />
-              </CollapsiblePanel>
-            </div>
-
-            {/* Bags.fm + AI Picks Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <CollapsiblePanel
-                title="BAGS.FM TOP LAUNCHES"
-                icon={<Rocket className="w-4 h-4" />}
-                badge="LIVE"
-                defaultExpanded={false}
-              >
-                <BagsTop15 />
-              </CollapsiblePanel>
-
-              <CollapsiblePanel
-                title="AI PICKS"
-                icon={<LineChart className="w-4 h-4" />}
-                defaultExpanded={false}
-              >
-                <AIPicks />
-              </CollapsiblePanel>
-            </div>
-          </div>
-
-          {/* RIGHT COLUMN: Trade Execution + Performance */}
-          <div className="flex flex-col gap-3 max-h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar pl-1">
-            <TradePanel />
-            <PerformanceTracker />
-            <CollapsiblePanel
-              title="AI MODEL"
-              icon={<Brain className="w-4 h-4" />}
-              defaultExpanded={false}
-            >
-              <ModelSwitcher />
-            </CollapsiblePanel>
+          {/* Right: Trade Panel (sticky on desktop, max-width constrained on mobile) */}
+          <div className="lg:sticky lg:top-[104px] lg:self-start flex flex-col gap-4 max-w-md lg:max-w-none mx-auto lg:mx-0 w-full">
+            <ErrorBoundary name="Trade Panel">
+              <TradePanel />
+            </ErrorBoundary>
+            <ErrorBoundary name="Performance Tracker">
+              <PerformanceTracker />
+            </ErrorBoundary>
+            <ErrorBoundary name="Watchlist">
+              <WatchlistPanel />
+            </ErrorBoundary>
           </div>
         </section>
-      </main>
+      </div>
+
+      <TokenDrawer />
     </div>
   );
 }

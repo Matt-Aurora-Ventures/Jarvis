@@ -1,0 +1,37 @@
+{
+  "algo_id": "bags_value",
+  "total_trades": 40,
+  "wins": 21,
+  "losses": 19,
+  "win_rate": 52.5,
+  "avg_win_pct": 8.22,
+  "avg_loss_pct": -6.37,
+  "max_win_pct": 8.51,
+  "max_loss_pct": -6.37,
+  "avg_trade_duration_hours": 0.58,
+  "median_trade_duration_hours": 0.25,
+  "profit_factor": 1.43,
+  "expectancy_per_trade_pct": 1.29,
+  "total_return_pct": 51.49,
+  "sharpe_ratio": 2.78,
+  "max_drawdown_pct": -2.52,
+  "dual_trigger_bars": 3,
+  "expiry_exits_below_entry": 0,
+  "exit_distribution": {
+    "sl_hit": 19,
+    "tp_hit": 20,
+    "trail_stop": 0,
+    "expired": 1,
+    "end_of_data": 0
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-02",
+      "trades": 40,
+      "pnl_pct": 51.49,
+      "win_rate": 52.5
+    }
+  ],
+  "best_day": "2026-02-15",
+  "worst_day": "2026-02-13"
+}

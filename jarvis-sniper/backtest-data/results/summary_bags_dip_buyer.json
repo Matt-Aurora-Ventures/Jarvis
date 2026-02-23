@@ -1,0 +1,37 @@
+{
+  "algo_id": "bags_dip_buyer",
+  "total_trades": 65,
+  "wins": 31,
+  "losses": 34,
+  "win_rate": 47.7,
+  "avg_win_pct": 16.88,
+  "avg_loss_pct": -8.79,
+  "max_win_pct": 23.39,
+  "max_loss_pct": -9.35,
+  "avg_trade_duration_hours": 3.18,
+  "median_trade_duration_hours": 1.83,
+  "profit_factor": 1.75,
+  "expectancy_per_trade_pct": 3.45,
+  "total_return_pct": 224.55,
+  "sharpe_ratio": 3.79,
+  "max_drawdown_pct": -4.24,
+  "dual_trigger_bars": 2,
+  "expiry_exits_below_entry": 5,
+  "exit_distribution": {
+    "sl_hit": 27,
+    "tp_hit": 21,
+    "trail_stop": 0,
+    "expired": 14,
+    "end_of_data": 3
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-02",
+      "trades": 65,
+      "pnl_pct": 224.55,
+      "win_rate": 47.7
+    }
+  ],
+  "best_day": "2026-02-13",
+  "worst_day": "2026-02-15"
+}

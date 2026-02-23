@@ -159,22 +159,22 @@ export interface SentimentDashboardData {
 export const GRADE_COLORS: Record<SentimentGrade, { text: string; bg: string; border: string }> = {
     'A+': { text: 'text-emerald-400', bg: 'bg-emerald-500/20', border: 'border-emerald-500/40' },
     'A': { text: 'text-emerald-400', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30' },
-    'A-': { text: 'text-green-400', bg: 'bg-green-500/15', border: 'border-green-500/30' },
+    'A-': { text: 'text-accent-success', bg: 'bg-accent-success/15', border: 'border-accent-success/30' },
     'B+': { text: 'text-lime-400', bg: 'bg-lime-500/15', border: 'border-lime-500/30' },
-    'B': { text: 'text-yellow-400', bg: 'bg-yellow-500/15', border: 'border-yellow-500/30' },
-    'B-': { text: 'text-yellow-500', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
-    'C+': { text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-    'C': { text: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-    'C-': { text: 'text-orange-600', bg: 'bg-orange-600/10', border: 'border-orange-600/20' },
-    'D+': { text: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
-    'D': { text: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/20' },
-    'F': { text: 'text-red-600', bg: 'bg-red-600/15', border: 'border-red-600/30' },
+    'B': { text: 'text-text-muted', bg: 'bg-accent-warning/15', border: 'border-accent-warning/30' },
+    'B-': { text: 'text-text-muted', bg: 'bg-accent-warning/10', border: 'border-accent-warning/20' },
+    'C+': { text: 'text-accent-warning', bg: 'bg-accent-warning/10', border: 'border-accent-warning/20' },
+    'C': { text: 'text-accent-warning', bg: 'bg-accent-warning/10', border: 'border-accent-warning/20' },
+    'C-': { text: 'text-accent-warning', bg: 'bg-accent-warning/10', border: 'border-accent-warning/20' },
+    'D+': { text: 'text-accent-error', bg: 'bg-accent-error/10', border: 'border-accent-error/20' },
+    'D': { text: 'text-accent-error', bg: 'bg-accent-error/10', border: 'border-accent-error/20' },
+    'F': { text: 'text-accent-error', bg: 'bg-accent-error/15', border: 'border-accent-error/30' },
 };
 
 export const REGIME_COLORS: Record<RegimeTrend, { text: string; bg: string }> = {
     'BULLISH': { text: 'text-emerald-400', bg: 'bg-emerald-500/20' },
-    'NEUTRAL': { text: 'text-yellow-400', bg: 'bg-yellow-500/20' },
-    'BEARISH': { text: 'text-red-400', bg: 'bg-red-500/20' },
+    'NEUTRAL': { text: 'text-text-muted', bg: 'bg-accent-warning/20' },
+    'BEARISH': { text: 'text-accent-error', bg: 'bg-accent-error/20' },
 };
 
 export const ASSET_TYPE_LABELS: Record<AssetType, string> = {

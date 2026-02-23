@@ -118,8 +118,8 @@ export interface AutonomyAuditArtifact {
   createdAt: string;
   updatedAt: string;
   batchId?: string;
-  inputFileId?: string;
-  outputFileId?: string;
+  batchName?: string;
+  requestIds?: string[];
   matrixHash: string;
   responseHash?: string;
   decisionHash?: string;
@@ -133,7 +133,8 @@ export interface AutonomyState {
   pendingBatch?: {
     cycleId: string;
     batchId: string;
-    inputFileId?: string;
+    batchName?: string;
+    requestIds?: [string, string] | string[];
     model: string;
     submittedAt: string;
     matrix: AutonomyDecisionMatrix;
@@ -151,3 +152,38 @@ export interface AutonomyState {
   >;
 }
 
+// ============================================================================
+// Trade Telemetry (Client -> Server) for Autonomy / Backtests
+// ============================================================================
+
+export type TelemetryTradeSignerMode = 'session' | 'phantom';
+
+export interface TradeTelemetryIngest {
+  schemaVersion: 1;
+  positionId: string;
+  mint: string;
+  status: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' | 'closed';
+  symbol?: string;
+  walletAddress?: string;
+  strategyId?: string | null;
+  entrySource?: 'auto' | 'manual';
+  entryTime?: number;
+  exitTime?: number;
+  solInvested?: number;
+  exitSolReceived?: number | null;
+  pnlSol?: number;
+  pnlPercent?: number;
+  buyTxHash?: string | null;
+  sellTxHash?: string | null;
+  includedInStats?: boolean;
+  manualOnly?: boolean;
+  recoveredFrom?: string | null;
+  tradeSignerMode?: TelemetryTradeSignerMode;
+  sessionWalletPubkey?: string | null;
+  activePreset?: string | null;
+}
+
+export interface TradeTelemetryRecord extends TradeTelemetryIngest {
+  receivedAt: string;
+  source: 'client';
+}

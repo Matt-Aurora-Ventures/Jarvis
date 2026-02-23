@@ -29,16 +29,11 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: jarvis-sniper/package.json
+          cache-dependency-path: jarvis-sniper/package-lock.json
 
       - name: Install
         working-directory: jarvis-sniper
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install --no-audit --no-fund
-          fi
+        run: npm ci
 
       - name: Test
         working-directory: jarvis-sniper

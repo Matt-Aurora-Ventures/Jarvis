@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-02-16T17:24:38.341Z",
+  "requests_total": 0,
+  "coverage_complete": false,
+  "required_providers": [
+    "gecko",
+    "dexscreener",
+    "jupiter",
+    "birdeye",
+    "pumpfun",
+    "helius"
+  ],
+  "missing_providers": [
+    "gecko",
+    "dexscreener",
+    "jupiter",
+    "birdeye",
+    "pumpfun",
+    "helius"
+  ],
+  "min_requests_per_provider": 1,
+  "requests_by_provider": {},
+  "status_distribution": {},
+  "avg_duration_ms_by_provider": {},
+  "universe_tokens_by_source": {
+    "geckoterminal": 623,
+    "dexscreener": 753
+  }
+}

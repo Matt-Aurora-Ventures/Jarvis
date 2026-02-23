@@ -1,14 +1,10 @@
 import { NextResponse } from 'next/server';
 import { XSTOCKS, PRESTOCKS, INDEXES, type TokenizedEquity } from '@/lib/xstocks-data';
-import { AsyncServerCache } from '@/lib/server-cache';
+import { ServerCache } from '@/lib/server-cache';
 import { getCachedTVData, XSTOCKS_TO_TV_SYMBOL } from '@/lib/tv-screener';
 import { calcTVEnhancedScoreDetailed } from '@/lib/tv-scoring';
 import type { TVStockData } from '@/lib/tv-screener';
 import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
-import { buildDataPointProvenance } from '@/lib/data-plane/provenance';
-import { deriveRedundancyState, scoreSourceReliability } from '@/lib/data-plane/reliability';
-import { recordSourceHealth } from '@/lib/data-plane/health-store';
-import { buildDatasetManifestV2, persistDatasetManifestV2 } from '@/lib/data-plane/manifest-v2';
 
 /**
  * xStocks / PreStocks / Indexes API route
@@ -26,7 +22,7 @@ import { buildDatasetManifestV2, persistDatasetManifestV2 } from '@/lib/data-pla
 const DEXSCREENER_TOKENS = 'https://api.dexscreener.com/tokens/v1/solana';
 
 // 30-second cache per category
-const xstocksCache = new AsyncServerCache<any>('xstocks-feed');
+const xstocksCache = new ServerCache<any>();
 const CACHE_TTL_MS = 30_000;
 
 /** Fetch with timeout to prevent hanging */
@@ -163,7 +159,7 @@ export async function GET(request: Request) {
   try {
     // Rate limit check
     const ip = getClientIp(request);
-    const limit = await apiRateLimiter.check(ip);
+    const limit = apiRateLimiter.check(ip);
     if (!limit.allowed) {
       return NextResponse.json(
         { graduations: [], error: 'Rate limit exceeded' },
@@ -187,7 +183,7 @@ export async function GET(request: Request) {
 
     // Check cache
     const cacheKey = `xstocks:${category.toUpperCase()}`;
-    const cached = await xstocksCache.get(cacheKey);
+    const cached = xstocksCache.get(cacheKey);
     if (cached) {
       return NextResponse.json(cached, {
         headers: {
@@ -201,20 +197,13 @@ export async function GET(request: Request) {
     // Batch fetch pair data from DexScreener (max 30 addresses per request)
     const pairsByMint = new Map<string, any>();
     const mintAddresses = tokens.map(t => t.mintAddress);
-    const dexFetchStartedAt = Date.now();
-    let dexLatencyMsTotal = 0;
-    let dexCalls = 0;
-    let dexFailures = 0;
 
     // Split into chunks of 30
     for (let i = 0; i < mintAddresses.length; i += 30) {
       const chunk = mintAddresses.slice(i, i + 30);
       const addresses = chunk.join(',');
-      const chunkStartedAt = Date.now();
       try {
         const res = await fetchWithTimeout(`${DEXSCREENER_TOKENS}/${addresses}`);
-        dexCalls += 1;
-        dexLatencyMsTotal += Date.now() - chunkStartedAt;
         if (res.ok) {
           const pairs: any[] = await res.json();
           for (const pair of pairs) {
@@ -226,13 +215,8 @@ export async function GET(request: Request) {
               pairsByMint.set(mint, { ...pair, _liq: liq });
             }
           }
-        } else {
-          dexFailures += 1;
         }
       } catch {
-        dexCalls += 1;
-        dexFailures += 1;
-        dexLatencyMsTotal += Date.now() - chunkStartedAt;
         // Continue with partial data if one chunk fails
       }
     }
@@ -246,28 +230,6 @@ export async function GET(request: Request) {
     }
 
     // Map tokens to BagsGraduation format
-    const nowIso = new Date().toISOString();
-    const dexLatencyMs = dexCalls > 0 ? Math.round(dexLatencyMsTotal / dexCalls) : (Date.now() - dexFetchStartedAt);
-    const dexOk = dexCalls === 0 ? true : dexFailures < dexCalls;
-    const dexReliability = scoreSourceReliability({
-      ok: dexOk,
-      latencyMs: dexLatencyMs,
-      httpStatus: dexOk ? 200 : 500,
-      freshnessMs: 0,
-      errorBudgetBurn: dexCalls > 0 ? (dexFailures / dexCalls) : 0,
-    });
-    await recordSourceHealth({
-      source: 'dexscreener:xstocks',
-      checkedAt: nowIso,
-      ok: dexOk,
-      freshnessMs: 0,
-      latencyMs: dexLatencyMs,
-      httpStatus: dexOk ? 200 : 500,
-      reliabilityScore: dexReliability,
-      errorBudgetBurn: dexCalls > 0 ? (dexFailures / dexCalls) : 0,
-      redundancyState: deriveRedundancyState(2),
-    });
-
     const graduations = tokens.map(token => {
       const pair = pairsByMint.get(token.mintAddress);
       const tvTicker = XSTOCKS_TO_TV_SYMBOL[token.ticker];
@@ -305,18 +267,6 @@ export async function GET(request: Request) {
         tv_momentum: scoreDetails.momentum,
         tv_volume_confirmation: scoreDetails.volumeConfirmation,
         tv_base_score: scoreDetails.baseEquityScore,
-        provenance: buildDataPointProvenance({
-          source: 'dexscreener',
-          fetchedAt: nowIso,
-          latencyMs: dexLatencyMs,
-          httpStatus: dexOk ? 200 : 500,
-          reliabilityScore: dexReliability,
-          raw: {
-            mint: token.mintAddress,
-            pairAddress: pair?.pairAddress || null,
-            category: token.category,
-          },
-        }),
       };
     });
 
@@ -324,36 +274,8 @@ export async function GET(request: Request) {
     // Sort by score descending (liquidity is not a signal for tokenized equities)
     graduations.sort((a, b) => (b.score - a.score) || (b.volume_24h - a.volume_24h));
 
-    const manifest = buildDatasetManifestV2({
-      family: `xstocks_${category.toLowerCase()}`,
-      surface: 'tradfi',
-      timeRange: {
-        from: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        to: nowIso,
-      },
-      records: graduations.map((g) => ({
-        mint: g.mint,
-        symbol: g.symbol,
-        score: g.score,
-        source: g.source,
-        provenance: g.provenance,
-      })),
-    });
-    const manifestPersisted = await persistDatasetManifestV2(manifest).catch(() => null);
-
-    const responseData = {
-      graduations,
-      meta: {
-        category: category.toUpperCase(),
-        datasetManifestId: manifest.datasetId,
-        datasetManifestSha256: manifest.sha256,
-        datasetManifestPath: manifestPersisted?.path || null,
-        sourceReliability: {
-          dexscreener: dexReliability,
-        },
-      },
-    };
-    await xstocksCache.set(cacheKey, responseData, CACHE_TTL_MS);
+    const responseData = { graduations };
+    xstocksCache.set(cacheKey, responseData, CACHE_TTL_MS);
 
     return NextResponse.json(responseData, {
       headers: {

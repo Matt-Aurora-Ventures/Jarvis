@@ -292,11 +292,11 @@ export function PositionManager() {
     return (
         <div className="card-glass overflow-hidden">
             {/* Header */}
-            <div className="p-4 border-b border-theme-border/30">
+            <div className="p-4 border-b border-border-primary/30">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-theme-cyan/20 flex items-center justify-center">
-                            <Briefcase className="w-5 h-5 text-theme-cyan" />
+                        <div className="w-10 h-10 rounded-xl bg-accent-neon/20 flex items-center justify-center">
+                            <Briefcase className="w-5 h-5 text-accent-neon" />
                         </div>
                         <div>
                             <h3 className="font-display font-bold text-lg text-text-primary">
@@ -313,7 +313,7 @@ export function PositionManager() {
                         <button
                             onClick={handleRefresh}
                             disabled={refreshing}
-                            className="p-2 rounded-lg hover:bg-theme-dark/50 transition-colors"
+                            className="p-2 rounded-lg hover:bg-bg-secondary/50 transition-colors"
                         >
                             <RefreshCw className={`w-4 h-4 text-text-muted ${refreshing ? 'animate-spin' : ''}`} />
                         </button>
@@ -323,7 +323,7 @@ export function PositionManager() {
                             onClick={() => setShowBulkActions(!showBulkActions)}
                             className={`
                                 p-2 rounded-lg transition-colors
-                                ${showBulkActions ? 'bg-accent-neon/20 text-accent-neon' : 'hover:bg-theme-dark/50 text-text-muted'}
+                                ${showBulkActions ? 'bg-accent-neon/20 text-accent-neon' : 'hover:bg-bg-secondary/50 text-text-muted'}
                             `}
                         >
                             <Settings2 className="w-4 h-4" />
@@ -333,23 +333,23 @@ export function PositionManager() {
 
                 {/* Portfolio Stats */}
                 <div className="grid grid-cols-4 gap-2 mt-4">
-                    <div className="p-2 rounded-lg bg-theme-dark/30 text-center">
+                    <div className="p-2 rounded-lg bg-bg-secondary/30 text-center">
                         <p className="text-[10px] text-text-muted">TOTAL P&L</p>
                         <p className={`font-mono font-bold ${stats.totalPnl >= 0 ? 'text-accent-success' : 'text-accent-danger'}`}>
                             {stats.totalPnl >= 0 ? '+' : ''}{stats.totalPnl.toFixed(2)}
                         </p>
                     </div>
-                    <div className="p-2 rounded-lg bg-theme-dark/30 text-center">
+                    <div className="p-2 rounded-lg bg-bg-secondary/30 text-center">
                         <p className="text-[10px] text-text-muted">AVG P&L</p>
                         <p className={`font-mono font-bold ${stats.avgPnl >= 0 ? 'text-accent-success' : 'text-accent-danger'}`}>
                             {stats.avgPnl >= 0 ? '+' : ''}{stats.avgPnl.toFixed(1)}%
                         </p>
                     </div>
-                    <div className="p-2 rounded-lg bg-theme-dark/30 text-center">
+                    <div className="p-2 rounded-lg bg-bg-secondary/30 text-center">
                         <p className="text-[10px] text-text-muted">WINNERS</p>
                         <p className="font-mono font-bold text-accent-success">{stats.winners}</p>
                     </div>
-                    <div className="p-2 rounded-lg bg-theme-dark/30 text-center">
+                    <div className="p-2 rounded-lg bg-bg-secondary/30 text-center">
                         <p className="text-[10px] text-text-muted">LOSERS</p>
                         <p className="font-mono font-bold text-accent-danger">{stats.losers}</p>
                     </div>
@@ -357,7 +357,7 @@ export function PositionManager() {
 
                 {/* Bulk Actions Panel */}
                 {showBulkActions && (
-                    <div className="mt-4 p-3 rounded-lg bg-theme-dark/50 border border-theme-border/30">
+                    <div className="mt-4 p-3 rounded-lg bg-bg-secondary/50 border border-border-primary/30">
                         <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
                                 <button
@@ -399,7 +399,7 @@ export function PositionManager() {
                             <button
                                 onClick={closeAllPositions}
                                 disabled={!connected}
-                                className="px-3 py-1.5 rounded text-xs font-mono bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 flex items-center gap-1"
+                                className="px-3 py-1.5 rounded text-xs font-mono bg-accent-error/10 text-accent-error border border-accent-error/30 hover:bg-accent-error/20 flex items-center gap-1"
                             >
                                 <Trash2 className="w-3 h-3" />
                                 Close All
@@ -419,7 +419,7 @@ export function PositionManager() {
                                     px-3 py-1 rounded text-xs font-mono transition-all
                                     ${filterProfit === filter
                                         ? 'bg-accent-neon/20 text-accent-neon'
-                                        : 'bg-theme-dark/30 text-text-muted hover:bg-theme-dark/50'}
+                                        : 'bg-bg-secondary/30 text-text-muted hover:bg-bg-secondary/50'}
                                 `}
                             >
                                 {filter.charAt(0).toUpperCase() + filter.slice(1)}
@@ -435,8 +435,8 @@ export function PositionManager() {
                                 className={`
                                     px-3 py-1 rounded text-xs font-mono transition-all
                                     ${sortBy === sort
-                                        ? 'bg-theme-cyan/20 text-theme-cyan'
-                                        : 'bg-theme-dark/30 text-text-muted hover:bg-theme-dark/50'}
+                                        ? 'bg-accent-neon/20 text-accent-neon'
+                                        : 'bg-bg-secondary/30 text-text-muted hover:bg-bg-secondary/50'}
                                 `}
                             >
                                 {sort.toUpperCase()}
@@ -522,8 +522,8 @@ function PositionCard({
 
     return (
         <div className={`
-            border-b border-theme-border/20 transition-all
-            ${selected ? 'bg-accent-neon/5' : 'hover:bg-theme-dark/20'}
+            border-b border-border-primary/20 transition-all
+            ${selected ? 'bg-accent-neon/5' : 'hover:bg-bg-secondary/20'}
             ${tpReached ? 'bg-accent-success/5' : ''}
             ${slReached ? 'bg-accent-danger/5' : ''}
         `}>
@@ -542,7 +542,7 @@ function PositionCard({
                         w-5 h-5 rounded border-2 flex items-center justify-center transition-all
                         ${selected
                             ? 'bg-accent-neon border-accent-neon'
-                            : 'border-theme-border hover:border-accent-neon/50'}
+                            : 'border-border-primary hover:border-accent-neon/50'}
                     `}
                 >
                     {selected && <CheckCircle className="w-3 h-3 text-black" />}
@@ -550,7 +550,7 @@ function PositionCard({
 
                 {/* Token Info */}
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-theme-dark flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-bg-secondary flex items-center justify-center shrink-0">
                         <span className="font-bold">{position.symbol[0]}</span>
                     </div>
                     <div className="min-w-0">
@@ -605,11 +605,11 @@ function PositionCard({
                 <div className="px-4 pb-4 space-y-3">
                     {/* Entry vs Current */}
                     <div className="grid grid-cols-2 gap-3">
-                        <div className="p-2 rounded bg-theme-dark/30">
+                        <div className="p-2 rounded bg-bg-secondary/30">
                             <p className="text-[10px] text-text-muted">ENTRY</p>
                             <p className="font-mono text-sm text-text-primary">${position.entryPrice.toFixed(6)}</p>
                         </div>
-                        <div className="p-2 rounded bg-theme-dark/30">
+                        <div className="p-2 rounded bg-bg-secondary/30">
                             <p className="text-[10px] text-text-muted">CURRENT</p>
                             <p className="font-mono text-sm text-text-primary">${position.currentPrice.toFixed(6)}</p>
                         </div>
@@ -624,7 +624,7 @@ function PositionCard({
                                     type="number"
                                     value={position.tp}
                                     onChange={(e) => onUpdateTPSL(parseInt(e.target.value) || 0, position.sl)}
-                                    className="w-16 px-2 py-1 rounded bg-theme-dark/50 text-accent-success font-mono text-sm border-none outline-none"
+                                    className="w-16 px-2 py-1 rounded bg-bg-secondary/50 text-accent-success font-mono text-sm border-none outline-none"
                                 />
                                 <span className="text-xs text-accent-success">%</span>
                                 {tpReached && <CheckCircle className="w-4 h-4 text-accent-success" />}
@@ -637,7 +637,7 @@ function PositionCard({
                                     type="number"
                                     value={position.sl}
                                     onChange={(e) => onUpdateTPSL(position.tp, parseInt(e.target.value) || 0)}
-                                    className="w-16 px-2 py-1 rounded bg-theme-dark/50 text-accent-danger font-mono text-sm border-none outline-none"
+                                    className="w-16 px-2 py-1 rounded bg-bg-secondary/50 text-accent-danger font-mono text-sm border-none outline-none"
                                 />
                                 <span className="text-xs text-accent-danger">%</span>
                                 {slReached && <AlertTriangle className="w-4 h-4 text-accent-danger" />}
@@ -646,9 +646,9 @@ function PositionCard({
                     </div>
 
                     {/* Sentiment at Entry */}
-                    <div className="flex items-center justify-between p-2 rounded bg-theme-dark/30">
+                    <div className="flex items-center justify-between p-2 rounded bg-bg-secondary/30">
                         <span className="text-xs text-text-muted">Entry Sentiment</span>
-                        <span className={`font-mono text-sm ${position.sentiment >= 60 ? 'text-accent-success' : position.sentiment >= 40 ? 'text-yellow-400' : 'text-accent-danger'}`}>
+                        <span className={`font-mono text-sm ${position.sentiment >= 60 ? 'text-accent-success' : position.sentiment >= 40 ? 'text-text-muted' : 'text-accent-danger'}`}>
                             {position.sentiment}
                         </span>
                     </div>
@@ -663,10 +663,10 @@ function PositionCard({
                                 className={`
                                     flex-1 py-2 rounded-lg font-mono text-sm font-bold transition-all
                                     ${executing
-                                        ? 'bg-theme-dark/50 text-text-muted'
+                                        ? 'bg-bg-secondary/50 text-text-muted'
                                         : pct === 100
                                             ? 'bg-accent-danger/20 text-accent-danger hover:bg-accent-danger/30'
-                                            : 'bg-theme-dark/50 text-text-primary hover:bg-theme-dark'}
+                                            : 'bg-bg-secondary/50 text-text-primary hover:bg-bg-secondary'}
                                 `}
                             >
                                 {executing ? (

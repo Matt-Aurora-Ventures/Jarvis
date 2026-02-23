@@ -13,8 +13,8 @@ import { quoteRateLimiter, getClientIp } from '@/lib/rate-limiter';
 import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
 
 function readBagsApiKey(): string {
-  // Secret Manager values can include trailing newlines/whitespace; Node will reject such values
-  // when used as HTTP header content (x-api-key). Sanitize defensively.
+  // Secret Manager values can sometimes include trailing newlines/whitespace; Node will reject
+  // such values when used as HTTP header content (x-api-key). Sanitize defensively.
   return String(process.env.BAGS_API_KEY || '')
     .replace(/[\x00-\x20\x7f]/g, '')
     .trim();
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit — quote is the most expensive upstream call
     const ip = getClientIp(request);
-    const limit = await quoteRateLimiter.check(ip);
+    const limit = quoteRateLimiter.check(ip);
     if (!limit.allowed) {
       return NextResponse.json(
         { error: 'Rate limit exceeded. Try again shortly.' },
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
 
     // Cache key: same pair + amount = same quote (within TTL)
     const cacheKey = `quote:${inputMint}:${outputMint}:${amount}:${slippageBps || 'auto'}`;
-    const cached = await quoteCache.get(cacheKey);
+    const cached = quoteCache.get(cacheKey);
     if (cached) {
       return NextResponse.json(cached, {
         headers: {
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
     });
 
     const responseData = { quote };
-    await quoteCache.set(cacheKey, responseData, QUOTE_TTL_MS);
+    quoteCache.set(cacheKey, responseData, QUOTE_TTL_MS);
 
     return NextResponse.json(responseData, {
       headers: {

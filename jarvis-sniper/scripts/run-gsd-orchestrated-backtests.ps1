@@ -131,12 +131,6 @@ function Normalize-RunRows {
       maxDrawdownPct = 100.0
       netPnl = 0.0
       sharpe = 0.0
-      executionReliabilityPct = 0.0
-      noRouteRate = 0.0
-      unresolvedRate = 0.0
-      executionAdjustedExpectancy = 0.0
-      executionAdjustedNetPnlPct = 0.0
-      degraded = $true
     }
   }
 
@@ -147,12 +141,6 @@ function Normalize-RunRows {
   $weightedExp = 0.0
   $weightedPf = 0.0
   $weightedSharpe = 0.0
-  $weightedExecRel = 0.0
-  $weightedNoRoute = 0.0
-  $weightedUnresolved = 0.0
-  $weightedExecAdjExp = 0.0
-  $weightedExecAdjNetPnlPct = 0.0
-  $degradedCount = 0
   $maxDd = 0.0
   foreach ($row in $filtered) {
     $trades = [int](To-Num $row.trades 0)
@@ -161,12 +149,6 @@ function Normalize-RunRows {
     $weightedExp += (To-Num $row.expectancy 0) * $w
     $weightedPf += (To-Num $row.profitFactor 0) * $w
     $weightedSharpe += (To-Num $row.sharpe 0) * $w
-    $weightedExecRel += (To-Num $row.executionReliabilityPct 0) * $w
-    $weightedNoRoute += (To-Num $row.noRouteRate 0) * $w
-    $weightedUnresolved += (To-Num $row.unresolvedRate 0) * $w
-    $weightedExecAdjExp += (To-Num $row.executionAdjustedExpectancy 0) * $w
-    $weightedExecAdjNetPnlPct += (To-Num $row.executionAdjustedNetPnlPct 0) * $w
-    if ([bool]$row.degraded) { $degradedCount += 1 }
     $dd = To-Num (([string]$row.maxDD).Replace('%', '')) 0
     if ($dd -gt $maxDd) { $maxDd = $dd }
   }
@@ -180,12 +162,6 @@ function Normalize-RunRows {
     maxDrawdownPct = $maxDd
     netPnl = $netPnl
     sharpe = $weightedSharpe
-    executionReliabilityPct = $weightedExecRel
-    noRouteRate = $weightedNoRoute
-    unresolvedRate = $weightedUnresolved
-    executionAdjustedExpectancy = $weightedExecAdjExp
-    executionAdjustedNetPnlPct = $weightedExecAdjNetPnlPct
-    degraded = ($degradedCount -gt 0)
   }
 }
 
@@ -240,44 +216,12 @@ function Add-UniqueListItem {
 function Get-DynamicTimeoutSec {
   param(
     [int]$ExpectedRequests,
-    [int]$Fallback = 240
+    [int]$Fallback = 1200
   )
-  $base = 180 + [int][Math]::Ceiling(([double][Math]::Max(1, $ExpectedRequests)) * 0.45)
-  $bounded = [Math]::Max(180, [Math]::Min(300, $base))
-  if ($bounded -lt 180) { return [Math]::Max(180, [Math]::Min(300, $Fallback)) }
+  $base = 180 + ([double]([Math]::Max(1, $ExpectedRequests)) * 3.2)
+  $bounded = [Math]::Max(1200, [Math]::Min(10800, [int][Math]::Ceiling($base)))
+  if ($bounded -lt 120) { return [Math]::Max(120, $Fallback) }
   return $bounded
-}
-
-function Get-JitterBackoffSec {
-  param([int]$Attempt = 1)
-  $pow = [Math]::Pow(2, [Math]::Max(1, $Attempt) - 1)
-  $base = [int][Math]::Min(30, (5 * $pow))
-  $jitter = Get-Random -Minimum 0 -Maximum 4
-  return [int]($base + $jitter)
-}
-
-function Is-TransientBacktestFailure {
-  param(
-    [string]$ErrorText,
-    $Diagnostics = $null
-  )
-  $text = [string]$ErrorText
-  if ($null -ne $Diagnostics) {
-    try {
-      $diagErr = [string]$Diagnostics.error
-      if (-not [string]::IsNullOrWhiteSpace($diagErr)) {
-        $text = "$text $diagErr"
-      }
-      $diagState = [string]$Diagnostics.state
-      if (-not [string]::IsNullOrWhiteSpace($diagState)) {
-        $text = "$text state=$diagState"
-      }
-    } catch {}
-  }
-  $t = $text.ToLowerInvariant()
-  if ($t -match "timeout|timed out|status endpoint unreachable|no status motion|stalled") { return $true }
-  if ($t -match "500|502|503|504|gateway|temporarily unavailable|connection reset|connection closed") { return $true }
-  return $false
 }
 
 function Get-StrategyMapFromRoute {
@@ -371,18 +315,6 @@ function New-CampaignState {
     familyPasses = @{}
     datasetManifestByFamily = @{}
     runtimeByRunIdSec = @{}
-    telemetry = [ordered]@{
-      timeoutRuns = 0
-      stalledRuns = 0
-      transientRetries = 0
-      transientRetrySuccess = 0
-      statusPolls = 0
-      statusPollErrors = 0
-      statusLatencyTotalMs = 0
-      statusLatencyMaxMs = 0
-      completionRatio = 0.0
-      degradedCompletionRatio = 0.0
-    }
     artifactIndex = @()
   }
 }
@@ -486,10 +418,6 @@ function Poll-RunUntilDone {
   $lastHeartbeat = $started
   $lastMotionAt = $started
   $lastSeenMotionTs = 0L
-  $pollCount = 0
-  $pollErrorCount = 0
-  $pollLatencyTotalMs = 0
-  $pollLatencyMaxMs = 0
 
   while ($true) {
     if ($Job.State -in @("Completed", "Failed", "Stopped")) { break }
@@ -502,23 +430,11 @@ function Poll-RunUntilDone {
         status = "timeout"
         error = "Hard timeout ${RunTimeoutSec}s"
         runStatus = $lastStatus
-        telemetry = [ordered]@{
-          polls = $pollCount
-          pollErrors = $pollErrorCount
-          statusLatencyTotalMs = $pollLatencyTotalMs
-          statusLatencyMaxMs = $pollLatencyMaxMs
-          statusLatencyAvgMs = if ($pollCount -gt 0) { [math]::Round($pollLatencyTotalMs / [double]$pollCount, 2) } else { 0 }
-        }
       }
     }
 
     try {
-      $pollStarted = Get-Date
       $status = Invoke-JsonApi -Method GET -Uri "http://127.0.0.1:3001/api/backtest/runs/$RunId" -TimeoutSec $PollTimeoutSec
-      $latMs = [int][Math]::Max(0, ((Get-Date) - $pollStarted).TotalMilliseconds)
-      $pollCount += 1
-      $pollLatencyTotalMs += $latMs
-      if ($latMs -gt $pollLatencyMaxMs) { $pollLatencyMaxMs = $latMs }
       $lastStatus = $status
       $lastPollOk = Get-Date
       $progressNow = [int](To-Num $status.progress 0)
@@ -550,17 +466,9 @@ function Poll-RunUntilDone {
           status = "stalled"
           error = "No status motion for ${RunStallAfterSec}s (updatedAt/heartbeatAt/lastDatasetBatchAt)"
           runStatus = $lastStatus
-          telemetry = [ordered]@{
-            polls = $pollCount
-            pollErrors = $pollErrorCount
-            statusLatencyTotalMs = $pollLatencyTotalMs
-            statusLatencyMaxMs = $pollLatencyMaxMs
-            statusLatencyAvgMs = if ($pollCount -gt 0) { [math]::Round($pollLatencyTotalMs / [double]$pollCount, 2) } else { 0 }
-          }
         }
       }
     } catch {
-      $pollErrorCount += 1
       if (((Get-Date) - $lastPollOk).TotalSeconds -ge $RunStallAfterSec) {
         try { Stop-Job -Job $Job -Force } catch {}
         return [ordered]@{
@@ -568,13 +476,6 @@ function Poll-RunUntilDone {
           status = "stalled"
           error = "Status endpoint unreachable for ${RunStallAfterSec}s"
           runStatus = $lastStatus
-          telemetry = [ordered]@{
-            polls = $pollCount
-            pollErrors = $pollErrorCount
-            statusLatencyTotalMs = $pollLatencyTotalMs
-            statusLatencyMaxMs = $pollLatencyMaxMs
-            statusLatencyAvgMs = if ($pollCount -gt 0) { [math]::Round($pollLatencyTotalMs / [double]$pollCount, 2) } else { 0 }
-          }
         }
       }
       # keep waiting; transient polling errors are non-fatal
@@ -590,13 +491,6 @@ function Poll-RunUntilDone {
       error = [string]$jobResult.error
       detail = $jobResult.detail
       runStatus = $lastStatus
-      telemetry = [ordered]@{
-        polls = $pollCount
-        pollErrors = $pollErrorCount
-        statusLatencyTotalMs = $pollLatencyTotalMs
-        statusLatencyMaxMs = $pollLatencyMaxMs
-        statusLatencyAvgMs = if ($pollCount -gt 0) { [math]::Round($pollLatencyTotalMs / [double]$pollCount, 2) } else { 0 }
-      }
     }
   }
 
@@ -607,13 +501,6 @@ function Poll-RunUntilDone {
     status = "completed"
     response = $jobResult.response
     runStatus = $finalStatus
-    telemetry = [ordered]@{
-      polls = $pollCount
-      pollErrors = $pollErrorCount
-      statusLatencyTotalMs = $pollLatencyTotalMs
-      statusLatencyMaxMs = $pollLatencyMaxMs
-      statusLatencyAvgMs = if ($pollCount -gt 0) { [math]::Round($pollLatencyTotalMs / [double]$pollCount, 2) } else { 0 }
-    }
   }
 }
 
@@ -678,7 +565,6 @@ function Evaluate-Promotion {
   if ((To-Num $Metric.maxDrawdownPct 100) -gt $maxDdGate) { return [ordered]@{ promoted = $false; reason = "maxDD gate failed" } }
   $wrGate = if ($Family -in @("memecoin", "bags")) { 0.40 } else { 0.45 }
   if ((To-Num $Metric.winRate 0) -lt $wrGate) { return [ordered]@{ promoted = $false; reason = "winRate gate failed" } }
-  if ((To-Num $Metric.executionReliabilityPct 0) -lt 80) { return [ordered]@{ promoted = $false; reason = "executionReliabilityPct < 80" } }
   return [ordered]@{ promoted = $true; reason = "passed promotion gates" }
 }
 
@@ -750,27 +636,6 @@ function Invoke-StrategyAttempt {
   $attempt.status = [string]$result.status
   $attempt.timeoutSec = $runTimeoutSec
   $attempt.expectedRequests = $expectedRequests
-  $polls = [int](To-Num $result.telemetry.polls 0)
-  $pollErrors = [int](To-Num $result.telemetry.pollErrors 0)
-  $statusLatencyTotalMs = [int](To-Num $result.telemetry.statusLatencyTotalMs 0)
-  $statusLatencyMaxMs = [int](To-Num $result.telemetry.statusLatencyMaxMs 0)
-  $statusLatencyAvgMs = To-Num $result.telemetry.statusLatencyAvgMs 0
-  $attempt.statusPolls = $polls
-  $attempt.statusPollErrors = $pollErrors
-  $attempt.statusLatencyTotalMs = $statusLatencyTotalMs
-  $attempt.statusLatencyMaxMs = $statusLatencyMaxMs
-  $attempt.statusLatencyAvgMs = $statusLatencyAvgMs
-  $State.telemetry.statusPolls = [int](To-Num $State.telemetry.statusPolls 0) + $polls
-  $State.telemetry.statusPollErrors = [int](To-Num $State.telemetry.statusPollErrors 0) + $pollErrors
-  $State.telemetry.statusLatencyTotalMs = [int](To-Num $State.telemetry.statusLatencyTotalMs 0) + $statusLatencyTotalMs
-  $prevLatencyMax = [int](To-Num $State.telemetry.statusLatencyMaxMs 0)
-  if ($statusLatencyMaxMs -gt $prevLatencyMax) { $State.telemetry.statusLatencyMaxMs = $statusLatencyMaxMs }
-  if ($result.status -eq "timeout") {
-    $State.telemetry.timeoutRuns = [int](To-Num $State.telemetry.timeoutRuns 0) + 1
-  }
-  if ($result.status -eq "stalled") {
-    $State.telemetry.stalledRuns = [int](To-Num $State.telemetry.stalledRuns 0) + 1
-  }
   if (-not $result.ok) {
     $attempt.error = [string]$result.error
     $attempt.diagnostics = $result.runStatus
@@ -792,12 +657,6 @@ function Invoke-StrategyAttempt {
 
   $rows = @($result.response.results)
   $metric = Normalize-RunRows -Rows $rows -StrategyId $strategyId
-  $metric.executionReliabilityPct = To-Num $result.response.executionReliabilityPct $metric.executionReliabilityPct
-  $metric.noRouteRate = To-Num $result.response.noRouteRate $metric.noRouteRate
-  $metric.unresolvedRate = To-Num $result.response.unresolvedRate $metric.unresolvedRate
-  $metric.executionAdjustedExpectancy = To-Num $result.response.executionAdjustedExpectancy $metric.executionAdjustedExpectancy
-  $metric.executionAdjustedNetPnlPct = To-Num $result.response.executionAdjustedNetPnlPct $metric.executionAdjustedNetPnlPct
-  $metric.degraded = [bool]$result.response.degraded
   $State.runMetricsByRunId[$runId] = $metric
 
   $stateEntry = Get-EntryByStrategyId -State $State -StrategyId $strategyId
@@ -832,22 +691,6 @@ function Invoke-StrategyWithRetries {
 
   foreach ($attempt in $attemptMatrix) {
     $res = Invoke-StrategyAttempt -State $State -Entry $Entry -MaxTokens ([int]$attempt.maxTokens) -SourcePolicy ([string]$attempt.sourcePolicy) -DataScale $DataScale -Mode $Mode
-    $transientRetried = $false
-    if (-not $res.ok -and (Is-TransientBacktestFailure -ErrorText ([string]$res.error) -Diagnostics $res.diagnostics)) {
-      $transientRetried = $true
-      $State.telemetry.transientRetries = [int](To-Num $State.telemetry.transientRetries 0) + 1
-      $delaySec = Get-JitterBackoffSec -Attempt 1
-      Write-Log "Transient failure for $($Entry.strategyId) attempt $($attempt.label); retrying once in ${delaySec}s" "WARN"
-      Save-State -State $State
-      Start-Sleep -Seconds $delaySec
-      $retryRes = Invoke-StrategyAttempt -State $State -Entry $Entry -MaxTokens ([int]$attempt.maxTokens) -SourcePolicy ([string]$attempt.sourcePolicy) -DataScale $DataScale -Mode $Mode
-      if ($retryRes.ok) {
-        $State.telemetry.transientRetrySuccess = [int](To-Num $State.telemetry.transientRetrySuccess 0) + 1
-        Save-State -State $State
-        return $retryRes
-      }
-      $res = $retryRes
-    }
     if ($res.ok) { return $res }
     if ($Entry.strategyId -notin @($State.insufficiencyAttemptsByStrategy.Keys)) {
       $State.insufficiencyAttemptsByStrategy[$Entry.strategyId] = @()
@@ -857,7 +700,6 @@ function Invoke-StrategyWithRetries {
       attempt = [string]$attempt.label
       sourcePolicy = [string]$attempt.sourcePolicy
       maxTokens = [int]$attempt.maxTokens
-      transientRetried = $transientRetried
       error = [string]$res.error
     })
     Save-State -State $State
@@ -1059,17 +901,6 @@ if ("insufficiencyAttemptsByStrategy" -notin @($state.Keys)) { $state.insufficie
 if ("familyPasses" -notin @($state.Keys)) { $state.familyPasses = @{} }
 if ("datasetManifestByFamily" -notin @($state.Keys)) { $state.datasetManifestByFamily = @{} }
 if ("runtimeByRunIdSec" -notin @($state.Keys)) { $state.runtimeByRunIdSec = @{} }
-if ("telemetry" -notin @($state.Keys) -or $null -eq $state.telemetry) { $state.telemetry = @{} }
-if ("timeoutRuns" -notin @($state.telemetry.Keys)) { $state.telemetry.timeoutRuns = 0 }
-if ("stalledRuns" -notin @($state.telemetry.Keys)) { $state.telemetry.stalledRuns = 0 }
-if ("transientRetries" -notin @($state.telemetry.Keys)) { $state.telemetry.transientRetries = 0 }
-if ("transientRetrySuccess" -notin @($state.telemetry.Keys)) { $state.telemetry.transientRetrySuccess = 0 }
-if ("statusPolls" -notin @($state.telemetry.Keys)) { $state.telemetry.statusPolls = 0 }
-if ("statusPollErrors" -notin @($state.telemetry.Keys)) { $state.telemetry.statusPollErrors = 0 }
-if ("statusLatencyTotalMs" -notin @($state.telemetry.Keys)) { $state.telemetry.statusLatencyTotalMs = 0 }
-if ("statusLatencyMaxMs" -notin @($state.telemetry.Keys)) { $state.telemetry.statusLatencyMaxMs = 0 }
-if ("completionRatio" -notin @($state.telemetry.Keys)) { $state.telemetry.completionRatio = 0.0 }
-if ("degradedCompletionRatio" -notin @($state.telemetry.Keys)) { $state.telemetry.degradedCompletionRatio = 0.0 }
 
 try {
   $state.phase = "preflight"; Save-State -State $state
@@ -1130,14 +961,10 @@ try {
         runId = $res.runId
         config = $top.config
         expectancy = To-Num $top.expectancy 0
-        executionAdjustedExpectancy = To-Num $res.response.executionAdjustedExpectancy (To-Num $top.expectancy 0)
-        executionAdjustedNetPnlPct = To-Num $res.response.executionAdjustedNetPnlPct 0
-        executionReliabilityPct = To-Num $res.response.executionReliabilityPct 0
         profitFactor = To-Num $top.profitFactor 0
         winRate = To-Num $top.winRate 0
         maxDrawdownPct = To-Num $top.maxDrawdownPct 100
         trades = [int](To-Num $top.totalTrades 0)
-        degraded = [bool]$res.response.degraded
       }
       Save-State -State $state
     }
@@ -1153,10 +980,9 @@ try {
       $metric = [ordered]@{
         trades = [int](To-Num $entry.achievedTrades 0)
         winRate = To-Num $opt.winRate 0
-        expectancy = To-Num $opt.executionAdjustedExpectancy (To-Num $opt.expectancy 0)
+        expectancy = To-Num $opt.expectancy 0
         profitFactor = To-Num $opt.profitFactor 0
         maxDrawdownPct = To-Num $opt.maxDrawdownPct 100
-        executionReliabilityPct = To-Num $opt.executionReliabilityPct 0
       }
     } else {
       $runIds = @($state.runsByStrategy[$entry.strategyId])
@@ -1170,10 +996,9 @@ try {
       $metric = [ordered]@{
         trades = [int](To-Num $entry.achievedTrades 0)
         winRate = To-Num $candidate.winRate 0
-        expectancy = To-Num $candidate.executionAdjustedExpectancy (To-Num $candidate.expectancy 0)
+        expectancy = To-Num $candidate.expectancy 0
         profitFactor = To-Num $candidate.profitFactor 0
         maxDrawdownPct = To-Num $candidate.maxDrawdownPct 100
-        executionReliabilityPct = To-Num $candidate.executionReliabilityPct 0
       }
     }
 
@@ -1189,29 +1014,10 @@ try {
   # Phase G: audit + publish
   $state.phase = "audit"; Save-State -State $state
   Write-Log "Audit complete: completed=$($state.completedRunIds.Count), failed=$($state.failedRunIds.Count), insufficient=$($state.insufficientStrategies.Count)"
-  $completedRuns = @($state.completedRunIds).Count
-  $failedRuns = @($state.failedRunIds).Count
-  $attemptedRuns = $completedRuns + $failedRuns
-  $completionRatio = if ($attemptedRuns -gt 0) { $completedRuns / [double]$attemptedRuns } else { 0.0 }
-  $degradedCompletionRatio = if ($attemptedRuns -gt 0) { $failedRuns / [double]$attemptedRuns } else { 1.0 }
-  $state.telemetry.completionRatio = [math]::Round($completionRatio, 4)
-  $state.telemetry.degradedCompletionRatio = [math]::Round($degradedCompletionRatio, 4)
-  $polls = [int](To-Num $state.telemetry.statusPolls 0)
-  $latTotal = [int](To-Num $state.telemetry.statusLatencyTotalMs 0)
-  $latAvg = if ($polls -gt 0) { [math]::Round($latTotal / [double]$polls, 2) } else { 0.0 }
-  $latMax = [int](To-Num $state.telemetry.statusLatencyMaxMs 0)
-  Write-Log "Telemetry: timeouts=$([int](To-Num $state.telemetry.timeoutRuns 0)) stalled=$([int](To-Num $state.telemetry.stalledRuns 0)) transientRetries=$([int](To-Num $state.telemetry.transientRetries 0)) retrySuccess=$([int](To-Num $state.telemetry.transientRetrySuccess 0)) statusLatency(avg/max)=${latAvg}ms/${latMax}ms completionRatio=$([math]::Round($completionRatio * 100, 2))% degradedRatio=$([math]::Round($degradedCompletionRatio * 100, 2))%"
-  Save-State -State $state
 
-  $degradedPublishThreshold = 0.35
-  $skipPublishForDegraded = $degradedCompletionRatio -gt $degradedPublishThreshold
   if (-not $SkipPublish) {
-    if ($skipPublishForDegraded) {
-      Write-Log "Skipping publish: degraded completion ratio $([math]::Round($degradedCompletionRatio * 100, 2))% exceeded threshold $([math]::Round($degradedPublishThreshold * 100, 2))%" "WARN"
-    } else {
-      Write-Log "Publishing campaign artifacts to docs/backtests/$CampaignId"
-      & powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\publish-backtest-campaign.ps1" -CampaignId $CampaignId
-    }
+    Write-Log "Publishing campaign artifacts to docs/backtests/$CampaignId"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\publish-backtest-campaign.ps1" -CampaignId $CampaignId
   }
 
   $state.phase = "done"; Save-State -State $state

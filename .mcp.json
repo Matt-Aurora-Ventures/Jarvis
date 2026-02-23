@@ -90,6 +90,17 @@
             ],
             "type": "stdio"
         },
+        "tvscreener": {
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "C:\\Users\\lucid\\OneDrive\\Desktop\\Projects\\Jarvis\\scripts\\tvscreener-mcp.ps1"
+            ],
+            "type": "stdio"
+        },
         "youtube-transcript": {
             "command": "npx",
             "args": [

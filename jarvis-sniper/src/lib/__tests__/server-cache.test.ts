@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { AsyncServerCache, ServerCache, graduationCache, quoteCache } from '../server-cache';
+import { ServerCache, graduationCache, quoteCache } from '../server-cache';
 
 describe('ServerCache', () => {
   let cache: ServerCache<string>;
@@ -93,12 +93,12 @@ describe('ServerCache', () => {
   });
 
   describe('exported singletons', () => {
-    it('graduationCache is an AsyncServerCache instance', () => {
-      expect(graduationCache).toBeInstanceOf(AsyncServerCache);
+    it('graduationCache is a ServerCache instance', () => {
+      expect(graduationCache).toBeInstanceOf(ServerCache);
     });
 
-    it('quoteCache is an AsyncServerCache instance', () => {
-      expect(quoteCache).toBeInstanceOf(AsyncServerCache);
+    it('quoteCache is a ServerCache instance', () => {
+      expect(quoteCache).toBeInstanceOf(ServerCache);
     });
 
     it('singletons are different instances', () => {

@@ -119,7 +119,7 @@ function GraduationCard({ graduation, onBuy, connected, isLoading, expanded, onT
                     className={`
                         px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all
                         ${connected
-                            ? 'bg-accent-neon text-theme-dark hover:bg-accent-neon/80'
+                            ? 'bg-accent-neon text-black hover:bg-accent-neon/80'
                             : 'bg-bg-tertiary text-text-muted cursor-not-allowed'}
                     `}
                 >
@@ -164,7 +164,7 @@ function GraduationCard({ graduation, onBuy, connected, isLoading, expanded, onT
                                 href={`https://solscan.io/token/${graduation.mint}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-400 hover:underline flex items-center gap-1"
+                                className="text-accent-neon hover:underline flex items-center gap-1"
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 Solscan <ExternalLink className="w-3 h-3" />
@@ -182,7 +182,7 @@ function GraduationCard({ graduation, onBuy, connected, isLoading, expanded, onT
                                     onClick={() => setSelectedAmount(amt)}
                                     className={`px-2 py-1 rounded text-xs font-mono transition-all ${
                                         selectedAmount === amt
-                                            ? 'bg-accent-neon text-theme-dark font-bold'
+                                            ? 'bg-accent-neon text-black font-bold'
                                             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
                                     }`}
                                 >
@@ -195,7 +195,7 @@ function GraduationCard({ graduation, onBuy, connected, isLoading, expanded, onT
                             disabled={!connected || buying || isLoading}
                             className={`flex-1 px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center justify-center gap-1 ${
                                 connected
-                                    ? 'bg-accent-neon text-theme-dark hover:bg-accent-neon/80'
+                                    ? 'bg-accent-neon text-black hover:bg-accent-neon/80'
                                     : 'bg-bg-tertiary text-text-muted cursor-not-allowed'
                             }`}
                         >
@@ -209,8 +209,8 @@ function GraduationCard({ graduation, onBuy, connected, isLoading, expanded, onT
 }
 
 function ScoreBar({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
-    const barColor = value >= 70 ? 'bg-green-400' : value >= 40 ? 'bg-yellow-400' : 'bg-red-400';
-    const textColor = value >= 70 ? 'text-green-400' : value >= 40 ? 'text-yellow-400' : 'text-red-400';
+    const barColor = value >= 70 ? 'bg-accent-success' : value >= 40 ? 'bg-accent-warning' : 'bg-accent-error';
+    const textColor = value >= 70 ? 'text-accent-success' : value >= 40 ? 'text-text-muted' : 'text-accent-error';
 
     return (
         <div className="p-2 rounded bg-bg-tertiary/50 text-center space-y-1">
@@ -307,19 +307,19 @@ export function BagsTop15() {
                     </div>
                     <div>
                         <h2 className="font-display font-bold text-lg text-text-primary">BAGS TOP 15</h2>
-                        <p className="text-[10px] font-mono text-text-muted">bags.fm graduations with AI scoring</p>
+                        <p className="text-[10px] font-mono text-text-muted">degen graduations with AI scoring</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     {isDemo ? (
                         <>
-                            <AlertTriangle className="w-4 h-4 text-yellow-400" />
-                            <span className="text-[10px] font-mono text-yellow-400">DEMO</span>
+                            <AlertTriangle className="w-4 h-4 text-text-muted" />
+                            <span className="text-[10px] font-mono text-text-muted">DEMO</span>
                         </>
                     ) : (
                         <>
-                            <Activity className="w-4 h-4 text-green-400 animate-pulse" />
-                            <span className="text-[10px] font-mono text-green-400">LIVE</span>
+                            <Activity className="w-4 h-4 text-accent-success animate-pulse" />
+                            <span className="text-[10px] font-mono text-accent-success">LIVE</span>
                         </>
                     )}
                     <button
@@ -353,7 +353,7 @@ export function BagsTop15() {
                         onClick={() => setFilter(key as typeof filter)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                             filter === key
-                                ? 'bg-accent-neon text-theme-dark'
+                                ? 'bg-accent-neon text-black'
                                 : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
                         }`}
                     >
@@ -366,9 +366,9 @@ export function BagsTop15() {
             <div className="flex items-center gap-3 text-[10px]">
                 <span className="text-text-muted">Score tiers:</span>
                 <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400">85+ Exceptional</span>
-                <span className="px-2 py-0.5 rounded bg-green-500/10 text-green-400">70-84 Strong</span>
-                <span className="px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">50-69 Average</span>
-                <span className="px-2 py-0.5 rounded bg-orange-500/10 text-orange-400">&lt;50 Weak</span>
+                <span className="px-2 py-0.5 rounded bg-accent-success/10 text-accent-success">70-84 Strong</span>
+                <span className="px-2 py-0.5 rounded bg-accent-warning/10 text-text-muted">50-69 Average</span>
+                <span className="px-2 py-0.5 rounded bg-accent-warning/10 text-accent-warning">&lt;50 Weak</span>
             </div>
 
             {/* Loading State */}
@@ -413,7 +413,7 @@ export function BagsTop15() {
 
             {/* Footer */}
             <div className="text-center text-[10px] text-text-muted pt-2 border-t border-border-primary">
-                <p>Live bags.fm graduation feed with AI-powered scoring</p>
+                <p>Live degen graduation feed with AI-powered scoring</p>
                 <p>0.5% commission on winning trades goes to stakers</p>
             </div>
         </div>

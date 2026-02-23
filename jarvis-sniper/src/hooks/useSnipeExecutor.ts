@@ -4,13 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { usePhantomWallet } from './usePhantomWallet';
 import { useSniperStore, getRecommendedSlTp, getConvictionMultiplier, type Position, type ExecutionEvent, buildMintCooldownKey } from '@/stores/useSniperStore';
-import {
-  executeSwap,
-  executeSwapFromQuote,
-  getSellQuote,
-  SOL_MINT,
-  type SwapResult,
-} from '@/lib/bags-trading';
+import { executeSwap, SOL_MINT, type SwapResult } from '@/lib/bags-trading';
 import { loadSessionWalletByPublicKey, loadSessionWalletFromStorage } from '@/lib/session-wallet';
 import { fetchTokenInfo, type BagsGraduation } from '@/lib/bags-api';
 import { filterTradeManagedOpenPositionsForActiveWallet } from '@/lib/position-scope';
@@ -18,11 +12,6 @@ import { getConnection as getSharedConnection } from '@/lib/rpc-url';
 import { getOwnerTokenBalanceLamportsWithRetry } from '@/lib/solana-tokens';
 import { checkSignerSolBalance } from '@/lib/solana-balance-guard';
 import { mergeRuntimeConfigWithStrategyOverride } from '@/lib/autonomy/override-policy';
-import { resolveOnChainProtectionConfig } from '@/lib/onchain-protection-config';
-import {
-  activateSpotProtectionClient,
-  preflightSpotProtectionClient,
-} from '@/lib/execution/spot-protection-client';
 const DEXSCREENER_TOKENS = 'https://api.dexscreener.com/tokens/v1/solana';
 const POST_BUY_VERIFY_DELAY_MS = 20_000;
 const POST_BUY_VERIFY_ATTEMPTS = 4;
@@ -30,12 +19,6 @@ const SIGNER_SOL_RESERVE_LAMPORTS = 3_000_000;
 const MAX_SLIPPAGE_BPS = 1200;
 const AUTO_MINT_LOCK_PREFIX = 'jarvis-sniper:auto-mint-lock:';
 const AUTO_MINT_LOCK_TTL_MS = 90_000;
-const FAIL_CLOSED_PROTECTION =
-  String(process.env.NEXT_PUBLIC_SNIPER_FAIL_CLOSED_PROTECTION || 'true').trim().toLowerCase() !== 'false';
-const ONCHAIN_PROTECTION_CONFIG = resolveOnChainProtectionConfig();
-const ONCHAIN_PROTECTION_ENABLED = ONCHAIN_PROTECTION_CONFIG.enabled;
-const ALLOW_INTERNAL_UNPROTECTED_FALLBACK =
-  String(process.env.NEXT_PUBLIC_SNIPER_ALLOW_UNPROTECTED_INTERNAL || '').trim().toLowerCase() === 'true';
 
 let execCounter = 0;
 
@@ -78,6 +61,7 @@ export function useSnipeExecutor() {
   const pendingRef = useRef<Set<string>>(new Set());
   const tradeSignerMode = useSniperStore((s) => s.tradeSignerMode);
   const sessionWalletPubkey = useSniperStore((s) => s.sessionWalletPubkey);
+  const executionPaused = useSniperStore((s) => s.executionPaused);
 
   // Lazy-init connection (WS-disabled for proxy compatibility)
   function getConnection(): Connection {
@@ -296,59 +280,6 @@ export function useSnipeExecutor() {
     const rec = getRecommendedSlTp(grad, config.strategyMode, config);
     const displaySymbol = normalizeDisplaySymbol(grad.symbol, grad.mint);
     const displayName = normalizeDisplayName(grad.name, displaySymbol, grad.mint);
-    const internalFallbackAllowed = process.env.NODE_ENV !== 'production' || ALLOW_INTERNAL_UNPROTECTED_FALLBACK;
-    let protectionReadyForActivation = false;
-    let protectionFailureReason: string | undefined;
-    let protectionModeLabel: 'PENDING_ONCHAIN' | 'ACTIVE_ONCHAIN' | 'LOCAL_ONLY' | 'UNPROTECTED_INTERNAL' = 'LOCAL_ONLY';
-
-    if (FAIL_CLOSED_PROTECTION && !ONCHAIN_PROTECTION_ENABLED && !internalFallbackAllowed) {
-      addExecution({
-        ...makeExecEvent(
-          grad,
-          'error',
-          positionSol,
-          'FAIL_CLOSED: live entry blocked because on-chain protection is not active.',
-        ),
-        phase: 'failed',
-      });
-      return 'fail';
-    }
-    if (FAIL_CLOSED_PROTECTION && !ONCHAIN_PROTECTION_ENABLED && internalFallbackAllowed) {
-      protectionModeLabel = 'UNPROTECTED_INTERNAL';
-      addExecution(makeExecEvent(
-        grad,
-        'info',
-        0,
-        `INTERNAL_FALLBACK_UNPROTECTED: ${ONCHAIN_PROTECTION_CONFIG.reason || 'on-chain protection unavailable'}; allowing internal alpha execution only.`,
-      ));
-    }
-    if (ONCHAIN_PROTECTION_ENABLED) {
-      const preflight = await preflightSpotProtectionClient();
-      if (!preflight.ok) {
-        protectionFailureReason = preflight.reason || 'Protection adapter preflight failed';
-        if (FAIL_CLOSED_PROTECTION) {
-          addExecution({
-            ...makeExecEvent(
-              grad,
-              'error',
-              positionSol,
-              `FAIL_CLOSED: blocking entry because protection preflight failed (${protectionFailureReason}).`,
-            ),
-            phase: 'failed',
-          });
-          return 'fail';
-        }
-        addExecution(makeExecEvent(
-          grad,
-          'error',
-          0,
-          `Protection preflight failed; continuing without on-chain protection: ${protectionFailureReason}`,
-        ));
-      } else {
-        protectionReadyForActivation = true;
-        protectionModeLabel = 'PENDING_ONCHAIN';
-      }
-    }
 
     const connection = getConnection();
     const signerBalance = await checkSignerSolBalance(
@@ -483,15 +414,13 @@ export function useSnipeExecutor() {
       // Success — create real position
       const posId = `pos-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const entryPrice = await resolveEntryPriceUsd(grad.mint, grad.price_usd, positionSol, result.outputAmount);
-      const activeAsset = useSniperStore.getState().assetFilter;
-      const protectionPending = protectionReadyForActivation;
 
       const newPosition: Position = {
         id: posId,
         mint: grad.mint,
         symbol: displaySymbol,
         name: displayName,
-        assetType: activeAsset,
+        assetType: useSniperStore.getState().assetFilter,
         walletAddress: signerAddress,
         strategyId: useSniperStore.getState().activePreset,
         entryPrice,
@@ -510,16 +439,6 @@ export function useSnipeExecutor() {
         recommendedTp: rec.tp,
         recommendedTrail: rec.trail,
         highWaterMarkPct: 0,
-        onChainSlTp: false,
-        protectionStatus: protectionPending ? 'pending' : 'failed',
-        protectionUpdatedAt: Date.now(),
-        protectionFailureReason: protectionPending
-          ? undefined
-          : (
-            protectionFailureReason
-            || ONCHAIN_PROTECTION_CONFIG.reason
-            || 'On-chain protection unavailable; running in internal fallback mode.'
-          ),
       };
 
       addPosition(newPosition);
@@ -537,107 +456,6 @@ export function useSnipeExecutor() {
         txHash: result.txHash,
         price: entryPrice,
       });
-
-      if (protectionPending) {
-        const activation = await activateSpotProtectionClient({
-          positionId: posId,
-          walletAddress: signerAddress,
-          mint: grad.mint,
-          symbol: displaySymbol,
-          entryPriceUsd: Math.max(0, entryPrice),
-          quantity: Math.max(0, Number(result.outputAmount || 0)),
-          tpPercent: rec.tp,
-          slPercent: rec.sl,
-          strategyId: useSniperStore.getState().activePreset,
-          surface: toProtectionSurface(activeAsset),
-          idempotencyKey: `${posId}:${String(result.txHash || '')}`,
-        });
-
-        if (!activation.ok || !activation.tpOrderKey || !activation.slOrderKey) {
-          const activationFailure = activation.reason || 'Protection activation returned incomplete order keys';
-          protectionModeLabel = internalFallbackAllowed ? 'UNPROTECTED_INTERNAL' : 'LOCAL_ONLY';
-          useSniperStore.getState().updatePosition(posId, {
-            onChainSlTp: false,
-            protectionStatus: 'failed',
-            protectionUpdatedAt: Date.now(),
-            protectionFailureReason: activationFailure,
-          });
-          addExecution({
-            ...makeExecEvent(
-              grad,
-              'error',
-              0,
-              `PROTECTION_ACTIVATION_FAILED: ${activationFailure}`,
-            ),
-            phase: 'failed',
-            txHash: result.txHash,
-          });
-
-          if (FAIL_CLOSED_PROTECTION) {
-            const unwind = await emergencyUnwindPosition({
-              connection,
-              walletAddress: signerAddress,
-              mint: grad.mint,
-              amountLamports: result.outputAmountLamports,
-              signTransaction: signerSignTransaction,
-              useJito: config.useJito,
-              strategyId: useSniperStore.getState().activePreset || 'unknown',
-              surface: toProtectionSurface(activeAsset),
-            });
-            if (unwind.success && unwind.txHash) {
-              useSniperStore.getState().closePosition(
-                posId,
-                'closed',
-                unwind.txHash,
-                unwind.exitSolReceived,
-              );
-              addExecution({
-                ...makeExecEvent(
-                  grad,
-                  'error',
-                  0,
-                  `FAIL_CLOSED_UNWIND_EXECUTED: protection failed and position was closed immediately (${unwind.txHash}).`,
-                ),
-                phase: 'confirmed',
-                txHash: unwind.txHash,
-              });
-            } else {
-              useSniperStore.getState().setExecutionPaused(
-                true,
-                `FAIL_CLOSED_EMERGENCY: ${unwind.reason || 'protection activation failed and emergency unwind did not complete'}`,
-              );
-              addExecution({
-                ...makeExecEvent(
-                  grad,
-                  'error',
-                  0,
-                  `FAIL_CLOSED_EMERGENCY: ${unwind.reason || 'position remains open without active protection'}`,
-                ),
-                phase: 'failed',
-              });
-            }
-            return 'fail';
-          }
-        } else {
-          useSniperStore.getState().updatePosition(posId, {
-            onChainSlTp: true,
-            protectionStatus: 'active',
-            tpOrderKey: activation.tpOrderKey,
-            slOrderKey: activation.slOrderKey,
-            jupTpOrderKey: activation.tpOrderKey,
-            jupSlOrderKey: activation.slOrderKey,
-            protectionUpdatedAt: Date.now(),
-            protectionFailureReason: undefined,
-          });
-          addExecution(makeExecEvent(
-            grad,
-            'info',
-            0,
-            `PROTECTION_ACTIVE: TP ${activation.tpOrderKey.slice(0, 12)}... SL ${activation.slOrderKey.slice(0, 12)}...`,
-          ));
-          protectionModeLabel = 'ACTIVE_ONCHAIN';
-        }
-      }
 
       schedulePostBuyVerification({
         positionId: posId,
@@ -676,7 +494,7 @@ export function useSnipeExecutor() {
         grad,
         'info',
         0,
-        `PROTECTION ${protectionModeLabel}: SL -${rec.sl}% | TP +${rec.tp}% | Trail ${rec.trail}% | ${
+        `SL/TP ACTIVE: SL -${rec.sl}% | TP +${rec.tp}% | Trail ${rec.trail}% | ${
           isAutoMode ? 'AUTO-SELL enabled (session wallet)' : 'Manual mode — approve exits in Positions'
         }`,
       ));
@@ -699,7 +517,7 @@ export function useSnipeExecutor() {
         releaseAutoMintLock(autoLockKey, autoLockOwner);
       }
     }
-  }, [address, signTransaction]);
+  }, [address, signTransaction, executionPaused]);
 
   const [sessionReady, setSessionReady] = useState(false);
   useEffect(() => {
@@ -749,75 +567,6 @@ function buildSlippageLadder(baseBps: number): number[] {
     .filter((bps, idx, arr) => Number.isFinite(bps) && bps > 0 && arr.indexOf(bps) === idx)
     .sort((a, b) => a - b);
   return ladder.length > 0 ? ladder : [300, 450, 600];
-}
-
-type ProtectionSurface = 'main' | 'bags' | 'tradfi' | 'unknown';
-
-function toProtectionSurface(assetType: Position['assetType'] | undefined): ProtectionSurface {
-  const value = String(assetType || '').toLowerCase();
-  if (value === 'bags') return 'bags';
-  if (value === 'xstock' || value === 'prestock' || value === 'index') return 'tradfi';
-  if (value) return 'main';
-  return 'unknown';
-}
-
-interface EmergencyUnwindArgs {
-  connection: Connection;
-  walletAddress: string;
-  mint: string;
-  amountLamports?: string;
-  signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>;
-  useJito: boolean;
-  strategyId: string;
-  surface: ProtectionSurface;
-}
-
-interface EmergencyUnwindResult {
-  success: boolean;
-  txHash?: string;
-  exitSolReceived?: number;
-  reason?: string;
-}
-
-async function emergencyUnwindPosition(args: EmergencyUnwindArgs): Promise<EmergencyUnwindResult> {
-  const amountLamports = String(args.amountLamports || '').trim();
-  if (!amountLamports || amountLamports === '0') {
-    return {
-      success: false,
-      reason: 'Missing token amount for emergency unwind.',
-    };
-  }
-
-  const quote = await getSellQuote(args.mint, amountLamports, Math.max(250, MAX_SLIPPAGE_BPS));
-  if (!quote) {
-    return {
-      success: false,
-      reason: 'No sell quote available for emergency unwind.',
-    };
-  }
-
-  const swap = await executeSwapFromQuote(
-    args.connection,
-    args.walletAddress,
-    quote,
-    args.signTransaction,
-    args.useJito,
-    200_000,
-    args.strategyId,
-    args.surface,
-  );
-  if (!swap.success || !swap.txHash) {
-    return {
-      success: false,
-      reason: swap.error || swap.failureDetail || 'Emergency unwind sell failed',
-    };
-  }
-
-  return {
-    success: true,
-    txHash: swap.txHash,
-    exitSolReceived: Number(swap.outputAmount || 0),
-  };
 }
 
 function normalizeDisplaySymbol(raw: string | undefined | null, mint: string): string {

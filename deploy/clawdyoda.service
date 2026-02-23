@@ -1,0 +1,41 @@
+[Unit]
+Description=ClawdYoda Telegram Bot - CIO Innovation Advisor
+Documentation=https://github.com/lucid/jarvis
+After=network-online.target
+Wants=network-online.target
+PartOf=clawdbots.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/clawdbots
+
+# Environment
+EnvironmentFile=/root/clawdbots/tokens.env
+
+# Execution
+ExecStart=/usr/bin/python3 bots/clawdyoda/clawdyoda_telegram_bot.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+# Timeouts
+TimeoutStartSec=30
+TimeoutStopSec=15
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=clawdyoda
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target clawdbots.target
+

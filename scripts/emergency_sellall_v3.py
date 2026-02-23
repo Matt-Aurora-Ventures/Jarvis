@@ -30,7 +30,8 @@ from core.security.key_manager import load_treasury_keypair
 TARGET_WALLET = "AXYFBhYPhHt4SzGqdpSfBSMWEQmKdCyQScA1xjRvHzph"
 POSITIONS_FILE = Path(__file__).parent.parent / "bots" / "treasury" / ".positions.json"
 SOL_MINT = "So11111111111111111111111111111111111111112"
-HELIUS_RPC = os.getenv("HELIUS_RPC_URL", "https://mainnet.helius-rpc.com/?api-key=95014bec-7a2f-46af-9750-48be929844f4")
+# IMPORTANT: Never hardcode RPC API keys in the repo.
+HELIUS_RPC = os.getenv("HELIUS_RPC_URL") or os.getenv("SOLANA_RPC_URL") or "https://api.mainnet-beta.solana.com"
 
 
 class SimpleWalletInfo:

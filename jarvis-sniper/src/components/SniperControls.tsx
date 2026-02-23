@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
 import { Buffer } from 'buffer';
-import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3, Trophy, Check, Gem, Rocket, Clock, HelpCircle, Package, X, FlaskConical } from 'lucide-react';
+import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3, Trophy, Check, Gem, Rocket, Clock, HelpCircle, Package, X } from 'lucide-react';
 import { useSniperStore, makeDefaultAssetBreaker, type SniperConfig, type StrategyMode, type AssetType, type PerAssetBreakerConfig, STRATEGY_PRESETS } from '@/stores/useSniperStore';
 import type { BagsGraduation } from '@/lib/bags-api';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
@@ -30,7 +30,6 @@ import { filterOpenPositionsForActiveWallet, filterTradeManagedOpenPositionsForA
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
 import { waitForSignatureStatus } from '@/lib/tx-confirmation';
 import { isProbablyMobile } from '@/lib/wallet-deeplinks';
-import { buildAutonomyReadHeaders, getAutonomyReadToken } from '@/lib/autonomy/client-auth';
 import {
   buildWrGateCandidates,
   gateStatusBadge,
@@ -52,17 +51,17 @@ function suggestStrategy(graduations: BagsGraduation[], assetType: AssetType = '
     const momPositive = graduations.filter(g => (g.price_change_1h ?? 0) > 0).length;
     const momPct = momPositive / graduations.length;
 
-    // Many high-score established tokens -> quality-focused play
+    // Many high-score established tokens → value play
     if (highScoreCount >= 5) {
-      return { presetId: 'bags_bluechip', reason: `${highScoreCount} high-score (55+) bags tokens — quality focus` };
+      return { presetId: 'bags_value', reason: `${highScoreCount} high-score (55+) bags tokens — value hunting` };
     }
-    // Strong momentum across the board -> aggressive play
+    // Strong momentum across the board → momentum play
     if (momPct >= 0.4 && graduations.length >= 10) {
-      return { presetId: 'bags_aggressive', reason: `${Math.round(momPct * 100)}% positive momentum across ${graduations.length} tokens` };
+      return { presetId: 'bags_momentum', reason: `${Math.round(momPct * 100)}% positive momentum across ${graduations.length} tokens` };
     }
-    // Fresh launches available -> rebound-focused entry
+    // Fresh launches available → snipe them
     if (freshCount >= 3) {
-      return { presetId: 'bags_dip_buyer', reason: `${freshCount} fresh bags launches (<48h)` };
+      return { presetId: 'bags_fresh_snipe', reason: `${freshCount} fresh bags launches (<48h)` };
     }
     // Default for bags
     return { presetId: 'bags_bluechip', reason: 'Default safe bags strategy — established tokens' };
@@ -89,23 +88,23 @@ function suggestStrategy(graduations: BagsGraduation[], assetType: AssetType = '
   const above40k = countAbove(40000);
   const above100k = countAbove(100000);
 
-  // Decision tree tuned for current live presets and real-time feed conditions.
-  // 1. Elite conditions: high-liq tokens with strong momentum
+  // Decision tree — ranked by backtest win rate, with realistic thresholds
+  // 1. Elite conditions: high-liq tokens with strong momentum (81.8% WR)
   if (above100k >= 2 && momPct >= 0.4) {
     return { presetId: 'elite', reason: `${above100k} tokens above $100K liq + ${Math.round(momPct * 100)}% momentum` };
   }
 
-  // 2. Strong bull momentum + volume -> LET IT RIDE
+  // 2. Strong bull momentum + volume → LET IT RIDE (82.4% WR)
   if (momPct >= 0.45 && highVolCount >= 2 && above40k >= 2) {
     return { presetId: 'let_it_ride', reason: `${Math.round(momPct * 100)}% momentum + ${highVolCount} high-vol tokens` };
   }
 
-  // 3. Many fresh tokens + decent liquidity -> PUMP FRESH TIGHT
+  // 3. Many fresh tokens + decent liquidity → VOLUME SPIKE (PF 2.31)
   if (freshCount >= 3 && above10k >= 3) {
-    return { presetId: 'pump_fresh_tight', reason: `${freshCount} fresh tokens + active market` };
+    return { presetId: 'volume_spike', reason: `${freshCount} fresh tokens + active market` };
   }
 
-  // 4. Good liquidity cluster with momentum -> SOL VETERAN
+  // 4. Good liquidity cluster with momentum → SOL VETERAN (PF 2.68)
   if (above25k >= 3 && momPct >= 0.3) {
     return { presetId: 'sol_veteran', reason: `${above25k} tokens with $25K+ liq & ${Math.round(momPct * 100)}% momentum` };
   }
@@ -115,13 +114,13 @@ function suggestStrategy(graduations: BagsGraduation[], assetType: AssetType = '
     return { presetId: 'hybrid_b', reason: `${above40k} tokens above $40K liq — balanced approach` };
   }
 
-  // 6. Lots of fresh micro-cap activity -> MICRO CAP SURGE
+  // 6. Lots of fresh micro-cap activity → MICRO CAP SURGE (78.8% WR)
   if (freshCount >= 4 && above10k >= 2) {
     return { presetId: 'micro_cap_surge', reason: `${freshCount} fresh micro-caps detected` };
   }
 
-  // 7. Default: PUMP FRESH TIGHT
-  return { presetId: 'pump_fresh_tight', reason: 'Default safe strategy for mixed launch conditions' };
+  // 7. Default: PUMP FRESH TIGHT (81% WR) — proven safe default, NOT momentum (20.9% WR)
+  return { presetId: 'pump_fresh_tight', reason: 'Default safe strategy — 81% backtest WR' };
 }
 
 const BUDGET_PRESETS = [0.1, 0.2, 0.5, 1.0];
@@ -135,18 +134,17 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   BarChart3: <BarChart3 className="w-3 h-3" />,
   Gem: <Gem className="w-3 h-3" />,
   Package: <Package className="w-3 h-3" />,
-  FlaskConical: <FlaskConical className="w-3 h-3" />,
 };
 
 /** Map asset filter to visible strategy categories */
 const ASSET_CATEGORY_MAP: Record<AssetType, string[]> = {
-  memecoin: ['TOP PERFORMERS', 'MEMECOIN', 'EXPERIMENTAL'],
-  established: ['ESTABLISHED TOKENS', 'EXPERIMENTAL'],
-  bags: ['BAGS.FM', 'EXPERIMENTAL'],
-  bluechip: ['EXPERIMENTAL'],
-  xstock: ['EXPERIMENTAL'],
-  prestock: ['EXPERIMENTAL'],
-  index: ['EXPERIMENTAL'],
+  memecoin: ['TOP PERFORMERS', 'MEMECOIN'],
+  established: ['TOP PERFORMERS', 'ESTABLISHED TOKENS'],
+  bags: ['BAGS.FM'],
+  bluechip: ['BLUE CHIP SOLANA'],
+  xstock: ['xSTOCK & INDEX'],
+  prestock: ['xSTOCK & INDEX'],
+  index: ['xSTOCK & INDEX'],
 };
 
 /** Risk level badge colors */
@@ -210,18 +208,8 @@ function InfoTip({ text }: { text: string }) {
   );
 }
 
-interface AutonomyRuntimeStatus {
-  autonomyEnabled: boolean;
-  applyOverridesEnabled: boolean;
-  xaiConfigured: boolean;
-  latestCycleId: string | null;
-  latestReasonCode: string | null;
-  overrideVersion: number;
-  overrideUpdatedAt: string | null;
-}
-
 export function SniperControls() {
-  const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining, graduations, tradeSignerMode, setTradeSignerMode, sessionWalletPubkey, setSessionWalletPubkey, assetFilter, backtestMeta, addExecution, autoResetRequired, showExperimentalStrategies, setShowExperimentalStrategies } = useSniperStore();
+  const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining, graduations, tradeSignerMode, setTradeSignerMode, sessionWalletPubkey, setSessionWalletPubkey, assetFilter, backtestMeta, addExecution, autoResetRequired } = useSniperStore();
   const { connected, connecting, connect, address, signTransaction, signMessage, publicKey } = usePhantomWallet();
   const { snipe, ready: walletReady } = useSnipeExecutor();
   const [isHydrated, setIsHydrated] = useState(false);
@@ -256,9 +244,6 @@ export function SniperControls() {
   const [activatePerTrade, setActivatePerTrade] = useState('');
   const [activateAutoSnipe, setActivateAutoSnipe] = useState(true);
   const [activateError, setActivateError] = useState<string | null>(null);
-  const [autonomyRuntime, setAutonomyRuntime] = useState<AutonomyRuntimeStatus | null>(null);
-  const [autonomyRuntimeError, setAutonomyRuntimeError] = useState<string | null>(null);
-  const autonomyReadToken = useMemo(() => getAutonomyReadToken(), []);
 
   // Safety watchdog: if Phantom/signature flows hang (popup blocked, route switch, extension bug),
   // sessionBusy can remain stuck and lock the entire session wallet UI. Auto-clear after 90s.
@@ -270,39 +255,6 @@ export function SniperControls() {
     }, 90_000);
     return () => window.clearTimeout(timer);
   }, [sessionBusy]);
-
-  useEffect(() => {
-    if (!autonomyReadToken) {
-      setAutonomyRuntime(null);
-      setAutonomyRuntimeError('Autonomy read token not configured for this client runtime.');
-      return;
-    }
-
-    let cancelled = false;
-    const loadAutonomyRuntime = async () => {
-      try {
-        const res = await fetch('/api/autonomy/status', {
-          cache: 'no-store',
-          headers: buildAutonomyReadHeaders(),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json() as AutonomyRuntimeStatus;
-        if (cancelled) return;
-        setAutonomyRuntime(json);
-        setAutonomyRuntimeError(null);
-      } catch (err) {
-        if (cancelled) return;
-        const msg = err instanceof Error ? err.message : 'Autonomy status unavailable';
-        setAutonomyRuntimeError(msg);
-      }
-    };
-    void loadAutonomyRuntime();
-    const timer = window.setInterval(() => { void loadAutonomyRuntime(); }, 60_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [autonomyReadToken]);
 
   // Load BEST_EVER on mount
   useEffect(() => {
@@ -1402,27 +1354,6 @@ export function SniperControls() {
       )}
 
       {/* ─── STRATEGY PRESET SELECTOR (Grouped Dropdown) ─── */}
-      {/* Runtime autonomy status (shows if overrides can be active right now) */}
-      <div className="mb-4 p-3 rounded-lg border border-border-primary bg-bg-secondary">
-        <div className="flex items-center gap-2 mb-1.5">
-          <FlaskConical className="w-3.5 h-3.5 text-text-muted" />
-          <span className="text-[10px] font-mono uppercase tracking-wide text-text-muted">AI Assist Status</span>
-        </div>
-        {autonomyRuntime ? (
-          <>
-            <p className="text-[10px] text-text-secondary leading-relaxed">
-              AI Assist {autonomyRuntime.autonomyEnabled && autonomyRuntime.applyOverridesEnabled && autonomyRuntime.xaiConfigured ? 'ON' : 'OFF'} (runtime tuning only; no code changes) | engine {autonomyRuntime.autonomyEnabled ? 'enabled' : 'disabled'} | overrides {autonomyRuntime.applyOverridesEnabled ? 'on' : 'off'} | xAI key {autonomyRuntime.xaiConfigured ? 'configured' : 'missing'}.
-            </p>
-            <p className="text-[9px] text-text-muted mt-1">
-              Cycle: {autonomyRuntime.latestCycleId || 'none'}{autonomyRuntime.latestReasonCode ? ` (${autonomyRuntime.latestReasonCode})` : ''} | override v{autonomyRuntime.overrideVersion} | updated {autonomyRuntime.overrideUpdatedAt ? new Date(autonomyRuntime.overrideUpdatedAt).toLocaleString() : 'never'}
-            </p>
-          </>
-        ) : (
-          <p className="text-[10px] text-text-muted">{autonomyRuntimeError ? `Unavailable: ${autonomyRuntimeError}` : 'Loading runtime status...'}</p>
-        )}
-      </div>
-
-      {/* Strategy preset selector (grouped dropdown) */}
       <div className="relative mb-4">
         {/* Dropdown trigger button */}
         <button
@@ -1476,23 +1407,7 @@ export function SniperControls() {
         {/* Dropdown panel with categories */}
         {strategyOpen && (
           <div className="mt-1.5 rounded-lg border border-border-primary bg-bg-secondary overflow-hidden animate-fade-in">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border-primary/50 bg-bg-tertiary/40">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted/80">Show Experimental</span>
-              <button
-                type="button"
-                onClick={() => setShowExperimentalStrategies(!showExperimentalStrategies)}
-                className={`px-2 py-1 rounded-md text-[9px] font-mono uppercase tracking-wider border transition-colors ${
-                  showExperimentalStrategies
-                    ? 'text-accent-warning border-accent-warning/40 bg-accent-warning/10'
-                    : 'text-text-muted border-border-primary bg-bg-secondary'
-                }`}
-                title={showExperimentalStrategies ? 'Hide experimental presets' : 'Show experimental presets'}
-              >
-                {showExperimentalStrategies ? 'On' : 'Off'}
-              </button>
-            </div>
             {STRATEGY_CATEGORIES.filter(c => {
-              if (c.label === 'EXPERIMENTAL' && !showExperimentalStrategies) return false;
               const allowed = ASSET_CATEGORY_MAP[assetFilter];
               return allowed ? allowed.includes(c.label) : true;
             }).map((category) => (
@@ -1509,17 +1424,10 @@ export function SniperControls() {
                   const isActive = activePreset === preset.id;
                   const isAggressive = preset.config.strategyMode === 'aggressive';
                   const isSuggested = suggestion?.presetId === preset.id && !isActive;
-                  const isDisabled = !!preset.disabled;
                   return (
                     <button
                       key={preset.id}
-                      type="button"
-                      disabled={isDisabled}
-                      onClick={() => {
-                        if (isDisabled) return;
-                        loadPreset(preset.id);
-                        setStrategyOpen(false);
-                      }}
+                      onClick={() => { loadPreset(preset.id); setStrategyOpen(false); }}
                       className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-all border-b border-border-primary/30 last:border-b-0 ${
                         isActive
                           ? isAggressive
@@ -1528,7 +1436,7 @@ export function SniperControls() {
                           : isSuggested
                             ? 'bg-blue-500/[0.04] text-text-secondary hover:bg-blue-500/[0.08]'
                             : 'text-text-secondary hover:bg-bg-tertiary/60'
-                      } ${isDisabled ? 'opacity-60 cursor-not-allowed hover:bg-transparent' : ''}`}
+                      }`}
                     >
                       {/* Active indicator */}
                       <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -1553,10 +1461,6 @@ export function SniperControls() {
                             <span className="text-[7px] font-bold uppercase tracking-wider bg-accent-error/20 text-accent-error px-1 py-0.5 rounded-full leading-none flex-shrink-0">
                               Disabled
                             </span>
-                          ) : preset.experimental ? (
-                            <span className="text-[7px] font-bold uppercase tracking-wider bg-accent-warning/20 text-accent-warning px-1 py-0.5 rounded-full leading-none flex-shrink-0">
-                              Experimental
-                            </span>
                           ) : preset.underperformer ? (
                             <span className="text-[7px] font-bold uppercase tracking-wider bg-accent-error/20 text-accent-error px-1 py-0.5 rounded-full leading-none flex-shrink-0">
                               Losing
@@ -1572,7 +1476,6 @@ export function SniperControls() {
                         const trades = meta?.backtested ? Number(meta.trades || 0) : 0;
                         const disabled = !!preset.disabled;
                         const under = !!meta?.underperformer || !!preset.underperformer;
-                        const exp = !!preset.experimental;
                         const gateBadge = gateStatusBadge(meta, config, preset.autoWrPrimaryOverridePct);
                         const stageTag =
                           meta?.stage === 'promotion' ? 'S3' :
@@ -1583,8 +1486,6 @@ export function SniperControls() {
 
                         const style = (disabled || under)
                           ? 'bg-accent-error/10 text-accent-error'
-                          : exp
-                            ? 'bg-accent-warning/10 text-accent-warning'
                           : isActive
                             ? isAggressive
                               ? 'bg-accent-warning/10 text-accent-warning'
@@ -1658,7 +1559,6 @@ export function SniperControls() {
         const meta: any = (backtestMeta as any)?.[activePreset];
         const isUnder = !!meta?.underperformer || !!preset?.underperformer;
         const isDisabled = !!preset?.disabled;
-        const isExperimental = !!preset?.experimental;
         const isAgg = preset?.config.strategyMode === 'aggressive';
         return (
           <div className={`mb-4 rounded-lg border overflow-hidden ${isAgg ? 'border-accent-warning/20 bg-accent-warning/[0.03]' : 'border-accent-neon/20 bg-accent-neon/[0.03]'}`}>
@@ -1668,10 +1568,6 @@ export function SniperControls() {
               {isDisabled ? (
                 <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-accent-error/10 text-accent-error border-accent-error/25">
                   disabled
-                </span>
-              ) : isExperimental ? (
-                <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-accent-warning/10 text-accent-warning border-accent-warning/25">
-                  experimental
                 </span>
               ) : isUnder ? (
                 <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-accent-error/10 text-accent-error border-accent-error/25">
@@ -1941,7 +1837,7 @@ export function SniperControls() {
                     <span className="font-bold text-accent-warning">Session Wallet</span> — a burner wallet that auto-signs buys and sells without Phantom popups. Required for automatic SL/TP execution.
                   </p>
                   <p className="text-[11px] text-text-muted/80 leading-relaxed">
-                    Fund it with only what you can afford to lose. Auto-close keeps proceeds in the session wallet; use <span className="font-semibold text-accent-warning">Sweep Back</span> whenever you want to move SOL to your main wallet.
+                    Fund it with only what you can afford to lose. Jarvis auto-sweeps excess SOL back to your main wallet after exits, but this is <span className="font-semibold text-accent-warning">best-effort</span>.
                   </p>
                   <p className="text-[11px] text-accent-error/90 leading-relaxed font-semibold">
                     ALWAYS click &quot;Save Key&quot; after creating your wallet. The downloaded key file is the ONLY backup.
@@ -2872,3 +2768,7 @@ function ConfigField({
     </div>
   );
 }
+
+
+
+

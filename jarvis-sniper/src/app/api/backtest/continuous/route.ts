@@ -337,7 +337,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit check (strict: backtest is compute-heavy)
     const ip = getClientIp(request);
-    const limit = await apiRateLimiter.check(ip);
+    const limit = apiRateLimiter.check(ip);
     if (!limit.allowed) {
       return NextResponse.json(
         { error: 'Rate limit exceeded', timestamp: new Date().toISOString() },

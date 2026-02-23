@@ -35,7 +35,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     // Rate limit check
     const ip = getClientIp(request);
-    const limit = await apiRateLimiter.check(ip);
+    const limit = apiRateLimiter.check(ip);
     if (!limit.allowed) {
       return NextResponse.json(
         { error: 'Rate limit exceeded' },
@@ -73,7 +73,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     // Rate limit check
     const ip = getClientIp(request);
-    const limit = await apiRateLimiter.check(ip);
+    const limit = apiRateLimiter.check(ip);
     if (!limit.allowed) {
       return NextResponse.json(
         { error: 'Rate limit exceeded' },

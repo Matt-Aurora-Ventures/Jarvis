@@ -44,8 +44,6 @@ import {
   markBacktestChunkRunning,
   markBacktestRunPhase,
 } from '@/lib/backtest-run-registry';
-import { readTradeExecutionPriors, type TradeExecutionPriors } from '@/lib/autonomy/trade-telemetry-store';
-import { isPromotableDataSource } from '@/lib/real-data-guard';
 
 // Evidence downloads rely on Node.js filesystem fallback in dev/serverless.
 export const runtime = 'nodejs';
@@ -84,10 +82,6 @@ type BacktestDataScale = 'fast' | 'thorough';
 type BacktestDataSource = OHLCVSource | 'mixed' | 'client';
 type SourcePolicy = 'gecko_only' | 'allow_birdeye_fallback';
 type RequestedFamily = DatasetFamily;
-
-const EXECUTION_PRIOR_LOOKBACK_DAYS = 30;
-const EXECUTION_PRIOR_SAMPLE_MIN = 50;
-const EXECUTION_RELIABILITY_PROMOTION_GATE_PCT = 80;
 
 function normalizeDataScale(v: unknown): BacktestDataScale {
   return v === 'fast' ? 'fast' : 'thorough';
@@ -247,8 +241,8 @@ type StrategyRuntimeConfig = Omit<BacktestConfig, 'entrySignal'> & {
 };
 
 const STRATEGY_SEED_METADATA: Pick<StrategyRuntimeConfig, 'strategyRevision' | 'seedVersion'> = {
-  strategyRevision: 'v4-backtest-2026-02-16',
-  seedVersion: 'seed-v4',
+  strategyRevision: 'v3-backtest-proven-2026-02-15',
+  seedVersion: 'seed-v3',
 };
 
 // Strategy configs — R4 realistic-TP optimized (2026-02-15).
@@ -876,56 +870,6 @@ function wilsonBoundsPctFromCounts(wins: number, total: number): { lower: number
   };
 }
 
-function fallbackExecutionPriors(): TradeExecutionPriors {
-  return {
-    sampleSize: 0,
-    lookbackDays: EXECUTION_PRIOR_LOOKBACK_DAYS,
-    totalSellAttempts: 0,
-    confirmedEvents: 0,
-    noRouteEvents: 0,
-    unresolvedEvents: 0,
-    failedEvents: 0,
-    noRouteRate: 0.08,
-    unresolvedRate: 0.05,
-    failedRate: 0.03,
-    executionReliabilityPct: 84,
-  };
-}
-
-function sanitizeExecutionPriors(input: TradeExecutionPriors | null | undefined): TradeExecutionPriors {
-  const fallback = fallbackExecutionPriors();
-  if (!input) return fallback;
-  const noRouteRate = Number.isFinite(input.noRouteRate) ? Math.max(0, Math.min(1, input.noRouteRate)) : fallback.noRouteRate;
-  const unresolvedRate = Number.isFinite(input.unresolvedRate) ? Math.max(0, Math.min(1, input.unresolvedRate)) : fallback.unresolvedRate;
-  const failedRate = Number.isFinite(input.failedRate) ? Math.max(0, Math.min(1, input.failedRate)) : fallback.failedRate;
-  const executionReliabilityPctRaw = 100 * Math.max(0, 1 - noRouteRate - unresolvedRate - failedRate);
-  const executionReliabilityPct = Number.isFinite(executionReliabilityPctRaw)
-    ? Math.max(0, Math.min(100, executionReliabilityPctRaw))
-    : fallback.executionReliabilityPct;
-  return {
-    sampleSize: Math.max(0, Math.floor(Number(input.sampleSize || 0))),
-    lookbackDays: Math.max(1, Math.floor(Number(input.lookbackDays || EXECUTION_PRIOR_LOOKBACK_DAYS))),
-    totalSellAttempts: Math.max(0, Math.floor(Number(input.totalSellAttempts || 0))),
-    confirmedEvents: Math.max(0, Math.floor(Number(input.confirmedEvents || 0))),
-    noRouteEvents: Math.max(0, Math.floor(Number(input.noRouteEvents || 0))),
-    unresolvedEvents: Math.max(0, Math.floor(Number(input.unresolvedEvents || 0))),
-    failedEvents: Math.max(0, Math.floor(Number(input.failedEvents || 0))),
-    noRouteRate,
-    unresolvedRate,
-    failedRate,
-    executionReliabilityPct,
-  };
-}
-
-function baseExecutionDegradedReasons(priors: TradeExecutionPriors): string[] {
-  const reasons: string[] = [];
-  if ((priors.totalSellAttempts || 0) < EXECUTION_PRIOR_SAMPLE_MIN) reasons.push('execution_prior_sample_low');
-  if ((priors.executionReliabilityPct || 0) < EXECUTION_RELIABILITY_PROMOTION_GATE_PCT) {
-    reasons.push('execution_reliability_below_gate');
-  }
-  return reasons;
-}
-
 // ─── Real Data Universes ───
 
 const DEXSCREENER_BOOSTS = 'https://api.dexscreener.com/token-boosts/latest/v1';
@@ -1518,7 +1462,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit check
     const ip = getClientIp(request);
-    const limit = await apiRateLimiter.check(ip);
+    const limit = apiRateLimiter.check(ip);
     if (!limit.allowed) {
       return withBacktestCors(request, NextResponse.json(
         { error: 'Rate limit exceeded' },
@@ -1548,7 +1492,7 @@ export async function POST(request: Request) {
       runId: requestedRunId,
       manifestId: requestedManifestId,
       datasetManifestId: requestedDatasetManifestId,
-      strictNoSynthetic = true,
+      strictNoSynthetic = false,
       targetTradesPerStrategy = 5000,
       sourceTierPolicy = 'adaptive_tiered',
       cohort = 'baseline_90d',
@@ -1583,9 +1527,6 @@ export async function POST(request: Request) {
     const fetchBatchSize = typeof body.fetchBatchSize === 'number'
       ? Math.max(1, Math.min(8, Math.floor(body.fetchBatchSize)))
       : (dataScale === 'fast' ? 4 : 3);
-    const familyConcurrency = typeof body.familyConcurrency === 'number'
-      ? Math.max(1, Math.min(4, Math.floor(body.familyConcurrency)))
-      : 2;
 
     // Dataset sizing: "fast" keeps the UI snappy; "thorough" runs 200+ tokens.
     // maxTokens override lets callers push to 200+ for deep validation.
@@ -1603,11 +1544,6 @@ export async function POST(request: Request) {
           bagsMaxTokens: requestedMax ?? 200,
           xstockMaxTokens: requestedMax ? Math.min(requestedMax, 80) : 50,
         };
-    const executionPriors = sanitizeExecutionPriors(
-      await readTradeExecutionPriors(EXECUTION_PRIOR_LOOKBACK_DAYS).catch(() => null),
-    );
-    const executionScale = Math.max(0, Math.min(1, executionPriors.executionReliabilityPct / 100));
-    const executionBaseDegradedReasons = baseExecutionDegradedReasons(executionPriors);
 
     const allRunResults: StrategyRunResult[] = [];
     let universeTimeouts = 0;
@@ -1627,9 +1563,6 @@ export async function POST(request: Request) {
           }
 
           const cfg = result.config;
-          const rowDegradedReasons = [...executionBaseDegradedReasons];
-          const rowDegraded = rowDegradedReasons.length > 0;
-          const rowDegradedReasonText = rowDegradedReasons.join('|');
           for (const t of result.trades) {
             evidenceTrades.push({
               strategyId: result.strategyId,
@@ -1658,39 +1591,23 @@ export async function POST(request: Request) {
               feePct: cfg.feePct,
               minScore: cfg.minScore,
               minLiquidityUsd: cfg.minLiquidityUsd,
-              executionReliabilityPct: Number(executionPriors.executionReliabilityPct.toFixed(4)),
-              noRouteRate: Number(executionPriors.noRouteRate.toFixed(6)),
-              unresolvedRate: Number(executionPriors.unresolvedRate.toFixed(6)),
-              failedRate: Number(executionPriors.failedRate.toFixed(6)),
-              executionAdjustedPnlNet: Number((t.pnlNet * executionScale).toFixed(6)),
-              degraded: rowDegraded,
-              degradedReasons: rowDegradedReasonText,
             });
           }
         }
       : undefined;
 
     // Real-data universes are expensive to build; cache them per request.
-    type TokenUniverse = {
-      mints: string[];
-      datasets: HistoricalDataSet[];
-      sources: Set<OHLCVSource>;
-      attempted: number;
-    };
-
-    let memecoinUniverse: TokenUniverse | null = null;
-    let bagsUniverse: TokenUniverse | null = null;
+    let memecoinUniverse:
+      | { mints: string[]; datasets: HistoricalDataSet[]; sources: Set<OHLCVSource>; attempted: number }
+      | null = null;
+    let bagsUniverse:
+      | { mints: string[]; datasets: HistoricalDataSet[]; sources: Set<OHLCVSource>; attempted: number }
+      | null = null;
 
     const equityUniverses = new Map<
       string,
       { datasets: HistoricalDataSet[]; sources: Set<OHLCVSource>; attempted: number }
     >();
-
-    const summarizeUniverse = (universe: TokenUniverse | null) => ({
-      candidates: universe ? universe.mints.length : 0,
-      datasets: universe ? universe.datasets.length : 0,
-      attempted: universe ? Number(universe.attempted || 0) : 0,
-    });
 
     const withTimeBudget = async <T,>(
       promise: Promise<T>,
@@ -2099,16 +2016,15 @@ export async function POST(request: Request) {
     });
     heartbeatBacktestRun(runId, `Initialized run with ${strategyIds.length} strategy chunks`);
 
-    const runStrategyById = async (sid: string): Promise<void> => {
+    for (const sid of strategyIds) {
       const config = STRATEGY_CONFIGS[sid];
-      if (!config) return;
+      if (!config) continue;
 
       const entrySignal = ENTRY_SIGNALS[sid] || momentumEntry;
       const category = STRATEGY_CATEGORY[sid] || 'xstock_index';
       markBacktestChunkRunning(runId, sid);
       heartbeatBacktestRun(runId, `Running ${sid} (${category})`);
       try {
-        const resultsBefore = allRunResults.length;
         // If client provided candles, use those directly (override data source logic)
         if (clientCandles) {
           heartbeatBacktestRun(runId, `Using client candles for ${sid}`);
@@ -2121,7 +2037,7 @@ export async function POST(request: Request) {
             });
           }
           markBacktestChunkDone(runId, sid);
-          return;
+          continue;
         }
 
         // Route to appropriate data source based on strategy category
@@ -2219,49 +2135,16 @@ export async function POST(request: Request) {
             break;
           }
         }
-        const produced = allRunResults.length - resultsBefore;
-        if (!clientCandles && produced <= 0) {
-          const noDataMsg = `No executable real-data dataset for ${sid}`;
-          heartbeatBacktestRun(runId, noDataMsg);
-          markBacktestChunkFailed(runId, sid, noDataMsg);
-          return;
-        }
         markBacktestChunkDone(runId, sid);
       } catch (err) {
         const message = err instanceof Error ? err.message : `Strategy ${sid} failed`;
         heartbeatBacktestRun(runId, `Chunk failed for ${sid}: ${message}`);
         markBacktestChunkFailed(runId, sid, message);
       }
-    };
-
-    const familyBuckets = new Map<StrategyCategory, string[]>();
-    for (const sid of strategyIds) {
-      const category = STRATEGY_CATEGORY[sid] || 'xstock_index';
-      const bucket = familyBuckets.get(category) || [];
-      bucket.push(sid);
-      familyBuckets.set(category, bucket);
     }
-    const familyQueues = [...familyBuckets.entries()];
-    const maxFamilyWorkers = Math.max(1, Math.min(familyConcurrency, familyQueues.length));
-    let familyCursor = 0;
-    const runFamilyWorker = async () => {
-      while (true) {
-        const next = familyCursor++;
-        if (next >= familyQueues.length) return;
-        const [family, sids] = familyQueues[next];
-        heartbeatBacktestRun(runId, `Processing ${family} family (${sids.length} strategies)`);
-        for (const sid of sids) {
-          await runStrategyById(sid);
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: maxFamilyWorkers }, () => runFamilyWorker()));
-    markBacktestRunPhase(runId, 'strategy_run', 'Completed strategy execution');
 
     if (!clientCandles && allRunResults.length === 0) {
       failBacktestRun(runId, 'No usable real-data datasets for requested strategy/source');
-      const memecoinSummary = summarizeUniverse(memecoinUniverse);
-      const bagsSummary = summarizeUniverse(bagsUniverse);
       return withBacktestCors(request, NextResponse.json(
         {
           error: 'Backtest produced no results (no usable real-data datasets for requested strategy/source)',
@@ -2274,10 +2157,10 @@ export async function POST(request: Request) {
             datasetManifestId: activeDatasetManifestId,
             requestedMaxTokens: requestedMax,
             strategyId,
-            memecoinCandidates: memecoinSummary.candidates,
-            memecoinDatasetsUsed: memecoinSummary.datasets,
-            bagsCandidates: bagsSummary.candidates,
-            bagsDatasetsUsed: bagsSummary.datasets,
+            memecoinCandidates: memecoinUniverse?.mints?.length ?? 0,
+            memecoinDatasetsUsed: memecoinUniverse?.datasets?.length ?? 0,
+            bagsCandidates: bagsUniverse?.mints?.length ?? 0,
+            bagsDatasetsUsed: bagsUniverse?.datasets?.length ?? 0,
           },
         },
         { status: 422 },
@@ -2285,27 +2168,14 @@ export async function POST(request: Request) {
     }
 
     if (strictNoSynthetic) {
-      const strategyCoverage = new Set(allRunResults.map((r) => r.result.strategyId));
-      const missingStrategyResults = strategyIds.filter((sid) => !strategyCoverage.has(sid));
-      if (missingStrategyResults.length > 0) {
-        failBacktestRun(runId, 'strictNoSynthetic gate failed: one or more strategies had no executable real-data path');
-        return withBacktestCors(request, NextResponse.json(
-          {
-            error: 'strictNoSynthetic gate failed: one or more strategies had no executable real-data path',
-            runId,
-            missingStrategyResults,
-          },
-          { status: 422 },
-        ));
-      }
-      const disallowed = allRunResults.filter((r) => !isPromotableDataSource(r.dataSource));
+      const disallowed = allRunResults.filter((r) => r.dataSource === 'client' || !r.dataSource);
       if (disallowed.length > 0) {
         failBacktestRun(runId, 'strictNoSynthetic gate failed: non-real data source detected');
         return withBacktestCors(request, NextResponse.json(
           {
             error: 'strictNoSynthetic gate failed: non-real data source detected',
             runId,
-            disallowedSources: disallowed.map((d) => String(d.dataSource || 'unknown')),
+            disallowedSources: disallowed.map((d) => d.dataSource),
           },
           { status: 422 },
         ));
@@ -2330,13 +2200,6 @@ export async function POST(request: Request) {
         ? { lower: Number(existingCi[0] || 0) * 100, upper: Number(existingCi[1] || 0) * 100 }
         : wilsonBoundsPctFromCounts(r.result.wins, r.result.totalTrades);
       const netPnlPct = Number((r.result.avgReturnPct || 0) * (r.result.totalTrades || 0));
-      const expectancyValue = Number(r.result.expectancy || 0);
-      const executionAdjustedExpectancy = expectancyValue * executionScale;
-      const executionAdjustedNetPnlPct = netPnlPct * executionScale;
-      const degradedReasons = [...executionBaseDegradedReasons];
-      if (!isPromotableDataSource(r.dataSource)) degradedReasons.push('non_real_source');
-      if (!r.validated) degradedReasons.push('unvalidated_result');
-      const degraded = [...new Set(degradedReasons)];
 
       return {
         strategyId: r.result.strategyId,
@@ -2352,38 +2215,23 @@ export async function POST(request: Request) {
         sharpe: r.result.sharpeRatio.toFixed(2),
         maxDD: `${r.result.maxDrawdownPct.toFixed(1)}%`,
         expectancy: r.result.expectancy.toFixed(4),
-        expectancyValue: Number(expectancyValue.toFixed(6)),
         avgHold: `${r.result.avgHoldCandles.toFixed(0)}h`,
         validated: r.validated,
         dataSource: r.dataSource,
-        executionReliabilityPct: Number(executionPriors.executionReliabilityPct.toFixed(4)),
-        noRouteRate: Number(executionPriors.noRouteRate.toFixed(6)),
-        unresolvedRate: Number(executionPriors.unresolvedRate.toFixed(6)),
-        executionAdjustedExpectancy: Number(executionAdjustedExpectancy.toFixed(6)),
-        executionAdjustedNetPnlPct: Number(executionAdjustedNetPnlPct.toFixed(6)),
-        degraded: degraded.length > 0,
-        degradedReasons: degraded,
       };
     });
 
-    // Detect underperformers using profitability-first criteria.
-    // Avoid raw WR-only flags: low-WR/high-R setups can still be profitable.
+    // Detect underperformers: win rate < 40% OR profit factor < 1.0
     const underperformers = allRunResults
-      .filter((r) => {
-        const pf = Number(r.result.profitFactor || 0);
-        const netPnlPct = Number((r.result.avgReturnPct || 0) * (r.result.totalTrades || 0));
-        return pf < 1.0 || netPnlPct <= 0;
-      })
+      .filter(r => r.result.winRate < 0.40 || r.result.profitFactor < 1.0)
       .map(r => r.result.strategyId);
     // Deduplicate
     const uniqueUnderperformers = [...new Set(underperformers)];
 
-    const memecoinSummary = summarizeUniverse(memecoinUniverse);
-    const bagsSummary = summarizeUniverse(bagsUniverse);
     const equityAttempted = [...equityUniverses.values()].reduce((s, v) => s + (v.attempted || 0), 0);
     const equitySucceeded = [...equityUniverses.values()].reduce((s, v) => s + v.datasets.length, 0);
-    const computedDatasetsAttempted = memecoinSummary.attempted + bagsSummary.attempted + equityAttempted;
-    const computedDatasetsSucceeded = memecoinSummary.datasets + bagsSummary.datasets + equitySucceeded;
+    const computedDatasetsAttempted = (memecoinUniverse?.attempted ?? 0) + (bagsUniverse?.attempted ?? 0) + equityAttempted;
+    const computedDatasetsSucceeded = (memecoinUniverse?.datasets?.length ?? 0) + (bagsUniverse?.datasets?.length ?? 0) + equitySucceeded;
     const runDiag = getBacktestRunStatus(runId);
     const datasetsAttempted = (runDiag?.datasetsAttempted ?? 0) > 0 ? (runDiag?.datasetsAttempted ?? 0) : computedDatasetsAttempted;
     const datasetsSucceeded = (runDiag?.datasetsSucceeded ?? 0) > 0 ? (runDiag?.datasetsSucceeded ?? 0) : computedDatasetsSucceeded;
@@ -2394,38 +2242,22 @@ export async function POST(request: Request) {
       mixed: allRunResults.filter((r) => r.dataSource === 'mixed').length,
       client: allRunResults.filter((r) => r.dataSource === 'client').length,
     };
-    const totalSummaryTrades = summary.reduce((s, row) => s + Math.max(0, Number((row as any).trades || 0)), 0);
-    const weightedExecutionAdjustedExpectancyRaw = summary.reduce((s, row) => {
-      const weight = totalSummaryTrades > 0 ? Math.max(0, Number((row as any).trades || 0)) / totalSummaryTrades : 0;
-      return s + (Number((row as any).executionAdjustedExpectancy || 0) * weight);
-    }, 0);
-    const executionAdjustedNetPnlPctRaw = summary.reduce(
-      (s, row) => s + Number((row as any).executionAdjustedNetPnlPct || 0),
-      0,
-    );
-    const degradedReasons = [...executionBaseDegradedReasons];
-    if (datasetsSkipped > 0) degradedReasons.push('dataset_coverage_skipped');
-    if ((runDiag?.failedChunks || 0) > 0) degradedReasons.push('strategy_chunks_failed');
-    if ((sourceDiagnosticsExpanded.client || 0) > 0) degradedReasons.push('non_real_source_detected');
-    const uniqueDegradedReasons = [...new Set(degradedReasons)];
-    const degraded = uniqueDegradedReasons.length > 0;
 
     const meta = {
         dataScale,
         sourcePolicy,
         lookbackHours,
-        familyConcurrency,
         family: requestedFamily,
         datasetManifestId: activeDatasetManifestId,
         requestedMaxTokens: requestedMax,
         bluechipMaxTokens: scaleCfg.bluechipMaxTokens,
         bluechipHardcoded: ALL_BLUECHIPS.length,
         memecoinMaxTokens: scaleCfg.memecoinMaxTokens,
-        memecoinCandidates: memecoinSummary.candidates,
-        memecoinDatasetsUsed: memecoinSummary.datasets,
+        memecoinCandidates: memecoinUniverse?.mints?.length ?? 0,
+        memecoinDatasetsUsed: memecoinUniverse?.datasets?.length ?? 0,
         bagsMaxTokens: scaleCfg.bagsMaxTokens,
-        bagsCandidates: bagsSummary.candidates,
-        bagsDatasetsUsed: bagsSummary.datasets,
+        bagsCandidates: bagsUniverse?.mints?.length ?? 0,
+        bagsDatasetsUsed: bagsUniverse?.datasets?.length ?? 0,
         xstockMaxTokens: scaleCfg.xstockMaxTokens,
         xstockDatasetsUsed: [...equityUniverses.values()].reduce((s, v) => s + v.datasets.length, 0),
         datasetsAttempted,
@@ -2433,13 +2265,6 @@ export async function POST(request: Request) {
         datasetsSkipped,
         sourceDiagnosticsExpanded,
         totalResults: allRunResults.length,
-        executionReliabilityPct: Number(executionPriors.executionReliabilityPct.toFixed(4)),
-        noRouteRate: Number(executionPriors.noRouteRate.toFixed(6)),
-        unresolvedRate: Number(executionPriors.unresolvedRate.toFixed(6)),
-        executionAdjustedExpectancy: Number(weightedExecutionAdjustedExpectancyRaw.toFixed(6)),
-        executionAdjustedNetPnlPct: Number(executionAdjustedNetPnlPctRaw.toFixed(6)),
-        degraded,
-        degradedReasons: uniqueDegradedReasons,
       };
 
     if (includeEvidence && evidenceRunId) {
@@ -2487,28 +2312,15 @@ export async function POST(request: Request) {
       datasetsAttempted: runStatus?.datasetsAttempted ?? datasetsAttempted,
       datasetsSucceeded: runStatus?.datasetsSucceeded ?? datasetsSucceeded,
       datasetsFailed: runStatus?.datasetsFailed ?? Math.max(0, datasetsAttempted - datasetsSucceeded),
-      executionReliabilityPct: Number(executionPriors.executionReliabilityPct.toFixed(4)),
-      noRouteRate: Number(executionPriors.noRouteRate.toFixed(6)),
-      unresolvedRate: Number(executionPriors.unresolvedRate.toFixed(6)),
-      executionAdjustedExpectancy: Number(weightedExecutionAdjustedExpectancyRaw.toFixed(6)),
-      executionAdjustedNetPnlPct: Number(executionAdjustedNetPnlPctRaw.toFixed(6)),
-      degraded,
-      degradedReasons: uniqueDegradedReasons,
       sourceDiagnostics: {
         sourceTierPolicy: String(sourceTierPolicy || 'adaptive_tiered'),
         strictNoSynthetic: !!strictNoSynthetic,
         targetTradesPerStrategy: Number(targetTradesPerStrategy) || 5000,
         cohort: String(cohort || 'baseline_90d'),
-        familyConcurrency,
         datasetsAttempted,
         datasetsSucceeded,
         datasetsSkipped,
         sourceDiagnosticsExpanded,
-        executionReliabilityPct: Number(executionPriors.executionReliabilityPct.toFixed(4)),
-        noRouteRate: Number(executionPriors.noRouteRate.toFixed(6)),
-        unresolvedRate: Number(executionPriors.unresolvedRate.toFixed(6)),
-        degraded,
-        degradedReasons: uniqueDegradedReasons,
       },
       results: summary,
       report,

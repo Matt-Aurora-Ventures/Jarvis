@@ -64,7 +64,7 @@ except ImportError as e:
 
 # Import security modules
 try:
-    from bots.shared.allowlist import require_auth, AuthorizationLevel
+    from bots.shared.allowlist import AuthorizationLevel, load_allowlist, check_authorization
     from bots.shared.command_blocklist import is_dangerous_command
     HAS_SECURITY = True
 except ImportError as e:
@@ -119,6 +119,10 @@ if not BOT_TOKEN:
 # Initialize bot
 bot = AsyncTeleBot(BOT_TOKEN)
 
+# Load allowlist for privileged commands (browse/computer/remote).
+# NOTE: even if other bots run in "public mode", Jarvis computer control must stay locked down.
+_allowlist = load_allowlist() if HAS_SECURITY else None
+
 # Register approval handlers
 try:
     from bots.shared.approval_handlers import register_approval_handlers
@@ -162,6 +166,20 @@ Monitoring:
 - Token sentiment analysis
 - Market regime detection
 """
+
+
+def _is_admin(user_id: int) -> bool:
+    """Strict allowlist check for privileged commands (deny-by-default if not configured)."""
+    if not HAS_SECURITY or not _allowlist:
+        return False
+    return check_authorization(user_id, AuthorizationLevel.ADMIN, _allowlist)
+
+
+async def _deny_admin(message) -> None:
+    try:
+        await bot.reply_to(message, "This command is restricted to admins.")
+    except Exception:
+        return
 
 
 @bot.message_handler(commands=['start', 'help'])
@@ -233,6 +251,9 @@ async def handle_caps(message):
 @bot.message_handler(commands=['browse', 'web'])
 async def handle_browse(message):
     """Handle browser automation requests."""
+    if not _is_admin(message.from_user.id):
+        await _deny_admin(message)
+        return
     if not HAS_COMPUTER_CONTROL:
         await bot.reply_to(message, "Computer control module not available.")
         return
@@ -270,6 +291,9 @@ async def handle_browse(message):
 @bot.message_handler(commands=['computer', 'pc', 'cmd'])
 async def handle_computer(message):
     """Handle full computer control requests."""
+    if not _is_admin(message.from_user.id):
+        await _deny_admin(message)
+        return
     if not HAS_COMPUTER_CONTROL:
         await bot.reply_to(message, "Computer control module not available.")
         return
@@ -301,6 +325,9 @@ async def handle_computer(message):
 @bot.message_handler(commands=['remote', 'tailscale'])
 async def handle_remote_status(message):
     """Check remote control availability."""
+    if not _is_admin(message.from_user.id):
+        await _deny_admin(message)
+        return
     if not HAS_COMPUTER_CONTROL:
         await bot.reply_to(message, "Computer control module not available.")
         return

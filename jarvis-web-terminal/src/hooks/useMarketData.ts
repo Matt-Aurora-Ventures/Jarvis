@@ -73,6 +73,6 @@ function mapToSentiment(token: BagsToken): TokenSentiment {
         sentiment: sentiment,
         score: score,
         signal: score > 75 ? 'STRONG_BUY' : score > 50 ? 'BUY' : 'HOLD',
-        summary: `Vol: $${(token.volume_24h / 1000000).toFixed(2)}M | Liq: $${(token.liquidity / 1000000).toFixed(2)}M. Live from Bags.fm.`
+        summary: `Vol: $${(token.volume_24h / 1000000).toFixed(2)}M | Liq: $${(token.liquidity / 1000000).toFixed(2)}M. Live data.`
     };
 }

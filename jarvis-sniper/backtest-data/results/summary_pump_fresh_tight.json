@@ -1,0 +1,37 @@
+{
+  "algo_id": "pump_fresh_tight",
+  "total_trades": 98,
+  "wins": 45,
+  "losses": 53,
+  "win_rate": 45.9,
+  "avg_win_pct": 18.21,
+  "avg_loss_pct": -11.14,
+  "max_win_pct": 18.43,
+  "max_loss_pct": -11.33,
+  "avg_trade_duration_hours": 0.41,
+  "median_trade_duration_hours": 0.17,
+  "profit_factor": 1.39,
+  "expectancy_per_trade_pct": 2.34,
+  "total_return_pct": 229.32,
+  "sharpe_ratio": 2.53,
+  "max_drawdown_pct": -6.19,
+  "dual_trigger_bars": 2,
+  "expiry_exits_below_entry": 0,
+  "exit_distribution": {
+    "sl_hit": 52,
+    "tp_hit": 43,
+    "trail_stop": 0,
+    "expired": 0,
+    "end_of_data": 3
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-02",
+      "trades": 98,
+      "pnl_pct": 229.32,
+      "win_rate": 45.9
+    }
+  ],
+  "best_day": "2026-02-15",
+  "worst_day": "2026-02-14"
+}

@@ -186,7 +186,7 @@ async def send_telegram():
     import aiohttp
 
     bot_token = os.getenv("TG_BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
-    channel_id = os.getenv("TELEGRAM_BROADCAST_CHAT_ID", "-1003408655098")
+    channel_id = os.getenv("TELEGRAM_BROADCAST_CHAT_ID", "-5003286623")
 
     if not bot_token:
         print("No Telegram bot token found")

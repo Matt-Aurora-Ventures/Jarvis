@@ -1,0 +1,35 @@
+{
+  "algo_id": "insight_j",
+  "total_trades": 501,
+  "wins": 146,
+  "losses": 355,
+  "win_rate": 29.1,
+  "avg_win_pct": 45.48,
+  "avg_loss_pct": -15.59,
+  "max_win_pct": 58.11,
+  "max_loss_pct": -16.29,
+  "avg_trade_duration_hours": 1.71,
+  "median_trade_duration_hours": 0.92,
+  "profit_factor": 1.2,
+  "expectancy_per_trade_pct": 2.21,
+  "total_return_pct": 1105.18,
+  "sharpe_ratio": 1.17,
+  "max_drawdown_pct": -53.15,
+  "exit_distribution": {
+    "sl_hit": 331,
+    "tp_hit": 101,
+    "trail_stop": 0,
+    "expired": 51,
+    "end_of_data": 18
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-02",
+      "trades": 501,
+      "pnl_pct": 1105.18,
+      "win_rate": 29.1
+    }
+  ],
+  "best_day": "2026-02-14",
+  "worst_day": "2026-02-13"
+}

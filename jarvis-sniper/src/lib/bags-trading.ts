@@ -1,7 +1,7 @@
 /**
- * Solana Swap Execution - Bags.fm only
+ * Solana Swap Execution — Bags.fm only
  *
- * BUYS/SELLS -> /api/bags/* server proxy (Bags SDK, priority fees, no CORS)
+ * BUYS/SELLS → /api/bags/* server proxy (Bags SDK, priority fees, no CORS)
  *
  * The server proxy handles:
  * - Bags SDK execution (bypasses CORS)
@@ -47,7 +47,6 @@ export interface SwapQuote {
 export interface SwapResult {
   success: boolean;
   txHash?: string;
-  tradeId?: string;
   /** Confirmation outcome for the submitted signature, when known. */
   confirmationState?: 'confirmed' | 'failed' | 'unresolved';
   /** Normalized failure type for retry/backoff policies. */
@@ -71,7 +70,7 @@ const JITO_ENDPOINTS = [
 ];
 
 // ============================================================
-// BUY FLOW - via server proxy (Bags SDK, partner key, priority fees)
+// BUY FLOW — via server proxy (Bags SDK, partner key, priority fees)
 // ============================================================
 
 /**
@@ -117,15 +116,13 @@ export async function executeSwap(
   slippageBps: number,
   signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>,
   useJito = false,
-  strategyId = 'unknown',
-  surface: 'main' | 'bags' | 'tradfi' | 'unknown' = 'unknown',
 ): Promise<SwapResult> {
   const timestamp = Date.now();
   const lamports = Math.floor(amountSol * 1e9);
-  let tradeId: string | undefined;
+
   try {
     // 1. Get quote + transaction from server proxy (includes priority fees)
-    console.log(`[Bags Proxy] Swap: ${amountSol} SOL -> ${outputMint.slice(0, 8)}...`);
+    console.log(`[Bags Proxy] Swap: ${amountSol} SOL → ${outputMint.slice(0, 8)}...`);
     const swapController = new AbortController();
     const swapTimeout = setTimeout(() => swapController.abort(), 30_000); // 30s timeout
     let res: Response;
@@ -140,23 +137,21 @@ export async function executeSwap(
           slippageBps,
           userPublicKey: walletAddress,
           priorityFeeMicroLamports: 200_000,
-          strategyId,
-          surface,
         }),
         signal: swapController.signal,
       });
     } finally {
       clearTimeout(swapTimeout);
     }
+
     if (!res.ok) {
       const err = await safeReadJson(res);
-      tradeId = typeof err?.tradeId === 'string' ? err.tradeId : undefined;
       const errorMessage = String(err?.error || err?.message || `Server swap request failed (${res.status})`);
       const failureCode =
         normalizeFailureCode(errorMessage, err?.code) ||
         (res.status === 409 ? 'insufficient_signer_sol' : 'rpc_error');
       return {
-        success: false, tradeId, inputAmount: amountSol, outputAmount: 0, priceImpact: 0,
+        success: false, inputAmount: amountSol, outputAmount: 0, priceImpact: 0,
         error: errorMessage,
         failureCode,
         failureDetail: errorMessage,
@@ -164,19 +159,16 @@ export async function executeSwap(
       };
     }
 
-    const swapPayload = await res.json();
-    const txBase64 = swapPayload.transaction;
-    const quote = swapPayload.quote;
-    tradeId = typeof swapPayload.tradeId === 'string' ? swapPayload.tradeId : tradeId;
+    const { transaction: txBase64, quote } = await res.json();
 
     if (!quote || !quote.outAmount || quote.outAmount === '0') {
       return {
-        success: false, tradeId, inputAmount: amountSol, outputAmount: 0, priceImpact: 0,
-        error: 'No route found - token may not be tradeable yet', timestamp,
+        success: false, inputAmount: amountSol, outputAmount: 0, priceImpact: 0,
+        error: 'No route found — token may not be tradeable yet', timestamp,
       };
     }
 
-    console.log(`[Bags Proxy] Quote: ${quote.inAmount} -> ${quote.outAmount} (impact: ${quote.priceImpactPct}%)`);
+    console.log(`[Bags Proxy] Quote: ${quote.inAmount} → ${quote.outAmount} (impact: ${quote.priceImpactPct}%)`);
 
     // 2. Deserialize transaction from base64
     const transaction = VersionedTransaction.deserialize(
@@ -210,7 +202,7 @@ export async function executeSwap(
       const detail = confirmResult.errorDetail || 'On-chain failure';
       const failureCode = normalizeFailureCode(detail) || 'onchain_failed';
       return {
-        success: false, tradeId, txHash, inputAmount: amountSol, outputAmount: 0,
+        success: false, txHash, inputAmount: amountSol, outputAmount: 0,
         confirmationState: 'failed',
         failureCode,
         failureDetail: detail,
@@ -221,7 +213,7 @@ export async function executeSwap(
     }
     if (confirmResult.state === 'unresolved') {
       return {
-        success: false, tradeId, txHash, inputAmount: amountSol, outputAmount: 0,
+        success: false, txHash, inputAmount: amountSol, outputAmount: 0,
         confirmationState: 'unresolved',
         failureCode: 'unresolved',
         failureDetail: confirmResult.errorDetail || 'Transaction sent but not confirmed on-chain',
@@ -237,19 +229,18 @@ export async function executeSwap(
 
     console.log(`[Bags Proxy] Swap ${confirmResult.state === 'confirmed' ? 'confirmed' : 'assumed'}: ${txHash}`);
     return {
-      success: true, tradeId, txHash, inputAmount: amountSol, outputAmount, outputAmountLamports,
+      success: true, txHash, inputAmount: amountSol, outputAmount, outputAmountLamports,
       confirmationState: 'confirmed',
       priceImpact: parseFloat(quote.priceImpactPct || '0'), timestamp,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     if (msg.includes('User rejected') || msg.includes('user rejected')) {
-      return { success: false, tradeId, inputAmount: amountSol, outputAmount: 0, priceImpact: 0, error: 'Transaction rejected by user', timestamp };
+      return { success: false, inputAmount: amountSol, outputAmount: 0, priceImpact: 0, error: 'Transaction rejected by user', timestamp };
     }
     const failureCode = normalizeFailureCode(msg) || 'rpc_error';
     return {
       success: false,
-      tradeId,
       inputAmount: amountSol,
       outputAmount: 0,
       priceImpact: 0,
@@ -262,11 +253,11 @@ export async function executeSwap(
 }
 
 // ============================================================
-// SELL FLOW - via server proxy (Bags SDK, no client API keys)
+// SELL FLOW — via server proxy (Bags SDK, no client API keys)
 // ============================================================
 
 /**
- * Get a sell quote (Token->SOL) via the server proxy (Bags SDK).
+ * Get a sell quote (Token→SOL) via the server proxy (Bags SDK).
  * Used by the risk management loop to check exit value.
  */
 export async function getSellQuote(
@@ -309,11 +300,8 @@ export async function executeSwapFromQuote(
   signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>,
   useJito = false,
   priorityFeeMicroLamports: number = 200_000,
-  strategyId = 'unknown',
-  surface: 'main' | 'bags' | 'tradfi' | 'unknown' = 'unknown',
 ): Promise<SwapResult> {
   const timestamp = Date.now();
-  let tradeId: string | undefined;
 
   try {
     // Build tx on server via Bags SDK (bypasses CORS and keeps API key server-only)
@@ -328,23 +316,21 @@ export async function executeSwapFromQuote(
           quote,
           userPublicKey: walletAddress,
           priorityFeeMicroLamports,
-          strategyId,
-          surface,
         }),
         signal: swapController.signal,
       });
     } finally {
       clearTimeout(swapTimeout);
     }
+
     if (!res.ok) {
       const err = await safeReadJson(res);
-      tradeId = typeof err?.tradeId === 'string' ? err.tradeId : undefined;
       const errorMessage = String(err?.error || err?.message || `Server swap request failed (${res.status})`);
       const failureCode =
         normalizeFailureCode(errorMessage, err?.code) ||
         (res.status === 409 ? 'insufficient_signer_sol' : 'rpc_error');
       return {
-        success: false, tradeId, inputAmount: 0, outputAmount: 0,
+        success: false, inputAmount: 0, outputAmount: 0,
         priceImpact: parseFloat(quote.priceImpactPct || '0'),
         error: errorMessage,
         failureCode,
@@ -353,9 +339,7 @@ export async function executeSwapFromQuote(
       };
     }
 
-    const swapPayload = await res.json();
-    const txBase64 = swapPayload.transaction;
-    tradeId = typeof swapPayload.tradeId === 'string' ? swapPayload.tradeId : tradeId;
+    const { transaction: txBase64 } = await res.json();
     const transaction = VersionedTransaction.deserialize(
       new Uint8Array(Buffer.from(txBase64, 'base64')),
     );
@@ -388,7 +372,7 @@ export async function executeSwapFromQuote(
       const detail = confirmResult.errorDetail || 'On-chain failure';
       const failureCode = normalizeFailureCode(detail) || 'onchain_failed';
       return {
-        success: false, tradeId, txHash, inputAmount: 0, outputAmount: 0,
+        success: false, txHash, inputAmount: 0, outputAmount: 0,
         confirmationState: 'failed',
         failureCode,
         failureDetail: detail,
@@ -399,7 +383,7 @@ export async function executeSwapFromQuote(
     }
     if (confirmResult.state === 'unresolved') {
       return {
-        success: false, tradeId, txHash, inputAmount: 0, outputAmount: 0,
+        success: false, txHash, inputAmount: 0, outputAmount: 0,
         confirmationState: 'unresolved',
         failureCode: 'unresolved',
         failureDetail: confirmResult.errorDetail || 'Transaction sent but not confirmed on-chain',
@@ -414,7 +398,7 @@ export async function executeSwapFromQuote(
     const outputAmount = uiAmountFromRaw(outputAmountLamports, outputDecimals);
 
     return {
-      success: true, tradeId, txHash,
+      success: true, txHash,
       confirmationState: 'confirmed',
       inputAmount: 0,
       outputAmount,
@@ -425,12 +409,11 @@ export async function executeSwapFromQuote(
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     if (msg.includes('User rejected') || msg.includes('user rejected')) {
-      return { success: false, tradeId, inputAmount: 0, outputAmount: 0, priceImpact: 0, error: 'Transaction rejected by user', timestamp };
+      return { success: false, inputAmount: 0, outputAmount: 0, priceImpact: 0, error: 'Transaction rejected by user', timestamp };
     }
     const failureCode = normalizeFailureCode(msg) || 'rpc_error';
     return {
       success: false,
-      tradeId,
       inputAmount: 0,
       outputAmount: 0,
       priceImpact: 0,

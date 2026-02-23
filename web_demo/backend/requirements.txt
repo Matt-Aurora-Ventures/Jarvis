@@ -10,7 +10,7 @@ pydantic-settings==2.1.0
 python-jose[cryptography]>=3.5.0  # FIXED: CVE-2024-33663 algorithm confusion with ECDSA keys (GitHub Dependabot #28)
 passlib[bcrypt]==1.7.4
 bcrypt==4.1.2
-python-multipart>=0.0.9  # FIXED: ReDoS vulnerability (GitHub Dependabot #16)
+python-multipart>=0.0.20  # FIXED: DoS via boundary deformation #25, arbitrary file write #39
 slowapi==0.1.9  # Rate limiting
 
 # Database
@@ -20,7 +20,7 @@ alembic==1.13.1  # Migrations
 redis==5.0.1  # Cache and sessions
 
 # HTTP & Networking
-aiohttp>=3.11.7  # FIXED: Multiple vulnerabilities (directory traversal #15, DoS #22, #36, #37, etc.)
+aiohttp>=3.11.18  # FIXED: zip bomb #31, large payloads #36, bypassing asserts #35, chunked msgs #37
 httpx==0.26.0
 websockets==12.0
 

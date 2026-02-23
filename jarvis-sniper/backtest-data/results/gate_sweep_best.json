@@ -1,21 +1,25 @@
 {
-  "algo_id": "volume_spike",
-  "minTrades": 50,
-  "generated_at": "2026-02-16T08:56:42.616Z",
-  "best": {
-    "scoreMin": 35,
-    "liqMin": 150000,
-    "momMin": 5,
-    "vlrMin": 0.2,
-    "trades": 11,
-    "winRate": 63.64,
-    "profitFactor": 2.96,
-    "expectancyPct": 5.676,
-    "totalReturnPct": 62.43,
-    "minPosFrac": 1,
-    "avgPosFrac": 1,
-    "robust": false,
-    "profitable": true,
-    "ranking": 1694.157
+  "bags_momentum": {
+    "minScore": 70,
+    "minLiquidityUsd": 0,
+    "minMomentum1h": -20,
+    "minVolLiqRatio": 0,
+    "maxTokenAgeHours": null,
+    "metrics": {
+      "trades": 15,
+      "winRate": 40,
+      "profitFactor": 1.668,
+      "expectancyPct": 4.54,
+      "totalReturnPct": 68.1,
+      "posFracByWindow": {
+        "10": 1
+      },
+      "minSumByWindow": {
+        "10": 45.4
+      },
+      "minPosFrac": 1,
+      "avgPosFrac": 1
+    },
+    "score": 1151.140912590557
   }
 }

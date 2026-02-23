@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kr8tiv MCP Authorization Hub</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 20px; }
+  h1 { color: #00d4ff; font-size: 28px; margin-bottom: 8px; }
+  .subtitle { color: #888; margin-bottom: 30px; }
+  .section { background: #141414; border: 1px solid #222; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  .section h2 { color: #ff6b35; font-size: 18px; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+  .section h2 .badge { background: #00d4ff22; color: #00d4ff; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+  .section h2 .badge.done { background: #00ff8822; color: #00ff88; }
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #1a1a1a; }
+  .row:last-child { border-bottom: none; }
+  .row .info { flex: 1; }
+  .row .info .name { font-weight: 600; color: #fff; }
+  .row .info .desc { font-size: 13px; color: #888; margin-top: 2px; }
+  .row .info .mcp { font-size: 11px; color: #00d4ff; font-family: monospace; }
+  a.btn { display: inline-block; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 13px; transition: all 0.2s; }
+  a.btn.primary { background: #00d4ff; color: #000; }
+  a.btn.primary:hover { background: #00b8e6; }
+  a.btn.done { background: #00ff8833; color: #00ff88; border: 1px solid #00ff8855; }
+  a.btn.orange { background: #ff6b35; color: #fff; }
+  a.btn.orange:hover { background: #e55a28; }
+  .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+  .status.green { background: #00ff88; }
+  .status.yellow { background: #ffd700; }
+  .status.red { background: #ff4444; }
+  .note { background: #1a1a00; border: 1px solid #333300; border-radius: 8px; padding: 12px; margin-top: 10px; font-size: 13px; color: #ffd700; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  .copy-zone { background: #0a0a0a; border: 1px dashed #333; border-radius: 8px; padding: 12px; margin-top: 10px; }
+  .copy-zone label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
+  .copy-zone input { width: 100%; background: #141414; border: 1px solid #333; border-radius: 4px; padding: 8px; color: #00d4ff; font-family: monospace; font-size: 13px; }
+  .copy-zone input:focus { outline: none; border-color: #00d4ff; }
+  #output { background: #0a0a0a; border: 1px solid #222; border-radius: 8px; padding: 16px; margin-top: 20px; font-family: monospace; font-size: 12px; white-space: pre-wrap; display: none; }
+  button.generate { background: #ff6b35; color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 20px; }
+  button.generate:hover { background: #e55a28; }
+</style>
+</head>
+<body>
+
+<h1>Kr8tiv MCP Authorization Hub</h1>
+<p class="subtitle">Click each link, grab the key, paste it below. Then hit Generate to build your .env.</p>
+
+<!-- ALREADY DONE -->
+<div class="section">
+  <h2><span class="status green"></span> Already Wired <span class="badge done">DONE</span></h2>
+  <div class="row"><div class="info"><span class="name">Anthropic</span><span class="mcp">claude-vibe, voice-box</span></div><a class="btn done">Connected</a></div>
+  <div class="row"><div class="info"><span class="name">OpenAI</span><span class="mcp">voice-box, ffmpeg</span></div><a class="btn done">Connected</a></div>
+  <div class="row"><div class="info"><span class="name">Twitter/X (OAuth 1.0a + 2.0)</span><span class="mcp">twitter</span></div><a class="btn done">Connected</a></div>
+  <div class="row"><div class="info"><span class="name">Solana (Helius RPC)</span><span class="mcp">solana</span></div><a class="btn done">Connected</a></div>
+  <div class="row"><div class="info"><span class="name">Telegram (API + Bot)</span><span class="mcp">claude-vibe, telegram-mcp, telegram-alerts</span></div><a class="btn done">Connected</a></div>
+  <div class="row"><div class="info"><span class="name">Hetzner VPS</span><span class="mcp">infrastructure</span></div><a class="btn done">Connected</a></div>
+  <div class="row"><div class="info"><span class="name">xAI / Grok</span><span class="mcp">ai providers</span></div><a class="btn done">Connected</a></div>
+  <div class="row"><div class="info"><span class="name">OpenRouter</span><span class="mcp">ai routing</span></div><a class="btn done">Connected</a></div>
+  <div class="row"><div class="info"><span class="name">Supermemory</span><span class="mcp">memory</span></div><a class="btn done">Connected</a></div>
+  <div class="row"><div class="info"><span class="name">PostgreSQL (local)</span><span class="mcp">postgres</span></div><a class="btn done">Connected</a></div>
+</div>
+
+<div class="grid">
+
+<!-- FREE TIER - NO CREDIT CARD -->
+<div class="section">
+  <h2><span class="status yellow"></span> Free Tier (No CC Required)</h2>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">GitHub Personal Access Token</span>
+      <div class="desc">Repo access, issues, PRs, code search</div>
+      <span class="mcp">MCP: github</span>
+    </div>
+    <a class="btn primary" href="https://github.com/settings/tokens/new?scopes=repo,read:org,read:user&description=Claude+Code+MCP" target="_blank">Generate</a>
+  </div>
+  <div class="copy-zone"><label>GITHUB_TOKEN</label><input id="github_token" placeholder="ghp_xxxxxxxxxxxx" /></div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">CoinGecko (Free Demo)</span>
+      <div class="desc">Crypto prices, market data, charts - 10k calls/mo free</div>
+      <span class="mcp">MCP: coingecko</span>
+    </div>
+    <a class="btn primary" href="https://www.coingecko.com/en/developers/dashboard" target="_blank">Get Key</a>
+  </div>
+  <div class="copy-zone"><label>COINGECKO_API_KEY</label><input id="coingecko_api_key" placeholder="CG-xxxxxxxxxxxx" /></div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Alchemy (Free Ethereum RPC)</span>
+      <div class="desc">Ethereum mainnet RPC - 300M compute units/mo free</div>
+      <span class="mcp">MCP: ethereum</span>
+    </div>
+    <a class="btn primary" href="https://dashboard.alchemy.com/signup" target="_blank">Sign Up</a>
+  </div>
+  <div class="copy-zone"><label>ETHEREUM_RPC_URL</label><input id="ethereum_rpc_url" placeholder="https://eth-mainnet.g.alchemy.com/v2/your-key" /></div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Brave Search API</span>
+      <div class="desc">Web search - 2k queries/mo free</div>
+      <span class="mcp">MCP: brave-search</span>
+    </div>
+    <a class="btn primary" href="https://brave.com/search/api/" target="_blank">Get Key</a>
+  </div>
+  <div class="copy-zone"><label>BRAVE_API_KEY</label><input id="brave_api_key" placeholder="BSAxxxxxxxxxxxx" /></div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Notion Integration</span>
+      <div class="desc">Pages, databases, workspace search</div>
+      <span class="mcp">MCP: notion</span>
+    </div>
+    <a class="btn primary" href="https://www.notion.so/my-integrations" target="_blank">Create</a>
+  </div>
+  <div class="copy-zone"><label>NOTION_API_KEY</label><input id="notion_api_key" placeholder="ntn_xxxxxxxxxxxx" /></div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Figma Access Token</span>
+      <div class="desc">Design-to-code, live Figma data</div>
+      <span class="mcp">MCP: figma</span>
+    </div>
+    <a class="btn primary" href="https://www.figma.com/developers/api#access-tokens" target="_blank">Generate</a>
+  </div>
+  <div class="copy-zone"><label>FIGMA_ACCESS_TOKEN</label><input id="figma_access_token" placeholder="figd_xxxxxxxxxxxx" /></div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Sentry Auth Token</span>
+      <div class="desc">Error tracking, performance monitoring</div>
+      <span class="mcp">MCP: sentry</span>
+    </div>
+    <a class="btn primary" href="https://sentry.io/settings/auth-tokens/new-token/" target="_blank">Generate</a>
+  </div>
+  <div class="copy-zone"><label>SENTRY_AUTH_TOKEN</label><input id="sentry_auth_token" placeholder="sntrys_xxxxxxxxxxxx" /></div>
+</div>
+
+<!-- INFRASTRUCTURE -->
+<div class="section">
+  <h2><span class="status yellow"></span> Infrastructure & Cloud</h2>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Tailscale API Key</span>
+      <div class="desc">Manage all VPS devices, DNS, ACLs</div>
+      <span class="mcp">MCP: tailscale</span>
+    </div>
+    <a class="btn orange" href="https://login.tailscale.com/admin/settings/keys" target="_blank">Generate</a>
+  </div>
+  <div class="copy-zone">
+    <label>TAILSCALE_API_KEY</label><input id="tailscale_api_key" placeholder="tskey-api-xxxxxxxxxxxx" />
+    <label style="margin-top:8px">TAILSCALE_TAILNET</label><input id="tailscale_tailnet" placeholder="your-tailnet-name.ts.net" />
+  </div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Cloudflare API Token</span>
+      <div class="desc">Workers, KV, D1, R2, DNS</div>
+      <span class="mcp">MCP: cloudflare-workers</span>
+    </div>
+    <a class="btn orange" href="https://dash.cloudflare.com/profile/api-tokens" target="_blank">Create Token</a>
+  </div>
+  <div class="copy-zone">
+    <label>CLOUDFLARE_API_TOKEN</label><input id="cloudflare_api_token" placeholder="xxxxxxxxxxxx" />
+    <label style="margin-top:8px">CLOUDFLARE_ACCOUNT_ID</label><input id="cloudflare_account_id" placeholder="xxxxxxxxxxxx" />
+  </div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Google Cloud OAuth</span>
+      <div class="desc">Gmail, Calendar, Drive, Docs, Sheets, YouTube - ALL Google</div>
+      <span class="mcp">MCP: google-workspace, google-maps, youtube</span>
+    </div>
+    <a class="btn orange" href="https://console.cloud.google.com/apis/credentials/oauthclient" target="_blank">Create OAuth</a>
+  </div>
+  <div class="copy-zone">
+    <label>GOOGLE_CLIENT_ID</label><input id="google_client_id" placeholder="xxxx.apps.googleusercontent.com" />
+    <label style="margin-top:8px">GOOGLE_CLIENT_SECRET</label><input id="google_client_secret" placeholder="GOCSPX-xxxxxxxxxxxx" />
+    <label style="margin-top:8px">GOOGLE_MAPS_API_KEY</label><input id="google_maps_api_key" placeholder="AIzaSyxxxxxxxxxxxx" />
+    <label style="margin-top:8px">YOUTUBE_API_KEY</label><input id="youtube_api_key" placeholder="AIzaSyxxxxxxxxxxxx" />
+  </div>
+  <div class="note">For Google: Create a project, enable Gmail/Calendar/Drive/YouTube APIs, create OAuth 2.0 Client ID (Desktop app type), and API keys for Maps + YouTube.</div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Meta / Facebook Ads</span>
+      <div class="desc">Ad campaigns, budgets, analytics</div>
+      <span class="mcp">MCP: meta-ads</span>
+    </div>
+    <a class="btn orange" href="https://developers.facebook.com/apps/" target="_blank">Create App</a>
+  </div>
+  <div class="copy-zone">
+    <label>META_ACCESS_TOKEN</label><input id="meta_access_token" placeholder="EAAxxxxxxxxxxxx" />
+    <label style="margin-top:8px">META_AD_ACCOUNT_ID</label><input id="meta_ad_account_id" placeholder="act_xxxxxxxxxxxx" />
+  </div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Firecrawl</span>
+      <div class="desc">Web scraping, crawling, structured data extraction</div>
+      <span class="mcp">MCP: firecrawl</span>
+    </div>
+    <a class="btn primary" href="https://www.firecrawl.dev/app/api-keys" target="_blank">Get Key</a>
+  </div>
+  <div class="copy-zone"><label>FIRECRAWL_API_KEY</label><input id="firecrawl_api_key" placeholder="fc-xxxxxxxxxxxx" /></div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Perplexity AI</span>
+      <div class="desc">AI-powered web search and research</div>
+      <span class="mcp">MCP: perplexity</span>
+    </div>
+    <a class="btn primary" href="https://www.perplexity.ai/settings/api" target="_blank">Get Key</a>
+  </div>
+  <div class="copy-zone"><label>PERPLEXITY_API_KEY</label><input id="perplexity_api_key" placeholder="pplx-xxxxxxxxxxxx" /></div>
+
+  <div class="row">
+    <div class="info">
+      <span class="name">Alpaca (Stock/Crypto Trading)</span>
+      <div class="desc">Live trading + paper trading + backtesting</div>
+      <span class="mcp">MCP: alpaca-trading</span>
+    </div>
+    <a class="btn primary" href="https://app.alpaca.markets/signup" target="_blank">Sign Up</a>
+  </div>
+  <div class="copy-zone">
+    <label>ALPACA_API_KEY</label><input id="alpaca_api_key" placeholder="PKxxxxxxxxxxxx" />
+    <label style="margin-top:8px">ALPACA_API_SECRET</label><input id="alpaca_api_secret" placeholder="xxxxxxxxxxxx" />
+  </div>
+
+</div>
+</div>
+
+<!-- TELEGRAM BOT TOKENS -->
+<div class="section">
+  <h2><span class="status yellow"></span> Telegram Bot Tokens (from BotFather)</h2>
+  <div class="note">Open @BotFather on Telegram, send /mybots, tap each bot, tap "API Token" to get fresh tokens.</div>
+  <div class="copy-zone">
+    <label>ARSENAL_BOT_TOKEN (COO - Iron Man theme)</label><input id="arsenal_token" placeholder="xxxxxxxxx:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+  </div>
+</div>
+
+<!-- GENERATE BUTTON -->
+<button class="generate" onclick="generateEnv()">Generate .env Output</button>
+
+<pre id="output"></pre>
+
+<script>
+function generateEnv() {
+  const fields = [
+    'github_token', 'coingecko_api_key', 'ethereum_rpc_url', 'brave_api_key',
+    'notion_api_key', 'figma_access_token', 'sentry_auth_token',
+    'tailscale_api_key', 'tailscale_tailnet', 'cloudflare_api_token', 'cloudflare_account_id',
+    'google_client_id', 'google_client_secret', 'google_maps_api_key', 'youtube_api_key',
+    'meta_access_token', 'meta_ad_account_id', 'firecrawl_api_key', 'perplexity_api_key',
+    'alpaca_api_key', 'alpaca_api_secret', 'arsenal_token'
+  ];
+
+  let output = '# === PASTE INTO ~/.claude/.env ===\n\n';
+  let count = 0;
+
+  fields.forEach(f => {
+    const el = document.getElementById(f);
+    if (el && el.value.trim()) {
+      output += f.toUpperCase() + '=' + el.value.trim() + '\n';
+      count++;
+    }
+  });
+
+  const el = document.getElementById('output');
+  el.style.display = 'block';
+  el.textContent = count > 0 ? output + '\n# ' + count + ' keys ready to add' : '# No keys entered yet. Fill in the fields above and try again.';
+}
+</script>
+
+</body>
+</html>

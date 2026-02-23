@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit (uses swap limiter: 20 req/min — Jito is transaction-heavy)
     const ip = getClientIp(request);
-    const limit = await swapRateLimiter.check(ip);
+    const limit = swapRateLimiter.check(ip);
     if (!limit.allowed) {
       return NextResponse.json(
         { error: 'Rate limit exceeded' },

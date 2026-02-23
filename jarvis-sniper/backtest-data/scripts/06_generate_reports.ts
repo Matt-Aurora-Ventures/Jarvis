@@ -16,21 +16,8 @@ import {
   log, logError, readJSON, writeJSON, writeCSV, sha256File,
   ensureDir, dataPath,
 } from './shared/utils';
+import { CURRENT_ALGO_IDS } from './shared/algo-ids';
 import type { TradeResult, AlgoSummary, ExitReason, DataManifest } from './shared/types';
-
-// ─── All Algo IDs ───
-
-const ALL_ALGO_IDS = [
-  // v5 (2026-02-15): 26 strategies — 6 memecoin, 5 established, 8 bags, 2 bluechip, 3 xstock, 2 index
-  'pump_fresh_tight', 'micro_cap_surge', 'elite', 'momentum',
-  'hybrid_b', 'let_it_ride',
-  'sol_veteran', 'utility_swing', 'established_breakout', 'meme_classic', 'volume_spike',
-  'bags_fresh_snipe', 'bags_momentum', 'bags_value', 'bags_dip_buyer',
-  'bags_bluechip', 'bags_conservative', 'bags_aggressive', 'bags_elite',
-  'bluechip_trend_follow', 'bluechip_breakout',
-  'xstock_intraday', 'xstock_swing', 'prestock_speculative',
-  'index_intraday', 'index_leveraged',
-];
 
 // ─── Compute Algo Summary ───
 
@@ -189,7 +176,7 @@ async function main(): Promise<void> {
   const allSummaries: AlgoSummary[] = [];
   const allTrades: TradeResult[] = [];
 
-  for (const algoId of ALL_ALGO_IDS) {
+  for (const algoId of CURRENT_ALGO_IDS) {
     const trades = readJSON<TradeResult[]>(`results/results_${algoId}.json`);
 
     if (!trades || trades.length === 0) {
@@ -302,7 +289,7 @@ async function main(): Promise<void> {
 
   log('');
   log(`Total trades across all algos: ${allTrades.length}`);
-  log(`Algos with results: ${allSummaries.length}/${ALL_ALGO_IDS.length}`);
+  log(`Algos with results: ${allSummaries.length}/${CURRENT_ALGO_IDS.length}`);
 
   const overallWins = allTrades.filter(t => t.pnl_percent > 0).length;
   const overallWR = (overallWins / allTrades.length * 100).toFixed(1);

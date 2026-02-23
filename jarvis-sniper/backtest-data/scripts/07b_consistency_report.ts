@@ -15,10 +15,25 @@
 
 import { log, logError, readJSON, writeCSV, writeJSON, ensureDir } from './shared/utils';
 import { CURRENT_ALGO_IDS, type AlgoId } from './shared/algo-ids';
-import type { TradeResult } from './shared/types';
+import type { ConsistencyReportRow, SampleBand, StrategyStatusLabel, TradeResult } from './shared/types';
 
 type WindowSize = 10 | 25 | 50 | 100 | 250 | 500 | 1000;
 const WINDOWS: WindowSize[] = [10, 25, 50, 100, 250, 500, 1000];
+const STRICT_MIN_TRADES = 100;
+const STRICT_MIN_POS_FRAC = 0.70;
+const STRICT_MIN_PF = 1.15;
+
+function sampleBand(trades: number): SampleBand {
+  if (trades >= 50) return 'ROBUST';
+  if (trades >= 25) return 'MEDIUM';
+  return 'THIN';
+}
+
+function classifyStatus(trades: number, pf: number, expectancyPct: number, minPosFrac: number): StrategyStatusLabel {
+  if (pf <= 1 || expectancyPct <= 0) return 'EXPERIMENTAL_DISABLED';
+  if (trades >= STRICT_MIN_TRADES && pf > STRICT_MIN_PF && minPosFrac >= STRICT_MIN_POS_FRAC) return 'PROVEN';
+  return 'EXPERIMENTAL';
+}
 
 function computeProfitFactor(pnls: number[]): number {
   let grossWin = 0;
@@ -91,8 +106,8 @@ async function main(): Promise<void> {
 
   ensureDir('results');
 
-  const rows: Record<string, unknown>[] = [];
-  const jsonOut: Record<string, unknown> = {};
+  const rows: ConsistencyReportRow[] = [];
+  const jsonOut: Record<string, ConsistencyReportRow & { min_sum_by_window: Partial<Record<WindowSize, number>> }> = {};
 
   for (const algoId of CURRENT_ALGO_IDS) {
     const trades = readJSON<TradeResult[]>(`results/results_${algoId}.json`) || [];
@@ -108,7 +123,8 @@ async function main(): Promise<void> {
 
     const cons = computeConsistency(trades);
 
-    const row: Record<string, unknown> = {
+    const status = classifyStatus(trades.length, pf, (total / trades.length), cons.minPosFrac);
+    const row: ConsistencyReportRow = {
       algo_id: algoId,
       trades: trades.length,
       win_rate: +(wins / trades.length * 100).toFixed(1),
@@ -117,21 +133,29 @@ async function main(): Promise<void> {
       total_return_pct: +total.toFixed(2),
       min_pos_frac: cons.minPosFrac,
       avg_pos_frac: cons.avgPosFrac,
+      sample_band: sampleBand(trades.length),
+      status_label: status,
     };
 
     for (const w of WINDOWS) {
-      const k = `pos${w}` as const;
+      const k = `pos${w}` as keyof ConsistencyReportRow;
       const v = cons.posFracByWindow[w];
-      if (v !== undefined) row[k] = v;
+      if (v !== undefined) {
+        (row as unknown as Record<string, unknown>)[k] = v;
+      }
     }
 
     rows.push(row);
     jsonOut[algoId] = { ...row, min_sum_by_window: cons.minSumByWindow };
+    log(
+      `  ${algoId}: N=${row.trades} PF=${row.profit_factor} Exp=${row.expectancy_pct}% ` +
+      `minPos=${row.min_pos_frac} band=${row.sample_band} status=${row.status_label}`,
+    );
   }
 
   rows.sort((a, b) => Number(b.min_pos_frac) - Number(a.min_pos_frac));
 
-  writeCSV('results/consistency_report.csv', rows);
+  writeCSV('results/consistency_report.csv', rows.map(r => ({ ...r } as Record<string, unknown>)));
   writeJSON('results/consistency_report.json', jsonOut);
 
   log('\n✓ Phase 7b complete');
@@ -143,4 +167,3 @@ main().catch(err => {
   logError('Fatal error in consistency report', err);
   process.exit(1);
 });
-

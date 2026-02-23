@@ -1,0 +1,41 @@
+{
+  "algo_id": "bluechip_mean_revert",
+  "total_trades": 1060,
+  "wins": 298,
+  "losses": 762,
+  "win_rate": 28.1,
+  "avg_win_pct": 30.45,
+  "avg_loss_pct": -10.81,
+  "max_win_pct": 38.27,
+  "max_loss_pct": -11.33,
+  "avg_trade_duration_hours": 6.17,
+  "median_trade_duration_hours": 2.17,
+  "profit_factor": 1.1,
+  "expectancy_per_trade_pct": 0.79,
+  "total_return_pct": 834.75,
+  "sharpe_ratio": 0.63,
+  "max_drawdown_pct": -50.45,
+  "exit_distribution": {
+    "sl_hit": 709,
+    "tp_hit": 210,
+    "trail_stop": 0,
+    "expired": 111,
+    "end_of_data": 30
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-01",
+      "trades": 16,
+      "pnl_pct": -91.25,
+      "win_rate": 25
+    },
+    {
+      "month": "2026-02",
+      "trades": 1044,
+      "pnl_pct": 926,
+      "win_rate": 28.2
+    }
+  ],
+  "best_day": "2026-02-06",
+  "worst_day": "2026-02-09"
+}

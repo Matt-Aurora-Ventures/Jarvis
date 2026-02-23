@@ -1,0 +1,41 @@
+{
+  "algo_id": "genetic_v2",
+  "total_trades": 1705,
+  "wins": 503,
+  "losses": 1202,
+  "win_rate": 29.5,
+  "avg_win_pct": 57.04,
+  "avg_loss_pct": -18.17,
+  "max_win_pct": 196.99,
+  "max_loss_pct": -21.25,
+  "avg_trade_duration_hours": 12.17,
+  "median_trade_duration_hours": 8.83,
+  "profit_factor": 1.31,
+  "expectancy_per_trade_pct": 4.02,
+  "total_return_pct": 6849.38,
+  "sharpe_ratio": 1.21,
+  "max_drawdown_pct": -182.41,
+  "exit_distribution": {
+    "sl_hit": 935,
+    "tp_hit": 97,
+    "trail_stop": 0,
+    "expired": 578,
+    "end_of_data": 95
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-01",
+      "trades": 65,
+      "pnl_pct": -440.28,
+      "win_rate": 20
+    },
+    {
+      "month": "2026-02",
+      "trades": 1640,
+      "pnl_pct": 7289.66,
+      "win_rate": 29.9
+    }
+  ],
+  "best_day": "2026-02-14",
+  "worst_day": "2026-02-03"
+}

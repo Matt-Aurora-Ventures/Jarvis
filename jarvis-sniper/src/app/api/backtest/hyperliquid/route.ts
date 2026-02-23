@@ -304,7 +304,7 @@ function runStrategy(
 
 export async function POST(request: Request): Promise<NextResponse> {
   const ip = getClientIp(request);
-  const limit = await apiRateLimiter.check(ip);
+  const limit = apiRateLimiter.check(ip);
   if (!limit.allowed) {
     return NextResponse.json(
       { success: false, error: 'Rate limit exceeded' },

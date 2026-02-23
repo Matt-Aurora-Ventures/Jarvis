@@ -1,0 +1,237 @@
+name: Sniper Algo Loop (Cloud, Real Data)
+
+on:
+  workflow_dispatch:
+    inputs:
+      loop_enabled:
+        description: "Continue chaining runs after this one"
+        required: false
+        default: "true"
+      gecko_new_pages:
+        description: "GECKO_MAX_PAGES_NEW_POOLS"
+        required: false
+        default: "200"
+      gecko_top_pages:
+        description: "GECKO_MAX_PAGES_TOP_POOLS"
+        required: false
+        default: "200"
+  repository_dispatch:
+    types: [sniper-algo-loop-next]
+  schedule:
+    - cron: "17 * * * *"
+
+concurrency:
+  group: sniper-algo-loop
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+env:
+  FIREBASE_PROJECT: kr8tiv
+  LOOP_HEARTBEAT_ENABLED: "true"
+
+jobs:
+  run:
+    name: Continuous Algo Tuning
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Schedule guard
+        if: ${{ github.event_name == 'schedule' && env.LOOP_HEARTBEAT_ENABLED != 'true' }}
+        run: |
+          echo "Heartbeat disabled; exiting schedule run."
+          exit 0
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: jarvis-sniper/package-lock.json
+
+      - name: Install dependencies
+        working-directory: jarvis-sniper
+        run: npm ci
+
+      - name: Write backtest env (real-data only)
+        working-directory: jarvis-sniper
+        env:
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          BIRDEYE_API_KEY: ${{ secrets.BIRDEYE_API_KEY }}
+          PUMPFUN_API_KEY: ${{ secrets.PUMPFUN_API_KEY }}
+          GECKO_MAX_PAGES_NEW_POOLS: ${{ inputs.gecko_new_pages || vars.GECKO_MAX_PAGES_NEW_POOLS || '200' }}
+          GECKO_MAX_PAGES_TOP_POOLS: ${{ inputs.gecko_top_pages || vars.GECKO_MAX_PAGES_TOP_POOLS || '200' }}
+          GECKO_MAX_PAGES_MISC: ${{ vars.GECKO_MAX_PAGES_MISC || '25' }}
+          GECKO_RPM: ${{ vars.GECKO_RPM || '28' }}
+          BIRDEYE_MAX_PAGES: ${{ vars.BIRDEYE_MAX_PAGES || '20' }}
+          BIRDEYE_PAGE_SIZE: ${{ vars.BIRDEYE_PAGE_SIZE || '100' }}
+          BIRDEYE_RPM: ${{ vars.BIRDEYE_RPM || '25' }}
+          PUMPFUN_MAX_PAGES: ${{ vars.PUMPFUN_MAX_PAGES || '20' }}
+          PUMPFUN_PAGE_SIZE: ${{ vars.PUMPFUN_PAGE_SIZE || '200' }}
+          PUMPFUN_RPM: ${{ vars.PUMPFUN_RPM || '40' }}
+          HELIUS_MAX_MINTS: ${{ vars.HELIUS_MAX_MINTS || '500' }}
+          HELIUS_BATCH_SIZE: ${{ vars.HELIUS_BATCH_SIZE || '100' }}
+          HELIUS_RPM: ${{ vars.HELIUS_RPM || '20' }}
+          CANDLE_MAX_PAGES: ${{ vars.CANDLE_MAX_PAGES || '2' }}
+          CANDLE_MAX_PAGES_MINUTE: ${{ vars.CANDLE_MAX_PAGES_MINUTE || '2' }}
+          CANDLE_MAX_PAGES_HOUR: ${{ vars.CANDLE_MAX_PAGES_HOUR || '4' }}
+          CANDLE_MAX_PAGES_DAY: ${{ vars.CANDLE_MAX_PAGES_DAY || '8' }}
+          WALKFORWARD_FOLDS: ${{ vars.WALKFORWARD_FOLDS || '5' }}
+          WALKFORWARD_MIN_VALIDATE_TRADES: ${{ vars.WALKFORWARD_MIN_VALIDATE_TRADES || '10' }}
+          GATE_SWEEP_MIN_TRADES: ${{ vars.GATE_SWEEP_MIN_TRADES || '100' }}
+          GATE_SWEEP_REQUIRE_PF: ${{ vars.GATE_SWEEP_REQUIRE_PF || '1' }}
+          GATE_SWEEP_TOP_K: ${{ vars.GATE_SWEEP_TOP_K || '8' }}
+        run: |
+          if [[ -z "$COINGECKO_API_KEY" || -z "$HELIUS_API_KEY" || -z "$BIRDEYE_API_KEY" ]]; then
+            echo "Missing required real-data API keys (COINGECKO/HELIUS/BIRDEYE)." >&2
+            exit 1
+          fi
+          cat > backtest-data/.env <<EOF
+          COINGECKO_API_KEY=${COINGECKO_API_KEY}
+          HELIUS_API_KEY=${HELIUS_API_KEY}
+          BIRDEYE_API_KEY=${BIRDEYE_API_KEY}
+          PUMPFUN_API_KEY=${PUMPFUN_API_KEY}
+          GECKO_MAX_PAGES_NEW_POOLS=${GECKO_MAX_PAGES_NEW_POOLS}
+          GECKO_MAX_PAGES_TOP_POOLS=${GECKO_MAX_PAGES_TOP_POOLS}
+          GECKO_MAX_PAGES_MISC=${GECKO_MAX_PAGES_MISC}
+          GECKO_RPM=${GECKO_RPM}
+          BIRDEYE_MAX_PAGES=${BIRDEYE_MAX_PAGES}
+          BIRDEYE_PAGE_SIZE=${BIRDEYE_PAGE_SIZE}
+          BIRDEYE_RPM=${BIRDEYE_RPM}
+          PUMPFUN_MAX_PAGES=${PUMPFUN_MAX_PAGES}
+          PUMPFUN_PAGE_SIZE=${PUMPFUN_PAGE_SIZE}
+          PUMPFUN_RPM=${PUMPFUN_RPM}
+          HELIUS_MAX_MINTS=${HELIUS_MAX_MINTS}
+          HELIUS_BATCH_SIZE=${HELIUS_BATCH_SIZE}
+          HELIUS_RPM=${HELIUS_RPM}
+          CANDLE_MAX_PAGES=${CANDLE_MAX_PAGES}
+          CANDLE_MAX_PAGES_MINUTE=${CANDLE_MAX_PAGES_MINUTE}
+          CANDLE_MAX_PAGES_HOUR=${CANDLE_MAX_PAGES_HOUR}
+          CANDLE_MAX_PAGES_DAY=${CANDLE_MAX_PAGES_DAY}
+          WALKFORWARD_FOLDS=${WALKFORWARD_FOLDS}
+          WALKFORWARD_MIN_VALIDATE_TRADES=${WALKFORWARD_MIN_VALIDATE_TRADES}
+          GATE_SWEEP_MIN_TRADES=${GATE_SWEEP_MIN_TRADES}
+          GATE_SWEEP_REQUIRE_PF=${GATE_SWEEP_REQUIRE_PF}
+          GATE_SWEEP_TOP_K=${GATE_SWEEP_TOP_K}
+          EOF
+
+      - name: Preflight tests
+        id: preflight
+        continue-on-error: true
+        working-directory: jarvis-sniper
+        run: |
+          set +e
+          npm test
+          TEST_EXIT=$?
+          npm run smoke:nav
+          NAV_EXIT=$?
+          npm run smoke:mobile
+          MOBILE_EXIT=$?
+          ./node_modules/.bin/tsc -p backtest-data/scripts/tsconfig.json
+          TSC_EXIT=$?
+          set -e
+          echo "test_exit=$TEST_EXIT" >> "$GITHUB_OUTPUT"
+          echo "smoke_nav_exit=$NAV_EXIT" >> "$GITHUB_OUTPUT"
+          echo "smoke_mobile_exit=$MOBILE_EXIT" >> "$GITHUB_OUTPUT"
+          echo "tsc_exit=$TSC_EXIT" >> "$GITHUB_OUTPUT"
+          if [[ $TEST_EXIT -ne 0 || $NAV_EXIT -ne 0 || $MOBILE_EXIT -ne 0 || $TSC_EXIT -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Run tuning pipeline
+        working-directory: jarvis-sniper
+        run: bash backtest-data/scripts/run_pipeline_ci.sh
+
+      - name: Summarize strict gate
+        id: gate
+        working-directory: jarvis-sniper
+        env:
+          PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const preflightOutcome = process.env.PREFLIGHT_OUTCOME || 'unknown';
+          const testsOk = preflightOutcome === 'success';
+          const p = 'backtest-data/results/strategy_recommendations.json';
+          if (!fs.existsSync(p)) {
+            console.log('promotion_eligible_count=0');
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `preflight_ok=${testsOk}\n`);
+            process.exit(0);
+          }
+          const rows = JSON.parse(fs.readFileSync(p, 'utf8'));
+          const proven = rows.filter(r => r.status_label === 'PROVEN').length;
+          const eligibleRaw = rows.filter(r => r.recommendation === 'promote_to_proven').length;
+          const eligible = testsOk ? eligibleRaw : 0;
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `proven_count=${proven}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `promotion_eligible_count=${eligible}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `preflight_ok=${testsOk}\n`);
+          NODE
+
+      - name: Auth Firebase
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KR8TIV }}
+        run: |
+          mkdir -p "$HOME/.gcp"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$HOME/.gcp/firebase-sa.json"
+
+      - name: Firebase preview deploy
+        working-directory: jarvis-sniper
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.home }}/.gcp/firebase-sa.json
+        run: |
+          npx firebase-tools hosting:channel:deploy "algo-loop-${GITHUB_RUN_ID}" \
+            --project "$FIREBASE_PROJECT" \
+            --expires 7d \
+            --non-interactive
+
+      - name: Create pull request (artifacts + recommendations)
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: automation/algo-loop/${{ github.run_id }}
+          title: "algo-loop: refresh artifacts (proven=${{ steps.gate.outputs.proven_count || 0 }})"
+          commit-message: "chore(algo): refresh backtest artifacts and provenance pack"
+          body: |
+            Automated cloud algo-tuning cycle.
+
+            - Strict promotion-eligible strategies: `${{ steps.gate.outputs.promotion_eligible_count || 0 }}`
+            - Proven strategies: `${{ steps.gate.outputs.proven_count || 0 }}`
+            - Preflight tests passed: `${{ steps.gate.outputs.preflight_ok || 'false' }}`
+            - Test exit codes: `test=${{ steps.preflight.outputs.test_exit || 'n/a' }}, nav=${{ steps.preflight.outputs.smoke_nav_exit || 'n/a' }}, mobile=${{ steps.preflight.outputs.smoke_mobile_exit || 'n/a' }}, tsc=${{ steps.preflight.outputs.tsc_exit || 'n/a' }}`
+            - Includes refreshed real-data artifacts, recommendations, and provenance evidence.
+          labels: |
+            algo-tuning
+            real-data
+            auto-generated
+          add-paths: |
+            jarvis-sniper/backtest-data/results/**
+
+      - name: Loop redispatch (serial nonstop)
+        if: ${{ success() && github.event_name != 'schedule' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOOP_ENABLED_INPUT: ${{ inputs.loop_enabled }}
+          LOOP_ENABLED_VAR: ${{ vars.ALGO_LOOP_ENABLED }}
+          LOOP_COOLDOWN_SECONDS: ${{ vars.ALGO_LOOP_COOLDOWN_SECONDS || '120' }}
+        run: |
+          ENABLED="false"
+          if [[ "${LOOP_ENABLED_INPUT}" == "true" || "${LOOP_ENABLED_VAR}" == "true" ]]; then
+            ENABLED="true"
+          fi
+          if [[ "$ENABLED" != "true" ]]; then
+            echo "Loop disabled; not redispatching."
+            exit 0
+          fi
+          sleep "$LOOP_COOLDOWN_SECONDS"
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/dispatches" \
+            -d '{"event_type":"sniper-algo-loop-next"}'
