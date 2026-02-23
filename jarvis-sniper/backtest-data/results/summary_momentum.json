@@ -1,0 +1,37 @@
+{
+  "algo_id": "momentum",
+  "total_trades": 68,
+  "wins": 31,
+  "losses": 37,
+  "win_rate": 45.6,
+  "avg_win_pct": 22.05,
+  "avg_loss_pct": -10.91,
+  "max_win_pct": 23.39,
+  "max_loss_pct": -11.33,
+  "avg_trade_duration_hours": 9.87,
+  "median_trade_duration_hours": 5.08,
+  "profit_factor": 1.69,
+  "expectancy_per_trade_pct": 4.12,
+  "total_return_pct": 279.95,
+  "sharpe_ratio": 3.91,
+  "max_drawdown_pct": -7.39,
+  "dual_trigger_bars": 0,
+  "expiry_exits_below_entry": 0,
+  "exit_distribution": {
+    "sl_hit": 35,
+    "tp_hit": 28,
+    "trail_stop": 0,
+    "expired": 3,
+    "end_of_data": 2
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-02",
+      "trades": 68,
+      "pnl_pct": 279.95,
+      "win_rate": 45.6
+    }
+  ],
+  "best_day": "2026-02-13",
+  "worst_day": "2026-02-09"
+}

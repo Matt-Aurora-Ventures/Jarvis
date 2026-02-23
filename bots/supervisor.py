@@ -218,6 +218,19 @@ if sys.platform == "win32":
             stream.reconfigure(encoding='utf-8', errors='replace')
 
 logger = logging.getLogger("jarvis.supervisor")
+# Never log full request URLs (they may include API keys or Telegram bot tokens).
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+def track_supervisor_error(exc: Exception, component: str, context: str = "") -> None:
+    """Track an error in the supervisor using the centralized error tracker."""
+    if ERROR_TRACKER_AVAILABLE and error_tracker:
+        error_tracker.track_error(
+            exc,
+            context=context or f"supervisor.{component}",
+            component="supervisor",
+            metadata={"component_name": component}
+        )
 
 
 def track_supervisor_error(exc: Exception, component: str, context: str = "") -> None:
@@ -646,8 +659,29 @@ def load_env():
                         os.environ.setdefault(key.strip(), value.strip())
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    """Parse a boolean-ish env var with a safe default.
+
+    - Unset or empty: default
+    - "1/true/yes/on": True
+    - everything else: False
+    """
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _cooldown_mode() -> bool:
+    """Master kill-switch for cost-heavy / risky components."""
+    return _env_flag("JARVIS_COOLDOWN_MODE", False)
+
+
 async def create_buy_bot():
     """Create and run the buy bot."""
+    if _cooldown_mode() or not _env_flag("BUY_BOT_ENABLED", True):
+        logger.info("[buy_bot] DISABLED (cooldown mode or BUY_BOT_ENABLED=0)")
+        return
     from bots.buy_tracker.bot import JarvisBuyBot
     bot = JarvisBuyBot()
     await bot.start()
@@ -655,6 +689,9 @@ async def create_buy_bot():
 
 async def create_sentiment_reporter():
     """Create and run the sentiment reporter (1 hour interval)."""
+    if _cooldown_mode() or not _env_flag("SENTIMENT_REPORTER_ENABLED", True):
+        logger.info("[sentiment_reporter] DISABLED (cooldown mode or SENTIMENT_REPORTER_ENABLED=0)")
+        return
     from bots.buy_tracker.sentiment_report import SentimentReportGenerator
 
     reporter = SentimentReportGenerator(
@@ -668,6 +705,9 @@ async def create_sentiment_reporter():
 
 async def create_twitter_poster():
     """Create and run the Twitter sentiment poster."""
+    if _cooldown_mode() or not _env_flag("TWITTER_POSTER_ENABLED", True):
+        logger.info("[twitter_poster] DISABLED (cooldown mode or TWITTER_POSTER_ENABLED=0)")
+        return
     from bots.twitter.sentiment_poster import SentimentTwitterPoster
     from bots.twitter.twitter_client import TwitterClient, TwitterCredentials
     from bots.twitter.claude_content import ClaudeContentGenerator
@@ -799,6 +839,9 @@ async def create_telegram_bot():
 
 async def create_autonomous_x_engine():
     """Create and run the autonomous X (Twitter) posting engine."""
+    if _cooldown_mode() or not _env_flag("AUTONOMOUS_X_ENABLED", True):
+        logger.info("[autonomous_x] DISABLED (cooldown mode or AUTONOMOUS_X_ENABLED=0)")
+        return
     from bots.twitter.autonomous_engine import get_autonomous_engine
     from bots.twitter.x_claude_cli_handler import get_x_claude_cli_handler
 
@@ -819,6 +862,288 @@ async def create_autonomous_x_engine():
         cli_handler.run(),
         return_exceptions=False
     )
+
+
+async def create_public_trading_bot():
+    """Create and run the public trading bot for mass-market users."""
+    from bots.public_trading_bot_supervisor import PublicBotConfig, PublicTradingBotSupervisor
+
+    try:
+        # Get configuration from environment
+        telegram_token = os.environ.get("PUBLIC_BOT_TELEGRAM_TOKEN", "")
+        live_trading = os.environ.get("PUBLIC_BOT_LIVE_TRADING", "false").lower() == "true"
+        require_confirmation = os.environ.get("PUBLIC_BOT_REQUIRE_CONFIRMATION", "true").lower() == "true"
+        min_confidence = float(os.environ.get("PUBLIC_BOT_MIN_CONFIDENCE", "65.0"))
+        max_daily_loss = float(os.environ.get("PUBLIC_BOT_MAX_DAILY_LOSS", "1000.0"))
+
+        # Check if enabled
+        if not telegram_token:
+            logger.info("[public_bot] PUBLIC_BOT_TELEGRAM_TOKEN not set, skipping public trading bot")
+            return
+
+        # Create config
+        config = PublicBotConfig(
+            enabled=True,
+            telegram_token=telegram_token,
+            enable_live_trading=live_trading,
+            require_confirmation=require_confirmation,
+            min_confidence_threshold=min_confidence,
+            max_daily_loss_per_user=max_daily_loss,
+        )
+
+        # Create and initialize supervisor
+        supervisor = PublicTradingBotSupervisor(config)
+        success = await supervisor.initialize()
+
+        if not success:
+            logger.error("[public_bot] Failed to initialize public trading bot")
+            return
+
+        # Start the bot
+        logger.info("[public_bot] Public trading bot initialized, starting polling...")
+        await supervisor.start()
+
+        # Keep this component alive so PTB polling/background tasks keep running.
+        # The supervisor expects component coroutines to be long-lived.
+        if not supervisor.running:
+            raise RuntimeError("[public_bot] Public trading bot failed to start polling")
+
+        try:
+            while supervisor.running:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            logger.info("[public_bot] Cancelled; shutting down public trading bot...")
+            try:
+                await supervisor.shutdown()
+            finally:
+                raise
+
+    except Exception as e:
+        logger.error(f"[public_bot] Public trading bot error: {e}", exc_info=True)
+        raise
+
+
+async def create_treasury_bot():
+    """Create and run the Treasury bot on its own Telegram token."""
+    import subprocess
+
+    treasury_token = (
+        os.environ.get("TREASURY_BOT_TOKEN", "")
+        or os.environ.get("TREASURY_BOT_TELEGRAM_TOKEN", "")
+    )
+    if not treasury_token:
+        logger.warning("No TREASURY_BOT_TOKEN set, skipping Treasury bot")
+        return
+
+    main_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    public_token = os.environ.get("PUBLIC_BOT_TELEGRAM_TOKEN", "")
+    if treasury_token in (main_token, public_token):
+        logger.warning(
+            "Treasury bot token matches another bot token; skipping to avoid polling conflict"
+        )
+        return
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(project_root) + os.pathsep + env.get("PYTHONPATH", "")
+    env["TREASURY_BOT_TOKEN"] = treasury_token
+    env["TREASURY_BOT_TELEGRAM_TOKEN"] = treasury_token
+
+    # Kill any lingering treasury bot processes from previous runs
+    try:
+        if sys.platform == "win32":
+            kill_cmd = (
+                'powershell -Command "'
+                "Get-CimInstance Win32_Process -Filter \\\"Name='python.exe'\\\" | "
+                "Where-Object { $_.CommandLine -like '*run_treasury.py*' } | "
+                'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"'
+            )
+            os.system(kill_cmd)
+        else:
+            os.system("pkill -f 'python.*run_treasury.py' 2>/dev/null || true")
+        await asyncio.sleep(2)
+    except Exception as e:
+        logger.warning(f"Failed to clean up treasury bot processes: {e}")
+
+    proc = subprocess.Popen(
+        [sys.executable, str(project_root / "bots" / "treasury" / "run_treasury.py")],
+        env=env,
+    )
+
+    try:
+        while True:
+            ret = proc.poll()
+            if ret is not None:
+                logger.error(f"Treasury bot exited with code {ret}")
+                await asyncio.sleep(15)
+                raise RuntimeError(f"Treasury bot exited with code {ret}")
+            await asyncio.sleep(5)
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                logger.warning("Treasury bot process killed (timeout on terminate)")
+
+
+async def create_autonomous_manager():
+    """Create and run the autonomous manager (moderation, learning, vibe coding)."""
+    from core.moderation.toxicity_detector import ToxicityDetector
+    from core.moderation.auto_actions import AutoActions
+    from core.learning.engagement_analyzer import EngagementAnalyzer
+    from core.vibe_coding.sentiment_mapper import SentimentMapper
+    from core.vibe_coding.regime_adapter import RegimeAdapter
+    from core.autonomous_manager import get_autonomous_manager
+    from bots.twitter.grok_client import get_grok_client
+    from core.sentiment_aggregator import get_sentiment_aggregator
+
+    try:
+        # Initialize all components
+        logger.info("[autonomous_manager] Initializing autonomous system components...")
+
+        # Moderation
+        toxicity_detector = ToxicityDetector()
+        auto_actions = AutoActions()
+        logger.info("[autonomous_manager] Moderation initialized")
+
+        # Learning
+        engagement_analyzer = EngagementAnalyzer(data_dir="data/learning")
+        logger.info("[autonomous_manager] Learning analyzer initialized")
+
+        # Vibe coding
+        sentiment_mapper = SentimentMapper()
+        regime_adapter = RegimeAdapter()
+        logger.info("[autonomous_manager] Vibe coding initialized")
+
+        # Get shared services
+        # In cooldown mode (or when XAI is explicitly disabled), do not initialize Grok.
+        # This prevents background loops from pinging xAI and draining credits.
+        xai_enabled = _env_flag("XAI_ENABLED", True) and not _cooldown_mode()
+        grok_client = get_grok_client() if xai_enabled else None
+        sentiment_agg = get_sentiment_aggregator()
+
+        # Get or create autonomous manager
+        manager = await get_autonomous_manager(
+            toxicity_detector=toxicity_detector,
+            auto_actions=auto_actions,
+            engagement_analyzer=engagement_analyzer,
+            sentiment_mapper=sentiment_mapper,
+            regime_adapter=regime_adapter,
+            grok_client=grok_client,
+            sentiment_agg=sentiment_agg,
+        )
+
+        logger.info("[autonomous_manager] All components initialized, starting loops...")
+
+        # Run the autonomous manager (this runs all loops continuously)
+        await manager.run()
+
+    except Exception as e:
+        logger.error(f"[autonomous_manager] Failed to start: {e}", exc_info=True)
+        raise
+
+
+async def create_bags_intel():
+    """Create and run the Bags Intel service for bags.fm graduation monitoring."""
+    # DISABLED: BitQuery API has 402 payment issues - needs alternative (Helius webhooks)
+    # To re-enable: Set BAGS_INTEL_ENABLED=true in environment
+    if not os.environ.get("BAGS_INTEL_ENABLED", "").lower() == "true":
+        logger.info("[bags_intel] DISABLED - set BAGS_INTEL_ENABLED=true to enable (needs Helius alternative)")
+        # Run forever but do nothing
+        while True:
+            await asyncio.sleep(3600)
+        return
+
+    from bots.bags_intel import create_bags_intel_service
+
+    try:
+        await create_bags_intel_service()
+    except Exception as e:
+        logger.error(f"[bags_intel] Failed to start: {e}", exc_info=True)
+        raise
+
+
+async def create_ai_supervisor():
+    """Create and run optional AI runtime supervisor (Ollama-backed)."""
+    try:
+        from core.ai_runtime.integration import get_ai_runtime_manager
+    except Exception as exc:
+        logger.warning(f"AI runtime unavailable: {exc}", exc_info=True)
+        # Run forever but idle to avoid restart churn
+        while True:
+            await asyncio.sleep(60)
+
+    try:
+        manager = get_ai_runtime_manager()
+        started = await manager.start()
+        if not started:
+            logger.info("AI runtime disabled or unavailable; supervisor idle")
+            # Keep running to prevent supervisor restart loop
+            while True:
+                await asyncio.sleep(60)
+        else:
+            logger.info("AI runtime started successfully, entering idle loop")
+            # Keep the task alive while AI runtime runs
+            while True:
+                await asyncio.sleep(60)
+    except Exception as exc:
+        logger.error(f"AI supervisor error: {exc}", exc_info=True)
+        # Don't crash - just idle
+        while True:
+            await asyncio.sleep(60)
+
+
+async def register_memory_reflect_jobs():
+    """
+    Register daily/weekly memory reflection jobs with the global scheduler.
+
+    Jobs:
+    - Daily reflect: 3 AM UTC every day (PERF-002: <5min timeout)
+    - Weekly summary: 4 AM UTC every Sunday
+
+    Kill switch: Set MEMORY_REFLECT_ENABLED=false to disable.
+    """
+    from core.automation.scheduler import get_scheduler
+    from core.memory.reflect import reflect_daily
+    from core.memory.patterns import generate_weekly_summary
+
+    # Check kill switch
+    if os.environ.get("MEMORY_REFLECT_ENABLED", "true").lower() != "true":
+        logger.info("[memory_reflect] Disabled via MEMORY_REFLECT_ENABLED=false")
+        return
+
+    scheduler = get_scheduler()
+
+    # Daily reflection job - 3 AM UTC every day
+    daily_job_id = scheduler.schedule_cron(
+        name="memory_daily_reflect",
+        action=reflect_daily,
+        cron_expression="0 3 * * *",  # 3 AM UTC daily
+        params={},
+        enabled=True,
+        retry_on_failure=True,
+        timeout=300.0,  # 5 minutes max (PERF-002 requirement)
+        tags=["memory", "reflect", "critical"]
+    )
+    logger.info(f"[memory_reflect] Registered daily reflect job (3 AM UTC) - ID: {daily_job_id}")
+
+    # Weekly summary job - 4 AM UTC every Sunday
+    weekly_job_id = scheduler.schedule_cron(
+        name="memory_weekly_summary",
+        action=generate_weekly_summary,
+        cron_expression="0 4 * * 0",  # 4 AM UTC every Sunday
+        params={},
+        enabled=True,
+        retry_on_failure=True,
+        timeout=600.0,  # 10 minutes max
+        tags=["memory", "summary", "weekly"]
+    )
+    logger.info(f"[memory_reflect] Registered weekly summary job (Sundays 4 AM UTC) - ID: {weekly_job_id}")
+
+    # Start the scheduler if not already running
+    await scheduler.start()
+    logger.info("[memory_reflect] Scheduler started for memory reflection jobs")
 
 
 async def create_public_trading_bot():
@@ -1220,6 +1545,12 @@ async def main():
 
     # Ensure logs directory exists
     (project_root / "logs").mkdir(exist_ok=True)
+
+    # Global automation pause flag (used to temporarily stop scheduled tasks safely).
+    pause_flag = project_root / "PAUSE_AUTOMATIONS"
+    if pause_flag.exists() or os.getenv("JARVIS_PAUSE_AUTOMATIONS", "").strip().lower() in ("1", "true", "yes", "y", "on"):
+        print(f"[Jarvis] Automations paused. Supervisor will not start. ({pause_flag})")
+        return
 
     # ==========================================================
     # SINGLE INSTANCE ENFORCEMENT: Prevent dual supervisor race

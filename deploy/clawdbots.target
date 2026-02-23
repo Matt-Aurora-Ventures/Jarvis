@@ -4,10 +4,14 @@ Documentation=https://github.com/lucid/jarvis
 After=network-online.target
 Wants=network-online.target
 
-# Target to manage all three bots together
+# Target to manage all bots together
 # Start all: systemctl start clawdbots.target
 # Stop all: systemctl stop clawdbots.target
 # Status: systemctl status clawdbots.target
+
+# Pull in services when the target is started.
+Wants=clawdjarvis.service clawdfriday.service clawdmatt.service clawdyoda.service clawdsquishy.service
+Requires=clawdjarvis.service clawdfriday.service clawdmatt.service clawdyoda.service clawdsquishy.service
 
 [Install]
 WantedBy=multi-user.target

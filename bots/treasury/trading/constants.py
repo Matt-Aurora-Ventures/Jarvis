@@ -78,7 +78,8 @@ GRADE_EMOJI = {
 # ADMIN CONFIGURATION
 # ==========================================================================
 
-ADMIN_USER_ID = int(os.environ.get("JARVIS_ADMIN_USER_ID", "8527130908"))
+# Prefer env-driven admin IDs; fallback is the current primary admin (post account migration).
+ADMIN_USER_ID = int(os.environ.get("JARVIS_ADMIN_USER_ID", "8527368699"))
 
 
 # ==========================================================================

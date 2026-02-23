@@ -3,8 +3,8 @@
 Generate a fix-it list from the last N hours of Telegram messages in a chat.
 
 Usage:
-  python scripts/telegram_fixit_loop.py --chat-id -1003408655098 --hours 48
-  python scripts/telegram_fixit_loop.py --chat-id -1003408655098 --hours 48 --loop --interval 1800
+  python scripts/telegram_fixit_loop.py --chat-id -5003286623 --hours 48
+  python scripts/telegram_fixit_loop.py --chat-id -5003286623 --hours 48 --loop --interval 1800
 """
 
 import os

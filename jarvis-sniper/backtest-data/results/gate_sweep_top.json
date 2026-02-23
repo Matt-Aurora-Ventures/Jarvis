@@ -1,0 +1,1278 @@
+{
+  "bags_momentum": [
+    {
+      "minScore": 70,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": null,
+      "metrics": {
+        "trades": 15,
+        "winRate": 40,
+        "profitFactor": 1.668,
+        "expectancyPct": 4.54,
+        "totalReturnPct": 68.1,
+        "posFracByWindow": {
+          "10": 1
+        },
+        "minSumByWindow": {
+          "10": 45.4
+        },
+        "minPosFrac": 1,
+        "avgPosFrac": 1
+      },
+      "score": 1151.140912590557
+    },
+    {
+      "minScore": 70,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 72,
+      "metrics": {
+        "trades": 15,
+        "winRate": 40,
+        "profitFactor": 1.668,
+        "expectancyPct": 4.54,
+        "totalReturnPct": 68.1,
+        "posFracByWindow": {
+          "10": 1
+        },
+        "minSumByWindow": {
+          "10": 45.4
+        },
+        "minPosFrac": 1,
+        "avgPosFrac": 1
+      },
+      "score": 1151.140912590557
+    },
+    {
+      "minScore": 70,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 100,
+      "metrics": {
+        "trades": 15,
+        "winRate": 40,
+        "profitFactor": 1.668,
+        "expectancyPct": 4.54,
+        "totalReturnPct": 68.1,
+        "posFracByWindow": {
+          "10": 1
+        },
+        "minSumByWindow": {
+          "10": 45.4
+        },
+        "minPosFrac": 1,
+        "avgPosFrac": 1
+      },
+      "score": 1151.140912590557
+    },
+    {
+      "minScore": 70,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 150,
+      "metrics": {
+        "trades": 15,
+        "winRate": 40,
+        "profitFactor": 1.668,
+        "expectancyPct": 4.54,
+        "totalReturnPct": 68.1,
+        "posFracByWindow": {
+          "10": 1
+        },
+        "minSumByWindow": {
+          "10": 45.4
+        },
+        "minPosFrac": 1,
+        "avgPosFrac": 1
+      },
+      "score": 1151.140912590557
+    },
+    {
+      "minScore": 70,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 200,
+      "metrics": {
+        "trades": 15,
+        "winRate": 40,
+        "profitFactor": 1.668,
+        "expectancyPct": 4.54,
+        "totalReturnPct": 68.1,
+        "posFracByWindow": {
+          "10": 1
+        },
+        "minSumByWindow": {
+          "10": 45.4
+        },
+        "minPosFrac": 1,
+        "avgPosFrac": 1
+      },
+      "score": 1151.140912590557
+    },
+    {
+      "minScore": 70,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 336,
+      "metrics": {
+        "trades": 15,
+        "winRate": 40,
+        "profitFactor": 1.668,
+        "expectancyPct": 4.54,
+        "totalReturnPct": 68.1,
+        "posFracByWindow": {
+          "10": 1
+        },
+        "minSumByWindow": {
+          "10": 45.4
+        },
+        "minPosFrac": 1,
+        "avgPosFrac": 1
+      },
+      "score": 1151.140912590557
+    },
+    {
+      "minScore": 70,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 500,
+      "metrics": {
+        "trades": 15,
+        "winRate": 40,
+        "profitFactor": 1.668,
+        "expectancyPct": 4.54,
+        "totalReturnPct": 68.1,
+        "posFracByWindow": {
+          "10": 1
+        },
+        "minSumByWindow": {
+          "10": 45.4
+        },
+        "minPosFrac": 1,
+        "avgPosFrac": 1
+      },
+      "score": 1151.140912590557
+    },
+    {
+      "minScore": 70,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 720,
+      "metrics": {
+        "trades": 15,
+        "winRate": 40,
+        "profitFactor": 1.668,
+        "expectancyPct": 4.54,
+        "totalReturnPct": 68.1,
+        "posFracByWindow": {
+          "10": 1
+        },
+        "minSumByWindow": {
+          "10": 45.4
+        },
+        "minPosFrac": 1,
+        "avgPosFrac": 1
+      },
+      "score": 1151.140912590557
+    },
+    {
+      "minScore": 70,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 8760,
+      "metrics": {
+        "trades": 15,
+        "winRate": 40,
+        "profitFactor": 1.668,
+        "expectancyPct": 4.54,
+        "totalReturnPct": 68.1,
+        "posFracByWindow": {
+          "10": 1
+        },
+        "minSumByWindow": {
+          "10": 45.4
+        },
+        "minPosFrac": 1,
+        "avgPosFrac": 1
+      },
+      "score": 1151.140912590557
+    },
+    {
+      "minScore": 60,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 72,
+      "metrics": {
+        "trades": 22,
+        "winRate": 31.8,
+        "profitFactor": 1.189,
+        "expectancyPct": 1.433,
+        "totalReturnPct": 31.53,
+        "posFracByWindow": {
+          "10": 0.769
+        },
+        "minSumByWindow": {
+          "10": -33.96
+        },
+        "minPosFrac": 0.769,
+        "avgPosFrac": 0.769
+      },
+      "score": 878.379226808222
+    },
+    {
+      "minScore": 0,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 72,
+      "metrics": {
+        "trades": 23,
+        "winRate": 30.4,
+        "profitFactor": 1.113,
+        "expectancyPct": 0.878,
+        "totalReturnPct": 20.2,
+        "posFracByWindow": {
+          "10": 0.714
+        },
+        "minSumByWindow": {
+          "10": -33.96
+        },
+        "minPosFrac": 0.714,
+        "avgPosFrac": 0.714
+      },
+      "score": 814.5372783601758
+    },
+    {
+      "minScore": 20,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 72,
+      "metrics": {
+        "trades": 23,
+        "winRate": 30.4,
+        "profitFactor": 1.113,
+        "expectancyPct": 0.878,
+        "totalReturnPct": 20.2,
+        "posFracByWindow": {
+          "10": 0.714
+        },
+        "minSumByWindow": {
+          "10": -33.96
+        },
+        "minPosFrac": 0.714,
+        "avgPosFrac": 0.714
+      },
+      "score": 814.5372783601758
+    },
+    {
+      "minScore": 25,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 72,
+      "metrics": {
+        "trades": 23,
+        "winRate": 30.4,
+        "profitFactor": 1.113,
+        "expectancyPct": 0.878,
+        "totalReturnPct": 20.2,
+        "posFracByWindow": {
+          "10": 0.714
+        },
+        "minSumByWindow": {
+          "10": -33.96
+        },
+        "minPosFrac": 0.714,
+        "avgPosFrac": 0.714
+      },
+      "score": 814.5372783601758
+    },
+    {
+      "minScore": 30,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 72,
+      "metrics": {
+        "trades": 23,
+        "winRate": 30.4,
+        "profitFactor": 1.113,
+        "expectancyPct": 0.878,
+        "totalReturnPct": 20.2,
+        "posFracByWindow": {
+          "10": 0.714
+        },
+        "minSumByWindow": {
+          "10": -33.96
+        },
+        "minPosFrac": 0.714,
+        "avgPosFrac": 0.714
+      },
+      "score": 814.5372783601758
+    },
+    {
+      "minScore": 35,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 72,
+      "metrics": {
+        "trades": 23,
+        "winRate": 30.4,
+        "profitFactor": 1.113,
+        "expectancyPct": 0.878,
+        "totalReturnPct": 20.2,
+        "posFracByWindow": {
+          "10": 0.714
+        },
+        "minSumByWindow": {
+          "10": -33.96
+        },
+        "minPosFrac": 0.714,
+        "avgPosFrac": 0.714
+      },
+      "score": 814.5372783601758
+    },
+    {
+      "minScore": 40,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 72,
+      "metrics": {
+        "trades": 23,
+        "winRate": 30.4,
+        "profitFactor": 1.113,
+        "expectancyPct": 0.878,
+        "totalReturnPct": 20.2,
+        "posFracByWindow": {
+          "10": 0.714
+        },
+        "minSumByWindow": {
+          "10": -33.96
+        },
+        "minPosFrac": 0.714,
+        "avgPosFrac": 0.714
+      },
+      "score": 814.5372783601758
+    },
+    {
+      "minScore": 45,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 72,
+      "metrics": {
+        "trades": 23,
+        "winRate": 30.4,
+        "profitFactor": 1.113,
+        "expectancyPct": 0.878,
+        "totalReturnPct": 20.2,
+        "posFracByWindow": {
+          "10": 0.714
+        },
+        "minSumByWindow": {
+          "10": -33.96
+        },
+        "minPosFrac": 0.714,
+        "avgPosFrac": 0.714
+      },
+      "score": 814.5372783601758
+    },
+    {
+      "minScore": 50,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 72,
+      "metrics": {
+        "trades": 23,
+        "winRate": 30.4,
+        "profitFactor": 1.113,
+        "expectancyPct": 0.878,
+        "totalReturnPct": 20.2,
+        "posFracByWindow": {
+          "10": 0.714
+        },
+        "minSumByWindow": {
+          "10": -33.96
+        },
+        "minPosFrac": 0.714,
+        "avgPosFrac": 0.714
+      },
+      "score": 814.5372783601758
+    },
+    {
+      "minScore": 55,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 72,
+      "metrics": {
+        "trades": 23,
+        "winRate": 30.4,
+        "profitFactor": 1.113,
+        "expectancyPct": 0.878,
+        "totalReturnPct": 20.2,
+        "posFracByWindow": {
+          "10": 0.714
+        },
+        "minSumByWindow": {
+          "10": -33.96
+        },
+        "minPosFrac": 0.714,
+        "avgPosFrac": 0.714
+      },
+      "score": 814.5372783601758
+    },
+    {
+      "minScore": 0,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": null,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 0,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 150,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 0,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 200,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 0,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 336,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 0,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 500,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 0,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 720,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 0,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 8760,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 20,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": null,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 20,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 150,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 20,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 200,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 20,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 336,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 20,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 500,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 20,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 720,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 20,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 8760,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 25,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": null,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 25,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 150,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 25,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 200,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 25,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 336,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 25,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 500,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 25,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 720,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 25,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 8760,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 30,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": null,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 30,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 150,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 30,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 200,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 30,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 336,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 30,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 500,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 30,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 720,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 30,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 8760,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 35,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": null,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 35,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 150,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    },
+    {
+      "minScore": 35,
+      "minLiquidityUsd": 0,
+      "minMomentum1h": -20,
+      "minVolLiqRatio": 0,
+      "maxTokenAgeHours": 200,
+      "metrics": {
+        "trades": 54,
+        "winRate": 31.5,
+        "profitFactor": 1.037,
+        "expectancyPct": 0.274,
+        "totalReturnPct": 14.8,
+        "posFracByWindow": {
+          "10": 0.644,
+          "25": 0.667,
+          "50": 1
+        },
+        "minSumByWindow": {
+          "10": -98.3,
+          "25": -20.74,
+          "50": 7.52
+        },
+        "minPosFrac": 0.644,
+        "avgPosFrac": 0.77
+      },
+      "score": 750.0639375982297
+    }
+  ]
+}

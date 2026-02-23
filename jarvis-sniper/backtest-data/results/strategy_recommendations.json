@@ -1,0 +1,600 @@
+[
+  {
+    "algo_id": "xstock_intraday",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 40,
+      "win_rate": 25,
+      "profit_factor": 3.26,
+      "expectancy_pct": 15.37,
+      "total_return_pct": 614.82,
+      "min_pos_frac": 1,
+      "walkforward_pass_rate": 1,
+      "sample_band": "MEDIUM"
+    }
+  },
+  {
+    "algo_id": "bluechip_trend_follow",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": false
+    },
+    "metrics": {
+      "trades": 42,
+      "win_rate": 42.9,
+      "profit_factor": 3.36,
+      "expectancy_pct": 8.11,
+      "total_return_pct": 340.43,
+      "min_pos_frac": 1,
+      "walkforward_pass_rate": 0,
+      "sample_band": "MEDIUM"
+    }
+  },
+  {
+    "algo_id": "bluechip_breakout",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": false
+    },
+    "metrics": {
+      "trades": 42,
+      "win_rate": 42.9,
+      "profit_factor": 3.36,
+      "expectancy_pct": 8.11,
+      "total_return_pct": 340.43,
+      "min_pos_frac": 1,
+      "walkforward_pass_rate": 0,
+      "sample_band": "MEDIUM"
+    }
+  },
+  {
+    "algo_id": "micro_cap_surge",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 94,
+      "win_rate": 57.4,
+      "profit_factor": 2.01,
+      "expectancy_pct": 4.87,
+      "total_return_pct": 457.48,
+      "min_pos_frac": 0.871,
+      "walkforward_pass_rate": 0.8,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "sol_veteran",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 71,
+      "win_rate": 60.6,
+      "profit_factor": 2.27,
+      "expectancy_pct": 4.52,
+      "total_return_pct": 320.96,
+      "min_pos_frac": 0.903,
+      "walkforward_pass_rate": 1,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "utility_swing",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 71,
+      "win_rate": 60.6,
+      "profit_factor": 2.27,
+      "expectancy_pct": 4.52,
+      "total_return_pct": 320.96,
+      "min_pos_frac": 0.903,
+      "walkforward_pass_rate": 1,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "momentum",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 68,
+      "win_rate": 45.6,
+      "profit_factor": 1.69,
+      "expectancy_pct": 4.12,
+      "total_return_pct": 279.95,
+      "min_pos_frac": 0.729,
+      "walkforward_pass_rate": 0.8,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "hybrid_b",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 68,
+      "win_rate": 45.6,
+      "profit_factor": 1.69,
+      "expectancy_pct": 4.12,
+      "total_return_pct": 279.95,
+      "min_pos_frac": 0.729,
+      "walkforward_pass_rate": 0.8,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "prestock_speculative",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": false
+    },
+    "metrics": {
+      "trades": 23,
+      "win_rate": 69.6,
+      "profit_factor": 2.64,
+      "expectancy_pct": 3.93,
+      "total_return_pct": 90.32,
+      "min_pos_frac": 0.857,
+      "walkforward_pass_rate": 0,
+      "sample_band": "THIN"
+    }
+  },
+  {
+    "algo_id": "elite",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 89,
+      "win_rate": 50.6,
+      "profit_factor": 1.63,
+      "expectancy_pct": 3.55,
+      "total_return_pct": 316.02,
+      "min_pos_frac": 0.938,
+      "walkforward_pass_rate": 1,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "let_it_ride",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 56,
+      "win_rate": 44.6,
+      "profit_factor": 1.56,
+      "expectancy_pct": 3.51,
+      "total_return_pct": 196.49,
+      "min_pos_frac": 0.723,
+      "walkforward_pass_rate": 1,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "bags_dip_buyer",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 65,
+      "win_rate": 47.7,
+      "profit_factor": 1.75,
+      "expectancy_pct": 3.45,
+      "total_return_pct": 224.55,
+      "min_pos_frac": 0.929,
+      "walkforward_pass_rate": 0.8,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "established_breakout",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": false
+    },
+    "metrics": {
+      "trades": 18,
+      "win_rate": 55.6,
+      "profit_factor": 1.8,
+      "expectancy_pct": 3.33,
+      "total_return_pct": 59.89,
+      "min_pos_frac": 0.778,
+      "walkforward_pass_rate": 0,
+      "sample_band": "THIN"
+    }
+  },
+  {
+    "algo_id": "meme_classic",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 73,
+      "win_rate": 56.2,
+      "profit_factor": 1.8,
+      "expectancy_pct": 3.29,
+      "total_return_pct": 240.21,
+      "min_pos_frac": 0.828,
+      "walkforward_pass_rate": 1,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "bags_fresh_snipe",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": false
+    },
+    "metrics": {
+      "trades": 28,
+      "win_rate": 35.7,
+      "profit_factor": 1.41,
+      "expectancy_pct": 2.95,
+      "total_return_pct": 82.58,
+      "min_pos_frac": 1,
+      "walkforward_pass_rate": 0,
+      "sample_band": "MEDIUM"
+    }
+  },
+  {
+    "algo_id": "volume_spike",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": false,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 80,
+      "win_rate": 53.8,
+      "profit_factor": 1.67,
+      "expectancy_pct": 2.92,
+      "total_return_pct": 233.24,
+      "min_pos_frac": 0.69,
+      "walkforward_pass_rate": 0.8,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "bags_momentum",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": false
+    },
+    "metrics": {
+      "trades": 23,
+      "win_rate": 34.8,
+      "profit_factor": 1.36,
+      "expectancy_pct": 2.6,
+      "total_return_pct": 59.88,
+      "min_pos_frac": 1,
+      "walkforward_pass_rate": 0,
+      "sample_band": "THIN"
+    }
+  },
+  {
+    "algo_id": "pump_fresh_tight",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 98,
+      "win_rate": 45.9,
+      "profit_factor": 1.39,
+      "expectancy_pct": 2.34,
+      "total_return_pct": 229.32,
+      "min_pos_frac": 0.809,
+      "walkforward_pass_rate": 0.8,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "bags_aggressive",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": false
+    },
+    "metrics": {
+      "trades": 58,
+      "win_rate": 34.5,
+      "profit_factor": 1.31,
+      "expectancy_pct": 1.67,
+      "total_return_pct": 96.7,
+      "min_pos_frac": 0.816,
+      "walkforward_pass_rate": 0,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "bags_value",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 40,
+      "win_rate": 52.5,
+      "profit_factor": 1.43,
+      "expectancy_pct": 1.29,
+      "total_return_pct": 51.49,
+      "min_pos_frac": 0.774,
+      "walkforward_pass_rate": 1,
+      "sample_band": "MEDIUM"
+    }
+  },
+  {
+    "algo_id": "bags_conservative",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 40,
+      "win_rate": 52.5,
+      "profit_factor": 1.43,
+      "expectancy_pct": 1.29,
+      "total_return_pct": 51.49,
+      "min_pos_frac": 0.774,
+      "walkforward_pass_rate": 1,
+      "sample_band": "MEDIUM"
+    }
+  },
+  {
+    "algo_id": "bags_elite",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 40,
+      "win_rate": 52.5,
+      "profit_factor": 1.26,
+      "expectancy_pct": 0.79,
+      "total_return_pct": 31.65,
+      "min_pos_frac": 0.774,
+      "walkforward_pass_rate": 1,
+      "sample_band": "MEDIUM"
+    }
+  },
+  {
+    "algo_id": "bags_bluechip",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": true,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": true
+    },
+    "metrics": {
+      "trades": 51,
+      "win_rate": 51,
+      "profit_factor": 1.2,
+      "expectancy_pct": 0.59,
+      "total_return_pct": 30.28,
+      "min_pos_frac": 0.738,
+      "walkforward_pass_rate": 1,
+      "sample_band": "ROBUST"
+    }
+  },
+  {
+    "algo_id": "index_intraday",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": false,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": false
+    },
+    "metrics": {
+      "trades": 10,
+      "win_rate": 40,
+      "profit_factor": 1.09,
+      "expectancy_pct": 0.22,
+      "total_return_pct": 2.22,
+      "min_pos_frac": 1,
+      "walkforward_pass_rate": 0,
+      "sample_band": "THIN"
+    }
+  },
+  {
+    "algo_id": "index_leveraged",
+    "status_label": "EXPERIMENTAL",
+    "recommendation": "keep_experimental",
+    "reason": "Insufficient robustness for promotion gate",
+    "gates": {
+      "pf_gt_1_15": false,
+      "expectancy_gt_0": true,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": true,
+      "walkforward_pass_rate_gte_0_60": false
+    },
+    "metrics": {
+      "trades": 10,
+      "win_rate": 40,
+      "profit_factor": 1.09,
+      "expectancy_pct": 0.22,
+      "total_return_pct": 2.22,
+      "min_pos_frac": 1,
+      "walkforward_pass_rate": 0,
+      "sample_band": "THIN"
+    }
+  },
+  {
+    "algo_id": "xstock_swing",
+    "status_label": "EXPERIMENTAL_DISABLED",
+    "recommendation": "disable_experimental",
+    "reason": "Losing or non-positive expectancy",
+    "gates": {
+      "pf_gt_1_15": false,
+      "expectancy_gt_0": false,
+      "trades_gte_100": false,
+      "min_pos_frac_gte_0_70": false,
+      "walkforward_pass_rate_gte_0_60": false
+    },
+    "metrics": {
+      "trades": 47,
+      "win_rate": 10.6,
+      "profit_factor": 0.16,
+      "expectancy_pct": -2.48,
+      "total_return_pct": -116.78,
+      "min_pos_frac": 0,
+      "walkforward_pass_rate": 0,
+      "sample_band": "MEDIUM"
+    }
+  }
+]

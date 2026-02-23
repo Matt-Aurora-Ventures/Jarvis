@@ -242,6 +242,13 @@ class JarvisVoice:
     ) -> Optional[str]:
         """Fallback: generate Jarvis voice using Grok when Claude is unavailable."""
         try:
+            from core.feature_flags import is_xai_enabled
+            if not is_xai_enabled(default=True):
+                return None
+        except Exception:
+            return None
+
+        try:
             from bots.twitter.grok_client import GrokClient
         except Exception as exc:
             logger.error(f"Grok client unavailable: {exc}")
@@ -297,6 +304,18 @@ Respond with ONLY the tweet text. No quotes, no explanation, no markdown."""
             full_prompt += "\n\nGenerate a single tweet. Can be up to 4,000 characters (Premium X). Lowercase. Do NOT end with 'nfa' every time - only occasionally."
 
             if not self._cli_available() and not self.api_client:
+                # If xAI is disabled (cooldown / XAI_ENABLED=0), do not attempt Grok fallback.
+                try:
+                    from core.feature_flags import is_xai_enabled
+                    if not is_xai_enabled(default=True):
+                        now = time.time()
+                        if now - self._last_grok_fallback_log_ts > 10 * 60:
+                            logger.warning("Claude not available and xAI is disabled; skipping tweet generation")
+                            self._last_grok_fallback_log_ts = now
+                        return None
+                except Exception:
+                    return None
+
                 now = time.time()
                 if now - self._last_grok_fallback_log_ts > 10 * 60:
                     if not self.cli_enabled:

@@ -4,14 +4,39 @@ export interface XaiModelRecord {
   id: string;
 }
 
+export interface XaiBatchState {
+  num_requests?: number;
+  num_pending?: number;
+  num_success?: number;
+  num_error?: number;
+  num_cancelled?: number;
+}
+
 export interface XaiBatchInfo {
-  id: string;
-  status: string;
-  input_file_id?: string;
-  output_file_id?: string;
-  error_file_id?: string;
-  endpoint?: string;
-  completion_window?: string;
+  batch_id: string;
+  name?: string;
+  create_time?: string;
+  expire_time?: string;
+  cancel_time?: string;
+  cancel_by_xai_message?: string;
+  state?: XaiBatchState;
+  cost_breakdown?: unknown;
+}
+
+export interface XaiBatchRequest {
+  batch_request_id: string;
+  completion_request: Record<string, unknown>;
+}
+
+export interface XaiBatchResult {
+  batch_request_id: string;
+  response?: unknown;
+  error?: unknown;
+}
+
+export interface XaiBatchResultsPage {
+  results: XaiBatchResult[];
+  pagination_token?: string;
 }
 
 export interface XaiApiErrorShape {
@@ -49,10 +74,11 @@ function baseUrl(): string {
 }
 
 function apiKey(): string {
-  // Secret Manager values can include stray whitespace/newlines; sanitize to avoid invalid header chars.
+  // Secrets injected via Secret Manager can sometimes include embedded newlines.
+  // xAI keys never contain whitespace, so stripping is safe and prevents subtle auth failures.
   return String(process.env.XAI_API_KEY || '')
-    .replace(/[\x00-\x20\x7f]/g, '')
-    .trim();
+    .trim()
+    .replace(/\s+/g, '');
 }
 
 function mustApiKey(): string {
@@ -96,8 +122,9 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
   const payload = await parseJsonSafe(response);
   if (!response.ok) {
     const apiError = (payload as { error?: XaiApiErrorShape } | null)?.error;
+    const rawText = (payload as { raw?: string } | null)?.raw;
     throw new XaiApiError({
-      message: apiError?.message || `xAI API request failed (${response.status})`,
+      message: apiError?.message || rawText || `xAI API request failed (${response.status})`,
       status: response.status,
       correlationId,
       code: apiError?.code,
@@ -115,64 +142,14 @@ export async function listModels(): Promise<XaiModelRecord[]> {
     .map((id) => ({ id }));
 }
 
-export async function uploadBatchInputFile(jsonl: string): Promise<string> {
-  const correlationId = makeCorrelationId();
-  const key = mustApiKey();
-  const url = `${baseUrl()}/files`;
-  const form = new FormData();
-  form.append('purpose', 'batch');
-  form.append(
-    'file',
-    new Blob([jsonl], { type: 'application/x-ndjson' }),
-    `xai-batch-${Date.now()}.jsonl`,
-  );
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'X-Correlation-Id': correlationId,
-    },
-    body: form,
-  });
-  const payload = await parseJsonSafe(response);
-  if (!response.ok) {
-    const apiError = (payload as { error?: XaiApiErrorShape } | null)?.error;
-    throw new XaiApiError({
-      message: apiError?.message || `xAI file upload failed (${response.status})`,
-      status: response.status,
-      correlationId,
-      code: apiError?.code,
-      details: payload,
-    });
-  }
-  const id = String((payload as { id?: string } | null)?.id || '').trim();
-  if (!id) {
-    throw new XaiApiError({
-      message: 'xAI file upload returned empty file id',
-      status: 502,
-      correlationId,
-      code: 'XAI_FILE_ID_MISSING',
-      details: payload,
-    });
-  }
-  return id;
-}
-
-export async function createBatch(
-  inputFileId: string,
-  endpoint = '/v1/chat/completions',
-  completionWindow = '24h',
-): Promise<string> {
-  const payload = await requestJson<{ id?: string }>('/batches', {
+export async function createBatch(name: string): Promise<string> {
+  const payload = await requestJson<Record<string, unknown>>('/batches', {
     method: 'POST',
     body: JSON.stringify({
-      input_file_id: inputFileId,
-      endpoint,
-      completion_window: completionWindow,
+      name,
     }),
   });
-  const id = String(payload?.id || '').trim();
+  const id = String(payload?.batch_id || payload?.id || '').trim();
   if (!id) {
     throw new XaiApiError({
       message: 'xAI batch create returned empty batch id',
@@ -186,47 +163,89 @@ export async function createBatch(
 }
 
 export async function getBatch(batchId: string): Promise<XaiBatchInfo> {
-  const payload = await requestJson<Record<string, unknown>>(`/batches/${encodeURIComponent(batchId)}`, {
-    method: 'GET',
-  });
+  const payload = await requestJson<Record<string, unknown>>(
+    `/batches/${encodeURIComponent(batchId)}`,
+    { method: 'GET' },
+  );
+  const state = (payload.state && typeof payload.state === 'object') ? (payload.state as XaiBatchState) : undefined;
   return {
-    id: String(payload.id || ''),
-    status: String(payload.status || 'unknown'),
-    input_file_id: typeof payload.input_file_id === 'string' ? payload.input_file_id : undefined,
-    output_file_id: typeof payload.output_file_id === 'string' ? payload.output_file_id : undefined,
-    error_file_id: typeof payload.error_file_id === 'string' ? payload.error_file_id : undefined,
-    endpoint: typeof payload.endpoint === 'string' ? payload.endpoint : undefined,
-    completion_window: typeof payload.completion_window === 'string' ? payload.completion_window : undefined,
+    batch_id: String(payload.batch_id || payload.id || ''),
+    name: typeof payload.name === 'string' ? payload.name : undefined,
+    create_time: typeof payload.create_time === 'string' ? payload.create_time : undefined,
+    expire_time: typeof payload.expire_time === 'string' ? payload.expire_time : undefined,
+    cancel_time: typeof payload.cancel_time === 'string' ? payload.cancel_time : undefined,
+    cancel_by_xai_message: typeof payload.cancel_by_xai_message === 'string' ? payload.cancel_by_xai_message : undefined,
+    state,
+    cost_breakdown: payload.cost_breakdown,
   };
 }
 
-export async function getFileContent(fileId: string): Promise<string> {
-  const correlationId = makeCorrelationId();
-  const key = mustApiKey();
-  const url = `${baseUrl()}/files/${encodeURIComponent(fileId)}/content`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'X-Correlation-Id': correlationId,
-    },
+export async function addBatchRequests(batchId: string, batchRequests: XaiBatchRequest[]): Promise<void> {
+  await requestJson<Record<string, unknown>>(`/batches/${encodeURIComponent(batchId)}/requests`, {
+    method: 'POST',
+    body: JSON.stringify({
+      // REST Batch API uses a tagged union wrapper to support multiple endpoint types.
+      // For chat completions, the expected variant is `chat_get_completion`.
+      batch_requests: batchRequests.map((req) => ({
+        batch_request: {
+          chat_get_completion: req,
+        },
+      })),
+    }),
   });
-  const text = await response.text();
-  if (!response.ok) {
-    let details: unknown = text;
-    try {
-      details = JSON.parse(text);
-    } catch {
-      // keep text fallback
-    }
-    throw new XaiApiError({
-      message: `xAI file content fetch failed (${response.status})`,
-      status: response.status,
-      correlationId,
-      code: 'XAI_FILE_CONTENT_FAILED',
-      details,
-    });
-  }
-  return text;
 }
 
+export async function getBatchResults(args: {
+  batchId: string;
+  limit?: number;
+  paginationToken?: string;
+}): Promise<XaiBatchResultsPage> {
+  const query: string[] = [];
+  if (typeof args.limit === 'number' && Number.isFinite(args.limit) && args.limit > 0) {
+    query.push(`limit=${encodeURIComponent(String(Math.floor(args.limit)))}`);
+  }
+  if (args.paginationToken) {
+    query.push(`pagination_token=${encodeURIComponent(String(args.paginationToken))}`);
+  }
+  const suffix = query.length ? `?${query.join('&')}` : '';
+  const payload = await requestJson<Record<string, unknown>>(
+    `/batches/${encodeURIComponent(args.batchId)}/results${suffix}`,
+    { method: 'GET' },
+  );
+  const resultsRaw = Array.isArray(payload.results) ? payload.results : [];
+  const results: XaiBatchResult[] = resultsRaw
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null;
+      const rec = row as Record<string, unknown>;
+      let batch_request_id = String(rec.batch_request_id || '').trim();
+      let response = rec.response;
+      let error = rec.error;
+
+      // Some API shapes wrap results similarly to requests:
+      // { batch_result: { chat_get_completion: { batch_request_id, response, error } } }
+      if (!batch_request_id) {
+        const batchResult = rec.batch_result;
+        if (batchResult && typeof batchResult === 'object') {
+          const variant = (batchResult as any).chat_get_completion;
+          if (variant && typeof variant === 'object') {
+            batch_request_id = String(variant.batch_request_id || '').trim();
+            response = variant.response ?? variant.completion_response ?? response;
+            error = variant.error ?? error;
+          }
+        }
+      }
+
+      if (!batch_request_id) return null;
+      return {
+        batch_request_id,
+        response,
+        error,
+      } as XaiBatchResult;
+    })
+    .filter((v): v is XaiBatchResult => Boolean(v));
+
+  return {
+    results,
+    pagination_token: typeof payload.pagination_token === 'string' ? payload.pagination_token : undefined,
+  };
+}

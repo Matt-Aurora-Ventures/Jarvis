@@ -15,6 +15,9 @@ Required:
 
 - `HELIUS_GATEKEEPER_RPC_URL` (server-side Helius Gatekeeper URL; production routes fail closed without this)
 - `BAGS_API_KEY` (server-side; used by `/api/bags/quote` + `/api/bags/swap`)
+- `AUTONOMY_JOB_TOKEN` (bearer token required by `POST /api/autonomy/hourly`)
+- `AUTONOMY_AUDIT_BUCKET` (GCS bucket for hourly autonomy decision artifacts)
+- `XAI_API_KEY` (restricted runtime key for batch-only autonomy jobs)
 
 Recommended:
 
@@ -22,6 +25,14 @@ Recommended:
 - `NEXT_PUBLIC_SOLANA_RPC` (client-side; use a **public** endpoint)
 - `ALLOWED_ORIGINS` (CORS allowlist for `/api/*` routes; comma-separated)
 - `BAGS_REFERRAL_ACCOUNT` (optional referral account for Bags)
+- `XAI_FRONTIER_MODEL=grok-4-1-fast-reasoning`
+- `XAI_FRONTIER_FALLBACK_MODELS=grok-4-fast-reasoning,grok-4`
+- `XAI_BATCH_ENABLED=true`
+- `XAI_DAILY_BUDGET_USD=10`
+- `XAI_HOURLY_MAX_INPUT_TOKENS=150000`
+- `XAI_HOURLY_MAX_OUTPUT_TOKENS=30000`
+- `AUTONOMY_ENABLED=true`
+- `AUTONOMY_MAX_ADJUSTMENTS_PER_CYCLE=1`
 
 ## Local Run
 
@@ -102,4 +113,47 @@ Then deploy with the hardened flow:
 
 ```bash
 npm run deploy:hardened
+```
+
+## Autonomy Scheduler + Audit Trail
+
+1. Create bucket + lifecycle (180 days):
+
+```bash
+gcloud storage buckets create gs://kr8tiv-sniper-autonomy-audit --project kr8tiv --location us-central1
+gcloud storage buckets update gs://kr8tiv-sniper-autonomy-audit --lifecycle-file=- <<'JSON'
+{
+  "rule": [
+    { "action": { "type": "Delete" }, "condition": { "age": 180 } }
+  ]
+}
+JSON
+```
+
+2. Configure scheduler:
+
+```bash
+npm run autonomy:scheduler
+```
+
+3. Optional: provision restricted xAI runtime key:
+
+```bash
+npm run xai:provision-key
+```
+
+4. Smoke checks:
+
+```bash
+curl -i https://kr8tiv.web.app/api/health
+curl -i https://kr8tiv.web.app/api/autonomy/audit/latest
+curl -i -X POST https://kr8tiv.web.app/api/autonomy/hourly -H "Authorization: Bearer <AUTONOMY_JOB_TOKEN>" -H "Content-Type: application/json" -d "{}"
+```
+
+## Rollback
+
+To disable runtime autonomy without removing artifacts/history:
+
+```bash
+gcloud run services update ssrkr8tiv --project kr8tiv --region us-central1 --set-env-vars AUTONOMY_ENABLED=false
 ```

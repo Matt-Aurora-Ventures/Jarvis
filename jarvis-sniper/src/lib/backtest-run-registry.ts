@@ -1,6 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ServerCache } from './server-cache';
+import {
+  readBacktestRunStatusFromGcs,
+  writeBacktestRunStatusToGcsThrottled,
+} from './backtest-run-status-store';
 
 export type BacktestRunState = 'running' | 'completed' | 'failed' | 'partial';
 
@@ -61,6 +65,9 @@ function persistRunStatus(run: BacktestRunStatus): void {
   } catch {
     // best effort only
   }
+
+  // Best-effort cross-instance visibility (Cloud Run often serves polling from different instances).
+  writeBacktestRunStatusToGcsThrottled(run);
 }
 
 function touch(run: BacktestRunStatus): BacktestRunStatus {
@@ -219,6 +226,15 @@ export function getBacktestRunStatus(runId: string): BacktestRunStatus | null {
   } catch {
     return null;
   }
+}
+
+export async function getBacktestRunStatusRemote(runId: string): Promise<BacktestRunStatus | null> {
+  const remote = await readBacktestRunStatusFromGcs(runId);
+  if (!remote) return null;
+
+  runCache.set(runId, remote, RUN_TTL_MS);
+  persistRunStatus(remote);
+  return remote;
 }
 
 export function markBacktestChunkRunning(runId: string, strategyId: string): void {

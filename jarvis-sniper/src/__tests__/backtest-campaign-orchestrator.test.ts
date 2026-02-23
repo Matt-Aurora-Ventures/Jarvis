@@ -107,8 +107,8 @@ describe('backtest campaign orchestrator ledger', () => {
 describe('backtest campaign scoring', () => {
   it('scores candidates and evaluates promotion gates', () => {
     const aggregate = aggregateRunSummaries('bags_momentum', 'bags', [
-      { trades: 3000, winRate: 0.52, expectancy: 0.08, profitFactor: 1.2, maxDrawdownPct: 22, netPnl: 240, sharpe: 1.4, executionReliabilityPct: 88 },
-      { trades: 2500, winRate: 0.49, expectancy: 0.06, profitFactor: 1.15, maxDrawdownPct: 25, netPnl: 180, sharpe: 1.3, executionReliabilityPct: 86 },
+      { trades: 3000, winRate: 0.52, expectancy: 0.08, profitFactor: 1.2, maxDrawdownPct: 22, netPnl: 240, sharpe: 1.4 },
+      { trades: 2500, winRate: 0.49, expectancy: 0.06, profitFactor: 1.15, maxDrawdownPct: 25, netPnl: 180, sharpe: 1.3 },
     ]);
     expect(aggregate.trades).toBe(5500);
 
@@ -124,7 +124,6 @@ describe('backtest campaign scoring', () => {
         maxDrawdownPct: 39,
         netPnl: 60,
         sharpe: 0.7,
-        executionReliabilityPct: 82,
       },
     ]);
     expect(ranked.length).toBe(2);
@@ -132,22 +131,6 @@ describe('backtest campaign scoring', () => {
 
     const decision = evaluatePromotion(aggregate);
     expect(decision.promoted).toBe(true);
-  });
-
-  it('blocks promotion when execution reliability gate fails', () => {
-    const decision = evaluatePromotion({
-      strategyId: 'bags_value',
-      family: 'bags',
-      trades: 5200,
-      winRate: 0.49,
-      expectancy: 0.03,
-      profitFactor: 1.2,
-      maxDrawdownPct: 21,
-      netPnl: 160,
-      executionReliabilityPct: 72,
-    });
-    expect(decision.promoted).toBe(false);
-    expect(decision.reason).toContain('executionReliabilityPct');
   });
 });
 

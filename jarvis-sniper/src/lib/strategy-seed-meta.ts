@@ -1,5 +1,5 @@
 export const STRATEGY_SEED_META = {
-  strategyRevision: 'v4-backtest-2026-02-16',
-  seedVersion: 'seed-v4',
+  strategyRevision: 'v3-backtest-proven-2026-02-15',
+  seedVersion: 'seed-v3',
 } as const;
 

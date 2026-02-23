@@ -153,7 +153,7 @@
         "${HOME}/Documents/Jarvis context/mcp-servers/solana-rpc/dist/index.js"
       ],
       "env": {
-        "SOLANA_RPC_URL": "https://mainnet.helius-rpc.com/?api-key=95014bec-7a2f-46af-9750-48be929844f4",
+        "SOLANA_RPC_URL": "https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}",
         "SOLANA_NETWORK": "mainnet-beta"
       }
     },
@@ -178,7 +178,7 @@
       "args": [],
       "env": {
         "TELEGRAM_BOT_TOKEN": "${TELEGRAM_BOT_TOKEN}",
-        "TELEGRAM_ADMIN_IDS": "8527130908",
+        "TELEGRAM_ADMIN_IDS": "8527368699",
         "CLAUDE_VIBE_DIR": "${HOME}/Desktop/LifeOS"
       }
     },

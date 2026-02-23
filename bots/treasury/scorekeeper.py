@@ -154,6 +154,34 @@ class Scorekeeper:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         db = get_core_db()
         with db.connection() as conn:
+            # SQLite migrations: CREATE TABLE IF NOT EXISTS does not evolve schemas.
+            # We explicitly ensure newer columns exist so older DBs don't break loads.
+            def _table_columns(table: str) -> set[str]:
+                cols: set[str] = set()
+                try:
+                    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+                    for row in rows:
+                        try:
+                            name = row["name"]  # sqlite3.Row
+                        except Exception:
+                            name = row[1] if len(row) > 1 else None  # tuple
+                        if name:
+                            cols.add(str(name))
+                except Exception:
+                    return set()
+                return cols
+
+            def _ensure_column(table: str, col: str, ddl: str) -> None:
+                existing = _table_columns(table)
+                if existing and col in existing:
+                    return
+                try:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+                    logger.info(f"Migrated SQLite: added {table}.{col}")
+                except Exception:
+                    # If it already exists or migration can't be applied, ignore and continue.
+                    pass
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS positions (
                     id TEXT PRIMARY KEY,
@@ -193,6 +221,15 @@ class Scorekeeper:
                     user_id INTEGER DEFAULT 0
                 )
             """)
+
+            # Migrate columns for legacy DBs (pre-position_id/user_id tracking).
+            _ensure_column("positions", "user_id", "INTEGER DEFAULT 0")
+            _ensure_column("positions", "tx_signature_entry", "TEXT")
+            _ensure_column("positions", "tx_signature_exit", "TEXT")
+            _ensure_column("trades", "tx_signature", "TEXT")
+            _ensure_column("trades", "position_id", "TEXT")
+            _ensure_column("trades", "user_id", "INTEGER DEFAULT 0")
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS scorecard (
                     id INTEGER PRIMARY KEY CHECK (id = 1),

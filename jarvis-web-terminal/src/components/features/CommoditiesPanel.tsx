@@ -33,7 +33,7 @@ export function CommoditiesPanel({ commodities, preciousMetals, isLoading }: Com
     return (
         <div className="sentiment-panel">
             <div className="sentiment-panel-header">
-                <Gem className="w-5 h-5 text-amber-400" />
+                <Gem className="w-5 h-5 text-accent-neon" />
                 <h3>💎 Commodities & Metals</h3>
             </div>
 
@@ -74,11 +74,11 @@ export function CommoditiesPanel({ commodities, preciousMetals, isLoading }: Com
                             <Fuel className="w-4 h-4 text-text-muted" />
                             <span className="font-medium text-text-primary">{commodity.name}</span>
 
-                            <span className={`ml-auto text-sm ${commodity.direction === 'LONG' ? 'text-emerald-400' : 'text-red-400'}`}>
+                            <span className={`ml-auto text-sm ${commodity.direction === 'LONG' ? 'text-emerald-400' : 'text-accent-error'}`}>
                                 {commodity.change}
                             </span>
 
-                            <span className={`px-1.5 py-0.5 text-xs rounded ${commodity.direction === 'LONG' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                            <span className={`px-1.5 py-0.5 text-xs rounded ${commodity.direction === 'LONG' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-accent-error/20 text-accent-error'}`}>
                                 {commodity.direction}
                             </span>
                         </div>

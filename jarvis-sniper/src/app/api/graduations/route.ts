@@ -694,7 +694,7 @@ export async function GET(request: Request) {
         price_usd: priceUsd,
         liquidity: liq,
         volume_24h: vol24,
-        logo_uri: safeImageUrl(iconUrl),
+        logo_uri: iconUrl,
         website,
         twitter,
         telegram,

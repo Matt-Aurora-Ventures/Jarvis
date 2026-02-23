@@ -24,20 +24,6 @@ param(
 $ErrorActionPreference = "Stop"
 
 Write-Host "[hardening] Updating Cloud Run service $Service in $Project/$Region ..."
-$envVars = @(
-  "AUTONOMY_ENABLED=$AutonomyEnabled",
-  "AUTONOMY_APPLY_OVERRIDES=$AutonomyApplyOverrides",
-  "AUTONOMY_AUDIT_BUCKET=$AutonomyAuditBucket",
-  "XAI_BATCH_ENABLED=$XaiBatchEnabled",
-  "XAI_FRONTIER_MODEL=$XaiFrontierModel",
-  "XAI_DAILY_BUDGET_USD=$XaiDailyBudgetUsd",
-  "XAI_HOURLY_MAX_INPUT_TOKENS=$XaiHourlyMaxInputTokens",
-  "XAI_HOURLY_MAX_OUTPUT_TOKENS=$XaiHourlyMaxOutputTokens",
-  "XAI_KEY_RATE_QPS=$XaiKeyRateQps",
-  "XAI_KEY_RATE_QPM=$XaiKeyRateQpm",
-  "XAI_KEY_RATE_TPM=$XaiKeyRateTpm"
-) -join ","
-
 gcloud run services update $Service `
   --project $Project `
   --region $Region `
@@ -105,4 +91,3 @@ if ($fhTags.Count -gt 0) {
 }
 
 Write-Host "[hardening] Completed."
-

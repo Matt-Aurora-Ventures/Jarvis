@@ -1,0 +1,61 @@
+{
+  "algo_id": "index_leveraged",
+  "total_trades": 10,
+  "wins": 4,
+  "losses": 6,
+  "win_rate": 40,
+  "avg_win_pct": 6.72,
+  "avg_loss_pct": -4.11,
+  "max_win_pct": 18.43,
+  "max_loss_pct": -7.36,
+  "avg_trade_duration_hours": 530.4,
+  "median_trade_duration_hours": 744,
+  "profit_factor": 1.09,
+  "expectancy_per_trade_pct": 0.22,
+  "total_return_pct": 2.22,
+  "sharpe_ratio": 0.48,
+  "max_drawdown_pct": -1.4,
+  "dual_trigger_bars": 0,
+  "expiry_exits_below_entry": 1,
+  "exit_distribution": {
+    "sl_hit": 3,
+    "tp_hit": 1,
+    "trail_stop": 0,
+    "expired": 6,
+    "end_of_data": 0
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2025-08",
+      "trades": 1,
+      "pnl_pct": 4.65,
+      "win_rate": 100
+    },
+    {
+      "month": "2025-10",
+      "trades": 3,
+      "pnl_pct": 11.78,
+      "win_rate": 66.7
+    },
+    {
+      "month": "2025-11",
+      "trades": 3,
+      "pnl_pct": -5.01,
+      "win_rate": 33.3
+    },
+    {
+      "month": "2025-12",
+      "trades": 2,
+      "pnl_pct": -1.85,
+      "win_rate": 0
+    },
+    {
+      "month": "2026-01",
+      "trades": 1,
+      "pnl_pct": -7.36,
+      "win_rate": 0
+    }
+  ],
+  "best_day": "2025-10-11",
+  "worst_day": "2025-10-05"
+}

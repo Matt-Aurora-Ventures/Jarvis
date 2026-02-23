@@ -7,10 +7,14 @@ vi.mock('@/lib/autonomy/hourly-cycle', () => ({
   runHourlyAutonomyCycle: mockRunHourlyAutonomyCycle,
 }));
 
-vi.mock('@/lib/rate-limiter', () => ({
-  autonomyRateLimiter: { check: mockRateLimiterCheck },
-  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
-}));
+vi.mock('@/lib/rate-limiter', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/rate-limiter')>('@/lib/rate-limiter');
+  return {
+    ...actual,
+    autonomyRateLimiter: { check: mockRateLimiterCheck },
+    getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
+  };
+});
 
 describe('POST /api/autonomy/hourly', () => {
   beforeEach(() => {
@@ -54,4 +58,3 @@ describe('POST /api/autonomy/hourly', () => {
     expect(body.reasonCode).toBe('AUTONOMY_PENDING_BATCH');
   });
 });
-

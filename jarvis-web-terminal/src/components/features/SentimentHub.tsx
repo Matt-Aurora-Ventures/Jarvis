@@ -14,7 +14,7 @@ export function SentimentHub({ data }: SentimentHubProps) {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-neon opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-accent-neon"></span>
                     </span>
-                    <span className="text-xs font-mono text-theme-muted uppercase tracking-widest">Live Analysis</span>
+                    <span className="text-xs font-mono text-text-muted uppercase tracking-widest">Live Analysis</span>
                 </div>
             </div>
 
@@ -28,10 +28,10 @@ export function SentimentHub({ data }: SentimentHubProps) {
                         <div className="flex justify-between items-start mb-4 relative z-10">
                             <div>
                                 <h3 className="text-xl font-bold font-display text-theme-ink">{token.symbol}</h3>
-                                <span className="text-xs font-mono text-theme-muted">{token.name}</span>
+                                <span className="text-xs font-mono text-text-muted">{token.name}</span>
                             </div>
                             <div className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider uppercase border ${token.signal === 'STRONG_BUY' || token.signal === 'BUY'
-                                ? 'bg-accent-neon/10 border-accent-neon text-theme-dark'
+                                ? 'bg-accent-neon/10 border-accent-neon text-accent-neon'
                                 : token.signal === 'STRONG_SELL' || token.signal === 'SELL'
                                     ? 'bg-accent-error/10 border-accent-error text-accent-error'
                                     : 'bg-gray-100 border-gray-200 text-gray-500'
@@ -50,7 +50,7 @@ export function SentimentHub({ data }: SentimentHubProps) {
                         </div>
 
                         <div className="space-y-2 relative z-10">
-                            <div className="flex justify-between text-xs font-mono text-theme-muted">
+                            <div className="flex justify-between text-xs font-mono text-text-muted">
                                 <span>SENTIMENT SCORE</span>
                                 <span>{token.score}/100</span>
                             </div>
@@ -63,7 +63,7 @@ export function SentimentHub({ data }: SentimentHubProps) {
                             </div>
                         </div>
 
-                        <p className="mt-4 text-xs text-theme-muted leading-relaxed line-clamp-2 min-h-[2.5em]">
+                        <p className="mt-4 text-xs text-text-muted leading-relaxed line-clamp-2 min-h-[2.5em]">
                             {token.summary}
                         </p>
 

@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { PublicKey } from '@solana/web3.js';
 import { ServerCache } from '@/lib/server-cache';
 import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
-import { safeImageUrl } from '@/lib/safe-url';
 import {
   type WalletHoldingsConsensus,
   type WalletConsensusHolding,
@@ -82,7 +81,7 @@ async function fetchDexMarketByMints(mints: string[]): Promise<Map<string, DexTo
           priceUsd,
           symbol: asString(pair?.baseToken?.symbol, '') || undefined,
           name: asString(pair?.baseToken?.name, '') || undefined,
-          icon: safeImageUrl(asString(pair?.info?.imageUrl, '')) || undefined,
+          icon: asString(pair?.info?.imageUrl, '') || undefined,
           website: asString(websites.find((w: any) => typeof w?.url === 'string')?.url, '') || undefined,
           twitter: asString(socials.find((s: any) => String(s?.type || '').toLowerCase() === 'twitter')?.url, '') || undefined,
           telegram: asString(socials.find((s: any) => String(s?.type || '').toLowerCase() === 'telegram')?.url, '') || undefined,

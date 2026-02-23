@@ -1,54 +1,31 @@
 /**
- * URL safety helpers.
+ * URL sanitizers used by UI + API responses.
  *
- * Used to prevent mixed-content (http://) and sketchy/icon-host URLs from being
- * rendered in the client. Prefer returning `undefined` over attempting to load
- * an insecure resource.
+ * Goal: prevent mixed-content (http) and obviously unsafe protocols from
+ * being surfaced to the client.
  */
 
-function isLikelyIpHost(hostname: string): boolean {
-  // IPv4
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) return true;
-  // IPv6
-  if (hostname.includes(':')) return true;
-  return false;
-}
+export function safeImageUrl(input: string | null | undefined): string | null {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
 
-export function safeImageUrl(raw: string | null | undefined): string | undefined {
-  const input = String(raw || '').trim();
-  if (!input) return undefined;
+  // Allow inline and blob images (CSP already restricts these).
+  if (raw.startsWith('data:') || raw.startsWith('blob:')) return raw;
 
-  // Allow safe in-page references (used rarely, but safe under our CSP).
-  if (input.startsWith('data:') || input.startsWith('blob:')) return input;
-
-  // Allow https URLs as-is.
-  if (input.startsWith('https://')) return input;
-
-  // Normalize common crypto URI schemes.
-  if (input.startsWith('ipfs://')) {
-    const cid = input.slice('ipfs://'.length).replace(/^ipfs\//, '');
-    return cid ? `https://ipfs.io/ipfs/${cid}` : undefined;
-  }
-  if (input.startsWith('ar://')) {
-    const id = input.slice('ar://'.length);
-    return id ? `https://arweave.net/${id}` : undefined;
+  // Normalize IPFS URIs to an HTTPS gateway URL.
+  if (raw.startsWith('ipfs://')) {
+    const path = raw.slice('ipfs://'.length).replace(/^ipfs\//, '');
+    if (!path) return null;
+    return `https://ipfs.io/ipfs/${path}`;
   }
 
-  // Mixed-content / insecure resources: allow a conservative upgrade from http->https
-  // only when the hostname is not an IP and no explicit port is present.
-  if (input.startsWith('http://')) {
-    try {
-      const url = new URL(input);
-      if (isLikelyIpHost(url.hostname)) return undefined;
-      if (url.hostname === 'localhost') return undefined;
-      if (url.port) return undefined;
-      url.protocol = 'https:';
-      return url.toString();
-    } catch {
-      return undefined;
-    }
+  try {
+    const url = new URL(raw);
+    // Mixed content and non-web protocols are blocked.
+    if (url.protocol !== 'https:') return null;
+    return url.toString();
+  } catch {
+    return null;
   }
-
-  return undefined;
 }
 

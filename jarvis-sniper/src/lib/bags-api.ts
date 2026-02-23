@@ -14,8 +14,6 @@
  *   as a rug-risk dimension, but it is still useful as a trade-quality metric.
  */
 
-import { safeImageUrl } from './safe-url';
-
 export interface BagsGraduation {
   mint: string;
   symbol: string;
@@ -369,7 +367,7 @@ function tokenInfoToGraduation(
     market_cap: n(info.mcap, 0),
     price_usd: n(info.usdPrice, 0),
     liquidity: n(info.liquidity, 0),
-    logo_uri: safeImageUrl(coalesceStr(info.icon, null) || undefined),
+    logo_uri: coalesceStr(info.icon, null) || undefined,
     volume_24h: vol24h,
     price_change_5m: n(info.stats5m?.priceChange, 0),
     price_change_1h: n(stats1h?.priceChange, 0),
@@ -380,7 +378,7 @@ function tokenInfoToGraduation(
     total_txns_1h: tx1h.total,
     holderCount: n(info.holderCount, 0),
     organicScore: n(info.organicScore, 0),
-    icon: safeImageUrl(info.icon),
+    icon: info.icon,
     twitter: info.twitter,
     website: info.website,
     source: category === 'topEarners' ? 'bags.fun:topEarners' : `bags.fun:${category}`,

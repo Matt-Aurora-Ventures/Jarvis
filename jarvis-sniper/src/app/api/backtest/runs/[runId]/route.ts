@@ -2,13 +2,19 @@ import { NextResponse } from 'next/server';
 import {
   computeLastMovementAt,
   getBacktestRunStatus,
+  getBacktestRunStatusRemote,
   markBacktestRunStaleIfExpired,
 } from '@/lib/backtest-run-registry';
+import { backtestCorsOptions, withBacktestCors } from '@/lib/backtest-cors';
 
 export const runtime = 'nodejs';
 
+export function OPTIONS(request: Request) {
+  return backtestCorsOptions(request);
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ runId: string }> },
 ) {
   const { runId } = await params;
@@ -21,7 +27,9 @@ export async function GET(
     const staleChecked = markBacktestRunStaleIfExpired(runId);
     run = staleChecked || getBacktestRunStatus(runId);
   } catch {
-    return NextResponse.json(
+    return withBacktestCors(
+      request,
+      NextResponse.json(
       {
         runId,
         state: 'unknown',
@@ -32,12 +40,29 @@ export async function GET(
         error: 'Run monitor temporarily unavailable. Please retry status polling.',
       },
       { status: 503 },
+      ),
     );
+  }
+
+  // Cross-instance fallback: if local cache/disk isn't present (or appears stale), consult GCS.
+  const localMovement = run ? computeLastMovementAt(run) : 0;
+  const shouldTryRemote =
+    !run ||
+    (run.state === 'running' && Number.isFinite(localMovement) && Date.now() - localMovement > 15_000);
+  if (shouldTryRemote) {
+    try {
+      const remote = await getBacktestRunStatusRemote(runId);
+      if (remote) run = remote;
+    } catch {
+      // best-effort only
+    }
   }
   if (!run) {
     const likelyRecent = Number.isFinite(runAgeMs) && runAgeMs <= 5 * 60 * 1000;
     if (likelyRecent) {
-      return NextResponse.json(
+      return withBacktestCors(
+        request,
+        NextResponse.json(
         {
           runId,
           state: 'unknown',
@@ -48,9 +73,12 @@ export async function GET(
           error: 'Run monitor temporarily unavailable. Status cache not found yet for this run ID.',
         },
         { status: 503 },
+        ),
       );
     }
-    return NextResponse.json(
+    return withBacktestCors(
+      request,
+      NextResponse.json(
       {
         runId,
         state: 'unknown',
@@ -61,43 +89,47 @@ export async function GET(
         error: 'Run ID not found (or expired from cache).',
       },
       { status: 404 },
+      ),
     );
   }
 
   const lastMovementAt = computeLastMovementAt(run);
   const livenessBudgetSec = Math.max(60, Math.floor(run.livenessBudgetSec || (run.totalChunks > 1 ? 45 * 60 : 15 * 60)));
 
-  return NextResponse.json({
-    runId: run.runId,
-    manifestId: run.manifestId,
-    state: run.state,
-    progress: run.progress,
-    startedAt: run.startedAt,
-    updatedAt: run.updatedAt,
-    heartbeatAt: run.heartbeatAt ?? null,
-    lastDatasetBatchAt: run.lastDatasetBatchAt ?? null,
-    lastMovementAt,
-    currentActivity: run.currentActivity ?? null,
-    phase: run.phase ?? 'unknown',
-    stale: !!run.stale,
-    staleReason: run.staleReason ?? null,
-    livenessBudgetSec,
-    completedAt: run.completedAt ?? null,
-    totalChunks: run.totalChunks,
-    completedChunks: run.completedChunks,
-    failedChunks: run.failedChunks,
-    datasetsAttempted: run.datasetsAttempted ?? 0,
-    datasetsSucceeded: run.datasetsSucceeded ?? 0,
-    datasetsFailed: run.datasetsFailed ?? 0,
-    chunks: run.chunks,
-    evidenceRunId: run.evidenceRunId ?? null,
-    artifactsPath: run.artifactsPath ?? null,
-    sourceDiagnostics: {
-      strictNoSynthetic: run.strictNoSynthetic,
-      targetTradesPerStrategy: run.targetTradesPerStrategy,
-      sourceTierPolicy: run.sourceTierPolicy,
-      cohort: run.cohort,
-    },
-    error: run.error ?? null,
-  });
+  return withBacktestCors(
+    request,
+    NextResponse.json({
+      runId: run.runId,
+      manifestId: run.manifestId,
+      state: run.state,
+      progress: run.progress,
+      startedAt: run.startedAt,
+      updatedAt: run.updatedAt,
+      heartbeatAt: run.heartbeatAt ?? null,
+      lastDatasetBatchAt: run.lastDatasetBatchAt ?? null,
+      lastMovementAt,
+      currentActivity: run.currentActivity ?? null,
+      phase: run.phase ?? 'unknown',
+      stale: !!run.stale,
+      staleReason: run.staleReason ?? null,
+      livenessBudgetSec,
+      completedAt: run.completedAt ?? null,
+      totalChunks: run.totalChunks,
+      completedChunks: run.completedChunks,
+      failedChunks: run.failedChunks,
+      datasetsAttempted: run.datasetsAttempted ?? 0,
+      datasetsSucceeded: run.datasetsSucceeded ?? 0,
+      datasetsFailed: run.datasetsFailed ?? 0,
+      chunks: run.chunks,
+      evidenceRunId: run.evidenceRunId ?? null,
+      artifactsPath: run.artifactsPath ?? null,
+      sourceDiagnostics: {
+        strictNoSynthetic: run.strictNoSynthetic,
+        targetTradesPerStrategy: run.targetTradesPerStrategy,
+        sourceTierPolicy: run.sourceTierPolicy,
+        cohort: run.cohort,
+      },
+      error: run.error ?? null,
+    }),
+  );
 }

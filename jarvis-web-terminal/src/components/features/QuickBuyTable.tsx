@@ -59,20 +59,20 @@ const CATEGORY_CONFIG: Record<AssetCategory, { label: string; icon: React.ReactN
     blue_chips: {
         label: 'Blue Chips',
         icon: <Shield className="w-4 h-4" />,
-        color: 'text-blue-400',
+        color: 'text-accent-neon',
         description: 'Established, lower-risk tokens'
     },
     xstocks: {
         label: 'xStocks',
         icon: <Building2 className="w-4 h-4" />,
-        color: 'text-green-400',
+        color: 'text-accent-success',
         description: 'Tokenized stocks on Solana (coming soon)'
     },
     new_launches: {
         label: 'New Launches',
         icon: <Gem className="w-4 h-4" />,
         color: 'text-pink-400',
-        description: 'Fresh bags.fm graduations'
+        description: 'Fresh degen graduations'
     }
 };
 
@@ -80,26 +80,26 @@ const QUICK_AMOUNTS = [0.1, 0.25, 0.5, 1, 2, 5];
 
 function getSentimentColor(sentiment: number): string {
     if (sentiment >= 80) return 'text-accent-neon';
-    if (sentiment >= 60) return 'text-green-400';
-    if (sentiment >= 40) return 'text-yellow-400';
-    if (sentiment >= 20) return 'text-orange-400';
-    return 'text-red-400';
+    if (sentiment >= 60) return 'text-accent-success';
+    if (sentiment >= 40) return 'text-text-muted';
+    if (sentiment >= 20) return 'text-accent-warning';
+    return 'text-accent-error';
 }
 
 function getSentimentBg(sentiment: number): string {
     if (sentiment >= 80) return 'bg-accent-neon/20';
-    if (sentiment >= 60) return 'bg-green-400/20';
-    if (sentiment >= 40) return 'bg-yellow-400/20';
-    if (sentiment >= 20) return 'bg-orange-400/20';
-    return 'bg-red-400/20';
+    if (sentiment >= 60) return 'bg-accent-success/20';
+    if (sentiment >= 40) return 'bg-accent-warning/20';
+    if (sentiment >= 20) return 'bg-accent-warning/20';
+    return 'bg-accent-error/20';
 }
 
 function getRiskBadge(risk: Asset['riskLevel']): { color: string; label: string } {
     switch (risk) {
-        case 'low': return { color: 'bg-green-500/20 text-green-400', label: 'LOW RISK' };
-        case 'medium': return { color: 'bg-yellow-500/20 text-yellow-400', label: 'MEDIUM' };
-        case 'high': return { color: 'bg-orange-500/20 text-orange-400', label: 'HIGH RISK' };
-        case 'extreme': return { color: 'bg-red-500/20 text-red-400', label: 'DEGEN' };
+        case 'low': return { color: 'bg-accent-success/20 text-accent-success', label: 'LOW RISK' };
+        case 'medium': return { color: 'bg-accent-warning/20 text-text-muted', label: 'MEDIUM' };
+        case 'high': return { color: 'bg-accent-warning/20 text-accent-warning', label: 'HIGH RISK' };
+        case 'extreme': return { color: 'bg-accent-error/20 text-accent-error', label: 'DEGEN' };
     }
 }
 
@@ -214,7 +214,7 @@ function QuickBuyRow({ asset, onBuy, isLoading, connected }: QuickBuyRowProps) {
                     className={`
                         px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all
                         ${connected
-                            ? 'bg-accent-neon text-theme-dark hover:bg-accent-neon/80'
+                            ? 'bg-accent-neon text-black hover:bg-accent-neon/80'
                             : 'bg-bg-tertiary text-text-muted cursor-not-allowed'}
                     `}
                 >
@@ -249,7 +249,7 @@ function QuickBuyRow({ asset, onBuy, isLoading, connected }: QuickBuyRowProps) {
                         )}
                         <div className="p-2 rounded bg-bg-tertiary/50">
                             <p className="text-text-muted mb-0.5">B/S Ratio</p>
-                            <p className={`font-mono font-bold ${(asset.buySellRatio || 0) >= 1.5 ? 'text-green-400' : 'text-text-primary'}`}>
+                            <p className={`font-mono font-bold ${(asset.buySellRatio || 0) >= 1.5 ? 'text-accent-success' : 'text-text-primary'}`}>
                                 {(asset.buySellRatio || 0).toFixed(1)}x
                             </p>
                         </div>
@@ -276,7 +276,7 @@ function QuickBuyRow({ asset, onBuy, isLoading, connected }: QuickBuyRowProps) {
                             href={`https://solscan.io/token/${asset.mint}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-blue-400 hover:underline flex items-center gap-1"
+                            className="text-xs text-accent-neon hover:underline flex items-center gap-1"
                         >
                             View on Solscan <ExternalLink className="w-3 h-3" />
                         </a>
@@ -292,7 +292,7 @@ function QuickBuyRow({ asset, onBuy, isLoading, connected }: QuickBuyRowProps) {
                                     className={`
                                         px-2 py-1 rounded text-xs font-mono transition-all
                                         ${selectedAmount === amt
-                                            ? 'bg-accent-neon text-theme-dark font-bold'
+                                            ? 'bg-accent-neon text-black font-bold'
                                             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'}
                                     `}
                                 >
@@ -428,7 +428,7 @@ export function QuickBuyTable() {
                     className={`
                         px-3 py-1.5 rounded-lg text-xs font-medium transition-all
                         ${selectedCategory === 'all'
-                            ? 'bg-accent-neon text-theme-dark'
+                            ? 'bg-accent-neon text-black'
                             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'}
                     `}
                 >
@@ -443,7 +443,7 @@ export function QuickBuyTable() {
                             className={`
                                 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
                                 ${selectedCategory === key
-                                    ? 'bg-accent-neon text-theme-dark'
+                                    ? 'bg-accent-neon text-black'
                                     : `bg-bg-tertiary ${config.color} hover:bg-bg-secondary`}
                             `}
                         >

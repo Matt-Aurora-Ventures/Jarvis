@@ -88,14 +88,19 @@ class HeliusClient {
         try {
             return await operation(this.connection!);
         } catch (error: any) {
-            // Check for 403 or blockchain access error
             const errorStr = error?.message || error?.toString() || '';
-            const is403Error = errorStr.includes('403') ||
+            // Trigger fallback on: 403, access denied, NetworkError, fetch failure, timeout
+            const shouldFallback = errorStr.includes('403') ||
                 errorStr.includes('not allowed to access blockchain') ||
-                errorStr.includes('-32052');
+                errorStr.includes('-32052') ||
+                errorStr.includes('NetworkError') ||
+                errorStr.includes('fetch') ||
+                errorStr.includes('ECONNREFUSED') ||
+                errorStr.includes('ETIMEDOUT') ||
+                errorStr.includes('Failed to fetch');
 
-            if (is403Error && !this.fallbackAttempted) {
-                console.warn('[Helius] 403 error detected, switching to fallback');
+            if (shouldFallback && !this.fallbackAttempted) {
+                console.warn(`[Helius] RPC error detected (${errorStr.slice(0, 80)}), switching to fallback`);
                 await this.switchToFallback();
                 return await operation(this.connection!);
             }

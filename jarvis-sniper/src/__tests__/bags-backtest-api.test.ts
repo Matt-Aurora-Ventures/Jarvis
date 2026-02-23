@@ -23,11 +23,15 @@ vi.mock('@/lib/bags-backtest', () => ({
   },
 }));
 
-// Mock rate limiter so tests aren't blocked
-vi.mock('@/lib/rate-limiter', () => ({
-  apiRateLimiter: { check: vi.fn().mockReturnValue({ allowed: true }) },
-  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
-}));
+// Mock rate limiter so tests aren't blocked (keep other exports intact to avoid cross-test interference)
+vi.mock('@/lib/rate-limiter', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/rate-limiter')>('@/lib/rate-limiter');
+  return {
+    ...actual,
+    apiRateLimiter: { check: vi.fn().mockReturnValue({ allowed: true, remaining: 999 }) },
+    getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
+  };
+});
 
 /** Helper: create a minimal GET Request for the route handler */
 function mockGetRequest() {

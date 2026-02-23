@@ -5,3 +5,5 @@ pipeline.log
 *_partial.json
 discovery_progress.json
 candle_fetch_progress.json
+scripts/dist/
+results/run_log_*.md

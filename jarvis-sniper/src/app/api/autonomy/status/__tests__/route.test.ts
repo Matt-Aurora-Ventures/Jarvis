@@ -19,6 +19,7 @@ describe('GET /api/autonomy/status', () => {
     process.env.AUTONOMY_ENABLED = 'true';
     process.env.AUTONOMY_APPLY_OVERRIDES = 'true';
     process.env.XAI_API_KEY = 'xai-test-key';
+    process.env.AUTONOMY_READ_TOKEN = 'read-token';
   });
 
   it('returns sanitized runtime truth fields', async () => {

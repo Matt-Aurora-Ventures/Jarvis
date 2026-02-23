@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
 import { Buffer } from 'buffer';
-import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3, Trophy, Check, Gem, Rocket, Clock, HelpCircle, Package, X, FlaskConical } from 'lucide-react';
+import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3, Trophy, Check, Gem, Rocket, Clock, HelpCircle, Package, X } from 'lucide-react';
 import { useSniperStore, makeDefaultAssetBreaker, type SniperConfig, type StrategyMode, type AssetType, type PerAssetBreakerConfig, STRATEGY_PRESETS } from '@/stores/useSniperStore';
 import type { BagsGraduation } from '@/lib/bags-api';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
@@ -55,18 +55,17 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   BarChart3: <BarChart3 className="w-3 h-3" />,
   Gem: <Gem className="w-3 h-3" />,
   Package: <Package className="w-3 h-3" />,
-  FlaskConical: <FlaskConical className="w-3 h-3" />,
 };
 
 /** Map asset filter to visible strategy categories */
 const ASSET_CATEGORY_MAP: Record<AssetType, string[]> = {
-  memecoin: ['TOP PERFORMERS', 'MEMECOIN', 'EXPERIMENTAL'],
-  established: ['ESTABLISHED TOKENS', 'EXPERIMENTAL'],
-  bags: ['BAGS.FM', 'EXPERIMENTAL'],
-  bluechip: ['EXPERIMENTAL'],
-  xstock: ['EXPERIMENTAL'],
-  prestock: ['EXPERIMENTAL'],
-  index: ['EXPERIMENTAL'],
+  memecoin: ['TOP PERFORMERS', 'MEMECOIN'],
+  established: ['TOP PERFORMERS', 'ESTABLISHED TOKENS'],
+  bags: ['BAGS.FM'],
+  bluechip: ['BLUE CHIP SOLANA'],
+  xstock: ['xSTOCK & INDEX'],
+  prestock: ['xSTOCK & INDEX'],
+  index: ['xSTOCK & INDEX'],
 };
 
 /** Risk level badge colors */
@@ -131,7 +130,7 @@ function InfoTip({ text }: { text: string }) {
 }
 
 export function SniperControls() {
-  const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining, graduations, tradeSignerMode, setTradeSignerMode, sessionWalletPubkey, setSessionWalletPubkey, assetFilter, backtestMeta, addExecution, autoResetRequired, showExperimentalStrategies, setShowExperimentalStrategies } = useSniperStore();
+  const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining, graduations, tradeSignerMode, setTradeSignerMode, sessionWalletPubkey, setSessionWalletPubkey, assetFilter, backtestMeta, addExecution, autoResetRequired } = useSniperStore();
   const { connected, connecting, connect, address, signTransaction, signMessage, publicKey } = usePhantomWallet();
   const { snipe, ready: walletReady } = useSnipeExecutor();
   const [isHydrated, setIsHydrated] = useState(false);
@@ -166,8 +165,6 @@ export function SniperControls() {
   const [activatePerTrade, setActivatePerTrade] = useState('');
   const [activateAutoSnipe, setActivateAutoSnipe] = useState(true);
   const [activateError, setActivateError] = useState<string | null>(null);
-  const [autonomyRuntime, setAutonomyRuntime] = useState<AutonomyRuntimeStatus | null>(null);
-  const [autonomyRuntimeError, setAutonomyRuntimeError] = useState<string | null>(null);
 
   // Safety watchdog: if Phantom/signature flows hang (popup blocked, route switch, extension bug),
   // sessionBusy can remain stuck and lock the entire session wallet UI. Auto-clear after 90s.
@@ -1379,23 +1376,7 @@ export function SniperControls() {
         {/* Dropdown panel with categories */}
         {strategyOpen && (
           <div className="mt-1.5 rounded-lg border border-border-primary bg-bg-secondary overflow-hidden animate-fade-in">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border-primary/50 bg-bg-tertiary/40">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted/80">Show Experimental</span>
-              <button
-                type="button"
-                onClick={() => setShowExperimentalStrategies(!showExperimentalStrategies)}
-                className={`px-2 py-1 rounded-md text-[9px] font-mono uppercase tracking-wider border transition-colors ${
-                  showExperimentalStrategies
-                    ? 'text-accent-warning border-accent-warning/40 bg-accent-warning/10'
-                    : 'text-text-muted border-border-primary bg-bg-secondary'
-                }`}
-                title={showExperimentalStrategies ? 'Hide experimental presets' : 'Show experimental presets'}
-              >
-                {showExperimentalStrategies ? 'On' : 'Off'}
-              </button>
-            </div>
             {STRATEGY_CATEGORIES.filter(c => {
-              if (c.label === 'EXPERIMENTAL' && !showExperimentalStrategies) return false;
               const allowed = ASSET_CATEGORY_MAP[assetFilter];
               return allowed ? allowed.includes(c.label) : true;
             }).map((category) => (
@@ -1412,17 +1393,10 @@ export function SniperControls() {
                   const isActive = activePreset === preset.id;
                   const isAggressive = preset.config.strategyMode === 'aggressive';
                   const isSuggested = suggestion?.presetId === preset.id && !isActive;
-                  const isDisabled = !!preset.disabled;
                   return (
                     <button
                       key={preset.id}
-                      type="button"
-                      disabled={isDisabled}
-                      onClick={() => {
-                        if (isDisabled) return;
-                        loadPreset(preset.id);
-                        setStrategyOpen(false);
-                      }}
+                      onClick={() => { loadPreset(preset.id); setStrategyOpen(false); }}
                       className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-all border-b border-border-primary/30 last:border-b-0 ${
                         isActive
                           ? isAggressive
@@ -1431,7 +1405,7 @@ export function SniperControls() {
                           : isSuggested
                             ? 'bg-blue-500/[0.04] text-text-secondary hover:bg-blue-500/[0.08]'
                             : 'text-text-secondary hover:bg-bg-tertiary/60'
-                      } ${isDisabled ? 'opacity-60 cursor-not-allowed hover:bg-transparent' : ''}`}
+                      }`}
                     >
                       {/* Active indicator */}
                       <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -1456,10 +1430,6 @@ export function SniperControls() {
                             <span className="text-[7px] font-bold uppercase tracking-wider bg-accent-error/20 text-accent-error px-1 py-0.5 rounded-full leading-none flex-shrink-0">
                               Disabled
                             </span>
-                          ) : preset.experimental ? (
-                            <span className="text-[7px] font-bold uppercase tracking-wider bg-accent-warning/20 text-accent-warning px-1 py-0.5 rounded-full leading-none flex-shrink-0">
-                              Experimental
-                            </span>
                           ) : preset.underperformer ? (
                             <span className="text-[7px] font-bold uppercase tracking-wider bg-accent-error/20 text-accent-error px-1 py-0.5 rounded-full leading-none flex-shrink-0">
                               Losing
@@ -1475,7 +1445,6 @@ export function SniperControls() {
                         const trades = meta?.backtested ? Number(meta.trades || 0) : 0;
                         const disabled = !!preset.disabled;
                         const under = !!meta?.underperformer || !!preset.underperformer;
-                        const exp = !!preset.experimental;
                         const gateBadge = gateStatusBadge(meta, config, preset.autoWrPrimaryOverridePct);
                         const stageTag =
                           meta?.stage === 'promotion' ? 'S3' :
@@ -1486,8 +1455,6 @@ export function SniperControls() {
 
                         const style = (disabled || under)
                           ? 'bg-accent-error/10 text-accent-error'
-                          : exp
-                            ? 'bg-accent-warning/10 text-accent-warning'
                           : isActive
                             ? isAggressive
                               ? 'bg-accent-warning/10 text-accent-warning'
@@ -1561,7 +1528,6 @@ export function SniperControls() {
         const meta: any = (backtestMeta as any)?.[activePreset];
         const isUnder = !!meta?.underperformer || !!preset?.underperformer;
         const isDisabled = !!preset?.disabled;
-        const isExperimental = !!preset?.experimental;
         const isAgg = preset?.config.strategyMode === 'aggressive';
         return (
           <div className={`mb-4 rounded-lg border overflow-hidden ${isAgg ? 'border-accent-warning/20 bg-accent-warning/[0.03]' : 'border-accent-neon/20 bg-accent-neon/[0.03]'}`}>
@@ -1571,10 +1537,6 @@ export function SniperControls() {
               {isDisabled ? (
                 <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-accent-error/10 text-accent-error border-accent-error/25">
                   disabled
-                </span>
-              ) : isExperimental ? (
-                <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-accent-warning/10 text-accent-warning border-accent-warning/25">
-                  experimental
                 </span>
               ) : isUnder ? (
                 <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-accent-error/10 text-accent-error border-accent-error/25">
@@ -1844,7 +1806,7 @@ export function SniperControls() {
                     <span className="font-bold text-accent-warning">Session Wallet</span> — a burner wallet that auto-signs buys and sells without Phantom popups. Required for automatic SL/TP execution.
                   </p>
                   <p className="text-[11px] text-text-muted/80 leading-relaxed">
-                    Fund it with only what you can afford to lose. Auto-close keeps proceeds in the session wallet; use <span className="font-semibold text-accent-warning">Sweep Back</span> whenever you want to move SOL to your main wallet.
+                    Fund it with only what you can afford to lose. Jarvis auto-sweeps excess SOL back to your main wallet after exits, but this is <span className="font-semibold text-accent-warning">best-effort</span>.
                   </p>
                   <p className="text-[11px] text-accent-error/90 leading-relaxed font-semibold">
                     ALWAYS click &quot;Save Key&quot; after creating your wallet. The downloaded key file is the ONLY backup.

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join, normalize, resolve, sep } from 'path';
 import { NextResponse } from 'next/server';
 import { getBacktestRunStatus } from '@/lib/backtest-run-registry';
+import { backtestCorsOptions, withBacktestCors } from '@/lib/backtest-cors';
 
 export const runtime = 'nodejs';
 
@@ -54,7 +55,10 @@ export async function GET(
   const tradesPath = join(dir, 'trades.csv');
 
   if (!existsSync(dir)) {
-    return NextResponse.json({ error: 'Artifacts not found', runId: requestedRunId }, { status: 404 });
+    return withBacktestCors(
+      request,
+      NextResponse.json({ error: 'Artifacts not found', runId: requestedRunId }, { status: 404 }),
+    );
   }
 
   const url = new URL(request.url);
@@ -68,15 +72,21 @@ export async function GET(
     };
     const hit = lookup[format];
     if (!hit || !existsSync(hit.path)) {
-      return NextResponse.json({ error: `Artifact format "${format}" unavailable`, runId: requestedRunId }, { status: 404 });
+      return withBacktestCors(
+        request,
+        NextResponse.json(
+          { error: `Artifact format "${format}" unavailable`, runId: requestedRunId },
+          { status: 404 },
+        ),
+      );
     }
     const body = readFileSync(hit.path, 'utf8');
-    return new NextResponse(body, {
+    return withBacktestCors(request, new NextResponse(body, {
       headers: {
         'Content-Type': hit.contentType,
         'Cache-Control': 'no-store',
       },
-    });
+    }));
   }
 
   return NextResponse.json({

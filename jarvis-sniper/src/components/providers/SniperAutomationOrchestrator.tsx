@@ -27,9 +27,6 @@ import { buildAutonomyReadHeaders } from '@/lib/autonomy/client-auth';
 const SIGNER_SOL_RESERVE_LAMPORTS = 3_000_000;
 const BALANCE_GATE_CACHE_MS = 10_000;
 const THOMPSON_STICKY_WINDOW_MS = 60_000;
-const SESSION_ONLY_AUTO = String(
-  process.env.NEXT_PUBLIC_SNIPER_SESSION_ONLY_AUTO || process.env.SNIPER_SESSION_ONLY_AUTO || 'true',
-).toLowerCase() !== 'false';
 
 async function fetchFromApi(assetFilter: AssetType): Promise<BagsGraduation[]> {
   try {
@@ -128,7 +125,6 @@ export function SniperAutomationOrchestrator() {
   const lastNoCandidateLogAtRef = useRef(0);
   const lastFallbackLogAtRef = useRef(0);
   const lastNoSolLogAtRef = useRef(0);
-  const lastSessionOnlyLogAtRef = useRef(0);
   const lastResetGateLogAtRef = useRef(0);
   const lastWrGatePrimaryLogAtRef = useRef(0);
   const lastWrGateFallbackLogAtRef = useRef(0);
@@ -288,31 +284,6 @@ export function SniperAutomationOrchestrator() {
           lastBudgetNotAuthorizedLogAtRef.current = nowLog;
         }
         return;
-      }
-
-      if (SESSION_ONLY_AUTO) {
-        const signerMode = useSniperStore.getState().tradeSignerMode;
-        const sessionPk = useSniperStore.getState().sessionWalletPubkey;
-        if (signerMode !== 'session' || !sessionPk || !walletReady) {
-          setAutomationState('paused');
-          const nowLog = Date.now();
-          if (nowLog - lastSessionOnlyLogAtRef.current > 60_000) {
-            addExecution({
-              id: `auto-session-only-${nowLog}`,
-              type: 'info',
-              symbol: 'AUTO',
-              mint: '',
-              amount: 0,
-              reason:
-                signerMode !== 'session'
-                  ? 'AUTO_STOP_SESSION_ONLY: Auto trading requires Session Wallet signer mode.'
-                  : 'AUTO_STOP_SESSION_ONLY: Session signer key unavailable. Re-upload session key in controls.',
-              timestamp: nowLog,
-            });
-            lastSessionOnlyLogAtRef.current = nowLog;
-          }
-          return;
-        }
       }
 
       if (!walletReady) {

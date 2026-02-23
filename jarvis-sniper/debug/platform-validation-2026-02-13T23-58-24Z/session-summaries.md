@@ -1,0 +1,301 @@
+# Session Export Summary
+GeneratedAt: 2026-02-14T00:13:08.9991985-06:00
+
+## jarvis-session-2026-02-13T20-13-19.md
+- Generated: 2026-02-13T20:13:19.589Z
+- Strategy: pump_fresh_tight (conservative)
+- Signing: phantom
+- TotalTrades: 0
+- WinRate: 0% (0W / 0L)
+- TxVerification: 0 confirmed, 0 failed, 0 unresolved
+- CloseAccountMentions: 0
+- SweepMentions: 0
+- SwapFailedMentions: 0
+- AutoExitFailedMentions: 0
+- AUTO_STOP_LOW_SOL: 0
+- AUTO_STOP_WALLET_NOT_READY: 0
+- WR Gate Fail-Open: 0
+- EventTypes:
+  - -------: 2
+  - **+0.0000 SOL**: 1
+  - +0.0000 SOL: 2
+  - ≥1: 1
+  - $0.00: 1
+  - $25.000: 1
+  - 0: 2
+  - 0 confirmed, 0 failed, 0 unresolved: 1
+  - 0.1 SOL: 1
+  - 0.5 SOL (spent: 0.0000): 1
+  - 0% (0W / 0L): 1
+  - 10: 1
+  - 20% / 60% / 8%: 1
+  - 48h: 1
+  - 5%: 1
+  - memecoin: 1
+  - OFF: 2
+  - ON: 1
+  - phantom: 1
+  - pump_fresh_tight (conservative): 1
+  - Value: 2
+
+## jarvis-session-2026-02-13T12-29-45.md
+- Generated: 2026-02-13T12:29:45.118Z
+- Strategy: genetic_v2 (aggressive)
+- Signing: session (517T3scW...)
+- TotalTrades: 26
+- WinRate: 23.1% (6W / 20L)
+- TxVerification: 24 confirmed, 5 failed, 0 unresolved
+- CloseAccountMentions: 0
+- SweepMentions: 2
+- SwapFailedMentions: 2
+- AutoExitFailedMentions: 2
+- AUTO_STOP_LOW_SOL: 9
+- AUTO_STOP_WALLET_NOT_READY: 1
+- WR Gate Fail-Open: 11
+- EventTypes:
+  - -------: 3
+  - -0.0543 SOL ($-4.34): 1
+  - **-0.0543 SOL** **($-4.34)**: 1
+  - +0.0000 SOL ($0.00): 1
+  - ≥2: 1
+  - $0.00002809: 1
+  - $0.00002918: 1
+  - $0.00011380: 1
+  - $0.00011441: 1
+  - $0.00011906: 1
+  - $0.00012225: 1
+  - $0.00012352: 1
+  - $0.00013288: 1
+  - $0.00014448: 1
+  - $0.00014716: 1
+  - $0.00015033: 1
+  - $0.00015500: 1
+  - $0.00015857: 1
+  - $0.00018417: 1
+  - $0.00020822: 1
+  - $0.00021441: 1
+  - $0.00022930: 1
+  - $0.00024870: 1
+  - $0.00025240: 1
+  - $0.00028036: 1
+  - $0.00028432: 1
+  - $0.00044916: 1
+  - $0.00056492: 1
+  - $0.00089130: 1
+  - $0.00169687: 1
+  - $0.00172458: 1
+  - $0.21718259: 1
+  - $0.21743096: 1
+  - $0.26087653: 1
+  - $0.59750028: 1
+  - $0.59883780: 1
+  - $5'000: 1
+  - $79.94: 1
+  - 0: 1
+  - 0.1 SOL: 1
+  - 0.1 SOL (spent: 0.0000): 1
+  - 10: 1
+  - 10%: 1
+  - 23.1% (6W / 20L): 1
+  - 24 confirmed, 5 failed, 0 unresolved: 1
+  - 26: 1
+  - 28% / 140% / 8%: 1
+  - 48h: 1
+  - Entry: 1
+  - error: 4
+  - genetic_v2 (aggressive): 1
+  - info: 63
+  - manual_exit: 7
+  - memecoin: 1
+  - OFF: 2
+  - ON: 1
+  - session (517T3scW...): 1
+  - skip: 15
+  - sl_exit: 3
+  - snipe: 6
+  - tp_exit: 2
+  - Value: 2
+
+## jarvis-session-2026-02-13T08-39-58.md
+- Generated: 2026-02-13T08:39:54.370Z
+- Strategy: pump_fresh_tight (conservative)
+- Signing: session (517T3scW...)
+- TotalTrades: 1
+- WinRate: 0.0% (0W / 0L)
+- TxVerification: 2 confirmed, 0 failed, 0 unresolved
+- CloseAccountMentions: 0
+- SweepMentions: 0
+- SwapFailedMentions: 0
+- AutoExitFailedMentions: 0
+- AUTO_STOP_LOW_SOL: 9
+- AUTO_STOP_WALLET_NOT_READY: 4
+- WR Gate Fail-Open: 2
+- EventTypes:
+  - -------: 3
+  - -0.0006 SOL ($-0.05): 1
+  - **-0.0006 SOL** **($-0.05)**: 1
+  - +0.0000 SOL ($0.00): 1
+  - ≥2: 1
+  - $0.00172458: 1
+  - $25'000: 1
+  - $79.16: 1
+  - 0: 1
+  - 0.0% (0W / 0L): 1
+  - 0.1 SOL: 1
+  - 0.15 SOL (spent: 0.0375): 1
+  - 1: 1
+  - 10: 1
+  - 10%: 1
+  - 2 confirmed, 0 failed, 0 unresolved: 1
+  - 20% / 60% / 8%: 1
+  - 720h: 1
+  - Entry: 1
+  - info: 47
+  - memecoin: 1
+  - OFF: 1
+  - ON: 2
+  - pump_fresh_tight (conservative): 1
+  - session (517T3scW...): 1
+  - skip: 5
+  - snipe: 1
+  - Value: 2
+
+## jarvis-session-2026-02-12T23-56-28.md
+- Generated: 2026-02-12T23:56:27.737Z
+- Strategy: bags_fresh_snipe (conservative)
+- Signing: session (517T3scW...)
+- TotalTrades: 15
+- WinRate: 53.3% (8W / 7L)
+- TxVerification: 13 confirmed, 5 failed, 0 unresolved
+- CloseAccountMentions: 0
+- SweepMentions: 0
+- SwapFailedMentions: 5
+- AutoExitFailedMentions: 0
+- AUTO_STOP_LOW_SOL: 0
+- AUTO_STOP_WALLET_NOT_READY: 0
+- WR Gate Fail-Open: 0
+- EventTypes:
+  - -------: 3
+  - -0.0027 SOL: 1
+  - **-0.0027 SOL**: 1
+  - +0.0000 SOL: 1
+  - ≥2: 1
+  - $0.00: 1
+  - $0.00008872: 1
+  - $0.00009733: 1
+  - $0.00009762: 2
+  - $0.00013778: 1
+  - $0.00048434: 2
+  - $0.00050524: 1
+  - $0.00058368: 1
+  - $0.00077307: 1
+  - $0.00188242: 2
+  - $0.00432126: 1
+  - $0.00432264: 1
+  - $0.02451975: 1
+  - $0.02451982: 1
+  - $25'000: 1
+  - 0: 1
+  - 0.088 SOL (spent: 0.0000): 1
+  - 0.1 SOL: 1
+  - 10: 1
+  - 10%: 1
+  - 13 confirmed, 5 failed, 0 unresolved: 1
+  - 15: 1
+  - 20% / 60% / 8%: 1
+  - 48h: 1
+  - 53.3% (8W / 7L): 1
+  - bags: 1
+  - bags_fresh_snipe (conservative): 1
+  - Entry: 1
+  - error: 5
+  - info: 38
+  - manual_exit: 6
+  - OFF: 1
+  - ON: 2
+  - session (517T3scW...): 1
+  - sl_exit: 2
+  - snipe: 3
+  - tp_exit: 1
+  - Value: 2
+
+## jarvis-session-2026-02-12T20-40-57.md
+- Generated: 2026-02-12T20:40:57.657Z
+- Strategy: pump_fresh_tight (conservative)
+- Signing: session (517T3scW...)
+- TotalTrades: 0
+- WinRate: 0% (0W / 0L)
+- TxVerification: 0 confirmed, 0 failed, 0 unresolved
+- CloseAccountMentions: 0
+- SweepMentions: 0
+- SwapFailedMentions: 2
+- AutoExitFailedMentions: 0
+- AUTO_STOP_LOW_SOL: 0
+- AUTO_STOP_WALLET_NOT_READY: 0
+- WR Gate Fail-Open: 0
+- EventTypes:
+  - -------: 2
+  - **+0.0000 SOL**: 1
+  - +0.0000 SOL: 2
+  - ≥1: 1
+  - $0.00: 1
+  - $25'000: 1
+  - 0: 2
+  - 0 confirmed, 0 failed, 0 unresolved: 1
+  - 0.015 SOL: 1
+  - 0.09 SOL (spent: 0.0000): 1
+  - 0% (0W / 0L): 1
+  - 20% / 60% / 8%: 1
+  - 48h: 1
+  - 5%: 1
+  - 6: 1
+  - error: 2
+  - info: 1
+  - memecoin: 1
+  - OFF: 1
+  - ON: 2
+  - pump_fresh_tight (conservative): 1
+  - session (517T3scW...): 1
+  - snipe: 2
+  - Value: 2
+
+## jarvis-session-2026-02-12T20-40-51.md
+- Generated: 2026-02-12T20:40:51.379Z
+- Strategy: pump_fresh_tight (conservative)
+- Signing: session (517T3scW...)
+- TotalTrades: 0
+- WinRate: 0% (0W / 0L)
+- TxVerification: 0 confirmed, 0 failed, 0 unresolved
+- CloseAccountMentions: 0
+- SweepMentions: 0
+- SwapFailedMentions: 2
+- AutoExitFailedMentions: 0
+- AUTO_STOP_LOW_SOL: 0
+- AUTO_STOP_WALLET_NOT_READY: 0
+- WR Gate Fail-Open: 0
+- EventTypes:
+  - -------: 2
+  - **+0.0000 SOL**: 1
+  - +0.0000 SOL: 2
+  - ≥1: 1
+  - $0.00: 1
+  - $25'000: 1
+  - 0: 2
+  - 0 confirmed, 0 failed, 0 unresolved: 1
+  - 0.015 SOL: 1
+  - 0.09 SOL (spent: 0.0000): 1
+  - 0% (0W / 0L): 1
+  - 20% / 60% / 8%: 1
+  - 48h: 1
+  - 5%: 1
+  - 6: 1
+  - error: 2
+  - info: 1
+  - memecoin: 1
+  - OFF: 1
+  - ON: 2
+  - pump_fresh_tight (conservative): 1
+  - session (517T3scW...): 1
+  - snipe: 2
+  - Value: 2
+

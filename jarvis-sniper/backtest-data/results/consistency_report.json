@@ -1,1 +1,486 @@
-{}
+{
+  "pump_fresh_tight": {
+    "algo_id": "pump_fresh_tight",
+    "trades": 98,
+    "win_rate": 45.9,
+    "profit_factor": 1.389,
+    "expectancy_pct": 2.34,
+    "total_return_pct": 229.32,
+    "min_pos_frac": 0.809,
+    "avg_pos_frac": 0.932,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.809,
+    "pos25": 0.986,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -58.48,
+      "25": -20.14,
+      "50": 53.68
+    }
+  },
+  "micro_cap_surge": {
+    "algo_id": "micro_cap_surge",
+    "trades": 94,
+    "win_rate": 57.4,
+    "profit_factor": 2.009,
+    "expectancy_pct": 4.867,
+    "total_return_pct": 457.48,
+    "min_pos_frac": 0.871,
+    "avg_pos_frac": 0.947,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.871,
+    "pos25": 0.971,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -83.56,
+      "25": -27.07,
+      "50": 76.51
+    }
+  },
+  "elite": {
+    "algo_id": "elite",
+    "trades": 89,
+    "win_rate": 50.6,
+    "profit_factor": 1.634,
+    "expectancy_pct": 3.551,
+    "total_return_pct": 316.02,
+    "min_pos_frac": 0.938,
+    "avg_pos_frac": 0.979,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.938,
+    "pos25": 1,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -24.04,
+      "25": 14.3,
+      "50": 88.11
+    }
+  },
+  "momentum": {
+    "algo_id": "momentum",
+    "trades": 68,
+    "win_rate": 45.6,
+    "profit_factor": 1.694,
+    "expectancy_pct": 4.117,
+    "total_return_pct": 279.95,
+    "min_pos_frac": 0.729,
+    "avg_pos_frac": 0.857,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.729,
+    "pos25": 0.841,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -43.88,
+      "25": -40.27,
+      "50": 109.92
+    }
+  },
+  "hybrid_b": {
+    "algo_id": "hybrid_b",
+    "trades": 68,
+    "win_rate": 45.6,
+    "profit_factor": 1.694,
+    "expectancy_pct": 4.117,
+    "total_return_pct": 279.95,
+    "min_pos_frac": 0.729,
+    "avg_pos_frac": 0.857,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.729,
+    "pos25": 0.841,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -43.88,
+      "25": -40.27,
+      "50": 109.92
+    }
+  },
+  "let_it_ride": {
+    "algo_id": "let_it_ride",
+    "trades": 56,
+    "win_rate": 44.6,
+    "profit_factor": 1.559,
+    "expectancy_pct": 3.509,
+    "total_return_pct": 196.49,
+    "min_pos_frac": 0.723,
+    "avg_pos_frac": 0.835,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.723,
+    "pos25": 0.781,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -43.88,
+      "25": -22.48,
+      "50": 180.3
+    }
+  },
+  "sol_veteran": {
+    "algo_id": "sol_veteran",
+    "trades": 71,
+    "win_rate": 60.6,
+    "profit_factor": 2.269,
+    "expectancy_pct": 4.521,
+    "total_return_pct": 320.96,
+    "min_pos_frac": 0.903,
+    "avg_pos_frac": 0.968,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.903,
+    "pos25": 1,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -2.22,
+      "25": 40.09,
+      "50": 134.63
+    }
+  },
+  "utility_swing": {
+    "algo_id": "utility_swing",
+    "trades": 71,
+    "win_rate": 60.6,
+    "profit_factor": 2.269,
+    "expectancy_pct": 4.521,
+    "total_return_pct": 320.96,
+    "min_pos_frac": 0.903,
+    "avg_pos_frac": 0.968,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.903,
+    "pos25": 1,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -2.22,
+      "25": 40.09,
+      "50": 134.63
+    }
+  },
+  "established_breakout": {
+    "algo_id": "established_breakout",
+    "trades": 18,
+    "win_rate": 55.6,
+    "profit_factor": 1.801,
+    "expectancy_pct": 3.327,
+    "total_return_pct": 59.89,
+    "min_pos_frac": 0.778,
+    "avg_pos_frac": 0.778,
+    "sample_band": "THIN",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.778,
+    "min_sum_by_window": {
+      "10": -2.22
+    }
+  },
+  "meme_classic": {
+    "algo_id": "meme_classic",
+    "trades": 73,
+    "win_rate": 56.2,
+    "profit_factor": 1.803,
+    "expectancy_pct": 3.291,
+    "total_return_pct": 240.21,
+    "min_pos_frac": 0.828,
+    "avg_pos_frac": 0.943,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.828,
+    "pos25": 1,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -47.85,
+      "25": 40.09,
+      "50": 148.63
+    }
+  },
+  "volume_spike": {
+    "algo_id": "volume_spike",
+    "trades": 80,
+    "win_rate": 53.8,
+    "profit_factor": 1.674,
+    "expectancy_pct": 2.915,
+    "total_return_pct": 233.24,
+    "min_pos_frac": 0.69,
+    "avg_pos_frac": 0.813,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.69,
+    "pos25": 0.75,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -70.67,
+      "25": -51.18,
+      "50": 57.36
+    }
+  },
+  "bags_fresh_snipe": {
+    "algo_id": "bags_fresh_snipe",
+    "trades": 28,
+    "win_rate": 35.7,
+    "profit_factor": 1.411,
+    "expectancy_pct": 2.949,
+    "total_return_pct": 82.58,
+    "min_pos_frac": 1,
+    "avg_pos_frac": 1,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 1,
+    "pos25": 1,
+    "min_sum_by_window": {
+      "10": 5.72,
+      "25": 73.82
+    }
+  },
+  "bags_momentum": {
+    "algo_id": "bags_momentum",
+    "trades": 23,
+    "win_rate": 34.8,
+    "profit_factor": 1.359,
+    "expectancy_pct": 2.604,
+    "total_return_pct": 59.88,
+    "min_pos_frac": 1,
+    "avg_pos_frac": 1,
+    "sample_band": "THIN",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 1,
+    "min_sum_by_window": {
+      "10": 5.72
+    }
+  },
+  "bags_value": {
+    "algo_id": "bags_value",
+    "trades": 40,
+    "win_rate": 52.5,
+    "profit_factor": 1.425,
+    "expectancy_pct": 1.287,
+    "total_return_pct": 51.49,
+    "min_pos_frac": 0.774,
+    "avg_pos_frac": 0.887,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.774,
+    "pos25": 1,
+    "min_sum_by_window": {
+      "10": -4.2,
+      "25": 13.15
+    }
+  },
+  "bags_dip_buyer": {
+    "algo_id": "bags_dip_buyer",
+    "trades": 65,
+    "win_rate": 47.7,
+    "profit_factor": 1.751,
+    "expectancy_pct": 3.455,
+    "total_return_pct": 224.55,
+    "min_pos_frac": 0.929,
+    "avg_pos_frac": 0.976,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.929,
+    "pos25": 1,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -33.89,
+      "25": 37,
+      "50": 209.82
+    }
+  },
+  "bags_bluechip": {
+    "algo_id": "bags_bluechip",
+    "trades": 51,
+    "win_rate": 51,
+    "profit_factor": 1.198,
+    "expectancy_pct": 0.594,
+    "total_return_pct": 30.28,
+    "min_pos_frac": 0.738,
+    "avg_pos_frac": 0.913,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.738,
+    "pos25": 1,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -15.02,
+      "25": 2.24,
+      "50": 22.77
+    }
+  },
+  "bags_conservative": {
+    "algo_id": "bags_conservative",
+    "trades": 40,
+    "win_rate": 52.5,
+    "profit_factor": 1.425,
+    "expectancy_pct": 1.287,
+    "total_return_pct": 51.49,
+    "min_pos_frac": 0.774,
+    "avg_pos_frac": 0.887,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.774,
+    "pos25": 1,
+    "min_sum_by_window": {
+      "10": -4.2,
+      "25": 13.15
+    }
+  },
+  "bags_aggressive": {
+    "algo_id": "bags_aggressive",
+    "trades": 58,
+    "win_rate": 34.5,
+    "profit_factor": 1.306,
+    "expectancy_pct": 1.667,
+    "total_return_pct": 96.7,
+    "min_pos_frac": 0.816,
+    "avg_pos_frac": 0.929,
+    "sample_band": "ROBUST",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.816,
+    "pos25": 0.971,
+    "pos50": 1,
+    "min_sum_by_window": {
+      "10": -39.12,
+      "25": -3.93,
+      "50": 100.06
+    }
+  },
+  "bags_elite": {
+    "algo_id": "bags_elite",
+    "trades": 40,
+    "win_rate": 52.5,
+    "profit_factor": 1.261,
+    "expectancy_pct": 0.791,
+    "total_return_pct": 31.65,
+    "min_pos_frac": 0.774,
+    "avg_pos_frac": 0.887,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.774,
+    "pos25": 1,
+    "min_sum_by_window": {
+      "10": -8.17,
+      "25": 2.24
+    }
+  },
+  "bluechip_trend_follow": {
+    "algo_id": "bluechip_trend_follow",
+    "trades": 42,
+    "win_rate": 42.9,
+    "profit_factor": 3.364,
+    "expectancy_pct": 8.105,
+    "total_return_pct": 340.43,
+    "min_pos_frac": 1,
+    "avg_pos_frac": 1,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 1,
+    "pos25": 1,
+    "min_sum_by_window": {
+      "10": 5.72,
+      "25": 118.46
+    }
+  },
+  "bluechip_breakout": {
+    "algo_id": "bluechip_breakout",
+    "trades": 42,
+    "win_rate": 42.9,
+    "profit_factor": 3.364,
+    "expectancy_pct": 8.105,
+    "total_return_pct": 340.43,
+    "min_pos_frac": 1,
+    "avg_pos_frac": 1,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 1,
+    "pos25": 1,
+    "min_sum_by_window": {
+      "10": 5.72,
+      "25": 118.46
+    }
+  },
+  "xstock_intraday": {
+    "algo_id": "xstock_intraday",
+    "trades": 40,
+    "win_rate": 25,
+    "profit_factor": 3.262,
+    "expectancy_pct": 15.37,
+    "total_return_pct": 614.82,
+    "min_pos_frac": 1,
+    "avg_pos_frac": 1,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 1,
+    "pos25": 1,
+    "min_sum_by_window": {
+      "10": 19.78,
+      "25": 112.21
+    }
+  },
+  "xstock_swing": {
+    "algo_id": "xstock_swing",
+    "trades": 47,
+    "win_rate": 10.6,
+    "profit_factor": 0.155,
+    "expectancy_pct": -2.485,
+    "total_return_pct": -116.78,
+    "min_pos_frac": 0,
+    "avg_pos_frac": 0,
+    "sample_band": "MEDIUM",
+    "status_label": "EXPERIMENTAL_DISABLED",
+    "pos10": 0,
+    "pos25": 0,
+    "min_sum_by_window": {
+      "10": -33.96,
+      "25": -76.71
+    }
+  },
+  "prestock_speculative": {
+    "algo_id": "prestock_speculative",
+    "trades": 23,
+    "win_rate": 69.6,
+    "profit_factor": 2.644,
+    "expectancy_pct": 3.927,
+    "total_return_pct": 90.32,
+    "min_pos_frac": 0.857,
+    "avg_pos_frac": 0.857,
+    "sample_band": "THIN",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 0.857,
+    "min_sum_by_window": {
+      "10": -15.89
+    }
+  },
+  "index_intraday": {
+    "algo_id": "index_intraday",
+    "trades": 10,
+    "win_rate": 40,
+    "profit_factor": 1.09,
+    "expectancy_pct": 0.222,
+    "total_return_pct": 2.22,
+    "min_pos_frac": 1,
+    "avg_pos_frac": 1,
+    "sample_band": "THIN",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 1,
+    "min_sum_by_window": {
+      "10": 2.22
+    }
+  },
+  "index_leveraged": {
+    "algo_id": "index_leveraged",
+    "trades": 10,
+    "win_rate": 40,
+    "profit_factor": 1.09,
+    "expectancy_pct": 0.222,
+    "total_return_pct": 2.22,
+    "min_pos_frac": 1,
+    "avg_pos_frac": 1,
+    "sample_band": "THIN",
+    "status_label": "EXPERIMENTAL",
+    "pos10": 1,
+    "min_sum_by_window": {
+      "10": 2.22
+    }
+  }
+}

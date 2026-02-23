@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/rate-limiter', () => ({
-  swapRateLimiter: { check: vi.fn().mockReturnValue({ allowed: true }) },
-  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
-}));
+vi.mock('@/lib/rate-limiter', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/rate-limiter')>('@/lib/rate-limiter');
+  return {
+    ...actual,
+    swapRateLimiter: { check: vi.fn().mockReturnValue({ allowed: true, remaining: 999 }) },
+    getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
+  };
+});
 
 vi.mock('@/lib/solana-balance-guard', () => ({
   checkSignerSolBalance: vi.fn(),

@@ -32,11 +32,17 @@ export interface TradeTelemetryEvent {
 }
 
 /**
- * Best-effort telemetry client.
+ * Best-effort client telemetry. Never blocks trading UX.
  *
- * This must never throw: trading execution should not be blocked by analytics.
+ * Notes:
+ * - Firebase Hosting does NOT store swaps/trades. Without this, only the browser that
+ *   executed a trade knows about it (localStorage Zustand persist).
+ * - We intentionally keep this "fire-and-forget" and skip entirely in tests/SSR.
  */
-export function postTradeTelemetry(event: TradeTelemetryEvent): void {
+export function postTradeTelemetry(payload: TradeTelemetryIngest): void {
+  if (typeof window === 'undefined') return;
+  if (process.env.NODE_ENV === 'test') return;
+
   try {
     // Server-side / tests: no-op.
     if (typeof window === 'undefined') return;
@@ -48,7 +54,7 @@ export function postTradeTelemetry(event: TradeTelemetryEvent): void {
     // sendBeacon cannot attach Authorization headers, so only use it when telemetry auth is not configured.
     if (!telemetryToken && typeof navigator !== 'undefined' && typeof (navigator as any).sendBeacon === 'function') {
       const blob = new Blob([body], { type: 'application/json' });
-      (navigator as any).sendBeacon(url, blob);
+      navigator.sendBeacon('/api/autonomy/telemetry/trade', blob);
       return;
     }
 
@@ -67,3 +73,4 @@ export function postTradeTelemetry(event: TradeTelemetryEvent): void {
     // ignore
   }
 }
+

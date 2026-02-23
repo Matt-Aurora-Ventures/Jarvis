@@ -5,7 +5,6 @@
  *   1. GeckoTerminal (new_pools + top pools by volume)
  *   2. DexScreener (token profiles + boosts)
  *   3. Jupiter Gems (graduation feed)
- *   4. Birdeye (token list + trending, optional)
  * 
  * Goal: 50,000+ unique token mints with metadata.
  * Outputs: universe/universe_raw.json, universe/universe_raw.csv
@@ -20,6 +19,11 @@ import {
   deduplicateByMint, ensureDir, readJSON, dataPath, geckoBaseUrl,
 } from './shared/utils';
 import type { TokenRecord, DiscoveryProgress } from './shared/types';
+import { ALL_TOKENIZED_EQUITIES } from './shared/tokenized-equities';
+import { ALL_BLUECHIPS } from './shared/bluechips';
+import { fetchBirdeyeTokenList } from './shared/sources/birdeye';
+import { fetchPumpfunCoins } from './shared/sources/pumpfun';
+import { fetchHeliusAssetBatch } from './shared/sources/helius';
 import * as fs from 'fs';
 
 function envInt(name: string, fallback: number): number {
@@ -28,15 +32,21 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-function getBirdeyeApiKey(): string {
-  return String(process.env.BIRDEYE_API_KEY || process.env.BIRDEYE_API || '').trim();
+function envCsv(name: string): string[] {
+  const raw = String(process.env[name] || '').trim();
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
 }
 
 // ─── Rate Limiters (CoinGecko Basic paid: 250 req/min for GeckoTerminal) ───
-const geckoLimiter = new RateLimiter(200, 60_000, 300);   // 200 req/min with 300ms min delay (paid tier)
+// GeckoTerminal rate limits vary by plan/key. Default to a conservative value and allow override.
+const GECKO_RPM = envInt('GECKO_RPM', 28);
+const geckoLimiter = new RateLimiter(GECKO_RPM, 60_000);
 const dexLimiter = new RateLimiter(250, 60_000, 250);     // 250 req/min, min 250ms between requests
 const jupiterLimiter = new RateLimiter(60, 60_000, 1000);  // conservative, 1s between requests
-const birdeyeLimiter = new RateLimiter(120, 60_000, 500);  // conservative; API key often enforces burst limits
 
 // ─── API Response Types ───
 
@@ -159,40 +169,6 @@ interface JupiterGemPool {
   score?: number;
 }
 
-interface BirdeyeTokenEntry {
-  address?: string;
-  mint?: string;
-  symbol?: string;
-  name?: string;
-  logoURI?: string;
-  liquidity?: number;
-  liquidityUsd?: number;
-  v24hUSD?: number;
-  volume24hUSD?: number;
-  volume24h?: number;
-  price?: number;
-  priceUsd?: number;
-  mc?: number;
-  fdv?: number;
-  updateUnixTime?: number;
-}
-
-interface BirdeyeTokenListResponse {
-  success?: boolean;
-  data?: {
-    items?: BirdeyeTokenEntry[];
-    tokens?: BirdeyeTokenEntry[];
-  } | BirdeyeTokenEntry[];
-}
-
-interface BirdeyeTrendingResponse {
-  success?: boolean;
-  data?: {
-    tokens?: BirdeyeTokenEntry[];
-    items?: BirdeyeTokenEntry[];
-  } | BirdeyeTokenEntry[];
-}
-
 // ─── Conversion Helpers ───
 
 function geckoPoolToToken(pool: GeckoPoolData, included?: GeckoTokenIncluded[]): TokenRecord | null {
@@ -284,106 +260,6 @@ function jupiterGemToToken(gem: JupiterGemPool): TokenRecord | null {
     has_telegram: !!(gem.telegram || gem.hasTelegram),
     source: 'jupiter_gems',
   };
-}
-
-function birdeyeTokenToToken(entry: BirdeyeTokenEntry): TokenRecord | null {
-  const mint = entry.address || entry.mint || '';
-  if (!mint || mint.length < 32) return null;
-
-  const liq = Number(entry.liquidityUsd ?? entry.liquidity ?? 0) || 0;
-  const vol = Number(entry.v24hUSD ?? entry.volume24hUSD ?? entry.volume24h ?? 0) || 0;
-  const price = Number(entry.priceUsd ?? entry.price ?? 0) || 0;
-  const ts = Number(entry.updateUnixTime || 0) || 0;
-
-  return {
-    mint,
-    symbol: entry.symbol || 'UNKNOWN',
-    name: entry.name || entry.symbol || 'Unknown',
-    pool_address: '',
-    creation_timestamp: ts > 1_000_000_000 ? ts : 0,
-    liquidity_usd: liq,
-    volume_24h_usd: vol,
-    price_change_1h: 0,
-    price_usd: price,
-    buy_txn_count_24h: 0,
-    sell_txn_count_24h: 0,
-    holder_count: 0,
-    has_twitter: false,
-    has_website: false,
-    has_telegram: false,
-    source: 'birdeye',
-  };
-}
-
-function mergeUniverseByMint(
-  tokens: TokenRecord[],
-  boostedMints: Set<string>,
-  trendingMints: Set<string>,
-): TokenRecord[] {
-  const merged = new Map<string, TokenRecord>();
-  const sourceFlags = new Map<string, { gecko: boolean; dex: boolean; jupiter: boolean; birdeye: boolean }>();
-
-  for (const token of tokens) {
-    if (!token.mint || token.mint.length < 32) continue;
-
-    const flags = sourceFlags.get(token.mint) || { gecko: false, dex: false, jupiter: false, birdeye: false };
-    if (token.source === 'geckoterminal') flags.gecko = true;
-    else if (token.source === 'dexscreener') flags.dex = true;
-    else if (token.source === 'jupiter_gems') flags.jupiter = true;
-    else if (token.source === 'birdeye') flags.birdeye = true;
-    sourceFlags.set(token.mint, flags);
-
-    const existing = merged.get(token.mint);
-    if (!existing) {
-      merged.set(token.mint, { ...token });
-      continue;
-    }
-
-    if ((!existing.symbol || existing.symbol === 'UNKNOWN') && token.symbol) existing.symbol = token.symbol;
-    if ((!existing.name || existing.name === 'Unknown') && token.name) existing.name = token.name;
-    if ((!existing.pool_address || existing.pool_address.length < 20) && token.pool_address) existing.pool_address = token.pool_address;
-
-    if (token.creation_timestamp > 0) {
-      if (existing.creation_timestamp <= 0) existing.creation_timestamp = token.creation_timestamp;
-      else existing.creation_timestamp = Math.min(existing.creation_timestamp, token.creation_timestamp);
-    }
-
-    existing.liquidity_usd = Math.max(existing.liquidity_usd || 0, token.liquidity_usd || 0);
-    existing.volume_24h_usd = Math.max(existing.volume_24h_usd || 0, token.volume_24h_usd || 0);
-    existing.price_usd = Math.max(existing.price_usd || 0, token.price_usd || 0);
-    if (Math.abs(token.price_change_1h || 0) > Math.abs(existing.price_change_1h || 0)) {
-      existing.price_change_1h = token.price_change_1h || 0;
-    }
-    existing.buy_txn_count_24h = Math.max(existing.buy_txn_count_24h || 0, token.buy_txn_count_24h || 0);
-    existing.sell_txn_count_24h = Math.max(existing.sell_txn_count_24h || 0, token.sell_txn_count_24h || 0);
-    existing.holder_count = Math.max(existing.holder_count || 0, token.holder_count || 0);
-    existing.has_twitter = !!(existing.has_twitter || token.has_twitter);
-    existing.has_website = !!(existing.has_website || token.has_website);
-    existing.has_telegram = !!(existing.has_telegram || token.has_telegram);
-  }
-
-  const out: TokenRecord[] = [];
-  for (const [mint, token] of merged.entries()) {
-    const flags = sourceFlags.get(mint) || { gecko: false, dex: false, jupiter: false, birdeye: false };
-    const sourceCount = [flags.gecko, flags.dex, flags.jupiter, flags.birdeye].filter(Boolean).length;
-
-    token.seen_on_geckoterminal = flags.gecko;
-    token.seen_on_dexscreener = flags.dex;
-    token.seen_on_jupiter_gems = flags.jupiter;
-    token.seen_on_birdeye = flags.birdeye;
-    token.source_count = Math.max(1, sourceCount);
-    token.interest_is_boosted = boostedMints.has(mint);
-    token.interest_is_trending = trendingMints.has(mint);
-
-    if (flags.dex) token.source = 'dexscreener';
-    else if (flags.gecko) token.source = 'geckoterminal';
-    else if (flags.birdeye) token.source = 'birdeye';
-    else token.source = 'jupiter_gems';
-
-    out.push(token);
-  }
-
-  return out;
 }
 
 // ─── API Fetch Functions ───
@@ -498,70 +374,6 @@ async function fetchJupiterGems(): Promise<TokenRecord[]> {
   }
 
   log('Jupiter Gems returned no data from any endpoint variant');
-  return [];
-}
-
-function birdeyeItemsFromResponse(data: BirdeyeTokenListResponse | BirdeyeTrendingResponse | null): BirdeyeTokenEntry[] {
-  if (!data) return [];
-  const payload = data.data;
-  if (Array.isArray(payload)) return payload;
-  if (!payload) return [];
-  const items = Array.isArray(payload.items) ? payload.items : [];
-  const tokens = Array.isArray(payload.tokens) ? payload.tokens : [];
-  return [...items, ...tokens];
-}
-
-async function fetchBirdeyeTokenListPage(page: number, limit: number): Promise<TokenRecord[]> {
-  const key = getBirdeyeApiKey();
-  if (!key) return [];
-
-  const offset = (page - 1) * limit;
-  const urls = [
-    `https://public-api.birdeye.so/defi/v3/token/list?sort_by=v24hUSD&sort_type=desc&offset=${offset}&limit=${limit}`,
-    `https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=${offset}&limit=${limit}`,
-  ];
-
-  for (const url of urls) {
-    const resp = await fetchJSON<BirdeyeTokenListResponse>(url, {
-      rateLimiter: birdeyeLimiter,
-      label: `birdeye:token_list:p${page}`,
-      retries: 3,
-      extraHeaders: {
-        'x-api-key': key,
-        'x-chain': 'solana',
-      },
-    });
-    const items = birdeyeItemsFromResponse(resp);
-    if (items.length === 0) continue;
-    return items.map(birdeyeTokenToToken).filter((t): t is TokenRecord => t !== null);
-  }
-  return [];
-}
-
-async function fetchBirdeyeTrendingPage(page: number, limit: number): Promise<TokenRecord[]> {
-  const key = getBirdeyeApiKey();
-  if (!key) return [];
-
-  const offset = (page - 1) * limit;
-  const urls = [
-    `https://public-api.birdeye.so/defi/v3/token/trending?offset=${offset}&limit=${limit}`,
-    `https://public-api.birdeye.so/defi/token_trending?sort_by=rank&sort_type=asc&offset=${offset}&limit=${limit}`,
-  ];
-
-  for (const url of urls) {
-    const resp = await fetchJSON<BirdeyeTrendingResponse>(url, {
-      rateLimiter: birdeyeLimiter,
-      label: `birdeye:trending:p${page}`,
-      retries: 3,
-      extraHeaders: {
-        'x-api-key': key,
-        'x-chain': 'solana',
-      },
-    });
-    const items = birdeyeItemsFromResponse(resp);
-    if (items.length === 0) continue;
-    return items.map(birdeyeTokenToToken).filter((t): t is TokenRecord => t !== null);
-  }
   return [];
 }
 
@@ -748,15 +560,24 @@ async function discoverUniverse(): Promise<void> {
     dexscreener_profiles_done: false,
     dexscreener_boosts_done: false,
     jupiter_gems_done: false,
+    birdeye_done: false,
+    pumpfun_done: false,
+    helius_enrichment_done: false,
     total_tokens_discovered: 0,
     last_updated: new Date().toISOString(),
   });
 
-  const allTokens: TokenRecord[] = readJSON<TokenRecord[]>('universe/universe_raw_partial.json') || [];
-  const boostedMints = new Set<string>();
-  const trendingMints = new Set<string>();
+  // Resumable behavior:
+  // - If a partial run is in progress, use universe_raw_partial.json
+  // - If a previous full run completed, fall back to universe_raw.json so we can do incremental runs
+  //   (the progress file may say we're on page 10+, but the partial file is cleaned up on success).
+  const partial = readJSON<TokenRecord[]>('universe/universe_raw_partial.json');
+  const priorFull = !partial ? readJSON<TokenRecord[]>('universe/universe_raw.json') : null;
+  const allTokens: TokenRecord[] = partial || priorFull || [];
   if (allTokens.length > 0) {
-    log(`Resuming with ${allTokens.length} tokens already discovered`);
+    log(partial
+      ? `Resuming with ${allTokens.length} tokens already discovered (partial)`
+      : `Loaded existing universe_raw.json with ${allTokens.length} tokens (incremental run)`);
   }
 
   const p = progress.get();
@@ -765,7 +586,7 @@ async function discoverUniverse(): Promise<void> {
   // to maximize unique tokens (each sort returns different pools).
   const GECKO_MAX_PAGES_NEW_POOLS = envInt('GECKO_MAX_PAGES_NEW_POOLS', 200);
   const GECKO_MAX_PAGES_TOP_POOLS = envInt('GECKO_MAX_PAGES_TOP_POOLS', 200);
-  const GECKO_MAX_PAGES_MISC = envInt('GECKO_MAX_PAGES_MISC', 10);
+  const GECKO_MAX_PAGES_MISC = envInt('GECKO_MAX_PAGES_MISC', 25);
 
   // ─── 1. GeckoTerminal: New Pools ───
   log('─── GeckoTerminal: New Pools ───');
@@ -802,9 +623,6 @@ async function discoverUniverse(): Promise<void> {
       GECKO_MAX_PAGES_MISC,
     );
     allTokens.push(...tokens);
-    for (const token of tokens) {
-      if (token.mint && token.mint.length >= 32) trendingMints.add(token.mint);
-    }
   }
 
   // ─── 3b. GeckoTerminal: Pools sorted by transaction count ───
@@ -857,11 +675,6 @@ async function discoverUniverse(): Promise<void> {
     log(`  ${boosts.length} DexScreener boosts`);
 
     const existingMints = new Set(allTokens.map(t => t.mint));
-    for (const boost of boosts) {
-      if (boost.tokenAddress && boost.tokenAddress.length >= 32) {
-        boostedMints.add(boost.tokenAddress);
-      }
-    }
     const newMints = boosts
       .map(b => b.tokenAddress)
       .filter(m => m && m.length >= 32 && !existingMints.has(m));
@@ -892,7 +705,8 @@ async function discoverUniverse(): Promise<void> {
     'laser', 'rocket', 'fire', 'flame', 'blaze',
   ];
 
-  for (const query of SEARCH_QUERIES) {
+  const dexQueries = Array.from(new Set([...SEARCH_QUERIES, ...envCsv('DEX_EXTRA_SEARCH_QUERIES')]));
+  for (const query of dexQueries) {
     const cacheKey = `dex_search_${query}`;
     let searchTokens = getCachedResponse<TokenRecord[]>(cacheKey);
     if (!searchTokens) {
@@ -907,49 +721,123 @@ async function discoverUniverse(): Promise<void> {
   writeJSON('universe/universe_raw_partial.json', deduplicateByMint(allTokens));
   log(`After DexScreener search: ${deduplicateByMint(allTokens).length} unique tokens`);
 
-  // ─── 6. Birdeye (optional): high-interest + trending feeds ───
-  const birdeyeKey = getBirdeyeApiKey();
-  if (birdeyeKey) {
-    log('─── Birdeye: Token List + Trending ───');
-    const BIRDEYE_MAX_PAGES = envInt('BIRDEYE_MAX_PAGES', 25);
-    const BIRDEYE_LIMIT = envInt('BIRDEYE_PAGE_LIMIT', 50);
-
-    for (let page = 1; page <= BIRDEYE_MAX_PAGES; page++) {
-      const listCacheKey = `birdeye_list_p${page}`;
-      let listTokens = getCachedResponse<TokenRecord[]>(listCacheKey);
-      if (!listTokens) {
-        listTokens = await fetchBirdeyeTokenListPage(page, BIRDEYE_LIMIT);
-        setCachedResponse(listCacheKey, listTokens);
-      }
-      if (listTokens.length === 0) {
-        if (page <= 3) log(`  birdeye token list page ${page}: empty`);
-        break;
-      }
-      allTokens.push(...listTokens);
-      if (page % 5 === 0) {
-        log(`  birdeye token list page ${page}: +${listTokens.length} tokens`);
-      }
+  // ─── 5a. Birdeye + Pump.fun source expansion ───
+  if (!p.birdeye_done) {
+    log('─── Birdeye: Token List Expansion ───');
+    const cacheKey = 'birdeye_token_list';
+    let birdeyeTokens = getCachedResponse<TokenRecord[]>(cacheKey);
+    if (!birdeyeTokens) {
+      birdeyeTokens = await fetchBirdeyeTokenList();
+      if (birdeyeTokens.length > 0) setCachedResponse(cacheKey, birdeyeTokens);
     }
-
-    for (let page = 1; page <= Math.min(BIRDEYE_MAX_PAGES, 10); page++) {
-      const trendCacheKey = `birdeye_trending_p${page}`;
-      let trendTokens = getCachedResponse<TokenRecord[]>(trendCacheKey);
-      if (!trendTokens) {
-        trendTokens = await fetchBirdeyeTrendingPage(page, BIRDEYE_LIMIT);
-        setCachedResponse(trendCacheKey, trendTokens);
-      }
-      if (trendTokens.length === 0) break;
-      allTokens.push(...trendTokens);
-      for (const token of trendTokens) {
-        if (token.mint && token.mint.length >= 32) trendingMints.add(token.mint);
-      }
-    }
-    log(`After Birdeye: ${deduplicateByMint(allTokens).length} unique tokens`);
-  } else {
-    log('─── Birdeye: skipped (BIRDEYE_API_KEY not set) ───');
+    log(`  Birdeye tokens: ${birdeyeTokens.length}`);
+    allTokens.push(...birdeyeTokens);
+    progress.update({
+      birdeye_done: true,
+      total_tokens_discovered: deduplicateByMint(allTokens).length,
+    });
   }
 
-  // ─── 7. Jupiter Gems ───
+  if (!p.pumpfun_done) {
+    log('─── Pump.fun: Launch Feed Expansion ───');
+    const cacheKey = 'pumpfun_coins';
+    let pumpfunTokens = getCachedResponse<TokenRecord[]>(cacheKey);
+    if (!pumpfunTokens) {
+      pumpfunTokens = await fetchPumpfunCoins();
+      if (pumpfunTokens.length > 0) setCachedResponse(cacheKey, pumpfunTokens);
+    }
+    log(`  Pump.fun tokens: ${pumpfunTokens.length}`);
+    allTokens.push(...pumpfunTokens);
+    progress.update({
+      pumpfun_done: true,
+      total_tokens_discovered: deduplicateByMint(allTokens).length,
+    });
+  }
+
+  writeJSON('universe/universe_raw_partial.json', deduplicateByMint(allTokens));
+  log(`After Birdeye + Pump.fun: ${deduplicateByMint(allTokens).length} unique tokens`);
+
+  // ─── 5b. Tokenized Equities Registry (xStocks / PreStocks / Indexes) ───
+  // These mints often won't appear in "new pools" / "top volume" endpoints due to lower onchain activity.
+  // We explicitly include them so xStock/index strategies can be backtested against their real assets.
+  log('─── Tokenized Equities Registry ───');
+  {
+    const registryMints = ALL_TOKENIZED_EQUITIES
+      .map(t => t.mintAddress)
+      .filter(m => m && m.length >= 32);
+
+    // Always fetch full registry via DexScreener so we can upgrade stale/wrong pools
+    // (deduplicateByMint() will keep the highest-liquidity pool per mint).
+    const cacheKey = 'registry_tokens_dex';
+    let dexTokens = getCachedResponse<TokenRecord[]>(cacheKey);
+    if (!dexTokens) {
+      dexTokens = await fetchDexScreenerTokenDetails(registryMints);
+      setCachedResponse(cacheKey, dexTokens);
+    }
+    allTokens.push(...dexTokens);
+
+    // Fallback: GeckoTerminal "pools by token" endpoint for any mints DexScreener missed.
+    const found = new Set(dexTokens.map(t => t.mint));
+    const missing = registryMints.filter(m => !found.has(m));
+    let geckoAdded = 0;
+    if (missing.length > 0) {
+      log(`  DexScreener missing ${missing.length} registry mints; trying GeckoTerminal fallback...`);
+      for (const mint of missing) {
+        const ck = `registry_tokens_gecko_${mint}`;
+        let pools = getCachedResponse<TokenRecord[]>(ck);
+        if (!pools) {
+          pools = await fetchGeckoPoolsByToken(mint);
+          setCachedResponse(ck, pools);
+        }
+        if (pools.length > 0) {
+          allTokens.push(...pools);
+          geckoAdded += 1;
+        }
+      }
+    }
+
+    log(`  Registry mints: ${registryMints.length} | Dex pools: ${dexTokens.length} | Gecko fallback mints: ${geckoAdded}`);
+  }
+
+  writeJSON('universe/universe_raw_partial.json', deduplicateByMint(allTokens));
+  log(`After registry merge: ${deduplicateByMint(allTokens).length} unique tokens`);
+
+  // ─── 5c. Bluechip Registry (curated Solana majors) ───
+  // Ensure curated bluechips always resolve to their highest-liquidity pools.
+  log('─── Bluechip Registry ───');
+  {
+    const bluechipMints = ALL_BLUECHIPS.map(t => t.mintAddress).filter(m => m && m.length >= 32);
+    const cacheKey = 'bluechip_tokens_dex';
+    let dexTokens = getCachedResponse<TokenRecord[]>(cacheKey);
+    if (!dexTokens) {
+      dexTokens = await fetchDexScreenerTokenDetails(bluechipMints);
+      setCachedResponse(cacheKey, dexTokens);
+    }
+    allTokens.push(...dexTokens);
+
+    const found = new Set(dexTokens.map(t => t.mint));
+    const missing = bluechipMints.filter(m => !found.has(m));
+    let geckoAdded = 0;
+    if (missing.length > 0) {
+      log(`  DexScreener missing ${missing.length} bluechip mints; trying GeckoTerminal fallback...`);
+      for (const mint of missing) {
+        const ck = `bluechip_tokens_gecko_${mint}`;
+        let pools = getCachedResponse<TokenRecord[]>(ck);
+        if (!pools) {
+          pools = await fetchGeckoPoolsByToken(mint);
+          setCachedResponse(ck, pools);
+        }
+        if (pools.length > 0) {
+          allTokens.push(...pools);
+          geckoAdded += 1;
+        }
+      }
+    }
+
+    log(`  Bluechip mints: ${bluechipMints.length} | Dex pools: ${dexTokens.length} | Gecko fallback mints: ${geckoAdded}`);
+  }
+
+  // ─── 6. Jupiter Gems ───
   if (!p.jupiter_gems_done) {
     log('─── Jupiter Gems (Graduation Feed) ───');
     const cacheKey = 'jupiter_gems';
@@ -967,13 +855,34 @@ async function discoverUniverse(): Promise<void> {
     }
   }
 
-  // ─── 8. GeckoTerminal: Search with diverse queries for more coverage ───
+  // ─── 6b. Helius metadata enrichment for discovered mints ───
+  if (!p.helius_enrichment_done) {
+    log('─── Helius: Metadata Enrichment ───');
+    const cacheKey = 'helius_enrichment';
+    let heliusTokens = getCachedResponse<TokenRecord[]>(cacheKey);
+    if (!heliusTokens) {
+      const discoveredMints = deduplicateByMint(allTokens)
+        .map(t => t.mint)
+        .filter(m => m && m.length >= 32);
+      heliusTokens = await fetchHeliusAssetBatch(discoveredMints);
+      if (heliusTokens.length > 0) setCachedResponse(cacheKey, heliusTokens);
+    }
+    log(`  Helius enrichment records: ${heliusTokens.length}`);
+    allTokens.push(...heliusTokens);
+    progress.update({
+      helius_enrichment_done: true,
+      total_tokens_discovered: deduplicateByMint(allTokens).length,
+    });
+  }
+
+  // ─── 7. GeckoTerminal: Search with diverse queries for more coverage ───
   log('─── GeckoTerminal: Search Queries ───');
   const GECKO_SEARCH_QUERIES = [
     'pump', 'sol', 'meme', 'pepe', 'doge', 'cat', 'dog', 'ai',
     'bonk', 'wif', 'trump', 'moon', 'baby', 'inu', 'bags',
   ];
-  for (const query of GECKO_SEARCH_QUERIES) {
+  const geckoQueries = Array.from(new Set([...GECKO_SEARCH_QUERIES, ...envCsv('GECKO_EXTRA_SEARCH_QUERIES')]));
+  for (const query of geckoQueries) {
     const cacheKey = `gecko_search_${query}`;
     let searchTokens = getCachedResponse<TokenRecord[]>(cacheKey);
     if (!searchTokens) {
@@ -987,7 +896,7 @@ async function discoverUniverse(): Promise<void> {
 
   writeJSON('universe/universe_raw_partial.json', deduplicateByMint(allTokens));
 
-  // ─── 9. Cross-enrich: look up DexScreener for tokens with missing market metadata ───
+  // ─── 8. Cross-enrich: look up DexScreener for tokens found on GeckoTerminal ───
   log('─── Cross-enrichment: DexScreener lookups for Gecko tokens ───');
   const deduped = deduplicateByMint(allTokens);
   const needsEnrichment = deduped.filter(t =>
@@ -1028,8 +937,8 @@ async function discoverUniverse(): Promise<void> {
   }
   log(`  Enrichment complete: ${enriched} tokens updated`);
 
-  // ─── Final Merge + Save ───
-  const universe = mergeUniverseByMint(allTokens, boostedMints, trendingMints);
+  // ─── Final Dedup & Save ───
+  const universe = deduplicateByMint(allTokens);
 
   // Keep all tokens that have a valid mint (relaxed filter to maximize count)
   const validUniverse = universe.filter(t => t.mint.length >= 32);
@@ -1053,16 +962,10 @@ async function discoverUniverse(): Promise<void> {
   const withVolume = validUniverse.filter(t => t.volume_24h_usd > 0).length;
   const withPool = validUniverse.filter(t => t.pool_address && t.pool_address.length >= 20).length;
   const withSocials = validUniverse.filter(t => t.has_twitter || t.has_website || t.has_telegram).length;
-  const withBoostSignal = validUniverse.filter(t => t.interest_is_boosted).length;
-  const withTrendSignal = validUniverse.filter(t => t.interest_is_trending).length;
-  const multiSource = validUniverse.filter(t => (t.source_count || 1) >= 2).length;
   log(`Tokens with liquidity > 0: ${withLiquidity}`);
   log(`Tokens with volume > 0: ${withVolume}`);
   log(`Tokens with pool address: ${withPool}`);
   log(`Tokens with socials: ${withSocials}`);
-  log(`Tokens with boost signal: ${withBoostSignal}`);
-  log(`Tokens with trending signal: ${withTrendSignal}`);
-  log(`Tokens seen on >=2 sources: ${multiSource}`);
   log('═══════════════════════════════════════════════════════');
 
   writeJSON('universe/universe_raw.json', validUniverse);

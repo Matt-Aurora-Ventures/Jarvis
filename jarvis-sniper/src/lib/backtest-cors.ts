@@ -20,7 +20,7 @@ export function withBacktestCors<T extends Response>(request: Request, response:
   const origin = resolveAllowedOrigin(request.headers.get('origin'));
   if (!origin) return response;
 
-  // Next.js route-handler responses have mutable headers.
+  // In Next.js route handlers, the Response headers are mutable.
   response.headers.set('Access-Control-Allow-Origin', origin);
   response.headers.set('Vary', 'Origin');
   response.headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -32,3 +32,4 @@ export function withBacktestCors<T extends Response>(request: Request, response:
 export function backtestCorsOptions(request: Request): NextResponse {
   return withBacktestCors(request, new NextResponse(null, { status: 204 }));
 }
+

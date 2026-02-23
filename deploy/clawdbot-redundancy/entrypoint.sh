@@ -79,22 +79,26 @@ fi
 # STEP 2.6: Configure Supermemory (Persistent Memory Across Reboots)
 # =============================================================================
 
-# Default Supermemory API key (can be overridden via env)
-SUPERMEMORY_API_KEY="${SUPERMEMORY_API_KEY:-sm_9C4AwqczHUwJxjWfxjZiyu_FjWfbGVRLozelLmnKXHnWtfUAIdfBegwfmVfkSrqhrOaohwbRKTwshSZgRrbyjUU}"
+# Supermemory API key (must be provided via env)
+SUPERMEMORY_API_KEY="${SUPERMEMORY_API_KEY:-}"
 
-# Export for plugins to pick up
-export SUPERMEMORY_API_KEY
-export SUPERMEMORY_OPENCLAW_API_KEY="$SUPERMEMORY_API_KEY"
-export SUPERMEMORY_CONTAINER_TAG="clawdbot_$BOT_NAME"
+if [ -n "$SUPERMEMORY_API_KEY" ]; then
+    # Export for plugins to pick up
+    export SUPERMEMORY_API_KEY
+    export SUPERMEMORY_OPENCLAW_API_KEY="$SUPERMEMORY_API_KEY"
+    export SUPERMEMORY_CONTAINER_TAG="clawdbot_$BOT_NAME"
 
-log "Supermemory API key exported (containerTag: clawdbot_$BOT_NAME)"
+    log "Supermemory API key exported (containerTag: clawdbot_$BOT_NAME)"
 
-# Try to install/enable Supermemory plugin if not already
-if command -v openclaw &> /dev/null; then
-    openclaw plugins install @supermemory/openclaw-supermemory 2>/dev/null || true
+    # Try to install/enable Supermemory plugin if not already
+    if command -v openclaw &> /dev/null; then
+        openclaw plugins install @supermemory/openclaw-supermemory 2>/dev/null || true
+    fi
+
+    log "✅ Supermemory configured for persistent memory"
+else
+    log "Supermemory API key not set (SUPERMEMORY_API_KEY). Skipping Supermemory plugin setup."
 fi
-
-log "✅ Supermemory configured for persistent memory"
 
 # =============================================================================
 # STEP 2.605: Configure Codex CLI (for Matt / coding-agent)

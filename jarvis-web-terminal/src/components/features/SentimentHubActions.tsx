@@ -48,19 +48,16 @@ function QuickBuyButton({ amount, onBuy, disabled }: QuickBuyButtonProps) {
                 flex items-center gap-2 px-4 py-2.5 rounded-lg font-mono text-sm font-medium transition-all
                 ${disabled
                     ? 'bg-bg-tertiary text-text-muted cursor-not-allowed'
-                    : 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30'}
+                    : 'bg-accent-success/20 text-accent-success hover:bg-accent-success/30 border border-accent-success/30'}
             `}
         >
-            <div className="w-2 h-2 rounded-full bg-green-400" />
+            <div className="w-2 h-2 rounded-full bg-accent-success" />
             Buy {amount} SOL
         </button>
     );
 }
 
-interface ActionGridButtonProps extends ActionButton {
-}
-
-function ActionGridButton({ icon, label, onClick, href, color = 'text-text-secondary', badge, disabled }: ActionGridButtonProps) {
+function ActionGridButton({ icon, label, onClick, href, color = 'text-text-secondary', badge, disabled }: ActionButton) {
     const content = (
         <div className={`
             flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all
@@ -132,8 +129,8 @@ export function SentimentHubActions() {
                         className={`
                             px-2 py-1 rounded text-xs font-mono font-bold transition-all
                             ${mode === 'LIVE'
-                                ? 'bg-green-500/20 text-green-400'
-                                : 'bg-yellow-500/20 text-yellow-400'}
+                                ? 'bg-accent-success/20 text-accent-success'
+                                : 'bg-accent-warning/20 text-text-muted'}
                         `}
                     >
                         {mode === 'PAPER' && <span className="mr-1">⚪</span>}
@@ -155,7 +152,7 @@ export function SentimentHubActions() {
                 <ActionGridButton
                     icon={<Zap className="w-4 h-4" />}
                     label="INSTA SNIPE"
-                    color="text-yellow-400"
+                    color="text-text-muted"
                     href="/trade"
                 />
                 <ActionGridButton
@@ -167,14 +164,14 @@ export function SentimentHubActions() {
                 <ActionGridButton
                     icon={<Brain className="w-4 h-4" />}
                     label="AI Picks"
-                    color="text-blue-400"
+                    color="text-accent-neon"
                     badge="HOT"
                     href="/"
                 />
                 <ActionGridButton
                     icon={<Flame className="w-4 h-4" />}
                     label="Trending"
-                    color="text-orange-400"
+                    color="text-accent-warning"
                     href="/"
                 />
             </div>
@@ -203,7 +200,7 @@ export function SentimentHubActions() {
                 </div>
                 <button
                     onClick={handleSearch}
-                    className="px-4 py-2.5 rounded-lg bg-accent-neon text-theme-dark font-mono text-sm font-bold hover:bg-accent-neon/80 transition-all"
+                    className="px-4 py-2.5 rounded-lg bg-accent-neon text-black font-mono text-sm font-bold hover:bg-accent-neon/80 transition-all"
                 >
                     <Search className="w-4 h-4" />
                 </button>
@@ -222,13 +219,13 @@ export function SentimentHubActions() {
                 <ActionGridButton
                     icon={<Zap className="w-4 h-4" />}
                     label="Quick Trade"
-                    color="text-yellow-400"
+                    color="text-text-muted"
                     href="/trade"
                 />
                 <ActionGridButton
                     icon={<BarChart3 className="w-4 h-4" />}
                     label="Positions"
-                    color="text-blue-400"
+                    color="text-accent-neon"
                     href="/positions"
                 />
                 <ActionGridButton
@@ -240,8 +237,8 @@ export function SentimentHubActions() {
                 />
                 <ActionGridButton
                     icon={<Activity className="w-4 h-4" />}
-                    label="Bags Intel"
-                    color="text-green-400"
+                    label="DeGen Intel"
+                    color="text-accent-success"
                     href="/bags-intel"
                 />
             </div>
@@ -251,13 +248,13 @@ export function SentimentHubActions() {
                 <ActionGridButton
                     icon={<Star className="w-4 h-4" />}
                     label="Watchlist"
-                    color="text-yellow-400"
+                    color="text-text-muted"
                     onClick={() => toastInfo('Watchlist coming soon')}
                 />
                 <ActionGridButton
                     icon={<Bell className="w-4 h-4" />}
                     label="Alerts"
-                    color="text-red-400"
+                    color="text-accent-error"
                     onClick={() => toastInfo('Price alerts coming soon')}
                 />
                 <ActionGridButton

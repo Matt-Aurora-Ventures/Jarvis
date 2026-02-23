@@ -1,0 +1,122 @@
+{
+  "prestock_speculative": {
+    "algo_id": "prestock_speculative",
+    "entryType": "strict_trend",
+    "sl": 10,
+    "tp": 100,
+    "maxAge": 96,
+    "trades": 6702,
+    "winRate": 23.1,
+    "expectancy": 1.7127,
+    "profitFactor": 1.21,
+    "totalPnlPct": 11478.6
+  },
+  "xstock_intraday": {
+    "algo_id": "xstock_intraday",
+    "entryType": "trend_follow",
+    "sl": 10,
+    "tp": 100,
+    "maxAge": 96,
+    "trades": 13749,
+    "winRate": 28.1,
+    "expectancy": 1.695,
+    "profitFactor": 1.23,
+    "totalPnlPct": 23304.71
+  },
+  "index_intraday": {
+    "algo_id": "index_intraday",
+    "entryType": "trend_follow",
+    "sl": 10,
+    "tp": 100,
+    "maxAge": 96,
+    "trades": 13144,
+    "winRate": 28.3,
+    "expectancy": 1.7986,
+    "profitFactor": 1.24,
+    "totalPnlPct": 23641.11
+  },
+  "momentum": {
+    "algo_id": "momentum",
+    "entryType": "mean_reversion",
+    "sl": 20,
+    "tp": 200,
+    "maxAge": 24,
+    "trades": 2443,
+    "winRate": 31.9,
+    "expectancy": 7.1183,
+    "profitFactor": 1.56,
+    "totalPnlPct": 17390.01
+  },
+  "hybrid_b": {
+    "algo_id": "hybrid_b",
+    "entryType": "mean_reversion",
+    "sl": 20,
+    "tp": 200,
+    "maxAge": 24,
+    "trades": 2443,
+    "winRate": 31.9,
+    "expectancy": 7.1183,
+    "profitFactor": 1.56,
+    "totalPnlPct": 17390.01
+  },
+  "index_leveraged": {
+    "algo_id": "index_leveraged",
+    "entryType": "trend_follow",
+    "sl": 10,
+    "tp": 100,
+    "maxAge": 96,
+    "trades": 13749,
+    "winRate": 28.1,
+    "expectancy": 1.695,
+    "profitFactor": 1.23,
+    "totalPnlPct": 23304.71
+  },
+  "bluechip_trend_follow": {
+    "algo_id": "bluechip_trend_follow",
+    "entryType": "mean_reversion",
+    "sl": 15,
+    "tp": 120,
+    "maxAge": 48,
+    "trades": 1356,
+    "winRate": 29.1,
+    "expectancy": 7.3173,
+    "profitFactor": 1.67,
+    "totalPnlPct": 9922.27
+  },
+  "genetic_v2": {
+    "algo_id": "genetic_v2",
+    "entryType": "mean_reversion",
+    "sl": 20,
+    "tp": 200,
+    "maxAge": 24,
+    "trades": 3395,
+    "winRate": 29.7,
+    "expectancy": 4.8303,
+    "profitFactor": 1.37,
+    "totalPnlPct": 16398.86
+  },
+  "bluechip_breakout": {
+    "algo_id": "bluechip_breakout",
+    "entryType": "mean_reversion",
+    "sl": 15,
+    "tp": 120,
+    "maxAge": 48,
+    "trades": 1356,
+    "winRate": 29.1,
+    "expectancy": 7.3173,
+    "profitFactor": 1.67,
+    "totalPnlPct": 9922.27
+  },
+  "let_it_ride": {
+    "algo_id": "let_it_ride",
+    "entryType": "mean_reversion",
+    "sl": 20,
+    "tp": 200,
+    "maxAge": 24,
+    "trades": 2443,
+    "winRate": 31.9,
+    "expectancy": 7.1183,
+    "profitFactor": 1.56,
+    "totalPnlPct": 17390.01
+  }
+}

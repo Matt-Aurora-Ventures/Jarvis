@@ -30,20 +30,6 @@ export interface BacktestSummary {
   dataSource?: string;
   /** Forward-compat: whether real candle data was used */
   validated?: boolean;
-  /** Execution telemetry priors (0-100). */
-  executionReliabilityPct?: number;
-  /** Historical no-route probability prior (0-1). */
-  noRouteRate?: number;
-  /** Historical unresolved probability prior (0-1). */
-  unresolvedRate?: number;
-  /** Expectancy adjusted by execution reliability priors. */
-  executionAdjustedExpectancy?: number;
-  /** Net PnL adjusted by execution reliability priors. */
-  executionAdjustedNetPnlPct?: number;
-  /** Whether this row is degraded for promotion/validation trust. */
-  degraded?: boolean;
-  /** Degraded reason codes supplied by API. */
-  degradedReasons?: string[];
 }
 
 export interface BacktestEvidenceMeta {
@@ -268,10 +254,6 @@ type PresetBacktestUpdate = {
   totalTrades?: number;
   netPnlPct?: number;
   profitFactorValue?: number;
-  executionReliabilityPct?: number;
-  executionAdjustedNetPnlPct?: number;
-  degraded?: boolean;
-  degradedReasons?: string[];
 };
 
 export function buildPresetBacktestUpdates(rows: BacktestSummary[]): PresetBacktestUpdate[] {
@@ -287,14 +269,8 @@ export function buildPresetBacktestUpdates(rows: BacktestSummary[]): PresetBackt
       wrBoundTrades: number;
       netPnlPctSum: number;
       netPnlRows: number;
-      executionReliabilityWeightedSum: number;
-      executionReliabilityTrades: number;
-      executionAdjustedNetPnlPctSum: number;
-      executionAdjustedNetPnlRows: number;
       dataSources: Set<string>;
       validatedAny: boolean;
-      degradedAny: boolean;
-      degradedReasons: Set<string>;
     }
   >();
 
@@ -317,14 +293,8 @@ export function buildPresetBacktestUpdates(rows: BacktestSummary[]): PresetBackt
       wrBoundTrades: 0,
       netPnlPctSum: 0,
       netPnlRows: 0,
-      executionReliabilityWeightedSum: 0,
-      executionReliabilityTrades: 0,
-      executionAdjustedNetPnlPctSum: 0,
-      executionAdjustedNetPnlRows: 0,
       dataSources: new Set<string>(),
       validatedAny: false,
-      degradedAny: false,
-      degradedReasons: new Set<string>(),
     };
 
     cur.totalTrades += trades;
@@ -344,26 +314,6 @@ export function buildPresetBacktestUpdates(rows: BacktestSummary[]): PresetBackt
       cur.netPnlPctSum += netPnlRaw;
       cur.netPnlRows += 1;
     }
-    const executionReliabilityRaw = Number.isFinite(r.executionReliabilityPct)
-      ? Number(r.executionReliabilityPct)
-      : Number.NaN;
-    if (Number.isFinite(executionReliabilityRaw) && trades > 0) {
-      cur.executionReliabilityWeightedSum += executionReliabilityRaw * trades;
-      cur.executionReliabilityTrades += trades;
-    }
-    const executionAdjustedNetPnlRaw = Number.isFinite(r.executionAdjustedNetPnlPct)
-      ? Number(r.executionAdjustedNetPnlPct)
-      : Number.NaN;
-    if (Number.isFinite(executionAdjustedNetPnlRaw)) {
-      cur.executionAdjustedNetPnlPctSum += executionAdjustedNetPnlRaw;
-      cur.executionAdjustedNetPnlRows += 1;
-    }
-    if (r.degraded) cur.degradedAny = true;
-    if (Array.isArray(r.degradedReasons)) {
-      for (const reason of r.degradedReasons) {
-        if (typeof reason === 'string' && reason.trim()) cur.degradedReasons.add(reason.trim());
-      }
-    }
     if (r.dataSource) cur.dataSources.add(r.dataSource);
     if (r.validated) cur.validatedAny = true;
 
@@ -381,10 +331,6 @@ export function buildPresetBacktestUpdates(rows: BacktestSummary[]): PresetBackt
       agg.wrBoundTrades > 0 ? agg.wrHiWeightedSum / agg.wrBoundTrades : undefined;
     const netPnlPct =
       agg.netPnlRows > 0 ? agg.netPnlPctSum : undefined;
-    const executionReliabilityPct =
-      agg.executionReliabilityTrades > 0 ? agg.executionReliabilityWeightedSum / agg.executionReliabilityTrades : undefined;
-    const executionAdjustedNetPnlPct =
-      agg.executionAdjustedNetPnlRows > 0 ? agg.executionAdjustedNetPnlPctSum : undefined;
     const dataSource =
       agg.dataSources.size === 1
         ? [...agg.dataSources][0]
@@ -392,18 +338,7 @@ export function buildPresetBacktestUpdates(rows: BacktestSummary[]): PresetBackt
           ? 'mixed'
           : 'unknown';
     const stage = stageForTrades(agg.totalTrades);
-    const netPnlFinite = Number.isFinite(netPnlPct as number) ? Number(netPnlPct) : Number.NaN;
-    const executionAdjustedNetPnlFinite = Number.isFinite(executionAdjustedNetPnlPct as number)
-      ? Number(executionAdjustedNetPnlPct)
-      : Number.NaN;
-    const underperformer = profitFactor < 1.0 || (
-      Number.isFinite(executionAdjustedNetPnlFinite)
-        ? executionAdjustedNetPnlFinite <= 0
-        : (Number.isFinite(netPnlFinite) && netPnlFinite <= 0)
-    );
-    const executionReliabilityGatePassed =
-      Number.isFinite(executionReliabilityPct as number) && Number(executionReliabilityPct) >= 80;
-    const degradedReasons = [...agg.degradedReasons.values()];
+    const underperformer = winRatePct < 40 || profitFactor < 1.0;
 
     return {
       strategyId,
@@ -413,17 +348,13 @@ export function buildPresetBacktestUpdates(rows: BacktestSummary[]): PresetBackt
       dataSource,
       underperformer,
       stage,
-      promotionEligible: stage === 'promotion' && !underperformer && executionReliabilityGatePassed,
+      promotionEligible: stage === 'promotion' && !underperformer,
       winRatePct,
       winRateLower95Pct,
       winRateUpper95Pct,
       totalTrades: agg.totalTrades,
       netPnlPct,
       profitFactorValue: Number.isFinite(profitFactor) ? profitFactor : undefined,
-      executionReliabilityPct: Number.isFinite(executionReliabilityPct as number) ? Number(executionReliabilityPct) : undefined,
-      executionAdjustedNetPnlPct: Number.isFinite(executionAdjustedNetPnlFinite) ? executionAdjustedNetPnlFinite : undefined,
-      degraded: agg.degradedAny || degradedReasons.length > 0 || !executionReliabilityGatePassed,
-      degradedReasons,
     };
   });
 }

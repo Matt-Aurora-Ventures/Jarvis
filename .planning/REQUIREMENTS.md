@@ -1,298 +1,163 @@
-# Jarvis Requirements
+# Requirements: Jarvis V3 — Sovereign AI Operating System
 
-**Created:** 2026-01-24
-**Updated:** 2026-02-01
-**Status:** V1 Complete, V2 In Progress
+**Defined:** 2026-02-16
+**Core Value:** The boot document — a portable, encrypted representation of the user's entire context that initializes any model on any platform.
 
----
+## v3 Requirements
 
-## Current Milestone: V2 - Web Trading Dashboard
+### Infrastructure
 
-### V2 Executive Summary
+- [ ] **INFRA-01**: Codebase refactored into clean monorepo with proper Python package structure (pyproject.toml, src layout)
+- [ ] **INFRA-02**: CI/CD pipeline runs tests and linting on every push
+- [ ] **INFRA-03**: Database migrations managed by Alembic with versioned schema changes
+- [ ] **INFRA-04**: Docker Compose orchestrates all services (gateway, memory, orchestrator, interfaces)
+- [ ] **INFRA-05**: Scattered memory files consolidated into single persistence layer (PostgreSQL + Qdrant)
 
-Replicate the Telegram `/demo` bot trading interface as a modern React web application, reusing 85% of existing backend logic.
+### LLM Gateway
 
-**Scope:**
-- 19 callback handlers (~5,200 lines) to replicate
-- 7 existing API endpoints to extend (~15-20 new endpoints)
-- ~30-40 new React components
-- Real-time WebSocket updates
-- Mobile-responsive dark mode UI
+- [ ] **GATE-01**: LiteLLM proxy deployed as Docker container exposing unified OpenAI-compatible endpoint
+- [ ] **GATE-02**: Task-based routing rules configured (sentiment→Grok, reasoning→Claude, code→Claude, private→local Ollama)
+- [ ] **GATE-03**: Automatic failover chain (primary→secondary→tertiary→local) with health checks and cooldown
+- [ ] **GATE-04**: Per-model spend tracking with configurable budget controls
+- [ ] **GATE-05**: PII masking via Presidio before sending to cloud models
 
----
+### Memory Engine
 
-## V2 P0 Requirements (MVP - Phase 1)
+- [ ] **MEM-01**: Mem0 extraction pipeline processes every conversation to identify facts, entities, and preferences
+- [ ] **MEM-02**: Mem0 conflict resolution (add/merge/invalidate/skip) keeps memory consistent
+- [ ] **MEM-03**: Letta self-editing memory runtime — agent manages its own context via tool calls
+- [ ] **MEM-04**: Context window guard monitors token count and triggers summarization before overflow
+- [ ] **MEM-05**: Graphiti temporal knowledge graph tracks entity relationships and how they evolve over time
+- [ ] **MEM-06**: Four-tier memory hierarchy (working→episodic→semantic→procedural) with automatic promotion/demotion
+- [ ] **MEM-07**: Memory is transparent and user-editable (plain Markdown view of memory state)
 
-### REQ-V2-001: Portfolio Dashboard
-**Priority:** P0 | **Category:** Core
-- Display wallet SOL balance and USD equivalent
-- Show total portfolio value
-- Show unrealized P&L (USD and %)
-- Position count indicator
-- Market regime indicator (bull/bear/crab)
+### Boot Document
 
-### REQ-V2-002: Position List View
-**Priority:** P0 | **Category:** Core
-- List all open positions with:
-  - Token symbol + logo
-  - Entry price / Current price
-  - P&L (USD and %)
-  - TP/SL levels
-  - Time held
-- Sortable by P&L, value, time
-- Quick sell buttons (25%, 50%, 100%)
+- [ ] **BOOT-01**: Boot document auto-generates from Mem0 persistent store after each session
+- [ ] **BOOT-02**: Boot document contains user profile, active goals, current projects, key relationships, communication preferences
+- [ ] **BOOT-03**: Boot document injected as system prompt at every new interaction
+- [ ] **BOOT-04**: Boot document is portable — can initialize Claude, GPT, Grok, or local models identically
+- [ ] **BOOT-05**: Boot document encrypted at rest and in transit
 
-### REQ-V2-003: Buy Token Flow
-**Priority:** P0 | **Category:** Trading
-- Token address input + validation
-- Quick buy amounts: 0.05, 0.1, 0.25, 0.5, 1, 2 SOL
-- Custom amount input
-- **Mandatory TP/SL selection** (default: TP=50%, SL=20%)
-- Pre-buy AI sentiment display
-- Execute via bags.fm with Jupiter fallback
-- Success confirmation with tx link
+### Agent Orchestration
 
-### REQ-V2-004: Sell Position Flow
-**Priority:** P0 | **Category:** Trading
-- Select position to sell
-- Partial sell options: 25%, 50%, 100%
-- Confirmation dialog with P&L preview
-- Execute via bags.fm with Jupiter fallback
-- 0.5% success fee on profitable trades
-- Post-sell summary
+- [ ] **ORCH-01**: LangGraph orchestrator replaces Python supervisor process
+- [ ] **ORCH-02**: Trading domain runs as stateful subgraph with explicit state management
+- [ ] **ORCH-03**: Research domain subgraph provides web search and document analysis
+- [ ] **ORCH-04**: State checkpoints to PostgreSQL for pause/resume and time-travel debugging
+- [ ] **ORCH-05**: Orchestrator routes between domains based on user intent classification
+- [ ] **ORCH-06**: MCP (Model Context Protocol) used for standardized tool and data access across agents
 
-### REQ-V2-005: AI Sentiment Analysis
-**Priority:** P0 | **Category:** AI
-- Request sentiment for any token
-- Display: sentiment (bullish/bearish/neutral), score (0-100), signal
-- Show AI reasoning
-- Powered by Grok (xAI)
+### Domain Plugins
 
-### REQ-V2-006: Real-Time Updates
-**Priority:** P0 | **Category:** Infrastructure
-- WebSocket connection for live price updates
-- Auto-refresh positions every 5 seconds
-- Reconnection logic with exponential backoff
-- Visual indicator for connection status
+- [ ] **PLUG-01**: Plugin registry allows adding new domains without modifying core orchestrator code
+- [ ] **PLUG-02**: Trading engine wrapped as first domain plugin (all existing functionality preserved)
+- [ ] **PLUG-03**: Research domain plugin provides web search, document analysis, and deep research mode
+- [ ] **PLUG-04**: Communication domain plugin handles email drafts and social media scheduling
 
----
+### Interface Layer
 
-## V2 P1 Requirements (Phase 2)
+- [ ] **INTF-01**: Central WebSocket gateway (hub) handles message routing, session management, and access control
+- [ ] **INTF-02**: WhatsApp channel adapter via Baileys library for consumer messaging
+- [ ] **INTF-03**: Telegram channel adapter upgraded from current bot with normalized message parsing
+- [ ] **INTF-04**: Web PWA dashboard with portfolio monitoring, memory graph visualization, agent status
+- [ ] **INTF-05**: Voice interface via Whisper STT + Piper TTS for hands-free interaction
+- [ ] **INTF-06**: All channels route through central gateway for unified state management
 
-### REQ-V2-007: Trending Tokens
-**Priority:** P1 | **Category:** Discovery
-- Bags.fm top 15 trending tokens
-- Quick buy from trending list
-- Token details on click
+### Edge & Sovereignty
 
-### REQ-V2-008: TP/SL Adjustment
-**Priority:** P1 | **Category:** Trading
-- Adjust TP/SL on open positions
-- Slider or input for new values
-- Immediate effect on monitoring
+- [ ] **EDGE-01**: Quantized models (Gemma 3 1B, Phi-3 Mini, Llama 3.2 3B) available for on-device inference
+- [ ] **EDGE-02**: Hybrid routing — private/simple tasks run locally, complex reasoning goes to cloud
+- [ ] **EDGE-03**: Boot document syncs encrypted across devices via user-controlled infrastructure
+- [ ] **EDGE-04**: All personal data stored on user infrastructure — zero third-party data storage
 
-### REQ-V2-009: Trailing Stops
-**Priority:** P1 | **Category:** Trading
-- Add trailing stop to position
-- Configure trail percentage
+## Future Requirements (v4+)
 
-### REQ-V2-010: Watchlist
-**Priority:** P1 | **Category:** Discovery
-- Add tokens to watchlist
-- Price tracking for watchlist tokens
-- Quick buy from watchlist
+### Monetization
+- **TOKEN-01**: $KR8TIV token integration for access, staking, governance
+- **PAY-01**: Stripe payments for premium features
+- **FEE-01**: Success fee system for profitable trades
 
-### REQ-V2-011: Price Alerts
-**Priority:** P1 | **Category:** Alerts
-- Set price alerts for tokens
-- Alert types: above/below price
-- Notification via UI toast
+### Extended Domains
+- **HEALTH-01**: Wearable data integration and habit tracking
+- **EDU-01**: Learning paths and flashcard generation
+- **SCHED-01**: Calendar optimization and time blocking
+- **FIN-01**: Tax reporting and budget automation
 
----
+### Mobile
+- **MOB-01**: Native iOS app
+- **MOB-02**: Native Android app
 
-## V2 P2 Requirements (Phase 3)
+### Advanced AI
+- **AI-01**: DSPy-based procedural memory optimization
+- **AI-02**: Sleep-time agents for async memory consolidation (Letta pattern)
+- **AI-03**: xRouter RL-based sequential routing decisions
+- **AI-04**: CrewAI role-based agent teams within domains
 
-### REQ-V2-012: Sniper Configuration
-**Priority:** P2 | **Category:** Advanced
-- Configure auto-snipe settings
-- Token launch detection
+## Out of Scope
 
-### REQ-V2-013: DCA Plans
-**Priority:** P2 | **Category:** Advanced
-- Create DCA plan for token
-- Configure interval and amount
+| Feature | Reason |
+|---------|--------|
+| $KR8TIV token | Infrastructure first — monetization in v4 |
+| Native mobile apps | PWA covers mobile; native adds maintenance burden |
+| Multi-user isolation | Single-user personal AI OS — not a SaaS platform |
+| Full strategy migration | 81 strategies stay in existing engine, wrapped as plugin |
+| Real-time chat | Not a social platform |
+| iMessage adapter | Apple ecosystem lock-in, WhatsApp covers messaging |
+| Signal adapter | Niche user base, defer to community contribution |
 
-### REQ-V2-014: Bull vs Bear Debate
-**Priority:** P2 | **Category:** AI
-- Request AI debate for any token
-- Display bull vs bear arguments
+## Traceability
 
-### REQ-V2-015: Trade History
-**Priority:** P2 | **Category:** Analytics
-- Complete trade history
-- Filter by date, token, P&L
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| INFRA-01 | Phase 1 | Pending |
+| INFRA-02 | Phase 1 | Pending |
+| INFRA-03 | Phase 1 | Pending |
+| INFRA-04 | Phase 1 | Pending |
+| INFRA-05 | Phase 1 | Pending |
+| GATE-01 | Phase 2 | Pending |
+| GATE-02 | Phase 2 | Pending |
+| GATE-03 | Phase 2 | Pending |
+| GATE-04 | Phase 2 | Pending |
+| GATE-05 | Phase 2 | Pending |
+| MEM-01 | Phase 3 | Pending |
+| MEM-02 | Phase 3 | Pending |
+| MEM-03 | Phase 6 | Pending |
+| MEM-04 | Phase 6 | Pending |
+| MEM-05 | Phase 6 | Pending |
+| MEM-06 | Phase 6 | Pending |
+| MEM-07 | Phase 3 | Pending |
+| BOOT-01 | Phase 3 | Pending |
+| BOOT-02 | Phase 3 | Pending |
+| BOOT-03 | Phase 3 | Pending |
+| BOOT-04 | Phase 3 | Pending |
+| BOOT-05 | Phase 3 | Pending |
+| ORCH-01 | Phase 4 | Pending |
+| ORCH-02 | Phase 4 | Pending |
+| ORCH-03 | Phase 4 | Pending |
+| ORCH-04 | Phase 4 | Pending |
+| ORCH-05 | Phase 4 | Pending |
+| ORCH-06 | Phase 4 | Pending |
+| PLUG-01 | Phase 5 | Pending |
+| PLUG-02 | Phase 5 | Pending |
+| PLUG-03 | Phase 5 | Pending |
+| PLUG-04 | Phase 8 | Pending |
+| INTF-01 | Phase 5 | Pending |
+| INTF-02 | Phase 5 | Pending |
+| INTF-03 | Phase 5 | Pending |
+| INTF-04 | Phase 7 | Pending |
+| INTF-05 | Phase 7 | Pending |
+| INTF-06 | Phase 5 | Pending |
+| EDGE-01 | Phase 8 | Pending |
+| EDGE-02 | Phase 8 | Pending |
+| EDGE-03 | Phase 8 | Pending |
+| EDGE-04 | Phase 8 | Pending |
 
-### REQ-V2-016: P&L Reports
-**Priority:** P2 | **Category:** Analytics
-- Daily/weekly/monthly P&L
-- Win rate statistics
-
----
-
-## V2 Technical Requirements
-
-### API Endpoints Required
-
-**Phase 1 (P0):**
-```
-GET  /api/status          # Wallet, balance, position count
-GET  /api/positions       # All positions with P&L
-POST /api/token/sentiment # AI sentiment
-POST /api/trade/buy       # Execute buy with TP/SL
-POST /api/trade/sell      # Execute sell
-GET  /api/market/regime   # Market regime
-WS   /ws/prices           # Real-time price updates
-```
-
-**Phase 2 (P1):**
-```
-GET  /api/trending        # Bags.fm trending
-GET  /api/watchlist       # User watchlist
-POST /api/watchlist       # Add to watchlist
-PATCH /api/positions/:id/tpsl # Update TP/SL
-POST /api/alerts          # Create alert
-```
-
-**Phase 3 (P2):**
-```
-GET  /api/sniper/config   # Sniper settings
-GET  /api/dca/plans       # DCA plans
-POST /api/analysis/debate # Bull vs Bear
-GET  /api/portfolio/history # Trade history
-```
-
-### Data Structures
-
-**Position Object:**
-```typescript
-interface Position {
-  id: string
-  symbol: string
-  address: string
-  entryPrice: number
-  currentPrice: number
-  amount: number
-  amountSol: number
-  currentValue: number
-  unrealizedPnl: number
-  unrealizedPnlPct: number
-  tpPrice: number
-  slPrice: number
-  timestamp: string
-  txHash: string
-  source: 'bags_fm' | 'jupiter'
-}
-```
-
-### Business Rules
-
-1. **Mandatory TP/SL**: All buys MUST have TP/SL set (default: TP=50%, SL=20%)
-2. **Success Fee**: 0.5% fee on profitable trade exits
-3. **Trading Source**: bags.fm primary, Jupiter DEX fallback
-4. **Price Caching**: 5-second TTL for Jupiter prices
+**Coverage:**
+- v3 requirements: 42 total
+- Mapped to phases: 42
+- Unmapped: 0 ✓
 
 ---
-
-## V2 Implementation Phases
-
-| Phase | Requirements | Duration |
-|-------|--------------|----------|
-| Phase 1 | REQ-V2-001 to REQ-V2-006 | 2-3 weeks |
-| Phase 2 | REQ-V2-007 to REQ-V2-011 | 1-2 weeks |
-| Phase 3 | REQ-V2-012 to REQ-V2-016 | 1-2 weeks |
-| Phase 4 | Mobile optimization, polish | 1 week |
-
----
-
-## V2 Success Criteria
-
-- All P0 requirements implemented and tested
-- <500ms response time for API calls
-- WebSocket reconnection works reliably
-- Mobile responsive on all breakpoints
-- Zero critical security vulnerabilities
-
----
-
----
-
-# V1 Requirements (COMPLETED 2026-01-26)
-
-## V1 Summary
-
-| Category | Count | Status |
-|----------|-------|--------|
-| Must-Have | 7 | Complete |
-| Should-Have | 4 | Complete |
-
-### V1 Key Achievements
-- Database consolidation (28 -> 3 databases)
-- Demo bot fully functional with 240 tests passing
-- bags.fm API integrated with Jupiter fallback
-- Mandatory TP/SL on all trades
-- Zero critical security vulnerabilities
-- 80%+ test coverage on critical paths
-
----
-
-## V1 Must-Have Requirements (All Complete)
-
-### REQ-001: Database Consolidation
-**Status:** Complete
-- Consolidated 28+ SQLite databases into 3 databases
-
-### REQ-002: /demo Trading Bot - Fix Execution
-**Status:** Complete
-- 100% trade execution success rate
-
-### REQ-003: /vibe Command Implementation
-**Status:** Complete
-- Verified working
-
-### REQ-004: bags.fm API Integration
-**Status:** Complete
-- Primary trading interface with Jupiter fallback
-
-### REQ-005: Stop-Loss/Take-Profit Enforcement
-**Status:** Complete
-- 100% of trades have mandatory TP/SL
-
-### REQ-006: Security Vulnerability Fixes
-**Status:** Complete
-- Zero critical vulnerabilities
-
-### REQ-007: Code Refactoring
-**Status:** Complete
-- No files >1000 lines
-
----
-
-## V1 Should-Have Requirements (All Complete)
-
-### REQ-008: Test Coverage
-**Status:** Complete - 80%+ coverage
-
-### REQ-009: Performance Optimization
-**Status:** Complete - <500ms p95 latency
-
-### REQ-010: Monitoring & Alerting
-**Status:** Complete
-
-### REQ-011: API Key Management
-**Status:** Complete
-
----
-
-**Document Version:** 2.0
-**Author:** Claude Code
-**Next:** Create ROADMAP.md with V2 phase breakdown
+*Requirements defined: 2026-02-16*
+*Last updated: 2026-02-16 after V3 milestone initialization*

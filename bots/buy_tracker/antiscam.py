@@ -424,4 +424,7 @@ def create_antiscam_handler(antiscam: AntiScamProtection):
             await antiscam.handle_scam(message, detection)
 
     from telegram.ext import MessageHandler, filters
-    return MessageHandler(filters.TEXT & ~filters.COMMAND, handler)
+    # Anti-scam is primarily for groups where spam/phishing is common. In DMs,
+    # users may paste sensitive material (seed phrases/private keys) during wallet
+    # import flows; we must not capture or forward those messages to admins.
+    return MessageHandler(filters.ChatType.GROUPS & filters.TEXT & ~filters.COMMAND, handler)

@@ -39,7 +39,6 @@ export interface PendingTxRecord {
   signature: string;
   kind: PendingTxKind;
   mint?: string;
-  positionId?: string;
   submittedAt: number;
   lastCheckedAt?: number;
   status: PendingTxStatus;
@@ -144,10 +143,8 @@ export interface StrategyPreset {
   backtested?: boolean;
   /** If backtested, the data source used ('geckoterminal' | 'birdeye' | 'mixed' | 'client') */
   dataSource?: string;
-  /** Marked losing/unreliable by profitability-first backtest criteria. */
+  /** If backtested and win rate < 40% or profit factor < 1.0 */
   underperformer?: boolean;
-  /** Profitable but below promotion/proven confidence thresholds. */
-  experimental?: boolean;
   /** Strategy disabled (e.g. failed backtest) */
   disabled?: boolean;
 }
@@ -178,22 +175,24 @@ export interface BacktestMetaEntry {
 }
 
 /**
- * Strategy presets synced to latest backtest artifacts (2026-02-16 run).
+ * Strategy presets — R4 REALISTIC-TP optimized (v6, 2026-02-15).
  *
- * Source: backtest-data/results/master_comparison.csv + consistency_report.csv
- * Classification policy:
- * - Proven: expectancy > 0, PF > 1, trades >= 50, min_pos_frac >= 0.70
- * - Experimental: profitable but below proven thresholds (and all TradFi)
- * - Losing/disabled: expectancy <= 0 or PF <= 1
+ * MATH: TP > SL (traditional R:R). Each win pays ~2x each loss.
+ * With ~1.9% total friction, realistic TPs (9-30%) proven over 27,686 trades.
+ * 15/26 profitable, 6 borderline (PF 0.91-0.97), 5 xstock/index disabled.
+ * Trailing stops DISABLED (99%) — trail at sub-friction = hidden losses.
+ *
+ * Grok autonomy can adjust these params hourly
+ * via the override system when live trade data warrants it.
  */
 export const STRATEGY_PRESETS: StrategyPreset[] = [
   // ─── MEMECOIN CORE — 3 strategies (SL 10%, TP 20% = 2:1 R:R) ──────────
   {
     id: 'elite',
     name: 'SNIPER ELITE',
-    description: 'Strict filter — PF 1.54, +3.14%/trade, 108 trades',
-    winRate: '49.1%',
-    trades: 108,
+    description: 'Strict filter — R4: PF 1.06, +0.39%/trade, 246 trades',
+    winRate: '39.8%',
+    trades: 246,
     assetType: 'memecoin',
     config: {
       stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 99,
@@ -204,9 +203,9 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'pump_fresh_tight',
     name: 'PUMP FRESH TIGHT',
-    description: 'Fresh pumpswap — PF 1.30, +1.87%/trade, 106 trades',
-    winRate: '44.3%',
-    trades: 106,
+    description: 'Fresh pumpswap — R4: PF 1.14, +0.91%/trade, 246 trades',
+    winRate: '41.1%',
+    trades: 246,
     assetType: 'memecoin',
     // Default strategy gets a lower primary gate to remain selectable in early, noisy backtests.
     autoWrPrimaryOverridePct: 50,
@@ -219,9 +218,9 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'micro_cap_surge',
     name: 'MICRO CAP SURGE',
-    description: 'Micro-cap surge — PF 1.80, +4.09%/trade, 106 trades',
-    winRate: '54.7%',
-    trades: 106,
+    description: 'Micro-cap surge — R4: PF 1.03, +0.22%/trade, 344 trades',
+    winRate: '39.2%',
+    trades: 344,
     assetType: 'memecoin',
     config: {
       stopLossPct: 10, takeProfitPct: 20, trailingStopPct: 99,
@@ -230,14 +229,15 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     },
   },
   // ─── MEMECOIN WIDE — 3 strategies (SL 10%, TP 25% = 2.5:1 R:R) ────────
-  // Mean-reversion family retained; currently profitable in latest run.
+  // Borderline (PF 0.97) — mean_reversion entry, need TP ≥30% to be solidly profitable
   {
     id: 'momentum',
     name: 'MOMENTUM RIDER',
-    description: 'Mean-reversion dip buy — PF 1.75, +4.40%/trade, 69 trades',
-    winRate: '46.4%',
-    trades: 69,
+    description: 'Mean-reversion dip buy — R4: PF 0.97, -0.27%/trade, 1999 trades (borderline)',
+    winRate: '33.1%',
+    trades: 1999,
     assetType: 'memecoin',
+    underperformer: true,
     config: {
       stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
       minLiquidityUsd: 5000, minScore: 30, maxTokenAgeHours: 200,
@@ -247,10 +247,11 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'hybrid_b',
     name: 'HYBRID B',
-    description: 'Hybrid dip entry — PF 1.75, +4.40%/trade, 69 trades',
-    winRate: '46.4%',
-    trades: 69,
+    description: 'Hybrid dip entry — R4: PF 0.97, -0.27%/trade, 1999 trades (borderline)',
+    winRate: '33.1%',
+    trades: 1999,
     assetType: 'memecoin',
+    underperformer: true,
     config: {
       stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
       minLiquidityUsd: 5000, minScore: 30, maxTokenAgeHours: 200,
@@ -260,10 +261,11 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'let_it_ride',
     name: 'LET IT RIDE',
-    description: 'Wide hold dip buy — PF 1.56, +3.51%/trade, 56 trades',
-    winRate: '44.6%',
-    trades: 56,
+    description: 'Wide hold dip buy — R4: PF 0.97, -0.22%/trade, 1981 trades (borderline)',
+    winRate: '32.6%',
+    trades: 1981,
     assetType: 'memecoin',
+    underperformer: true,
     config: {
       stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
       minLiquidityUsd: 3000, minScore: 20, maxTokenAgeHours: 500,
@@ -274,9 +276,9 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'utility_swing',
     name: 'UTILITY SWING',
-    description: 'Utility/governance (RAY, JUP, PYTH) — PF 2.20, +4.36%/trade, 72 trades',
-    winRate: '61.1%',
-    trades: 72,
+    description: 'Utility/governance (RAY, JUP, PYTH) — R4: PF 1.57, +2.49%/trade, 123 trades',
+    winRate: '52.8%',
+    trades: 123,
     assetType: 'established',
     config: {
       stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
@@ -287,9 +289,9 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'meme_classic',
     name: 'MEME CLASSIC',
-    description: 'Established memes 1yr+ (BONK, WIF) — PF 1.85, +3.43%/trade, 74 trades',
-    winRate: '56.8%',
-    trades: 74,
+    description: 'Established memes 1yr+ (BONK, WIF) — R4: PF 1.44, +2.03%/trade, 197 trades',
+    winRate: '50.8%',
+    trades: 197,
     assetType: 'established',
     config: {
       stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
@@ -300,11 +302,11 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'volume_spike',
     name: 'VOLUME SPIKE',
-    description: 'Established volume surges — PF 1.67, +2.92%/trade, 80 trades (EXPERIMENTAL)',
-    winRate: '53.8%',
-    trades: 80,
+    description: 'Established volume surges — R4: PF 0.91, -0.45%/trade, 1358 trades (borderline)',
+    winRate: '37.2%',
+    trades: 1358,
     assetType: 'established',
-    experimental: true,
+    underperformer: true,
     config: {
       stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
       minLiquidityUsd: 20000, minScore: 35, maxTokenAgeHours: 99999,
@@ -315,9 +317,9 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'sol_veteran',
     name: 'SOL VETERAN',
-    description: 'Established Solana 6mo+ ($50K+ liq) — PF 2.20, +4.36%/trade, 72 trades',
-    winRate: '61.1%',
-    trades: 72,
+    description: 'Established Solana 6mo+ ($50K+ liq) — R4: PF 1.26, +1.30%/trade, 218 trades',
+    winRate: '47.7%',
+    trades: 218,
     assetType: 'established',
     config: {
       stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
@@ -328,11 +330,11 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'established_breakout',
     name: 'ESTABLISHED BREAKOUT',
-    description: '30d+ breakout signals — PF 1.80, +3.33%/trade, 18 trades (EXPERIMENTAL)',
-    winRate: '55.6%',
-    trades: 18,
+    description: '30d+ breakout signals — R4: PF 0.96, -0.23%/trade, 1047 trades (borderline)',
+    winRate: '40.2%',
+    trades: 1047,
     assetType: 'established',
-    experimental: true,
+    underperformer: true,
     config: {
       stopLossPct: 8, takeProfitPct: 15, trailingStopPct: 99,
       minLiquidityUsd: 10000, minScore: 30, maxTokenAgeHours: 99999,
@@ -343,11 +345,10 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_fresh_snipe',
     name: 'BAGS FRESH SNIPE',
-    description: 'Fresh bags launches — PF 1.41, +2.95%/trade, 28 trades (EXPERIMENTAL)',
-    winRate: '35.7%',
-    trades: 28,
+    description: 'Fresh bags launches — R4: PF 1.27, +1.94%/trade, 48 trades',
+    winRate: '37.5%',
+    trades: 48,
     assetType: 'bags',
-    experimental: true,
     config: {
       stopLossPct: 10, takeProfitPct: 30, trailingStopPct: 99,
       minLiquidityUsd: 0,
@@ -358,11 +359,11 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_momentum',
     name: 'BAGS MOMENTUM',
-    description: 'Post-launch momentum — PF 1.36, +2.60%/trade, 23 trades (EXPERIMENTAL)',
-    winRate: '34.8%',
-    trades: 23,
+    description: 'Post-launch momentum — R4: PF 0.88, -0.60%/trade, 61 trades (borderline)',
+    winRate: '29.5%',
+    trades: 61,
     assetType: 'bags',
-    experimental: true,
+    underperformer: true,
     config: {
       stopLossPct: 10, takeProfitPct: 30, trailingStopPct: 99,
       minLiquidityUsd: 0,
@@ -374,11 +375,10 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_value',
     name: 'BAGS VALUE HUNTER',
-    description: 'Quality bags — PF 1.43, +1.29%/trade, 40 trades (EXPERIMENTAL)',
-    winRate: '52.5%',
-    trades: 40,
+    description: 'Quality bags — R4: PF 1.50, +1.41%/trade, 71 trades',
+    winRate: '50.7%',
+    trades: 71,
     assetType: 'bags',
-    experimental: true,
     config: {
       stopLossPct: 5, takeProfitPct: 10, trailingStopPct: 99,
       minLiquidityUsd: 0,
@@ -389,9 +389,9 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_dip_buyer',
     name: 'BAGS DIP BUYER',
-    description: 'Dip recovery — PF 1.75, +3.45%/trade, 65 trades',
-    winRate: '47.7%',
-    trades: 65,
+    description: 'Dip recovery — R4: PF 1.34, +1.83%/trade, 110 trades',
+    winRate: '36.4%',
+    trades: 110,
     assetType: 'bags',
     config: {
       stopLossPct: 8, takeProfitPct: 25, trailingStopPct: 99,
@@ -403,9 +403,9 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_bluechip',
     name: 'BAGS BLUE CHIP',
-    description: 'Established bags — PF 1.20, +0.59%/trade, 51 trades',
-    winRate: '51.0%',
-    trades: 51,
+    description: 'Established bags — R4: PF 1.52, +1.38%/trade, 66 trades',
+    winRate: '54.5%',
+    trades: 66,
     assetType: 'bags',
     config: {
       stopLossPct: 5, takeProfitPct: 9, trailingStopPct: 99,
@@ -418,11 +418,10 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_conservative',
     name: 'BAGS CONSERVATIVE',
-    description: 'Conservative — PF 1.43, +1.29%/trade, 40 trades (EXPERIMENTAL)',
-    winRate: '52.5%',
-    trades: 40,
+    description: 'Conservative — R4: PF 1.51, +1.43%/trade, 78 trades',
+    winRate: '51.3%',
+    trades: 78,
     assetType: 'bags',
-    experimental: true,
     config: {
       stopLossPct: 5, takeProfitPct: 10, trailingStopPct: 99,
       minLiquidityUsd: 0,
@@ -433,9 +432,9 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_aggressive',
     name: 'BAGS AGGRESSIVE',
-    description: 'High-conviction — PF 1.31, +1.67%/trade, 58 trades',
-    winRate: '34.5%',
-    trades: 58,
+    description: 'High-conviction — R4: PF 1.14, +0.74%/trade, 105 trades',
+    winRate: '33.3%',
+    trades: 105,
     assetType: 'bags',
     config: {
       stopLossPct: 7, takeProfitPct: 25, trailingStopPct: 99,
@@ -447,11 +446,10 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_elite',
     name: 'BAGS ELITE',
-    description: 'Top-tier filter — PF 1.26, +0.79%/trade, 40 trades (EXPERIMENTAL)',
-    winRate: '52.5%',
+    description: 'Top-tier filter — R4: PF 1.45, +1.25%/trade, 40 trades',
+    winRate: '55.0%',
     trades: 40,
     assetType: 'bags',
-    experimental: true,
     config: {
       stopLossPct: 5, takeProfitPct: 9, trailingStopPct: 99,
       minLiquidityUsd: 0,
@@ -463,11 +461,10 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bluechip_trend_follow',
     name: 'BLUECHIP TREND FOLLOW',
-    description: 'Trend following — PF 1.14, +0.98%/trade, 610 trades (EXPERIMENTAL)',
-    winRate: '35.9%',
-    trades: 610,
+    description: 'Trend following — R4: PF 1.06, +0.47%/trade, 1075 trades',
+    winRate: '34.3%',
+    trades: 1075,
     assetType: 'bluechip',
-    experimental: true,
     config: {
       stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
       minLiquidityUsd: 200000, minScore: 55, maxTokenAgeHours: 99999,
@@ -477,73 +474,68 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bluechip_breakout',
     name: 'BLUECHIP BREAKOUT',
-    description: 'Breakout catcher — PF 1.14, +0.98%/trade, 610 trades (EXPERIMENTAL)',
-    winRate: '35.9%',
-    trades: 610,
+    description: 'Breakout catcher — R4: PF 1.06, +0.47%/trade, 1075 trades',
+    winRate: '34.3%',
+    trades: 1075,
     assetType: 'bluechip',
-    experimental: true,
     config: {
       stopLossPct: 10, takeProfitPct: 25, trailingStopPct: 99,
       minLiquidityUsd: 200000, minScore: 65, maxTokenAgeHours: 99999,
       strategyMode: 'balanced',
     },
   },
-  // ─── xSTOCK & PRESTOCK — tradfi stays Experimental by policy ───
+  // ─── xSTOCK & PRESTOCK — SL 4%, TP 10% = 2.5:1 R:R (DISABLED — unprofitable) ───
   {
     id: 'xstock_intraday',
     name: 'xSTOCK INTRADAY',
-    description: 'Stock intraday (low WR / high R) — PF 1.59, +4.53%/trade, 477 trades (EXPERIMENTAL)',
-    winRate: '17.6%',
-    trades: 477,
+    description: 'Stock intraday — R4: PF 0.75, -0.92%/trade, 3231 trades (LOSING)',
+    winRate: '32.2%',
+    trades: 3231,
     assetType: 'xstock',
-    experimental: true,
+    disabled: true,
     config: {
-      stopLossPct: 8, takeProfitPct: 100, trailingStopPct: 99,
-      maxPositionAgeHours: 336,
-      minLiquidityUsd: 50000, minScore: 55, maxTokenAgeHours: 99999,
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 50000, minScore: 40, maxTokenAgeHours: 99999,
       strategyMode: 'balanced',
     },
   },
   {
     id: 'xstock_swing',
     name: 'xSTOCK SWING',
-    description: 'Stock swing (low WR / high R) — PF 2.44, +11.78%/trade, 152 trades (EXPERIMENTAL)',
-    winRate: '26.3%',
-    trades: 152,
+    description: 'Stock swing — R4: PF 0.74, -0.94%/trade, 3047 trades (LOSING)',
+    winRate: '32.0%',
+    trades: 3047,
     assetType: 'xstock',
-    experimental: true,
+    disabled: true,
     config: {
-      stopLossPct: 10, takeProfitPct: 100, trailingStopPct: 99,
-      maxPositionAgeHours: 48,
-      minLiquidityUsd: 50000, minScore: 55, maxTokenAgeHours: 99999,
+      stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
+      minLiquidityUsd: 30000, minScore: 30, maxTokenAgeHours: 99999,
       strategyMode: 'balanced',
     },
   },
   {
     id: 'prestock_speculative',
     name: 'PRESTOCK SPECULATIVE',
-    description: 'Pre-stock spec — PF 0.78, -0.81%/trade, 79 trades (LOSING / EXPERIMENTAL)',
-    winRate: '32.9%',
-    trades: 79,
+    description: 'Pre-stock spec — R4: PF 0.74, -0.94%/trade, 3301 trades (LOSING)',
+    winRate: '32.0%',
+    trades: 3301,
     assetType: 'prestock',
-    underperformer: true,
-    experimental: true,
+    disabled: true,
     config: {
       stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
       minLiquidityUsd: 20000, minScore: 20, maxTokenAgeHours: 99999,
       strategyMode: 'aggressive',
     },
   },
-  // ─── INDEX — tradfi stays Experimental by policy ────────
+  // ─── INDEX — SL 4%, TP 10% = 2.5:1 R:R (DISABLED — unprofitable) ────────
   {
     id: 'index_intraday',
     name: 'INDEX INTRADAY',
-    description: 'Index intraday — PF 0.63, -1.43%/trade, 144 trades (LOSING / EXPERIMENTAL)',
-    winRate: '28.5%',
-    trades: 144,
+    description: 'Index intraday — R4: PF 0.74, -0.94%/trade, 3047 trades (LOSING)',
+    winRate: '32.0%',
+    trades: 3047,
     assetType: 'index',
-    underperformer: true,
-    experimental: true,
+    disabled: true,
     config: {
       stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
       minLiquidityUsd: 100000, minScore: 50, maxTokenAgeHours: 99999,
@@ -553,12 +545,11 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'index_leveraged',
     name: 'INDEX LEVERAGED',
-    description: 'Index leveraged — PF 0.72, -1.04%/trade, 112 trades (LOSING / EXPERIMENTAL)',
-    winRate: '31.3%',
-    trades: 112,
+    description: 'Index leveraged — R4: PF 0.75, -0.92%/trade, 3231 trades (LOSING)',
+    winRate: '32.2%',
+    trades: 3231,
     assetType: 'index',
-    underperformer: true,
-    experimental: true,
+    disabled: true,
     config: {
       stopLossPct: 4, takeProfitPct: 10, trailingStopPct: 99,
       minLiquidityUsd: 50000, minScore: 40, maxTokenAgeHours: 99999,
@@ -582,8 +573,6 @@ export interface SniperConfig {
   /** HYBRID-B gate: skip tokens under this liquidity (USD). */
   minLiquidityUsd: number;
   autoSnipe: boolean;
-  /** If true, auto/manual closes in session mode sweep excess SOL to main wallet. */
-  autoSweepToMainWalletOnClose: boolean;
   /** Enable backtest win-rate gate for automatic strategy selection. */
   autoWrGateEnabled: boolean;
   /** Primary win-rate threshold (%) for automatic strategy selection. */
@@ -699,24 +688,6 @@ export interface Position {
   status: 'open' | 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' | 'closed';
   /** Lock flag — prevents duplicate sell attempts while tx is in-flight */
   isClosing?: boolean;
-  /** Explicit sell lifecycle state for truthful exit telemetry and UI. */
-  exitLifecycle?: ExitLifecycleState;
-  /** Number of sell attempts made for this position. */
-  exitAttempts?: number;
-  /** Timestamp of latest sell attempt (ms). */
-  lastExitAttemptAt?: number;
-  /** Last sell error message (if any). */
-  lastExitError?: string;
-  /** Pending sell signature if submission occurred but close not finalized yet. */
-  pendingSellTxHash?: string;
-  /** Timestamp when pending sell signature was first submitted (ms). */
-  pendingSellSubmittedAt?: number;
-  /** Current pending sell tx state for reconciliation. */
-  pendingSellState?: PendingTxStatus;
-  /** Timestamp when unresolved/failed sell was reconciled via balance checks. */
-  sellReconciledAt?: number;
-  /** Reason for sell-side reconciliation. */
-  sellReconcileReason?: Extract<PositionReconcileReason, 'sell_tx_unresolved_balance_zero' | 'sell_tx_failed'>;
   /** Exit was triggered (SL/TP/trail/expiry) and is waiting for user approval in Phantom. */
   exitPending?: {
     trigger: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired';
@@ -772,7 +743,7 @@ export interface Position {
   /** Reconciled by on-chain sync because no live balance exists for active wallet. */
   reconciled?: boolean;
   /** Reconciliation reason enum for auditability. */
-  reconciledReason?: PositionReconcileReason;
+  reconciledReason?: 'no_onchain_balance' | 'buy_tx_unresolved' | 'buy_tx_failed';
   /** Reconciliation timestamp (ms). */
   reconciledAt?: number;
 }
@@ -980,7 +951,6 @@ const DEFAULT_CONFIG: SniperConfig = {
   // Users can still raise this to $40K/$50K for higher-quality entries.
   minLiquidityUsd: 25000,
   autoSnipe: false,
-  autoSweepToMainWalletOnClose: false,
   autoWrGateEnabled: true,
   autoWrPrimaryPct: 70,
   autoWrFallbackPct: 50,
@@ -1030,8 +1000,6 @@ interface SniperState {
   /** Monotonic strategy revision. Bumped whenever algo selection/config changes. */
   strategyEpoch: number;
   assetFilter: AssetType;
-  showExperimentalStrategies: boolean;
-  setShowExperimentalStrategies: (show: boolean) => void;
   loadBestEver: (cfg: Record<string, any>) => void;
 
   // Trade Signing Mode
@@ -1073,7 +1041,7 @@ interface SniperState {
    */
   reconcilePosition: (
     id: string,
-    reason: PositionReconcileReason,
+    reason: 'no_onchain_balance' | 'buy_tx_unresolved' | 'buy_tx_failed',
     opts?: { releaseBudget?: boolean },
   ) => void;
 
@@ -1232,8 +1200,6 @@ export const useSniperStore = create<SniperState>()(
   activePreset: 'pump_fresh_tight',
   strategyEpoch: 0,
   assetFilter: 'memecoin' as AssetType,
-  showExperimentalStrategies: false,
-  setShowExperimentalStrategies: (show) => set({ showExperimentalStrategies: !!show }),
   tradeSignerMode: 'phantom',
   setTradeSignerMode: (mode) => set({ tradeSignerMode: mode }),
   sessionWalletPubkey: null,
@@ -1605,9 +1571,6 @@ export const useSniperStore = create<SniperState>()(
           ...p,
           status,
           isClosing: false,
-          exitLifecycle: txHash ? 'swap_confirmed' : (p.exitLifecycle || 'open'),
-          exitAttempts: Number.isFinite(Number(p.exitAttempts)) ? Number(p.exitAttempts) : 0,
-          lastExitError: undefined,
           exitPending: undefined,
           exitSolReceived,
           realPnlSol,
@@ -1656,17 +1619,8 @@ export const useSniperStore = create<SniperState>()(
     // Persist a minimal trade ledger record server-side so autonomy/backtests can
     // learn from real executions across sessions/devices. Without this, swaps
     // exist only in the executing browser's localStorage.
-    const executionOutcome =
-      txHash
-        ? 'confirmed'
-        : pos.pendingSellState === 'unresolved'
-          ? 'unresolved'
-          : pos.pendingSellState === 'failed'
-            ? 'failed'
-            : undefined;
     postTradeTelemetry({
       schemaVersion: 1,
-      eventType: 'trade_closed',
       positionId: pos.id,
       mint: pos.mint,
       status,
@@ -1683,14 +1637,6 @@ export const useSniperStore = create<SniperState>()(
       buyTxHash: pos.txHash ?? null,
       sellTxHash: txHash ?? null,
       includedInStats: hasReliableCostBasis,
-      includedInExecutionStats: !!txHash,
-      executionOutcome,
-      failureCode: executionOutcome === 'failed' || executionOutcome === 'unresolved'
-        ? (pos.lastExitError || 'sell_unverified')
-        : null,
-      failureReason: executionOutcome === 'failed' || executionOutcome === 'unresolved'
-        ? (pos.lastExitError || null)
-        : null,
       manualOnly: !!pos.manualOnly,
       recoveredFrom: pos.recoveredFrom ?? null,
       tradeSignerMode: state.tradeSignerMode,
@@ -1719,27 +1665,10 @@ export const useSniperStore = create<SniperState>()(
               realPnlPercent: 0,
               realPnlSol: 0,
               isClosing: false,
-              exitLifecycle: reason === 'sell_tx_unresolved_balance_zero' || reason === 'sell_tx_failed'
-                ? 'sell_reconciled'
-                : (p.exitLifecycle || 'open'),
-              lastExitError: reason === 'sell_tx_failed'
-                ? (p.lastExitError || 'Sell transaction failed; reconciled by policy')
-                : p.lastExitError,
               exitPending: undefined,
-              pendingSellState: reason === 'sell_tx_unresolved_balance_zero'
-                ? 'unresolved'
-                : reason === 'sell_tx_failed'
-                  ? 'failed'
-                  : p.pendingSellState,
               reconciled: true,
               reconciledReason: reason,
               reconciledAt: now,
-              sellReconciledAt: reason === 'sell_tx_unresolved_balance_zero' || reason === 'sell_tx_failed'
-                ? now
-                : p.sellReconciledAt,
-              sellReconcileReason: reason === 'sell_tx_unresolved_balance_zero' || reason === 'sell_tx_failed'
-                ? reason
-                : p.sellReconcileReason,
             }
           : p
       )),
@@ -2118,16 +2047,15 @@ export const useSniperStore = create<SniperState>()(
     return {
       pendingTxs: {
         ...s.pendingTxs,
-          [signature]: {
-            signature,
-            kind: record.kind,
-            mint: record.mint || existing?.mint,
-            positionId: record.positionId || existing?.positionId,
-            submittedAt: existing?.submittedAt || Number(record.submittedAt || Date.now()),
-            lastCheckedAt: record.lastCheckedAt || existing?.lastCheckedAt,
-            status: record.status || existing?.status || 'submitted',
-            error: record.error || existing?.error,
-            sourcePage: record.sourcePage || existing?.sourcePage,
+        [signature]: {
+          signature,
+          kind: record.kind,
+          mint: record.mint || existing?.mint,
+          submittedAt: existing?.submittedAt || Number(record.submittedAt || Date.now()),
+          lastCheckedAt: record.lastCheckedAt || existing?.lastCheckedAt,
+          status: record.status || existing?.status || 'submitted',
+          error: record.error || existing?.error,
+          sourcePage: record.sourcePage || existing?.sourcePage,
         },
       },
     };
@@ -2343,7 +2271,6 @@ export const useSniperStore = create<SniperState>()(
       partialize: (state) => ({
         positions: state.positions,
         config: state.config,
-        showExperimentalStrategies: state.showExperimentalStrategies,
         tradeSignerMode: state.tradeSignerMode,
         sessionWalletPubkey: state.sessionWalletPubkey,
         budget: state.budget,
@@ -2369,7 +2296,6 @@ export const useSniperStore = create<SniperState>()(
 
         // Migrate config defaults (new fields, etc.)
         state.config = { ...DEFAULT_CONFIG, ...(state.config as SniperConfig | undefined) };
-        state.showExperimentalStrategies = !!(state as any).showExperimentalStrategies;
         state.autoResetRequired = !!state.autoResetRequired;
         state.lastAutoResetAt = Number(state.lastAutoResetAt || 0) || undefined;
         // Enforce upgraded circuit-breaker fail thresholds for existing persisted sessions.
@@ -2436,25 +2362,6 @@ export const useSniperStore = create<SniperState>()(
             recommendedSl: (p as any).recommendedSl ?? DEFAULT_CONFIG.stopLossPct,
             recommendedTp: (p as any).recommendedTp ?? DEFAULT_CONFIG.takeProfitPct,
             highWaterMarkPct: (p as any).highWaterMarkPct ?? 0,
-            exitLifecycle: (p as any).status === 'open'
-              ? (((p as any).exitLifecycle as ExitLifecycleState | undefined) || 'open')
-              : ((p as any).exitLifecycle as ExitLifecycleState | undefined),
-            exitAttempts: Number.isFinite(Number((p as any).exitAttempts))
-              ? Number((p as any).exitAttempts)
-              : 0,
-            pendingSellTxHash: typeof (p as any).pendingSellTxHash === 'string' ? (p as any).pendingSellTxHash : undefined,
-            pendingSellSubmittedAt: Number.isFinite(Number((p as any).pendingSellSubmittedAt))
-              ? Number((p as any).pendingSellSubmittedAt)
-              : undefined,
-            pendingSellState: (p as any).pendingSellState as PendingTxStatus | undefined,
-            sellReconciledAt: Number.isFinite(Number((p as any).sellReconciledAt))
-              ? Number((p as any).sellReconciledAt)
-              : undefined,
-            sellReconcileReason: (p as any).sellReconcileReason as Position['sellReconcileReason'],
-            lastExitAttemptAt: Number.isFinite(Number((p as any).lastExitAttemptAt))
-              ? Number((p as any).lastExitAttemptAt)
-              : undefined,
-            lastExitError: typeof (p as any).lastExitError === 'string' ? String((p as any).lastExitError) : undefined,
             // Derived / in-flight state should not survive reloads.
             isClosing: false,
             exitPending: undefined,

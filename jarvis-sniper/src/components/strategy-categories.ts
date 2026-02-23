@@ -9,32 +9,35 @@ export const STRATEGY_CATEGORIES: StrategyCategory[] = [
   {
     label: 'TOP PERFORMERS',
     icon: 'Trophy',
-    presetIds: ['utility_swing', 'sol_veteran', 'meme_classic'],
+    // Profitable presets only (default recommendations).
+    presetIds: ['pump_fresh_tight', 'utility_swing', 'meme_classic'],
   },
   {
     label: 'MEMECOIN',
     icon: 'Zap',
-    presetIds: ['elite', 'micro_cap_surge', 'pump_fresh_tight', 'momentum', 'hybrid_b', 'let_it_ride'],
+    presetIds: ['elite', 'micro_cap_surge', 'momentum', 'hybrid_b', 'let_it_ride'],
   },
   {
     label: 'ESTABLISHED TOKENS',
     icon: 'Landmark',
-    presetIds: ['established_breakout', 'volume_spike'],
+    presetIds: ['sol_veteran', 'volume_spike', 'established_breakout'],
   },
   {
     label: 'BAGS.FM',
     icon: 'Package',
     presetIds: [
-      'bags_dip_buyer', 'bags_aggressive', 'bags_bluechip',
-      'bags_fresh_snipe', 'bags_momentum', 'bags_value', 'bags_conservative', 'bags_elite',
+      'bags_elite', 'bags_bluechip', 'bags_conservative', 'bags_value',
+      'bags_dip_buyer', 'bags_fresh_snipe', 'bags_momentum', 'bags_aggressive',
     ],
   },
   {
-    label: 'EXPERIMENTAL',
-    icon: 'FlaskConical',
-    presetIds: [
-      'bluechip_trend_follow', 'bluechip_breakout',
-      'xstock_intraday', 'xstock_swing', 'prestock_speculative', 'index_intraday', 'index_leveraged',
-    ],
+    label: 'BLUE CHIP SOLANA',
+    icon: 'Shield',
+    presetIds: ['bluechip_trend_follow', 'bluechip_breakout'],
+  },
+  {
+    label: 'xSTOCK & INDEX',
+    icon: 'TrendingUp',
+    presetIds: ['xstock_intraday', 'xstock_swing', 'prestock_speculative', 'index_intraday', 'index_leveraged'],
   },
 ];

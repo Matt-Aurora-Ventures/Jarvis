@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useTradingData } from '@/context/TradingContext';
+import { useToast } from '@/components/ui/Toast';
 import {
     TrendingUp,
     TrendingDown,
@@ -12,7 +13,9 @@ import {
     ChevronUp,
     BarChart3,
     Brain,
-    Lightbulb
+    Lightbulb,
+    Download,
+    RotateCcw
 } from 'lucide-react';
 
 interface PerformanceMetrics {
@@ -47,10 +50,21 @@ interface TradeWithSentiment {
     txHash?: string;
 }
 
+const TIME_FILTERS = ['all', '24h', '7d', '30d'] as const;
+type TimeFilter = typeof TIME_FILTERS[number];
+
+const TIME_FILTER_LABELS: Record<TimeFilter, string> = {
+    all: 'All',
+    '24h': '24H',
+    '7d': '7D',
+    '30d': '30D',
+};
+
 export function PerformanceTracker() {
     const { state } = useTradingData();
+    const { success, info } = useToast();
     const [expanded, setExpanded] = useState(true);
-    const [timeFilter, setTimeFilter] = useState<'all' | '24h' | '7d' | '30d'>('all');
+    const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
 
     // Calculate performance metrics
     const metrics = useMemo<PerformanceMetrics>(() => {
@@ -193,175 +207,153 @@ export function PerformanceTracker() {
         return recs.length > 0 ? recs : ['Keep trading to build more performance data'];
     }, [metrics]);
 
+    // Export handler -- defined after metrics so it can reference them
+    const handleExport = useCallback(() => {
+        const csv = [
+            'Metric,Value',
+            `Win Rate,${metrics.winRate.toFixed(1)}%`,
+            `Total P&L,${metrics.totalPnL.toFixed(4)}`,
+            `Profit Factor,${metrics.profitFactor === Infinity ? 'Infinity' : metrics.profitFactor.toFixed(2)}`,
+            `Total Trades,${metrics.totalTrades}`,
+            `Wins,${metrics.winCount}`,
+            `Losses,${metrics.lossCount}`,
+            `Avg Win,${metrics.avgWin.toFixed(4)}`,
+            `Avg Loss,${metrics.avgLoss.toFixed(4)}`,
+            `Best Trade,${metrics.bestTrade ? `${metrics.bestTrade.symbol} (${metrics.bestTrade.pnlPercent.toFixed(1)}%)` : 'N/A'}`,
+            `Worst Trade,${metrics.worstTrade ? `${metrics.worstTrade.symbol} (${metrics.worstTrade.pnlPercent.toFixed(1)}%)` : 'N/A'}`,
+            `Time Filter,${timeFilter}`,
+        ].join('\n');
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `jarvis-performance-${timeFilter}-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        success('Performance data exported');
+    }, [metrics, timeFilter, success]);
+
+    const handleReset = useCallback(() => {
+        setTimeFilter('all');
+        info('Filters reset');
+    }, [info]);
+
     return (
-        <div className="card-glass p-4">
-            {/* Header */}
-            <button
-                onClick={() => setExpanded(!expanded)}
-                className="w-full flex items-center justify-between pb-3 border-b border-theme-border/30"
-            >
+        <div className="card-glass p-3">
+            {/* Header with expand/collapse toggle */}
+            <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-theme-cyan" />
-                    <span className="font-display font-bold">PERFORMANCE</span>
+                    <BarChart3 className="w-4 h-4 text-accent-neon" />
+                    <span className="text-xs font-mono uppercase tracking-wider text-text-muted">PERFORMANCE</span>
                 </div>
-                {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
+                <div className="flex items-center gap-1">
+                    {/* Export Button */}
+                    <button
+                        onClick={handleExport}
+                        className="p-1.5 rounded-lg hover:bg-bg-tertiary transition-all"
+                        title="Export performance data as CSV"
+                    >
+                        <Download className="w-3.5 h-3.5 text-text-muted hover:text-accent-neon transition-colors" />
+                    </button>
+                    {/* Reset Button */}
+                    <button
+                        onClick={handleReset}
+                        className="p-1.5 rounded-lg hover:bg-bg-tertiary transition-all"
+                        title="Reset filters"
+                    >
+                        <RotateCcw className="w-3.5 h-3.5 text-text-muted hover:text-accent-neon transition-colors" />
+                    </button>
+                    {/* Expand/Collapse */}
+                    <button
+                        onClick={() => setExpanded(!expanded)}
+                        className="p-1.5 rounded-lg hover:bg-bg-tertiary transition-all"
+                        title={expanded ? 'Collapse' : 'Expand'}
+                    >
+                        {expanded ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-text-muted" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-text-muted" />
+                        )}
+                    </button>
+                </div>
+            </div>
+
+            {/* Time Filter Tabs */}
+            <div className="flex items-center gap-1 mb-3">
+                {TIME_FILTERS.map((filter) => (
+                    <button
+                        key={filter}
+                        onClick={() => setTimeFilter(filter)}
+                        className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase transition-all ${
+                            timeFilter === filter
+                                ? 'bg-accent-neon/20 text-accent-neon border border-accent-neon/30'
+                                : 'bg-bg-tertiary/50 text-text-muted hover:text-text-primary hover:bg-bg-tertiary border border-transparent'
+                        }`}
+                    >
+                        {TIME_FILTER_LABELS[filter]}
+                    </button>
+                ))}
+            </div>
 
             {expanded && (
-                <div className="pt-4 space-y-4">
-                    {/* Time Filter */}
-                    <div className="flex gap-2">
-                        {(['all', '24h', '7d', '30d'] as const).map((filter) => (
-                            <button
-                                key={filter}
-                                onClick={() => setTimeFilter(filter)}
-                                className={`
-                                    px-3 py-1 text-xs font-mono rounded transition-all
-                                    ${timeFilter === filter
-                                        ? 'bg-theme-cyan text-black'
-                                        : 'bg-theme-dark/30 border border-theme-border/50 hover:border-theme-cyan'}
-                                `}
-                            >
-                                {filter.toUpperCase()}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Main Stats Grid */}
-                    <div className="grid grid-cols-2 gap-3">
+                <>
+                    {/* Compact 2x2 Grid */}
+                    <div className="grid grid-cols-2 gap-2">
                         {/* Win Rate */}
-                        <div className="bg-theme-dark/30 rounded-lg p-3">
-                            <div className="flex items-center gap-1 text-xs text-theme-muted mb-1">
-                                <Target className="w-3 h-3" />
-                                WIN RATE
-                            </div>
-                            <div className={`text-xl font-bold ${
-                                metrics.winRate >= 50 ? 'text-theme-green' : 'text-theme-red'
+                        <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                            <div className="text-[10px] text-text-muted font-mono uppercase">Win Rate</div>
+                            <div className={`text-sm font-mono font-bold ${
+                                metrics.winRate >= 50 ? 'text-accent-success' : 'text-accent-error'
                             }`}>
                                 {metrics.winRate.toFixed(1)}%
-                            </div>
-                            <div className="text-xs text-theme-muted">
-                                {metrics.winCount}W / {metrics.lossCount}L
                             </div>
                         </div>
 
                         {/* Total P&L */}
-                        <div className="bg-theme-dark/30 rounded-lg p-3">
-                            <div className="flex items-center gap-1 text-xs text-theme-muted mb-1">
-                                {metrics.totalPnL >= 0 ? (
-                                    <TrendingUp className="w-3 h-3 text-theme-green" />
-                                ) : (
-                                    <TrendingDown className="w-3 h-3 text-theme-red" />
-                                )}
-                                TOTAL P&L
-                            </div>
-                            <div className={`text-xl font-bold ${
-                                metrics.totalPnL >= 0 ? 'text-theme-green' : 'text-theme-red'
+                        <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                            <div className="text-[10px] text-text-muted font-mono uppercase">Total P&L</div>
+                            <div className={`text-sm font-mono font-bold ${
+                                metrics.totalPnL >= 0 ? 'text-accent-success' : 'text-accent-error'
                             }`}>
-                                {metrics.totalPnL >= 0 ? '+' : ''}{metrics.totalPnL.toFixed(4)} SOL
-                            </div>
-                            <div className="text-xs text-theme-muted">
-                                {metrics.totalTrades} trades
+                                {metrics.totalPnL >= 0 ? '+' : ''}{metrics.totalPnL.toFixed(4)}
                             </div>
                         </div>
 
                         {/* Profit Factor */}
-                        <div className="bg-theme-dark/30 rounded-lg p-3">
-                            <div className="flex items-center gap-1 text-xs text-theme-muted mb-1">
-                                <Activity className="w-3 h-3" />
-                                PROFIT FACTOR
-                            </div>
-                            <div className={`text-xl font-bold ${
-                                metrics.profitFactor >= 1 ? 'text-theme-green' : 'text-theme-red'
+                        <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                            <div className="text-[10px] text-text-muted font-mono uppercase">Profit Factor</div>
+                            <div className={`text-sm font-mono font-bold ${
+                                metrics.profitFactor >= 1 ? 'text-accent-success' : 'text-accent-error'
                             }`}>
                                 {metrics.profitFactor === Infinity ? '∞' : metrics.profitFactor.toFixed(2)}
                             </div>
-                            <div className="text-xs text-theme-muted">
-                                Avg Win: {metrics.avgWin.toFixed(4)}
-                            </div>
                         </div>
 
-                        {/* Best/Worst */}
-                        <div className="bg-theme-dark/30 rounded-lg p-3">
-                            <div className="flex items-center gap-1 text-xs text-theme-muted mb-1">
-                                <AlertTriangle className="w-3 h-3" />
-                                EXTREMES
-                            </div>
-                            {metrics.bestTrade ? (
-                                <div className="text-sm">
-                                    <span className="text-theme-green">
-                                        Best: +{metrics.bestTrade.pnlPercent.toFixed(1)}%
-                                    </span>
-                                    <span className="text-theme-muted"> ({metrics.bestTrade.symbol})</span>
-                                </div>
-                            ) : (
-                                <div className="text-sm text-theme-muted">No winning trades</div>
-                            )}
-                            {metrics.worstTrade ? (
-                                <div className="text-sm">
-                                    <span className="text-theme-red">
-                                        Worst: {metrics.worstTrade.pnlPercent.toFixed(1)}%
-                                    </span>
-                                    <span className="text-theme-muted"> ({metrics.worstTrade.symbol})</span>
-                                </div>
-                            ) : (
-                                <div className="text-sm text-theme-muted">No losing trades</div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Sentiment Correlation */}
-                    <div className="bg-theme-dark/30 rounded-lg p-3">
-                        <div className="flex items-center gap-2 mb-3">
-                            <Brain className="w-4 h-4 text-theme-cyan" />
-                            <span className="text-xs font-mono text-theme-muted">SENTIMENT CORRELATION</span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <div className="text-xs text-theme-muted mb-1">High Sentiment (60+)</div>
-                                <div className={`text-lg font-bold ${
-                                    metrics.sentimentCorrelation.highSentimentWinRate >= 50
-                                        ? 'text-theme-green' : 'text-theme-red'
-                                }`}>
-                                    {metrics.sentimentCorrelation.highSentimentWinRate.toFixed(1)}% win
-                                </div>
-                            </div>
-                            <div>
-                                <div className="text-xs text-theme-muted mb-1">Low Sentiment (&lt;60)</div>
-                                <div className={`text-lg font-bold ${
-                                    metrics.sentimentCorrelation.lowSentimentWinRate >= 50
-                                        ? 'text-theme-green' : 'text-theme-red'
-                                }`}>
-                                    {metrics.sentimentCorrelation.lowSentimentWinRate.toFixed(1)}% win
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="mt-3 pt-3 border-t border-theme-border/30">
-                            <div className="text-xs text-theme-muted">Optimal Sentiment Range</div>
-                            <div className="text-sm font-bold text-theme-cyan">
-                                {metrics.sentimentCorrelation.optimalSentimentRange.min} - {metrics.sentimentCorrelation.optimalSentimentRange.max}
+                        {/* Trades */}
+                        <div className="bg-bg-tertiary/50 rounded-lg p-2">
+                            <div className="text-[10px] text-text-muted font-mono uppercase">Trades</div>
+                            <div className="text-sm font-mono font-bold text-text-primary">
+                                {metrics.totalTrades}
                             </div>
                         </div>
                     </div>
 
-                    {/* AI Recommendations */}
-                    <div className="bg-gradient-to-r from-theme-cyan/10 to-accent-neon/10 rounded-lg p-3 border border-theme-cyan/30">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Lightbulb className="w-4 h-4 text-accent-neon" />
-                            <span className="text-xs font-mono text-accent-neon">AI RECOMMENDATIONS</span>
-                        </div>
-                        <ul className="space-y-1">
+                    {/* Recommendations (shown if there are trades) */}
+                    {recommendations.length > 0 && metrics.totalTrades > 0 && (
+                        <div className="mt-3 p-2 rounded-lg bg-accent-neon/5 border border-accent-neon/10">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                                <Lightbulb className="w-3 h-3 text-accent-neon" />
+                                <span className="text-[10px] font-mono text-accent-neon uppercase">AI Insight</span>
+                            </div>
                             {recommendations.map((rec, i) => (
-                                <li key={i} className="text-sm text-theme-muted flex items-start gap-2">
-                                    <span className="text-accent-neon">•</span>
+                                <p key={i} className="text-[11px] text-text-secondary leading-relaxed">
                                     {rec}
-                                </li>
+                                </p>
                             ))}
-                        </ul>
-                    </div>
-                </div>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );

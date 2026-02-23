@@ -61,6 +61,7 @@ config.local.json
 *.local.json
 *.local.yaml
 *.local.yml
+PAUSE_AUTOMATIONS
 
 # === RUNTIME DATA ===
 lifeos/logs/
@@ -117,6 +118,7 @@ conversation_*.json
 venv/
 venv311/
 .venv/
+.venv-*/
 env/
 .env/
 __pycache__/
@@ -190,8 +192,13 @@ tests/__pycache__/
 *.temp
 .tmp/
 .cache/
+.jarvis-cache/
 *.cache
 .jarvis-cache/
+
+# === LOCAL NOTES ===
+AUDIT_200_POINT_CHECKLIST.md
+thoughts/shared/handoffs/**/current.md
 
 # === LOCAL NOTES ===
 AUDIT_200_POINT_CHECKLIST.md
@@ -476,6 +483,56 @@ request.md
 docs/TREASURY_BOT_FIX_VERIFIED.md
 scripts/get_moltbook_claim.ps1
 
+# === WALLET RECOVERY / FORENSIC SCRIPTS (contain key material) ===
+jarvis-sniper/decrypt_wallet.py
+jarvis-sniper/decompress_wallet.py
+jarvis-sniper/recover_wallet.py
+jarvis-sniper/query_sqlite.py
+jarvis-sniper/deep_search_wallet.ps1
+jarvis-sniper/search_wallet.ps1
+jarvis-sniper/scripts/full-sweep-session.ts
+jarvis-sniper/scripts/sweep-session-wallet.ts
+
 # === ORPHAN DIRECTORIES (Unicode / path artifacts) ===
 C\357\200\272*/
 .planning/memory-integration/
+
+# === AI CODING ASSISTANTS ===
+.adal/
+.agents/
+.augment/
+.cline/
+.codebuddy/
+.commandcode/
+.continue/
+.crush/
+.factory/
+.goose/
+.iflow/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.vibe/
+# .windsurf/ - actively used, keep
+.zencoder/
+
+# === TEMP FILE PATTERNS ===
+.tmp_*
+.tmp-*/
+
+# === FIREBASE BUILD ARTIFACTS ===
+.firebase/
+
+# === PLANNING TEMP ===
+.planning/quick/

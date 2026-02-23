@@ -1,0 +1,37 @@
+{
+  "algo_id": "micro_cap_surge",
+  "total_trades": 94,
+  "wins": 54,
+  "losses": 40,
+  "win_rate": 57.4,
+  "avg_win_pct": 16.87,
+  "avg_loss_pct": -11.33,
+  "max_win_pct": 18.43,
+  "max_loss_pct": -11.33,
+  "avg_trade_duration_hours": 0.5,
+  "median_trade_duration_hours": 0.25,
+  "profit_factor": 2.01,
+  "expectancy_per_trade_pct": 4.87,
+  "total_return_pct": 457.48,
+  "sharpe_ratio": 5.38,
+  "max_drawdown_pct": -7.19,
+  "dual_trigger_bars": 2,
+  "expiry_exits_below_entry": 0,
+  "exit_distribution": {
+    "sl_hit": 40,
+    "tp_hit": 48,
+    "trail_stop": 0,
+    "expired": 2,
+    "end_of_data": 4
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-02",
+      "trades": 94,
+      "pnl_pct": 457.48,
+      "win_rate": 57.4
+    }
+  ],
+  "best_day": "2026-02-14",
+  "worst_day": "2026-02-15"
+}

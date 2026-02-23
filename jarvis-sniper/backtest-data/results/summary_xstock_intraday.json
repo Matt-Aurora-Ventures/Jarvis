@@ -1,0 +1,43 @@
+{
+  "algo_id": "xstock_intraday",
+  "total_trades": 40,
+  "wins": 10,
+  "losses": 30,
+  "win_rate": 25,
+  "avg_win_pct": 88.66,
+  "avg_loss_pct": -9.06,
+  "max_win_pct": 97.79,
+  "max_loss_pct": -9.35,
+  "avg_trade_duration_hours": 15.18,
+  "median_trade_duration_hours": 9,
+  "profit_factor": 3.26,
+  "expectancy_per_trade_pct": 15.37,
+  "total_return_pct": 614.82,
+  "sharpe_ratio": 5.48,
+  "max_drawdown_pct": -4.34,
+  "dual_trigger_bars": 5,
+  "expiry_exits_below_entry": 2,
+  "exit_distribution": {
+    "sl_hit": 28,
+    "tp_hit": 9,
+    "trail_stop": 0,
+    "expired": 3,
+    "end_of_data": 0
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-01",
+      "trades": 17,
+      "pnl_pct": 272.21,
+      "win_rate": 23.5
+    },
+    {
+      "month": "2026-02",
+      "trades": 23,
+      "pnl_pct": 342.6,
+      "win_rate": 26.1
+    }
+  ],
+  "best_day": "2026-02-14",
+  "worst_day": "2026-02-01"
+}

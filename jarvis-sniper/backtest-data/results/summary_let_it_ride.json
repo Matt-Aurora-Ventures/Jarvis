@@ -1,0 +1,37 @@
+{
+  "algo_id": "let_it_ride",
+  "total_trades": 56,
+  "wins": 25,
+  "losses": 31,
+  "win_rate": 44.6,
+  "avg_win_pct": 21.91,
+  "avg_loss_pct": -11.33,
+  "max_win_pct": 23.39,
+  "max_loss_pct": -11.33,
+  "avg_trade_duration_hours": 9.38,
+  "median_trade_duration_hours": 5,
+  "profit_factor": 1.56,
+  "expectancy_per_trade_pct": 3.51,
+  "total_return_pct": 196.49,
+  "sharpe_ratio": 3.3,
+  "max_drawdown_pct": -7.28,
+  "dual_trigger_bars": 0,
+  "expiry_exits_below_entry": 0,
+  "exit_distribution": {
+    "sl_hit": 31,
+    "tp_hit": 23,
+    "trail_stop": 0,
+    "expired": 1,
+    "end_of_data": 1
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-02",
+      "trades": 56,
+      "pnl_pct": 196.49,
+      "win_rate": 44.6
+    }
+  ],
+  "best_day": "2026-02-13",
+  "worst_day": "2026-02-10"
+}
