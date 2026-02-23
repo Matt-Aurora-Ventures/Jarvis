@@ -1,0 +1,14 @@
+[features]
+seeds = true
+skip-lint = false
+
+[programs.localnet]
+jarvis_mesh = "Jarv1sMesh111111111111111111111111111111111"
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "anchor test"
+

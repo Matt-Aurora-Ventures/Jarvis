@@ -28,6 +28,12 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 logger = logging.getLogger(__name__)
 
+try:
+    from services.compute.nosana_client import get_nosana_client
+except Exception:  # pragma: no cover - optional integration
+    def get_nosana_client():  # type: ignore[override]
+        return None
+
 T = TypeVar('T')
 
 
@@ -196,22 +202,30 @@ class ResilientProviderChain:
             use_for=["consensus"],
         ),
         ProviderConfig(
-            name="xai",
+            name="nosana",
             priority=4,
+            api_key_env="NOSANA_API_KEY",
+            is_free=False,
+            is_local=False,
+            use_for=["heavy_compute"],
+        ),
+        ProviderConfig(
+            name="xai",
+            priority=5,
             api_key_env="XAI_API_KEY",
             is_free=False,
             use_for=["sentiment"],  # Strictly reserved for sentiment
         ),
         ProviderConfig(
             name="groq",
-            priority=5,
+            priority=6,
             api_key_env="GROQ_API_KEY",
             is_free=True,  # Free tier
             use_for=["chat", "code"],
         ),
         ProviderConfig(
             name="openrouter",
-            priority=6,
+            priority=7,
             api_key_env="OPENROUTER_API_KEY",
             is_free=False,
             use_for=["chat", "code", "sentiment"],
@@ -337,6 +351,26 @@ class ResilientProviderChain:
         from core.consensus.arena import get_consensus
 
         return await get_consensus(query, panel=panel)
+
+    async def execute_nosana(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute heavy workloads on Nosana decentralized GPU marketplace.
+        """
+        if os.environ.get("JARVIS_USE_NOSANA", "1").strip().lower() not in ("1", "true", "yes", "on"):
+            return {
+                "provider": "nosana",
+                "status": "disabled",
+                "payload": payload,
+            }
+
+        client = get_nosana_client()
+        if client is None or not getattr(client, "is_configured", False):
+            return {
+                "provider": "nosana",
+                "status": "unconfigured",
+                "payload": payload,
+            }
+        return await client.run_heavy_workload(payload)
 
 
 # Global instance
