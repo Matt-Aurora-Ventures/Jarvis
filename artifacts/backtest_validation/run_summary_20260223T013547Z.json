@@ -1,0 +1,19 @@
+﻿{
+    "generated_at":  "2026-02-23T01:35:47.4083890Z",
+    "strict_mode":  true,
+    "overall_status":  "pass",
+    "commands":  [
+                     {
+                         "name":  "python_backtest_suite",
+                         "command":  "python -m pytest tests/backtesting/test_backtest.py -q",
+                         "exit_code":  0,
+                         "status":  "pass"
+                     },
+                     {
+                         "name":  "jarvis_sniper_backtest_suite",
+                         "command":  "npm --prefix jarvis-sniper run test -- src/__tests__/bags-backtest-api.test.ts src/__tests__/backtest-route-execution-realism.test.ts src/__tests__/backtest-campaign-orchestrator.test.ts",
+                         "exit_code":  0,
+                         "status":  "pass"
+                     }
+                 ]
+}

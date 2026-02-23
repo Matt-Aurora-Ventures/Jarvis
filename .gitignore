@@ -188,6 +188,11 @@ tests/__pycache__/
 .cache/
 .jarvis-cache/
 *.cache
+.jarvis-cache/
+
+# === LOCAL NOTES ===
+AUDIT_200_POINT_CHECKLIST.md
+thoughts/shared/handoffs/**/current.md
 
 # === LOCAL NOTES ===
 AUDIT_200_POINT_CHECKLIST.md
