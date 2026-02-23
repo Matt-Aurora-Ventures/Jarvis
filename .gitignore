@@ -288,6 +288,8 @@ temp_*.py
 temp_*.js
 temp_*.json
 temp_*.txt
+tmp_ps_test.txt
+test_results.txt
 
 # === CLAUDE CODE WORKING DIRECTORIES ===
 # Temporary directories created by Claude Code CLI sessions
