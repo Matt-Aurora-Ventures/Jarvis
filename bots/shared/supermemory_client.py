@@ -29,8 +29,10 @@ Environment Variables:
 """
 
 import asyncio
+import hashlib
 import logging
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -193,6 +195,58 @@ class SupermemoryClient:
             logger.warning(f"[{self.bot_name}] Failed to add memory: {e}")
             return False
 
+    async def add_with_container_tag(
+        self,
+        content: str,
+        container_tag: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        custom_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Add memory with an explicit container tag.
+
+        This is used by lifecycle hooks that need stable cross-bot namespaces
+        (for example research notebooks).
+        """
+        if not self.is_available:
+            logger.debug(f"[{self.bot_name}] Supermemory not available, skipping add_with_container_tag")
+            return False
+
+        client = self._get_async_client()
+        if not client:
+            return False
+
+        meta = metadata or {}
+        meta.setdefault("bot_name", self.bot_name)
+        meta.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+
+        kwargs: Dict[str, Any] = {
+            "content": content,
+            "container_tag": container_tag,
+            "metadata": meta,
+        }
+        if custom_id:
+            kwargs["customId"] = custom_id
+
+        try:
+            await client.memories.add(**kwargs)
+            return True
+        except TypeError:
+            # Some SDK versions do not support customId. Preserve dedupe signal
+            # in metadata and retry without the unsupported argument.
+            kwargs.pop("customId", None)
+            if custom_id:
+                meta.setdefault("custom_id", custom_id)
+            try:
+                await client.memories.add(**kwargs)
+                return True
+            except Exception as e:
+                logger.warning(f"[{self.bot_name}] add_with_container_tag retry failed: {e}")
+                return False
+        except Exception as e:
+            logger.warning(f"[{self.bot_name}] add_with_container_tag failed: {e}")
+            return False
+
     async def add_shared_learning(
         self,
         content: str,
@@ -337,6 +391,227 @@ class SupermemoryClient:
 
         return "\n".join(context_parts)
 
+    def _is_static_profile_entry(self, entry: MemoryEntry) -> bool:
+        """Heuristic split for long-lived user preferences."""
+        kind = str(entry.metadata.get("profile_kind", "")).lower()
+        if kind == "static":
+            return True
+        if entry.memory_type in (MemoryType.LONG_TERM, MemoryType.SHARED):
+            return True
+        text = entry.content.lower()
+        return any(token in text for token in ["always", "only", "prefer", "strictly"])
+
+    def _is_dynamic_profile_entry(self, entry: MemoryEntry) -> bool:
+        """Heuristic split for current session focus and recent state."""
+        kind = str(entry.metadata.get("profile_kind", "")).lower()
+        if kind == "dynamic":
+            return True
+        if entry.memory_type in (MemoryType.SHORT_TERM, MemoryType.MID_TERM):
+            return True
+        text = entry.content.lower()
+        return any(token in text for token in ["currently", "recent", "today", "now", "researching"])
+
+    def format_dual_profile_prompt(
+        self,
+        static_profile: List[str],
+        dynamic_profile: List[str],
+        context_memories: List[str],
+    ) -> str:
+        """
+        Build prompt block for preResponse injection.
+        """
+        lines: List[str] = ["## Supermemory Context"]
+
+        lines.append("## Static Profile")
+        if static_profile:
+            lines.extend(f"- {item}" for item in static_profile)
+        else:
+            lines.append("- (none)")
+
+        lines.append("## Dynamic Profile")
+        if dynamic_profile:
+            lines.extend(f"- {item}" for item in dynamic_profile)
+        else:
+            lines.append("- (none)")
+
+        if context_memories:
+            lines.append("## Relevant Memory")
+            lines.extend(f"- {item}" for item in context_memories)
+
+        return "\n".join(lines)
+
+    async def pre_recall(
+        self,
+        query: str,
+        *,
+        limit: int = 6,
+        max_profile_items: int = 4,
+    ) -> Dict[str, Any]:
+        """
+        Lifecycle hook: query memory before LLM execution.
+
+        Returns a dual-profile payload plus formatted prompt block for system
+        prompt injection.
+        """
+        memories = await self.search(query=query, include_shared=True, limit=limit)
+
+        static_profile: List[str] = []
+        dynamic_profile: List[str] = []
+        context_memories: List[str] = []
+
+        for entry in memories:
+            content = entry.content.strip()
+            if not content:
+                continue
+
+            if self._is_static_profile_entry(entry) and len(static_profile) < max_profile_items:
+                static_profile.append(content)
+            elif self._is_dynamic_profile_entry(entry) and len(dynamic_profile) < max_profile_items:
+                dynamic_profile.append(content)
+            else:
+                context_memories.append(content)
+
+        prompt_block = self.format_dual_profile_prompt(
+            static_profile=static_profile,
+            dynamic_profile=dynamic_profile,
+            context_memories=context_memories[:max_profile_items],
+        )
+
+        return {
+            "static_profile": static_profile,
+            "dynamic_profile": dynamic_profile,
+            "context_memories": context_memories,
+            "prompt_block": prompt_block,
+            "memory_count": len(memories),
+        }
+
+    def extract_candidate_facts(
+        self,
+        user_message: str,
+        assistant_response: str,
+        *,
+        max_facts: int = 5,
+    ) -> List[str]:
+        """
+        Lightweight fact extraction for postResponse capture.
+        """
+        text = f"{user_message}\n{assistant_response}".strip()
+        if not text:
+            return []
+
+        candidates = re.split(r"[.!?]\s+|\n+", text)
+        keep_tokens = [
+            "prefer",
+            "only",
+            "always",
+            "wallet",
+            "solana",
+            "risk",
+            "focus",
+            "currently",
+            "research",
+            "strategy",
+            "trade",
+        ]
+
+        facts: List[str] = []
+        seen = set()
+        for raw in candidates:
+            sentence = raw.strip(" -\t\r\n")
+            if len(sentence) < 20:
+                continue
+            lowered = sentence.lower()
+            if not any(token in lowered for token in keep_tokens):
+                continue
+            normalized = " ".join(sentence.split())
+            if normalized.lower() in seen:
+                continue
+            seen.add(normalized.lower())
+            facts.append(normalized)
+            if len(facts) >= max_facts:
+                break
+
+        return facts
+
+    async def post_response(
+        self,
+        *,
+        user_message: str,
+        assistant_response: str,
+        conversation_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """
+        Lifecycle hook: capture and persist facts after response generation.
+        """
+        if not self.is_available:
+            return False
+
+        meta = metadata or {}
+        conversation_fingerprint = hashlib.sha256(
+            f"{self.bot_name}:{user_message}:{assistant_response}".encode("utf-8")
+        ).hexdigest()
+        custom_id = f"conversation:{conversation_fingerprint[:32]}"
+
+        convo_text = (
+            f"user: {user_message.strip()}\n"
+            f"assistant: {assistant_response.strip()}"
+        )
+
+        saved_conversation = await self.add_with_container_tag(
+            content=convo_text,
+            container_tag=self.user_id_mid,
+            custom_id=custom_id,
+            metadata={
+                "hook": "postResponse",
+                "conversation_id": conversation_id or datetime.now(timezone.utc).isoformat(),
+                **meta,
+            },
+        )
+
+        facts = self.extract_candidate_facts(user_message, assistant_response)
+        fact_writes = []
+        for fact in facts:
+            fact_profile_kind = "dynamic"
+            lowered = fact.lower()
+            if any(token in lowered for token in ["prefer", "always", "only", "strictly"]):
+                fact_profile_kind = "static"
+            fact_writes.append(
+                self.add(
+                    fact,
+                    memory_type=MemoryType.LONG_TERM,
+                    metadata={
+                        "hook": "postResponse",
+                        "profile_kind": fact_profile_kind,
+                        "source": "fact_extraction",
+                        **meta,
+                    },
+                )
+            )
+
+        fact_results = await asyncio.gather(*fact_writes, return_exceptions=True)
+        facts_ok = any(r is True for r in fact_results) if fact_results else True
+        return saved_conversation or facts_ok
+
+    async def add_research_notebook(
+        self,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        custom_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Store autonomous research output in a stable shared container.
+        """
+        return await self.add_with_container_tag(
+            content=content,
+            container_tag="research_notebooks",
+            custom_id=custom_id,
+            metadata={
+                "source": "research_notebook",
+                **(metadata or {}),
+            },
+        )
+
     async def ingest_conversation(
         self,
         messages: List[Dict[str, str]],
@@ -360,7 +635,7 @@ class SupermemoryClient:
         # the conversation as a mid-term memory entry.
         try:
             convo_text = "\n".join(
-                f\"{m.get('role','').strip()}: {m.get('content','').strip()}\"
+                f"{m.get('role','').strip()}: {m.get('content','').strip()}"
                 for m in messages
                 if m.get("content")
             )

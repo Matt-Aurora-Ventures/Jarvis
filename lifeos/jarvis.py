@@ -37,6 +37,11 @@ from lifeos.plugins import PluginManager
 
 logger = logging.getLogger(__name__)
 
+try:
+    from bots.shared.supermemory_client import get_memory_client
+except Exception:  # pragma: no cover - optional dependency
+    get_memory_client = None  # type: ignore[assignment]
+
 
 class Jarvis:
     """
@@ -73,6 +78,7 @@ class Jarvis:
 
         # LLM service
         self._llm = None
+        self._supermemory_client = None
 
         # State
         self._started = False
@@ -210,6 +216,23 @@ class Jarvis:
         except Exception as e:
             logger.error(f"Failed to initialize LLM: {e}")
 
+    def _get_supermemory_client(self, persona: Optional[str] = None):
+        """
+        Lazily initialize the optional supermemory client.
+        """
+        if self._supermemory_client is not None:
+            return self._supermemory_client
+        if get_memory_client is None:
+            return None
+
+        try:
+            bot_name = (persona or self._config.get("persona.default", "jarvis") or "jarvis").lower()
+            self._supermemory_client = get_memory_client(bot_name=bot_name)
+            return self._supermemory_client
+        except Exception as e:
+            logger.debug(f"Supermemory client unavailable: {e}")
+            return None
+
     def _build_services(self) -> Dict[str, Any]:
         """Build services dictionary for dependency injection."""
         return {
@@ -260,6 +283,17 @@ class Jarvis:
             context_type = context.get("context_type") if context else None
             system_prompt = self._persona.get_system_prompt(context_type)
 
+        # preRecall hook: inject dual-profile memory context before LLM call.
+        memory_client = self._get_supermemory_client(persona=persona)
+        if memory_client is not None:
+            try:
+                pre_recall_payload = await memory_client.pre_recall(message)
+                prompt_block = pre_recall_payload.get("prompt_block", "")
+                if prompt_block:
+                    system_prompt = f"{system_prompt}\n\n{prompt_block}".strip()
+            except Exception as e:
+                logger.debug(f"Supermemory pre_recall skipped: {e}")
+
         # Build messages
         from lifeos.services.interfaces import LLMMessage, LLMConfig
 
@@ -288,6 +322,20 @@ class Jarvis:
                     "chat.response",
                     {"response": styled, "model": response.model},
                 )
+
+                # postResponse hook: async memory capture after response is ready.
+                if memory_client is not None:
+                    async def _post_response_capture():
+                        try:
+                            await memory_client.post_response(
+                                user_message=message,
+                                assistant_response=styled,
+                                metadata={"source": "lifeos.jarvis.chat"},
+                            )
+                        except Exception as hook_error:
+                            logger.debug(f"Supermemory post_response skipped: {hook_error}")
+
+                    asyncio.create_task(_post_response_capture())
 
                 return styled
 
