@@ -66,6 +66,7 @@ jobs:
           fi
 
       - name: Write backtest env (real-data only)
+        id: realdata
         working-directory: jarvis-sniper
         env:
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
@@ -96,9 +97,15 @@ jobs:
           GATE_SWEEP_TOP_K: ${{ vars.GATE_SWEEP_TOP_K || '8' }}
         run: |
           if [[ -z "$COINGECKO_API_KEY" || -z "$HELIUS_API_KEY" || -z "$BIRDEYE_API_KEY" ]]; then
+            if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
+              echo "skip_real_data=true" >> "$GITHUB_OUTPUT"
+              echo "Missing required real-data API keys (COINGECKO/HELIUS/BIRDEYE); skipping scheduled run."
+              exit 0
+            fi
             echo "Missing required real-data API keys (COINGECKO/HELIUS/BIRDEYE)." >&2
             exit 1
           fi
+          echo "skip_real_data=false" >> "$GITHUB_OUTPUT"
           cat > backtest-data/.env <<EOF
           COINGECKO_API_KEY=${COINGECKO_API_KEY}
           HELIUS_API_KEY=${HELIUS_API_KEY}
@@ -130,6 +137,7 @@ jobs:
 
       - name: Preflight tests
         id: preflight
+        if: ${{ steps.realdata.outputs.skip_real_data != 'true' }}
         continue-on-error: true
         working-directory: jarvis-sniper
         run: |
@@ -152,11 +160,13 @@ jobs:
           fi
 
       - name: Run tuning pipeline
+        if: ${{ steps.realdata.outputs.skip_real_data != 'true' }}
         working-directory: jarvis-sniper
         run: bash backtest-data/scripts/run_pipeline_ci.sh
 
       - name: Summarize strict gate
         id: gate
+        if: ${{ steps.realdata.outputs.skip_real_data != 'true' }}
         working-directory: jarvis-sniper
         env:
           PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
@@ -181,6 +191,7 @@ jobs:
           NODE
 
       - name: Auth Firebase
+        if: ${{ steps.realdata.outputs.skip_real_data != 'true' }}
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KR8TIV }}
         run: |
@@ -188,6 +199,7 @@ jobs:
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$HOME/.gcp/firebase-sa.json"
 
       - name: Firebase preview deploy
+        if: ${{ steps.realdata.outputs.skip_real_data != 'true' }}
         working-directory: jarvis-sniper
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.home }}/.gcp/firebase-sa.json
@@ -198,6 +210,7 @@ jobs:
             --non-interactive
 
       - name: Create pull request (artifacts + recommendations)
+        if: ${{ steps.realdata.outputs.skip_real_data != 'true' }}
         uses: peter-evans/create-pull-request@v7
         with:
           branch: automation/algo-loop/${{ github.run_id }}
