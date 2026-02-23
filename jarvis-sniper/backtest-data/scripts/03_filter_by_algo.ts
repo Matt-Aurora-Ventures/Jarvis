@@ -47,17 +47,11 @@ const ALGO_FILTERS: AlgoFilter[] = [
   { algo_id: 'let_it_ride',        category: 'memecoin', min_score: 70, min_liquidity_usd: 200000, min_momentum_1h: 0, min_vol_liq_ratio: 0.2 },
 
   // ESTABLISHED TOKEN STRATEGIES (5) — proven tokens with volume + liquidity
-  // Gate-sweep (minTrades=50): strong consistency boost when restricting to higher-liquidity leaders.
-  { algo_id: 'sol_veteran',            category: 'established', min_score: 55, min_liquidity_usd: 200000, min_age_hours: 4380 },
-  { algo_id: 'utility_swing',          category: 'established', min_score: 55, min_liquidity_usd: 200000, min_age_hours: 4380 },
-  // Gate-sweep: raise min_score to eliminate noisy breakouts.
-  // Gate-sweep (minTrades=10, 2026-02-16): this strategy only becomes 70%+ consistent
-  // when restricted to high-liquidity, high-activity leaders (trade count drops).
-  { algo_id: 'established_breakout',   category: 'established', min_score: 70, min_liquidity_usd: 200000, min_age_hours: 720, min_momentum_1h: 0, min_vol_liq_ratio: 0.8 },
-  { algo_id: 'meme_classic',           category: 'established', min_score: 50, min_liquidity_usd: 5000,   min_age_hours: 8760, min_vol_liq_ratio: 0.3 },
-  // Gate-sweep: much stricter volume/liquidity + score gates improved PF over large sample.
-  // Gate-sweep (minTrades=50): minLiq=$100k + minMom1h=5% improved consistency materially.
-  { algo_id: 'volume_spike',           category: 'established', min_score: 55, min_liquidity_usd: 100000, min_age_hours: 720, min_momentum_1h: 5, min_vol_liq_ratio: 0.8 },
+  { algo_id: 'sol_veteran',            category: 'established', min_score: 40, min_liquidity_usd: 50000,  min_age_hours: 4380 },
+  { algo_id: 'utility_swing',          category: 'established', min_score: 55, min_liquidity_usd: 10000,  min_age_hours: 4380 },
+  { algo_id: 'established_breakout',   category: 'established', min_score: 30, min_liquidity_usd: 10000,  min_age_hours: 720 },
+  { algo_id: 'meme_classic',           category: 'established', min_score: 40, min_liquidity_usd: 5000,   min_age_hours: 8760 },
+  { algo_id: 'volume_spike',           category: 'established', min_score: 40, min_liquidity_usd: 30000,  min_age_hours: 1440, min_vol_liq_ratio: 0.45 },
 
   // BAGS.FM STRATEGIES (8) — liquidity always 0 for bags (locked by design)
   { algo_id: 'bags_fresh_snipe',   category: 'bags', min_score: 30, max_age_hours: 72 },
@@ -81,7 +75,7 @@ const ALGO_FILTERS: AlgoFilter[] = [
 
   // xSTOCK STRATEGIES (3)
   { algo_id: 'xstock_intraday',      category: 'xstock', min_score: 30 },
-  { algo_id: 'xstock_swing',         category: 'xstock', min_score: 40 },
+  { algo_id: 'xstock_swing',         category: 'xstock', min_score: 45, min_liquidity_usd: 50000, min_age_hours: 168 },
   { algo_id: 'prestock_speculative', category: 'xstock', min_score: 25 },
 
   // INDEX STRATEGIES (2)

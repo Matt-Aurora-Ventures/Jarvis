@@ -1,194 +1,87 @@
-/**
- * Phase 5f: Volume Gate Sweep
- *
- * Purpose:
- * - Optimize metadata gates for `volume_spike` using already-simulated trades.
- * - Prefer robust configs (trades >= minTrades) that remain profitable.
- *
- * Inputs:
- * - results/results_volume_spike.json
- *
- * Outputs:
- * - results/gate_sweep_best.json
- * - results/gate_sweep_all.json
- *
- * Run:
- *   npx vite-node backtest-data/scripts/05f_volume_gate_sweep.ts
- */
+import { log, readJSON, writeJSON } from './shared/utils';
+import type { ScoredToken, TradeResult } from './shared/types';
 
-import { log, logError, readJSON, writeJSON } from './shared/utils';
-import type { TradeResult } from './shared/types';
-
-type Candidate = {
-  scoreMin: number;
-  liqMin: number;
-  momMin: number;
-  vlrMin: number;
+interface GateRes {
+  min_score: number;
+  min_liquidity_usd: number;
+  min_age_hours: number;
+  min_vol_liq_ratio: number;
   trades: number;
-  winRate: number;
-  profitFactor: number;
-  expectancyPct: number;
-  totalReturnPct: number;
-  minPosFrac: number;
-  avgPosFrac: number;
-  robust: boolean;
-  profitable: boolean;
-  ranking: number;
-};
-
-function envInt(name: string, fallback: number): number {
-  const raw = process.env[name];
-  const n = raw ? parseInt(raw, 10) : NaN;
-  return Number.isFinite(n) && n > 0 ? n : fallback;
+  min_pos_frac: number;
+  expectancy_pct: number;
+  profit_factor: number;
 }
 
-function computeProfitFactor(pnls: number[]): number {
-  let wins = 0;
-  let losses = 0;
-  for (const p of pnls) {
-    if (p > 0) wins += p;
-    else losses += -p;
+function minPosFrac(pnls: number[], window = 20): number {
+  if (pnls.length === 0) return 0;
+  if (pnls.length < window) return +(pnls.filter(v => v > 0).length / pnls.length).toFixed(3);
+  let min = 1;
+  for (let i = 0; i <= pnls.length - window; i++) {
+    const p = pnls.slice(i, i + window).filter(v => v > 0).length / window;
+    min = Math.min(min, p);
   }
-  if (losses <= 0) return wins > 0 ? 999 : 0;
-  return wins / losses;
+  return +min.toFixed(3);
 }
 
-function rollingPosFrac(pnls: number[], window: number): number | null {
-  if (pnls.length < window) return null;
-  let sum = 0;
-  for (let i = 0; i < window; i++) sum += pnls[i];
-  let positive = sum > 0 ? 1 : 0;
-  let total = 1;
-  for (let i = window; i < pnls.length; i++) {
-    sum += pnls[i] - pnls[i - window];
-    total++;
-    if (sum > 0) positive++;
-  }
-  return positive / total;
+function pf(pnls: number[]): number {
+  const w = pnls.filter(v => v > 0).reduce((s, v) => s + v, 0);
+  const l = Math.abs(pnls.filter(v => v <= 0).reduce((s, v) => s + v, 0));
+  if (l === 0) return w > 0 ? 999 : 0;
+  return +(w / l).toFixed(3);
 }
 
-function consistency(pnls: number[]): { minPosFrac: number; avgPosFrac: number } {
-  const windows = [10, 25, 50];
-  const vals: number[] = [];
-  for (const w of windows) {
-    const v = rollingPosFrac(pnls, w);
-    if (v !== null) vals.push(v);
-  }
-  if (vals.length === 0) return { minPosFrac: 0, avgPosFrac: 0 };
-  return {
-    minPosFrac: Math.min(...vals),
-    avgPosFrac: vals.reduce((s, n) => s + n, 0) / vals.length,
-  };
-}
-
-function buildCandidate(
-  allTrades: TradeResult[],
-  scoreMin: number,
-  liqMin: number,
-  momMin: number,
-  vlrMin: number,
-  minTrades: number,
-): Candidate {
-  const filtered = allTrades
-    .filter(t =>
-      t.score_at_entry >= scoreMin &&
-      t.liquidity_at_entry >= liqMin &&
-      t.momentum_1h_at_entry >= momMin &&
-      t.vol_liq_ratio_at_entry >= vlrMin,
-    )
-    .sort((a, b) => a.entry_timestamp - b.entry_timestamp);
-
-  const pnls = filtered.map(t => t.pnl_percent);
-  const trades = filtered.length;
-  const wins = pnls.filter(p => p > 0).length;
-  const winRate = trades > 0 ? (wins / trades) * 100 : 0;
-  const totalReturnPct = pnls.reduce((s, p) => s + p, 0);
-  const expectancyPct = trades > 0 ? totalReturnPct / trades : 0;
-  const profitFactor = computeProfitFactor(pnls);
-  const { minPosFrac, avgPosFrac } = consistency(pnls);
-  const robust = trades >= minTrades;
-  const profitable = expectancyPct > 0 && profitFactor > 1;
-
-  // Ranking:
-  // 1) robust candidates first
-  // 2) profitable first
-  // 3) maximize expectancy while preferring stable minPosFrac and sample size
-  const ranking =
-    (robust ? 10_000 : 0) +
-    (profitable ? 1_000 : 0) +
-    (expectancyPct * 100) +
-    ((profitFactor - 1) * 50) +
-    (minPosFrac * 25) +
-    Math.log2(trades + 1);
-
-  return {
-    scoreMin,
-    liqMin,
-    momMin,
-    vlrMin,
-    trades,
-    winRate: +winRate.toFixed(2),
-    profitFactor: +profitFactor.toFixed(3),
-    expectancyPct: +expectancyPct.toFixed(3),
-    totalReturnPct: +totalReturnPct.toFixed(2),
-    minPosFrac: +minPosFrac.toFixed(3),
-    avgPosFrac: +avgPosFrac.toFixed(3),
-    robust,
-    profitable,
-    ranking: +ranking.toFixed(3),
-  };
-}
-
-async function main(): Promise<void> {
-  log('═══════════════════════════════════════════════════════');
-  log('Phase 5f: Volume Gate Sweep');
-  log('═══════════════════════════════════════════════════════');
-
+function main(): void {
+  const tokens = readJSON<(ScoredToken & { age_hours?: number; vol_liq_ratio?: number })[]>('qualified/qualified_volume_spike.json') || [];
   const trades = readJSON<TradeResult[]>('results/results_volume_spike.json') || [];
-  if (trades.length === 0) {
-    logError('No volume_spike trades found. Run 05_simulate_trades.ts first.');
-    process.exit(1);
-  }
+  const tokenMap = new Map(tokens.map(t => [t.mint, t]));
 
-  const MIN_TRADES = envInt('GATE_SWEEP_MIN_TRADES', 50);
-  const scores = [35, 45, 50, 55, 60, 65];
-  const liqs = [20_000, 50_000, 75_000, 100_000, 150_000, 200_000];
-  const moms = [0, 2, 5, 8];
-  const vlrs = [0.2, 0.4, 0.6, 0.8, 1.0];
+  const scores = [35, 40, 45, 50];
+  const liqs = [20000, 30000, 40000, 50000];
+  const ages = [720, 1440, 2160];
+  const ratios = [0.3, 0.45, 0.6, 0.8];
 
-  const candidates: Candidate[] = [];
-  for (const scoreMin of scores) {
-    for (const liqMin of liqs) {
-      for (const momMin of moms) {
-        for (const vlrMin of vlrs) {
-          candidates.push(buildCandidate(trades, scoreMin, liqMin, momMin, vlrMin, MIN_TRADES));
+  const all: GateRes[] = [];
+
+  for (const minScore of scores) {
+    for (const minLiq of liqs) {
+      for (const minAge of ages) {
+        for (const minRatio of ratios) {
+          const allowed = new Set(tokens.filter(t => {
+            const age = t.age_hours ?? Infinity;
+            const ratio = t.vol_liq_ratio ?? (t.liquidity_usd > 0 ? t.volume_24h_usd / t.liquidity_usd : 0);
+            return t.score >= minScore && t.liquidity_usd >= minLiq && age >= minAge && ratio >= minRatio;
+          }).map(t => t.mint));
+
+          const filtered = trades.filter(tr => allowed.has(tr.mint));
+          const pnls = filtered.map(t => t.pnl_percent);
+          if (pnls.length < 20) continue;
+          all.push({
+            min_score: minScore,
+            min_liquidity_usd: minLiq,
+            min_age_hours: minAge,
+            min_vol_liq_ratio: minRatio,
+            trades: pnls.length,
+            min_pos_frac: minPosFrac(pnls),
+            expectancy_pct: +(pnls.reduce((s, v) => s + v, 0) / pnls.length).toFixed(3),
+            profit_factor: pf(pnls),
+          });
         }
       }
     }
   }
 
-  candidates.sort((a, b) => b.ranking - a.ranking);
-  const best = candidates[0];
-  const top = candidates.slice(0, 200);
-
-  writeJSON('results/gate_sweep_best.json', {
-    algo_id: 'volume_spike',
-    minTrades: MIN_TRADES,
-    generated_at: new Date().toISOString(),
-    best,
+  all.sort((a, b) => {
+    const ar = a.trades >= 50 ? 1 : 0;
+    const br = b.trades >= 50 ? 1 : 0;
+    if (br !== ar) return br - ar;
+    if (b.min_pos_frac !== a.min_pos_frac) return b.min_pos_frac - a.min_pos_frac;
+    if (b.expectancy_pct !== a.expectancy_pct) return b.expectancy_pct - a.expectancy_pct;
+    return b.profit_factor - a.profit_factor;
   });
-  writeJSON('results/gate_sweep_all.json', top);
 
-  log(`Candidates evaluated: ${candidates.length}`);
-  log(`Best gates: score>=${best.scoreMin}, liq>=${best.liqMin}, mom>=${best.momMin}, vlr>=${best.vlrMin}`);
-  log(`Best metrics: trades=${best.trades}, WR=${best.winRate}%, PF=${best.profitFactor}, exp=${best.expectancyPct}%, minPos=${best.minPosFrac}`);
-  log('\n✓ Phase 5f complete');
-  log('  → results/gate_sweep_best.json');
-  log('  → results/gate_sweep_all.json');
+  writeJSON('results/gate_sweep_best.json', all.slice(0, 5));
+  writeJSON('results/gate_sweep_all.json', all);
+  log(`Volume gate sweep complete. tested=${all.length}`);
 }
 
-main().catch(err => {
-  logError('Fatal error in volume gate sweep', err);
-  process.exit(1);
-});
-
+main();
