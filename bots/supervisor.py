@@ -747,18 +747,18 @@ async def create_telegram_bot():
         if sys.platform == "win32":
             # taskkill /FI doesn't support CMDLINE filter on Windows
             # Use PowerShell to find and kill processes with tg_bot in command line
-            kill_cmd = (
-                'powershell -Command "'
-                "Get-CimInstance Win32_Process -Filter \\\"Name='python.exe'\\\" | "
+            kill_cmd = [
+                "powershell", "-Command",
+                "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
                 "Where-Object { $_.CommandLine -like '*tg_bot/bot.py*' } | "
-                'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"'
-            )
-            os.system(kill_cmd)
+                "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+            ]
+            subprocess.run(kill_cmd, check=False, capture_output=True)
         else:
             # More specific pattern: only match tg_bot/bot.py (not just 'tg_bot')
             # Also exclude our own PID's children to avoid self-kill race
             logger.info("Cleaning up lingering telegram bot processes...")
-            os.system("pkill -f 'tg_bot/bot.py' 2>/dev/null || true")
+            subprocess.run(["pkill", "-f", "tg_bot/bot.py"], check=False, capture_output=True)
         await asyncio.sleep(3)  # Wait longer for process to fully terminate
     except Exception as e:
         logger.warning(f"Failed to clean up lingering processes: {e}")
@@ -893,15 +893,15 @@ async def create_treasury_bot():
     # Kill any lingering treasury bot processes from previous runs
     try:
         if sys.platform == "win32":
-            kill_cmd = (
-                'powershell -Command "'
-                "Get-CimInstance Win32_Process -Filter \\\"Name='python.exe'\\\" | "
+            kill_cmd = [
+                "powershell", "-Command",
+                "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
                 "Where-Object { $_.CommandLine -like '*run_treasury.py*' } | "
-                'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"'
-            )
-            os.system(kill_cmd)
+                "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+            ]
+            subprocess.run(kill_cmd, check=False, capture_output=True)
         else:
-            os.system("pkill -f 'python.*run_treasury.py' 2>/dev/null || true")
+            subprocess.run(["pkill", "-f", "python.*run_treasury.py"], check=False, capture_output=True)
         await asyncio.sleep(2)
     except Exception as e:
         logger.warning(f"Failed to clean up treasury bot processes: {e}")
@@ -1008,27 +1008,47 @@ async def create_ai_supervisor():
     try:
         from core.ai_runtime.integration import get_ai_runtime_manager
     except Exception as exc:
-        logger.warning(f"AI runtime unavailable: {exc}", exc_info=True)
-        # Run forever but idle to avoid restart churn
+        logger.warning(f"AI runtime unavailable (import failed): {exc}")
         while True:
             await asyncio.sleep(60)
 
+    manager = None
     try:
         manager = get_ai_runtime_manager()
         started = await manager.start()
         if not started:
             logger.info("AI runtime disabled or unavailable; supervisor idle")
-            # Keep running to prevent supervisor restart loop
             while True:
                 await asyncio.sleep(60)
-        else:
-            logger.info("AI runtime started successfully, entering idle loop")
-            # Keep the task alive while AI runtime runs
-            while True:
-                await asyncio.sleep(60)
+
+        logger.info("AI runtime started — supervisor heartbeat every 5min")
+        tick = 0
+        while True:
+            await asyncio.sleep(300)  # 5-minute heartbeat
+            tick += 1
+            try:
+                sup = getattr(manager, "_ai_supervisor", None)
+                status = sup.get_status() if sup else {}
+                logger.info(
+                    "AI supervisor heartbeat #%d — running=%s agents=%s insights=%s",
+                    tick,
+                    status.get("running", "?"),
+                    status.get("active_agents", "?"),
+                    status.get("insight_count", "?"),
+                )
+            except Exception:
+                pass
+
+    except asyncio.CancelledError:
+        logger.info("AI supervisor task cancelled — stopping manager")
+        if manager is not None:
+            try:
+                await manager.stop()
+            except Exception:
+                pass
+        raise
     except Exception as exc:
         logger.error(f"AI supervisor error: {exc}", exc_info=True)
-        # Don't crash - just idle
         while True:
             await asyncio.sleep(60)
 
@@ -1472,7 +1492,7 @@ async def main():
         logger.info("Shutdown manager: ENABLED")
     else:
         # Fallback to manual signal handling
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def signal_handler():
             logger.info("Received shutdown signal")

@@ -143,9 +143,9 @@ if __name__ == "__main__":
         try:
             # Run tests with aggressive timeout protection
             result = safe_subprocess.run_command_safe(
-                f"{sys.executable} {test_file}",
+                [sys.executable, str(test_file)],
                 timeout=30,
-                shell=True,
+                shell=False,
                 capture_output=True,
             )
             

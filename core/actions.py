@@ -67,8 +67,13 @@ def compose_email(to: str = "", subject: str = "", body: str = "") -> Tuple[bool
     """Open a new email composition window with pre-filled fields."""
     if not _ui_allowed("compose_email"):
         return _ui_blocked_msg("compose_email")
-    escaped_subject = subject.replace('"', '\\"')
-    escaped_body = body.replace('"', '\\"').replace(chr(10), '\\n')
+    # Proper AppleScript escaping: backslashes before quotes
+    def _as_escape(s: str) -> str:
+        return s.replace("\\", "\\\\").replace('"', '\\"')
+
+    escaped_subject = _as_escape(subject)
+    escaped_body = _as_escape(body).replace(chr(10), "\\n")
+    escaped_to = _as_escape(to)
     script = f'''
     tell application "Mail"
         activate
@@ -76,8 +81,8 @@ def compose_email(to: str = "", subject: str = "", body: str = "") -> Tuple[bool
         tell newMessage
             set subject to "{escaped_subject}"
             set content to "{escaped_body}"
-            if "{to}" is not "" then
-                make new to recipient at end of to recipients with properties {{address:"{to}"}}
+            if "{escaped_to}" is not "" then
+                make new to recipient at end of to recipients with properties {{address:"{escaped_to}"}}
             end if
         end tell
     end tell

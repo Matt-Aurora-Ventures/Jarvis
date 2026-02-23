@@ -1,0 +1,10 @@
+# Optional AI node dependency profile (Zone A)
+
+aiohttp==3.13.3
+anthropic==0.79.0
+langchain==1.2.10
+langchain-core==1.2.13
+langgraph==1.0.8
+openai==2.21.0
+supermemory==3.24.0
+xai-sdk==1.6.1

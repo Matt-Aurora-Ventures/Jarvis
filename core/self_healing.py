@@ -5,6 +5,7 @@ Automatically detects, diagnoses, and fixes failed actions using online research
 
 import json
 import re
+import shlex
 import subprocess
 import tempfile
 import time
@@ -255,10 +256,20 @@ Format as JSON array of objects."""
                 if original_context:
                     command = self._replace_placeholders(command, original_context)
                 
-                # Execute command
+                # Execute command — split into argv list to avoid shell injection
+                try:
+                    cmd_args = shlex.split(command)
+                except ValueError:
+                    attempt["error"] = f"Malformed command (shell parse failed): {command}"
+                    break
+                # Allowlist of safe command prefixes from LLM output
+                _SAFE_PREFIXES = ("pip", "python", "python3", "pip3", "git", "npm", "node")
+                if not cmd_args or cmd_args[0] not in _SAFE_PREFIXES:
+                    attempt["error"] = f"Command blocked (not in allowlist): {command}"
+                    break
                 result = subprocess.run(
-                    command,
-                    shell=True,
+                    cmd_args,
+                    shell=False,
                     capture_output=True,
                     text=True,
                     timeout=30

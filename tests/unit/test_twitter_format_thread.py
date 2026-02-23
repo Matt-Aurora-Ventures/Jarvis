@@ -627,11 +627,11 @@ class TestApiRequestResponse:
     def test_request_body_format(self):
         """Test API request body is formatted correctly."""
         body = {
-            'model': 'claude-sonnet-4-20250514',
+            'model': 'claude-sonnet-4-6',
             'max_tokens': 6000,
             'messages': [{'role': 'user', 'content': 'Test prompt'}],
         }
-        assert body['model'] == 'claude-sonnet-4-20250514'
+        assert body['model'] == 'claude-sonnet-4-6'
         assert body['max_tokens'] == 6000
         assert len(body['messages']) == 1
         assert body['messages'][0]['role'] == 'user'

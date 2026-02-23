@@ -537,7 +537,8 @@ class TWAPExecutor:
         order.vwap = total_vwap / total_volume if total_volume > 0 else 0
 
         # Calculate total slippage
-        order.total_slippage_bps = sum(s.slippage_bps for s in order.slices if s.executed) / len([s for s in order.slices if s.executed])
+        executed_slices = [s for s in order.slices if s.executed]
+        order.total_slippage_bps = sum(s.slippage_bps for s in executed_slices) / len(executed_slices) if executed_slices else 0.0
 
         self._save_order(order)
 

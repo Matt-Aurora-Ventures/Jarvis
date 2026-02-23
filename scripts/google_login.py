@@ -20,8 +20,9 @@ async def main():
         from browser_use.browser.context import BrowserContextConfig
     except ImportError:
         print("Installing browser-use...")
-        os.system(f'"{sys.executable}" -m pip install browser-use playwright')
-        os.system('playwright install chromium')
+        import subprocess
+        subprocess.run([sys.executable, "-m", "pip", "install", "browser-use", "playwright"], check=False)
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False)
         from browser_use import Browser, BrowserConfig
         from browser_use.browser.context import BrowserContextConfig
 
@@ -58,7 +59,7 @@ async def main():
     try:
         while True:
             await asyncio.sleep(1)
-    except:
+    except (KeyboardInterrupt, asyncio.CancelledError):
         pass
 
     await browser.close()

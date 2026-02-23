@@ -92,9 +92,9 @@ async def _handle_show_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
             sol_price = await jupiter.get_sol_price()
             if sol_price > 0:
                 usd_value = f" (${balance * sol_price:.2f})"
-        except:
+        except Exception:
             pass
-    
+
     await update.message.reply_text(
         "💰 *YOUR WALLET*\n"
         "━━━━━━━━━━━━━━━━━━━━━\n\n"

@@ -619,8 +619,8 @@ PROVIDER_RANKINGS = [
     {"name": "llama-3.1-8b-instant", "provider": "groq", "intelligence": 78, "free": True, "notes": "Groq 8B instant fallback"},
 
     # Rank 3: Grok (X.AI - for sentiment analysis when needed)
-    {"name": "grok-beta", "provider": "grok", "intelligence": 92, "free": False, "notes": "Grok - X.com sentiment analysis"},
-    {"name": "grok-2-latest", "provider": "grok", "intelligence": 95, "free": False, "notes": "Grok 2 - advanced reasoning"},
+    {"name": "grok-4-1-fast-non-reasoning", "provider": "grok", "intelligence": 93, "free": False, "notes": "Grok 4 fast - X.com sentiment analysis, 2M context"},
+    {"name": "grok-4-1-fast-reasoning", "provider": "grok", "intelligence": 96, "free": False, "notes": "Grok 4 fast reasoning - advanced analysis"},
 
     # Rank 4: Local Ollama (FALLBACK - always available offline)
     {"name": "llama3.1:8b", "provider": "ollama", "intelligence": 78, "free": True, "notes": "Local 8B - offline fallback"},

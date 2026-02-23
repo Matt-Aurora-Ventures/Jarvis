@@ -314,7 +314,8 @@ class Leaderboard:
         conn = self._get_conn()
         cursor = conn.cursor()
 
-        # Map ranking metric to column
+        # Map ranking metric to column — whitelist prevents SQL injection via ORDER BY
+        _SAFE_COLUMNS = {"total_pnl", "win_rate", "total_trades", "sharpe_ratio"}
         column_map = {
             "profit": "total_pnl",
             "win_rate": "win_rate",
@@ -322,6 +323,8 @@ class Leaderboard:
             "consistency": "sharpe_ratio",
         }
         order_column = column_map.get(by, "total_pnl")
+        # Belt-and-suspenders: assert only whitelisted identifiers reach the query
+        assert order_column in _SAFE_COLUMNS, f"Unexpected order column: {order_column}"
 
         if period == "overall":
             cursor.execute(f"""

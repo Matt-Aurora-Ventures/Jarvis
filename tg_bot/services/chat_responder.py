@@ -283,7 +283,7 @@ class ChatResponder:
     ) -> None:
         self.xai_api_key = xai_api_key or os.getenv("XAI_API_KEY", "")
         # NOTE: Anthropic API removed - CLI only (per user requirement)
-        self.model = model or os.getenv("TG_REPLY_MODEL", "grok-3")
+        self.model = model or os.getenv("TG_REPLY_MODEL", "grok-4-1-fast-non-reasoning")
         self._session: Optional[aiohttp.ClientSession] = None
         self._memory = None
         self._jarvis_admin = None

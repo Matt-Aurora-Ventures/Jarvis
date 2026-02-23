@@ -166,7 +166,7 @@ class TWAPExecutor:
         max_intervals = int(order.size_usd / self.min_chunk_usd)
         if max_intervals < 1:
             max_intervals = 1
-        intervals = min(intervals, max_intervals)
+        intervals = max(1, min(intervals, max_intervals))
 
         # Calculate chunk size
         chunk_size = order.size_usd / intervals
@@ -414,6 +414,8 @@ class VWAPExecutor:
         if order.size_usd <= 0:
             return ExecutionSchedule(order=order, algorithm="VWAP", chunks=[])
 
+        intervals = max(1, intervals)
+
         # Normalize volume pattern
         pattern = volume_pattern[:intervals] if len(volume_pattern) >= intervals else volume_pattern
         if not pattern:
@@ -482,6 +484,7 @@ class VWAPExecutor:
         Returns:
             ExecutionSchedule with volume-weighted chunks
         """
+        intervals = max(1, intervals)
         pattern = await self.fetch_volume_pattern(token_mint)
 
         if pattern is None:
@@ -813,6 +816,8 @@ class ExecutionEngine:
                 chunks_total=0,
                 error="Invalid order size: zero or negative",
             )
+
+        intervals = max(1, intervals)
 
         # Check pool liquidity
         warnings = []

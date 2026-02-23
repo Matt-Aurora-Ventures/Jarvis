@@ -90,6 +90,8 @@ class TradeOutcome:
     @property
     def return_pct(self) -> float:
         """Return percentage."""
+        if not self.entry_price:
+            return 0.0
         return (self.exit_price - self.entry_price) / self.entry_price * 100
 
 
@@ -199,8 +201,28 @@ class AdaptiveAlgorithm:
             if metrics_file.exists():
                 with open(metrics_file, 'r') as f:
                     data = json.load(f)
-                    # TODO: Deserialize metrics from JSON
-                logger.info("Loaded global metrics from disk")
+                loaded = 0
+                for algo_type in AlgorithmType:
+                    entry = data.get(algo_type.value)
+                    if not entry:
+                        continue
+                    metrics = self.global_metrics[algo_type]
+                    metrics.total_signals = int(entry.get("total_signals", 0))
+                    metrics.winning_signals = int(entry.get("winning_signals", 0))
+                    metrics.losing_signals = int(entry.get("losing_signals", 0))
+                    metrics.total_pnl = float(entry.get("total_pnl", 0.0))
+                    metrics.accuracy = float(entry.get("accuracy", 0.0))
+                    metrics.avg_win = float(entry.get("avg_win", 0.0))
+                    metrics.avg_loss = float(entry.get("avg_loss", 0.0))
+                    metrics.best_win = float(entry.get("best_win", 0.0))
+                    metrics.worst_loss = float(entry.get("worst_loss", 0.0))
+                    metrics.confidence_score = float(entry.get("confidence_score", 50.0))
+                    try:
+                        metrics.last_updated = datetime.fromisoformat(entry["last_updated"])
+                    except (KeyError, ValueError):
+                        pass
+                    loaded += 1
+                logger.info(f"Loaded global metrics from disk ({loaded} algorithm types)")
         except Exception as e:
             logger.error(f"Failed to load metrics: {e}")
 

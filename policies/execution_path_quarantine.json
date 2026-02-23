@@ -1,0 +1,17 @@
+{
+  "protected_globs": [
+    "core/jupiter_perps/**/*.py",
+    "scripts/ralph_wiggum_parallel_loop.py",
+    "scripts/start_ralph_wiggum_parallel_loop.ps1"
+  ],
+  "forbidden_terms": [
+    "openclaw",
+    "@solana/kit",
+    "@solana/web3.js",
+    "bun",
+    "ipc bridge",
+    "ipc_bridge",
+    "bun subprocess",
+    "typescript execution layer"
+  ]
+}

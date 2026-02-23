@@ -214,7 +214,10 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
         content_length = int(self.headers.get("Content-Length", 0))
         if content_length:
             body = self.rfile.read(content_length)
-            return json.loads(body.decode())
+            try:
+                return json.loads(body.decode())
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return {}
         return {}
 
     def do_OPTIONS(self):
@@ -1875,9 +1878,9 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
                     })
                     return
             except Exception as e:
-                logger.warning(f"BirdEye OHLCV failed: {e}")
-            
-            # Fallback to DexScreener for price history
+                print(f"[chart] BirdEye OHLCV failed: {e}")
+
+            # Fallback to DexScreener reference data only (non-promotable; no synthetic candles)
             try:
                 import urllib.request
                 url = f"https://api.dexscreener.com/latest/dex/tokens/{mint}"
@@ -1887,44 +1890,27 @@ class JarvisAPIHandler(BaseHTTPRequestHandler):
                     pairs = data.get("pairs", [])
                     if pairs:
                         pair = pairs[0]
-                        # DexScreener doesn't provide full OHLCV, generate synthetic
-                        current_price = float(pair.get("priceUsd", 0))
-                        price_change = float(pair.get("priceChange", {}).get("h24", 0))
-                        
-                        # Generate synthetic candles based on price change
-                        import time as time_module
-                        now = int(time_module.time())
-                        candles = []
-                        
-                        # Simple model: linear interpolation from 24h ago
-                        old_price = current_price / (1 + price_change / 100) if price_change != -100 else current_price
-                        
-                        for i in range(min(limit, 96)):  # Max 96 15-min candles (24h)
-                            t = now - (i * 900)  # 15 min intervals
-                            progress = i / 96
-                            price = old_price + (current_price - old_price) * (1 - progress)
-                            variance = price * 0.002  # 0.2% variance
-                            import random
-                            candles.append({
-                                "timestamp": t,
-                                "open": price + random.uniform(-variance, variance),
-                                "high": price + random.uniform(0, variance * 2),
-                                "low": price - random.uniform(0, variance * 2),
-                                "close": price + random.uniform(-variance, variance),
-                                "volume": 0
-                            })
-                        
-                        candles.reverse()
                         self._send_json({
                             "success": True,
                             "mint": mint,
                             "timeframe": timeframe,
-                            "candles": candles,
-                            "source": "dexscreener_synthetic"
+                            "candles": [],
+                            "source": "dexscreener_spot_only",
+                            "validationEligible": False,
+                            "promotable": False,
+                            "warning": "Synthetic chart generation disabled; no verifiable OHLCV available.",
+                            "reference": {
+                                "priceUsd": float(pair.get("priceUsd", 0) or 0),
+                                "priceChange24h": float(pair.get("priceChange", {}).get("h24", 0) or 0),
+                                "volume24h": float(pair.get("volume", {}).get("h24", 0) or 0),
+                                "liquidityUsd": float(pair.get("liquidity", {}).get("usd", 0) or 0),
+                                "pairAddress": pair.get("pairAddress"),
+                                "dexId": pair.get("dexId"),
+                            },
                         })
                         return
             except Exception as e:
-                logger.warning(f"DexScreener fallback failed: {e}")
+                print(f"[chart] DexScreener fallback failed: {e}")
             
             self._send_json({"success": False, "error": "No chart data available"})
         except Exception as e:

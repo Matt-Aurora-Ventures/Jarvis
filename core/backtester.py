@@ -317,8 +317,16 @@ class BacktestEngine:
                 else:
                     self._position.unrealized_pnl = (self._position.entry_price - candle.close) * self._position.quantity
 
-            # Record equity
-            equity = self._capital + self._position.unrealized_pnl
+            # Record equity using side-aware accounting.
+            # For longs, capital excludes deployed principal, so include full market value.
+            # For shorts, capital retains collateral under the current margin model; use
+            # unrealized PnL adjustment on top of capital.
+            if self._position.side == PositionSide.LONG:
+                equity = self._capital + (self._position.quantity * candle.close)
+            elif self._position.side == PositionSide.SHORT:
+                equity = self._capital + self._position.unrealized_pnl
+            else:
+                equity = self._capital
             self._equity_curve.append({
                 'timestamp': candle.timestamp,
                 'equity': equity,
@@ -430,7 +438,8 @@ class BacktestEngine:
         else:
             pnl = (self._position.entry_price - price) * self._position.quantity
 
-        self._capital += value - fee + pnl
+        # Sale/purchase proceeds already embed realized PnL via execution price.
+        self._capital += value - fee
 
         side = OrderSide.SELL if self._position.side == PositionSide.LONG else OrderSide.BUY
         self._record_trade(side, price, self._position.quantity, fee, pnl, reason)
@@ -540,7 +549,12 @@ class BacktestEngine:
 
     def ema(self, period: int = 20) -> float:
         """Exponential Moving Average."""
-        closes = [self.close(i) for i in range(period * 2)][::-1]
+        candles = self._data.get(self._config.symbol.upper(), [])
+        if not candles or self._current_idx < 0:
+            return 0
+
+        start_idx = max(0, self._current_idx - (period * 2) + 1)
+        closes = [c.close for c in candles[start_idx:self._current_idx + 1]]
         if len(closes) < period:
             return 0
 
@@ -554,7 +568,12 @@ class BacktestEngine:
 
     def rsi(self, period: int = 14) -> float:
         """Relative Strength Index."""
-        closes = [self.close(i) for i in range(period + 1)][::-1]
+        candles = self._data.get(self._config.symbol.upper(), [])
+        if not candles or self._current_idx < 0:
+            return 50
+
+        start_idx = max(0, self._current_idx - period)
+        closes = [c.close for c in candles[start_idx:self._current_idx + 1]]
         if len(closes) < period + 1:
             return 50
 

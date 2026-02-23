@@ -122,7 +122,7 @@ class ConversationSummarizer:
         r"(?:yes|no|okay|sure),?\s+(?:I'll|let's|we'll)\s+(.+)",
     ]
 
-    def __init__(self, llm_client: Optional[Any] = None, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, llm_client: Optional[Any] = None, model: str = "claude-sonnet-4-6"):
         self.llm_client = llm_client
         self.model = model
         self._summaries_cache: Dict[str, ConversationSummary] = {}

@@ -30,8 +30,8 @@ import functools
 import hashlib
 import json
 import logging
-import pickle
 import sqlite3
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -149,10 +149,9 @@ class MemoryCache:
     ) -> CacheEntry:
         """Set entry in cache."""
         with self._lock:
-            # Calculate size
+            # Calculate size (use sys.getsizeof — no unsafe deserialization)
             try:
-                serialized = pickle.dumps(value)
-                size_bytes = len(serialized)
+                size_bytes = sys.getsizeof(value)
             except Exception:
                 size_bytes = 0
 
@@ -305,7 +304,12 @@ class FileCache:
                     return None
 
                 try:
-                    return pickle.loads(row["value"])
+                    raw = row["value"]
+                    # Support both bytes (legacy pickle) and text (json)
+                    if isinstance(raw, (bytes, bytearray)):
+                        # Legacy entry — discard, not deserializing untrusted pickle
+                        return None
+                    return json.loads(raw)
                 except Exception:
                     return None
 
@@ -320,7 +324,11 @@ class FileCache:
         """Set value in file cache."""
         with self._lock:
             try:
-                serialized = pickle.dumps(value)
+                try:
+                    serialized = json.dumps(value)
+                except (TypeError, ValueError):
+                    # Non-JSON-serializable value — skip file cache, not in memory only
+                    return False
                 now = time.time()
                 tags_str = ",".join(tags) if tags else ""
 

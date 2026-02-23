@@ -50,7 +50,7 @@ const DEFAULT_PROVIDERS: AIProviderConfig[] = [
     {
         name: 'grok',
         endpoint: 'https://api.x.ai/v1/chat/completions',
-        model: 'grok-beta',
+        model: 'grok-4-1-fast-non-reasoning',
         priority: 3,
         costPerToken: 0.0001,
         isLocal: false,

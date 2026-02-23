@@ -134,7 +134,10 @@ class ContentGenerator:
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get("data"):
-                        metrics.fear_greed_index = int(data["data"][0].get("value", 50))
+                        try:
+                            metrics.fear_greed_index = int(data["data"][0].get("value", 50))
+                        except (ValueError, TypeError, IndexError):
+                            pass  # Keep default if API response is malformed
 
             # Get trending tokens from DexScreener (multi-chain)
             SUPPORTED_CHAINS = ["solana", "ethereum", "base", "bsc", "arbitrum"]

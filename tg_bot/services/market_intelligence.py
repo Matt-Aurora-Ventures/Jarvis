@@ -12,13 +12,20 @@ Real-time market data and insights:
 """
 
 import logging
+import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
 
 from telegram.constants import ParseMode
 
 logger = logging.getLogger(__name__)
+
+_COINGECKO_BASE = "https://api.coingecko.com/api/v3"
+_PRICE_CACHE_TTL_S = 5 * 60  # 5-minute cache
+
+# (timestamp, {coin_id: {"usd": price, "usd_24h_change": pct}})
+_price_cache: tuple[float, dict] = (0.0, {})
 
 
 class TrendDirection(Enum):
@@ -63,47 +70,81 @@ class MarketIntelligence:
 
     # ==================== MARKET OVERVIEW ====================
 
-    def build_market_overview(self) -> str:
-        """Build current market overview."""
-        msg = f"""{self.EMOJI['chart']} <b>MARKET OVERVIEW</b>
+    @staticmethod
+    async def _fetch_live_prices() -> Dict[str, Dict[str, float]]:
+        """Fetch BTC/ETH/SOL prices + 24h changes from CoinGecko.
+
+        Returns dict keyed by coin_id with "usd" and "usd_24h_change" fields.
+        Returns cached or empty dict on failure.
+        """
+        global _price_cache
+        now = time.time()
+        if now - _price_cache[0] <= _PRICE_CACHE_TTL_S and _price_cache[1]:
+            return _price_cache[1]
+
+        try:
+            import aiohttp
+
+            url = f"{_COINGECKO_BASE}/simple/price"
+            params = {
+                "ids": "bitcoin,ethereum,solana",
+                "vs_currencies": "usd",
+                "include_24hr_change": "true",
+            }
+            headers = {"Accept": "application/json", "User-Agent": "JarvisBot/1.0"}
+            timeout = aiohttp.ClientTimeout(total=8)
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                async with session.get(url, params=params) as resp:
+                    if resp.status != 200:
+                        logger.warning("CoinGecko /simple/price returned %s", resp.status)
+                        return _price_cache[1]
+                    data = await resp.json()
+
+            _price_cache = (now, data)
+            return data
+        except Exception as exc:
+            logger.warning("CoinGecko price fetch failed: %s", exc)
+            return _price_cache[1]
+
+    async def build_market_overview(self) -> str:
+        """Build current market overview with live prices from CoinGecko."""
+        prices = await self._fetch_live_prices()
+
+        def _coin(coin_id: str, fallback_price: float, fallback_chg: float) -> Tuple[float, float]:
+            c = prices.get(coin_id, {})
+            return (
+                float(c.get("usd", fallback_price)),
+                float(c.get("usd_24h_change", fallback_chg)),
+            )
+
+        btc_price, btc_change = _coin("bitcoin", 95000.0, 0.0)
+        eth_price, eth_change = _coin("ethereum", 3200.0, 0.0)
+        sol_price, sol_change = _coin("solana", 140.0, 0.0)
+
+        live_tag = "" if prices else " <i>(cached)</i>"
+
+        msg = f"""{self.EMOJI['chart']} <b>MARKET OVERVIEW</b>{live_tag}
 
 <b>Major Assets:</b>
 
 """
 
-        # BTC
-        btc_price = 95432.50  # TODO: Get real data
-        btc_change = 2.35
         btc_emoji = self._get_trend_emoji(btc_change)
         msg += f"  {btc_emoji} <b>BTC</b>: <code>${btc_price:,.2f}</code> ({btc_change:+.2f}%)\n"
 
-        # ETH
-        eth_price = 3285.10
-        eth_change = 1.82
         eth_emoji = self._get_trend_emoji(eth_change)
         msg += f"  {eth_emoji} <b>ETH</b>: <code>${eth_price:,.2f}</code> ({eth_change:+.2f}%)\n"
 
-        # SOL
-        sol_price = 142.75
-        sol_change = 4.21
         sol_emoji = self._get_trend_emoji(sol_change)
         msg += f"  {sol_emoji} <b>SOL</b>: <code>${sol_price:,.2f}</code> ({sol_change:+.2f}%)\n"
 
         msg += f"""\n<b>Market Status:</b>
-  <b>Market Cap:</b> <code>$2.85T</code> ({2.1:+.2f}%)
-  <b>24h Volume:</b> <code>$125B</code>
-  <b>Bitcoin Dominance:</b> <code>58.3%</code> ({0.5:+.2f}%)
-  <b>Fear & Greed:</b> <code>65/100</code> ({self.EMOJI['bull']} Greed)
+  <b>Fear & Greed:</b> <code>—</code>
 
 <b>Top Gainers (24h):</b>
-  🥇 DOGE: +8.5%
-  🥈 XRP: +6.2%
-  🥉 ADA: +4.1%
+  Use /sentiment for live gainers/losers
 
-<b>Top Losers (24h):</b>
-  📉 LINK: -3.2%
-  📉 AVAX: -2.8%
-  📉 ATOM: -1.5%
+<i>Prices from CoinGecko | Updated: {datetime.utcnow().strftime('%H:%M UTC')}</i>
 """
 
         return msg

@@ -22,6 +22,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.security_validation import ValidationError, sanitize_sql_identifier
+
 
 @dataclass
 class ConnectionPoolStats:
@@ -245,12 +247,15 @@ class DatabaseService:
     ) -> tuple[bool, str]:
         """Verify data integrity."""
         try:
-            result = await self.execute_query(f"SELECT COUNT(*) FROM {table}")
+            safe_table = sanitize_sql_identifier(table)
+            result = await self.execute_query(f"SELECT COUNT(*) FROM {safe_table}")
             actual_count = result[0].get("id", 0) if result else 0
 
             if actual_count != expected_count:
                 return False, f"Count mismatch: expected {expected_count}, got {actual_count}"
             return True, "Data integrity verified"
+        except ValidationError as exc:
+            return False, f"Invalid table name: {exc}"
         except Exception as e:
             return False, f"Integrity check failed: {e}"
 
@@ -366,13 +371,14 @@ class TestSlowQueries:
 
         Expected: Slow queries are tracked and counted.
         """
-        db_service.slow_query_threshold_ms = 100  # Lower for testing
+        # Keep a wide buffer so scheduler jitter does not classify fast queries as slow.
+        db_service.slow_query_threshold_ms = 250
 
         # Execute some fast and slow queries
-        await db_service.execute_query("SELECT 1", latency_ms=50)   # Fast
-        await db_service.execute_query("SELECT 2", latency_ms=50)   # Fast
-        await db_service.execute_query("SELECT 3", latency_ms=150)  # Slow
-        await db_service.execute_query("SELECT 4", latency_ms=200)  # Slow
+        await db_service.execute_query("SELECT 1", latency_ms=10)   # Fast
+        await db_service.execute_query("SELECT 2", latency_ms=20)   # Fast
+        await db_service.execute_query("SELECT 3", latency_ms=350)  # Slow
+        await db_service.execute_query("SELECT 4", latency_ms=450)  # Slow
 
         print(f"\n[Slow Query Detection]")
         print(f"  Slow queries detected: {db_service.slow_query_count}")
@@ -521,6 +527,20 @@ class TestDataCorruptionRecovery:
 
         assert not valid
         assert "Count mismatch" in message
+
+    @pytest.mark.asyncio
+    async def test_data_integrity_rejects_invalid_table_name(
+        self,
+        db_service: DatabaseService,
+    ):
+        """Invalid table names should be rejected deterministically."""
+        valid, message = await db_service.verify_data_integrity(
+            "users; DROP TABLE users; --",
+            1,
+        )
+
+        assert not valid
+        assert "Invalid table name" in message
 
 
 class TestConnectionPoolStats:

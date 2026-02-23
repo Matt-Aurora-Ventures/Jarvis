@@ -151,7 +151,10 @@ async def handle_learning(
 
     elif data.startswith("demo:history_page:"):
         parts = data.split(":")
-        page = int(parts[2]) if len(parts) >= 3 else 0
+        try:
+            page = int(parts[2]) if len(parts) >= 3 else 0
+        except (ValueError, TypeError):
+            page = 0
 
         intelligence = ctx.get_trade_intelligence()
         if intelligence:

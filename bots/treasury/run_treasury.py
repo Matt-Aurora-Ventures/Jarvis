@@ -134,7 +134,7 @@ class TreasuryBot:
         # Parse admin IDs
         admin_ids = []
         if admin_ids_str:
-            admin_ids = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip()]
+            admin_ids = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip() and x.strip().lstrip('-').isdigit()]
 
         logger.info(f"Initializing Treasury Bot with {len(admin_ids)} admins")
 

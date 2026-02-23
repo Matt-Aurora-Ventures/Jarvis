@@ -124,7 +124,7 @@ class ProviderHealthMonitor:
         await self._attempt_recovery(report)
 
         # Log detailed metrics every 10 checks (10 minutes)
-        if int(asyncio.get_event_loop().time()) % 600 < self.check_interval:
+        if int(asyncio.get_running_loop().time()) % 600 < self.check_interval:
             await self._log_detailed_metrics(report)
 
     async def _attempt_recovery(self, report: dict):
@@ -168,9 +168,33 @@ class ProviderHealthMonitor:
 
         logger.error(alert_message)
 
-        # TODO: Send Telegram notification to admin
-        # This would require telegram bot integration
-        # For now, just log the alert
+        # Send Telegram notification to admin (non-blocking, best-effort)
+        try:
+            import os
+            import urllib.request
+            import urllib.parse
+            bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+            admin_ids_raw = os.getenv("TELEGRAM_ADMIN_IDS", "")
+            if bot_token and admin_ids_raw:
+                for chat_id in admin_ids_raw.split(","):
+                    chat_id = chat_id.strip()
+                    if not chat_id:
+                        continue
+                    try:
+                        params = urllib.parse.urlencode({
+                            "chat_id": chat_id,
+                            "text": alert_message[:4096],
+                        }).encode("utf-8")
+                        req = urllib.request.Request(
+                            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                            data=params,
+                            method="POST",
+                        )
+                        urllib.request.urlopen(req, timeout=5)
+                    except Exception:
+                        pass  # Notification is best-effort; failures must not crash monitor
+        except Exception:
+            pass
 
     async def _log_detailed_metrics(self, report: dict):
         """Log detailed health metrics."""

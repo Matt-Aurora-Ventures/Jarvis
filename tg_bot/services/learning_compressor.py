@@ -229,7 +229,7 @@ Focus on:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-2-1212",
+                    "model": "grok-4-1-fast-non-reasoning",
                     "messages": [
                         {"role": "system", "content": "You are a trading coach AI that generates concise, actionable insights."},
                         {"role": "user", "content": prompt},

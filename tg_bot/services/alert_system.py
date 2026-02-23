@@ -275,8 +275,15 @@ class AlertSystem:
             total_value = sum(p.current_value_usd for p in positions) if positions else 0
             total_pnl = sum(p.unrealized_pnl_usd for p in positions) if positions else 0
 
-            # TODO: Calculate max drawdown
-            max_drawdown = 15.0
+            # Compute max drawdown from open positions (worst losing position %)
+            if not positions:
+                return
+            drawdowns = [
+                abs(p.unrealized_pnl_pct)
+                for p in positions
+                if hasattr(p, "unrealized_pnl_pct") and (p.unrealized_pnl_pct or 0) < 0
+            ]
+            max_drawdown = max(drawdowns) if drawdowns else 0.0
 
             if max_drawdown >= self.risk_threshold_pct:
                 alert = Alert(
@@ -299,10 +306,18 @@ class AlertSystem:
             logger.error(f"Risk alert check failed: {e}")
 
     async def check_volatility_alerts(self, context: ContextTypes.DEFAULT_TYPE):
-        """Monitor for high market volatility."""
+        """Monitor for high market volatility based on BTC 24h price change."""
         try:
-            # TODO: Calculate market volatility
-            market_volatility = 45.0
+            # Attempt to get BTC 24h change as a volatility proxy
+            try:
+                from tg_bot.services.market_intelligence import _price_cache
+                btc_data = _price_cache[1].get("bitcoin", {}) if _price_cache[1] else {}
+                btc_24h = abs(btc_data.get("usd_24h_change", 0) or 0)
+                # Map 24h abs% change to a 0-100 volatility scale
+                # >10% abs move → ~80 vol; <3% abs move → ~25 vol
+                market_volatility = min(100.0, btc_24h * 7.0)
+            except Exception:
+                return  # No live data — skip alert rather than spam
 
             if market_volatility > 40:
                 alert = Alert(

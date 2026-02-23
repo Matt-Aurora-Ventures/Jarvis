@@ -206,6 +206,51 @@ class TestBacktestEngine:
         # Volatile data should have measurable drawdown
         assert result.metrics.max_drawdown >= 0
 
+    def test_flat_price_long_hold_has_near_zero_drawdown(self):
+        """Flat-price long hold should not collapse equity curve."""
+        from core.backtesting.backtest_engine import AdvancedBacktestEngine, BacktestConfig
+
+        candles = [
+            {
+                "timestamp": "2024-01-01T00:00:00Z",
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.0,
+                "volume": 1000.0,
+            },
+            {
+                "timestamp": "2024-01-01T01:00:00Z",
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.0,
+                "volume": 1000.0,
+            },
+        ]
+
+        engine = AdvancedBacktestEngine()
+        engine.load_data("SOL", candles)
+
+        def flat_hold(engine, candle):
+            if engine._current_idx == 0 and engine.is_flat():
+                engine.buy(1.0, "enter")
+            elif engine._current_idx == 1 and engine.is_long():
+                engine.close_position("exit")
+
+        config = BacktestConfig(
+            symbol="SOL",
+            start_date="2024-01-01",
+            end_date="2024-01-02",
+            initial_capital=10000,
+            fee_rate=0.0,
+            slippage_bps=0.0,
+        )
+
+        result = engine.run(flat_hold, config)
+        assert result.final_capital == pytest.approx(10000.0, abs=1e-6)
+        assert result.metrics.max_drawdown == pytest.approx(0.0, abs=1e-6)
+
     def test_profit_factor_calculation(self, sample_price_data):
         """Test profit factor calculation."""
         from core.backtesting.backtest_engine import AdvancedBacktestEngine, BacktestConfig
@@ -1013,3 +1058,89 @@ class TestEdgeCases:
                 n_splits=5,
                 initial_capital=10000
             )
+
+
+class TestEngineParity:
+    """Parity checks between legacy and advanced Python backtest engines."""
+
+    def test_legacy_and_advanced_engine_capital_parity(self, tmp_path):
+        """Equivalent configurations should produce equivalent accounting outputs."""
+        from core.backtester import (
+            BacktestConfig as LegacyConfig,
+            BacktestEngine as LegacyBacktestEngine,
+            OHLCV as LegacyOHLCV,
+        )
+        from core.backtesting.backtest_engine import (
+            AdvancedBacktestEngine,
+            BacktestConfig as AdvancedConfig,
+        )
+
+        candles_dict = [
+            {
+                "timestamp": "2024-01-01T00:00:00+00:00",
+                "open": 100.0,
+                "high": 100.0,
+                "low": 100.0,
+                "close": 100.0,
+                "volume": 1000.0,
+            },
+            {
+                "timestamp": "2024-01-02T00:00:00+00:00",
+                "open": 100.0,
+                "high": 100.0,
+                "low": 100.0,
+                "close": 100.0,
+                "volume": 1000.0,
+            },
+            {
+                "timestamp": "2024-01-03T00:00:00+00:00",
+                "open": 110.0,
+                "high": 110.0,
+                "low": 110.0,
+                "close": 110.0,
+                "volume": 1000.0,
+            },
+        ]
+
+        legacy = LegacyBacktestEngine(db_path=tmp_path / "legacy_backtest.db")
+        legacy.load_data("SOL", [LegacyOHLCV(**row) for row in candles_dict])
+        legacy_config = LegacyConfig(
+            symbol="SOL",
+            start_date="2024-01-01",
+            end_date="2024-01-03",
+            initial_capital=10000.0,
+            fee_rate=0.0,
+            slippage_bps=0.0,
+            max_position_size=1.0,
+            allow_short=False,
+        )
+
+        advanced = AdvancedBacktestEngine(results_dir=tmp_path / "advanced_results")
+        advanced.load_data("SOL", candles_dict)
+        advanced_config = AdvancedConfig(
+            symbol="SOL",
+            start_date="2024-01-01",
+            end_date="2024-01-03",
+            initial_capital=10000.0,
+            fee_rate=0.0,
+            slippage_bps=0.0,
+            max_position_size=1.0,
+            allow_short=False,
+        )
+
+        def open_then_close(engine, candle):
+            if engine._current_idx == 0 and engine.is_flat():
+                engine.buy(1.0, "enter")
+            elif engine._current_idx == 2 and engine.is_long():
+                engine.close_position("exit")
+
+        legacy_result = legacy.run(open_then_close, legacy_config, strategy_name="parity_check")
+        advanced_result = advanced.run(open_then_close, advanced_config, strategy_name="parity_check")
+
+        legacy_pnl = sum(trade.pnl for trade in legacy_result.trades)
+        advanced_pnl = sum(trade.pnl for trade in advanced_result.trades)
+
+        assert legacy_result.final_capital == pytest.approx(advanced_result.final_capital, rel=1e-9)
+        assert legacy_result.total_fees == pytest.approx(advanced_result.total_fees, rel=1e-9)
+        assert legacy_pnl == pytest.approx(advanced_pnl, rel=1e-9)
+        assert len(legacy_result.trades) == len(advanced_result.trades)

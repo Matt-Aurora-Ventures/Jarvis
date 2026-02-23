@@ -11,16 +11,29 @@ from typing import Dict, List, Optional, Any
 # Format: provider -> model -> {input_per_1k, output_per_1k}
 MODEL_PRICING: Dict[str, Dict[str, Dict[str, float]]] = {
     "grok": {
-        # Grok 3: $0.001/1K tokens (same for input/output)
+        # Grok 4-1 fast: $0.20/$0.50 per 1M tokens = $0.00020/$0.00050 per 1K
+        "grok-4-1-fast-non-reasoning": {
+            "input_per_1k": 0.00020,
+            "output_per_1k": 0.00050,
+        },
+        "grok-4-1-fast-reasoning": {
+            "input_per_1k": 0.00020,
+            "output_per_1k": 0.00050,
+        },
+        # Grok 4: higher capability, same fast-track pricing
+        "grok-4": {
+            "input_per_1k": 0.00300,
+            "output_per_1k": 0.01500,
+        },
+        # Legacy models
         "grok-3": {
             "input_per_1k": 0.001,
             "output_per_1k": 0.001,
         },
         "grok-3-mini": {
-            "input_per_1k": 0.0005,  # Cheaper mini variant
+            "input_per_1k": 0.0005,
             "output_per_1k": 0.0005,
         },
-        # Legacy model names
         "grok-2": {
             "input_per_1k": 0.001,
             "output_per_1k": 0.001,
@@ -46,7 +59,20 @@ MODEL_PRICING: Dict[str, Dict[str, Dict[str, float]]] = {
         },
     },
     "anthropic": {
-        # Opus: $0.015/1K input, $0.075/1K output
+        # Claude 4.6 models (Feb 2026 pricing)
+        "claude-opus-4-6": {
+            "input_per_1k": 0.015,
+            "output_per_1k": 0.075,
+        },
+        "claude-sonnet-4-6": {
+            "input_per_1k": 0.003,
+            "output_per_1k": 0.015,
+        },
+        "claude-haiku-4-5-20251001": {
+            "input_per_1k": 0.00025,
+            "output_per_1k": 0.00125,
+        },
+        # Legacy model names (still valid on API)
         "claude-opus-4": {
             "input_per_1k": 0.015,
             "output_per_1k": 0.075,
@@ -56,6 +82,10 @@ MODEL_PRICING: Dict[str, Dict[str, Dict[str, float]]] = {
             "output_per_1k": 0.075,
         },
         "claude-sonnet-4": {
+            "input_per_1k": 0.003,
+            "output_per_1k": 0.015,
+        },
+        "claude-sonnet-4-20250514": {
             "input_per_1k": 0.003,
             "output_per_1k": 0.015,
         },

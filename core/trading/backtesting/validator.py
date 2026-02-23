@@ -36,6 +36,8 @@ class ValidationResult:
     parameter_sensitivity: Dict[str, Any]
     permutation_pvalue: Optional[float]
     monte_carlo_results: Dict[str, Any]
+    stat_test_method: Optional[str] = None
+    stat_test_runs: int = 0
     warnings: List[str] = field(default_factory=list)
     recommendations: List[str] = field(default_factory=list)
 
@@ -47,6 +49,8 @@ class ValidationResult:
             'out_sample': self.out_sample_metrics.to_dict() if self.out_sample_metrics else None,
             'parameter_sensitivity': self.parameter_sensitivity,
             'permutation_pvalue': self.permutation_pvalue,
+            'stat_test_method': self.stat_test_method,
+            'stat_test_runs': self.stat_test_runs,
             'monte_carlo': self.monte_carlo_results,
             'warnings': self.warnings,
             'recommendations': self.recommendations,
@@ -73,12 +77,15 @@ class StrategyValidator:
         permutation_runs: int = 1000,
         monte_carlo_runs: int = 10000,
         significance_level: float = 0.05,
+        random_seed: Optional[int] = None,
     ):
         self.train_ratio = train_ratio
         self.min_trades = min_trades
         self.permutation_runs = permutation_runs
         self.monte_carlo_runs = monte_carlo_runs
         self.significance_level = significance_level
+        self.random_seed = random_seed
+        self._rng = random.Random(random_seed)
 
     def validate(
         self,
@@ -197,6 +204,8 @@ class StrategyValidator:
             parameter_sensitivity=param_sensitivity,
             permutation_pvalue=pvalue,
             monte_carlo_results=mc_results,
+            stat_test_method='sign_flip_sharpe' if pvalue is not None else None,
+            stat_test_runs=self.permutation_runs if pvalue is not None else 0,
             warnings=warnings,
             recommendations=recommendations,
         )
@@ -205,23 +214,29 @@ class StrategyValidator:
         """
         Run permutation test to determine statistical significance.
 
-        Shuffles trade outcomes and compares to actual performance.
+        Uses a sign-flip null model that preserves return magnitudes while
+        randomizing direction. This avoids order-invariance issues from
+        shuffling returns when evaluating Sharpe.
         """
         if len(trades) < 20:
             return None
 
-        actual_sharpe = calculate_sharpe([t.pnl_pct for t in trades])
         returns = [t.pnl_pct for t in trades]
+        actual_sharpe = calculate_sharpe(returns)
+        magnitudes = [abs(r) for r in returns]
 
         count_better = 0
         for _ in range(self.permutation_runs):
-            shuffled = returns.copy()
-            random.shuffle(shuffled)
-            shuffled_sharpe = calculate_sharpe(shuffled)
-            if shuffled_sharpe >= actual_sharpe:
+            flipped = [
+                mag if self._rng.random() >= 0.5 else -mag
+                for mag in magnitudes
+            ]
+            flipped_sharpe = calculate_sharpe(flipped)
+            if flipped_sharpe >= actual_sharpe:
                 count_better += 1
 
-        pvalue = count_better / self.permutation_runs
+        # Add-one smoothing to avoid brittle 0.0/1.0 edge-values on finite runs.
+        pvalue = (count_better + 1) / (self.permutation_runs + 1)
         logger.info(f"Permutation test p-value: {pvalue:.4f}")
 
         return pvalue
@@ -240,7 +255,7 @@ class StrategyValidator:
 
         for _ in range(self.monte_carlo_runs):
             # Sample with replacement
-            sampled = random.choices(trades, k=len(trades))
+            sampled = self._rng.choices(trades, k=len(trades))
             returns = [t.pnl_pct for t in sampled]
 
             # Calculate cumulative return

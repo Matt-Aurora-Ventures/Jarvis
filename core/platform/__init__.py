@@ -208,8 +208,13 @@ class WindowsAdapter(PlatformAdapter):
 
     def open_application(self, app_name: str) -> bool:
         try:
-            import subprocess
-            subprocess.Popen(["start", "", app_name], shell=True)
+            import os
+            # os.startfile is Windows-only but safe (no shell injection)
+            if hasattr(os, 'startfile'):
+                os.startfile(app_name)  # noqa: S606
+            else:
+                import subprocess
+                subprocess.run(["xdg-open", app_name], check=False, capture_output=True)
             return True
         except Exception:
             return False

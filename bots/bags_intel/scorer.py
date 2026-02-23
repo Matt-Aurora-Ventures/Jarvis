@@ -301,7 +301,7 @@ Provide a concise risk assessment."""
                     "https://api.x.ai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {self.xai_api_key}"},
                     json={
-                        "model": "grok-2-latest",
+                        "model": "grok-4-1-fast-non-reasoning",
                         "messages": [{"role": "user", "content": prompt}],
                         "max_tokens": 150,
                     },

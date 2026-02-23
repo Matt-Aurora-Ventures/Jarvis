@@ -95,7 +95,7 @@ class DebateClient:
             )
 
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=500,
                 temperature=0.7,
                 messages=[{"role": "user", "content": context}],

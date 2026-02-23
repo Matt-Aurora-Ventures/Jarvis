@@ -328,7 +328,7 @@ class HealthChecker:
         results = {}
         # Add any health endpoints to check
         endpoints = {
-            "api_server": "http://localhost:8765/api/stats",
+            "api_server": os.getenv("API_SERVER_URL", "http://localhost:8765") + "/api/stats",
         }
 
         for name, url in endpoints.items():

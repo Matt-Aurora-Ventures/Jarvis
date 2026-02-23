@@ -134,8 +134,8 @@ class ReflexionEngine:
         self,
         memory: MemoryStore,
         llm_client: Optional[Any] = None,
-        model: str = "claude-sonnet-4-20250514",
-        opus_model: str = "claude-opus-4-20250514",
+        model: str = "claude-sonnet-4-6",
+        opus_model: str = "claude-opus-4-6",
     ):
         self.memory = memory
         self.llm_client = llm_client

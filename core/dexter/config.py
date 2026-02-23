@@ -7,10 +7,11 @@ from typing import List
 
 class DexterModel(str, Enum):
     """Available models for Dexter agent."""
+    GROK_4_FAST = "grok-4-1-fast-non-reasoning"
     GROK_3 = "grok-3"
     GROK_2 = "grok-2"
-    CLAUDE = "claude-3-sonnet"
-    GPT4 = "gpt-4-turbo"
+    CLAUDE = "claude-sonnet-4-6"
+    GPT4 = "gpt-4o"
 
     def __str__(self) -> str:
         return self.value
@@ -20,7 +21,7 @@ class DexterModel(str, Enum):
 class DexterConfig:
     """Dexter agent configuration."""
     enabled: bool = True
-    model: DexterModel = DexterModel.GROK_3
+    model: DexterModel = DexterModel.GROK_4_FAST
     max_iterations: int = 15
     max_cost_per_decision: float = 0.50  # USD limit
     scan_interval_minutes: int = 15

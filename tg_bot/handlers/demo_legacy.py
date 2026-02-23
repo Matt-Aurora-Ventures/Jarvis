@@ -7580,7 +7580,7 @@ first, then create DCA plans from there.
 
         elif data.startswith("demo:bags_info:"):
             # Show detailed token info
-            token_ref = action.split(":")[1]
+            token_ref = data.split(":")[2] if len(data.split(":")) > 2 else ""
             address = _resolve_token_ref(context, token_ref)
 
             # Find token from cached data or fetch
@@ -7606,11 +7606,11 @@ first, then create DCA plans from there.
 
         elif data.startswith("demo:bags_buy:"):
             # Show buy confirmation for a Bags token
-            parts = action.split(":")
-            token_ref = parts[1]
+            parts = data.split(":")
+            token_ref = parts[2] if len(parts) > 2 else ""
             address = _resolve_token_ref(context, token_ref)
-            tp_percent = float(parts[2]) if len(parts) > 2 else 15.0
-            sl_percent = float(parts[3]) if len(parts) > 3 else 15.0
+            tp_percent = float(parts[3]) if len(parts) > 3 else 15.0
+            sl_percent = float(parts[4]) if len(parts) > 4 else 15.0
 
             # Find token
             bags_tokens = await get_bags_top_tokens_with_sentiment(limit=15)
@@ -7632,12 +7632,12 @@ first, then create DCA plans from there.
 
         elif data.startswith("demo:bags_exec:"):
             # Execute buy via Bags.fm API
-            parts = action.split(":")
-            token_ref = parts[1]
+            parts = data.split(":")
+            token_ref = parts[2] if len(parts) > 2 else ""
             address = _resolve_token_ref(context, token_ref)
-            amount_sol = float(parts[2]) if len(parts) > 2 else 0.1
-            tp_percent = float(parts[3]) if len(parts) > 3 else 15.0
-            sl_percent = float(parts[4]) if len(parts) > 4 else 15.0
+            amount_sol = float(parts[3]) if len(parts) > 3 else 0.1
+            tp_percent = float(parts[4]) if len(parts) > 4 else 15.0
+            sl_percent = float(parts[5]) if len(parts) > 5 else 15.0
 
             # Find token
             bags_tokens = await get_bags_top_tokens_with_sentiment(limit=15)
@@ -7750,7 +7750,11 @@ _Applied to all Bags.fm trades_
             ])
 
         elif data.startswith("demo:bags_set_tp:"):
-            tp_value = float(action.split(":")[1])
+            try:
+                tp_value = float(data.split(":")[2])
+            except (IndexError, ValueError):
+                await query.answer("Invalid TP value")
+                return
             context.user_data["bags_tp_percent"] = tp_value
             await query.answer(f"Take Profit set to +{tp_value:.0f}%")
             # Redirect back to settings
@@ -7787,7 +7791,11 @@ _Applied to all Bags.fm trades_
             ])
 
         elif data.startswith("demo:bags_set_sl:"):
-            sl_value = float(action.split(":")[1])
+            try:
+                sl_value = float(data.split(":")[2])
+            except (IndexError, ValueError):
+                await query.answer("Invalid SL value")
+                return
             context.user_data["bags_sl_percent"] = sl_value
             await query.answer(f"Stop Loss set to -{sl_value:.0f}%")
             # Redirect back to settings
@@ -7843,7 +7851,7 @@ _Applied to all Bags.fm trades_
 
         elif data.startswith("demo:tsl_select:"):
             # Position selected, show trail percentage options
-            pos_id = action.split(":")[1]
+            pos_id = data.split(":")[2] if len(data.split(":")) > 2 else ""
             positions = context.user_data.get("positions", [])
             position = next((p for p in positions if p.get("id") == pos_id), None)
 
@@ -7858,9 +7866,9 @@ _Applied to all Bags.fm trades_
         elif data.startswith("demo:tsl_create:"):
             # Create trailing stop with: pos_id:trail_percent
             try:
-                parts = action.split(":")
-                pos_id = parts[1]
-                trail_percent = float(parts[2])
+                parts = data.split(":")
+                pos_id = parts[2]
+                trail_percent = float(parts[3])
 
                 positions = context.user_data.get("positions", [])
                 position = next((p for p in positions if p.get("id") == pos_id), None)
@@ -7910,7 +7918,7 @@ _Applied to all Bags.fm trades_
 
         elif data.startswith("demo:tsl_edit:"):
             # Edit a trailing stop
-            stop_id = action.split(":")[1]
+            stop_id = data.split(":")[2] if len(data.split(":")) > 2 else ""
             trailing_stops = context.user_data.get("trailing_stops", [])
             stop = next((s for s in trailing_stops if s.get("id") == stop_id), None)
 
@@ -7935,7 +7943,7 @@ _Applied to all Bags.fm trades_
 
         elif data.startswith("demo:tsl_delete:"):
             # Delete a trailing stop
-            stop_id = action.split(":")[1]
+            stop_id = data.split(":")[2] if len(data.split(":")) > 2 else ""
             trailing_stops = context.user_data.get("trailing_stops", [])
 
             # Remove the stop
@@ -7951,7 +7959,7 @@ _Applied to all Bags.fm trades_
 
         elif data.startswith("demo:tsl_custom:"):
             # Custom trail percentage - placeholder
-            pos_id = action.split(":")[1]
+            pos_id = data.split(":")[2] if len(data.split(":")) > 2 else ""
             text = f"""
 🛡️ *CUSTOM TRAIL %*
 ━━━━━━━━━━━━━━━━━━━━━
@@ -7978,7 +7986,7 @@ _This feature coming soon!_
 
         elif data.startswith("demo:pos_adjust:"):
             # Show position adjustment menu (quick SL/TP)
-            pos_id = action.split(":")[1]
+            pos_id = data.split(":")[2] if len(data.split(":")) > 2 else ""
             positions = context.user_data.get("positions", [])
             position = next((p for p in positions if p.get("id") == pos_id), None)
 
@@ -7999,9 +8007,9 @@ _This feature coming soon!_
         elif data.startswith("demo:set_tp:"):
             # Set take profit for a position
             try:
-                parts = action.split(":")
-                pos_id = parts[1]
-                tp_value = float(parts[2])
+                parts = data.split(":")
+                pos_id = parts[2]
+                tp_value = float(parts[3])
 
                 positions = context.user_data.get("positions", [])
                 for p in positions:
@@ -8035,9 +8043,9 @@ _This feature coming soon!_
         elif data.startswith("demo:set_sl:"):
             # Set stop loss for a position
             try:
-                parts = action.split(":")
-                pos_id = parts[1]
-                sl_value = float(parts[2])
+                parts = data.split(":")
+                pos_id = parts[2]
+                sl_value = float(parts[3])
 
                 positions = context.user_data.get("positions", [])
                 for p in positions:
@@ -8070,7 +8078,7 @@ _This feature coming soon!_
 
         elif data.startswith("demo:trailing_setup:"):
             # Quick trailing stop setup from position adjust menu
-            pos_id = action.split(":")[1]
+            pos_id = data.split(":")[2] if len(data.split(":")) > 2 else ""
             positions = context.user_data.get("positions", [])
             position = next((p for p in positions if p.get("id") == pos_id), None)
 

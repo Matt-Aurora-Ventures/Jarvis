@@ -43,8 +43,9 @@ async def setup_google_login():
         from browser_use.browser.context import BrowserContextConfig
     except ImportError:
         print("\nInstalling browser-use...")
-        os.system(f'"{sys.executable}" -m pip install browser-use playwright')
-        os.system('playwright install chromium')
+        import subprocess
+        subprocess.run([sys.executable, "-m", "pip", "install", "browser-use", "playwright"], check=False)
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False)
         from browser_use import Browser, BrowserConfig
         from browser_use.browser.context import BrowserContextConfig
 

@@ -164,9 +164,9 @@ class BotConfig:
     telegram_token: str = field(default_factory=_get_telegram_token)
 
     # === API KEYS (from environment only) ===
-    grok_api_key: str = field(default_factory=lambda: os.getenv("XAI_API_KEY", ""))
+    grok_api_key: str = field(default_factory=lambda: os.getenv("XAI_API_KEY", "").strip())
     anthropic_api_key: str = field(default_factory=lambda: _get_anthropic_key())
-    birdeye_api_key: str = field(default_factory=lambda: os.getenv("BIRDEYE_API_KEY", ""))
+    birdeye_api_key: str = field(default_factory=lambda: os.getenv("BIRDEYE_API_KEY", "").strip())
 
     # === ADMIN SECURITY ===
     # Only these Telegram user IDs can run sentiment checks
@@ -179,8 +179,8 @@ class BotConfig:
     daily_cost_limit_usd: float = 10.00  # Stop if daily cost exceeds this
 
     # === MODEL SETTINGS ===
-    grok_model: str = "grok-3-mini"  # cheapest: grok-3-mini, best: grok-4
-    claude_model: str = "claude-opus-4-5-20251101"  # Opus 4.5 (best reasoning)
+    grok_model: str = "grok-4-1-fast-non-reasoning"  # fast+cheap: grok-4-1-fast-non-reasoning, best: grok-4
+    claude_model: str = "claude-sonnet-4-6"  # Sonnet 4.6 (fast, capable)
     claude_max_tokens: int = 1024
 
     # === DATABASE ===

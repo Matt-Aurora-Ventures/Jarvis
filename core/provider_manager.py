@@ -200,7 +200,7 @@ class ProviderManager:
                     # Try with the configured model from config
                     from core import config
                     cfg = config.load_config()
-                    model = cfg.get("providers", {}).get("grok", {}).get("model", "grok-beta")
+                    model = cfg.get("providers", {}).get("grok", {}).get("model", "grok-4-1-fast-non-reasoning")
                     return providers._ask_grok(prompt, model, max_tokens)
                 else:
                     raise Exception("Grok client unavailable")

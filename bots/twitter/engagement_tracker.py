@@ -501,11 +501,17 @@ class EngagementTracker:
             """)
 
             results = []
+            day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
             for row in cursor.fetchall():
-                day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                try:
+                    day_idx = int(row['day_of_week'])
+                    day = day_names[day_idx] if 0 <= day_idx < len(day_names) else 'Unknown'
+                    hour = int(row['hour'])
+                except (ValueError, TypeError, KeyError):
+                    continue
                 results.append({
-                    'hour': int(row['hour']),
-                    'day': day_names[int(row['day_of_week'])],
+                    'hour': hour,
+                    'day': day,
                     'avg_engagement': row['avg_engagement'],
                     'sample_size': row['tweet_count']
                 })

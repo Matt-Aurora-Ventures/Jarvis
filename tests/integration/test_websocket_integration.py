@@ -130,7 +130,7 @@ class TestMarketDataWebSocket:
                 snapshot = websocket.receive_json(timeout=0.5)
                 if snapshot["type"] == "snapshot":
                     pass
-            except:
+            except Exception:
                 pass
 
             # Publish a price update via manager
@@ -175,7 +175,7 @@ class TestMarketDataWebSocket:
                 ws.receive_json()  # subscribed
                 try:
                     ws.receive_json(timeout=0.5)  # snapshot (optional)
-                except:
+                except Exception:
                     pass
 
             # Publish update
@@ -220,7 +220,7 @@ class TestMarketDataWebSocket:
             websocket.receive_json()  # subscribed
             try:
                 websocket.receive_json(timeout=0.5)  # snapshot
-            except:
+            except Exception:
                 pass
 
             # Publish volume update - should NOT receive
@@ -243,7 +243,7 @@ class TestMarketDataWebSocket:
                 data = websocket.receive_json(timeout=1)
                 # If we get here, it's wrong
                 assert data["type"] != "volume", "Should not receive volume update"
-            except:
+            except Exception:
                 pass  # Expected - no volume update received
 
     def test_heartbeat_mechanism(self, client):
@@ -335,7 +335,7 @@ class TestWebSocketPerformance:
 
             try:
                 websocket.receive_json(timeout=0.5)  # snapshot
-            except:
+            except Exception:
                 pass
 
             # Send first update
@@ -367,7 +367,7 @@ class TestWebSocketPerformance:
                 data3 = websocket.receive_json(timeout=0.5)
                 # If we get here, something wrong
                 assert False, "Unexpected message received"
-            except:
+            except Exception:
                 pass  # Expected - no more messages
 
     def test_concurrent_subscriptions(self, client):

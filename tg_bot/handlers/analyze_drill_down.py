@@ -10,6 +10,7 @@ Provides formatting and data fetching for:
 """
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -27,23 +28,29 @@ async def fetch_holder_data(token_address: str) -> List[Dict[str, Any]]:
     Returns list of holder entries with address, percentage, and amount.
     """
     try:
-        # Try Birdeye for holder data
-        from tg_bot.services.token_data import TokenDataService
-        from tg_bot.config import get_config
+        from core.data.solscan_api import get_solscan_api
 
-        config = get_config()
-        service = TokenDataService(birdeye_key=config.birdeye_api_key)
+        api = get_solscan_api()
+        holders = await api.get_token_holders(token_address, limit=100)
+        if not holders:
+            return []
 
-        # For now, return mock data until we have the actual API integration
-        # This will be replaced with real data fetching
-        holders = _generate_mock_holders(token_address)
+        results: List[Dict[str, Any]] = []
+        for holder in holders:
+            amount_tokens = int(getattr(holder, "amount_formatted", 0) or 0)
+            results.append(
+                {
+                    "address": getattr(holder, "owner", ""),
+                    "percentage": round(float(getattr(holder, "percentage", 0) or 0), 2),
+                    "amount": amount_tokens,
+                }
+            )
 
-        await service.close()
-        return holders
+        return results
 
     except Exception as e:
         logger.warning(f"Failed to fetch holder data: {e}")
-        return _generate_mock_holders(token_address)
+        return []
 
 
 async def fetch_recent_trades(token_address: str, limit: int = 20) -> List[Dict[str, Any]]:
@@ -53,14 +60,32 @@ async def fetch_recent_trades(token_address: str, limit: int = 20) -> List[Dict[
     Returns list of trade entries with type, amount, time, and whale status.
     """
     try:
-        # Try to fetch from DexScreener or similar
-        # For now, return mock data
-        trades = _generate_mock_trades(token_address, limit)
-        return trades
+        from core.data.solscan_api import get_solscan_api
+
+        api = get_solscan_api()
+        txs = await api.get_recent_transactions(token_address, limit=limit)
+        if not txs:
+            return []
+
+        trades: List[Dict[str, Any]] = []
+        for tx in txs:
+            tx_type = str(getattr(tx, "tx_type", "") or "").lower()
+            trade_type = "sell" if "sell" in tx_type else "buy"
+            amount = int(abs(float(getattr(tx, "amount", 0) or 0)))
+            trades.append(
+                {
+                    "type": trade_type,
+                    "amount_usd": amount,
+                    "time": _format_time_ago(int(getattr(tx, "block_time", 0) or 0)),
+                    "is_whale": amount >= 50_000,
+                }
+            )
+
+        return trades[:limit]
 
     except Exception as e:
         logger.warning(f"Failed to fetch trades: {e}")
-        return _generate_mock_trades(token_address, limit)
+        return []
 
 
 async def fetch_token_details(token_address: str) -> Dict[str, Any]:
@@ -149,6 +174,21 @@ def _generate_mock_trades(token_address: str, limit: int = 20) -> List[Dict[str,
         })
 
     return trades
+
+
+def _format_time_ago(block_time: int) -> str:
+    """Format unix timestamp into short relative age string."""
+    if block_time <= 0:
+        return "unknown"
+
+    age_s = max(0, int(time.time()) - block_time)
+    if age_s < 60:
+        return f"{age_s}s ago"
+    if age_s < 3600:
+        return f"{age_s // 60}m ago"
+    if age_s < 86400:
+        return f"{age_s // 3600}h ago"
+    return f"{age_s // 86400}d ago"
 
 
 # =============================================================================

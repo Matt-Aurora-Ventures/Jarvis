@@ -436,10 +436,24 @@ class BackupManager:
             interval_hours: Hours between automatic backups
             backup_type: Type of backup to create
         """
-        # This would integrate with a task scheduler like APScheduler
-        logger.info(f"Backup scheduling: every {interval_hours}h, type={backup_type}")
-        # Implementation would depend on scheduler integration
-        raise NotImplementedError("Scheduler integration needed")
+        logger.info(f"Backup scheduling requested: every {interval_hours}h, type={backup_type}")
+        # Use threading.Timer for a simple in-process recurring backup
+        # (no APScheduler dependency required)
+        def _run_and_reschedule():
+            try:
+                self.create_backup(backup_type=backup_type, description=f"Scheduled {backup_type} backup")
+                logger.info(f"Scheduled backup ({backup_type}) completed")
+            except Exception as exc:
+                logger.error(f"Scheduled backup failed: {exc}")
+            finally:
+                # Reschedule unconditionally so failures don't stop future backups
+                self.schedule_backup(interval_hours=interval_hours, backup_type=backup_type)
+
+        import threading
+        timer = threading.Timer(interval_hours * 3600, _run_and_reschedule)
+        timer.daemon = True  # Don't block process exit
+        timer.start()
+        logger.info(f"Backup scheduler armed: next run in {interval_hours}h")
 
 
 def create_emergency_backup(description: str = "Emergency backup") -> BackupMetadata:

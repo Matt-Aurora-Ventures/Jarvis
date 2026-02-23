@@ -103,7 +103,7 @@ Example thread closing:
                     if is_local_anthropic():
                         self._model = os.getenv("OLLAMA_THREAD_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen3-coder"
                     else:
-                        self._model = os.getenv("CLAUDE_THREAD_MODEL", "claude-sonnet-4-20250514")
+                        self._model = os.getenv("CLAUDE_THREAD_MODEL", "claude-sonnet-4-6")
             except Exception as e:
                 logger.error(f"Could not init Anthropic: {e}")
         return self._anthropic_client
@@ -164,7 +164,7 @@ Remember: Each tweet MUST be under 280 characters. Jarvis voice. Lowercase."""
             message = await loop.run_in_executor(
                 None,
                 lambda: client.messages.create(
-                    model=getattr(self, "_model", "claude-sonnet-4-20250514"),
+                    model=getattr(self, "_model", "claude-sonnet-4-6"),
                     max_tokens=1500,
                     system=JARVIS_VOICE_BIBLE,
                     messages=[{"role": "user", "content": prompt}]

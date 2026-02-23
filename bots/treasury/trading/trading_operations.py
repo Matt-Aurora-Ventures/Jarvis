@@ -355,7 +355,10 @@ class TradingOperationsMixin:
         try:
             from ..jupiter import JupiterClient
 
-            sol_amount = int(amount_usd / await self.jupiter.get_token_price(JupiterClient.SOL_MINT) * 1e9)
+            sol_price = await self.jupiter.get_token_price(JupiterClient.SOL_MINT)
+            if not sol_price:
+                return False, "Could not get SOL price for trade sizing", None
+            sol_amount = int(amount_usd / sol_price * 1e9)
             slippage = 200
 
             quote = await self.jupiter.get_quote(
@@ -557,7 +560,12 @@ class TradingOperationsMixin:
                     exit_price=position.exit_price,
                     pnl_pct=position.pnl_pct,
                     hold_duration_hours=hold_duration,
-                    strategy="treasury",  # TODO: Extract actual strategy from position
+                    strategy=(
+                        "ladder" if getattr(position, "ladder_exits", None)
+                        else "sentiment_bull" if (position.sentiment_grade or "").upper() in {"A", "B"}
+                        else "tpsl" if (position.take_profit_price and position.stop_loss_price)
+                        else "treasury"
+                    ),
                     sentiment_score=position.sentiment_score if position.sentiment_score > 0 else None,
                     exit_reason=reason,
                     metadata={
@@ -713,7 +721,12 @@ class TradingOperationsMixin:
                     exit_price=position.exit_price,
                     pnl_pct=position.pnl_pct,
                     hold_duration_hours=hold_duration,
-                    strategy="treasury",  # TODO: Extract actual strategy from position
+                    strategy=(
+                        "ladder" if getattr(position, "ladder_exits", None)
+                        else "sentiment_bull" if (position.sentiment_grade or "").upper() in {"A", "B"}
+                        else "tpsl" if (position.take_profit_price and position.stop_loss_price)
+                        else "treasury"
+                    ),
                     sentiment_score=position.sentiment_score if position.sentiment_score > 0 else None,
                     exit_reason=reason,
                     metadata={

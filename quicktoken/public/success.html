@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuickToken - Complete Launch</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@solana/web3.js@1.98.4/lib/index.iife.min.js"></script>
+  <style>
+    .gradient-bg { background: linear-gradient(135deg, #0d1b2a 0%, #1b263b 50%, #415a77 100%); }
+    .glass {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+  <main class="max-w-2xl mx-auto px-6 py-12">
+    <div class="glass rounded-2xl p-8">
+      <h1 class="text-3xl font-bold mb-2">Payment Confirmed</h1>
+      <p class="opacity-80 mb-8">Connect Phantom and submit your launch transaction.</p>
+
+      <div class="space-y-4">
+        <div class="rounded-lg bg-white/10 p-4">
+          <p class="text-sm opacity-70 mb-1">Launch ID</p>
+          <p id="launchId" class="font-mono text-sm break-all">-</p>
+        </div>
+        <div class="rounded-lg bg-white/10 p-4">
+          <p class="text-sm opacity-70 mb-1">Partner wallet (mint revenue destination)</p>
+          <p id="partnerWallet" class="font-mono text-sm break-all">-</p>
+        </div>
+      </div>
+
+      <button id="launchBtn" class="w-full mt-6 py-4 rounded-lg bg-white text-slate-900 font-semibold text-lg hover:bg-white/90 transition">
+        Connect Phantom & Launch
+      </button>
+
+      <div id="statusBox" class="mt-6 hidden rounded-lg bg-white/10 p-4">
+        <p id="statusText" class="text-sm"></p>
+        <a id="txLink" class="underline text-sm mt-2 inline-block hidden" target="_blank" rel="noreferrer">View transaction</a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const launchBtn = document.getElementById('launchBtn');
+    const statusBox = document.getElementById('statusBox');
+    const statusText = document.getElementById('statusText');
+    const txLink = document.getElementById('txLink');
+    const launchIdEl = document.getElementById('launchId');
+    const partnerWalletEl = document.getElementById('partnerWallet');
+
+    const params = new URLSearchParams(window.location.search);
+    const launchId = params.get('launchId');
+    launchIdEl.textContent = launchId || 'missing launchId';
+
+    function setStatus(text, isError = false) {
+      statusBox.classList.remove('hidden');
+      statusText.textContent = text;
+      statusText.className = `text-sm ${isError ? 'text-red-300' : 'text-white'}`;
+    }
+
+    async function fetchLaunchStatus() {
+      if (!launchId) {
+        setStatus('Missing launchId in URL.', true);
+        launchBtn.disabled = true;
+        return null;
+      }
+
+      const res = await fetch(`/api/token/status/${launchId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unable to load launch status');
+
+      partnerWalletEl.textContent = data.partnerWallet || '-';
+      if (!data.paid) {
+        throw new Error('Payment is not marked as completed yet. Wait a moment and retry.');
+      }
+      return data;
+    }
+
+    async function connectPhantom() {
+      const provider = window.phantom?.solana;
+      if (!provider || !provider.isPhantom) {
+        throw new Error('Phantom wallet not detected. Install Phantom and retry.');
+      }
+      const resp = await provider.connect();
+      return { provider, walletAddress: resp.publicKey.toString() };
+    }
+
+    async function createLaunchTransaction(walletAddress) {
+      const res = await fetch('/api/token/launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          launchId,
+          walletAddress,
+          initialBuyLamports: 0,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create launch transaction');
+      partnerWalletEl.textContent = data.partnerWallet || partnerWalletEl.textContent;
+      return data.transaction;
+    }
+
+    function decodeTransaction(serializedTx) {
+      const txBytes = Uint8Array.from(atob(serializedTx), c => c.charCodeAt(0));
+      try {
+        return solanaWeb3.VersionedTransaction.deserialize(txBytes);
+      } catch (_) {
+        return solanaWeb3.Transaction.from(txBytes);
+      }
+    }
+
+    async function signAndSubmit(provider, serializedTx) {
+      const transaction = decodeTransaction(serializedTx);
+      const signed = await provider.signTransaction(transaction);
+      const signedBase64 = btoa(String.fromCharCode(...signed.serialize()));
+
+      const submitRes = await fetch('/api/token/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          launchId,
+          signedTransaction: signedBase64,
+        }),
+      });
+      const submitData = await submitRes.json();
+      if (!submitRes.ok) throw new Error(submitData.error || 'Failed to submit launch transaction');
+      return submitData;
+    }
+
+    launchBtn.addEventListener('click', async () => {
+      launchBtn.disabled = true;
+      txLink.classList.add('hidden');
+
+      try {
+        setStatus('Checking payment status...');
+        await fetchLaunchStatus();
+
+        setStatus('Connecting Phantom wallet...');
+        const { provider, walletAddress } = await connectPhantom();
+
+        setStatus('Preparing launch transaction...');
+        const transaction = await createLaunchTransaction(walletAddress);
+
+        setStatus('Requesting signature from Phantom...');
+        const submitResult = await signAndSubmit(provider, transaction);
+
+        setStatus(`Launch submitted. Signature: ${submitResult.signature}`);
+        txLink.href = submitResult.explorerUrl;
+        txLink.textContent = submitResult.explorerUrl;
+        txLink.classList.remove('hidden');
+      } catch (error) {
+        setStatus(error.message || 'Launch failed', true);
+      } finally {
+        launchBtn.disabled = false;
+      }
+    });
+
+    fetchLaunchStatus().catch((error) => {
+      setStatus(error.message || 'Unable to initialize launch page', true);
+    });
+  </script>
+</body>
+</html>

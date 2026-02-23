@@ -1,0 +1,24 @@
+# Dev / CI Tools — Not installed in any production zone
+# Used only in development environments and CI runners
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.2
+pytest-cov==6.0.0
+pytest-mock==3.14.0
+responses==0.25.3
+
+# Dependency management
+pip-tools==7.4.1
+
+# Code quality
+ruff==0.9.1
+mypy==1.14.1
+
+# Pre-commit
+pre-commit==4.0.1
+
+# Type stubs
+types-redis==4.6.0.20241004
+types-requests==2.32.0.20241016
+types-pyyaml==6.0.12.20241230

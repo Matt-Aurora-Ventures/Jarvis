@@ -245,7 +245,7 @@ Respond ONLY with valid JSON.
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "grok-beta",
+                    "model": "grok-4-1-fast-non-reasoning",
                     "messages": [
                         {
                             "role": "system",

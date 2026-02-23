@@ -324,7 +324,7 @@ class XAIProvider(BaseLLMProvider):
     """
     xAI/Grok - Existing JARVIS integration.
 
-    Models: grok-3-mini, grok-3
+    Models: grok-4-1-fast-non-reasoning, grok-4-1-fast-reasoning
     """
 
     BASE_URL = "https://api.x.ai/v1"
@@ -670,7 +670,7 @@ def get_default_configs() -> List[LLMConfig]:
     if xai_key:
         configs.append(LLMConfig(
             provider=LLMProvider.XAI,
-            model=os.getenv("XAI_MODEL", "grok-3-mini"),
+            model=os.getenv("XAI_MODEL", "grok-4-1-fast-non-reasoning"),
             api_key=xai_key,
             priority=2,
         ))

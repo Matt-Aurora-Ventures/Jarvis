@@ -16,6 +16,26 @@
 
 ---
 
+## Local Development Ports (Windows)
+
+Canonical production surface policy:
+
+1. Canonical UI (Next.js): `jarvis-sniper` at `http://127.0.0.1:3001`
+- Default launcher: `START_TRADING.bat`
+- Direct start: `npm --prefix jarvis-sniper run dev`
+
+2. Preview copy (Next.js): `http://127.0.0.1:3011`
+- Start: `start_sniper_preview.ps1`
+- Status: `status_sniper_preview.ps1`
+- Stop: `stop_sniper_preview.ps1`
+- Log file: `logs/sniper_preview_3011.log`
+
+3. Prototype surfaces (non-canonical, internal-only):
+- Flask trading UI: `http://127.0.0.1:5001` via `start_trading_ui.ps1 -Prototype`
+- `jarvis-web-terminal`, `web/templates/trading.html`, and `web_demo`
+- These are frozen from production claims and default launch paths.
+
+---
 ## Table of Contents
 
 - [What Jarvis Is](#-what-jarvis-is)
@@ -475,6 +495,8 @@ architecture overview, and deployment guidance.
 - **Canonical README**: [`README.md`](README.md)
 - **GitBook documentation**: [`docs/gitbook`](docs/gitbook/README.md)
 - **Legacy README snapshots** (archived for historical context): [`docs/history`](docs/history)
+- **Canonical surface policy**: [`docs/canonical-surface-policy.md`](docs/canonical-surface-policy.md)
+- **Branch/worktree policy**: [`docs/branch-worktree-policy.md`](docs/branch-worktree-policy.md)
 
 If you encounter older links referencing `README_NEW.md` or `README_BACKUP.md`, use the
 archived copies and defer to this README for current guidance.
@@ -2168,3 +2190,4 @@ SOFTWARE.
   <a href="https://t.me/Jarviskr8tivbot">Telegram</a> •
   <a href="https://github.com/Matt-Aurora-Ventures/Jarvis">GitHub</a>
 </p>
+

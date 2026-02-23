@@ -14,7 +14,7 @@ async def test_dexter_agent_init():
     """Test DexterAgent initialization."""
     agent = DexterAgent()
     assert agent.session_id
-    assert agent.model == "grok-3"
+    assert agent.model == "grok-4-1-fast-non-reasoning"
     assert agent.max_iterations == 15
 
 

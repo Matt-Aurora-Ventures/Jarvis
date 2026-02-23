@@ -342,7 +342,14 @@ Welcome to the Jarvis Treasury Management System.
             return
 
         token_mint = args[0]
-        amount_usd = float(args[1]) if len(args) > 1 else None
+        try:
+            amount_usd = float(args[1]) if len(args) > 1 else None
+        except (ValueError, TypeError):
+            await update.message.reply_text(
+                f"{self.EMOJI['cross']} Invalid amount: <code>{args[1]}</code>",
+                parse_mode=ParseMode.HTML
+            )
+            return
 
         # Get token info
         token_info = await self.engine.jupiter.get_token_info(token_mint)
@@ -600,8 +607,13 @@ Welcome to the Jarvis Treasury Management System.
 
         elif data.startswith("exec_buy:"):
             parts = data.split(":")
-            token_mint = parts[1]
-            amount = float(parts[2]) if parts[2] != "0" else None
+            token_mint = parts[1] if len(parts) > 1 else None
+            if not token_mint:
+                return
+            try:
+                amount = float(parts[2]) if len(parts) > 2 and parts[2] != "0" else None
+            except (ValueError, TypeError):
+                amount = None
 
             success, msg, position = await self.engine.open_position(
                 token_mint=token_mint,

@@ -171,9 +171,16 @@ class PhoneController:
         battery = {}
         for line in lines:
             if 'level:' in line:
-                battery['level'] = int(line.split(':')[1].strip())
+                parts = line.split(':', 1)
+                if len(parts) > 1:
+                    try:
+                        battery['level'] = int(parts[1].strip())
+                    except (ValueError, TypeError):
+                        pass
             elif 'status:' in line:
-                battery['status'] = line.split(':')[1].strip()
+                parts = line.split(':', 1)
+                if len(parts) > 1:
+                    battery['status'] = parts[1].strip()
         return battery
 
     async def take_screenshot(self, save_path: str) -> bool:

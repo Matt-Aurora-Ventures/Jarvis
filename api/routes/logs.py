@@ -27,6 +27,14 @@ from api.log_rotation import cleanup_old_logs, get_log_stats
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
 
+def _parse_float_env(name: str, default: float) -> float:
+    """Parse a float environment variable, returning default on invalid value."""
+    try:
+        return float(os.getenv(name, str(default)))
+    except (ValueError, TypeError):
+        return default
+
+
 # =============================================================================
 # Request/Response Models
 # =============================================================================
@@ -205,7 +213,7 @@ async def get_log_config():
         "request_logging_enabled": os.getenv("REQUEST_LOGGING_ENABLED", "true"),
         "log_request_body": os.getenv("LOG_REQUEST_BODY", "false"),
         "log_response_body": os.getenv("LOG_RESPONSE_BODY", "false"),
-        "slow_request_threshold": float(os.getenv("SLOW_REQUEST_THRESHOLD", "1.0")),
+        "slow_request_threshold": _parse_float_env("SLOW_REQUEST_THRESHOLD", 1.0),
         "log_level": os.getenv("LOG_LEVEL", "INFO"),
     }
 

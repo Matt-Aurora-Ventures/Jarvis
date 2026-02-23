@@ -472,7 +472,7 @@ async def handle_status(message):
         try:
             status = await check_remote_status()
             remote_status = "ONLINE" if status.get("available") else "OFFLINE"
-        except:
+        except Exception:
             remote_status = "ERROR"
 
     status_text = f"""

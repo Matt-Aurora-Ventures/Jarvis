@@ -187,10 +187,10 @@ class TestBotConfigDefaults:
         assert config.grok_model == "grok-3-mini"
 
     def test_default_claude_model(self, clean_env, reset_singleton):
-        """Default claude_model should be claude-sonnet-4-20250514."""
+        """Default claude_model should be claude-sonnet-4-6."""
         from tg_bot.config import BotConfig
         config = BotConfig()
-        assert config.claude_model == "claude-sonnet-4-20250514"
+        assert config.claude_model == "claude-sonnet-4-6"
 
     def test_default_claude_max_tokens(self, clean_env, reset_singleton):
         """Default claude_max_tokens should be 1024."""

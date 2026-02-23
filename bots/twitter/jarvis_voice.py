@@ -63,7 +63,7 @@ class JarvisVoice:
         self._cli_backoff_reason: str = ""
         self._last_grok_fallback_log_ts: float = 0.0
         self.api_client = None
-        self.api_model = "claude-sonnet-4-20250514"
+        self.api_model = "claude-sonnet-4-6"
         self.api_base_url = None
         try:
             from core.llm.anthropic_utils import (

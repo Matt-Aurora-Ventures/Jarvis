@@ -572,7 +572,7 @@ class TestRetryHandlerStatistics:
 
         try:
             await handler.execute_async(fail, config=config)
-        except:
+        except Exception:
             pass
 
         stats = handler.get_statistics()

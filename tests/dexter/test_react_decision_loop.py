@@ -39,7 +39,7 @@ class TestReActDecisionLoop:
         assert len(agent.session_id) == 8  # UUID prefix
 
         # Should have default config
-        assert agent.model == "grok-3"
+        assert agent.model == "grok-4-1-fast-non-reasoning"
         assert agent.max_iterations == 15
         assert agent.min_confidence == 70.0
 
@@ -354,7 +354,7 @@ class TestDexterConfig:
         config = DexterConfig()
 
         assert config.enabled is True
-        assert config.model == "grok-3"
+        assert config.model == "grok-4-1-fast-non-reasoning"
         assert config.max_iterations == 15
         assert config.max_cost_per_decision == 0.50
         assert config.scan_interval_minutes == 15
@@ -391,10 +391,11 @@ class TestDexterModel:
 
     def test_model_values(self):
         """Test model enum values."""
+        assert DexterModel.GROK_4_FAST.value == "grok-4-1-fast-non-reasoning"
         assert DexterModel.GROK_3.value == "grok-3"
         assert DexterModel.GROK_2.value == "grok-2"
-        assert DexterModel.CLAUDE.value == "claude-3-sonnet"
-        assert DexterModel.GPT4.value == "gpt-4-turbo"
+        assert DexterModel.CLAUDE.value == "claude-sonnet-4-6"
+        assert DexterModel.GPT4.value == "gpt-4o"
 
     def test_model_string_representation(self):
         """Test model string representation."""
@@ -489,7 +490,7 @@ class TestErrorHandling:
         agent = DexterAgent(None)
 
         # Should use defaults
-        assert agent.model == "grok-3"
+        assert agent.model == "grok-4-1-fast-non-reasoning"
         assert agent.max_iterations == 15
 
     def test_agent_handles_empty_config(self):
@@ -497,7 +498,7 @@ class TestErrorHandling:
         agent = DexterAgent({})
 
         # Should use defaults
-        assert agent.model == "grok-3"
+        assert agent.model == "grok-4-1-fast-non-reasoning"
         assert agent.max_iterations == 15
 
 
