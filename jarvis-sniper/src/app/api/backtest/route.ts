@@ -45,6 +45,7 @@ import {
   markBacktestRunPhase,
 } from '@/lib/backtest-run-registry';
 import { readTradeExecutionPriors, type TradeExecutionPriors } from '@/lib/autonomy/trade-telemetry-store';
+import { isPromotableDataSource } from '@/lib/real-data-guard';
 
 // Evidence downloads rely on Node.js filesystem fallback in dev/serverless.
 export const runtime = 'nodejs';
@@ -1517,7 +1518,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit check
     const ip = getClientIp(request);
-    const limit = apiRateLimiter.check(ip);
+    const limit = await apiRateLimiter.check(ip);
     if (!limit.allowed) {
       return withBacktestCors(request, NextResponse.json(
         { error: 'Rate limit exceeded' },
@@ -1627,7 +1628,6 @@ export async function POST(request: Request) {
 
           const cfg = result.config;
           const rowDegradedReasons = [...executionBaseDegradedReasons];
-          if (dataset.source === 'client') rowDegradedReasons.push('non_real_source');
           const rowDegraded = rowDegradedReasons.length > 0;
           const rowDegradedReasonText = rowDegradedReasons.join('|');
           for (const t of result.trades) {
@@ -1671,17 +1671,26 @@ export async function POST(request: Request) {
       : undefined;
 
     // Real-data universes are expensive to build; cache them per request.
-    let memecoinUniverse:
-      | { mints: string[]; datasets: HistoricalDataSet[]; sources: Set<OHLCVSource>; attempted: number }
-      | null = null;
-    let bagsUniverse:
-      | { mints: string[]; datasets: HistoricalDataSet[]; sources: Set<OHLCVSource>; attempted: number }
-      | null = null;
+    type TokenUniverse = {
+      mints: string[];
+      datasets: HistoricalDataSet[];
+      sources: Set<OHLCVSource>;
+      attempted: number;
+    };
+
+    let memecoinUniverse: TokenUniverse | null = null;
+    let bagsUniverse: TokenUniverse | null = null;
 
     const equityUniverses = new Map<
       string,
       { datasets: HistoricalDataSet[]; sources: Set<OHLCVSource>; attempted: number }
     >();
+
+    const summarizeUniverse = (universe: TokenUniverse | null) => ({
+      candidates: universe ? universe.mints.length : 0,
+      datasets: universe ? universe.datasets.length : 0,
+      attempted: universe ? Number(universe.attempted || 0) : 0,
+    });
 
     const withTimeBudget = async <T,>(
       promise: Promise<T>,
@@ -2251,6 +2260,8 @@ export async function POST(request: Request) {
 
     if (!clientCandles && allRunResults.length === 0) {
       failBacktestRun(runId, 'No usable real-data datasets for requested strategy/source');
+      const memecoinSummary = summarizeUniverse(memecoinUniverse);
+      const bagsSummary = summarizeUniverse(bagsUniverse);
       return withBacktestCors(request, NextResponse.json(
         {
           error: 'Backtest produced no results (no usable real-data datasets for requested strategy/source)',
@@ -2263,10 +2274,10 @@ export async function POST(request: Request) {
             datasetManifestId: activeDatasetManifestId,
             requestedMaxTokens: requestedMax,
             strategyId,
-            memecoinCandidates: memecoinUniverse?.mints?.length ?? 0,
-            memecoinDatasetsUsed: memecoinUniverse?.datasets?.length ?? 0,
-            bagsCandidates: bagsUniverse?.mints?.length ?? 0,
-            bagsDatasetsUsed: bagsUniverse?.datasets?.length ?? 0,
+            memecoinCandidates: memecoinSummary.candidates,
+            memecoinDatasetsUsed: memecoinSummary.datasets,
+            bagsCandidates: bagsSummary.candidates,
+            bagsDatasetsUsed: bagsSummary.datasets,
           },
         },
         { status: 422 },
@@ -2287,14 +2298,14 @@ export async function POST(request: Request) {
           { status: 422 },
         ));
       }
-      const disallowed = allRunResults.filter((r) => r.dataSource === 'client' || !r.dataSource);
+      const disallowed = allRunResults.filter((r) => !isPromotableDataSource(r.dataSource));
       if (disallowed.length > 0) {
         failBacktestRun(runId, 'strictNoSynthetic gate failed: non-real data source detected');
         return withBacktestCors(request, NextResponse.json(
           {
             error: 'strictNoSynthetic gate failed: non-real data source detected',
             runId,
-            disallowedSources: disallowed.map((d) => d.dataSource),
+            disallowedSources: disallowed.map((d) => String(d.dataSource || 'unknown')),
           },
           { status: 422 },
         ));
@@ -2323,7 +2334,7 @@ export async function POST(request: Request) {
       const executionAdjustedExpectancy = expectancyValue * executionScale;
       const executionAdjustedNetPnlPct = netPnlPct * executionScale;
       const degradedReasons = [...executionBaseDegradedReasons];
-      if (r.dataSource === 'client' || !r.dataSource) degradedReasons.push('non_real_source');
+      if (!isPromotableDataSource(r.dataSource)) degradedReasons.push('non_real_source');
       if (!r.validated) degradedReasons.push('unvalidated_result');
       const degraded = [...new Set(degradedReasons)];
 
@@ -2367,10 +2378,12 @@ export async function POST(request: Request) {
     // Deduplicate
     const uniqueUnderperformers = [...new Set(underperformers)];
 
+    const memecoinSummary = summarizeUniverse(memecoinUniverse);
+    const bagsSummary = summarizeUniverse(bagsUniverse);
     const equityAttempted = [...equityUniverses.values()].reduce((s, v) => s + (v.attempted || 0), 0);
     const equitySucceeded = [...equityUniverses.values()].reduce((s, v) => s + v.datasets.length, 0);
-    const computedDatasetsAttempted = (memecoinUniverse?.attempted ?? 0) + (bagsUniverse?.attempted ?? 0) + equityAttempted;
-    const computedDatasetsSucceeded = (memecoinUniverse?.datasets?.length ?? 0) + (bagsUniverse?.datasets?.length ?? 0) + equitySucceeded;
+    const computedDatasetsAttempted = memecoinSummary.attempted + bagsSummary.attempted + equityAttempted;
+    const computedDatasetsSucceeded = memecoinSummary.datasets + bagsSummary.datasets + equitySucceeded;
     const runDiag = getBacktestRunStatus(runId);
     const datasetsAttempted = (runDiag?.datasetsAttempted ?? 0) > 0 ? (runDiag?.datasetsAttempted ?? 0) : computedDatasetsAttempted;
     const datasetsSucceeded = (runDiag?.datasetsSucceeded ?? 0) > 0 ? (runDiag?.datasetsSucceeded ?? 0) : computedDatasetsSucceeded;
@@ -2408,11 +2421,11 @@ export async function POST(request: Request) {
         bluechipMaxTokens: scaleCfg.bluechipMaxTokens,
         bluechipHardcoded: ALL_BLUECHIPS.length,
         memecoinMaxTokens: scaleCfg.memecoinMaxTokens,
-        memecoinCandidates: memecoinUniverse?.mints?.length ?? 0,
-        memecoinDatasetsUsed: memecoinUniverse?.datasets?.length ?? 0,
+        memecoinCandidates: memecoinSummary.candidates,
+        memecoinDatasetsUsed: memecoinSummary.datasets,
         bagsMaxTokens: scaleCfg.bagsMaxTokens,
-        bagsCandidates: bagsUniverse?.mints?.length ?? 0,
-        bagsDatasetsUsed: bagsUniverse?.datasets?.length ?? 0,
+        bagsCandidates: bagsSummary.candidates,
+        bagsDatasetsUsed: bagsSummary.datasets,
         xstockMaxTokens: scaleCfg.xstockMaxTokens,
         xstockDatasetsUsed: [...equityUniverses.values()].reduce((s, v) => s + v.datasets.length, 0),
         datasetsAttempted,

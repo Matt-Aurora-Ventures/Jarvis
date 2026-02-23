@@ -1,134 +1,67 @@
 {
     "mcpServers": {
         "filesystem": {
-            "command": "npx",
+            "command": "cmd",
             "args": [
+                "/c",
+                "npx",
                 "-y",
                 "@modelcontextprotocol/server-filesystem",
-                "C:\\Users\\lucid\\OneDrive\\Desktop\\Projects"
+                "C:\\Users\\lucid\\Desktop\\Jarvis"
             ],
             "type": "stdio"
         },
         "memory": {
-            "command": "npx",
+            "command": "cmd",
             "args": [
+                "/c",
+                "npx",
                 "-y",
                 "@modelcontextprotocol/server-memory"
             ],
             "type": "stdio"
         },
         "sequential-thinking": {
-            "command": "npx",
+            "command": "cmd",
             "args": [
+                "/c",
+                "npx",
                 "-y",
                 "@modelcontextprotocol/server-sequential-thinking"
             ],
             "type": "stdio"
         },
-        "brave-search": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "@modelcontextprotocol/server-brave-search"
-            ],
-            "env": {
-                "BRAVE_API_KEY": "YOUR_BRAVE_API_KEY_HERE"
-            },
-            "type": "stdio"
-        },
-        "context7": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "@upyesp/mcp-context7"
-            ],
-            "type": "stdio"
-        },
-        "github": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "@modelcontextprotocol/server-github"
-            ],
-            "env": {
-                "GITHUB_PERSONAL_ACCESS_TOKEN": "YOUR_GITHUB_TOKEN_HERE"
-            },
-            "type": "stdio"
-        },
-        "postgres": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "@modelcontextprotocol/server-postgres",
-                "postgresql://localhost/jarvis"
-            ],
-            "type": "stdio"
-        },
-        "sqlite": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "@modelcontextprotocol/server-sqlite",
-                "--db-path",
-                "C:\\Users\\lucid\\OneDrive\\Desktop\\Projects\\Jarvis\\database.db"
-            ],
-            "type": "stdio"
-        },
         "notebooklm": {
-            "command": "npx",
+            "command": "cmd",
             "args": [
+                "/c",
+                "npx",
                 "-y",
-                "notebooklm-mcp@latest"
+                "notebooklm-mcp@1.2.1"
             ],
             "type": "stdio"
         },
-        "fetch": {
-            "command": "npx",
+        "trading-launcher": {
+            "command": "cmd",
             "args": [
-                "-y",
-                "@modelcontextprotocol/server-fetch"
+                "/c",
+                "node",
+                "C:\\Users\\lucid\\Desktop\\Jarvis\\scripts\\trading_launcher_mcp.js"
             ],
             "type": "stdio"
         },
-        "youtube-transcript": {
-            "command": "npx",
+        "hostinger-mcp": {
+            "command": "cmd",
             "args": [
+                "/c",
+                "npx",
                 "-y",
-                "@sinco-lab/mcp-youtube-transcript"
+                "hostinger-api-mcp@latest"
             ],
-            "type": "stdio"
-        },
-        "solana": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "solana-mcp"
-            ],
+            "type": "stdio",
             "env": {
-                "SOLANA_PRIVATE_KEY": "YOUR_SOLANA_PRIVATE_KEY",
-                "RPC_URL": "https://api.mainnet-beta.solana.com"
-            },
-            "type": "stdio"
-        },
-        "magic-ui": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "@magicuidesign/mcp@latest"
-            ],
-            "type": "stdio"
-        },
-        "shadcn": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "shadcn-mcp"
-            ],
-            "type": "stdio"
-        },
-        "supermemory": {
-            "type": "sse",
-            "url": "https://mcp.supermemory.ai/mcp"
+                "API_TOKEN": "WMc8keCqAs0lNfn8RH8TSE3vhRsQqmRCzSTGLYJxf5e88452"
+            }
         }
     }
 }

@@ -64,7 +64,7 @@ def is_chrome_running_with_debugging() -> bool:
         result = sock.connect_ex(('127.0.0.1', CDP_PORT))
         sock.close()
         return result == 0
-    except:
+    except OSError:
         return False
 
 
@@ -161,7 +161,7 @@ class BrowserAgent:
 
         Args:
             llm_provider: "anthropic" or "openai"
-            model: Model name (defaults to claude-sonnet-4-20250514 or gpt-4o)
+            model: Model name (defaults to claude-sonnet-4-6 or gpt-4o)
             headless: Ignored (real Chrome is always visible)
             auto_launch_chrome: Auto-start Chrome if not running
         """
@@ -183,7 +183,7 @@ class BrowserAgent:
 
         if self.llm_provider == "anthropic":
             self._llm = ChatAnthropic(
-                model=self.model or "claude-sonnet-4-20250514",
+                model=self.model or "claude-sonnet-4-6",
                 timeout=120,
                 stop=None,
             )
@@ -282,7 +282,7 @@ class BrowserAgent:
         if self._browser:
             try:
                 await self._browser.close()
-            except:
+            except Exception:
                 pass
             self._browser = None
 

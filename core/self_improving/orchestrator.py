@@ -62,8 +62,8 @@ class SelfImprovingOrchestrator:
         self,
         db_path: str = "data/jarvis_memory.db",
         llm_client: Optional[Any] = None,
-        model: str = "claude-sonnet-4-20250514",
-        opus_model: str = "claude-opus-4-20250514",
+        model: str = "claude-sonnet-4-6",
+        opus_model: str = "claude-opus-4-6",
     ):
         # Core components
         self.memory = MemoryStore(db_path)

@@ -2989,8 +2989,15 @@ async def paper(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             symbol = args[1].upper()
             mint = args[2]
-            price = float(args[3])
-            size_usd = float(args[4]) if len(args) > 4 else None
+            try:
+                price = float(args[3])
+                size_usd = float(args[4]) if len(args) > 4 else None
+            except (ValueError, TypeError):
+                await update.message.reply_text(
+                    "❌ Invalid price or size — use numbers",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
 
             trade = paper_trading.open_position(
                 symbol=symbol,
@@ -3018,7 +3025,14 @@ async def paper(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            price = float(args[1])
+            try:
+                price = float(args[1])
+            except (ValueError, TypeError):
+                await update.message.reply_text(
+                    "❌ Invalid price — use a number",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
             reason = " ".join(args[2:]) if len(args) > 2 else "MANUAL_EXIT"
 
             trade = paper_trading.close_position(price, reason)
@@ -3038,7 +3052,10 @@ async def paper(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elif subcommand == "reset":
             # /paper reset [initial_balance]
-            initial = float(args[1]) if len(args) > 1 else 1000.0
+            try:
+                initial = float(args[1]) if len(args) > 1 else 1000.0
+            except (ValueError, TypeError):
+                initial = 1000.0
             paper_trading.reset_wallet(initial)
             await update.message.reply_text(
                 f"*🔄 Wallet Reset*\n\nNew balance: ${initial:.2f}",
@@ -4428,7 +4445,11 @@ async def _execute_trade_with_tp_sl(query, data: str):
         return
 
     token_address = parts[1]
-    pct = float(parts[2])
+    try:
+        pct = float(parts[2])
+    except (ValueError, TypeError):
+        await query.message.reply_text("❌ Invalid trade percent", parse_mode=ParseMode.MARKDOWN)
+        return
     grade = parts[3]
 
     user_id = query.from_user.id

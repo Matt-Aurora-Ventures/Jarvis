@@ -198,15 +198,55 @@ async def fetch_treasury_positions() -> List[Dict[str, Any]]:
 
 async def fetch_bags_graduations() -> List[Dict[str, Any]]:
     """
-    Fetch recent bags.fm graduations.
+    Fetch recent bags.fm graduations via DexScreener (Meteora pairs).
 
     Returns:
-        List of recent graduations with symbol, time, score
+        List of recent graduations with symbol, time, liquidity
     """
     try:
-        # TODO: Implement bags.fm graduation fetching
-        # For now, return empty list
-        return []
+        import aiohttp
+        from datetime import timedelta
+
+        url = "https://api.dexscreener.com/latest/dex/search?q=meteora"
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        cutoff_ms = int(cutoff.timestamp() * 1000)
+
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return []
+                data = await resp.json()
+
+        pairs = data.get("pairs", []) or []
+        results = []
+        for pair in pairs[:30]:
+            created_ms = pair.get("pairCreatedAt", 0) or 0
+            if created_ms < cutoff_ms:
+                continue
+            base = pair.get("baseToken", {}) or {}
+            symbol = base.get("symbol", "?")
+            liquidity = (pair.get("liquidity", {}) or {}).get("usd", 0) or 0
+            created_dt = datetime.fromtimestamp(created_ms / 1000, tz=timezone.utc)
+            results.append({
+                "symbol": symbol,
+                "address": base.get("address", ""),
+                "liquidity_usd": round(liquidity, 2),
+                "created_at": created_dt.isoformat(),
+                "chain": "solana",
+            })
+
+        # Add score + time fields expected by demo_sentiment.py display
+        import math
+        for r in results:
+            liq = r.get("liquidity_usd", 0) or 0
+            # Log-scale liquidity to a 0-100 score ($10 → ~20, $10k → ~67, $1M → ~100)
+            r["score"] = min(100, int(math.log10(max(liq, 1)) * 16.67))
+            r["time"] = r.get("created_at", "")[:10]  # YYYY-MM-DD
+
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:10]
+
     except Exception as e:
         logger.error(f"Failed to fetch bags graduations: {e}")
         return []

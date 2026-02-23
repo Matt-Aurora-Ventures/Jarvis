@@ -53,7 +53,7 @@ class ComputerController:
 
     def __init__(
         self,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-sonnet-4-6",
         provider: str = "anthropic",
         auto_run: bool = True,
         safe_mode: bool = True,

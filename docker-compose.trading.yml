@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  trading-ui:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "5001:5001"
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    restart: unless-stopped

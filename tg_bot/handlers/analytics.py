@@ -25,11 +25,16 @@ async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     Usage: /analytics
     """
+    if not update.message:
+        return
     config = get_config()
 
     # Admin-only for now
     if not is_admin(update.effective_user.id, config.admin_ids):
-        await update.message.reply_text("⛔ Admin only")
+        try:
+            await update.message.reply_text("⛔ Admin only")
+        except Exception:
+            pass
         return
 
     try:
@@ -133,7 +138,10 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Admin-only for now
     if not is_admin(update.effective_user.id, config.admin_ids):
-        await update.message.reply_text("⛔ Admin only")
+        try:
+            await update.message.reply_text("⛔ Admin only")
+        except Exception:
+            pass
         return
 
     try:
@@ -182,7 +190,10 @@ async def performers_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # Admin-only for now
     if not is_admin(update.effective_user.id, config.admin_ids):
-        await update.message.reply_text("⛔ Admin only")
+        try:
+            await update.message.reply_text("⛔ Admin only")
+        except Exception:
+            pass
         return
 
     try:
@@ -252,7 +263,10 @@ async def tokenperf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Admin-only for now
     if not is_admin(update.effective_user.id, config.admin_ids):
-        await update.message.reply_text("⛔ Admin only")
+        try:
+            await update.message.reply_text("⛔ Admin only")
+        except Exception:
+            pass
         return
 
     try:

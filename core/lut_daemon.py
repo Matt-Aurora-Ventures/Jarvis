@@ -135,15 +135,37 @@ def fetch_price(
     return None
 
 
-def check_sentiment_reversal(mint: str) -> bool:
+def check_sentiment_reversal(mint: str, h24_threshold: float = -35.0, h1_threshold: float = -20.0) -> bool:
     """
-    Check if sentiment has reversed for a token.
+    Check if price momentum signals a sentiment reversal for a token.
 
-    TODO: Integrate with xai_twitter.py for real sentiment checking.
-    For now, returns False (no reversal).
+    Uses DexScreener 24h and 1h price changes as sentiment proxies:
+    - 24h change < -35% → severe reversal
+    - 1h change < -20% → rapid dump in progress
+
+    Returns True only when both threshold and data availability pass.
+    Falls back to False if DexScreener is unavailable (safe default).
     """
-    # In production, this would call xai_twitter.analyze_token_sentiment()
-    # and compare with the sentiment at entry time
+    try:
+        result = dexscreener.get_pairs_by_token(mint, cache_ttl_seconds=60)
+        if not result or not isinstance(result, dict):
+            return False
+        pairs = result.get("pairs") or []
+        if not pairs:
+            return False
+        # Use the highest-liquidity pair for the signal
+        pair = max(pairs, key=lambda p: float((p.get("liquidity") or {}).get("usd") or 0))
+        price_change = pair.get("priceChange") or {}
+        h24 = float(price_change.get("h24") or 0)
+        h1 = float(price_change.get("h1") or 0)
+        if h24 <= h24_threshold or h1 <= h1_threshold:
+            logger.info(
+                f"[lut_daemon] Sentiment reversal detected for {mint[:8]}…: "
+                f"1h={h1:+.1f}% 24h={h24:+.1f}%"
+            )
+            return True
+    except Exception as e:
+        logger.debug(f"[lut_daemon] Sentiment reversal check failed for {mint}: {e}")
     return False
 
 

@@ -52,6 +52,7 @@ class TestBotConfig:
         # Clear any local Ollama configuration and set test values
         with patch.dict("os.environ", {
             "TELEGRAM_BOT_TOKEN": "test-token",
+            "TELEGRAM_ADMIN_IDS": "123456789",
             "ANTHROPIC_API_KEY": "test-key",
             "JARVIS_ALLOW_REMOTE_ANTHROPIC": "1",  # Required to allow API key passthrough
             # Clear local Ollama config to ensure remote key is used
@@ -70,7 +71,7 @@ class TestBotConfig:
         from tg_bot.config import BotConfig
         config = BotConfig()
 
-        assert config.claude_model == "claude-sonnet-4-20250514"
+        assert config.claude_model == "claude-sonnet-4-6"
         assert config.sentiment_interval_seconds == 3600  # 1 hour
         assert config.paper_starting_balance == 100.0
 

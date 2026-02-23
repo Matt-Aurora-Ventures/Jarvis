@@ -79,7 +79,7 @@ class ClaudeContentGenerator:
         if is_local_anthropic():
             self.api_model = os.getenv("OLLAMA_TWITTER_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen3-coder"
         else:
-            self.api_model = os.getenv("CLAUDE_TWITTER_MODEL", "claude-sonnet-4-20250514")
+            self.api_model = os.getenv("CLAUDE_TWITTER_MODEL", "claude-sonnet-4-6")
         self._cli_system_prompt = None
         if self.cli_enabled:
             try:

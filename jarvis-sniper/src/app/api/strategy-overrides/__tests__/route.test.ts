@@ -10,6 +10,7 @@ describe('GET /api/strategy-overrides', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    process.env.AUTONOMY_READ_TOKEN = 'read-token';
   });
 
   it('returns stable schema with versioned snapshot', async () => {
@@ -31,7 +32,10 @@ describe('GET /api/strategy-overrides', () => {
       ],
     });
     const route = await import('@/app/api/strategy-overrides/route');
-    const res = await route.GET();
+    const req = new Request('http://localhost/api/strategy-overrides', {
+      headers: { Authorization: 'Bearer read-token' },
+    });
+    const res = await route.GET(req);
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.version).toBe(3);
@@ -39,4 +43,3 @@ describe('GET /api/strategy-overrides', () => {
     expect(body.patches[0].strategyId).toBe('pump_fresh_tight');
   });
 });
-

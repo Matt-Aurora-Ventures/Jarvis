@@ -42,7 +42,10 @@ class BusMessage:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "BusMessage":
-        return cls(**json.loads(data.decode("utf-8")))
+        try:
+            return cls(**json.loads(data.decode("utf-8")))
+        except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
+            raise ValueError(f"Invalid BusMessage bytes: {e}") from e
 
 
 class SecureMessageBus:

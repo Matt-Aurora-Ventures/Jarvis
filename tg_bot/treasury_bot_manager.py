@@ -223,7 +223,7 @@ class TreasuryBotManager:
 
     async def handle_market_overview(self, update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /market_overview command."""
-        market_msg = self.market_intel.build_market_overview()
+        market_msg = await self.market_intel.build_market_overview()
 
         await update.message.reply_text(
             market_msg,

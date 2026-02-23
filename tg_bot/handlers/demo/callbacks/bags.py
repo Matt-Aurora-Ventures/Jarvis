@@ -287,7 +287,12 @@ _Applied to all Bags.fm trades_
         return text, keyboard
 
     elif data.startswith("demo:bags_set_tp:"):
-        tp_value = float(data.split(":")[2])
+        parts = data.split(":")
+        try:
+            tp_value = float(parts[2]) if len(parts) >= 3 else 15.0
+        except (ValueError, TypeError):
+            logger.warning("Invalid TP value in callback data: %s", data)
+            tp_value = 15.0
         context.user_data["bags_tp_percent"] = tp_value
 
         default_tp = tp_value
@@ -323,7 +328,12 @@ _Applied to all Bags.fm trades_
         return text, keyboard
 
     elif data.startswith("demo:bags_set_sl:"):
-        sl_value = float(data.split(":")[2])
+        parts_sl = data.split(":")
+        try:
+            sl_value = float(parts_sl[2]) if len(parts_sl) >= 3 else 15.0
+        except (ValueError, TypeError):
+            logger.warning("Invalid SL value in callback data: %s", data)
+            sl_value = 15.0
         context.user_data["bags_sl_percent"] = sl_value
 
         default_tp = context.user_data.get("bags_tp_percent", 15.0)

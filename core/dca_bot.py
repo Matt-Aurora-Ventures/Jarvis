@@ -422,6 +422,10 @@ class DCABot:
 
         try:
             current_price = price_feed()
+            if not current_price:
+                logger.warning(f"Zero or None price for {plan.config.symbol}, skipping DCA cycle")
+                self._schedule_next(plan)
+                return
         except Exception as e:
             logger.error(f"Error getting price for {plan.config.symbol}: {e}")
             return

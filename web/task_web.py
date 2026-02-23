@@ -254,7 +254,10 @@ def api_research():
     payload = request.get_json() or {}
     topic = str(payload.get("topic", "")).strip()
     focus = str(payload.get("focus", "")).strip()
-    max_pages = int(payload.get("max_pages", 4))
+    try:
+        max_pages = int(payload.get("max_pages", 4))
+    except (ValueError, TypeError):
+        max_pages = 4
     if not topic:
         return jsonify({"error": "Topic is required"}), 400
     engine = research_engine.get_research_engine()

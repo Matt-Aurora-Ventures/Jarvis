@@ -118,7 +118,7 @@ class AnthropicVLM(VLMProvider):
 
     def __init__(self, api_key: str):
         super().__init__(api_key)
-        self.model = "claude-sonnet-4-20250514"
+        self.model = "claude-sonnet-4-6"
         self.base_url = "https://api.anthropic.com/v1/messages"
 
     def analyze_screenshot(self, image_path: str, task: str) -> str:

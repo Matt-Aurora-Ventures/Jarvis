@@ -16,6 +16,7 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { MobileTerminalShell } from '@/components/mobile/MobileTerminalShell';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { useAutomatedRiskManagement } from '@/hooks/useAutomatedRiskManagement';
+import { useSpotProtectionLifecycle } from '@/hooks/useSpotProtectionLifecycle';
 import { useTabNotifications } from '@/hooks/useTabNotifications';
 
 /** Bags-specific strategy presets for the info card */
@@ -67,6 +68,7 @@ export default function BagsSniperDashboard() {
 
   // Automated SL/TP: monitors positions and triggers sells when thresholds hit
   useAutomatedRiskManagement();
+  useSpotProtectionLifecycle();
 
   // Tab title flashing for important events (snipes, TP/SL exits)
   useTabNotifications();

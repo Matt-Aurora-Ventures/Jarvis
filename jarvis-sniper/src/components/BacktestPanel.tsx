@@ -85,6 +85,14 @@ export function BacktestPanel() {
               Last: {formatTimestamp(state.lastRunAt)}
             </span>
           )}
+          {state.usedRelaxedFallback && (
+            <span
+              className="text-[9px] font-mono font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border border-accent-warning/25 bg-accent-warning/10 text-accent-warning"
+              title="Strict real-data gate failed; this run used synthetic candles and is exploratory."
+            >
+              Exploratory
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {!collapsed && (
@@ -419,7 +427,7 @@ export function BacktestPanel() {
           {/* Last run timestamp */}
           {state.lastRunAt && (
             <div className="text-[10px] font-mono text-text-muted text-right pt-1">
-              Last validated: {formatTimestamp(state.lastRunAt)}
+              {state.usedRelaxedFallback ? 'Last run' : 'Last validated'}: {formatTimestamp(state.lastRunAt)}
             </div>
           )}
         </div>

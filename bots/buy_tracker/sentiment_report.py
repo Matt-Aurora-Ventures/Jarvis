@@ -1165,7 +1165,7 @@ Respond with ONLY the formatted lines, no other text."""
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-3",
+                    "model": "grok-4-1-fast-non-reasoning",
                     "messages": [
                         {"role": "system", "content": "You are a crypto trading analyst. Provide precise, actionable analysis."},
                         {"role": "user", "content": prompt}
@@ -1276,7 +1276,7 @@ Give a 2 sentence microcap market outlook. Be direct, acknowledge the risk, but 
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-3",
+                    "model": "grok-4-1-fast-non-reasoning",
                     "messages": [
                         {"role": "user", "content": context}
                     ],
@@ -1354,7 +1354,7 @@ DOUBLE CHECK: All events must be FUTURE events from {current_date}, not past eve
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-3",
+                    "model": "grok-4-1-fast-non-reasoning",
                     "messages": [
                         {"role": "system", "content": "You are a macro analyst specializing in crypto markets. Provide current, actionable analysis based on real-time news and events."},
                         {"role": "user", "content": prompt}
@@ -1492,7 +1492,7 @@ Be direct and specific. Traders need actionable intel, not fluff."""
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-3",
+                    "model": "grok-4-1-fast-non-reasoning",
                     "messages": [
                         {"role": "system", "content": "You are a traditional markets analyst. Provide current market analysis based on real-time data."},
                         {"role": "user", "content": prompt}
@@ -1587,7 +1587,7 @@ Respond with ONLY the formatted lines."""
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-3",
+                    "model": "grok-4-1-fast-non-reasoning",
                     "messages": [
                         {"role": "system", "content": "You are a stock market analyst. Provide actionable picks with clear reasoning."},
                         {"role": "user", "content": prompt}
@@ -1668,7 +1668,7 @@ Respond with ONLY the formatted lines."""
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-3",
+                    "model": "grok-4-1-fast-non-reasoning",
                     "messages": [
                         {"role": "system", "content": "You are a commodities analyst. Provide current market movers with actionable insights."},
                         {"role": "user", "content": prompt}
@@ -1829,7 +1829,7 @@ Be specific about price targets and key levels to watch."""
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-3",
+                    "model": "grok-4-1-fast-non-reasoning",
                     "messages": [
                         {"role": "system", "content": "You are a precious metals analyst. Provide actionable weekly outlook with specific price levels."},
                         {"role": "user", "content": prompt}
@@ -2063,7 +2063,7 @@ Be specific about price targets and key levels to watch."""
         bearish_count = sum(1 for t in tokens if t.sentiment_score < -0.1)
         neutral_count = len(tokens) - bullish_count - bearish_count
 
-        avg_change = sum(t.change_24h for t in tokens) / len(tokens)
+        avg_change = sum(t.change_24h for t in tokens) / len(tokens) if tokens else 0.0
 
         lines.extend([
             "<b>________________________________________</b>",
@@ -3061,7 +3061,7 @@ DO NOT use words like "momentum", "surge", or "pump" in reasoning - focus on rat
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-3",
+                    "model": "grok-4-1-fast-non-reasoning",
                     "messages": [
                         {
                             "role": "system",

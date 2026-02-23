@@ -279,7 +279,9 @@ class WalkForwardTester:
         param_names = list(param_grid.keys())
         param_values = list(param_grid.values())
 
-        def generate_combinations(idx=0, current={}):
+        def generate_combinations(idx=0, current=None):
+            if current is None:
+                current = {}
             if idx == len(param_names):
                 yield current.copy()
                 return

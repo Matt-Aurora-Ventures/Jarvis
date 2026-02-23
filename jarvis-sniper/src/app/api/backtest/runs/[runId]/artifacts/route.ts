@@ -1,22 +1,53 @@
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { join, normalize, resolve, sep } from 'path';
 import { NextResponse } from 'next/server';
 import { getBacktestRunStatus } from '@/lib/backtest-run-registry';
 
 export const runtime = 'nodejs';
 
-function runDir(runId: string): string {
-  return join(process.cwd(), '.jarvis-cache', 'backtest-runs', runId);
+const ARTIFACTS_ROOT = resolve(process.cwd(), '.jarvis-cache', 'backtest-runs');
+const RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{7,95}$/;
+
+function isValidRunId(runId: string): boolean {
+  const normalized = String(runId || '').trim();
+  return RUN_ID_PATTERN.test(normalized);
+}
+
+function resolveRunDirSafe(runId: string): string | null {
+  if (!isValidRunId(runId)) return null;
+
+  const candidate = resolve(ARTIFACTS_ROOT, runId);
+  const normalizedRoot = normalize(ARTIFACTS_ROOT).toLowerCase();
+  const normalizedCandidate = normalize(candidate).toLowerCase();
+  const rootPrefix = normalizedRoot.endsWith(sep)
+    ? normalizedRoot
+    : `${normalizedRoot}${sep}`;
+
+  if (!normalizedCandidate.startsWith(rootPrefix)) return null;
+  return candidate;
 }
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ runId: string }> },
 ) {
-  const { runId: requestedRunId } = await params;
+  const { runId: rawRequestedRunId } = await params;
+  const requestedRunId = String(rawRequestedRunId || '').trim();
+  if (!isValidRunId(requestedRunId)) {
+    return NextResponse.json({ error: 'Invalid runId format', runId: requestedRunId }, { status: 400 });
+  }
+
   const run = getBacktestRunStatus(requestedRunId);
-  const resolvedRunId = run?.evidenceRunId || requestedRunId;
-  const dir = runDir(resolvedRunId);
+  const resolvedRunId = String(run?.evidenceRunId || requestedRunId).trim();
+  if (!isValidRunId(resolvedRunId)) {
+    return NextResponse.json({ error: 'Invalid resolved runId format', runId: requestedRunId }, { status: 400 });
+  }
+
+  const dir = resolveRunDirSafe(resolvedRunId);
+  if (!dir) {
+    return NextResponse.json({ error: 'Invalid artifact path', runId: requestedRunId }, { status: 400 });
+  }
+
   const manifestPath = join(dir, 'manifest.json');
   const evidencePath = join(dir, 'evidence.json');
   const reportPath = join(dir, 'report.md');

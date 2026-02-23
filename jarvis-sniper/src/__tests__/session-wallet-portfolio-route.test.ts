@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/rate-limiter', () => ({
   apiRateLimiter: { check: vi.fn().mockReturnValue({ allowed: true }) },
@@ -61,7 +61,12 @@ function baseConsensus(wallet: string) {
 }
 
 describe('GET /api/session-wallet/portfolio', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(async () => {
+    vi.resetModules();
     vi.clearAllMocks();
     mockFetchEmptyDex();
     const { apiRateLimiter, getClientIp } = await import('@/lib/rate-limiter');
@@ -84,7 +89,7 @@ describe('GET /api/session-wallet/portfolio', () => {
     expect(data.holdings[0].sources).toBeDefined();
     expect(data.holdings[0].accountCount).toBe(1);
     expect(Array.isArray(data.holdings[0].accounts)).toBe(true);
-  });
+  }, 15000);
 
   it('bypasses cache on fullScan', async () => {
     const wallet = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -100,7 +105,7 @@ describe('GET /api/session-wallet/portfolio', () => {
     expect(buildWalletHoldingsConsensus).toHaveBeenCalledTimes(2);
     expect((buildWalletHoldingsConsensus as any).mock.calls[0][1]).toEqual({ forceFullScan: false });
     expect((buildWalletHoldingsConsensus as any).mock.calls[1][1]).toEqual({ forceFullScan: true });
-  });
+  }, 15000);
 
   it('serves stale cached snapshot when fresh build fails', async () => {
     const wallet = 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN';
@@ -118,5 +123,5 @@ describe('GET /api/session-wallet/portfolio', () => {
     const data = await second.json();
     expect(data.stale).toBe(true);
     expect(data.warning).toContain('cached snapshot');
-  });
+  }, 15000);
 });

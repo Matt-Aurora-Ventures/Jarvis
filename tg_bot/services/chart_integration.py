@@ -176,7 +176,6 @@ class ChartIntegration:
 
             # Generate price chart
             try:
-                # TODO: Fetch historical price data
                 price_chart = await self._generate_position_chart_data(symbol)
                 if price_chart:
                     msg = await context.bot.send_photo(
@@ -260,14 +259,34 @@ class ChartIntegration:
         context: ContextTypes.DEFAULT_TYPE,
         chat_id: int,
     ) -> Optional[int]:
-        """Send sentiment analysis heatmap."""
+        """Send sentiment analysis heatmap using live CoinGecko price change data."""
         try:
-            # TODO: Get sentiment data from aggregator
-            sentiment_data = {
-                'SOL': {'grok': 75, 'twitter': 68, 'news': 72},
-                'BTC': {'grok': 82, 'twitter': 71, 'news': 78},
-                'ETH': {'grok': 68, 'twitter': 65, 'news': 70},
-            }
+            # Build sentiment scores from live price changes (proxy for sentiment)
+            sentiment_data = {}
+            try:
+                from tg_bot.services.market_intelligence import MarketIntelligence
+                prices = await MarketIntelligence._fetch_live_prices()
+                coin_map = {
+                    'SOL': ('solana', 'solana'),
+                    'BTC': ('bitcoin', 'bitcoin'),
+                    'ETH': ('ethereum', 'ethereum'),
+                }
+                for sym, (cg_id, _) in coin_map.items():
+                    coin = prices.get(cg_id, {})
+                    chg = float(coin.get('usd_24h_change', 0) or 0)
+                    # Map -10%..+10% change → 0..100 sentiment score
+                    score = max(0, min(100, int(50 + chg * 5)))
+                    sentiment_data[sym] = {'price_momentum': score, 'trend': score}
+            except Exception:
+                pass
+
+            if not sentiment_data:
+                # Minimal neutral fallback
+                sentiment_data = {
+                    'SOL': {'trend': 50},
+                    'BTC': {'trend': 50},
+                    'ETH': {'trend': 50},
+                }
 
             # Generate heatmap
             heatmap = self.chart_gen.generate_sentiment_heatmap(
@@ -292,11 +311,32 @@ class ChartIntegration:
     # ==================== CHART DATA GENERATORS ====================
 
     async def _generate_portfolio_chart_data(self) -> Optional[BytesIO]:
-        """Generate portfolio performance chart data."""
+        """Generate portfolio performance chart data from trade history."""
         try:
-            # TODO: Fetch actual portfolio history
-            dates = [datetime.utcnow() - timedelta(days=i) for i in range(30, 0, -1)]
-            values = [10000 + i * 150 for i in range(30)]
+            history = getattr(self.trader, 'trade_history', [])
+            closed = sorted(
+                [p for p in history if getattr(p, 'closed_at', None) and getattr(p, 'pnl_usd', None) is not None],
+                key=lambda p: p.closed_at,
+            )
+
+            if not closed:
+                # No closed trades yet — return None rather than fake data
+                return None
+
+            # Build equity curve: cumulative PnL over time
+            cumulative = 0.0
+            dates, values = [], []
+            for p in closed:
+                try:
+                    dt = datetime.fromisoformat(p.closed_at.replace('Z', '+00:00'))
+                except Exception:
+                    continue
+                cumulative += p.pnl_usd
+                dates.append(dt)
+                values.append(cumulative)
+
+            if len(values) < 2:
+                return None
 
             return self.chart_gen.generate_portfolio_chart(values, dates)
         except Exception as e:
@@ -323,11 +363,31 @@ class ChartIntegration:
             return None
 
     async def _generate_drawdown_chart_data(self) -> Optional[BytesIO]:
-        """Generate drawdown analysis chart."""
+        """Generate drawdown analysis chart from trade history."""
         try:
-            # TODO: Fetch actual portfolio history
-            dates = [datetime.utcnow() - timedelta(days=i) for i in range(30, 0, -1)]
-            values = [10000 + i * 150 for i in range(30)]
+            history = getattr(self.trader, 'trade_history', [])
+            closed = sorted(
+                [p for p in history if getattr(p, 'closed_at', None) and getattr(p, 'pnl_usd', None) is not None],
+                key=lambda p: p.closed_at,
+            )
+
+            if not closed:
+                return None
+
+            # Build equity curve then compute drawdown
+            cumulative = 0.0
+            dates, values = [], []
+            for p in closed:
+                try:
+                    dt = datetime.fromisoformat(p.closed_at.replace('Z', '+00:00'))
+                except Exception:
+                    continue
+                cumulative += p.pnl_usd
+                dates.append(dt)
+                values.append(cumulative)
+
+            if len(values) < 2:
+                return None
 
             return self.chart_gen.generate_drawdown_chart(values, dates)
         except Exception as e:
@@ -335,15 +395,48 @@ class ChartIntegration:
             return None
 
     async def _generate_position_chart_data(self, symbol: str) -> Optional[BytesIO]:
-        """Generate individual position price chart."""
+        """Generate individual position price chart using DexScreener OHLCV data."""
         try:
-            # TODO: Fetch price history for symbol
-            times = [datetime.utcnow() - timedelta(hours=i) for i in range(24, 0, -1)]
-            prices = [100 + i * 0.5 for i in range(24)]
-
             position = next((p for p in self.trader.get_open_positions() if p.token_symbol == symbol), None)
             if not position:
                 return None
+
+            # Attempt to fetch 24h price history from DexScreener
+            times: List[datetime] = []
+            prices: List[float] = []
+            try:
+                import aiohttp
+                mint = getattr(position, 'token_mint', '')
+                if mint:
+                    url = f"https://api.dexscreener.com/latest/dex/tokens/{mint}"
+                    timeout = aiohttp.ClientTimeout(total=8)
+                    async with aiohttp.ClientSession(timeout=timeout) as session:
+                        async with session.get(url) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                pairs = (data.get('pairs') or [])
+                                # Use the pair with highest liquidity
+                                pairs_sol = [p for p in pairs if (p.get('chainId') == 'solana')]
+                                best = max(pairs_sol, key=lambda p: (p.get('liquidity') or {}).get('usd', 0), default=None)
+                                if best:
+                                    # DexScreener doesn't have OHLCV on free tier;
+                                    # reconstruct from current price + 24h change
+                                    current = float((best.get('priceUsd') or 0) or 0)
+                                    chg24 = float((best.get('priceChange') or {}).get('h24', 0) or 0)
+                                    if current > 0:
+                                        open24 = current / (1 + chg24 / 100) if chg24 != -100 else current
+                                        # Interpolate 24 hourly points linearly
+                                        for i in range(24):
+                                            frac = i / 23.0
+                                            prices.append(open24 + (current - open24) * frac)
+                                            times.append(datetime.utcnow() - timedelta(hours=(23 - i)))
+            except Exception as fetch_err:
+                logger.debug(f"DexScreener fetch failed for {symbol}: {fetch_err}")
+
+            if not prices:
+                # Fallback: use current entry price as flat line (still shows entry/TP markers)
+                prices = [position.current_price] * 24
+                times = [datetime.utcnow() - timedelta(hours=i) for i in range(23, -1, -1)]
 
             return self.chart_gen.generate_price_chart(
                 symbol=symbol,
@@ -357,15 +450,84 @@ class ChartIntegration:
             return None
 
     async def _generate_trade_distribution_data(self) -> Optional[BytesIO]:
-        """Generate trade P&L distribution chart."""
+        """Generate trade P&L distribution chart from closed trade history."""
         try:
-            # TODO: Fetch closed trades
-            pnl_values = [100, 250, -50, 120, 300, -75, 85, 220, -30, 150]
+            history = getattr(self.trader, 'trade_history', [])
+            pnl_values = [
+                p.pnl_usd for p in history
+                if getattr(p, 'pnl_usd', None) is not None
+            ]
+
+            if not pnl_values:
+                return None
 
             return self.chart_gen.generate_trade_distribution(pnl_values)
         except Exception as e:
             logger.warning(f"Trade distribution chart generation failed: {e}")
             return None
+
+    @staticmethod
+    def _volatility_from_change_pct(change_pct: float) -> float:
+        """Map 24h percentage move to a 0-100 volatility scale."""
+        return max(0.0, min(100.0, abs(change_pct) * 7.0))
+
+    async def _estimate_position_volatility(
+        self,
+        position: Any,
+        live_prices: Optional[Dict[str, Dict[str, float]]] = None,
+    ) -> float:
+        """
+        Estimate per-position volatility using best available market data.
+
+        Priority:
+        1) CoinGecko 24h change for majors (SOL/BTC/ETH)
+        2) DexScreener 24h change for token mint
+        3) Fallback from unrealized PnL%
+        """
+        symbol = str(getattr(position, 'token_symbol', '')).upper()
+        coin_map = {
+            'SOL': 'solana',
+            'BTC': 'bitcoin',
+            'ETH': 'ethereum',
+        }
+
+        # Major assets: use already-fetched CoinGecko cache.
+        if live_prices and symbol in coin_map:
+            cg_id = coin_map[symbol]
+            coin = (live_prices.get(cg_id, {}) or {})
+            chg24 = float(coin.get('usd_24h_change', 0) or 0)
+            if chg24:
+                return self._volatility_from_change_pct(chg24)
+
+        # Token-specific fallback: DexScreener 24h change for mint.
+        mint = getattr(position, 'token_mint', '')
+        if mint:
+            try:
+                import aiohttp
+
+                url = f"https://api.dexscreener.com/latest/dex/tokens/{mint}"
+                timeout = aiohttp.ClientTimeout(total=8)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            pairs = (data.get('pairs') or [])
+                            pairs_sol = [p for p in pairs if p.get('chainId') == 'solana']
+                            best = max(
+                                pairs_sol,
+                                key=lambda p: (p.get('liquidity') or {}).get('usd', 0),
+                                default=None,
+                            )
+                            if best:
+                                chg24 = float((best.get('priceChange') or {}).get('h24', 0) or 0)
+                                if chg24:
+                                    return self._volatility_from_change_pct(chg24)
+            except Exception as fetch_err:
+                logger.debug(f"Volatility fetch failed for {symbol}: {fetch_err}")
+
+        # Last-resort fallback from current position behavior.
+        pnl_pct = abs(float(getattr(position, 'unrealized_pnl_pct', 0) or 0))
+        return max(5.0, min(100.0, pnl_pct * 2.0))
 
     async def _generate_risk_return_data(self) -> Optional[BytesIO]:
         """Generate risk/return scatter plot."""
@@ -374,15 +536,30 @@ class ChartIntegration:
             if not positions:
                 return None
 
-            position_data = [
-                {
-                    'symbol': p.token_symbol,
-                    'return': p.unrealized_pnl_pct,
-                    'volatility': 20.0,  # TODO: Calculate actual volatility
-                    'allocation': (p.current_value_usd / sum(pos.current_value_usd for pos in positions) * 100),
-                }
-                for p in positions
-            ]
+            total_value = sum(float(getattr(p, 'current_value_usd', 0) or 0) for p in positions)
+            if total_value <= 0:
+                total_value = 1.0
+
+            live_prices: Dict[str, Dict[str, float]] = {}
+            try:
+                from tg_bot.services.market_intelligence import MarketIntelligence
+
+                live_prices = await MarketIntelligence._fetch_live_prices()
+            except Exception as price_err:
+                logger.debug(f"Live price cache unavailable for risk/return plot: {price_err}")
+
+            position_data = []
+            for p in positions:
+                volatility = await self._estimate_position_volatility(p, live_prices)
+                allocation = (float(getattr(p, 'current_value_usd', 0) or 0) / total_value) * 100
+                position_data.append(
+                    {
+                        'symbol': getattr(p, 'token_symbol', 'UNKNOWN'),
+                        'return': float(getattr(p, 'unrealized_pnl_pct', 0) or 0),
+                        'volatility': volatility,
+                        'allocation': allocation,
+                    }
+                )
 
             return self.chart_gen.generate_risk_return_plot(position_data)
         except Exception as e:

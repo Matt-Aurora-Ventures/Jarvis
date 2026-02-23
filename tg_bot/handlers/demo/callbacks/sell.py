@@ -212,7 +212,11 @@ You are about to sell *{position_count} positions*
         parts = data.split(":")
         if len(parts) >= 4:
             pos_id = parts[2]
-            pct = int(parts[3])
+            try:
+                pct = int(parts[3])
+            except (ValueError, TypeError):
+                logger.warning("Invalid sell pct in callback data: %s", data)
+                return None
 
             pos_data = next((p for p in positions if p["id"] == pos_id), None)
             if pos_data:

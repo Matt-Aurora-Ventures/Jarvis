@@ -1,0 +1,9 @@
+# Signer host dependency profile (Zone C)
+# Keep this surface minimal.
+
+anchorpy==0.21.0
+solders==0.26.0
+solana==0.36.6
+base58==2.1.1
+borsh-construct==0.1.0
+aiosqlite==0.21.0

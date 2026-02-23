@@ -13,18 +13,20 @@ import Research from '@/pages/Research'
 import VoiceControl from '@/pages/VoiceControl'
 import Roadmap from '@/pages/Roadmap'
 import Alerts from '@/pages/Alerts'
+import Investments from '@/pages/Investments'
 
 /**
  * JARVIS Dashboard - Main Application Router
  *
  * Routes:
- * - /           → Dashboard (system overview, stats, activity)
- * - /trading    → Trading Command Center (full-screen, own nav)
- * - /chat       → Full-page Jarvis conversation
- * - /voice      → Voice control interface
- * - /research   → Research tools
- * - /settings   → System configuration
- * - /roadmap    → Development roadmap
+ * - /              → Dashboard (system overview, stats, activity)
+ * - /trading       → Trading Command Center (full-screen, own nav)
+ * - /investments   → AI Portfolio Manager dashboard
+ * - /chat          → Full-page Jarvis conversation
+ * - /voice         → Voice control interface
+ * - /research      → Research tools
+ * - /settings      → System configuration
+ * - /roadmap       → Development roadmap
  */
 function App() {
   return (
@@ -55,6 +57,9 @@ function App() {
 
           {/* Price Alerts */}
           <Route path="alerts" element={<Alerts />} />
+
+          {/* AI Investment Manager */}
+          <Route path="investments" element={<Investments />} />
         </Route>
       </Routes>
     </BrowserRouter>

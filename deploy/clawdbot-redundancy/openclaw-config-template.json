@@ -39,6 +39,7 @@
     "jarvis": "xai/grok-beta",
     "matt": "anthropic/claude-sonnet-4-20250514",
     "friday": "anthropic/claude-opus-4-20250514",
+    "codex": "openai/gpt-5-codex",
     "yoda": "nvidia/moonshotai/kimi-k2.5",
     "squishy": "google/gemini-2.5-pro-preview-05-06"
   },
@@ -58,6 +59,9 @@
       "anthropic": {
         "oauth_access": "${ANTHROPIC_OAUTH_ACCESS}",
         "oauth_refresh": "${ANTHROPIC_OAUTH_REFRESH}"
+      },
+      "openai": {
+        "api_key": "${OPENAI_API_KEY}"
       },
       "xai": {
         "api_key": "${XAI_API_KEY}"

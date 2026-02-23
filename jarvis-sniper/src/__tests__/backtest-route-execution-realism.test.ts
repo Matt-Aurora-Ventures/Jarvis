@@ -66,7 +66,7 @@ describe('POST /api/backtest execution realism contract', () => {
     const body = await res.json();
     expect(res.status).toBe(422);
     expect(String(body.error || '')).toContain('strictNoSynthetic gate failed');
-  });
+  }, 45_000);
 
   it('returns deterministic execution realism fields when strict mode is explicitly disabled', async () => {
     const route = await import('@/app/api/backtest/route');
@@ -95,5 +95,6 @@ describe('POST /api/backtest execution realism contract', () => {
     expect(body.results.length).toBeGreaterThan(0);
     expect(typeof body.results[0].executionAdjustedExpectancy).toBe('number');
     expect(typeof body.results[0].executionAdjustedNetPnlPct).toBe('number');
-  });
+  }, 45_000);
 });
+

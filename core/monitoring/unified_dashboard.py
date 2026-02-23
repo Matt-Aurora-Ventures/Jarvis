@@ -956,7 +956,10 @@ def create_dashboard_app(
     async def history_handler(request):
         """Historical metrics endpoint."""
         metric = request.query.get("metric", "")
-        days = int(request.query.get("days", "7"))
+        try:
+            days = int(request.query.get("days", "7"))
+        except (ValueError, TypeError):
+            days = 7
 
         data = app["metrics_store"].get_history(metric, days=days)
         return web.json_response({

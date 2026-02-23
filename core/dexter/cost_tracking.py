@@ -27,7 +27,7 @@ class CostEntry:
     output_tokens: int = 0
     cost_usd: float = 0.0
     iterations: int = 0
-    model: str = "grok-3"
+    model: str = "grok-4-1-fast-non-reasoning"
 
 
 @dataclass
@@ -115,7 +115,7 @@ class DexterCostTracker:
         input_tokens: int,
         output_tokens: int,
         iterations: int = 1,
-        model: str = "grok-3"
+        model: str = "grok-4-1-fast-non-reasoning"
     ) -> CostEntry:
         """
         Record cost for a decision.

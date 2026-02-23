@@ -53,19 +53,29 @@ class GrokClient:
     """
 
     BASE_URL = "https://api.x.ai/v1"
-    CHAT_MODEL = "grok-3"
+    CHAT_MODEL = "grok-4-1-fast-non-reasoning"
     IMAGE_MODEL = "grok-2-image"
     # State file - centralized under ~/.lifeos/data/
     from core.state_paths import STATE_PATHS
     STATE_FILE = STATE_PATHS.grok_state
 
-    # Cost per 1K tokens (xAI Grok pricing - update as needed)
-    COST_PER_1K_INPUT = 0.005   # $0.005 per 1K input tokens
-    COST_PER_1K_OUTPUT = 0.015  # $0.015 per 1K output tokens
+    # Cost per 1K tokens (xAI grok-4-1-fast-non-reasoning pricing)
+    COST_PER_1K_INPUT = 0.00020   # $0.20 per 1M input tokens
+    COST_PER_1K_OUTPUT = 0.00050  # $0.50 per 1M output tokens
     COST_PER_IMAGE = 0.02       # $0.02 per image generation
 
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv("XAI_API_KEY", "")
+        raw_key = api_key or os.getenv("XAI_API_KEY", "")
+        # Strip whitespace/newlines that can corrupt the key when loaded from .env files
+        self.api_key = raw_key.strip()
+        if self.api_key and not self.api_key.startswith("xai-"):
+            logger.warning(
+                "XAI_API_KEY does not start with 'xai-' — may be truncated or incorrect "
+                "(key length: %d). Check .env for quotes, trailing spaces, or newlines.",
+                len(self.api_key),
+            )
+        elif not self.api_key:
+            logger.warning("XAI_API_KEY is empty — Grok API calls will fail.")
         self._session: Optional[aiohttp.ClientSession] = None
         self._daily_image_count = 0
         self._last_image_date: Optional[str] = None

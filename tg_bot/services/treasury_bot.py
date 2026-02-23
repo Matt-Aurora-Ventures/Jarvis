@@ -540,7 +540,10 @@ Use /resume_token {token_mint} to resume.
         if data == "main_menu":
             await self._show_main_menu(query, context)
         elif data.startswith("report_"):
-            period = int(data.split("_")[1].rstrip("d"))
+            try:
+                period = int(data.split("_")[1].rstrip("d"))
+            except (IndexError, ValueError):
+                return
             await self._show_report(query, context, period)
         elif data == "refresh_dashboard":
             await self._refresh_dashboard(query, context)

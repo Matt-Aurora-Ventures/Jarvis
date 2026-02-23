@@ -74,7 +74,7 @@ class TestEnhancedSecretsManager:
             if file_path.is_file():
                 try:
                     all_content += file_path.read_text()
-                except:
+                except Exception:
                     all_content += file_path.read_bytes().decode('utf-8', errors='ignore')
 
         # Secret value should NOT appear in plaintext

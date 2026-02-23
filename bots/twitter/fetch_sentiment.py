@@ -50,7 +50,7 @@ CRYPTO_IMPACT|[how traditional markets affect crypto]"""
         async with session.post(
             'https://api.x.ai/v1/chat/completions',
             headers={'Authorization': f'Bearer {xai_key}', 'Content-Type': 'application/json'},
-            json={'model': 'grok-3', 'messages': [{'role': 'user', 'content': macro_prompt}], 'max_tokens': 800, 'temperature': 0.6}
+            json={'model': 'grok-4-1-fast-non-reasoning', 'messages': [{'role': 'user', 'content': macro_prompt}], 'max_tokens': 800, 'temperature': 0.6}
         ) as resp:
             if resp.status == 200:
                 data = await resp.json()
@@ -85,7 +85,7 @@ Be specific and actionable."""
         async with session.post(
             'https://api.x.ai/v1/chat/completions',
             headers={'Authorization': f'Bearer {xai_key}', 'Content-Type': 'application/json'},
-            json={'model': 'grok-3', 'messages': [{'role': 'user', 'content': stocks_prompt}], 'max_tokens': 600, 'temperature': 0.6}
+            json={'model': 'grok-4-1-fast-non-reasoning', 'messages': [{'role': 'user', 'content': stocks_prompt}], 'max_tokens': 600, 'temperature': 0.6}
         ) as resp:
             if resp.status == 200:
                 data = await resp.json()
@@ -115,7 +115,7 @@ COMMODITY|DIRECTION|CHANGE|REASON|OUTLOOK"""
         async with session.post(
             'https://api.x.ai/v1/chat/completions',
             headers={'Authorization': f'Bearer {xai_key}', 'Content-Type': 'application/json'},
-            json={'model': 'grok-3', 'messages': [{'role': 'user', 'content': commodities_prompt}], 'max_tokens': 500, 'temperature': 0.6}
+            json={'model': 'grok-4-1-fast-non-reasoning', 'messages': [{'role': 'user', 'content': commodities_prompt}], 'max_tokens': 500, 'temperature': 0.6}
         ) as resp:
             if resp.status == 200:
                 data = await resp.json()
@@ -143,7 +143,7 @@ PLATINUM|DIRECTION|[detailed outlook with levels]"""
         async with session.post(
             'https://api.x.ai/v1/chat/completions',
             headers={'Authorization': f'Bearer {xai_key}', 'Content-Type': 'application/json'},
-            json={'model': 'grok-3', 'messages': [{'role': 'user', 'content': metals_prompt}], 'max_tokens': 500, 'temperature': 0.6}
+            json={'model': 'grok-4-1-fast-non-reasoning', 'messages': [{'role': 'user', 'content': metals_prompt}], 'max_tokens': 500, 'temperature': 0.6}
         ) as resp:
             if resp.status == 200:
                 data = await resp.json()
@@ -218,7 +218,7 @@ Be honest about the extreme risk. These can go to zero overnight."""
             async with session.post(
                 'https://api.x.ai/v1/chat/completions',
                 headers={'Authorization': f'Bearer {xai_key}', 'Content-Type': 'application/json'},
-                json={'model': 'grok-3', 'messages': [{'role': 'user', 'content': microcap_prompt}], 'max_tokens': 600, 'temperature': 0.6}
+                json={'model': 'grok-4-1-fast-non-reasoning', 'messages': [{'role': 'user', 'content': microcap_prompt}], 'max_tokens': 600, 'temperature': 0.6}
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()

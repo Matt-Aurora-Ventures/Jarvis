@@ -1,3 +1,4 @@
+import { buildAutonomyTelemetryHeaders, getAutonomyTelemetryToken } from './client-auth';
 export interface TradeTelemetryEvent {
   schemaVersion: number;
   eventType?: 'trade_closed' | 'sell_attempt';
@@ -27,6 +28,7 @@ export interface TradeTelemetryEvent {
   tradeSignerMode?: string;
   sessionWalletPubkey?: string | null;
   activePreset?: string | null;
+  trustLevel?: 'trusted' | 'untrusted';
 }
 
 /**
@@ -41,18 +43,20 @@ export function postTradeTelemetry(event: TradeTelemetryEvent): void {
 
     const url = '/api/autonomy/trade-telemetry';
     const body = JSON.stringify(event);
+    const telemetryToken = getAutonomyTelemetryToken();
 
-    // Prefer beacon for unload-safe delivery.
-    if (typeof navigator !== 'undefined' && typeof (navigator as any).sendBeacon === 'function') {
+    // sendBeacon cannot attach Authorization headers, so only use it when telemetry auth is not configured.
+    if (!telemetryToken && typeof navigator !== 'undefined' && typeof (navigator as any).sendBeacon === 'function') {
       const blob = new Blob([body], { type: 'application/json' });
       (navigator as any).sendBeacon(url, blob);
       return;
     }
 
     if (typeof fetch === 'function') {
+      const headers = buildAutonomyTelemetryHeaders({ 'content-type': 'application/json' });
       void fetch(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers,
         body,
         keepalive: true,
       }).catch(() => {

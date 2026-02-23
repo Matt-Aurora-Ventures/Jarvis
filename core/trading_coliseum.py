@@ -41,6 +41,9 @@ class BacktestResult:
     total_trades: int
     final_pnl: float
     passed: bool
+    data_source: str = "synthetic_randomized"
+    promotable: bool = False
+    validation_excluded: bool = True
 
 
 class TradingColiseum:
@@ -215,10 +218,14 @@ class TradingColiseum:
             # would pull OHLCV data and run strategy logic)
             result = self._simulate_backtest(strategy, start, end)
             results.append(result)
-            
-            # Store in database
+
+            # Store for traceability, but never treat randomized outputs as scored validation.
             self._store_result(result)
-            
+
+            if result.validation_excluded:
+                print("   [coliseum] synthetic/randomized run excluded from scoring and promotions")
+                continue
+
             # Update strategy status
             self._update_strategy_status(strategy_id, result)
             
@@ -253,13 +260,7 @@ class TradingColiseum:
         total_trades = random.randint(20, 200)
         final_pnl = random.uniform(-5000, 10000)
         
-        # Determine pass/fail
-        passed = (
-            sharpe > 0.5 and
-            max_dd < self.max_drawdown_threshold and
-            win_rate > self.min_win_rate
-        )
-        
+        # Randomized simulation output is explicitly non-promotable.
         return BacktestResult(
             strategy_id=strategy["strategy_id"],
             window_start=start_date,
@@ -270,7 +271,10 @@ class TradingColiseum:
             profit_factor=profit_factor,
             total_trades=total_trades,
             final_pnl=final_pnl,
-            passed=passed,
+            passed=False,
+            data_source="synthetic_randomized",
+            promotable=False,
+            validation_excluded=True,
         )
     
     def _generate_random_windows(self, count: int, days: int) -> List[Tuple[str, str]]:
@@ -411,7 +415,10 @@ class TradingColiseum:
         - 5 consecutive failures
         """
         status = self._get_strategy_status(strategy_id)
-        
+
+        if not results or any(getattr(r, "validation_excluded", False) for r in results):
+            return "PENDING"
+
         # Check deletion
         if status["consecutive_failures"] >= self.max_consecutive_failures:
             return "DELETE"

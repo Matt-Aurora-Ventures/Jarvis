@@ -70,11 +70,11 @@ class GrokClient(BaseAPIClient):
     """
 
     BASE_URL = "https://api.x.ai/v1"
-    DEFAULT_MODEL = "grok-3"
+    DEFAULT_MODEL = "grok-4-1-fast-non-reasoning"
 
-    # Cost per 1K tokens (xAI Grok pricing)
-    COST_PER_1K_INPUT = 0.005   # $0.005 per 1K input tokens
-    COST_PER_1K_OUTPUT = 0.015  # $0.015 per 1K output tokens
+    # Cost per 1K tokens (xAI grok-4-1-fast-non-reasoning pricing)
+    COST_PER_1K_INPUT = 0.00020   # $0.20 per 1M input tokens
+    COST_PER_1K_OUTPUT = 0.00050  # $0.50 per 1M output tokens
 
     def __init__(
         self,

@@ -429,7 +429,7 @@ Generate 3-5 concrete refactor proposals in JSON format:
             
             validation_results[proposal_id] = {
                 "passed": passed_count >= 80,  # 80% success threshold
-                "score": passed_count / len(sample_logs),
+                "score": passed_count / len(sample_logs) if sample_logs else 0.0,
             }
         
         return validation_results

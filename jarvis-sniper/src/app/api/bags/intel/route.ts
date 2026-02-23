@@ -549,7 +549,7 @@ export async function GET(request: Request) {
 
   // Rate limiting
   const ip = getClientIp(request);
-  const rl = apiRateLimiter.check(ip);
+  const rl = await apiRateLimiter.check(ip);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: 'Rate limit exceeded', retryAfter: rl.retryAfterMs },

@@ -504,17 +504,7 @@ def handle_messages():
         # Command Processing
         response_text = "Message logged."
         
-        if text.startswith('/exec '):
-            cmd = text[6:]
-            response_text = f"Executing: {cmd}..."
-            try:
-                import subprocess
-                subprocess.Popen(cmd, shell=True)
-                response_text = f"🚀 Executed: {cmd}"
-            except Exception as e:
-                response_text = f"❌ Execution failed: {str(e)}"
-                
-        elif text == '/scan':
+        if text == '/scan':
             monitor.known_pids = set() # Reset baseline to re-scan
             response_text = "🔄 Security baseline reset. Re-scanning..."
             

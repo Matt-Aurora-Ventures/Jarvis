@@ -458,7 +458,7 @@ class DecisionMatrix:
 
         # Check notional limit
         notional = portfolio_value * base_size
-        if notional > self.entry.max_notional_usd:
+        if notional > self.entry.max_notional_usd and portfolio_value > 0:
             base_size = self.entry.max_notional_usd / portfolio_value
 
         return min(base_size, self.entry.max_position_size_pct)

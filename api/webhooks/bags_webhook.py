@@ -521,7 +521,8 @@ class BagsPollingFallback:
         """Poll for partner stats updates"""
         async with session.get(
             f"{self.base_url}/api/v1/partner/stats",
-            headers={"x-api-key": self.api_key}
+            headers={"x-api-key": self.api_key},
+            timeout=aiohttp.ClientTimeout(total=30),
         ) as response:
             if response.status == 200:
                 data = await response.json()
@@ -543,7 +544,8 @@ class BagsPollingFallback:
         async with session.get(
             f"{self.base_url}/api/v1/partner/trades",
             headers={"x-api-key": self.api_key},
-            params={"since": since}
+            params={"since": since},
+            timeout=aiohttp.ClientTimeout(total=30),
         ) as response:
             if response.status == 200:
                 data = await response.json()

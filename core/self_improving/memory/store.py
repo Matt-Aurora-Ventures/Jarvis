@@ -31,6 +31,7 @@ from core.self_improving.memory.models import (
     Interaction,
     ContextBundle,
 )
+from core.security_validation import sanitize_sql_identifier
 
 logger = logging.getLogger("jarvis.memory")
 
@@ -818,7 +819,8 @@ class MemoryStore:
         stats = {}
 
         for table in ["entities", "facts", "reflections", "predictions", "interactions"]:
-            cursor = self.conn.execute(f"SELECT COUNT(*) as count FROM {table}")
+            safe_table = sanitize_sql_identifier(table)
+            cursor = self.conn.execute(f"SELECT COUNT(*) as count FROM {safe_table}")
             stats[f"{table}_count"] = cursor.fetchone()["count"]
 
         # Recent activity

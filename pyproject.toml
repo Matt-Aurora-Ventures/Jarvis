@@ -47,10 +47,15 @@ test = [
     "httpx>=0.24.0",
     "locust>=2.0.0",
 ]
+backtesting = [
+    "lib-pybroker>=1.2.11",
+    "pandas>=2.0.0",
+]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]

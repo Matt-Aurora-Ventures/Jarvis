@@ -101,7 +101,7 @@ BAD QUOTE EXAMPLES:
                     if is_local_anthropic():
                         self._model = os.getenv("OLLAMA_QUOTE_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen3-coder"
                     else:
-                        self._model = os.getenv("CLAUDE_QUOTE_MODEL", "claude-sonnet-4-20250514")
+                        self._model = os.getenv("CLAUDE_QUOTE_MODEL", "claude-sonnet-4-6")
             except Exception:
                 pass
         return self._anthropic_client
@@ -192,7 +192,7 @@ Generate a quote tweet response. Under 200 characters. Jarvis voice. Lowercase."
             message = await loop.run_in_executor(
                 None,
                 lambda: client.messages.create(
-                    model=getattr(self, "_model", "claude-sonnet-4-20250514"),
+                    model=getattr(self, "_model", "claude-sonnet-4-6"),
                     max_tokens=150,
                     system=JARVIS_VOICE_BIBLE,
                     messages=[{"role": "user", "content": prompt}]

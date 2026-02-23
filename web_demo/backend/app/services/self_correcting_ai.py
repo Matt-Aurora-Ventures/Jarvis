@@ -330,7 +330,7 @@ Focus on risk-adjusted returns. Consider liquidity, volume trends, and holder di
                     conf_str = line.split(":", 1)[1].strip()
                     confidence = float(conf_str)
                     confidence = max(0.0, min(1.0, confidence))
-                except:
+                except (ValueError, IndexError):
                     pass
             elif line.startswith("REASONING:"):
                 reasoning = line.split(":", 1)[1].strip()

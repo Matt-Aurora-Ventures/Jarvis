@@ -199,7 +199,7 @@ def analyze_sentiment(
         return _heuristic_sentiment(text)
 
     cfg = config.load_config()
-    model = cfg.get("providers", {}).get("grok", {}).get("model", "grok-beta")
+    model = cfg.get("providers", {}).get("grok", {}).get("model", "grok-4-1-fast-non-reasoning")
 
     # Craft specialized prompt for sentiment analysis
     context_str = f"\n\nContext: {context}" if context else ""
@@ -273,7 +273,7 @@ def analyze_trend(
         return None
 
     cfg = config.load_config()
-    model = cfg.get("providers", {}).get("grok", {}).get("model", "grok-beta")
+    model = cfg.get("providers", {}).get("grok", {}).get("model", "grok-4-1-fast-non-reasoning")
 
     prompt = f"""Analyze X.com (Twitter) trends for the topic: "{topic}"
 Timeframe: {timeframe}
@@ -360,7 +360,7 @@ def batch_sentiment_analysis(
             results[idx] = _heuristic_sentiment(texts[idx])
         return results
 
-    model = config.load_config().get("providers", {}).get("grok", {}).get("model", "grok-beta")
+    model = config.load_config().get("providers", {}).get("grok", {}).get("model", "grok-4-1-fast-non-reasoning")
     prompt = {
         "focus": focus,
         "items": uncached,
@@ -476,7 +476,7 @@ def analyze_crypto_sentiment(
         return None
 
     cfg = config.load_config()
-    model = cfg.get("providers", {}).get("grok", {}).get("model", "grok-beta")
+    model = cfg.get("providers", {}).get("grok", {}).get("model", "grok-4-1-fast-non-reasoning")
 
     prompt = f"""Analyze X.com sentiment for cryptocurrency ${symbol}.
 

@@ -6,11 +6,13 @@ const Stripe = require('stripe');
 const { BagsSDK } = require('@bagsfm/bags-sdk');
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const DEFAULT_PARTNER_WALLET = '7BLHKsHRGjsTKQdZYaC3tRDeUChJ9E2XsMPpg2Tv23cf';
+const PARTNER_WALLET = process.env.PARTNER_WALLET || DEFAULT_PARTNER_WALLET;
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 // Initialize Bags SDK
 const connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
@@ -20,7 +22,11 @@ const bags = new BagsSDK(process.env.BAGS_API_KEY, connection);
 const pendingLaunches = new Map();
 
 app.use(cors());
-app.use(express.static('public'));
+app.use(express.static(PUBLIC_DIR));
+
+app.get('/success', (_req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'success.html'));
+});
 
 // Stripe webhook needs raw body
 app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -175,10 +181,10 @@ app.post('/api/token/launch', async (req, res) => {
     const launchWallet = new PublicKey(walletAddress);
     const tokenMint = Keypair.generate();
 
-    // Create fee share config (you as partner + creator)
+    // Create fee share config (partner + creator)
     const configResult = await bags.config.createFeeShareConfigWithPartnerKey({
       tokenMint: tokenMint.publicKey,
-      partnerKey: new PublicKey(process.env.PARTNER_WALLET),
+      partnerKey: new PublicKey(PARTNER_WALLET),
       feeClaimers: [
         {
           socialProvider: 'twitter',
@@ -197,19 +203,62 @@ app.post('/api/token/launch', async (req, res) => {
       configKey: configResult.configKey,
     });
 
+    // Server-side partial signature keeps mint signer key off the client.
+    if (typeof launchTx.partialSign === 'function') {
+      launchTx.partialSign(tokenMint);
+    } else if (typeof launchTx.sign === 'function') {
+      launchTx.sign([tokenMint]);
+    } else {
+      throw new Error('Unsupported transaction type returned by launch SDK');
+    }
+
     // Serialize transaction for client signing
     const serializedTx = Buffer.from(launchTx.serialize()).toString('base64');
-    const tokenMintSecret = Buffer.from(tokenMint.secretKey).toString('base64');
 
     res.json({
       transaction: serializedTx,
       tokenMint: tokenMint.publicKey.toBase58(),
-      tokenMintSecret, // Client needs to sign with this
       configKey: configResult.configKey.toBase58(),
+      partnerWallet: PARTNER_WALLET,
     });
   } catch (error) {
     console.error('Error creating launch transaction:', error);
     res.status(500).json({ error: error.message || 'Failed to create launch transaction' });
+  }
+});
+
+// Step 4: Submit signed launch transaction
+app.post('/api/token/submit', async (req, res) => {
+  try {
+    const { launchId, signedTransaction } = req.body;
+    if (!launchId || !signedTransaction) {
+      return res.status(400).json({ error: 'launchId and signedTransaction are required' });
+    }
+
+    if (!pendingLaunches.has(launchId)) {
+      return res.status(404).json({ error: 'Launch not found' });
+    }
+
+    const rawTx = Buffer.from(signedTransaction, 'base64');
+    const signature = await connection.sendRawTransaction(rawTx, {
+      skipPreflight: false,
+      maxRetries: 3,
+    });
+
+    await connection.confirmTransaction(signature, 'confirmed');
+
+    const launch = pendingLaunches.get(launchId);
+    launch.submitted = true;
+    launch.signature = signature;
+
+    res.json({
+      success: true,
+      signature,
+      explorerUrl: `https://solscan.io/tx/${signature}`,
+    });
+  } catch (error) {
+    console.error('Error submitting launch transaction:', error);
+    res.status(500).json({ error: error.message || 'Failed to submit launch transaction' });
   }
 });
 
@@ -226,6 +275,9 @@ app.get('/api/token/status/:launchId', (req, res) => {
     paid: launch.paid,
     name: launch.name,
     symbol: launch.symbol,
+    submitted: !!launch.submitted,
+    signature: launch.signature || null,
+    partnerWallet: PARTNER_WALLET,
   });
 });
 
@@ -233,4 +285,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`QuickToken server running on port ${PORT}`);
   console.log(`Open http://localhost:${PORT} to access the app`);
+  console.log(`Partner wallet: ${PARTNER_WALLET}`);
 });

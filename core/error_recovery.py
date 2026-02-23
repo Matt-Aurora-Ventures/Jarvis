@@ -1,5 +1,6 @@
 """Enhanced Error Handling and Recovery for Jarvis."""
 
+import abc
 import errno
 import gc
 import importlib
@@ -214,21 +215,21 @@ class StrategyState:
     failures: int = 0
 
 
-class RecoveryStrategy:
-    """Base class for recovery strategies."""
+class RecoveryStrategy(abc.ABC):
+    """Abstract base class for recovery strategies."""
 
     def __init__(self, name: str, priority: int = 0, cooldown_seconds: int = 0):
         self.name = name
         self.priority = priority
         self.cooldown_seconds = cooldown_seconds
 
+    @abc.abstractmethod
     def can_handle(self, error_record: ErrorRecord) -> bool:
         """Check if this strategy can handle the error."""
-        raise NotImplementedError
 
+    @abc.abstractmethod
     def attempt_recovery(self, error_record: ErrorRecord) -> bool:
         """Attempt to recover from the error."""
-        raise NotImplementedError
 
 
 class RestartMCPServerStrategy(RecoveryStrategy):

@@ -606,8 +606,12 @@ class JupiterClient:
             input_decimals = input_info.decimals if input_info else 9
             output_decimals = output_info.decimals if output_info else 9
 
-            input_amount = int(data.get('inAmount', 0))
-            output_amount = int(data.get('outAmount', 0))
+            try:
+                input_amount = int(data.get('inAmount') or 0)
+                output_amount = int(data.get('outAmount') or 0)
+            except (ValueError, TypeError):
+                logger.error("Jupiter quote returned non-numeric inAmount/outAmount: %s", data)
+                return None
 
             return SwapQuote(
                 input_mint=input_mint,

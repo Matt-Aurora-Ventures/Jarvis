@@ -132,3 +132,23 @@ To add features:
 - Check that wallet is unlocked
 - Ensure TP/SL are within valid ranges (5-200% TP, 5-99% SL)
 - Review console for detailed error messages
+
+## Windows Launch Shortcuts
+
+From repo root (`C:\Users\lucid\Desktop\Jarvis`):
+
+1. Trading UI (Flask, port `5001`)
+- Batch: `START_TRADING.bat`
+- PowerShell: `powershell -ExecutionPolicy Bypass -File .\start_trading_ui.ps1`
+- Log: `logs\trading_web.log`
+
+2. Sniper main app (Next.js, port `3001`)
+- `npm -C jarvis-sniper run dev`
+
+3. Sniper preview copy (Next.js, port `3011`)
+- Start: `powershell -ExecutionPolicy Bypass -File .\start_sniper_preview.ps1`
+- Status: `powershell -ExecutionPolicy Bypass -File .\status_sniper_preview.ps1`
+- Stop: `powershell -ExecutionPolicy Bypass -File .\stop_sniper_preview.ps1`
+- Log: `logs\sniper_preview_3011.log`
+
+If startup fails, check the corresponding log file first.

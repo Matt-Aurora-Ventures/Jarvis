@@ -71,7 +71,11 @@ async def handle_alerts(
         if len(parts) >= 5:
             pos_id = parts[2]
             alert_type = parts[3]
-            target = float(parts[4])
+            try:
+                target = float(parts[4])
+            except (ValueError, TypeError):
+                logger.warning("Invalid alert target in callback data: %s", data)
+                return None
 
             target_pos = None
             for pos in positions:

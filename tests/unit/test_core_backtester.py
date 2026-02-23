@@ -797,6 +797,35 @@ class TestTradingMethods:
         for before, after in zip(trade_count_before[:5], trade_count_after[:5]):
             assert before == after
 
+    def test_close_position_long_uses_exit_value_once(self, backtest_engine):
+        """Closing a long should add sale proceeds once (no PnL double-counting)."""
+        candles = [
+            OHLCV(timestamp="2024-01-01T00:00:00+00:00", open=100, high=100, low=100, close=100, volume=1000),
+            OHLCV(timestamp="2024-01-02T00:00:00+00:00", open=100, high=100, low=100, close=100, volume=1000),
+            OHLCV(timestamp="2024-01-03T00:00:00+00:00", open=110, high=110, low=110, close=110, volume=1000),
+        ]
+        backtest_engine.load_data("SOL", candles)
+
+        config = BacktestConfig(
+            symbol="SOL",
+            start_date="2024-01-01",
+            end_date="2024-01-03",
+            initial_capital=10000.0,
+            fee_rate=0.0,
+            slippage_bps=0.0,
+            max_position_size=1.0,
+            allow_short=False,
+        )
+
+        def open_then_close(engine, candle):
+            if engine._current_idx == 0 and engine.is_flat():
+                engine.buy(1.0, "enter")
+            elif engine._current_idx == 2 and engine.is_long():
+                engine.close_position("exit")
+
+        result = backtest_engine.run(strategy=open_then_close, config=config, strategy_name="capital_accounting")
+        assert result.final_capital == pytest.approx(11000.0, rel=1e-9)
+
 
 class TestShortSelling:
     """Tests for short selling functionality."""
@@ -1262,6 +1291,50 @@ class TestDrawdownCalculation:
         if result.drawdown_curve:
             curve_max = max(d['drawdown'] for d in result.drawdown_curve)
             assert result.metrics.max_drawdown == pytest.approx(curve_max, rel=0.01)
+
+    def test_flat_price_long_hold_has_near_zero_drawdown(self, tmp_path):
+        """Flat-price long hold should not register catastrophic drawdown."""
+        from core.backtester import BacktestConfig, BacktestEngine, OHLCV
+
+        engine = BacktestEngine(db_path=tmp_path / "drawdown_flat.db")
+        flat_candles = [
+            OHLCV(
+                timestamp="2024-01-01T00:00:00Z",
+                open=100.0,
+                high=101.0,
+                low=99.0,
+                close=100.0,
+                volume=1000.0,
+            ),
+            OHLCV(
+                timestamp="2024-01-01T01:00:00Z",
+                open=100.0,
+                high=101.0,
+                low=99.0,
+                close=100.0,
+                volume=1000.0,
+            ),
+        ]
+        engine.load_data("SOL", flat_candles)
+        config = BacktestConfig(
+            symbol="SOL",
+            start_date="2024-01-01",
+            end_date="2024-01-02",
+            initial_capital=10000.0,
+            fee_rate=0.0,
+            slippage_bps=0.0,
+            max_position_size=1.0,
+        )
+
+        def flat_hold_strategy(engine, candle):
+            if engine._current_idx == 0 and engine.is_flat():
+                engine.buy(1.0, "enter")
+            elif engine._current_idx == 1 and engine.is_long():
+                engine.close_position("exit")
+
+        result = engine.run(strategy=flat_hold_strategy, config=config)
+        assert result.final_capital == pytest.approx(10000.0, abs=1e-6)
+        assert result.metrics.max_drawdown == pytest.approx(0.0, abs=1e-6)
 
 
 # ============================================================================

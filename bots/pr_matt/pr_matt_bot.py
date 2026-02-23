@@ -234,7 +234,7 @@ Respond ONLY with valid JSON in this exact format:
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "grok-beta",
+                    "model": "grok-4-1-fast-non-reasoning",
                     "messages": [
                         {
                             "role": "system",
@@ -319,6 +319,17 @@ Respond ONLY with valid JSON in this exact format:
             # Rule-based filter overrides AI approval if hard blocks detected
             decision = "BLOCKED" if len(quick_concerns) >= 3 else "NEEDS_REVISION"
 
+        # Confidence: high when both filters agree, lower when they conflict
+        ai_decision = ai_result["decision"]
+        if quick_blocked and ai_decision == "BLOCKED":
+            confidence = 0.95  # Both agree: block
+        elif not quick_blocked and ai_decision == "APPROVED":
+            confidence = 0.90  # Both agree: approve
+        elif quick_blocked != (ai_decision == "BLOCKED"):
+            confidence = 0.65  # Filters disagree
+        else:
+            confidence = 0.80  # Partial agreement
+
         review = MessageReview(
             original_message=message,
             platform=platform,
@@ -326,7 +337,7 @@ Respond ONLY with valid JSON in this exact format:
             concerns=all_concerns,
             suggested_revision=ai_result.get("suggested_revision"),
             reasoning=ai_result.get("reasoning", ""),
-            confidence=0.8,  # TODO: Calculate based on agreement between filters
+            confidence=confidence,
             reviewed_at=datetime.now(timezone.utc).isoformat()
         )
 

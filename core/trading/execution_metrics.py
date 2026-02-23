@@ -261,7 +261,8 @@ class ExecutionMetricsTracker:
         price_impact_pct: float = 0.0,
         retry_count: int = 0,
         error_type: Optional[str] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
+        sol_price_usd: float = 0.0,
     ):
         """Record execution result with comprehensive metrics"""
         metric = self._get_metric(metric_id)
@@ -295,8 +296,8 @@ class ExecutionMetricsTracker:
         metric.priority_fee_lamports = priority_fee_lamports
         metric.priority_fee_sol = priority_fee_lamports / 1_000_000_000  # lamports to SOL
         metric.jupiter_fee_usd = jupiter_fee_usd
-        # TODO: Convert SOL fee to USD using current price
-        metric.total_cost_usd = jupiter_fee_usd  # + (priority_fee_sol * sol_price)
+        priority_fee_usd = metric.priority_fee_sol * sol_price_usd if sol_price_usd else 0.0
+        metric.total_cost_usd = jupiter_fee_usd + priority_fee_usd
 
         # Error tracking
         if error_type or error_message:

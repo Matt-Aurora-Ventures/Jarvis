@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from core import config, birdeye, dexscreener, geckoterminal
+from core.lut_daemon import check_sentiment_reversal
 from core.risk_manager import get_risk_manager
 
 # Import exit intents for LUT/Perps enforcement
@@ -255,7 +256,7 @@ def _check_lut_perps_intents(
                 triggers = exit_intents.check_intent_triggers(
                     intent,
                     current_price,
-                    sentiment_reversed=False,  # TODO: integrate xAI sentiment check
+                    sentiment_reversed=check_sentiment_reversal(intent.token_mint),
                 )
 
             for action, params in triggers:

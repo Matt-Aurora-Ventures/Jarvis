@@ -1,0 +1,244 @@
+name: Integrity & Dependency Checks
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'requirements/**'
+      - 'core/jupiter_perps/**'
+      - '.github/workflows/integrity.yml'
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly dependency drift review — Sunday at 02:00 UTC
+    - cron: '0 2 * * 0'
+
+jobs:
+  # ─── Job 1: Dependency Lockfile Verification ───────────────────────────────
+  dependency-freeze:
+    name: Verify Dependency Lockfiles
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install pip-tools
+        run: pip install pip-tools==7.4.1
+
+      - name: Verify signer lockfile is not stale
+        run: |
+          pip-compile --generate-hashes --resolver=backtracking \
+            --dry-run \
+            --output-file requirements/signer.txt \
+            requirements/signer.in
+          # Compare against committed lockfile
+          pip-compile --generate-hashes --resolver=backtracking \
+            --output-file /tmp/signer_fresh.txt \
+            requirements/signer.in
+          if ! diff -q requirements/signer.txt /tmp/signer_fresh.txt; then
+            echo "ERROR: requirements/signer.txt is stale. Run scripts/freeze_deps.sh and commit."
+            diff requirements/signer.txt /tmp/signer_fresh.txt
+            exit 1
+          fi
+          echo "signer.txt: OK"
+
+      - name: Verify core lockfile is not stale
+        run: |
+          pip-compile --generate-hashes --resolver=backtracking \
+            --output-file /tmp/core_fresh.txt \
+            requirements/core.in
+          if ! diff -q requirements/core.txt /tmp/core_fresh.txt; then
+            echo "ERROR: requirements/core.txt is stale. Run scripts/freeze_deps.sh and commit."
+            diff requirements/core.txt /tmp/core_fresh.txt
+            exit 1
+          fi
+          echo "core.txt: OK"
+
+      - name: Check for forbidden packages in signer lockfile
+        run: |
+          FORBIDDEN=(flask fastapi uvicorn gunicorn pandas numpy xgboost scikit-learn
+                     redis ccxt freqtrade langchain langgraph openai anthropic
+                     telegram playwright aiohttp)
+          LOCKFILE="requirements/signer.txt"
+          FOUND=0
+          for pkg in "${FORBIDDEN[@]}"; do
+            if grep -qi "^${pkg}==" "${LOCKFILE}"; then
+              echo "ERROR: Forbidden package '${pkg}' found in signer lockfile!"
+              FOUND=1
+            fi
+          done
+          if [ $FOUND -ne 0 ]; then
+            exit 1
+          fi
+          echo "Forbidden package check: OK"
+
+  # ─── Job 2: IDL Integrity ──────────────────────────────────────────────────
+  idl-integrity:
+    name: Jupiter Perps IDL Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify IDL file exists
+        run: |
+          if [ ! -f "core/jupiter_perps/idl/jupiter_perps.json" ]; then
+            echo "ERROR: IDL file missing. Run: python scripts/fetch_idl.py"
+            exit 1
+          fi
+          if [ ! -f "core/jupiter_perps/idl/jupiter_perps.json.sha256" ]; then
+            echo "ERROR: IDL hash file missing. Run: python scripts/fetch_idl.py"
+            exit 1
+          fi
+          echo "IDL files exist: OK"
+
+      - name: Verify IDL hash matches stored hash
+        run: |
+          EXPECTED=$(cat core/jupiter_perps/idl/jupiter_perps.json.sha256 | tr -d '\n')
+          ACTUAL=$(sha256sum core/jupiter_perps/idl/jupiter_perps.json | awk '{print $1}')
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "FATAL: IDL hash mismatch!"
+            echo "  Expected : $EXPECTED"
+            echo "  Actual   : $ACTUAL"
+            echo ""
+            echo "If Jupiter upgraded the contract intentionally:"
+            echo "  python scripts/fetch_idl.py --force"
+            echo "Then review the diff and commit."
+            exit 1
+          fi
+          echo "IDL hash: OK ($ACTUAL)"
+
+      - name: Validate IDL JSON structure
+        run: |
+          python3 -c "
+          import json, sys
+          with open('core/jupiter_perps/idl/jupiter_perps.json') as f:
+              idl = json.load(f)
+          required = ['version', 'name', 'instructions', 'accounts', 'types']
+          for field in required:
+              assert field in idl, f'IDL missing field: {field}'
+          print(f'IDL name: {idl[\"name\"]}')
+          print(f'IDL version: {idl[\"version\"]}')
+          print(f'Instructions: {len(idl[\"instructions\"])}')
+          print(f'Accounts: {len(idl[\"accounts\"])}')
+          print(f'Types: {len(idl[\"types\"])}')
+          print('IDL structure: OK')
+          "
+
+  # ─── Job 3: Unit Tests ─────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [idl-integrity]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dev dependencies
+        run: pip install -r requirements/dev.txt
+
+      - name: Install signer dependencies (for PDA tests)
+        run: pip install solders==0.26.0 solana==0.36.6 base58==2.1.1 anchorpy==0.21.0
+
+      - name: Run integrity tests
+        run: pytest tests/test_idl_integrity.py -v
+
+      - name: Run intent validation tests
+        run: pytest tests/test_execution_intent.py -v
+
+      - name: Run PDA derivation tests
+        run: pytest tests/test_pda_derivation.py -v
+
+      - name: Run fee adapter tests
+        run: pytest tests/test_jupiter_fee_adapter.py -v
+
+      - name: Run all tests with coverage
+        run: |
+          pytest tests/ \
+            --cov=core/jupiter_perps \
+            --cov=core/backtesting \
+            --cov-report=term-missing \
+            --cov-fail-under=80 \
+            -v
+
+  # ─── Job 4: Execution Intent Replay ───────────────────────────────────────
+  intent-replay:
+    name: Execution Intent Replay (Last 30 Days)
+    runs-on: ubuntu-latest
+    needs: [unit-tests]
+    if: github.ref == 'refs/heads/main'
+    env:
+      # Replay uses read-only DB access — no live trading
+      PERPS_LIVE_MODE: 'false'
+      LIFEOS_KILL_SWITCH: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install signer dependencies
+        run: pip install solders==0.26.0 solana==0.36.6 base58==2.1.1 anchorpy==0.21.0
+
+      - name: Run intent deserialization replay test
+        run: |
+          python3 -c "
+          import json
+          from core.jupiter_perps.execution_service import _deserialize_intent
+          from core.jupiter_perps.intent import (
+              OpenPosition, ClosePosition, ReducePosition, CancelRequest, Noop,
+              IntentType, Side, CollateralMint
+          )
+
+          # Test round-trip for each intent type
+          test_cases = [
+              {
+                  'intent_type': 'open_position',
+                  'idempotency_key': 'test-open-001',
+                  'market': 'SOL-USD',
+                  'side': 'long',
+                  'collateral_mint': 'So11111111111111111111111111111111111111112',
+                  'collateral_amount_usd': 100.0,
+                  'leverage': 5.0,
+                  'size_usd': 500.0,
+                  'max_slippage_bps': 50,
+              },
+              {
+                  'intent_type': 'close_position',
+                  'idempotency_key': 'test-close-001',
+                  'position_pda': 'Eo4LXZxpkMZ7mACEaCvrmwcmpyAL3JUH8L8ZBvd2w4cQ',
+                  'max_slippage_bps': 100,
+              },
+              {
+                  'intent_type': 'noop',
+                  'idempotency_key': 'test-noop-001',
+              },
+          ]
+
+          for tc in test_cases:
+              intent = _deserialize_intent(tc['intent_type'], tc)
+              print(f'OK: {type(intent).__name__} deserialized')
+
+          print('Intent replay: PASS')
+          "

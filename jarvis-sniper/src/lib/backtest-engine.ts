@@ -67,7 +67,11 @@ export interface BacktestTrade {
   entryPrice: number;
   exitPrice: number;
   pnlPct: number;
-  pnlNet: number;      // After fees/slippage
+  pnlNet: number;      // Backward-compatible alias for netPnlPct
+  grossPnlPct: number;
+  feesPct: number;
+  slippagePct: number;
+  netPnlPct: number;
   /** Log return: ln(exit/entry). Time-additive, better for statistical analysis. */
   logReturn: number;
   exitReason: 'tp' | 'sl' | 'trail' | 'expired' | 'end_of_data';
@@ -521,14 +525,19 @@ export class BacktestEngine {
     maxDrawdownPct: number,
   ): BacktestTrade {
     const { config } = this;
-    const grossPnl = (exitPrice - entryPrice) / entryPrice * 100;
-    const fees = config.feePct * 2; // Entry + exit fee
-    const pnlNet = grossPnl - fees - config.slippagePct; // Net after all costs
+    const grossPnlPct = (exitPrice - entryPrice) / entryPrice * 100;
+    const feesPct = config.feePct * 2; // Entry + exit fee
+    // Slippage is already embedded in execution prices (entryPrice/exitPrice).
+    const netPnlPct = grossPnlPct - feesPct;
 
     return {
       entryTime, exitTime, entryPrice, exitPrice,
-      pnlPct: grossPnl,
-      pnlNet,
+      pnlPct: grossPnlPct,
+      pnlNet: netPnlPct,
+      grossPnlPct,
+      feesPct,
+      slippagePct: config.slippagePct,
+      netPnlPct,
       logReturn: calcLogReturn(entryPrice, exitPrice),
       exitReason,
       holdCandles,

@@ -94,7 +94,7 @@ class TestJarvisVoiceInit:
         from bots.twitter.jarvis_voice import JarvisVoice
         voice = JarvisVoice()
         assert voice.cli_enabled is True
-        assert voice.api_model == "claude-sonnet-4-20250514"
+        assert voice.api_model == "claude-sonnet-4-6"
 
     def test_init_with_cli_path_env(self, mock_anthropic_utils):
         """Test initialization with custom CLI path from environment."""

@@ -725,6 +725,9 @@ class PaperTradingEngine:
             if token_price <= 0:
                 return False, "Could not get token price", None
 
+            if not sol_price or sol_price <= 0:
+                return False, "Could not get SOL price", None
+
             # Calculate SOL needed
             sol_needed = amount_usd / sol_price
             sol_balance = self.paper_wallet.get_sol_balance()

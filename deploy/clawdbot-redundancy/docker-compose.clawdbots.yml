@@ -24,6 +24,7 @@ x-clawdbot-common: &clawdbot-common
     - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
     - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
     - NVIDIA_NIM_API_KEY=${NVIDIA_NIM_API_KEY:-}
+    - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     # Shared memory bus (Redis)
     - REDIS_HOST=jarvis-redis
     - REDIS_PORT=6379
@@ -100,6 +101,7 @@ services:
     environment:
       - BOT_NAME=matt
       - PROFILE=matt
+      - INSTALL_CODEX=true
       - GATEWAY_PORT=18800
       - DOCKER_API_VERSION=1.44
       - REDIS_HOST=jarvis-redis

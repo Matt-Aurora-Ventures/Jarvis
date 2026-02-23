@@ -39,11 +39,14 @@ async def handle_token_input(
         error_text, keyboard = DemoMenuBuilder.error_message(
             "Invalid Solana address. Must be 32-44 characters."
         )
-        await update.message.reply_text(
-            error_text,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=keyboard,
-        )
+        try:
+            await update.message.reply_text(
+                error_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard,
+            )
+        except Exception:
+            pass
         return True
 
     # Store pending token context for follow-up actions (buy buttons, etc.)
@@ -65,10 +68,12 @@ async def handle_token_input(
         token_ref=token_ref,
     )
 
-    await update.message.reply_text(
-        confirm_text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=keyboard,
-    )
-    
+    try:
+        await update.message.reply_text(
+            confirm_text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard,
+        )
+    except Exception:
+        pass
     return True

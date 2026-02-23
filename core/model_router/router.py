@@ -122,7 +122,7 @@ DEFAULT_PROVIDERS = [
     ),
     ModelProvider(
         name="grok",
-        model_id="grok-2-latest",
+        model_id="grok-4-1-fast-non-reasoning",
         api_key_env="XAI_API_KEY",
         capabilities=[
             ModelCapability.TEXT_GENERATION,
@@ -131,7 +131,7 @@ DEFAULT_PROVIDERS = [
         ],
         priority=2,
         latency_ms=300,
-        cost_per_1k_tokens=0.005,
+        cost_per_1k_tokens=0.00020,
         max_tokens=32768,
     ),
     ModelProvider(

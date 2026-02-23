@@ -116,6 +116,8 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /balance - Show treasury balance and allocation.
     """
+    if not update.message:
+        return
     try:
         from tg_bot import bot_core as bot_module
         config = get_config()
@@ -172,6 +174,8 @@ async def positions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /positions - Show open positions with P&L and sell buttons.
     """
+    if not update.message:
+        return
     try:
         from tg_bot import bot_core as bot_module
         engine = await bot_module._get_treasury_engine()

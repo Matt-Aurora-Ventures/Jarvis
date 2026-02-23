@@ -111,8 +111,8 @@ class TelegramConfig:
     buy_bot_chat_id: str = ""
     reply_mode: str = "mentions"
     reply_cooldown: int = 12
-    reply_model: str = "grok-3"
-    claude_model: str = "claude-sonnet-4-20250514"
+    reply_model: str = "grok-4-1-fast-non-reasoning"
+    claude_model: str = "claude-sonnet-4-6"
 
     @classmethod
     def from_env(cls) -> 'TelegramConfig':
@@ -130,8 +130,8 @@ class TelegramConfig:
             buy_bot_chat_id=_get_env("TELEGRAM_BUY_BOT_CHAT_ID", ""),
             reply_mode=_get_env("TG_REPLY_MODE", "mentions"),
             reply_cooldown=_get_env("TG_REPLY_COOLDOWN_SECONDS", 12, int),
-            reply_model=_get_env("TG_REPLY_MODEL", "grok-3"),
-            claude_model=_get_env("TG_CLAUDE_MODEL", "claude-sonnet-4-20250514"),
+            reply_model=_get_env("TG_REPLY_MODEL", "grok-4-1-fast-non-reasoning"),
+            claude_model=_get_env("TG_CLAUDE_MODEL", "claude-sonnet-4-6"),
         )
 
 
@@ -199,7 +199,7 @@ class LLMConfig:
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""
     xai_api_key: str = ""
-    xai_model: str = "grok-3-mini"
+    xai_model: str = "grok-4-1-fast-non-reasoning"
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
     ollama_url: str = "http://localhost:11434"
@@ -217,7 +217,7 @@ class LLMConfig:
             anthropic_api_key=anthropic_key,
             anthropic_base_url=_get_env("ANTHROPIC_BASE_URL", ""),
             xai_api_key=_get_env("XAI_API_KEY", ""),
-            xai_model=_get_env("XAI_MODEL", "grok-3-mini"),
+            xai_model=_get_env("XAI_MODEL", "grok-4-1-fast-non-reasoning"),
             groq_api_key=_get_env("GROQ_API_KEY", ""),
             groq_model=_get_env("GROQ_MODEL", "llama-3.3-70b-versatile"),
             ollama_url=_get_env("OLLAMA_URL", "http://localhost:11434"),

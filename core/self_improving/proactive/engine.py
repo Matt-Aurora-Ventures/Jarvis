@@ -148,7 +148,7 @@ class ProactiveEngine:
         memory: MemoryStore,
         trust: TrustManager,
         llm_client: Optional[Any] = None,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-sonnet-4-6",
     ):
         self.memory = memory
         self.trust = trust

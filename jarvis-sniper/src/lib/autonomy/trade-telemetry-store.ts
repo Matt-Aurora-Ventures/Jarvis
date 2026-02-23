@@ -9,6 +9,7 @@ const MAX_TELEMETRY_FILE_BYTES = 16 * 1024 * 1024;
 const TRIM_TARGET_BYTES = 10 * 1024 * 1024;
 
 export interface PersistedTradeTelemetryEvent extends TradeTelemetryEvent {
+  trustLevel: 'trusted' | 'untrusted';
   receivedAt: string;
   receivedAtMs: number;
 }
@@ -82,6 +83,7 @@ function sanitizeTelemetryEvent(input: TradeTelemetryEvent): PersistedTradeTelem
     tradeSignerMode: clampString(input.tradeSignerMode, 32),
     sessionWalletPubkey: clampString(input.sessionWalletPubkey, 128) || null,
     activePreset: clampString(input.activePreset, 64) || null,
+    trustLevel: input.trustLevel === 'trusted' ? 'trusted' : 'untrusted',
     receivedAt: new Date(nowMs).toISOString(),
     receivedAtMs: nowMs,
   };
@@ -153,7 +155,8 @@ export async function readTradeExecutionPriors(lookbackDays = 30): Promise<Trade
   const windowMs = Math.max(1, Math.floor(lookbackDays)) * 24 * 60 * 60 * 1000;
   const cutoff = now - windowMs;
   const scoped = rows.filter((r) => Number(r.receivedAtMs || 0) >= cutoff);
-  const attempts = scoped.filter((r) => r.eventType === 'sell_attempt' && r.includedInExecutionStats !== false);
+  const trustedScoped = scoped.filter((r) => r.trustLevel === 'trusted');
+  const attempts = trustedScoped.filter((r) => r.eventType === 'sell_attempt' && r.includedInExecutionStats !== false);
   const totalSellAttempts = attempts.length;
   const confirmedEvents = attempts.filter((r) => r.executionOutcome === 'confirmed').length;
   const noRouteEvents = attempts.filter((r) => r.executionOutcome === 'no_route').length;
@@ -172,7 +175,7 @@ export async function readTradeExecutionPriors(lookbackDays = 30): Promise<Trade
   const reliability = Math.max(0, 1 - noRouteRate - unresolvedRate - failedRate);
 
   return {
-    sampleSize: scoped.length,
+    sampleSize: trustedScoped.length,
     lookbackDays: Math.max(1, Math.floor(lookbackDays)),
     totalSellAttempts,
     confirmedEvents,

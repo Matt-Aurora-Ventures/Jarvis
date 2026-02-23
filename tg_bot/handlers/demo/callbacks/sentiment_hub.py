@@ -173,7 +173,7 @@ async def handle_sentiment_hub(
             try:
                 sentiment_data = await ctx.get_ai_sentiment_for_token(address)
                 symbol = sentiment_data.get("symbol", "TOKEN")
-            except:
+            except Exception:
                 pass
             
             # Escape special markdown characters in symbol

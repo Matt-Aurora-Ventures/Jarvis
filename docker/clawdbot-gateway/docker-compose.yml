@@ -154,6 +154,10 @@ services:
         if ! command -v codex &>/dev/null; then
           npm install -g @openai/codex 2>/dev/null || true
         fi
+        NPM_PREFIX="$$(npm config get prefix)"
+        if [ -x "$$NPM_PREFIX/bin/codex" ] && [ ! -x /usr/local/bin/codex ]; then
+          ln -sf "$$NPM_PREFIX/bin/codex" /usr/local/bin/codex || true
+        fi
 
         # Write config
         mkdir -p /root/.clawdbot
@@ -178,6 +182,7 @@ services:
                 "codex": {
                   "enabled": true,
                   "command": "codex",
+                  "command_fallback": "npx --yes @openai/codex",
                   "description": "OpenAI Codex CLI for code generation and editing"
                 }
               }
@@ -211,6 +216,7 @@ services:
               "coding-agent": {
                 "enabled": true,
                 "driver": "codex-cli",
+                "command_fallback": "npx --yes @openai/codex",
                 "description": "Offload coding tasks to Codex CLI"
               },
               "grok-xai": {

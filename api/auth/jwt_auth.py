@@ -11,7 +11,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-this-in-production-please")
+_JWT_SECRET_DEFAULT = "change-this-in-production-please"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", _JWT_SECRET_DEFAULT)
+if SECRET_KEY == _JWT_SECRET_DEFAULT:
+    import warnings
+    warnings.warn(
+        "JWT_SECRET_KEY is not set — using insecure default. "
+        "Set the JWT_SECRET_KEY environment variable before production use.",
+        stacklevel=1,
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7

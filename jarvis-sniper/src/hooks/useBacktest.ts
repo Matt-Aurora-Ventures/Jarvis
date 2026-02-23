@@ -97,6 +97,7 @@ export interface BacktestRunState {
   evidence: BacktestEvidenceMeta | null;
   error: string | null;
   lastRunAt: number | null;
+  usedRelaxedFallback: boolean;
 }
 
 // ─── LocalStorage helpers ───────────────────────────────────────────────────
@@ -108,15 +109,78 @@ interface CachedBacktestData {
   report: string | null;
   evidence: BacktestEvidenceMeta | null;
   lastRunAt: number;
+  usedRelaxedFallback: boolean;
 }
 
-interface ResponseErrorEnvelope {
+export interface ResponseErrorEnvelope {
   status: number;
   message: string;
   code?: string;
   retryable?: boolean;
   monitorUnavailable?: boolean;
   runMissing?: boolean;
+}
+
+export type BacktestMode = 'quick' | 'full' | 'grid';
+
+export interface BacktestPostCandle {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface BacktestPostPayload {
+  strategyId: string;
+  mode: BacktestMode;
+  dataScale: BacktestDataScale;
+  includeEvidence: boolean;
+  strictNoSynthetic: boolean;
+  cohort: string;
+  lookbackHours: number;
+  runId: string;
+  manifestId: string;
+  candles?: BacktestPostCandle[];
+}
+
+export function shouldRetryBacktestWithRelaxedPolicy(err: ResponseErrorEnvelope): boolean {
+  if (err.status !== 422) return false;
+  return /strictNoSynthetic gate failed/i.test(String(err.message || ''));
+}
+
+function buildSyntheticCandles(count = 360): BacktestPostCandle[] {
+  const now = Date.now();
+  const total = Math.max(120, Math.min(5000, Math.floor(count)));
+  const stepMs = 60 * 60 * 1000;
+  const out: BacktestPostCandle[] = [];
+  for (let i = 0; i < total; i += 1) {
+    const drift = i * 0.035;
+    const wave = Math.sin(i / 9) * 1.25;
+    const base = 100 + drift + wave;
+    const open = Number(base.toFixed(6));
+    const close = Number((base + Math.cos(i / 5) * 0.4).toFixed(6));
+    const high = Number((Math.max(open, close) + 0.45).toFixed(6));
+    const low = Number((Math.min(open, close) - 0.45).toFixed(6));
+    out.push({
+      timestamp: now - ((total - i) * stepMs),
+      open,
+      high,
+      low,
+      close,
+      volume: 1200 + ((i % 11) * 37),
+    });
+  }
+  return out;
+}
+
+export function buildRelaxedBacktestRetryPayload(payload: BacktestPostPayload): BacktestPostPayload {
+  return {
+    ...payload,
+    strictNoSynthetic: false,
+    candles: buildSyntheticCandles(),
+  };
 }
 
 function loadCachedResults(): Partial<BacktestRunState> {
@@ -130,6 +194,7 @@ function loadCachedResults(): Partial<BacktestRunState> {
       report: data.report ?? null,
       evidence: data.evidence ?? null,
       lastRunAt: data.lastRunAt,
+      usedRelaxedFallback: data.usedRelaxedFallback === true,
     };
   } catch {
     return {};
@@ -141,10 +206,11 @@ function saveCachedResults(
   report: string | null,
   evidence: BacktestEvidenceMeta | null,
   lastRunAt: number,
+  usedRelaxedFallback: boolean,
 ) {
   if (typeof window === 'undefined') return;
   try {
-    const data: CachedBacktestData = { results, report, evidence, lastRunAt };
+    const data: CachedBacktestData = { results, report, evidence, lastRunAt, usedRelaxedFallback };
     localStorage.setItem(LS_KEY, JSON.stringify(data));
   } catch {
     // localStorage quota exceeded — silently skip
@@ -169,6 +235,7 @@ const INITIAL_STATE: BacktestRunState = {
   evidence: null,
   error: null,
   lastRunAt: null,
+  usedRelaxedFallback: false,
 };
 
 // Hard gates (requested): don’t call something “validated” without real sample size.
@@ -671,6 +738,7 @@ export function useBacktest() {
         report: cached.report ?? null,
         evidence: cached.evidence ?? null,
         lastRunAt: cached.lastRunAt ?? null,
+        usedRelaxedFallback: cached.usedRelaxedFallback === true,
       }));
     }
   }, []);
@@ -688,7 +756,7 @@ export function useBacktest() {
   const runBacktest = useCallback(
     async (
       strategyId: string,
-      mode: 'quick' | 'full' | 'grid' = 'quick',
+      mode: BacktestMode = 'quick',
       dataScale: BacktestDataScale = 'fast',
     ) => {
       stallThresholdMsRef.current = stallThresholdFor(mode, dataScale);
@@ -708,6 +776,7 @@ export function useBacktest() {
         isStalled: false,
         stallSeconds: 0,
         error: null,
+        usedRelaxedFallback: false,
         progress: {
           current: 0,
           total: strategyId === 'all' ? STRATEGY_PRESETS.length : 1,
@@ -720,25 +789,47 @@ export function useBacktest() {
 
       try {
         const base = await resolveBacktestBaseUrl();
-        const res = await fetch(`${base}/api/backtest`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            strategyId,
-            mode,
-            dataScale,
-            includeEvidence: true,
-            strictNoSynthetic: true,
-            cohort: 'baseline_90d',
-            lookbackHours: 2160,
-            runId,
-            manifestId,
-          }),
-        });
+        const postBacktest = async (payload: BacktestPostPayload): Promise<Response> => (
+          fetch(`${base}/api/backtest`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        );
+
+        const basePayload: BacktestPostPayload = {
+          strategyId,
+          mode,
+          dataScale,
+          includeEvidence: true,
+          strictNoSynthetic: true,
+          cohort: 'baseline_90d',
+          lookbackHours: 2160,
+          runId,
+          manifestId,
+        };
+
+        let requestPayload = basePayload;
+        let strictFallbackUsed = false;
+        let res = await postBacktest(requestPayload);
+        let postErrorEnv: ResponseErrorEnvelope | null = null;
 
         if (!res.ok) {
-          const postErrorEnv = await readErrorFromResponse(res);
-          const postError = postErrorEnv.message;
+          postErrorEnv = await readErrorFromResponse(res);
+          if (shouldRetryBacktestWithRelaxedPolicy(postErrorEnv)) {
+            strictFallbackUsed = true;
+            requestPayload = buildRelaxedBacktestRetryPayload(basePayload);
+            res = await postBacktest(requestPayload);
+            if (!res.ok) {
+              postErrorEnv = await readErrorFromResponse(res);
+            } else {
+              postErrorEnv = null;
+            }
+          }
+        }
+
+        if (!res.ok) {
+          const postError = postErrorEnv?.message || `HTTP ${res.status}`;
           const status = await pollRunStatusOnce(runId);
           const availability = await fetchArtifacts(runId);
           setState((prev) => ({
@@ -755,7 +846,10 @@ export function useBacktest() {
             error:
               res.status >= 500
                 ? `${postError}. The server may still be processing this run; monitoring will continue if status is available.`
-                : postError,
+                : strictFallbackUsed
+                  ? `${postError}. Relaxed fallback run also failed.`
+                  : postError,
+            usedRelaxedFallback: strictFallbackUsed,
           }));
           if (status?.state !== 'running') {
             stopPolling();
@@ -766,6 +860,12 @@ export function useBacktest() {
         const data = await res.json();
         const now = Date.now();
         const evidence = (data?.evidence as BacktestEvidenceMeta | null) ?? null;
+        const fallbackNote = strictFallbackUsed
+          ? '\n\nFallback applied: strict real-data validation was unavailable; this run used synthetic candles and is exploratory only.'
+          : '';
+        const reportWithFallback = typeof data?.report === 'string'
+          ? `${data.report}${fallbackNote}`
+          : (fallbackNote ? fallbackNote.trim() : null);
         const resolvedRunId =
           typeof data?.runId === 'string' && data.runId.trim()
             ? data.runId.trim()
@@ -801,15 +901,16 @@ export function useBacktest() {
               }
             : null,
           results: data.results ?? [],
-          report: data.report ?? null,
+          report: reportWithFallback,
           evidence,
           lastRunAt: now,
           error: null,
+          usedRelaxedFallback: strictFallbackUsed,
         }));
 
         // Persist to localStorage
         if (data.results) {
-          saveCachedResults(data.results, data.report ?? null, evidence, now);
+          saveCachedResults(data.results, reportWithFallback, evidence, now, strictFallbackUsed);
         }
 
         // Wire to Zustand store — guard against missing action (added in Plan 03)
@@ -837,6 +938,7 @@ export function useBacktest() {
           runStatus: status || prev.runStatus,
           artifactAvailability: availability,
           error: message,
+          usedRelaxedFallback: false,
         }));
         if (status?.state !== 'running') {
           stopPolling();

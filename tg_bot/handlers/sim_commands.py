@@ -77,7 +77,15 @@ async def sim(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            mint, amount = args[1], float(args[2])
+            mint = args[1]
+            try:
+                amount = float(args[2])
+            except (ValueError, TypeError):
+                await update.message.reply_text(
+                    "*error*\n\ninvalid amount — use a number like `50` or `25.5`",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
             grade = args[3].upper() if len(args) > 3 else "B"
 
             await update.message.reply_text(" executing paper buy...")
@@ -185,7 +193,10 @@ async def sim(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
 
         elif subcommand == "reset":
-            initial_sol = float(args[1]) if len(args) > 1 else 100.0
+            try:
+                initial_sol = float(args[1]) if len(args) > 1 else 100.0
+            except (ValueError, TypeError):
+                initial_sol = 100.0
             engine.reset(initial_sol=initial_sol)
             await update.message.reply_text(
                 f"* reset*\n\nstarting: `{initial_sol}` SOL\nall positions cleared",

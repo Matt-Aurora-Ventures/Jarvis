@@ -63,7 +63,7 @@ class TwitterConfig:
 class GrokConfig:
     """xAI Grok configuration"""
     api_key: str = ""
-    model: str = "grok-3"
+    model: str = "grok-4-1-fast-non-reasoning"
     image_model: str = "grok-2-image"
     max_images_per_day: int = 6
 

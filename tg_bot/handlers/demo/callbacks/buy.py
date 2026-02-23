@@ -46,7 +46,11 @@ async def handle_buy(
         # Handle buy amount selection
         parts = data.split(":")
         if len(parts) >= 3:
-            amount = float(parts[2])
+            try:
+                amount = float(parts[2])
+            except (ValueError, TypeError):
+                logger.warning("Invalid buy amount in callback data: %s", data)
+                return None
             context.user_data["buy_amount"] = amount
             context.user_data["awaiting_token"] = True
             return DemoMenuBuilder.token_input_prompt()
@@ -258,7 +262,13 @@ Amount: *{amount} SOL*
                 )
 
                 logger.info(f"[BUY] execute_buy_with_tpsl returned: success={result.get('success')}, tx={result.get('tx_hash', 'N/A')[:16] if result.get('tx_hash') else 'N/A'}...")
-                
+
+                # Always clean up buy-flow state regardless of success/failure
+                context.user_data.pop("awaiting_token", None)
+                context.user_data.pop("buy_amount", None)
+                context.user_data.pop("pending_token", None)
+                context.user_data.pop("pending_token_time", None)
+
                 if result.get("success"):
                     position = result.get("position", {})
 

@@ -330,8 +330,16 @@ class AdvancedBacktestEngine:
                 else:
                     self._position.unrealized_pnl = (self._position.entry_price - candle.close) * self._position.quantity
 
-            # Record equity
-            equity = self._capital + self._position.unrealized_pnl
+            # Record equity using side-aware accounting.
+            # For longs, capital excludes deployed principal, so include full market value.
+            # For shorts, capital retains collateral under the current margin model; use
+            # unrealized PnL adjustment on top of capital.
+            if self._position.side == PositionSide.LONG:
+                equity = self._capital + (self._position.quantity * candle.close)
+            elif self._position.side == PositionSide.SHORT:
+                equity = self._capital + self._position.unrealized_pnl
+            else:
+                equity = self._capital
             self._equity_curve.append({
                 'timestamp': candle.timestamp,
                 'equity': equity,

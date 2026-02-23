@@ -293,8 +293,8 @@ class TestConfigDefaults:
         assert config.admin_ids == []
         assert config.reply_mode == "mentions"
         assert config.reply_cooldown == 12
-        assert config.reply_model == "grok-3"
-        assert config.claude_model == "claude-sonnet-4-20250514"
+        assert config.reply_model == "grok-4-1-fast-non-reasoning"
+        assert config.claude_model == "claude-sonnet-4-6"
 
     def test_solana_config_defaults(self, clean_env):
         """Test SolanaConfig has correct defaults."""

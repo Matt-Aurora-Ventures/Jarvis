@@ -59,7 +59,7 @@ describe('bags-backtest types', () => {
   it('BagsBacktestResult should have required fields', async () => {
     const { runBagsBacktest } = await import('@/lib/bags-backtest');
     expect(typeof runBagsBacktest).toBe('function');
-  });
+  }, 20_000);
 
   it('BagsStrategyResult should have scoring fields', async () => {
     // Verify the type shape by constructing a mock

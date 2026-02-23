@@ -177,7 +177,7 @@ class DexterAgent:
             self.max_iterations = getattr(self.config, "max_iterations", self.MAX_ITERATIONS)
             self.min_confidence = getattr(self.config, "min_confidence", self.MIN_CONFIDENCE)
         else:
-            self.model = self.config.get("model", "grok-3") if isinstance(self.config, dict) else "grok-3"
+            self.model = self.config.get("model", "grok-4-1-fast-non-reasoning") if isinstance(self.config, dict) else "grok-4-1-fast-non-reasoning"
             self.max_iterations = self.config.get("max_iterations", self.MAX_ITERATIONS) if isinstance(self.config, dict) else self.MAX_ITERATIONS
             self.min_confidence = self.config.get("min_confidence", self.MIN_CONFIDENCE) if isinstance(self.config, dict) else self.MIN_CONFIDENCE
 

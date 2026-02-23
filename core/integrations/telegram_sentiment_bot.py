@@ -273,7 +273,7 @@ class TelegramSentimentBot:
             }
 
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=payload)
+                response = await client.post(url, json=payload, timeout=15.0)
                 return response.status_code == 200
 
         except ImportError:

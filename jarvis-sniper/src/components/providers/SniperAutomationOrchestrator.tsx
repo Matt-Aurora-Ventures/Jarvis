@@ -22,6 +22,7 @@ import {
 } from '@/lib/auto-wr-gate';
 import { selectStrategyWithThompson } from '@/lib/strategy-selector';
 import { mergeRuntimeConfigWithStrategyOverride } from '@/lib/autonomy/override-policy';
+import { buildAutonomyReadHeaders } from '@/lib/autonomy/client-auth';
 
 const SIGNER_SOL_RESERVE_LAMPORTS = 3_000_000;
 const BALANCE_GATE_CACHE_MS = 10_000;
@@ -178,7 +179,10 @@ export function SniperAutomationOrchestrator() {
     let cancelled = false;
     const refresh = async () => {
       try {
-        const res = await fetch('/api/strategy-overrides', { cache: 'no-store' });
+        const res = await fetch('/api/strategy-overrides', {
+          cache: 'no-store',
+          headers: buildAutonomyReadHeaders(),
+        });
         if (!res.ok || cancelled) return;
         const payload = await res.json();
         if (cancelled) return;

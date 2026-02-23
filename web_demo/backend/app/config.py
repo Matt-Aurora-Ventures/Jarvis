@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     # AI & Sentiment
     # Option 1: Cloud AI (Grok)
     XAI_API_KEY: Optional[str] = None
-    XAI_MODEL: str = "grok-beta"
+    XAI_MODEL: str = "grok-4-1-fast-non-reasoning"
     XAI_ENABLED: bool = True
 
     # Option 2: Local AI (Ollama - zero cost, privacy-first)

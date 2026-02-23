@@ -1,0 +1,31 @@
+name: Sniper Real Data Guard
+
+on:
+  pull_request:
+    paths:
+      - 'jarvis-sniper/**'
+      - 'core/api_server.py'
+      - 'core/trading_coliseum.py'
+      - '.github/workflows/sniper-real-data-guard.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'jarvis-sniper/**'
+      - 'core/api_server.py'
+      - 'core/trading_coliseum.py'
+      - '.github/workflows/sniper-real-data-guard.yml'
+
+jobs:
+  real-data-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run real-data-only guard
+        run: node jarvis-sniper/scripts/check-real-data-only.mjs

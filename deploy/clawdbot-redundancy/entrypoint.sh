@@ -97,6 +97,27 @@ fi
 log "✅ Supermemory configured for persistent memory"
 
 # =============================================================================
+# STEP 2.605: Configure Codex CLI (for Matt / coding-agent)
+# =============================================================================
+
+if [ "$BOT_NAME" = "matt" ] || [ "${INSTALL_CODEX:-false}" = "true" ]; then
+    log "Configuring Codex CLI..."
+    npm install -g @openai/codex 2>/dev/null || true
+
+    NPM_PREFIX="$(npm config get prefix 2>/dev/null || echo /usr/local)"
+    CODEX_BIN="$NPM_PREFIX/bin/codex"
+    if [ -x "$CODEX_BIN" ] && [ ! -x /usr/local/bin/codex ]; then
+        ln -sf "$CODEX_BIN" /usr/local/bin/codex || true
+    fi
+
+    if command -v codex >/dev/null 2>&1; then
+        log "✅ Codex CLI available"
+    else
+        log "⚠️ Codex CLI not on PATH; use fallback command: npx --yes @openai/codex"
+    fi
+fi
+
+# =============================================================================
 # STEP 2.61: Configure AI Provider (Multi-Provider Support)
 # =============================================================================
 
@@ -110,14 +131,25 @@ case "$AI_PROVIDER" in
     anthropic)
         export ANTHROPIC_OAUTH_ACCESS="${ANTHROPIC_OAUTH_ACCESS:-}"
         export ANTHROPIC_OAUTH_REFRESH="${ANTHROPIC_OAUTH_REFRESH:-}"
+        export AI_API_KEY="${AI_API_KEY:-${ANTHROPIC_OAUTH_ACCESS:-}}"
         if [ -z "$ANTHROPIC_OAUTH_ACCESS" ]; then
             log "  ⚠️ WARNING: ANTHROPIC_OAUTH_ACCESS not set"
         else
             log "  ✅ Anthropic OAuth configured"
         fi
         ;;
+    openai)
+        export OPENAI_API_KEY="${OPENAI_API_KEY:-}"
+        export AI_API_KEY="${AI_API_KEY:-${OPENAI_API_KEY:-}}"
+        if [ -z "$OPENAI_API_KEY" ]; then
+            log "  ⚠️ WARNING: OPENAI_API_KEY not set"
+        else
+            log "  ✅ OpenAI API key configured"
+        fi
+        ;;
     xai)
         export XAI_API_KEY="${XAI_API_KEY:-}"
+        export AI_API_KEY="${AI_API_KEY:-${XAI_API_KEY:-}}"
         if [ -z "$XAI_API_KEY" ]; then
             log "  ⚠️ WARNING: XAI_API_KEY not set"
         else
@@ -126,6 +158,7 @@ case "$AI_PROVIDER" in
         ;;
     nvidia)
         export NVIDIA_NIM_API_KEY="${NVIDIA_NIM_API_KEY:-}"
+        export AI_API_KEY="${AI_API_KEY:-${NVIDIA_NIM_API_KEY:-}}"
         if [ -z "$NVIDIA_NIM_API_KEY" ]; then
             log "  ⚠️ WARNING: NVIDIA_NIM_API_KEY not set"
         else
@@ -134,6 +167,7 @@ case "$AI_PROVIDER" in
         ;;
     google)
         export GOOGLE_AI_API_KEY="${GOOGLE_AI_API_KEY:-}"
+        export AI_API_KEY="${AI_API_KEY:-${GOOGLE_AI_API_KEY:-}}"
         if [ -z "$GOOGLE_AI_API_KEY" ]; then
             log "  ⚠️ WARNING: GOOGLE_AI_API_KEY not set"
         else

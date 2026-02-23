@@ -88,13 +88,13 @@ OUTPUT FORMAT:
 NEVER include actual API keys, passwords, or secrets in code - always use environment variables.
 NEVER generate code that could harm the system or leak data."""
 
-    def __init__(self, api_key: str = None, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, api_key: str = None, model: str = "claude-sonnet-4-6"):
         """
         Initialize code generator.
 
         Args:
             api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env)
-            model: Model to use (default: claude-sonnet-4-20250514)
+            model: Model to use (default: claude-sonnet-4-6)
         """
         self.api_key = api_key or get_anthropic_api_key()
         if is_local_anthropic():

@@ -256,7 +256,10 @@ class FlowController:
                 "Token could drop in value",
                 "Slippage may affect final amount",
             ]
-            plan.estimated_cost = float(amount) * 0.003 if amount.replace(".", "").isdigit() else 0
+            try:
+                plan.estimated_cost = float(amount) * 0.003
+            except (ValueError, TypeError):
+                plan.estimated_cost = 0
             plan.requires_confirmation = True
 
         elif cmd == "sell":

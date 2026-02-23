@@ -246,7 +246,10 @@ class TwelveDataClient:
         """Get latest price for a symbol."""
         data = await self._get("price", {"symbol": symbol})
         if data and "price" in data:
-            return float(data["price"])
+            try:
+                return float(data["price"])
+            except (TypeError, ValueError):
+                return None
         return None
 
     async def get_quotes_batch(self, symbols: List[str]) -> Dict[str, Quote]:
