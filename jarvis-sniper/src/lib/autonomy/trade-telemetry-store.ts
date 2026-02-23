@@ -2,6 +2,7 @@ import { Storage } from '@google-cloud/storage';
 import { createHash, randomUUID } from 'crypto';
 import { auditBucketName, isAuditBucketConfigured } from './audit-store';
 import type { TradeTelemetryRecord, TradeTelemetryIngest } from './types';
+import type { TradeTelemetryEvent } from './trade-telemetry-client';
 
 let storageSingleton: Storage | null = null;
 function gcs(): Storage {
@@ -35,6 +36,77 @@ export function tradeTelemetryPrefixForIso(iso: string): string {
 
 function sha256(text: string): string {
   return createHash('sha256').update(text).digest('hex');
+}
+
+export interface PersistedTradeTelemetryEvent extends TradeTelemetryEvent {
+  trustLevel: 'trusted' | 'untrusted';
+  receivedAt: string;
+  receivedAtMs: number;
+}
+
+function normalizeIngestStatus(value: unknown): TradeTelemetryIngest['status'] {
+  const status = String(value || '').trim().toLowerCase();
+  if (status === 'tp_hit' || status === 'sl_hit' || status === 'trail_stop' || status === 'expired') {
+    return status;
+  }
+  return 'closed';
+}
+
+function normalizeTelemetryEvent(input: TradeTelemetryEvent): PersistedTradeTelemetryEvent {
+  const now = Date.now();
+  return {
+    ...input,
+    schemaVersion: 1,
+    eventType: input.eventType === 'sell_attempt' ? 'sell_attempt' : 'trade_closed',
+    positionId: String(input.positionId || '').trim(),
+    mint: String(input.mint || '').trim(),
+    status: normalizeIngestStatus(input.status),
+    symbol: input.symbol ? String(input.symbol).trim() : undefined,
+    strategyId: input.strategyId ? String(input.strategyId).trim() : null,
+    walletAddress: input.walletAddress ? String(input.walletAddress).trim() : undefined,
+    buyTxHash: input.buyTxHash ? String(input.buyTxHash).trim() : null,
+    sellTxHash: input.sellTxHash ? String(input.sellTxHash).trim() : null,
+    trustLevel: input.trustLevel === 'trusted' ? 'trusted' : 'untrusted',
+    receivedAt: new Date(now).toISOString(),
+    receivedAtMs: now,
+  };
+}
+
+/**
+ * Backward-compatible append API consumed by route handlers and tests.
+ * Persists the telemetry payload via the GCS-backed write path, then returns
+ * a normalized event envelope for downstream evidence enrichment.
+ */
+export async function appendTradeTelemetryEvent(
+  event: TradeTelemetryEvent,
+): Promise<PersistedTradeTelemetryEvent> {
+  const normalized = normalizeTelemetryEvent(event);
+  const payload: TradeTelemetryIngest = {
+    schemaVersion: 1,
+    positionId: normalized.positionId,
+    mint: normalized.mint,
+    status: normalizeIngestStatus(normalized.status),
+    symbol: normalized.symbol,
+    walletAddress: normalized.walletAddress || undefined,
+    strategyId: normalized.strategyId || undefined,
+    entrySource: normalized.entrySource === 'manual' ? 'manual' : (normalized.entrySource === 'auto' ? 'auto' : undefined),
+    entryTime: Number.isFinite(Number(normalized.entryTime)) ? Number(normalized.entryTime) : undefined,
+    exitTime: Number.isFinite(Number(normalized.exitTime)) ? Number(normalized.exitTime) : undefined,
+    solInvested: Number.isFinite(Number(normalized.solInvested)) ? Number(normalized.solInvested) : undefined,
+    exitSolReceived: Number.isFinite(Number(normalized.exitSolReceived)) ? Number(normalized.exitSolReceived) : undefined,
+    pnlSol: Number.isFinite(Number(normalized.pnlSol)) ? Number(normalized.pnlSol) : undefined,
+    pnlPercent: Number.isFinite(Number(normalized.pnlPercent)) ? Number(normalized.pnlPercent) : undefined,
+    buyTxHash: normalized.buyTxHash || undefined,
+    sellTxHash: normalized.sellTxHash || undefined,
+    includedInStats: normalized.includedInStats,
+    manualOnly: normalized.manualOnly,
+    recoveredFrom: normalized.recoveredFrom || undefined,
+    tradeSignerMode: normalized.tradeSignerMode === 'phantom' ? 'phantom' : (normalized.tradeSignerMode === 'session' ? 'session' : undefined),
+    sessionWalletPubkey: normalized.sessionWalletPubkey || undefined,
+    activePreset: normalized.activePreset || undefined,
+  };
+  await writeTradeTelemetry({ payload, receivedAtIso: normalized.receivedAt });
+  return normalized;
 }
 
 export async function writeTradeTelemetry(args: {
