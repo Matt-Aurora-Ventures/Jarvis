@@ -22,9 +22,22 @@ import asyncio
 import logging
 import os
 import time
+from pathlib import Path
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, TypeVar
+
+from core.consensus import ConsensusArena
+
+try:
+    from litellm import acompletion
+except Exception:  # pragma: no cover
+    acompletion = None
+
+try:
+    from nosana_client import NosanaClient
+except Exception:  # pragma: no cover
+    NosanaClient = None
 
 logger = logging.getLogger(__name__)
 
@@ -188,22 +201,35 @@ class ResilientProviderChain:
             use_for=["chat", "code", "sentiment"],
         ),
         ProviderConfig(
-            name="xai",
+            name="consensus",
             priority=3,
+            is_free=False,
+            use_for=["chat", "code", "sentiment", "complex"],
+        ),
+        ProviderConfig(
+            name="nosana",
+            priority=4,
+            api_key_env="NOSANA_API_KEY",
+            is_free=False,
+            use_for=["chat", "code", "research", "complex"],
+        ),
+        ProviderConfig(
+            name="xai",
+            priority=5,
             api_key_env="XAI_API_KEY",
             is_free=False,
             use_for=["sentiment"],  # Strictly reserved for sentiment
         ),
         ProviderConfig(
             name="groq",
-            priority=4,
+            priority=6,
             api_key_env="GROQ_API_KEY",
             is_free=True,  # Free tier
             use_for=["chat", "code"],
         ),
         ProviderConfig(
             name="openrouter",
-            priority=5,
+            priority=7,
             api_key_env="OPENROUTER_API_KEY",
             is_free=False,
             use_for=["chat", "code", "sentiment"],
@@ -216,6 +242,103 @@ class ResilientProviderChain:
             p.name: CircuitBreaker(p) for p in self.providers
         }
         self._lock = asyncio.Lock()
+
+    async def _execute_builtin_provider(
+        self,
+        provider_name: str,
+        prompt: str,
+        *,
+        models: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Built-in execution path for providers managed directly by Jarvis."""
+        metadata = metadata or {}
+
+        if provider_name == "consensus":
+            arena = ConsensusArena(models=models or ["openai/gpt-4o-mini", "groq/llama3-70b-8192"])
+            synthesis = await arena.run(prompt)
+            winner = synthesis.get("winner") or {}
+            winner_provider = winner.get("provider")
+            final_response = ""
+            for candidate in synthesis.get("candidates", []):
+                if candidate.get("provider") == winner_provider:
+                    final_response = candidate.get("response", "")
+                    break
+            synthesis["final_response"] = final_response
+            return {"provider": "consensus", "result": synthesis}
+
+        if provider_name == "nosana":
+            if NosanaClient is None:
+                raise RuntimeError("nosana_client module unavailable")
+            client = NosanaClient(api_key=os.environ.get("NOSANA_API_KEY"))
+
+            task_type = metadata.get("task_type", "chat")
+            template_file = "ollama_consensus.json" if task_type == "complex" else "ollama_research.json"
+            template_path = Path("nosana_jobs") / template_file
+
+            if template_path.exists():
+                import json
+                template = json.loads(template_path.read_text(encoding="utf-8"))
+            else:
+                template = {"name": metadata.get("job_name", "jarvis-nosana-inference")}
+
+            template.setdefault("input", {})
+            template["input"]["prompt"] = prompt
+            template["metadata"] = metadata
+            result = await client.submit_job(template)
+            return {"provider": "nosana", "result": result}
+
+        if acompletion is None:
+            raise RuntimeError("litellm unavailable for direct provider execution")
+
+        completion = await acompletion(
+            model=provider_name,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=metadata.get("timeout", 45),
+        )
+        content = completion.choices[0].message.content or ""
+        return {"provider": provider_name, "result": content}
+
+    async def execute_prompt(
+        self,
+        prompt: str,
+        *,
+        task_type: str = "chat",
+        models: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Execute a plain-text prompt through resilient provider routing."""
+
+        metadata = metadata or {}
+        preferred = metadata.get("preferred_provider")
+        if preferred and preferred in self.breakers:
+            provider_cfg = next((p for p in self.providers if p.name == preferred), None)
+            breaker = self.breakers[preferred]
+            if provider_cfg and task_type in provider_cfg.use_for and breaker.can_execute():
+                try:
+                    result = await self._execute_builtin_provider(
+                        preferred,
+                        prompt,
+                        models=models,
+                        metadata={**metadata, "task_type": task_type},
+                    )
+                    breaker.record_success()
+                    return result
+                except Exception as exc:
+                    breaker.record_failure(exc)
+                    logger.warning("Preferred provider %s failed: %s", preferred, exc)
+
+        async def _call(provider_name: str) -> Dict[str, Any]:
+            call_metadata = dict(metadata or {})
+            call_metadata.setdefault("task_type", task_type)
+            return await self._execute_builtin_provider(
+                provider_name,
+                prompt,
+                models=models,
+                metadata=call_metadata,
+            )
+
+        return await self.execute(task_type=task_type, call_fn=_call, fallback_value=None)
 
     def get_available_provider(self, task_type: str = "chat") -> Optional[str]:
         """

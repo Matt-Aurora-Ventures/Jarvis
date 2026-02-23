@@ -89,6 +89,8 @@ class SupermemoryClient:
         bot_name: str,
         api_key: Optional[str] = None,
         user_prefix: str = "jarvis",
+        primary_profile: str = "default",
+        secondary_profile: Optional[str] = None,
     ):
         """
         Initialize the memory client.
@@ -100,6 +102,8 @@ class SupermemoryClient:
         """
         self.bot_name = bot_name.lower()
         self.user_prefix = user_prefix
+        self.primary_profile = primary_profile
+        self.secondary_profile = secondary_profile
         self._api_key = api_key or os.environ.get("SUPERMEMORY_API_KEY")
 
         # User IDs for different memory tiers
@@ -107,6 +111,10 @@ class SupermemoryClient:
         self.user_id_mid = f"{user_prefix}_{bot_name}_mid"
         self.user_id_long = f"{user_prefix}_{bot_name}_long"
         self.user_id_shared = f"{user_prefix}_shared"
+        self.user_id_profile_primary = f"{user_prefix}_{bot_name}_{primary_profile}"
+        self.user_id_profile_secondary = (
+            f"{user_prefix}_{bot_name}_{secondary_profile}" if secondary_profile else None
+        )
 
         self._async_client: Optional[Any] = None
         self._sync_client: Optional[Any] = None
@@ -360,7 +368,7 @@ class SupermemoryClient:
         # the conversation as a mid-term memory entry.
         try:
             convo_text = "\n".join(
-                f\"{m.get('role','').strip()}: {m.get('content','').strip()}\"
+                f"{m.get('role','').strip()}: {m.get('content','').strip()}"
                 for m in messages
                 if m.get("content")
             )
@@ -379,6 +387,38 @@ class SupermemoryClient:
         except Exception as e:
             logger.warning(f"[{self.bot_name}] Failed to ingest conversation: {e}")
             return False
+
+    async def pre_recall(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Hook executed before recall/search to enrich context."""
+        memories = await self.search(query, include_shared=True, limit=3)
+        return {
+            "query": query,
+            "context": context or {},
+            "memory_hints": [m.content for m in memories],
+            "profiles": {
+                "primary": self.primary_profile,
+                "secondary": self.secondary_profile,
+            },
+        }
+
+    async def post_response(self, query: str, response: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        """Hook executed after response generation to persist durable learning."""
+        metadata = {
+            "hook": "post_response",
+            "query": query,
+            "context": context or {},
+            "primary_profile": self.primary_profile,
+        }
+        ok_primary = await self.add(response, memory_type=MemoryType.MID_TERM, metadata=metadata)
+
+        ok_secondary = True
+        if self.user_id_profile_secondary:
+            secondary_meta = dict(metadata)
+            secondary_meta["secondary_profile"] = self.secondary_profile
+            # Reuse shared tier to avoid SDK schema assumptions while tagging profile.
+            ok_secondary = await self.add(response, memory_type=MemoryType.SHARED, metadata=secondary_meta)
+
+        return ok_primary and ok_secondary
 
     def search_sync(
         self,
@@ -424,7 +464,11 @@ class SupermemoryClient:
 _clients: Dict[str, SupermemoryClient] = {}
 
 
-def get_memory_client(bot_name: str) -> SupermemoryClient:
+def get_memory_client(
+    bot_name: str,
+    primary_profile: str = "default",
+    secondary_profile: Optional[str] = None,
+) -> SupermemoryClient:
     """
     Get or create a memory client for a bot.
 
@@ -435,9 +479,14 @@ def get_memory_client(bot_name: str) -> SupermemoryClient:
         SupermemoryClient instance
     """
     bot_name = bot_name.lower()
-    if bot_name not in _clients:
-        _clients[bot_name] = SupermemoryClient(bot_name=bot_name)
-    return _clients[bot_name]
+    cache_key = f"{bot_name}:{primary_profile}:{secondary_profile or ''}"
+    if cache_key not in _clients:
+        _clients[cache_key] = SupermemoryClient(
+            bot_name=bot_name,
+            primary_profile=primary_profile,
+            secondary_profile=secondary_profile,
+        )
+    return _clients[cache_key]
 
 
 # Convenience functions for quick access

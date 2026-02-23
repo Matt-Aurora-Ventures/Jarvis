@@ -34,6 +34,8 @@ from lifeos.memory import MemoryStore, MemoryContext
 from lifeos.pae import PAERegistry
 from lifeos.persona import PersonaManager, PersonaState
 from lifeos.plugins import PluginManager
+from bots.shared.supermemory_client import get_memory_client
+from core.resilient_provider import get_provider_chain
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,14 @@ class Jarvis:
         self._started = False
         self._start_time: Optional[datetime] = None
         self._shutdown_handlers: List[Callable] = []
+
+        self._memory_profile = self._config.get("memory.profile", "default")
+        self._memory_secondary_profile = self._config.get("memory.secondary_profile")
+        self._supermemory = get_memory_client(
+            bot_name="jarvis",
+            primary_profile=self._memory_profile,
+            secondary_profile=self._memory_secondary_profile,
+        )
 
     # =========================================================================
     # Lifecycle
@@ -220,6 +230,14 @@ class Jarvis:
             "jarvis": self,
         }
 
+    def _is_complex_query(self, message: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        """Heuristic used for consensus arena routing from lifeos."""
+        if context and context.get("force_consensus"):
+            return True
+        markers = ("compare", "tradeoff", "risks", "multi-step", "analyze", "consensus")
+        lowered = message.lower()
+        return len(message.split()) >= 20 or any(m in lowered for m in markers)
+
     # =========================================================================
     # Chat Interface
     # =========================================================================
@@ -248,22 +266,59 @@ class Jarvis:
         if persona and self._persona:
             self._persona.set_active(persona)
 
+        # Pre-recall hook for context injection
+        hook_payload = await self._supermemory.pre_recall(message, context=context)
+        merged_context = dict(context or {})
+        merged_context.setdefault("memory", hook_payload)
+
         # Emit chat event
         await self._event_bus.emit(
             "chat.message",
-            {"message": message, "context": context},
+            {"message": message, "context": merged_context},
         )
 
         # Get system prompt from persona
         system_prompt = ""
         if self._persona:
-            context_type = context.get("context_type") if context else None
+            context_type = merged_context.get("context_type") if merged_context else None
             system_prompt = self._persona.get_system_prompt(context_type)
 
         # Build messages
         from lifeos.services.interfaces import LLMMessage, LLMConfig
 
         messages = [LLMMessage(role="user", content=message)]
+
+        use_consensus = self._config.get("llm.consensus_for_complex", False) and self._is_complex_query(message, merged_context)
+        if use_consensus:
+            chain = get_provider_chain()
+            complex_provider = self._config.get("llm.complex_provider", "consensus")
+            routed = await chain.execute_prompt(
+                prompt=message,
+                task_type="complex",
+                metadata={
+                    "source": "lifeos.jarvis",
+                    "context": merged_context,
+                    "preferred_provider": complex_provider,
+                },
+            )
+            if routed and routed.get("provider") == "consensus":
+                result = routed.get("result") or {}
+                final_response = result.get("final_response") or ""
+                if final_response.strip():
+                    await self._supermemory.post_response(message, final_response, context=merged_context)
+                    return final_response
+
+                winner = result.get("winner") or {}
+                winner_provider = winner.get("provider", "unknown")
+                winner_score = winner.get("score", 0)
+                summary = f"Consensus winner: {winner_provider} (score={winner_score:.3f})"
+                await self._supermemory.post_response(message, summary, context=merged_context)
+                return summary
+
+            if routed and routed.get("provider") == "nosana":
+                nosana_summary = f"Nosana job submitted: {(routed.get('result') or {}).get('id', 'unknown')}"
+                await self._supermemory.post_response(message, nosana_summary, context=merged_context)
+                return nosana_summary
 
         # Call LLM
         if self._llm:
@@ -281,13 +336,14 @@ class Jarvis:
                 # Style response
                 styled = response.content
                 if self._persona:
-                    styled = await self._persona.style_response(styled, context)
+                    styled = await self._persona.style_response(styled, merged_context)
 
                 # Emit response event
                 await self._event_bus.emit(
                     "chat.response",
                     {"response": styled, "model": response.model},
                 )
+                await self._supermemory.post_response(message, styled, context=merged_context)
 
                 return styled
 
