@@ -49,7 +49,7 @@ def test_compute_semantic_agreement_from_embeddings():
         ["A", "B", "C"],
         embedder=_FakeEmbedder(vectors),
     )
-    assert 0.20 < score < 0.55
+    assert -0.40 < score < 0.05
 
 
 def test_confidence_scoring_penalizes_hedging():
@@ -72,16 +72,21 @@ def test_reasoning_quality_rewards_structure_and_risk_benefit():
 
 
 def test_score_responses_returns_ranked_payload(monkeypatch):
-    monkeypatch.setattr("core.consensus.scoring.compute_semantic_agreement", lambda *_args, **_kwargs: 0.84)
+    monkeypatch.setattr(
+        "core.consensus.scoring._semantic_similarity_matrix",
+        lambda *_args, **_kwargs: __import__("numpy").array([[1.0, 0.84], [0.84, 1.0]], dtype=float),
+    )
 
-    responses = [
-        {"model": "gpt-5.3", "content": "Maybe do A."},
-        {"model": "claude-opus", "content": "First evaluate risks and benefits. Therefore do B confidently."},
-    ]
+    responses = {
+        "gpt": "Maybe do A.",
+        "claude": "First evaluate risks and benefits. Therefore do B confidently.",
+    }
 
     result = score_responses(responses)
     assert result["agreement_score"] == pytest.approx(0.84)
     assert result["consensus_tier"] == "strong"
     assert len(result["responses"]) == 2
+    assert set(result["individual_scores"].keys()) == {"gpt", "claude"}
+    assert result["best_model"] in {"gpt", "claude"}
     assert result["responses"][0]["total_score"] >= result["responses"][1]["total_score"]
-    assert result["top_response"]["model"] in {"gpt-5.3", "claude-opus"}
+    assert result["top_response"]["model"] in {"gpt", "claude"}

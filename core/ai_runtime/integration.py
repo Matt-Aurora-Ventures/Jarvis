@@ -5,6 +5,7 @@ Provides an easy way to start the comprehensive AI runtime from the supervisor.
 """
 import asyncio
 import logging
+import os
 from typing import Optional
 
 from .config import AIRuntimeConfig, AgentConfig
@@ -33,7 +34,7 @@ class AIRuntimeManager:
         self._running = False
         self._config: Optional[AIRuntimeConfig] = None
 
-    async def start(self) -> bool:
+    async def start(self, *, use_arena: bool = False) -> bool:
         """
         Attempt to start AI runtime.
 
@@ -41,6 +42,12 @@ class AIRuntimeManager:
         Failure here is NOT an error - system continues without AI.
         """
         try:
+            # Pass arena mode through runtime startup.
+            if use_arena:
+                os.environ["JARVIS_USE_ARENA"] = "1"
+            else:
+                os.environ.setdefault("JARVIS_USE_ARENA", "0")
+
             # Load configuration
             self._config = AIRuntimeConfig.from_env()
 
@@ -58,7 +65,7 @@ class AIRuntimeManager:
 
             # Start bus
             await self._bus.start_server()
-            logger.info(f"Message bus started: {self._config.bus.socket_path}")
+            logger.info("Message bus started: %s", self._config.bus.socket_path)
 
             # Start supervisor
             self._ai_supervisor = AISupervisor(self._config, self._bus, self._memory)
@@ -93,15 +100,16 @@ class AIRuntimeManager:
                 logger.info("Telegram agent unavailable (Ollama not accessible)")
 
             self._running = True
-            logger.info("🧠 AI Runtime started successfully")
+            logger.info("AI Runtime started successfully (use_arena=%s)", use_arena)
             return True
 
         except ImportError as e:
-            logger.info(f"AI Runtime dependencies not available: {e}")
+            logger.info("AI Runtime dependencies not available: %s", e)
             return False
         except Exception as e:
             logger.warning(
-                f"AI Runtime failed to start (continuing without AI): {e}",
+                "AI Runtime failed to start (continuing without AI): %s",
+                e,
                 exc_info=True,
             )
             return False
@@ -132,7 +140,7 @@ class AIRuntimeManager:
             logger.info("AI Runtime stopped")
 
         except Exception as e:
-            logger.error(f"Error stopping AI Runtime: {e}")
+            logger.error("Error stopping AI Runtime: %s", e)
 
     def get_telegram_agent(self):
         """Get Telegram agent if available."""

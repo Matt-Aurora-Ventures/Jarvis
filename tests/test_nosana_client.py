@@ -67,3 +67,52 @@ def test_submit_job_returns_job_metadata(monkeypatch):
     result = client.submit_job({"template_id": "ollama_consensus", "input": {"prompt": "x"}})
     assert result["id"] == "job-123"
     assert result["status"] == "queued"
+
+
+def test_submit_ollama_job_selects_market_and_template(tmp_path, monkeypatch):
+    template_path = tmp_path / "ollama_consensus.json"
+    template_path.write_text(
+        json.dumps({"template_id": "ollama_consensus", "input": {"model": "", "prompt": ""}}),
+        encoding="utf-8",
+    )
+
+    client = NosanaClient(api_key="test-key")
+    monkeypatch.setattr(
+        client,
+        "list_markets",
+        lambda: [
+            {"id": "cheap-small", "price_per_hour": 0.2, "gpu_vram_gb": 8},
+            {"id": "cheap-large", "price_per_hour": 0.3, "gpu_vram_gb": 48},
+        ],
+    )
+    monkeypatch.setattr(client, "submit_job", lambda payload: {"status": "queued", "payload": payload})
+
+    result = client.submit_ollama_job(
+        template_path=template_path,
+        model="llama3.3:70b-q4",
+        prompt="Compare staking vs LP",
+    )
+    assert result["status"] == "queued"
+    assert result["market_id"] == "cheap-large"
+    assert result["payload"]["input"]["model"] == "llama3.3:70b-q4"
+
+
+def test_mesh_sync_envelope_encrypts_and_decrypts_state_delta():
+    client = NosanaClient(api_key="test-key")
+    shared_key_hex = "11" * 32
+    state_delta = {"last_topic": "staking-vs-lp", "updated_at": "2026-02-23T00:00:00Z"}
+
+    envelope = client.build_mesh_sync_envelope(
+        state_delta=state_delta,
+        node_pubkey="Node111111111111111111111111111111111111",
+        shared_key_hex=shared_key_hex,
+    )
+    assert envelope["channel"] == "jarvis.mesh.sync"
+    assert envelope["state_hash"] == client.state_hash(state_delta)
+
+    decrypted = client.decrypt_sync_payload(
+        envelope["encrypted_payload"],
+        shared_key_hex=shared_key_hex,
+    )
+    assert decrypted["state_delta"] == state_delta
+    assert decrypted["state_hash"] == envelope["state_hash"]

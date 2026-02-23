@@ -83,3 +83,22 @@ def test_weekly_guard_blocks_second_run_same_week(tmp_path):
 
     upgrader = ModelUpgrader(state_path=state_path)
     assert upgrader.should_run_weekly("2026-02-23T03:00:00+00:00") is False
+
+
+def test_update_arena_panel_replaces_existing_alias(tmp_path):
+    arena_path = tmp_path / "arena.py"
+    arena_path.write_text(
+        "PANEL: Dict[str, str] = {\n"
+        '    "claude": "anthropic/old-model",\n'
+        '    "gpt": "openai/gpt-old",\n'
+        "}\n",
+        encoding="utf-8",
+    )
+
+    upgrader = ModelUpgrader(arena_path=arena_path)
+    changed = upgrader.update_arena_panel({"claude": "anthropic/new-model"})
+    assert changed is True
+
+    updated = arena_path.read_text(encoding="utf-8")
+    assert '"claude": "anthropic/new-model"' in updated
+    assert "old-model" not in updated

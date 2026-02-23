@@ -13,10 +13,15 @@ async def test_get_consensus_routes_simple_queries_locally(monkeypatch):
     async def _should_not_run(*_args, **_kwargs):
         raise AssertionError("fan-out should not run for simple query")
 
+    async def _fake_local(*_args, **_kwargs):
+        return "SOL is 192.14"
+
     monkeypatch.setattr("core.consensus.arena._run_panel_calls", _should_not_run)
+    monkeypatch.setattr("core.consensus.arena._local_ollama_completion", _fake_local)
     result = await get_consensus("SOL price?")
     assert result["route"] == "local"
-    assert result["consensus"] is None
+    assert result["consensus"]["model"] == "ollama"
+    assert "SOL" in result["consensus"]["content"]
 
 
 @pytest.mark.asyncio
@@ -33,11 +38,13 @@ async def test_get_consensus_runs_arena_and_ranks(monkeypatch):
         return {
             "agreement_score": 0.83,
             "consensus_tier": "strong",
+            "best_model": "claude",
+            "best_response": responses["claude"],
             "responses": [
-                {"model": "claude", "content": responses[0]["content"], "total_score": 0.9},
-                {"model": "gpt", "content": responses[1]["content"], "total_score": 0.4},
+                {"model": "claude", "content": responses["claude"], "total_score": 0.9},
+                {"model": "gpt", "content": responses["gpt"], "total_score": 0.4},
             ],
-            "top_response": {"model": "claude", "content": responses[0]["content"], "total_score": 0.9},
+            "top_response": {"model": "claude", "content": responses["claude"], "total_score": 0.9},
         }
 
     monkeypatch.setattr("core.consensus.arena.score_responses", _fake_score)
@@ -50,12 +57,19 @@ async def test_get_consensus_runs_arena_and_ranks(monkeypatch):
     assert result["consensus"]["model"] == "claude"
 
 
-def test_synthesize_consensus_prefers_top_response():
+@pytest.mark.asyncio
+async def test_synthesize_consensus_prefers_top_response_when_llm_unavailable():
     scored = {
+        "best_model": "claude",
+        "best_response": "Use staking with downside controls.",
         "top_response": {"model": "claude", "content": "Use staking with downside controls."},
         "consensus_tier": "moderate",
         "agreement_score": 0.74,
     }
-    output = synthesize_consensus(scored)
+    output = await synthesize_consensus(
+        query="Should I stake SOL or LP?",
+        responses={"claude": "Use staking with downside controls."},
+        scoring=scored,
+    )
     assert output["model"] == "claude"
     assert "staking" in output["content"].lower()

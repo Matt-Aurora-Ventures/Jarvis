@@ -1081,14 +1081,15 @@ async def create_ai_supervisor():
 
     try:
         manager = get_ai_runtime_manager()
-        started = await manager.start()
+        arena_enabled = _arena_mode_enabled()
+        started = await manager.start(use_arena=arena_enabled)
         if not started:
             logger.info("AI runtime disabled or unavailable; supervisor idle")
             # Keep running to prevent supervisor restart loop
             while True:
                 await asyncio.sleep(60)
         else:
-            logger.info("AI runtime started successfully, entering idle loop")
+            logger.info("AI runtime started successfully (use_arena=%s), entering idle loop", arena_enabled)
             # Keep the task alive while AI runtime runs
             while True:
                 await asyncio.sleep(60)
@@ -1345,14 +1346,15 @@ async def create_ai_supervisor():
 
     try:
         manager = get_ai_runtime_manager()
-        started = await manager.start()
+        arena_enabled = _arena_mode_enabled()
+        started = await manager.start(use_arena=arena_enabled)
         if not started:
             logger.info("AI runtime disabled or unavailable; supervisor idle")
             # Keep running to prevent supervisor restart loop
             while True:
                 await asyncio.sleep(60)
         else:
-            logger.info("AI runtime started successfully, entering idle loop")
+            logger.info("AI runtime started successfully (use_arena=%s), entering idle loop", arena_enabled)
             # Keep the task alive while AI runtime runs
             while True:
                 await asyncio.sleep(60)
