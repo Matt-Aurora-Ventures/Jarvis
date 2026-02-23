@@ -188,22 +188,30 @@ class ResilientProviderChain:
             use_for=["chat", "code", "sentiment"],
         ),
         ProviderConfig(
-            name="xai",
+            name="consensus",
             priority=3,
+            api_key_env="OPENROUTER_API_KEY",
+            is_free=False,
+            is_local=False,
+            use_for=["consensus"],
+        ),
+        ProviderConfig(
+            name="xai",
+            priority=4,
             api_key_env="XAI_API_KEY",
             is_free=False,
             use_for=["sentiment"],  # Strictly reserved for sentiment
         ),
         ProviderConfig(
             name="groq",
-            priority=4,
+            priority=5,
             api_key_env="GROQ_API_KEY",
             is_free=True,  # Free tier
             use_for=["chat", "code"],
         ),
         ProviderConfig(
             name="openrouter",
-            priority=5,
+            priority=6,
             api_key_env="OPENROUTER_API_KEY",
             is_free=False,
             use_for=["chat", "code", "sentiment"],
@@ -309,6 +317,26 @@ class ResilientProviderChain:
                 if b.health.state == ProviderState.FAILED
             ),
         }
+
+    async def execute_consensus(
+        self,
+        query: str,
+        *,
+        panel: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        """Execute the consensus arena route for complex queries."""
+        if os.environ.get("JARVIS_USE_ARENA", "1").strip().lower() not in ("1", "true", "yes", "on"):
+            return {
+                "route": "local",
+                "reason": "arena_disabled",
+                "consensus": None,
+                "responses": [],
+                "scoring": None,
+            }
+
+        from core.consensus.arena import get_consensus
+
+        return await get_consensus(query, panel=panel)
 
 
 # Global instance
