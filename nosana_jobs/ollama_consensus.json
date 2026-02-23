@@ -1,0 +1,14 @@
+{
+  "name": "jarvis-ollama-consensus",
+  "image": "ollama/ollama:latest",
+  "resources": {
+    "gpu": 1,
+    "cpu": 6,
+    "memory": "24Gi"
+  },
+  "env": {
+    "OLLAMA_MODEL": "llama3.1:70b",
+    "TASK_TYPE": "consensus"
+  },
+  "command": ["/bin/sh", "-lc", "ollama run $OLLAMA_MODEL \"$PROMPT\""]
+}

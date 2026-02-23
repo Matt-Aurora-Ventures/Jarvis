@@ -26,6 +26,7 @@ from typing import Dict, List, Optional, Callable, Any
 from dataclasses import dataclass, field
 from enum import Enum
 
+from core.consensus import ConsensusArena
 
 # =============================================================================
 # Single Instance Enforcement (Bug Fix US-033)
@@ -222,16 +223,25 @@ logger = logging.getLogger("jarvis.supervisor")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-def track_supervisor_error(exc: Exception, component: str, context: str = "") -> None:
-    """Track an error in the supervisor using the centralized error tracker."""
-    if ERROR_TRACKER_AVAILABLE and error_tracker:
-        error_tracker.track_error(
-            exc,
-            context=context or f"supervisor.{component}",
-            component="supervisor",
-            metadata={"component_name": component}
-        )
+def should_use_consensus_arena(query: str, enabled: Optional[bool] = None) -> bool:
+    """Toggle path for routing complex queries to consensus arena."""
+    if enabled is None:
+        enabled = os.environ.get("JARVIS_COMPLEX_QUERY_ARENA", "0").lower() in {"1", "true", "yes", "on"}
 
+    if not enabled:
+        return False
+
+    complex_markers = ("compare", "tradeoff", "risks", "step-by-step", "analyze", "multi-agent")
+    query_l = query.lower()
+    return len(query.split()) >= 20 or any(marker in query_l for marker in complex_markers)
+
+
+
+
+async def run_complex_query_arena(query: str, models: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Execute a complex query through the consensus arena when enabled."""
+    arena = ConsensusArena(models=models or ["openai/gpt-4o-mini", "groq/llama3-70b-8192"])
+    return await arena.run(query)
 
 def track_supervisor_error(exc: Exception, component: str, context: str = "") -> None:
     """Track an error in the supervisor using the centralized error tracker."""
