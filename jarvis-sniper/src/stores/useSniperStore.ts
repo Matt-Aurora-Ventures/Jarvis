@@ -701,6 +701,16 @@ export interface Position {
   jupTpOrderKey?: string;
   /** Jupiter trigger order account for stop-loss */
   jupSlOrderKey?: string;
+  /** Upstream/local TP protection order key (non-Jupiter specific). */
+  tpOrderKey?: string;
+  /** Upstream/local SL protection order key (non-Jupiter specific). */
+  slOrderKey?: string;
+  /** Lifecycle state for spot protection reconciliation. */
+  protectionStatus?: 'pending' | 'active' | 'failed' | 'cancelled';
+  /** Last reconciliation/update timestamp for protection state. */
+  protectionUpdatedAt?: number;
+  /** Human-readable reason when protection fails or degrades. */
+  protectionFailureReason?: string;
   /** Whether SL/TP orders are placed on-chain */
   onChainSlTp?: boolean;
   /** Asset class this position belongs to (for per-asset circuit breakers) */

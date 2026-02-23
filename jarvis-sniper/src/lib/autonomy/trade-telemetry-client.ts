@@ -1,5 +1,15 @@
 import type { TradeTelemetryIngest } from './types';
 
+export interface TradeTelemetryEvent extends TradeTelemetryIngest {
+  eventType?: 'trade_closed' | 'sell_attempt';
+  executionOutcome?: 'confirmed' | 'failed' | 'unresolved' | 'no_route';
+  failureCode?: string | null;
+  failureReason?: string | null;
+  attemptIndex?: number | null;
+  includedInExecutionStats?: boolean;
+  trustLevel?: 'trusted' | 'untrusted';
+}
+
 /**
  * Best-effort client telemetry. Never blocks trading UX.
  *
@@ -8,7 +18,7 @@ import type { TradeTelemetryIngest } from './types';
  *   executed a trade knows about it (localStorage Zustand persist).
  * - We intentionally keep this "fire-and-forget" and skip entirely in tests/SSR.
  */
-export function postTradeTelemetry(payload: TradeTelemetryIngest): void {
+export function postTradeTelemetry(payload: TradeTelemetryEvent): void {
   if (typeof window === 'undefined') return;
   if (process.env.NODE_ENV === 'test') return;
 
