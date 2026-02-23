@@ -5,7 +5,7 @@ import sys
 
 HOST = "72.61.7.126"
 USER = "root"
-PASSWORD = "bhjhbHBujbxbvxd57272#####"
+PASSWORD = "***SSH_PASSWORD_REDACTED***"
 FILE_PATH = "/root/clawd/secrets/moltbook.json"
 
 try:

@@ -3,7 +3,6 @@ import { Buffer } from 'buffer';
 import { ServerCache } from '@/lib/server-cache';
 import { fetchWithRetry } from '@/lib/fetch-utils';
 import { resolveServerRpcConfig } from './server-rpc-config';
-import { safeImageUrl } from './safe-url';
 const SOLSCAN_BASE = 'https://pro-api.solscan.io/v2.0';
 
 let _connection: Connection | null = null;
@@ -562,18 +561,14 @@ async function sourceSolscan(wallet: string, forceFullScan = false): Promise<Sou
     if (cached) return cached;
   }
   const startedAt = nowMs();
-  const apiKey = String(process.env.SOLSCAN_API_KEY || '')
-    .replace(/[\x00-\x20\x7f]/g, '')
-    .trim();
+  const apiKey = process.env.SOLSCAN_API_KEY;
   if (!apiKey) {
     const result: SourceResult = {
       source: 'solscan',
       records: [],
       status: {
-        // Treat as an optional source: missing key should not degrade overall portfolio sync.
-        ok: true,
+        ok: false,
         durationMs: nowMs() - startedAt,
-        skipped: true,
         error: 'SOLSCAN_API_KEY is not configured',
       },
     };
@@ -603,15 +598,16 @@ async function sourceSolscan(wallet: string, forceFullScan = false): Promise<Sou
         maxRetries: 1,
         baseDelayMs: 600,
         timeoutMs: 12_000,
-        fetchOptions: {
-          headers: {
-            Accept: 'application/json',
-            token: apiKey,
-            Authorization: `Bearer ${apiKey}`,
+          fetchOptions: {
+            headers: {
+              Accept: 'application/json',
+              // Solscan Pro v2 expects the API key in the `token` header.
+              // Avoid sending multiple auth headers (can trigger 401s).
+              token: apiKey,
+            },
           },
-        },
-      }),
-    );
+        }),
+      );
     if (!res.ok) {
       applySolscanFailureBackoff(res.status);
       const result: SourceResult = {
@@ -889,7 +885,7 @@ export async function buildWalletHoldingsConsensus(
       mint: item.mint,
       symbol: item.symbol || item.mint.slice(0, 6),
       name: item.name || item.symbol || item.mint.slice(0, 6),
-      icon: safeImageUrl(item.icon),
+      icon: item.icon,
       decimals,
       amountLamports: item.amountLamports.toString(),
       uiAmount,

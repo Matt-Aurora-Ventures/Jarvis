@@ -1,0 +1,772 @@
+{
+  "baseUrl": "https://kr8tiv.web.app",
+  "routes": [
+    "/",
+    "/bags-sniper",
+    "/tradfi-sniper",
+    "/bags-intel",
+    "/bags-graduations"
+  ],
+  "generatedAtUtc": "2026-02-14T10:46:54Z",
+  "console": [
+    {
+      "kind": "debug",
+      "text": "PrivyWalletProvider.request {method: eth_accounts, params: undefined}",
+      "url": "https://dexscreener.com/assets/entries/pages_catch-all.0r19Rken.js",
+      "line": 709,
+      "column": 63128,
+      "ts": 1771065905.1361344
+    },
+    {
+      "kind": "error",
+      "text": "Access to fetch at 'https://io.dexscreener.com/hype/reactions/dexPair/solana:A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq' from origin 'https://dexscreener.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "https://dexscreener.com/solana/NV2RYH954cTJ3ckFUpvfqaQXU4ARqqDH3562nFSpump?embed=1&theme=dark&trades=0&info=0",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065905.3167703
+    },
+    {
+      "kind": "error",
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "https://io.dexscreener.com/hype/reactions/dexPair/solana:A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065905.3203523
+    },
+    {
+      "kind": "error",
+      "text": "Access to fetch at 'https://io.dexscreener.com/dex/trending/v6?chainId=solana&timeframeKey=h6' from origin 'https://dexscreener.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "https://dexscreener.com/solana/NV2RYH954cTJ3ckFUpvfqaQXU4ARqqDH3562nFSpump?embed=1&theme=dark&trades=0&info=0",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065905.8849635
+    },
+    {
+      "kind": "error",
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "https://io.dexscreener.com/dex/trending/v6?chainId=solana&timeframeKey=h6",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065905.8854976
+    },
+    {
+      "kind": "warning",
+      "text": "SymbolInfo validation: unsupported timezone \"America/Costa_Rica\"",
+      "url": "https://dexscreener.com/tv/v27.001/bundles/library.97ddeff81f861d17f06e.js",
+      "line": 140,
+      "column": 1880,
+      "ts": 1771065907.2776203
+    },
+    {
+      "kind": "error",
+      "text": "Access to fetch at 'https://io.dexscreener.com/dex/chart/amm/v3/pumpfundex/bars/solana/A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq?res=15&cb=329&q=So11111111111111111111111111111111111111112' from origin 'https://dexscreener.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "https://dexscreener.com/solana/NV2RYH954cTJ3ckFUpvfqaQXU4ARqqDH3562nFSpump?embed=1&theme=dark&trades=0&info=0",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065907.3928113
+    },
+    {
+      "kind": "error",
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/pumpfundex/bars/solana/A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065907.393392
+    },
+    {
+      "kind": "error",
+      "text": "Access to fetch at 'https://io.dexscreener.com/dex/chart/amm/v3/pumpfundex/bars/solana/A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq?res=15&cb=329&q=So11111111111111111111111111111111111111112' from origin 'https://dexscreener.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "https://dexscreener.com/solana/NV2RYH954cTJ3ckFUpvfqaQXU4ARqqDH3562nFSpump?embed=1&theme=dark&trades=0&info=0",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065908.4467564
+    },
+    {
+      "kind": "error",
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/pumpfundex/bars/solana/A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065908.448314
+    },
+    {
+      "kind": "error",
+      "text": "Access to fetch at 'https://io.dexscreener.com/dex/chart/amm/v3/pumpfundex/bars/solana/A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq?res=15&cb=329&q=So11111111111111111111111111111111111111112' from origin 'https://dexscreener.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "https://dexscreener.com/solana/NV2RYH954cTJ3ckFUpvfqaQXU4ARqqDH3562nFSpump?embed=1&theme=dark&trades=0&info=0",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065909.4752846
+    },
+    {
+      "kind": "error",
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/pumpfundex/bars/solana/A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065909.4770613
+    },
+    {
+      "kind": "warning",
+      "text": "Unknown subscription symbol=Punch/SOL, resolution=15, key=1",
+      "url": "https://dexscreener.com/tv/v27.001/bundles/library.97ddeff81f861d17f06e.js",
+      "line": 39,
+      "column": 1548,
+      "ts": 1771065924.5702467
+    },
+    {
+      "kind": "warning",
+      "text": "Unknown subscription symbol=Punch/SOL, resolution=15, key=0",
+      "url": "https://dexscreener.com/tv/v27.001/bundles/library.97ddeff81f861d17f06e.js",
+      "line": 39,
+      "column": 1548,
+      "ts": 1771065924.574446
+    },
+    {
+      "kind": "debug",
+      "text": "PrivyWalletProvider.request {method: eth_accounts, params: undefined}",
+      "url": "https://dexscreener.com/assets/entries/pages_catch-all.0r19Rken.js",
+      "line": 709,
+      "column": 63128,
+      "ts": 1771065930.495969
+    },
+    {
+      "kind": "error",
+      "text": "Access to fetch at 'https://io.dexscreener.com/hype/reactions/dexPair/solana:FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9' from origin 'https://dexscreener.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "https://dexscreener.com/solana/7pskt3A1Zsjhngazam7vHWjWHnfgiRump916Xj7ABAGS?embed=1&theme=dark&trades=0&info=0",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065930.5460272
+    },
+    {
+      "kind": "error",
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "https://io.dexscreener.com/hype/reactions/dexPair/solana:FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065930.5463483
+    },
+    {
+      "kind": "error",
+      "text": "Access to fetch at 'https://io.dexscreener.com/dex/trending/v6?chainId=solana&timeframeKey=h6' from origin 'https://dexscreener.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "https://dexscreener.com/solana/7pskt3A1Zsjhngazam7vHWjWHnfgiRump916Xj7ABAGS?embed=1&theme=dark&trades=0&info=0",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065931.5579677
+    },
+    {
+      "kind": "error",
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "https://io.dexscreener.com/dex/trending/v6?chainId=solana&timeframeKey=h6",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065931.55977
+    },
+    {
+      "kind": "warning",
+      "text": "SymbolInfo validation: unsupported timezone \"America/Costa_Rica\"",
+      "url": "https://dexscreener.com/tv/v27.001/bundles/library.97ddeff81f861d17f06e.js",
+      "line": 140,
+      "column": 1880,
+      "ts": 1771065932.2071214
+    },
+    {
+      "kind": "error",
+      "text": "Access to fetch at 'https://io.dexscreener.com/dex/chart/amm/v3/meteora/bars/solana/FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9?res=15&cb=329&q=So11111111111111111111111111111111111111112' from origin 'https://dexscreener.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "https://dexscreener.com/solana/7pskt3A1Zsjhngazam7vHWjWHnfgiRump916Xj7ABAGS?embed=1&theme=dark&trades=0&info=0",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065932.4543474
+    },
+    {
+      "kind": "error",
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/meteora/bars/solana/FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065932.4549663
+    },
+    {
+      "kind": "error",
+      "text": "Access to fetch at 'https://io.dexscreener.com/dex/chart/amm/v3/meteora/bars/solana/FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9?res=15&cb=329&q=So11111111111111111111111111111111111111112' from origin 'https://dexscreener.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "https://dexscreener.com/solana/7pskt3A1Zsjhngazam7vHWjWHnfgiRump916Xj7ABAGS?embed=1&theme=dark&trades=0&info=0",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065933.4856613
+    },
+    {
+      "kind": "error",
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/meteora/bars/solana/FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065933.4861765
+    },
+    {
+      "kind": "error",
+      "text": "Access to fetch at 'https://io.dexscreener.com/dex/chart/amm/v3/meteora/bars/solana/FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9?res=15&cb=329&q=So11111111111111111111111111111111111111112' from origin 'https://dexscreener.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "url": "https://dexscreener.com/solana/7pskt3A1Zsjhngazam7vHWjWHnfgiRump916Xj7ABAGS?embed=1&theme=dark&trades=0&info=0",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065934.5423293
+    },
+    {
+      "kind": "error",
+      "text": "Failed to load resource: net::ERR_FAILED",
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/meteora/bars/solana/FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "line": 0,
+      "column": 0,
+      "ts": 1771065934.6499293
+    },
+    {
+      "kind": "warning",
+      "text": "Unknown subscription symbol=GAS/SOL, resolution=15, key=1",
+      "url": "https://dexscreener.com/tv/v27.001/bundles/library.97ddeff81f861d17f06e.js",
+      "line": 39,
+      "column": 1548,
+      "ts": 1771065959.8760588
+    },
+    {
+      "kind": "warning",
+      "text": "Unknown subscription symbol=GAS/SOL, resolution=15, key=0",
+      "url": "https://dexscreener.com/tv/v27.001/bundles/library.97ddeff81f861d17f06e.js",
+      "line": 39,
+      "column": 1548,
+      "ts": 1771065959.8762085
+    },
+    {
+      "kind": "debug",
+      "text": "PrivyWalletProvider.request {method: eth_accounts, params: undefined}",
+      "url": "https://dexscreener.com/assets/entries/pages_catch-all.0r19Rken.js",
+      "line": 709,
+      "column": 63128,
+      "ts": 1771065965.967598
+    },
+    {
+      "kind": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 ()",
+      "url": "https://fh-7c1d9cac1d0c8a9c---ssrkr8tiv-wrmji3msqa-uc.a.run.app/api/backtest/runs/ui-smoke-nonexistent",
+      "line": 0,
+      "column": 0,
+      "ts": 1771066014.0514758
+    }
+  ],
+  "pageErrors": [
+    "Failed to fetch",
+    "Failed to fetch"
+  ],
+  "network": [
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/BCG4MBb279NJnJh9iFGooKbKzihymv7gVuEUtcdzpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771065900.9992027
+    },
+    {
+      "url": "https://io.dexscreener.com/hype/reactions/dexPair/solana:A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_FAILED",
+      "resource": "fetch",
+      "ts": 1771065905.3195953
+    },
+    {
+      "url": "https://io.dexscreener.com/dex/trending/v6?chainId=solana&timeframeKey=h6",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_FAILED",
+      "resource": "fetch",
+      "ts": 1771065905.885374
+    },
+    {
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/pumpfundex/bars/solana/A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_FAILED",
+      "resource": "fetch",
+      "ts": 1771065907.3932228
+    },
+    {
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/pumpfundex/bars/solana/A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_FAILED",
+      "resource": "fetch",
+      "ts": 1771065908.4480646
+    },
+    {
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/pumpfundex/bars/solana/A6KHMiFzn9AM7VKBtVP4fZNY9bCo2jP63R9dphaW1vrq?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_FAILED",
+      "resource": "fetch",
+      "ts": 1771065909.476104
+    },
+    {
+      "url": "https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?gsessionid=098FkgNlR4Vb1QsWrGLpCkSBPYt8O0TdFYnYD-NuYdLfXl1OfJaReQ&VER=8&database=projects%2Fdex-screener-16543%2Fdatabases%2F(default)&RID=rpc&SID=T1kSy_5jswkx9xsEYCf8rg&CI=0&AID=0&TYPE=xmlhttp&zx=rea78go16jb&t=1",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065924.5693142
+    },
+    {
+      "url": "https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?gsessionid=TwEl7OsBa4GXaNDdbwOXGRkq6b72gOeFf-MsXON6_KABJfohEWvemQ&VER=8&database=projects%2Fdex-screener-16543%2Fdatabases%2F(default)&RID=rpc&SID=f8ooFNLJuynzymu_6M1vvg&CI=0&AID=0&TYPE=xmlhttp&zx=l62cb6dnxopa&t=1",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065924.5697029
+    },
+    {
+      "url": "https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?gsessionid=098FkgNlR4Vb1QsWrGLpCkSBPYt8O0TdFYnYD-NuYdLfXl1OfJaReQ&VER=8&database=projects%2Fdex-screener-16543%2Fdatabases%2F(default)&RID=rpc&SID=T1kSy_5jswkx9xsEYCf8rg&CI=0&AID=18&TYPE=xmlhttp&zx=sapax2m33frb&t=1",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065924.6092002
+    },
+    {
+      "url": "https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?gsessionid=TwEl7OsBa4GXaNDdbwOXGRkq6b72gOeFf-MsXON6_KABJfohEWvemQ&VER=8&database=projects%2Fdex-screener-16543%2Fdatabases%2F(default)&RID=rpc&SID=f8ooFNLJuynzymu_6M1vvg&CI=0&AID=2&TYPE=xmlhttp&zx=d55blpls29ff&t=1",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065924.6093988
+    },
+    {
+      "url": "https://kr8tiv.web.app/api/tv-screener",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "other",
+      "ts": 1771065928.572709
+    },
+    {
+      "url": "https://kr8tiv.web.app/api/macro",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "other",
+      "ts": 1771065928.5728927
+    },
+    {
+      "url": "https://io.dexscreener.com/hype/reactions/dexPair/solana:FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_FAILED",
+      "resource": "fetch",
+      "ts": 1771065930.5462627
+    },
+    {
+      "url": "https://dexscreener.com/tv/v27.001/bundles/6150.bda60280b05cea478076.css",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "stylesheet",
+      "ts": 1771065931.5129838
+    },
+    {
+      "url": "https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?gsessionid=1_9mZ5LOsjeB1yOG-oS59XJhvwkTkoRLTZCpHSCmuca8BTaYfqZ5vg&VER=8&database=projects%2Fdex-screener-16543%2Fdatabases%2F(default)&RID=rpc&SID=s5EtrxXkvHbIzfpyWM8EXQ&CI=0&AID=0&TYPE=xmlhttp&zx=12ks1dphfqba&t=1",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065931.5573943
+    },
+    {
+      "url": "https://io.dexscreener.com/dex/trending/v6?chainId=solana&timeframeKey=h6",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_FAILED",
+      "resource": "fetch",
+      "ts": 1771065931.5595493
+    },
+    {
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/meteora/bars/solana/FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_FAILED",
+      "resource": "fetch",
+      "ts": 1771065932.454817
+    },
+    {
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/meteora/bars/solana/FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_FAILED",
+      "resource": "fetch",
+      "ts": 1771065933.4860566
+    },
+    {
+      "url": "https://io.dexscreener.com/dex/chart/amm/v3/meteora/bars/solana/FiNu5nSFwvjQbAFDESxDxvLhQJa3H7QYBrLUqFRB27v9?res=15&cb=329&q=So11111111111111111111111111111111111111112",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_FAILED",
+      "resource": "fetch",
+      "ts": 1771065934.6460936
+    },
+    {
+      "url": "https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?gsessionid=1_9mZ5LOsjeB1yOG-oS59XJhvwkTkoRLTZCpHSCmuca8BTaYfqZ5vg&VER=8&database=projects%2Fdex-screener-16543%2Fdatabases%2F(default)&RID=rpc&SID=s5EtrxXkvHbIzfpyWM8EXQ&CI=1&AID=4&TYPE=xmlhttp&zx=viavrzwjwppz&t=1",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065959.8757982
+    },
+    {
+      "url": "https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?gsessionid=LWZAytNFhN_oheHG9OJlIMNTAhhnKZsyDNegjmLr2wVjoAkA14gX8w&VER=8&database=projects%2Fdex-screener-16543%2Fdatabases%2F(default)&RID=rpc&SID=6oRgyVhSPVBshm5Nr6KiQQ&CI=0&AID=0&TYPE=xmlhttp&zx=d03azau7fsql&t=1",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065959.8758786
+    },
+    {
+      "url": "https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?gsessionid=1_9mZ5LOsjeB1yOG-oS59XJhvwkTkoRLTZCpHSCmuca8BTaYfqZ5vg&VER=8&database=projects%2Fdex-screener-16543%2Fdatabases%2F(default)&RID=rpc&SID=s5EtrxXkvHbIzfpyWM8EXQ&CI=1&AID=5&TYPE=xmlhttp&zx=xri4nwusvbne&t=1",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065960.2959754
+    },
+    {
+      "url": "https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?gsessionid=LWZAytNFhN_oheHG9OJlIMNTAhhnKZsyDNegjmLr2wVjoAkA14gX8w&VER=8&database=projects%2Fdex-screener-16543%2Fdatabases%2F(default)&RID=rpc&SID=6oRgyVhSPVBshm5Nr6KiQQ&CI=0&AID=25&TYPE=xmlhttp&zx=gophq1u34tfl&t=1",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065960.2963398
+    },
+    {
+      "url": "https://kr8tiv.web.app/api/tv-screener",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "other",
+      "ts": 1771065964.7851546
+    },
+    {
+      "url": "https://kr8tiv.web.app/api/macro",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "other",
+      "ts": 1771065964.7852871
+    },
+    {
+      "url": "https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?gsessionid=I-6LsYE5hXqGYnihZvyBPgXZ8uF1oBi-_CoPiNxscWI6-u8GhPbVAQ&VER=8&database=projects%2Fdex-screener-16543%2Fdatabases%2F(default)&RID=rpc&SID=UkrfC-njjDu3wavJcl0Rqw&CI=0&AID=0&TYPE=xmlhttp&zx=w3hqgry4krc1&t=1",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065993.3529522
+    },
+    {
+      "url": "https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?gsessionid=I-6LsYE5hXqGYnihZvyBPgXZ8uF1oBi-_CoPiNxscWI6-u8GhPbVAQ&VER=8&database=projects%2Fdex-screener-16543%2Fdatabases%2F(default)&RID=rpc&SID=UkrfC-njjDu3wavJcl0Rqw&CI=0&AID=3&TYPE=xmlhttp&zx=phqw1o21f5f8&t=1",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065993.3534715
+    },
+    {
+      "url": "https://kr8tiv.web.app/api/macro",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "other",
+      "ts": 1771065995.836641
+    },
+    {
+      "url": "https://kr8tiv.web.app/api/bags/intel?limit=200",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "fetch",
+      "ts": 1771065997.3110595
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/BCG4MBb279NJnJh9iFGooKbKzihymv7gVuEUtcdzpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771065999.7439988
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/2Mexkemd4X6h2wqZjjPQwwFdGBbfvnWUWty6cHyMpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771065999.798443
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/H1fKJnAcRNLvcpBxtgFDUt29WWiWvEaZvBsMZYyLpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771065999.9362786
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/5phuyQcNmGXU19zo6TWrV8zRpSoyd66ghMWKSb7Wpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771065999.9367502
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/Fu7rsbRLnNZz3PW4TpbqmDo4AZUcf87p1YjmHArvpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771065999.936917
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/Hrq1URUnhs6nvQ62sMKmb2GEQmALgVKspYS55hrepump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.2897394
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/6RLKHhdsTwWqz7kRkdigL4488sNYJAYJR3589zjLpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.2900116
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/64UuJ3g7LZ8kUatiWWA5bgCDcfV9km8SSBscTacupump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.2909884
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/3NCNTQ4KTLF3Z5BsU5saqdrpRLqmt8A6JpCZBiQdpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.2912962
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/3he6hnrsgvmNz64q1Z1QWwvEQG33u1Bm7s1kd4zupump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.291424
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/41uQipnraTB8n9BCngxiccykEC8NKUh62yvU1uMrpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.2940736
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/82ghhUYeQZLLaRWPYsECUodaU8rwB5cLmZF8Ky86pump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.2947562
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/6RbzrC3JWyCPwAFLwiQJkvNjTj21SjTYaQ7WjXGMpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.2948468
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/8Y4iGgprZwmH6vj4v7BfRcZaN89TCd6JxYrQ7tNkpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.297225
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/EirpkRcuj7oQvTZZgWXuCmQtGvbdHt7hx6Gk5n1Jpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.3002133
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/4nEaoXP4JfLCkb7wtBKYUzfk6xXgfVbS8YHKaTpUpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.3007827
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/4udCASKskpYNymxwXAwMR4En15vtUXwT7P5vc3fjpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.3060083
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/7RZfBmAPnB6BBrqh7sy9GmZnkBgyw3uGERsTV63Wpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.328496
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/FLvDF81CnmM3cPb7uyc3iGfZex3Fz4DVeMY7n94Mpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.3295624
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/G2qWeQeCLoibSoyCGwR2Bsw6RiTftPexg9UGk8Gsynam.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.3302827
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/7UUnvpeXWd9a1Hxo6fVCUQy56rpuZb8EgYPpikcKpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.3314838
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/4DBwZRPCgKhv9foyrv2bJJsEMmJZ1HfvQALJheF5moon.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.3316174
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/Bhj1Wty4KzoffySMXw8voTmc87v8Et6kNqWe12y1pump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.3373435
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/FZ56HV9f8yWAj7MF6n7NrU8Enm7UYiqMkQc7mqFzpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.3450358
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/26sP8Z3VexjvWaXKfupt2Je6Rc4S6bQzHL6LpSTZpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.3516681
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/2tHHHoDUXKbyrwbzfgdYSumwNrd1Nd2EhFAQUhnKpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.412014
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/3fP46CWXpEoVMQ8wXtTYsWbL3k1ihNsr9E3vXECCpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.4769626
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/7ASpUGEgCh5DtpYPHDGgUodvJrsX1rQ8qYePCXYbpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.4771478
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/7dTxVD4RBiw7Nox2uiSXzsGmhYENUyZfTdqPxpbTmEDv.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.4824405
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/Etf7wrDEjJpUkQntFx6PHS2aXyPYudxHt7hMZpNqpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.482691
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/8DnUod63SEwEyzFLXrgK1D3pQcDPHwKf3q1rC1Fepump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.4866998
+    },
+    {
+      "url": "https://cdn.dexscreener.com/tokens/solana/7t6dWDbXeQ1GZ4cviQUfnQ42Z5FDzTUHPpwTc8ifpump.png",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_BLOCKED_BY_ORB",
+      "resource": "image",
+      "ts": 1771066000.4876235
+    },
+    {
+      "url": "https://kr8tiv.web.app/api/macro",
+      "method": "GET",
+      "status": null,
+      "failure": "net::ERR_ABORTED",
+      "resource": "other",
+      "ts": 1771066005.892089
+    },
+    {
+      "url": "https://fh-7c1d9cac1d0c8a9c---ssrkr8tiv-wrmji3msqa-uc.a.run.app/api/backtest/runs/ui-smoke-nonexistent",
+      "method": "GET",
+      "status": 404,
+      "failure": null,
+      "resource": "fetch",
+      "ts": 1771066014.0513117
+    }
+  ],
+  "backtestProbe": {
+    "tagUrl": "https://fh-7c1d9cac1d0c8a9c---ssrkr8tiv-wrmji3msqa-uc.a.run.app",
+    "probe": {
+      "ok": false,
+      "status": 404,
+      "ct": "application/json",
+      "bodyHead": "{\"runId\":\"ui-smoke-nonexistent\",\"state\":\"unknown\",\"monitorUnavailable\":false,\"runMissing\":true,\"retryable\":false,\"code\":\"RUN_NOT_FOUND\",\"err"
+    }
+  }
+}

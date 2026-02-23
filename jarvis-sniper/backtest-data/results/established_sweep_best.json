@@ -1,0 +1,62 @@
+[
+  {
+    "algo_id": "sol_veteran",
+    "entryType": "mean_reversion",
+    "sl": 25,
+    "tp": 200,
+    "maxAge": 168,
+    "trades": 104,
+    "winRate": 50,
+    "expectancy": 17.1168,
+    "profitFactor": 2.68,
+    "totalPnlPct": 1780.15
+  },
+  {
+    "algo_id": "utility_swing",
+    "entryType": "mean_reversion",
+    "sl": 25,
+    "tp": 200,
+    "maxAge": 168,
+    "trades": 67,
+    "winRate": 55.2,
+    "expectancy": 19.7796,
+    "profitFactor": 3.12,
+    "totalPnlPct": 1325.24
+  },
+  {
+    "algo_id": "established_breakout",
+    "entryType": "mean_reversion",
+    "sl": 25,
+    "tp": 200,
+    "maxAge": 168,
+    "trades": 390,
+    "winRate": 37.7,
+    "expectancy": 14.4024,
+    "profitFactor": 2.04,
+    "totalPnlPct": 5616.92
+  },
+  {
+    "algo_id": "meme_classic",
+    "entryType": "mean_reversion",
+    "sl": 25,
+    "tp": 200,
+    "maxAge": 168,
+    "trades": 106,
+    "winRate": 50,
+    "expectancy": 19.3008,
+    "profitFactor": 2.91,
+    "totalPnlPct": 2045.89
+  },
+  {
+    "algo_id": "volume_spike",
+    "entryType": "dip_buy",
+    "sl": 25,
+    "tp": 200,
+    "maxAge": 168,
+    "trades": 299,
+    "winRate": 38.8,
+    "expectancy": 19.3201,
+    "profitFactor": 2.31,
+    "totalPnlPct": 5776.72
+  }
+]

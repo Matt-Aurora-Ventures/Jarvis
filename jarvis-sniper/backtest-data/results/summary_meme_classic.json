@@ -1,0 +1,43 @@
+{
+  "algo_id": "meme_classic",
+  "total_trades": 73,
+  "wins": 41,
+  "losses": 32,
+  "win_rate": 56.2,
+  "avg_win_pct": 13.16,
+  "avg_loss_pct": -9.35,
+  "max_win_pct": 13.47,
+  "max_loss_pct": -9.35,
+  "avg_trade_duration_hours": 8.53,
+  "median_trade_duration_hours": 1.83,
+  "profit_factor": 1.8,
+  "expectancy_per_trade_pct": 3.29,
+  "total_return_pct": 240.21,
+  "sharpe_ratio": 4.64,
+  "max_drawdown_pct": -5.47,
+  "dual_trigger_bars": 0,
+  "expiry_exits_below_entry": 0,
+  "exit_distribution": {
+    "sl_hit": 32,
+    "tp_hit": 40,
+    "trail_stop": 0,
+    "expired": 0,
+    "end_of_data": 1
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-01",
+      "trades": 6,
+      "pnl_pct": 12.36,
+      "win_rate": 50
+    },
+    {
+      "month": "2026-02",
+      "trades": 67,
+      "pnl_pct": 227.85,
+      "win_rate": 56.7
+    }
+  ],
+  "best_day": "2026-02-06",
+  "worst_day": "2026-02-03"
+}

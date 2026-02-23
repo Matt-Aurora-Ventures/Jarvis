@@ -45,9 +45,26 @@ Run-Phase "5" "05_simulate_trades.ts" "Trade Simulation"
 # Phase 6: Generate reports (CPU only, ~1 min)
 Run-Phase "6" "06_generate_reports.ts" "Generate Reports"
 
+# Phase 7b: Consistency report (CPU only, ~1 min)
+Run-Phase "7b" "07b_consistency_report.ts" "Consistency Report"
+
+# Phase 8: Walk-forward validation (CPU only, ~1 min)
+Run-Phase "8" "08_walkforward_validate.ts" "Walk-Forward Validation"
+
+# Optional sweeps
+Run-Phase "8e" "05e_equity_sweep.ts" "Equity Sweep"
+Run-Phase "8g" "07_gate_sweep.ts" "Gate Sweep"
+if (Test-Path "backtest-data/scripts/05f_volume_gate_sweep.ts") {
+    Run-Phase "8f" "05f_volume_gate_sweep.ts" "Volume Gate Sweep"
+}
+
+# Phase 9: Recommendations + provenance
+Run-Phase "9" "09_generate_recommendations_and_provenance.ts" "Recommendations + Provenance"
+
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "  PIPELINE COMPLETE" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "Results: backtest-data/results/" -ForegroundColor Cyan
 Write-Host "Reports: backtest-data/results/master_comparison.csv" -ForegroundColor Cyan
+Write-Host "Recommendations: backtest-data/results/strategy_recommendations.md" -ForegroundColor Cyan

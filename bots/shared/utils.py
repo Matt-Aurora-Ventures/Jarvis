@@ -100,7 +100,22 @@ def get_bot_name() -> str:
 
 def is_founder(user_id: int) -> bool:
     """Check if user is the founder."""
-    return user_id == 8527130908
+    # Prefer env-driven admin IDs so account migrations don't require code edits.
+    ids_str = (os.environ.get("TELEGRAM_ADMIN_IDS", "") or "").strip()
+    if ids_str:
+        for part in ids_str.split(","):
+            part = part.strip()
+            if part.isdigit() and int(part) == int(user_id):
+                return True
+        return False
+
+    # Legacy fallback (older deployments used a single admin id env var).
+    legacy = (os.environ.get("JARVIS_ADMIN_USER_ID", "") or "").strip()
+    if legacy.isdigit():
+        return int(legacy) == int(user_id)
+
+    # Absolute last resort: historical defaults (supports account migrations).
+    return int(user_id) in (8527368699, 8527130908)
 
 
 def retry(func, retries: int = 3, delay: float = 1.0, backoff: float = 2.0):

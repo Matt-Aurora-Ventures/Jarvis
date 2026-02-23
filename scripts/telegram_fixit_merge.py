@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 CHAT_LABELS = {
+    -5003286623: "kr8tiv (Group)",
     -1003408655098: "KR8TIV AI - Jarvis Life OS (Group)",
     7864180473: "Friday DM (@ClawdFriday_bot)",
     8434411668: "ClawdJarvis DM (@ClawdJarvis_87772_bot)",
@@ -248,4 +249,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

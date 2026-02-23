@@ -3,7 +3,7 @@ ClawdBot Personality Loader.
 
 Provides a unified interface for loading bot personalities/souls from SOUL.md
 files and personality.json configurations. Supports:
-- Loading personality configurations for Jarvis, Matt, Friday
+- Loading personality configurations for Jarvis, Arsenal, Friday
 - Generating system prompts from personality data
 - Extracting structured personality traits
 - Adjusting response styles to match bot personality
@@ -118,6 +118,9 @@ BOT_NAME_MAP = {
     "clawdjarvis": "clawdjarvis",
     "matt": "clawdmatt",
     "clawdmatt": "clawdmatt",
+    # User-facing rename: "Arsenal" is the COO safety filter. Keep the underlying
+    # directory name for backward compatibility with deployments/scripts.
+    "arsenal": "clawdmatt",
     "friday": "clawdfriday",
     "clawdfriday": "clawdfriday",
 }

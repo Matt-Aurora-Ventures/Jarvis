@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { PositionManager } from '@/components/features/PositionManager';
-import { NeuralLattice } from '@/components/visuals/NeuralLattice';
 import { getHeliusClient } from '@/lib/helius-client';
 import {
     Wallet,
@@ -121,10 +120,15 @@ export default function PositionsPage() {
     }, []);
 
     return (
-        <div className="min-h-screen flex flex-col relative overflow-hidden">
-            <NeuralLattice />
+        <>
+            {/* Ambient Background */}
+            <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+                <div className="ambient-orb absolute top-1/4 left-1/4 w-96 h-96 bg-accent-neon/[0.04] rounded-full blur-[128px]" />
+                <div className="ambient-orb-2 absolute bottom-1/3 right-1/4 w-80 h-80 bg-accent-neon/[0.03] rounded-full blur-[128px]" />
+                <div className="ambient-orb-3 absolute top-2/3 left-1/2 w-64 h-64 bg-accent-success/[0.02] rounded-full blur-[128px]" />
+            </div>
 
-            <div className="relative z-10 pt-24 pb-12 px-4 max-w-7xl mx-auto w-full">
+            <div className="pt-[100px] pb-4 px-3 lg:px-6 max-w-[1920px] mx-auto w-full">
                 {/* Header */}
                 <section className="flex items-center justify-between mb-6">
                     <div>
@@ -139,7 +143,7 @@ export default function PositionsPage() {
 
                     <button
                         onClick={() => window.location.reload()}
-                        className="p-2 rounded-lg bg-theme-dark/50 text-text-muted hover:bg-theme-dark transition-colors"
+                        className="p-2 rounded-lg bg-bg-secondary/50 text-text-muted hover:bg-bg-secondary transition-colors"
                     >
                         <RefreshCw className="w-5 h-5" />
                     </button>
@@ -199,7 +203,7 @@ export default function PositionsPage() {
                     {/* Total Trades */}
                     <div className="card-glass p-4">
                         <div className="flex items-center gap-2 mb-2">
-                            <Activity className="w-4 h-4 text-blue-400" />
+                            <Activity className="w-4 h-4 text-accent-neon" />
                             <span className="text-xs text-text-muted">Total Trades</span>
                         </div>
                         <p className="font-mono font-bold text-xl text-text-primary">
@@ -273,7 +277,7 @@ export default function PositionsPage() {
                 {/* Empty State for New Users */}
                 {stats.totalTrades === 0 && stats.openPositions === 0 && !loading && (
                     <section className="card-glass p-8 text-center mb-6">
-                        <AlertTriangle className="w-12 h-12 text-yellow-400 mx-auto mb-4" />
+                        <AlertTriangle className="w-12 h-12 text-text-muted mx-auto mb-4" />
                         <h3 className="font-display font-bold text-xl text-text-primary mb-2">
                             No Trading History Yet
                         </h3>
@@ -303,8 +307,8 @@ export default function PositionsPage() {
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {stats.winRate < 50 && stats.totalTrades >= 5 && (
-                            <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                                <p className="text-sm text-yellow-400 font-mono mb-1">Win Rate Below 50%</p>
+                            <div className="p-3 rounded-lg bg-accent-warning/10 border border-accent-warning/30">
+                                <p className="text-sm text-text-muted font-mono mb-1">Win Rate Below 50%</p>
                                 <p className="text-xs text-text-muted">
                                     Consider tightening your entry criteria or adjusting position sizes.
                                 </p>
@@ -330,7 +334,7 @@ export default function PositionsPage() {
                         )}
 
                         {stats.totalTrades < 5 && (
-                            <div className="p-3 rounded-lg bg-theme-dark/50 border border-theme-border/30">
+                            <div className="p-3 rounded-lg bg-bg-secondary/50 border border-border-primary/30">
                                 <p className="text-sm text-text-primary font-mono mb-1">Building History</p>
                                 <p className="text-xs text-text-muted">
                                     Complete at least 5 trades to see performance insights.
@@ -340,6 +344,6 @@ export default function PositionsPage() {
                     </div>
                 </section>
             </div>
-        </div>
+        </>
     );
 }

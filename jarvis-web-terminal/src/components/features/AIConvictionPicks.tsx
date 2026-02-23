@@ -16,26 +16,40 @@ import {
 import { getBagsTradingClient, SOL_MINT } from '@/lib/bags-trading';
 import { useToast } from '@/components/ui/Toast';
 import { useSentimentData } from '@/hooks/useSentimentData';
+import { Sparkline } from '@/components/ui/Sparkline';
 import {
     ConvictionPick,
     TokenSentiment,
     GRADE_COLORS,
 } from '@/types/sentiment-types';
 
+function generateSparkData(seed: string, length = 12): number[] {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  }
+  let v = 50;
+  return Array.from({ length }, () => {
+    hash = (hash * 16807 + 0) % 2147483647;
+    v += ((hash % 11) - 5);
+    return Math.max(10, Math.min(90, v));
+  });
+}
+
 const QUICK_AMOUNTS = [0.1, 0.5, 1, 5];
 
 function getConvictionColor(score: number): string {
     if (score >= 80) return 'text-accent-neon';
-    if (score >= 60) return 'text-green-400';
-    if (score >= 40) return 'text-yellow-400';
-    return 'text-red-400';
+    if (score >= 60) return 'text-accent-success';
+    if (score >= 40) return 'text-text-muted';
+    return 'text-accent-error';
 }
 
 function getConvictionBg(score: number): string {
     if (score >= 80) return 'bg-accent-neon/20 border-accent-neon/30';
-    if (score >= 60) return 'bg-green-500/20 border-green-500/30';
-    if (score >= 40) return 'bg-yellow-500/20 border-yellow-500/30';
-    return 'bg-red-500/20 border-red-500/30';
+    if (score >= 60) return 'bg-accent-success/20 border-accent-success/30';
+    if (score >= 40) return 'bg-bg-tertiary border-border-primary';
+    return 'bg-accent-error/20 border-accent-error/30';
 }
 
 function formatPrice(price: number): string {
@@ -96,19 +110,22 @@ function PickCard({ pick, onBuy, connected, isLoading }: PickCardProps) {
             {/* Reasoning */}
             <p className="text-xs text-text-secondary italic">{pick.reasoning}</p>
 
-            {/* Targets */}
-            <div className="grid grid-cols-3 gap-1 text-[10px]">
-                <div className="p-1.5 rounded bg-bg-tertiary/50 text-center">
-                    <p className="text-text-muted">Safe TP</p>
-                    <p className="font-mono text-green-400">{formatPrice(pick.targets.safe.takeProfit)}</p>
-                </div>
-                <div className="p-1.5 rounded bg-bg-tertiary/50 text-center">
-                    <p className="text-text-muted">Med TP</p>
-                    <p className="font-mono text-yellow-400">{formatPrice(pick.targets.medium.takeProfit)}</p>
-                </div>
-                <div className="p-1.5 rounded bg-bg-tertiary/50 text-center">
-                    <p className="text-text-muted">Degen TP</p>
-                    <p className="font-mono text-orange-400">{formatPrice(pick.targets.degen.takeProfit)}</p>
+            {/* Sparkline + Targets */}
+            <div className="flex items-center gap-2">
+                <Sparkline data={generateSparkData(pick.symbol)} width={64} height={20} />
+                <div className="grid grid-cols-3 gap-1 text-[10px] flex-1">
+                    <div className="p-1.5 rounded bg-bg-tertiary/50 text-center">
+                        <p className="text-text-muted">Safe TP</p>
+                        <p className="font-mono text-accent-success">{formatPrice(pick.targets.safe.takeProfit)}</p>
+                    </div>
+                    <div className="p-1.5 rounded bg-bg-tertiary/50 text-center">
+                        <p className="text-text-muted">Med TP</p>
+                        <p className="font-mono text-text-secondary">{formatPrice(pick.targets.medium.takeProfit)}</p>
+                    </div>
+                    <div className="p-1.5 rounded bg-bg-tertiary/50 text-center">
+                        <p className="text-text-muted">Degen TP</p>
+                        <p className="font-mono text-accent-neon">{formatPrice(pick.targets.degen.takeProfit)}</p>
+                    </div>
                 </div>
             </div>
 
@@ -122,7 +139,7 @@ function PickCard({ pick, onBuy, connected, isLoading }: PickCardProps) {
                                 onClick={() => setSelectedAmount(amt)}
                                 className={`px-2 py-1 rounded text-[10px] font-mono transition-all ${
                                     selectedAmount === amt
-                                        ? 'bg-accent-neon text-theme-dark font-bold'
+                                        ? 'bg-accent-neon text-black font-bold'
                                         : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
                                 }`}
                             >
@@ -136,7 +153,7 @@ function PickCard({ pick, onBuy, connected, isLoading }: PickCardProps) {
                         className={`
                             flex-1 px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all flex items-center justify-center gap-1
                             ${connected
-                                ? 'bg-accent-neon text-theme-dark hover:bg-accent-neon/80'
+                                ? 'bg-accent-neon text-black hover:bg-accent-neon/80'
                                 : 'bg-bg-tertiary text-text-muted cursor-not-allowed'}
                         `}
                     >
@@ -225,19 +242,15 @@ export function AIConvictionPicks() {
         .slice(0, 4);
 
     return (
-        <div className="card-glass p-4 space-y-4">
+        <div className="card-glass p-3 space-y-3">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-accent-neon/20">
-                        <Brain className="w-5 h-5 text-accent-neon" />
-                    </div>
-                    <div>
-                        <h2 className="font-display font-bold text-lg text-text-primary">AI CONVICTION PICKS</h2>
-                        <p className="text-[10px] font-mono text-text-muted">
-                            {dataLoading ? 'Loading...' : `${convictionPicks.length} picks | Updated ${timeSinceUpdate}m ago`}
-                        </p>
-                    </div>
+                    <Brain className="w-4 h-4 text-accent-neon" />
+                    <span className="text-xs font-mono uppercase tracking-wider text-text-muted">AI CONVICTION PICKS</span>
+                    <span className="text-[10px] font-mono text-text-muted">
+                        {dataLoading ? '...' : `${convictionPicks.length} picks`}
+                    </span>
                 </div>
                 <button
                     onClick={handleRefresh}
@@ -252,7 +265,7 @@ export function AIConvictionPicks() {
             <div className="grid grid-cols-3 gap-2">
                 <div className="p-2 rounded-lg bg-bg-tertiary/50 border border-border-primary text-center">
                     <p className="text-[10px] text-text-muted mb-1">Bullish</p>
-                    <p className="font-mono font-bold text-green-400">{stats.bullishCount}</p>
+                    <p className="font-mono font-bold text-accent-success">{stats.bullishCount}</p>
                 </div>
                 <div className="p-2 rounded-lg bg-bg-tertiary/50 border border-border-primary text-center">
                     <p className="text-[10px] text-text-muted mb-1">Avg Conviction</p>
@@ -278,12 +291,12 @@ export function AIConvictionPicks() {
                     <div className="flex items-center gap-2">
                         <ChevronRight className="w-3 h-3 text-text-muted" />
                         <span className="text-text-secondary">DexScreener real-time pair data</span>
-                        <CheckCircle2 className="w-3 h-3 text-green-400" />
+                        <CheckCircle2 className="w-3 h-3 text-accent-success" />
                     </div>
                     <div className="flex items-center gap-2">
                         <ChevronRight className="w-3 h-3 text-text-muted" />
                         <span className="text-text-secondary">Risk-tiered TP/SL targets (safe/med/degen)</span>
-                        <CheckCircle2 className="w-3 h-3 text-green-400" />
+                        <CheckCircle2 className="w-3 h-3 text-accent-success" />
                     </div>
                 </div>
             </div>
@@ -300,7 +313,7 @@ export function AIConvictionPicks() {
             {convictionPicks.length > 0 && (
                 <div>
                     <div className="flex items-center gap-2 mb-3">
-                        <Flame className="w-4 h-4 text-orange-400" />
+                        <Flame className="w-4 h-4 text-accent-neon" />
                         <span className="font-mono font-bold text-text-primary">HIGH CONVICTION ({convictionPicks.length})</span>
                     </div>
                     <div className="space-y-2">
@@ -331,7 +344,7 @@ export function AIConvictionPicks() {
                                     <span className="font-mono font-bold text-text-primary text-sm">{token.symbol}</span>
                                     <p className="text-[10px] text-text-muted font-mono">{token.buySellRatio.toFixed(1)}x B/S</p>
                                 </div>
-                                <span className={`font-mono font-bold text-sm ${token.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                <span className={`font-mono font-bold text-sm ${token.change24h >= 0 ? 'text-accent-success' : 'text-accent-error'}`}>
                                     {token.change24h >= 0 ? '+' : ''}{token.change24h.toFixed(1)}%
                                 </span>
                             </div>

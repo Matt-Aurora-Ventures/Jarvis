@@ -1,6 +1,7 @@
 import { STRATEGY_PRESETS } from '@/stores/useSniperStore';
 import { fetchGraduations } from '@/lib/bags-api';
 import type { AutonomyDecisionMatrix, AutonomyState } from './types';
+import { listRecentTradeTelemetry, summarizeTelemetry } from './trade-telemetry-store';
 
 const DEFAULT_WR_GATE = {
   primaryPct: 70,
@@ -90,6 +91,31 @@ export async function buildDecisionMatrix(args: {
   const mom = feedRows.map((r) => r.momentum).filter((n) => Number.isFinite(n));
   const vl = feedRows.map((r) => r.volLiq).filter((n) => Number.isFinite(n) && n >= 0);
 
+  // Realized trade outcomes are not stored by Firebase Hosting. We persist a minimal,
+  // confirmed ledger in GCS via /api/autonomy/telemetry/trade so hourly autonomy can
+  // learn from actual executions (not just backtest stats).
+  let telemetrySummary: ReturnType<typeof summarizeTelemetry> = {
+    totalPnlSol: 0,
+    winCount: 0,
+    lossCount: 0,
+    tradeCount: 0,
+    drawdownPct: 0,
+    byStrategy: {},
+  };
+  try {
+    const records = await listRecentTradeTelemetry({ days: 7, maxRecords: 1500 });
+    const filtered = records.filter((r) => (
+      r.entrySource === 'auto'
+      && r.status !== 'closed'
+      && r.includedInStats !== false
+      && typeof r.pnlSol === 'number'
+      && Number.isFinite(r.pnlSol)
+    ));
+    telemetrySummary = summarizeTelemetry(filtered);
+  } catch {
+    telemetrySummary = telemetrySummary;
+  }
+
   const base = {
     cycleId: args.cycleId,
     generatedAt,
@@ -110,17 +136,22 @@ export async function buildDecisionMatrix(args: {
         avgVolLiqRatio: Number(average(vl).toFixed(4)),
       },
       thompsonBeliefs: {
-        availability: 'unavailable_server_scope' as const,
-        reason: 'Thompson beliefs are client-side persisted in browser localStorage and not server-visible.',
-        rows: [],
+        availability: 'available' as const,
+        rows: Object.entries(telemetrySummary.byStrategy).map(([strategyId, stats]) => ({
+          strategyId,
+          wins: stats.wins,
+          losses: stats.losses,
+          alpha: stats.wins + 1,
+          beta: stats.losses + 1,
+        })),
       },
       reliability: reliabilityFromState(args.state),
       realized: {
-        totalPnlSol: 0,
-        winCount: 0,
-        lossCount: 0,
-        tradeCount: 0,
-        drawdownPct: 0,
+        totalPnlSol: telemetrySummary.totalPnlSol,
+        winCount: telemetrySummary.winCount,
+        lossCount: telemetrySummary.lossCount,
+        tradeCount: telemetrySummary.tradeCount,
+        drawdownPct: telemetrySummary.drawdownPct,
       },
     },
   };
@@ -168,4 +199,3 @@ export function buildSelfCritiquePrompt(matrix: AutonomyDecisionMatrix): string 
     JSON.stringify(matrix),
   ].join('\n');
 }
-

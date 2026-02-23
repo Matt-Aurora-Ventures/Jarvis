@@ -13,7 +13,7 @@ set -euo pipefail
 # - HEALTH_URL (default: http://76.13.106.100:18888/health)
 # - KVM4_SSH_HOST (default: 76.13.106.100)
 # - KVM4_SSH_KEY (default: /root/yoda-watchdog/id_ed25519)
-# - TELEGRAM_CHAT_ID (default: -1003408655098)
+# - TELEGRAM_CHAT_ID (default: -5003286623)
 # - YODA_TELEGRAM_TOKEN (required for alerts; if missing, alerts are skipped)
 # - RESTART_TARGETS (default: "clawdbot-friday clawdbot-matt clawdbot-jarvis")
 
@@ -21,7 +21,7 @@ LOCK_FILE="${LOCK_FILE:-/var/lock/yoda-watchdog.lock}"
 HEALTH_URL="${HEALTH_URL:-http://76.13.106.100:18888/health}"
 KVM4_SSH_HOST="${KVM4_SSH_HOST:-76.13.106.100}"
 KVM4_SSH_KEY="${KVM4_SSH_KEY:-/root/yoda-watchdog/id_ed25519}"
-TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:--1003408655098}"
+TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:--5003286623}"
 YODA_TELEGRAM_TOKEN="${YODA_TELEGRAM_TOKEN:-}"
 RESTART_TARGETS="${RESTART_TARGETS:-clawdbot-friday clawdbot-matt clawdbot-jarvis}"
 
@@ -133,4 +133,3 @@ if status != "healthy" or unhealthy:
         check=False,
     )
 PY
-

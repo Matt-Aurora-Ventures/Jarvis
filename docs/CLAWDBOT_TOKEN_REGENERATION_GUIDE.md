@@ -60,7 +60,7 @@ For EACH invalid bot:
 
 A valid token looks like:
 ```
-8504068106:AAHoS0GKxl79nPE_2wFjkkmX_T7iXEwOyao
+***TREASURY_BOT_TOKEN_REDACTED***
 ^^^^^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Bot ID              Token Hash
  (NUMERIC)          (alphanumeric)

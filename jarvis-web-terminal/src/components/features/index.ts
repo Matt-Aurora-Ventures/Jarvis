@@ -36,12 +36,21 @@ export { TradingGuard, ConfidenceBadge } from './TradingGuard';
 export { PriorityFeeSelector } from './PriorityFeeSelector';
 
 // Asset Classes
-export { xStocksPanel } from './xStocksPanel';
+export { XStocksPanel, xStocksPanel } from './xStocksPanel';
 export { CommoditiesPanel } from './CommoditiesPanel';
 export { PerpetualsSection } from './PerpetualsSection';
 
 // AI & Intelligence
 export { AIPicks } from './AIPicks';
+export { AITradeSignals } from './AITradeSignals';
+export { MarketNewsPanel } from './MarketNewsPanel';
+
+// Token Discovery
+export { TokenSearch } from './TokenSearch';
+export { TokenDrawer } from './TokenDrawer';
+
+// Monitoring
+export { SLTPMonitor } from './SLTPMonitor';
 
 // Other
 export { ConvictionPicksGrid } from './ConvictionPicksGrid';

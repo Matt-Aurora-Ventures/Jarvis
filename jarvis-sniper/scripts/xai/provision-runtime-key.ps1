@@ -6,14 +6,6 @@ param(
   [Parameter(Mandatory = $false)]
   [string]$KeyName = "jarvis-sniper-runtime",
   [Parameter(Mandatory = $false)]
-  [string]$Project = "kr8tiv",
-  [Parameter(Mandatory = $false)]
-  [string]$Region = "us-central1",
-  [Parameter(Mandatory = $false)]
-  [string]$Service = "ssrkr8tiv",
-  [Parameter(Mandatory = $false)]
-  [string]$SecretName = "jarvis-xai-runtime-key",
-  [Parameter(Mandatory = $false)]
   [double]$Qps = 0.2,
   [Parameter(Mandatory = $false)]
   [int]$Qpm = 12,
@@ -61,30 +53,11 @@ try {
   }
 
   Write-Host "[xai] Success. Key ID: $keyId" -ForegroundColor Green
-
-  # Never print the runtime key. Store it in Secret Manager instead.
-  Write-Host "[xai] Storing runtime key in Secret Manager secret '$SecretName'..." -ForegroundColor Cyan
-
-  $secretExists = $false
-  try {
-    gcloud secrets describe $SecretName --project $Project --format="value(name)" --quiet | Out-Null
-    $secretExists = $true
-  } catch {
-    $secretExists = $false
-  }
-
-  if (-not $secretExists) {
-    gcloud secrets create $SecretName --project $Project --replication-policy="automatic" --quiet | Out-Null
-  }
-
-  $runtimeKey | gcloud secrets versions add $SecretName --project $Project --data-file=- --quiet | Out-Null
-
-  Write-Host "[xai] Next steps:" -ForegroundColor Yellow
-  Write-Host "1) Grant Secret Manager access to your Cloud Run runtime service account (roles/secretmanager.secretAccessor)." -ForegroundColor White
-  Write-Host "2) Bind the secret to Cloud Run (server-only):" -ForegroundColor White
-  Write-Host \"   gcloud run services update $Service --project $Project --region $Region --set-secrets XAI_API_KEY=$SecretName:latest\" -ForegroundColor White
-  Write-Host "3) Also set policy envs: XAI_FRONTIER_MODEL, XAI_FRONTIER_FALLBACK_MODELS, XAI_DAILY_BUDGET_USD" -ForegroundColor White
+  Write-Host "[xai] Set Cloud Run env:" -ForegroundColor Yellow
+  Write-Host "gcloud run services update ssrkr8tiv --project kr8tiv --region us-central1 --set-env-vars XAI_API_KEY=$runtimeKey" -ForegroundColor White
+  Write-Host "[xai] Also set policy envs: XAI_FRONTIER_MODEL, XAI_FRONTIER_FALLBACK_MODELS, XAI_DAILY_BUDGET_USD"
 } catch {
   Write-Error "[xai] Failed to provision key via Management API. Check endpoint/payload against latest docs. Error: $($_.Exception.Message)"
   exit 1
 }
+

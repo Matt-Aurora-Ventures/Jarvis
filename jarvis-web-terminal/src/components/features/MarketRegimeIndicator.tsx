@@ -29,14 +29,14 @@ export function MarketRegimeIndicator({ regime, isLoading }: MarketRegimeIndicat
     const regimeColor = regime.regime === 'BULL'
         ? 'text-emerald-400'
         : regime.regime === 'BEAR'
-            ? 'text-red-400'
-            : 'text-yellow-400';
+            ? 'text-accent-error'
+            : 'text-text-muted';
 
     const regimeBg = regime.regime === 'BULL'
         ? 'bg-emerald-500/10 border-emerald-500/30'
         : regime.regime === 'BEAR'
-            ? 'bg-red-500/10 border-red-500/30'
-            : 'bg-yellow-500/10 border-yellow-500/30';
+            ? 'bg-accent-error/10 border-accent-error/30'
+            : 'bg-accent-warning/10 border-accent-warning/30';
 
     const RiskIcon = regime.riskLevel === 'HIGH'
         ? AlertTriangle
@@ -45,10 +45,10 @@ export function MarketRegimeIndicator({ regime, isLoading }: MarketRegimeIndicat
             : Activity;
 
     const riskColor = regime.riskLevel === 'HIGH'
-        ? 'text-red-400'
+        ? 'text-accent-error'
         : regime.riskLevel === 'LOW'
             ? 'text-emerald-400'
-            : 'text-yellow-400';
+            : 'text-text-muted';
 
     return (
         <div className={`sentiment-panel sentiment-panel-compact border ${regimeBg}`}>
@@ -118,7 +118,7 @@ function TrendCard({ symbol, icon, trend, change24h }: TrendCardProps) {
                 <TrendIcon className={`w-4 h-4 ${colors.text}`} />
             </div>
 
-            <div className={`text-xl font-bold ${isPositive ? 'text-emerald-400' : change24h < 0 ? 'text-red-400' : 'text-yellow-400'}`}>
+            <div className={`text-xl font-bold ${isPositive ? 'text-emerald-400' : change24h < 0 ? 'text-accent-error' : 'text-text-muted'}`}>
                 {isPositive ? '+' : ''}{change24h.toFixed(2)}%
             </div>
 

@@ -24,8 +24,8 @@ import { checkSignerSolBalance } from '@/lib/solana-balance-guard';
 import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
 
 function readBagsApiKey(): string {
-  // Secret Manager values can include trailing newlines/whitespace; Node will reject such values
-  // when used as HTTP header content (x-api-key). Sanitize defensively.
+  // Secret Manager values can sometimes include trailing newlines/whitespace; Node will reject
+  // such values when used as HTTP header content (x-api-key). Sanitize defensively.
   return String(process.env.BAGS_API_KEY || '')
     .replace(/[\x00-\x20\x7f]/g, '')
     .trim();

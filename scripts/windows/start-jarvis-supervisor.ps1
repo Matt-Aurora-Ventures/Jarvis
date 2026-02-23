@@ -27,6 +27,12 @@ function Write-Log {
 
 Write-Log "=== Jarvis Supervisor Startup ==="
 
+# Global automation pause flag (used to temporarily stop scheduled tasks safely)
+if (Test-Path (Join-Path $ProjectRoot "PAUSE_AUTOMATIONS")) {
+    Write-Log "Automations paused (PAUSE_AUTOMATIONS exists). Not starting supervisor."
+    exit 0
+}
+
 # Check if already running via lock file
 if (Test-Path $LockFile) {
     $PidContent = Get-Content $LockFile -ErrorAction SilentlyContinue

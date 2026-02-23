@@ -1,0 +1,45 @@
+{
+  "name": "solana-sniper",
+  "version": "0.1.0",
+  "description": "Autonomous Solana memecoin detection, safety analysis, and execution engine",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/",
+    "api": "tsx src/scripts/api-server.ts",
+    "backtest": "tsx src/scripts/continuous-backtest.ts",
+    "backtest:once": "tsx -e \"import { runEnhancedBacktest } from './src/analysis/historical-data.js'; runEnhancedBacktest().then(r => { console.log(JSON.stringify({winRate: r.winRate, pnl: r.totalPnlUsd, trades: r.totalTrades, sharpe: r.sharpeRatio, profitFactor: r.profitFactor}, null, 2)); process.exit(0); })\""
+  },
+  "keywords": [
+    "solana",
+    "trading",
+    "memecoin",
+    "jupiter",
+    "defi"
+  ],
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@jup-ag/api": "^6.0.48",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
+    "axios": "^1.13.4",
+    "better-sqlite3": "^12.6.2",
+    "bs58": "^6.0.0",
+    "dotenv": "^17.2.4",
+    "winston": "^3.19.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.2.2",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

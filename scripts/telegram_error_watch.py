@@ -2,8 +2,9 @@ import json
 import subprocess
 import time
 from pathlib import Path
+import sys
 
-CHAT_ID = "-1003408655098"
+CHAT_ID = "-5003286623"
 LIMIT = 120
 INTERVAL = 300  # 5 minutes
 STATE_FILE = Path(".tmp/telegram_error_watch_state.json")
@@ -31,7 +32,7 @@ def log_line(line: str):
 
 
 def fetch_messages():
-    cmd = ["python", "scripts/telegram_fetch.py", "recent", "--chat-id", CHAT_ID, "--limit", str(LIMIT)]
+    cmd = [sys.executable, "scripts/telegram_fetch.py", "recent", "--chat-id", CHAT_ID, "--limit", str(LIMIT)]
     proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(Path.cwd()))
     if proc.returncode != 0:
         log_line(f"fetch error: {proc.stderr}")
@@ -56,7 +57,7 @@ def send_notification(errors):
         return
     summary = "\n".join([f"{e.get('date')} | {e.get('text')[:200]}" for e in errors[:5]])
     note = f"ClawdBots error sweep detected {len(errors)} new errors:\n{summary}"
-    cmd = ["python", "scripts/telegram_fetch.py", "send", "--chat-id", CHAT_ID, "--text", note]
+    cmd = [sys.executable, "scripts/telegram_fetch.py", "send", "--chat-id", CHAT_ID, "--text", note]
     subprocess.run(cmd, capture_output=True, text=True, cwd=str(Path.cwd()))
 
 

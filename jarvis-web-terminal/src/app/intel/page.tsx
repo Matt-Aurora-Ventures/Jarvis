@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { NewsDashboard } from '@/components/features/NewsDashboard';
-import { NeuralLattice } from '@/components/visuals/NeuralLattice';
 import { getDexterIntelClient, StockAnalysis, SectorAnalysis } from '@/lib/dexter-intel';
 import {
     Brain,
@@ -72,10 +71,15 @@ export default function IntelPage() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col relative overflow-hidden">
-            <NeuralLattice />
+        <>
+            {/* Ambient Background */}
+            <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+                <div className="ambient-orb absolute top-1/4 left-1/4 w-96 h-96 bg-accent-neon/[0.04] rounded-full blur-[128px]" />
+                <div className="ambient-orb-2 absolute bottom-1/3 right-1/4 w-80 h-80 bg-accent-neon/[0.03] rounded-full blur-[128px]" />
+                <div className="ambient-orb-3 absolute top-2/3 left-1/2 w-64 h-64 bg-accent-success/[0.02] rounded-full blur-[128px]" />
+            </div>
 
-            <div className="relative z-10 pt-24 pb-12 px-4 max-w-7xl mx-auto w-full">
+            <div className="pt-[100px] pb-4 px-3 lg:px-6 max-w-[1920px] mx-auto w-full">
                 {/* Header */}
                 <section className="text-center mb-8">
                     <div className="flex items-center justify-center gap-2 mb-2">
@@ -97,7 +101,7 @@ export default function IntelPage() {
                         {/* Sector Analysis */}
                         <div className="card-glass p-6">
                             <div className="flex items-center gap-2 mb-4">
-                                <BarChart3 className="w-5 h-5 text-theme-cyan" />
+                                <BarChart3 className="w-5 h-5 text-accent-neon" />
                                 <h3 className="font-display font-bold text-lg text-text-primary">
                                     Sector Analysis
                                 </h3>
@@ -111,8 +115,8 @@ export default function IntelPage() {
                                         className={`
                                             px-3 py-2 rounded-lg text-sm font-mono transition-all
                                             ${selectedSector === sector
-                                                ? 'bg-theme-cyan/20 text-theme-cyan border border-theme-cyan/30'
-                                                : 'bg-theme-dark/50 text-text-muted hover:bg-theme-dark border border-theme-border/30'}
+                                                ? 'bg-accent-neon/20 text-accent-neon border border-accent-neon/30'
+                                                : 'bg-bg-secondary/50 text-text-muted hover:bg-bg-secondary border border-border-primary/30'}
                                         `}
                                     >
                                         {sector}
@@ -123,7 +127,7 @@ export default function IntelPage() {
                             {/* Sector Result */}
                             {loadingSector ? (
                                 <div className="text-center py-4">
-                                    <Activity className="w-6 h-6 text-theme-cyan animate-pulse mx-auto mb-2" />
+                                    <Activity className="w-6 h-6 text-accent-neon animate-pulse mx-auto mb-2" />
                                     <p className="text-xs text-text-muted">Analyzing {selectedSector}...</p>
                                 </div>
                             ) : sectorAnalysis ? (
@@ -136,7 +140,7 @@ export default function IntelPage() {
                                             <span className={`
                                                 text-lg font-mono font-bold
                                                 ${sectorAnalysis.score >= 65 ? 'text-accent-success' :
-                                                    sectorAnalysis.score >= 45 ? 'text-yellow-400' : 'text-accent-danger'}
+                                                    sectorAnalysis.score >= 45 ? 'text-text-muted' : 'text-accent-danger'}
                                             `}>
                                                 {sectorAnalysis.score}
                                             </span>
@@ -148,7 +152,7 @@ export default function IntelPage() {
                                         </div>
                                     </div>
 
-                                    <div className="p-3 rounded-lg bg-theme-dark/30">
+                                    <div className="p-3 rounded-lg bg-bg-secondary/30">
                                         <p className="text-xs text-text-muted mb-2">Top Tokens</p>
                                         <div className="flex flex-wrap gap-1">
                                             {sectorAnalysis.topTokens.map(token => (
@@ -176,7 +180,7 @@ export default function IntelPage() {
                                         <p className="text-xs text-text-muted">Risks</p>
                                         {sectorAnalysis.risks.map((risk, i) => (
                                             <p key={i} className="text-xs text-text-secondary flex items-start gap-1">
-                                                <AlertTriangle className="w-3 h-3 text-yellow-400 shrink-0 mt-0.5" />
+                                                <AlertTriangle className="w-3 h-3 text-text-muted shrink-0 mt-0.5" />
                                                 {risk}
                                             </p>
                                         ))}
@@ -192,7 +196,7 @@ export default function IntelPage() {
                         {/* xStock Analysis */}
                         <div className="card-glass p-6">
                             <div className="flex items-center gap-2 mb-4">
-                                <Building2 className="w-5 h-5 text-blue-400" />
+                                <Building2 className="w-5 h-5 text-accent-neon" />
                                 <h3 className="font-display font-bold text-lg text-text-primary">
                                     xStock Analysis
                                 </h3>
@@ -206,8 +210,8 @@ export default function IntelPage() {
                                         className={`
                                             px-3 py-2 rounded-lg text-sm font-mono transition-all
                                             ${selectedStock === symbol
-                                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                                : 'bg-theme-dark/50 text-text-muted hover:bg-theme-dark border border-theme-border/30'}
+                                                ? 'bg-accent-neon/20 text-accent-neon border border-accent-neon/30'
+                                                : 'bg-bg-secondary/50 text-text-muted hover:bg-bg-secondary border border-border-primary/30'}
                                         `}
                                     >
                                         {symbol}
@@ -218,7 +222,7 @@ export default function IntelPage() {
                             {/* Stock Result */}
                             {loadingStock ? (
                                 <div className="text-center py-4">
-                                    <Activity className="w-6 h-6 text-blue-400 animate-pulse mx-auto mb-2" />
+                                    <Activity className="w-6 h-6 text-accent-neon animate-pulse mx-auto mb-2" />
                                     <p className="text-xs text-text-muted">Analyzing {selectedStock}...</p>
                                 </div>
                             ) : stockAnalysis ? (
@@ -241,20 +245,20 @@ export default function IntelPage() {
                                     </div>
 
                                     {/* Sentiment Gauge */}
-                                    <div className="p-3 rounded-lg bg-theme-dark/30">
+                                    <div className="p-3 rounded-lg bg-bg-secondary/30">
                                         <div className="flex justify-between text-xs mb-1">
                                             <span className="text-text-muted">Sentiment</span>
                                             <span className={
                                                 stockAnalysis.sentiment >= 65 ? 'text-accent-success' :
-                                                    stockAnalysis.sentiment >= 45 ? 'text-yellow-400' : 'text-accent-danger'
+                                                    stockAnalysis.sentiment >= 45 ? 'text-text-muted' : 'text-accent-danger'
                                             }>
                                                 {stockAnalysis.sentiment}/100
                                             </span>
                                         </div>
-                                        <div className="h-2 bg-theme-dark rounded-full overflow-hidden">
+                                        <div className="h-2 bg-bg-secondary rounded-full overflow-hidden">
                                             <div
                                                 className={`h-full transition-all ${stockAnalysis.sentiment >= 65 ? 'bg-accent-success' :
-                                                        stockAnalysis.sentiment >= 45 ? 'bg-yellow-400' : 'bg-accent-danger'
+                                                        stockAnalysis.sentiment >= 45 ? 'bg-accent-warning' : 'bg-accent-danger'
                                                     }`}
                                                 style={{ width: `${stockAnalysis.sentiment}%` }}
                                             />
@@ -265,10 +269,10 @@ export default function IntelPage() {
                                     <div className={`
                                         p-3 rounded-lg text-center font-mono font-bold uppercase
                                         ${stockAnalysis.recommendation === 'strong_buy' ? 'bg-emerald-500/20 text-emerald-400' :
-                                            stockAnalysis.recommendation === 'buy' ? 'bg-green-500/20 text-green-400' :
-                                                stockAnalysis.recommendation === 'hold' ? 'bg-yellow-500/20 text-yellow-400' :
-                                                    stockAnalysis.recommendation === 'sell' ? 'bg-orange-500/20 text-orange-400' :
-                                                        'bg-red-500/20 text-red-400'}
+                                            stockAnalysis.recommendation === 'buy' ? 'bg-accent-success/20 text-accent-success' :
+                                                stockAnalysis.recommendation === 'hold' ? 'bg-accent-warning/20 text-text-muted' :
+                                                    stockAnalysis.recommendation === 'sell' ? 'bg-accent-warning/20 text-accent-warning' :
+                                                        'bg-accent-error/20 text-accent-error'}
                                     `}>
                                         {stockAnalysis.recommendation.replace('_', ' ')}
                                     </div>
@@ -295,6 +299,6 @@ export default function IntelPage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }

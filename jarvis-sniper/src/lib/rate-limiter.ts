@@ -115,6 +115,9 @@ export const swapRateLimiter = new RateLimiter({ maxRequests: 20, windowMs: 60_0
 /** Autonomy control routes: very low throughput by design (scheduler + manual checks). */
 export const autonomyRateLimiter = new RateLimiter({ maxRequests: 6, windowMs: 60_000 });
 
+/** Trade telemetry: low-volume, but must tolerate bursts (position closes + retries). */
+export const telemetryRateLimiter = new RateLimiter({ maxRequests: 120, windowMs: 60_000 });
+
 /**
  * Helper to extract client IP from a Next.js request.
  *

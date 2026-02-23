@@ -1,0 +1,37 @@
+{
+  "algo_id": "volume_spike",
+  "total_trades": 80,
+  "wins": 43,
+  "losses": 37,
+  "win_rate": 53.8,
+  "avg_win_pct": 13.47,
+  "avg_loss_pct": -9.35,
+  "max_win_pct": 13.47,
+  "max_loss_pct": -9.35,
+  "avg_trade_duration_hours": 2.35,
+  "median_trade_duration_hours": 1.25,
+  "profit_factor": 1.67,
+  "expectancy_per_trade_pct": 2.92,
+  "total_return_pct": 233.24,
+  "sharpe_ratio": 4.07,
+  "max_drawdown_pct": -8.04,
+  "dual_trigger_bars": 0,
+  "expiry_exits_below_entry": 0,
+  "exit_distribution": {
+    "sl_hit": 37,
+    "tp_hit": 43,
+    "trail_stop": 0,
+    "expired": 0,
+    "end_of_data": 0
+  },
+  "monthly_breakdown": [
+    {
+      "month": "2026-02",
+      "trades": 80,
+      "pnl_pct": 233.24,
+      "win_rate": 53.8
+    }
+  ],
+  "best_day": "2026-02-15",
+  "worst_day": "2026-02-08"
+}

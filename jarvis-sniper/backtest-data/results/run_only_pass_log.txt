@@ -1,0 +1,578 @@
+RUNNER=./node_modules/.bin/vite-node
+=== START 01_discover_universe 2026-02-16T16:19:37+00:00 ===
+[2026-02-16T16:19:39.582Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:19:39.584Z] Phase 1: Token Universe Discovery
+[2026-02-16T16:19:39.584Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:19:39.585Z] ─── GeckoTerminal: New Pools ───
+[2026-02-16T16:19:39.737Z] ERROR: Fetch failed gecko_new_pools:p1 (attempt 1/5) fetch failed
+[2026-02-16T16:19:41.802Z] ERROR: Fetch failed gecko_new_pools:p1 (attempt 2/5) fetch failed
+[2026-02-16T16:19:45.822Z] ERROR: Fetch failed gecko_new_pools:p1 (attempt 3/5) fetch failed
+[2026-02-16T16:19:53.893Z] ERROR: Fetch failed gecko_new_pools:p1 (attempt 4/5) fetch failed
+[2026-02-16T16:20:09.958Z] ERROR: Fetch failed gecko_new_pools:p1 (attempt 5/5) fetch failed
+[2026-02-16T16:20:09.959Z]   gecko_new_pools page 1: 0 tokens (empty 1/3)
+[2026-02-16T16:20:10.087Z] ERROR: Fetch failed gecko_new_pools:p2 (attempt 1/5) fetch failed
+[2026-02-16T16:20:12.155Z] ERROR: Fetch failed gecko_new_pools:p2 (attempt 2/5) fetch failed
+[2026-02-16T16:20:16.230Z] ERROR: Fetch failed gecko_new_pools:p2 (attempt 3/5) fetch failed
+[2026-02-16T16:20:24.360Z] ERROR: Fetch failed gecko_new_pools:p2 (attempt 4/5) fetch failed
+[2026-02-16T16:20:40.369Z] ERROR: Fetch failed gecko_new_pools:p2 (attempt 5/5) fetch failed
+[2026-02-16T16:20:40.369Z]   gecko_new_pools page 2: 0 tokens (empty 2/3)
+[2026-02-16T16:20:40.434Z] ERROR: Fetch failed gecko_new_pools:p3 (attempt 1/5) fetch failed
+[2026-02-16T16:20:42.446Z] ERROR: Fetch failed gecko_new_pools:p3 (attempt 2/5) fetch failed
+[2026-02-16T16:20:46.467Z] ERROR: Fetch failed gecko_new_pools:p3 (attempt 3/5) fetch failed
+[2026-02-16T16:20:54.482Z] ERROR: Fetch failed gecko_new_pools:p3 (attempt 4/5) fetch failed
+[2026-02-16T16:21:10.546Z] ERROR: Fetch failed gecko_new_pools:p3 (attempt 5/5) fetch failed
+[2026-02-16T16:21:10.546Z]   gecko_new_pools page 3: 0 tokens (empty 3/3)
+[2026-02-16T16:21:10.546Z]   Stopping gecko_new_pools after 3 consecutive empty pages
+[2026-02-16T16:21:10.547Z] ─── GeckoTerminal: Top Pools by Volume ───
+[2026-02-16T16:21:10.554Z] ERROR: Fetch failed gecko_top_pools:p1 (attempt 1/5) fetch failed
+[2026-02-16T16:21:12.578Z] ERROR: Fetch failed gecko_top_pools:p1 (attempt 2/5) fetch failed
+[2026-02-16T16:21:16.611Z] ERROR: Fetch failed gecko_top_pools:p1 (attempt 3/5) fetch failed
+[2026-02-16T16:21:24.675Z] ERROR: Fetch failed gecko_top_pools:p1 (attempt 4/5) fetch failed
+[2026-02-16T16:21:40.699Z] ERROR: Fetch failed gecko_top_pools:p1 (attempt 5/5) fetch failed
+[2026-02-16T16:21:40.699Z]   gecko_top_pools page 1: 0 tokens (empty 1/3)
+[2026-02-16T16:21:40.720Z] ERROR: Fetch failed gecko_top_pools:p2 (attempt 1/5) fetch failed
+[2026-02-16T16:21:42.747Z] ERROR: Fetch failed gecko_top_pools:p2 (attempt 2/5) fetch failed
+[2026-02-16T16:21:46.755Z] ERROR: Fetch failed gecko_top_pools:p2 (attempt 3/5) fetch failed
+[2026-02-16T16:21:54.761Z] ERROR: Fetch failed gecko_top_pools:p2 (attempt 4/5) fetch failed
+[2026-02-16T16:22:10.769Z] ERROR: Fetch failed gecko_top_pools:p2 (attempt 5/5) fetch failed
+[2026-02-16T16:22:10.769Z]   gecko_top_pools page 2: 0 tokens (empty 2/3)
+[2026-02-16T16:22:10.806Z] ERROR: Fetch failed gecko_top_pools:p3 (attempt 1/5) fetch failed
+[2026-02-16T16:22:12.812Z] ERROR: Fetch failed gecko_top_pools:p3 (attempt 2/5) fetch failed
+[2026-02-16T16:22:16.820Z] ERROR: Fetch failed gecko_top_pools:p3 (attempt 3/5) fetch failed
+[2026-02-16T16:22:24.826Z] ERROR: Fetch failed gecko_top_pools:p3 (attempt 4/5) fetch failed
+[2026-02-16T16:22:40.833Z] ERROR: Fetch failed gecko_top_pools:p3 (attempt 5/5) fetch failed
+[2026-02-16T16:22:40.833Z]   gecko_top_pools page 3: 0 tokens (empty 3/3)
+[2026-02-16T16:22:40.833Z]   Stopping gecko_top_pools after 3 consecutive empty pages
+[2026-02-16T16:22:40.833Z] ─── GeckoTerminal: Trending Pools ───
+[2026-02-16T16:22:40.855Z] ERROR: Fetch failed gecko_trending:p1 (attempt 1/5) fetch failed
+[2026-02-16T16:22:42.862Z] ERROR: Fetch failed gecko_trending:p1 (attempt 2/5) fetch failed
+[2026-02-16T16:22:46.957Z] ERROR: Fetch failed gecko_trending:p1 (attempt 3/5) fetch failed
+[2026-02-16T16:22:54.979Z] ERROR: Fetch failed gecko_trending:p1 (attempt 4/5) fetch failed
+[2026-02-16T16:23:11.106Z] ERROR: Fetch failed gecko_trending:p1 (attempt 5/5) fetch failed
+[2026-02-16T16:23:11.106Z]   gecko_trending page 1: 0 tokens (empty 1/3)
+[2026-02-16T16:23:11.131Z] ERROR: Fetch failed gecko_trending:p2 (attempt 1/5) fetch failed
+[2026-02-16T16:23:13.213Z] ERROR: Fetch failed gecko_trending:p2 (attempt 2/5) fetch failed
+[2026-02-16T16:23:17.219Z] ERROR: Fetch failed gecko_trending:p2 (attempt 3/5) fetch failed
+[2026-02-16T16:23:25.226Z] ERROR: Fetch failed gecko_trending:p2 (attempt 4/5) fetch failed
+[2026-02-16T16:23:41.232Z] ERROR: Fetch failed gecko_trending:p2 (attempt 5/5) fetch failed
+[2026-02-16T16:23:41.232Z]   gecko_trending page 2: 0 tokens (empty 2/3)
+[2026-02-16T16:23:41.253Z] ERROR: Fetch failed gecko_trending:p3 (attempt 1/5) fetch failed
+[2026-02-16T16:23:43.260Z] ERROR: Fetch failed gecko_trending:p3 (attempt 2/5) fetch failed
+[2026-02-16T16:23:47.289Z] ERROR: Fetch failed gecko_trending:p3 (attempt 3/5) fetch failed
+[2026-02-16T16:23:55.297Z] ERROR: Fetch failed gecko_trending:p3 (attempt 4/5) fetch failed
+[2026-02-16T16:24:11.303Z] ERROR: Fetch failed gecko_trending:p3 (attempt 5/5) fetch failed
+[2026-02-16T16:24:11.303Z]   gecko_trending page 3: 0 tokens (empty 3/3)
+[2026-02-16T16:24:11.304Z]   Stopping gecko_trending after 3 consecutive empty pages
+[2026-02-16T16:24:11.304Z] ─── GeckoTerminal: Top Pools by Tx Count ───
+[2026-02-16T16:24:11.310Z] ERROR: Fetch failed gecko_top_txns:p1 (attempt 1/5) fetch failed
+[2026-02-16T16:24:13.331Z] ERROR: Fetch failed gecko_top_txns:p1 (attempt 2/5) fetch failed
+[2026-02-16T16:24:17.337Z] ERROR: Fetch failed gecko_top_txns:p1 (attempt 3/5) fetch failed
+[2026-02-16T16:24:25.345Z] ERROR: Fetch failed gecko_top_txns:p1 (attempt 4/5) fetch failed
+[2026-02-16T16:24:41.352Z] ERROR: Fetch failed gecko_top_txns:p1 (attempt 5/5) fetch failed
+[2026-02-16T16:24:41.352Z]   gecko_top_txns page 1: 0 tokens (empty 1/3)
+[2026-02-16T16:24:41.359Z] ERROR: Fetch failed gecko_top_txns:p2 (attempt 1/5) fetch failed
+[2026-02-16T16:24:43.382Z] ERROR: Fetch failed gecko_top_txns:p2 (attempt 2/5) fetch failed
+[2026-02-16T16:24:47.404Z] ERROR: Fetch failed gecko_top_txns:p2 (attempt 3/5) fetch failed
+[2026-02-16T16:24:55.424Z] ERROR: Fetch failed gecko_top_txns:p2 (attempt 4/5) fetch failed
+[2026-02-16T16:25:11.448Z] ERROR: Fetch failed gecko_top_txns:p2 (attempt 5/5) fetch failed
+[2026-02-16T16:25:11.448Z]   gecko_top_txns page 2: 0 tokens (empty 2/3)
+[2026-02-16T16:25:11.470Z] ERROR: Fetch failed gecko_top_txns:p3 (attempt 1/5) fetch failed
+[2026-02-16T16:25:13.543Z] ERROR: Fetch failed gecko_top_txns:p3 (attempt 2/5) fetch failed
+[2026-02-16T16:25:17.566Z] ERROR: Fetch failed gecko_top_txns:p3 (attempt 3/5) fetch failed
+[2026-02-16T16:25:25.617Z] ERROR: Fetch failed gecko_top_txns:p3 (attempt 4/5) fetch failed
+[2026-02-16T16:25:41.641Z] ERROR: Fetch failed gecko_top_txns:p3 (attempt 5/5) fetch failed
+[2026-02-16T16:25:41.641Z]   gecko_top_txns page 3: 0 tokens (empty 3/3)
+[2026-02-16T16:25:41.641Z]   Stopping gecko_top_txns after 3 consecutive empty pages
+[2026-02-16T16:25:41.642Z] Wrote /workspace/Jarvis/jarvis-sniper/backtest-data/universe/universe_raw_partial.json (0.0 KB)
+[2026-02-16T16:25:41.642Z] After GeckoTerminal: 0 unique tokens
+[2026-02-16T16:25:41.642Z] ─── DexScreener: Token Profiles ───
+[2026-02-16T16:25:41.706Z] ERROR: Fetch failed dex:profiles (attempt 1/3) fetch failed
+[2026-02-16T16:25:43.762Z] ERROR: Fetch failed dex:profiles (attempt 2/3) fetch failed
+[2026-02-16T16:25:47.890Z] ERROR: Fetch failed dex:profiles (attempt 3/3) fetch failed
+[2026-02-16T16:25:47.890Z]   0 DexScreener profiles
+[2026-02-16T16:25:47.891Z] ─── DexScreener: Boosted Tokens ───
+[2026-02-16T16:25:47.952Z] ERROR: Fetch failed dex:boosts (attempt 1/3) fetch failed
+[2026-02-16T16:25:50.016Z] ERROR: Fetch failed dex:boosts (attempt 2/3) fetch failed
+[2026-02-16T16:25:54.051Z] ERROR: Fetch failed dex:boosts (attempt 3/3) fetch failed
+[2026-02-16T16:25:54.051Z]   0 DexScreener boosts
+[2026-02-16T16:25:54.051Z] ─── DexScreener: Search Queries ───
+[2026-02-16T16:25:54.215Z] ERROR: Fetch failed dex:search:pump (attempt 1/2) fetch failed
+[2026-02-16T16:25:56.276Z] ERROR: Fetch failed dex:search:pump (attempt 2/2) fetch failed
+[2026-02-16T16:25:56.310Z] ERROR: Fetch failed dex:search:sol (attempt 1/2) fetch failed
+[2026-02-16T16:25:58.333Z] ERROR: Fetch failed dex:search:sol (attempt 2/2) fetch failed
+[2026-02-16T16:25:58.369Z] ERROR: Fetch failed dex:search:meme (attempt 1/2) fetch failed
+[2026-02-16T16:26:00.395Z] ERROR: Fetch failed dex:search:meme (attempt 2/2) fetch failed
+[2026-02-16T16:26:00.465Z] ERROR: Fetch failed dex:search:pepe (attempt 1/2) fetch failed
+[2026-02-16T16:26:02.767Z] ERROR: Fetch failed dex:search:pepe (attempt 2/2) fetch failed
+[2026-02-16T16:26:02.803Z] ERROR: Fetch failed dex:search:doge (attempt 1/2) fetch failed
+[2026-02-16T16:26:04.831Z] ERROR: Fetch failed dex:search:doge (attempt 2/2) fetch failed
+[2026-02-16T16:26:04.962Z] ERROR: Fetch failed dex:search:cat (attempt 1/2) fetch failed
+[2026-02-16T16:26:06.984Z] ERROR: Fetch failed dex:search:cat (attempt 2/2) fetch failed
+[2026-02-16T16:26:06.990Z] ERROR: Fetch failed dex:search:dog (attempt 1/2) fetch failed
+[2026-02-16T16:26:09.014Z] ERROR: Fetch failed dex:search:dog (attempt 2/2) fetch failed
+[2026-02-16T16:26:09.035Z] ERROR: Fetch failed dex:search:ai (attempt 1/2) fetch failed
+[2026-02-16T16:26:11.041Z] ERROR: Fetch failed dex:search:ai (attempt 2/2) fetch failed
+[2026-02-16T16:26:11.049Z] ERROR: Fetch failed dex:search:trump (attempt 1/2) fetch failed
+[2026-02-16T16:26:13.071Z] ERROR: Fetch failed dex:search:trump (attempt 2/2) fetch failed
+[2026-02-16T16:26:13.198Z] ERROR: Fetch failed dex:search:elon (attempt 1/2) fetch failed
+[2026-02-16T16:26:15.204Z] ERROR: Fetch failed dex:search:elon (attempt 2/2) fetch failed
+[2026-02-16T16:26:15.225Z] ERROR: Fetch failed dex:search:moon (attempt 1/2) fetch failed
+[2026-02-16T16:26:17.233Z] ERROR: Fetch failed dex:search:moon (attempt 2/2) fetch failed
+[2026-02-16T16:26:17.238Z] ERROR: Fetch failed dex:search:inu (attempt 1/2) fetch failed
+[2026-02-16T16:26:19.261Z] ERROR: Fetch failed dex:search:inu (attempt 2/2) fetch failed
+[2026-02-16T16:26:19.402Z] ERROR: Fetch failed dex:search:bonk (attempt 1/2) fetch failed
+[2026-02-16T16:26:21.417Z] ERROR: Fetch failed dex:search:bonk (attempt 2/2) fetch failed
+[2026-02-16T16:26:21.442Z] ERROR: Fetch failed dex:search:jup (attempt 1/2) fetch failed
+[2026-02-16T16:26:23.447Z] ERROR: Fetch failed dex:search:jup (attempt 2/2) fetch failed
+[2026-02-16T16:26:23.468Z] ERROR: Fetch failed dex:search:ray (attempt 1/2) fetch failed
+[2026-02-16T16:26:25.474Z] ERROR: Fetch failed dex:search:ray (attempt 2/2) fetch failed
+[2026-02-16T16:26:25.486Z] ERROR: Fetch failed dex:search:wif (attempt 1/2) fetch failed
+[2026-02-16T16:26:27.510Z] ERROR: Fetch failed dex:search:wif (attempt 2/2) fetch failed
+[2026-02-16T16:26:27.535Z] ERROR: Fetch failed dex:search:bome (attempt 1/2) fetch failed
+[2026-02-16T16:26:29.543Z] ERROR: Fetch failed dex:search:bome (attempt 2/2) fetch failed
+[2026-02-16T16:26:29.672Z] ERROR: Fetch failed dex:search:popcat (attempt 1/2) fetch failed
+[2026-02-16T16:26:31.694Z] ERROR: Fetch failed dex:search:popcat (attempt 2/2) fetch failed
+[2026-02-16T16:26:31.699Z] ERROR: Fetch failed dex:search:wen (attempt 1/2) fetch failed
+[2026-02-16T16:26:33.721Z] ERROR: Fetch failed dex:search:wen (attempt 2/2) fetch failed
+[2026-02-16T16:26:33.726Z] ERROR: Fetch failed dex:search:jto (attempt 1/2) fetch failed
+[2026-02-16T16:26:35.732Z] ERROR: Fetch failed dex:search:jto (attempt 2/2) fetch failed
+[2026-02-16T16:26:35.754Z] ERROR: Fetch failed dex:search:pyth (attempt 1/2) fetch failed
+[2026-02-16T16:26:37.761Z] ERROR: Fetch failed dex:search:pyth (attempt 2/2) fetch failed
+[2026-02-16T16:26:37.766Z] ERROR: Fetch failed dex:search:orca (attempt 1/2) fetch failed
+[2026-02-16T16:26:39.772Z] ERROR: Fetch failed dex:search:orca (attempt 2/2) fetch failed
+[2026-02-16T16:26:39.776Z] ERROR: Fetch failed dex:search:tensor (attempt 1/2) fetch failed
+[2026-02-16T16:26:41.807Z] ERROR: Fetch failed dex:search:tensor (attempt 2/2) fetch failed
+[2026-02-16T16:26:41.813Z] ERROR: Fetch failed dex:search:marinade (attempt 1/2) fetch failed
+[2026-02-16T16:26:43.834Z] ERROR: Fetch failed dex:search:marinade (attempt 2/2) fetch failed
+[2026-02-16T16:26:43.839Z] ERROR: Fetch failed dex:search:drift (attempt 1/2) fetch failed
+[2026-02-16T16:26:45.846Z] ERROR: Fetch failed dex:search:drift (attempt 2/2) fetch failed
+[2026-02-16T16:26:45.868Z] ERROR: Fetch failed dex:search:zeta (attempt 1/2) fetch failed
+[2026-02-16T16:26:47.874Z] ERROR: Fetch failed dex:search:zeta (attempt 2/2) fetch failed
+[2026-02-16T16:26:47.885Z] ERROR: Fetch failed dex:search:kamino (attempt 1/2) fetch failed
+[2026-02-16T16:26:49.890Z] ERROR: Fetch failed dex:search:kamino (attempt 2/2) fetch failed
+[2026-02-16T16:26:49.902Z] ERROR: Fetch failed dex:search:parcl (attempt 1/2) fetch failed
+[2026-02-16T16:26:51.909Z] ERROR: Fetch failed dex:search:parcl (attempt 2/2) fetch failed
+[2026-02-16T16:26:51.916Z] ERROR: Fetch failed dex:search:render (attempt 1/2) fetch failed
+[2026-02-16T16:26:53.923Z] ERROR: Fetch failed dex:search:render (attempt 2/2) fetch failed
+[2026-02-16T16:26:53.928Z] ERROR: Fetch failed dex:search:helium (attempt 1/2) fetch failed
+[2026-02-16T16:26:55.936Z] ERROR: Fetch failed dex:search:helium (attempt 2/2) fetch failed
+[2026-02-16T16:26:55.941Z] ERROR: Fetch failed dex:search:shadow (attempt 1/2) fetch failed
+[2026-02-16T16:26:57.948Z] ERROR: Fetch failed dex:search:shadow (attempt 2/2) fetch failed
+[2026-02-16T16:26:57.953Z] ERROR: Fetch failed dex:search:grass (attempt 1/2) fetch failed
+[2026-02-16T16:26:59.961Z] ERROR: Fetch failed dex:search:grass (attempt 2/2) fetch failed
+[2026-02-16T16:26:59.966Z] ERROR: Fetch failed dex:search:nosana (attempt 1/2) fetch failed
+[2026-02-16T16:27:01.976Z] ERROR: Fetch failed dex:search:nosana (attempt 2/2) fetch failed
+[2026-02-16T16:27:01.981Z] ERROR: Fetch failed dex:search:access (attempt 1/2) fetch failed
+[2026-02-16T16:27:03.987Z] ERROR: Fetch failed dex:search:access (attempt 2/2) fetch failed
+[2026-02-16T16:27:03.992Z] ERROR: Fetch failed dex:search:io (attempt 1/2) fetch failed
+[2026-02-16T16:27:05.999Z] ERROR: Fetch failed dex:search:io (attempt 2/2) fetch failed
+[2026-02-16T16:27:06.003Z] ERROR: Fetch failed dex:search:cloud (attempt 1/2) fetch failed
+[2026-02-16T16:27:08.010Z] ERROR: Fetch failed dex:search:cloud (attempt 2/2) fetch failed
+[2026-02-16T16:27:08.016Z] ERROR: Fetch failed dex:search:gpt (attempt 1/2) fetch failed
+[2026-02-16T16:27:10.023Z] ERROR: Fetch failed dex:search:gpt (attempt 2/2) fetch failed
+[2026-02-16T16:27:10.028Z] ERROR: Fetch failed dex:search:agent (attempt 1/2) fetch failed
+[2026-02-16T16:27:12.034Z] ERROR: Fetch failed dex:search:agent (attempt 2/2) fetch failed
+[2026-02-16T16:27:12.038Z] ERROR: Fetch failed dex:search:nft (attempt 1/2) fetch failed
+[2026-02-16T16:27:14.061Z] ERROR: Fetch failed dex:search:nft (attempt 2/2) fetch failed
+[2026-02-16T16:27:14.076Z] ERROR: Fetch failed dex:search:defi (attempt 1/2) fetch failed
+[2026-02-16T16:27:16.098Z] ERROR: Fetch failed dex:search:defi (attempt 2/2) fetch failed
+[2026-02-16T16:27:16.109Z] ERROR: Fetch failed dex:search:swap (attempt 1/2) fetch failed
+[2026-02-16T16:27:18.114Z] ERROR: Fetch failed dex:search:swap (attempt 2/2) fetch failed
+[2026-02-16T16:27:18.118Z] ERROR: Fetch failed dex:search:baby (attempt 1/2) fetch failed
+[2026-02-16T16:27:20.126Z] ERROR: Fetch failed dex:search:baby (attempt 2/2) fetch failed
+[2026-02-16T16:27:20.132Z] ERROR: Fetch failed dex:search:mini (attempt 1/2) fetch failed
+[2026-02-16T16:27:22.156Z] ERROR: Fetch failed dex:search:mini (attempt 2/2) fetch failed
+[2026-02-16T16:27:22.161Z] ERROR: Fetch failed dex:search:mega (attempt 1/2) fetch failed
+[2026-02-16T16:27:24.169Z] ERROR: Fetch failed dex:search:mega (attempt 2/2) fetch failed
+[2026-02-16T16:27:24.175Z] ERROR: Fetch failed dex:search:super (attempt 1/2) fetch failed
+[2026-02-16T16:27:26.182Z] ERROR: Fetch failed dex:search:super (attempt 2/2) fetch failed
+[2026-02-16T16:27:26.190Z] ERROR: Fetch failed dex:search:ultra (attempt 1/2) fetch failed
+[2026-02-16T16:27:28.197Z] ERROR: Fetch failed dex:search:ultra (attempt 2/2) fetch failed
+[2026-02-16T16:27:28.201Z] ERROR: Fetch failed dex:search:hyper (attempt 1/2) fetch failed
+[2026-02-16T16:27:30.207Z] ERROR: Fetch failed dex:search:hyper (attempt 2/2) fetch failed
+[2026-02-16T16:27:30.216Z] ERROR: Fetch failed dex:search:turbo (attempt 1/2) fetch failed
+[2026-02-16T16:27:32.242Z] ERROR: Fetch failed dex:search:turbo (attempt 2/2) fetch failed
+[2026-02-16T16:27:32.248Z] ERROR: Fetch failed dex:search:alpha (attempt 1/2) fetch failed
+[2026-02-16T16:27:34.259Z] ERROR: Fetch failed dex:search:alpha (attempt 2/2) fetch failed
+[2026-02-16T16:27:34.266Z] ERROR: Fetch failed dex:search:beta (attempt 1/2) fetch failed
+[2026-02-16T16:27:36.274Z] ERROR: Fetch failed dex:search:beta (attempt 2/2) fetch failed
+[2026-02-16T16:27:36.285Z] ERROR: Fetch failed dex:search:sigma (attempt 1/2) fetch failed
+[2026-02-16T16:27:38.293Z] ERROR: Fetch failed dex:search:sigma (attempt 2/2) fetch failed
+[2026-02-16T16:27:38.301Z] ERROR: Fetch failed dex:search:chad (attempt 1/2) fetch failed
+[2026-02-16T16:27:40.379Z] ERROR: Fetch failed dex:search:chad (attempt 2/2) fetch failed
+[2026-02-16T16:27:40.386Z] ERROR: Fetch failed dex:search:wojak (attempt 1/2) fetch failed
+[2026-02-16T16:27:42.393Z] ERROR: Fetch failed dex:search:wojak (attempt 2/2) fetch failed
+[2026-02-16T16:27:42.398Z] ERROR: Fetch failed dex:search:frog (attempt 1/2) fetch failed
+[2026-02-16T16:27:44.414Z] ERROR: Fetch failed dex:search:frog (attempt 2/2) fetch failed
+[2026-02-16T16:27:44.419Z] ERROR: Fetch failed dex:search:bags (attempt 1/2) fetch failed
+[2026-02-16T16:27:46.427Z] ERROR: Fetch failed dex:search:bags (attempt 2/2) fetch failed
+[2026-02-16T16:27:46.433Z] ERROR: Fetch failed dex:search:snipe (attempt 1/2) fetch failed
+[2026-02-16T16:27:48.439Z] ERROR: Fetch failed dex:search:snipe (attempt 2/2) fetch failed
+[2026-02-16T16:27:48.449Z] ERROR: Fetch failed dex:search:gem (attempt 1/2) fetch failed
+[2026-02-16T16:27:50.455Z] ERROR: Fetch failed dex:search:gem (attempt 2/2) fetch failed
+[2026-02-16T16:27:50.460Z] ERROR: Fetch failed dex:search:diamond (attempt 1/2) fetch failed
+[2026-02-16T16:27:52.467Z] ERROR: Fetch failed dex:search:diamond (attempt 2/2) fetch failed
+[2026-02-16T16:27:52.473Z] ERROR: Fetch failed dex:search:gold (attempt 1/2) fetch failed
+[2026-02-16T16:27:54.483Z] ERROR: Fetch failed dex:search:gold (attempt 2/2) fetch failed
+[2026-02-16T16:27:54.490Z] ERROR: Fetch failed dex:search:silver (attempt 1/2) fetch failed
+[2026-02-16T16:27:56.497Z] ERROR: Fetch failed dex:search:silver (attempt 2/2) fetch failed
+[2026-02-16T16:27:56.502Z] ERROR: Fetch failed dex:search:pumpswap (attempt 1/2) fetch failed
+[2026-02-16T16:27:58.584Z] ERROR: Fetch failed dex:search:pumpswap (attempt 2/2) fetch failed
+[2026-02-16T16:27:58.590Z] ERROR: Fetch failed dex:search:raydium (attempt 1/2) fetch failed
+[2026-02-16T16:28:00.686Z] ERROR: Fetch failed dex:search:raydium (attempt 2/2) fetch failed
+[2026-02-16T16:28:00.693Z] ERROR: Fetch failed dex:search:jupiter (attempt 1/2) fetch failed
+[2026-02-16T16:28:02.701Z] ERROR: Fetch failed dex:search:jupiter (attempt 2/2) fetch failed
+[2026-02-16T16:28:02.707Z] ERROR: Fetch failed dex:search:meteora (attempt 1/2) fetch failed
+[2026-02-16T16:28:04.719Z] ERROR: Fetch failed dex:search:meteora (attempt 2/2) fetch failed
+[2026-02-16T16:28:04.726Z] ERROR: Fetch failed dex:search:hawk (attempt 1/2) fetch failed
+[2026-02-16T16:28:06.732Z] ERROR: Fetch failed dex:search:hawk (attempt 2/2) fetch failed
+[2026-02-16T16:28:06.737Z] ERROR: Fetch failed dex:search:eagle (attempt 1/2) fetch failed
+[2026-02-16T16:28:08.746Z] ERROR: Fetch failed dex:search:eagle (attempt 2/2) fetch failed
+[2026-02-16T16:28:08.752Z] ERROR: Fetch failed dex:search:bull (attempt 1/2) fetch failed
+[2026-02-16T16:28:10.758Z] ERROR: Fetch failed dex:search:bull (attempt 2/2) fetch failed
+[2026-02-16T16:28:10.763Z] ERROR: Fetch failed dex:search:bear (attempt 1/2) fetch failed
+[2026-02-16T16:28:12.771Z] ERROR: Fetch failed dex:search:bear (attempt 2/2) fetch failed
+[2026-02-16T16:28:12.777Z] ERROR: Fetch failed dex:search:whale (attempt 1/2) fetch failed
+[2026-02-16T16:28:14.782Z] ERROR: Fetch failed dex:search:whale (attempt 2/2) fetch failed
+[2026-02-16T16:28:14.787Z] ERROR: Fetch failed dex:search:shark (attempt 1/2) fetch failed
+[2026-02-16T16:28:16.793Z] ERROR: Fetch failed dex:search:shark (attempt 2/2) fetch failed
+[2026-02-16T16:28:16.797Z] ERROR: Fetch failed dex:search:laser (attempt 1/2) fetch failed
+[2026-02-16T16:28:18.803Z] ERROR: Fetch failed dex:search:laser (attempt 2/2) fetch failed
+[2026-02-16T16:28:18.810Z] ERROR: Fetch failed dex:search:rocket (attempt 1/2) fetch failed
+[2026-02-16T16:28:20.816Z] ERROR: Fetch failed dex:search:rocket (attempt 2/2) fetch failed
+[2026-02-16T16:28:20.821Z] ERROR: Fetch failed dex:search:fire (attempt 1/2) fetch failed
+[2026-02-16T16:28:22.839Z] ERROR: Fetch failed dex:search:fire (attempt 2/2) fetch failed
+[2026-02-16T16:28:22.844Z] ERROR: Fetch failed dex:search:flame (attempt 1/2) fetch failed
+[2026-02-16T16:28:25.008Z] ERROR: Fetch failed dex:search:flame (attempt 2/2) fetch failed
+[2026-02-16T16:28:25.320Z] ERROR: Fetch failed dex:search:blaze (attempt 1/2) fetch failed
+[2026-02-16T16:28:27.338Z] ERROR: Fetch failed dex:search:blaze (attempt 2/2) fetch failed
+[2026-02-16T16:28:27.339Z] Wrote /workspace/Jarvis/jarvis-sniper/backtest-data/universe/universe_raw_partial.json (0.0 KB)
+[2026-02-16T16:28:27.339Z] After DexScreener search: 0 unique tokens
+[2026-02-16T16:28:27.339Z] ─── Birdeye: skipped (BIRDEYE_API_KEY not set) ───
+[2026-02-16T16:28:27.340Z] ─── Jupiter Gems (Graduation Feed) ───
+[2026-02-16T16:28:27.396Z] ERROR: POST failed jupiter:gems:post (attempt 1/2) fetch failed
+[2026-02-16T16:28:29.441Z] ERROR: POST failed jupiter:gems:post (attempt 2/2) fetch failed
+[2026-02-16T16:28:29.475Z] ERROR: POST failed jupiter:gems:post (attempt 1/2) fetch failed
+[2026-02-16T16:28:31.512Z] ERROR: POST failed jupiter:gems:post (attempt 2/2) fetch failed
+[2026-02-16T16:28:31.552Z] ERROR: Fetch failed jupiter:gems:get (attempt 1/2) fetch failed
+[2026-02-16T16:28:33.600Z] ERROR: Fetch failed jupiter:gems:get (attempt 2/2) fetch failed
+[2026-02-16T16:28:33.638Z] ERROR: Fetch failed jupiter:gems:get (attempt 1/2) fetch failed
+[2026-02-16T16:28:35.682Z] ERROR: Fetch failed jupiter:gems:get (attempt 2/2) fetch failed
+[2026-02-16T16:28:35.736Z] ERROR: Fetch failed jupiter:gems:get (attempt 1/2) fetch failed
+[2026-02-16T16:28:37.805Z] ERROR: Fetch failed jupiter:gems:get (attempt 2/2) fetch failed
+[2026-02-16T16:28:37.805Z] Jupiter Gems returned no data from any endpoint variant
+[2026-02-16T16:28:37.805Z]   Jupiter gems: 0 tokens
+[2026-02-16T16:28:37.805Z]   WARNING: Jupiter gems returned empty; leaving jupiter_gems_done=false to retry later
+[2026-02-16T16:28:37.805Z] ─── GeckoTerminal: Search Queries ───
+[2026-02-16T16:28:37.838Z] ERROR: Fetch failed gecko:search:pump (attempt 1/2) fetch failed
+[2026-02-16T16:28:39.863Z] ERROR: Fetch failed gecko:search:pump (attempt 2/2) fetch failed
+[2026-02-16T16:28:39.868Z] ERROR: Fetch failed gecko:search:sol (attempt 1/2) fetch failed
+[2026-02-16T16:28:41.875Z] ERROR: Fetch failed gecko:search:sol (attempt 2/2) fetch failed
+[2026-02-16T16:28:41.895Z] ERROR: Fetch failed gecko:search:meme (attempt 1/2) fetch failed
+[2026-02-16T16:28:43.915Z] ERROR: Fetch failed gecko:search:meme (attempt 2/2) fetch failed
+[2026-02-16T16:28:43.921Z] ERROR: Fetch failed gecko:search:pepe (attempt 1/2) fetch failed
+[2026-02-16T16:28:45.927Z] ERROR: Fetch failed gecko:search:pepe (attempt 2/2) fetch failed
+[2026-02-16T16:28:45.951Z] ERROR: Fetch failed gecko:search:doge (attempt 1/2) fetch failed
+[2026-02-16T16:28:47.972Z] ERROR: Fetch failed gecko:search:doge (attempt 2/2) fetch failed
+[2026-02-16T16:28:47.976Z] ERROR: Fetch failed gecko:search:cat (attempt 1/2) fetch failed
+[2026-02-16T16:28:49.999Z] ERROR: Fetch failed gecko:search:cat (attempt 2/2) fetch failed
+[2026-02-16T16:28:50.019Z] ERROR: Fetch failed gecko:search:dog (attempt 1/2) fetch failed
+[2026-02-16T16:28:52.042Z] ERROR: Fetch failed gecko:search:dog (attempt 2/2) fetch failed
+[2026-02-16T16:28:52.048Z] ERROR: Fetch failed gecko:search:ai (attempt 1/2) fetch failed
+[2026-02-16T16:28:54.072Z] ERROR: Fetch failed gecko:search:ai (attempt 2/2) fetch failed
+[2026-02-16T16:28:54.090Z] ERROR: Fetch failed gecko:search:bonk (attempt 1/2) fetch failed
+[2026-02-16T16:28:56.114Z] ERROR: Fetch failed gecko:search:bonk (attempt 2/2) fetch failed
+[2026-02-16T16:28:56.118Z] ERROR: Fetch failed gecko:search:wif (attempt 1/2) fetch failed
+[2026-02-16T16:28:58.144Z] ERROR: Fetch failed gecko:search:wif (attempt 2/2) fetch failed
+[2026-02-16T16:28:58.165Z] ERROR: Fetch failed gecko:search:trump (attempt 1/2) fetch failed
+[2026-02-16T16:29:00.188Z] ERROR: Fetch failed gecko:search:trump (attempt 2/2) fetch failed
+[2026-02-16T16:29:00.214Z] ERROR: Fetch failed gecko:search:moon (attempt 1/2) fetch failed
+[2026-02-16T16:29:02.223Z] ERROR: Fetch failed gecko:search:moon (attempt 2/2) fetch failed
+[2026-02-16T16:29:02.244Z] ERROR: Fetch failed gecko:search:baby (attempt 1/2) fetch failed
+[2026-02-16T16:29:04.267Z] ERROR: Fetch failed gecko:search:baby (attempt 2/2) fetch failed
+[2026-02-16T16:29:04.273Z] ERROR: Fetch failed gecko:search:inu (attempt 1/2) fetch failed
+[2026-02-16T16:29:06.280Z] ERROR: Fetch failed gecko:search:inu (attempt 2/2) fetch failed
+[2026-02-16T16:29:06.301Z] ERROR: Fetch failed gecko:search:bags (attempt 1/2) fetch failed
+[2026-02-16T16:29:08.307Z] ERROR: Fetch failed gecko:search:bags (attempt 2/2) fetch failed
+[2026-02-16T16:29:08.308Z] Wrote /workspace/Jarvis/jarvis-sniper/backtest-data/universe/universe_raw_partial.json (0.0 KB)
+[2026-02-16T16:29:08.309Z] ─── Cross-enrichment: DexScreener lookups for Gecko tokens ───
+[2026-02-16T16:29:08.309Z]   0 tokens need enrichment
+[2026-02-16T16:29:08.309Z]   Enrichment complete: 0 tokens updated
+[2026-02-16T16:29:08.309Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:08.309Z] Total raw tokens: 0
+[2026-02-16T16:29:08.309Z] After dedup: 0
+[2026-02-16T16:29:08.309Z] After validation: 0
+[2026-02-16T16:29:08.309Z] 
+[2026-02-16T16:29:08.309Z] Source breakdown:
+[2026-02-16T16:29:08.309Z] 
+[2026-02-16T16:29:08.309Z] Tokens with liquidity > 0: 0
+[2026-02-16T16:29:08.309Z] Tokens with volume > 0: 0
+[2026-02-16T16:29:08.309Z] Tokens with pool address: 0
+[2026-02-16T16:29:08.309Z] Tokens with socials: 0
+[2026-02-16T16:29:08.309Z] Tokens with boost signal: 0
+[2026-02-16T16:29:08.309Z] Tokens with trending signal: 0
+[2026-02-16T16:29:08.309Z] Tokens seen on >=2 sources: 0
+[2026-02-16T16:29:08.309Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:08.309Z] Wrote /workspace/Jarvis/jarvis-sniper/backtest-data/universe/universe_raw.json (0.0 KB)
+[2026-02-16T16:29:08.310Z] 
+✓ Phase 1 complete: 0 unique tokens discovered
+[2026-02-16T16:29:08.310Z]   → universe/universe_raw.json
+[2026-02-16T16:29:08.310Z]   → universe/universe_raw.csv
+=== END 01_discover_universe status=0 elapsed=571s 2026-02-16T16:29:08+00:00 ===
+=== START 02_score_universe 2026-02-16T16:29:08+00:00 ===
+[2026-02-16T16:29:10.505Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:10.506Z] Phase 2: Score Universe
+[2026-02-16T16:29:10.506Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:10.506Z] ERROR: No universe data found. Run 01_discover_universe.ts first. 
+=== END 02_score_universe status=1 elapsed=2s 2026-02-16T16:29:10+00:00 ===
+=== START 03_filter_by_algo 2026-02-16T16:29:10+00:00 ===
+[2026-02-16T16:29:12.691Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:12.692Z] Phase 3: Filter Tokens Through All 26 Algos (TARGET_PER_ALGO=300)
+[2026-02-16T16:29:12.692Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:12.694Z] ERROR: No scored universe found. Run 02_score_universe.ts first. 
+=== END 03_filter_by_algo status=1 elapsed=2s 2026-02-16T16:29:12+00:00 ===
+=== START 04_fetch_candles 2026-02-16T16:29:12+00:00 ===
+[2026-02-16T16:29:14.822Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:14.823Z] Phase 4: Fetch OHLCV Candle Data
+[2026-02-16T16:29:14.824Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:14.824Z] Warning: qualified/filter_summary.json missing or empty; no algo files will be scanned.
+[2026-02-16T16:29:14.824Z] Total unique mints with pool addresses: 0
+[2026-02-16T16:29:14.824Z] Already completed: 0
+[2026-02-16T16:29:14.824Z] Previously failed: 0
+[2026-02-16T16:29:14.825Z] Remaining to fetch: 0
+[2026-02-16T16:29:14.825Z] Estimated time: 0.0 hours (0 requests at 28/min)
+[2026-02-16T16:29:14.825Z] 
+[2026-02-16T16:29:14.825Z] Wrote /workspace/Jarvis/jarvis-sniper/backtest-data/candles/candles_index.json (0.0 KB)
+[2026-02-16T16:29:14.826Z] 
+[2026-02-16T16:29:14.826Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:14.826Z] Total mints (target set): 0
+[2026-02-16T16:29:14.826Z] Universe mints available: 0
+[2026-02-16T16:29:14.826Z] Completed: 0
+[2026-02-16T16:29:14.826Z] Failed: 0
+[2026-02-16T16:29:14.858Z] Total candles: 5m=0, 15m=0, 1h=0
+[2026-02-16T16:29:14.858Z] 
+✓ Phase 4 complete: 0 mints with candle data
+[2026-02-16T16:29:14.859Z]   → candles/{mint}_{timeframe}.json
+[2026-02-16T16:29:14.859Z]   → candles/candles_index.json
+=== END 04_fetch_candles status=0 elapsed=2s 2026-02-16T16:29:14+00:00 ===
+=== START 05_simulate_trades 2026-02-16T16:29:14+00:00 ===
+[2026-02-16T16:29:17.085Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:17.086Z] Phase 5: Trade Simulation v3 (Strategy Entries + Fixed Costs + ATR-Adaptive)
+[2026-02-16T16:29:17.086Z] Position size: $10 | SOL: $150
+[2026-02-16T16:29:17.086Z] Fixed Solana costs: $0.06/trade (0.6% of position)
+[2026-02-16T16:29:17.086Z] DEX friction: 1.3% (slippage + fees)
+[2026-02-16T16:29:17.086Z] Total round-trip cost: 1.9%
+[2026-02-16T16:29:17.086Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:17.087Z] 
+─── Simulating elite (SL 10% / TP 20% / Trail 99% / Max 12h) ───
+[2026-02-16T16:29:17.087Z]   No qualified tokens for elite, skipping.
+[2026-02-16T16:29:17.087Z] 
+─── Simulating micro_cap_surge (SL 10% / TP 20% / Trail 99% / Max 8h) ───
+[2026-02-16T16:29:17.087Z]   No qualified tokens for micro_cap_surge, skipping.
+[2026-02-16T16:29:17.087Z] 
+─── Simulating pump_fresh_tight (SL 10% / TP 20% / Trail 99% / Max 8h) ───
+[2026-02-16T16:29:17.087Z]   No qualified tokens for pump_fresh_tight, skipping.
+[2026-02-16T16:29:17.087Z] 
+─── Simulating momentum (SL 10% / TP 25% / Trail 99% / Max 24h) ───
+[2026-02-16T16:29:17.087Z]   No qualified tokens for momentum, skipping.
+[2026-02-16T16:29:17.087Z] 
+─── Simulating hybrid_b (SL 10% / TP 25% / Trail 99% / Max 24h) ───
+[2026-02-16T16:29:17.088Z]   No qualified tokens for hybrid_b, skipping.
+[2026-02-16T16:29:17.088Z] 
+─── Simulating let_it_ride (SL 10% / TP 25% / Trail 99% / Max 48h) ───
+[2026-02-16T16:29:17.088Z]   No qualified tokens for let_it_ride, skipping.
+[2026-02-16T16:29:17.088Z] 
+─── Simulating sol_veteran (SL 8% / TP 15% / Trail 99% / Max 168h) ───
+[2026-02-16T16:29:17.088Z]   No qualified tokens for sol_veteran, skipping.
+[2026-02-16T16:29:17.088Z] 
+─── Simulating utility_swing (SL 8% / TP 15% / Trail 99% / Max 168h) ───
+[2026-02-16T16:29:17.088Z]   No qualified tokens for utility_swing, skipping.
+[2026-02-16T16:29:17.088Z] 
+─── Simulating established_breakout (SL 8% / TP 15% / Trail 99% / Max 168h) ───
+[2026-02-16T16:29:17.088Z]   No qualified tokens for established_breakout, skipping.
+[2026-02-16T16:29:17.088Z] 
+─── Simulating meme_classic (SL 8% / TP 15% / Trail 99% / Max 168h) ───
+[2026-02-16T16:29:17.088Z]   No qualified tokens for meme_classic, skipping.
+[2026-02-16T16:29:17.088Z] 
+─── Simulating volume_spike (SL 8% / TP 15% / Trail 99% / Max 168h) ───
+[2026-02-16T16:29:17.088Z]   No qualified tokens for volume_spike, skipping.
+[2026-02-16T16:29:17.088Z] 
+─── Simulating bags_fresh_snipe (SL 10% / TP 30% / Trail 99% / Max 8h) ───
+[2026-02-16T16:29:17.088Z]   No qualified tokens for bags_fresh_snipe, skipping.
+[2026-02-16T16:29:17.088Z] 
+─── Simulating bags_momentum (SL 10% / TP 30% / Trail 99% / Max 12h) ───
+[2026-02-16T16:29:17.088Z]   No qualified tokens for bags_momentum, skipping.
+[2026-02-16T16:29:17.089Z] 
+─── Simulating bags_aggressive (SL 7% / TP 25% / Trail 99% / Max 12h) ───
+[2026-02-16T16:29:17.091Z]   No qualified tokens for bags_aggressive, skipping.
+[2026-02-16T16:29:17.091Z] 
+─── Simulating bags_dip_buyer (SL 8% / TP 25% / Trail 99% / Max 8h) ───
+[2026-02-16T16:29:17.092Z]   No qualified tokens for bags_dip_buyer, skipping.
+[2026-02-16T16:29:17.092Z] 
+─── Simulating bags_elite (SL 5% / TP 9% / Trail 99% / Max 4h) ───
+[2026-02-16T16:29:17.092Z]   No qualified tokens for bags_elite, skipping.
+[2026-02-16T16:29:17.093Z] 
+─── Simulating bags_value (SL 5% / TP 10% / Trail 99% / Max 4h) ───
+[2026-02-16T16:29:17.093Z]   No qualified tokens for bags_value, skipping.
+[2026-02-16T16:29:17.093Z] 
+─── Simulating bags_conservative (SL 5% / TP 10% / Trail 99% / Max 4h) ───
+[2026-02-16T16:29:17.093Z]   No qualified tokens for bags_conservative, skipping.
+[2026-02-16T16:29:17.094Z] 
+─── Simulating bags_bluechip (SL 5% / TP 9% / Trail 99% / Max 4h) ───
+[2026-02-16T16:29:17.095Z]   No qualified tokens for bags_bluechip, skipping.
+[2026-02-16T16:29:17.095Z] 
+─── Simulating bluechip_trend_follow (SL 10% / TP 25% / Trail 99% / Max 48h) ───
+[2026-02-16T16:29:17.095Z]   No qualified tokens for bluechip_trend_follow, skipping.
+[2026-02-16T16:29:17.096Z] 
+─── Simulating bluechip_breakout (SL 10% / TP 25% / Trail 99% / Max 48h) ───
+[2026-02-16T16:29:17.096Z]   No qualified tokens for bluechip_breakout, skipping.
+[2026-02-16T16:29:17.097Z] 
+─── Simulating xstock_intraday (SL 8% / TP 100% / Trail 99% / Max 336h) ───
+[2026-02-16T16:29:17.097Z]   No qualified tokens for xstock_intraday, skipping.
+[2026-02-16T16:29:17.098Z] 
+─── Simulating xstock_swing (SL 10% / TP 100% / Trail 99% / Max 48h) ───
+[2026-02-16T16:29:17.098Z]   No qualified tokens for xstock_swing, skipping.
+[2026-02-16T16:29:17.098Z] 
+─── Simulating prestock_speculative (SL 4% / TP 10% / Trail 99% / Max 96h) ───
+[2026-02-16T16:29:17.098Z]   No qualified tokens for prestock_speculative, skipping.
+[2026-02-16T16:29:17.098Z] 
+─── Simulating index_intraday (SL 4% / TP 10% / Trail 99% / Max 96h) ───
+[2026-02-16T16:29:17.098Z]   No qualified tokens for index_intraday, skipping.
+[2026-02-16T16:29:17.098Z] 
+─── Simulating index_leveraged (SL 4% / TP 10% / Trail 99% / Max 96h) ───
+[2026-02-16T16:29:17.098Z]   No qualified tokens for index_leveraged, skipping.
+[2026-02-16T16:29:17.098Z] 
+[2026-02-16T16:29:17.098Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:17.098Z] Total trades simulated: 0
+[2026-02-16T16:29:17.098Z] Total skipped (no data): 0
+[2026-02-16T16:29:17.098Z] Position size: $10 | Fixed cost/trade: $0.06
+[2026-02-16T16:29:17.098Z] 
+✓ Phase 5 complete
+[2026-02-16T16:29:17.098Z]   → results/results_{algo_id}.json
+[2026-02-16T16:29:17.098Z]   → results/results_{algo_id}.csv
+=== END 05_simulate_trades status=0 elapsed=3s 2026-02-16T16:29:17+00:00 ===
+=== START 06_generate_reports 2026-02-16T16:29:17+00:00 ===
+[2026-02-16T16:29:19.145Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:19.146Z] Phase 6: Generate Reports
+[2026-02-16T16:29:19.146Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:19.146Z]   pump_fresh_tight: No trade results, skipping.
+[2026-02-16T16:29:19.146Z]   micro_cap_surge: No trade results, skipping.
+[2026-02-16T16:29:19.147Z]   elite: No trade results, skipping.
+[2026-02-16T16:29:19.147Z]   momentum: No trade results, skipping.
+[2026-02-16T16:29:19.147Z]   hybrid_b: No trade results, skipping.
+[2026-02-16T16:29:19.147Z]   let_it_ride: No trade results, skipping.
+[2026-02-16T16:29:19.147Z]   sol_veteran: No trade results, skipping.
+[2026-02-16T16:29:19.147Z]   utility_swing: No trade results, skipping.
+[2026-02-16T16:29:19.147Z]   established_breakout: No trade results, skipping.
+[2026-02-16T16:29:19.147Z]   meme_classic: No trade results, skipping.
+[2026-02-16T16:29:19.147Z]   volume_spike: No trade results, skipping.
+[2026-02-16T16:29:19.147Z]   bags_fresh_snipe: No trade results, skipping.
+[2026-02-16T16:29:19.147Z]   bags_momentum: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   bags_value: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   bags_dip_buyer: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   bags_bluechip: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   bags_conservative: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   bags_aggressive: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   bags_elite: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   bluechip_trend_follow: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   bluechip_breakout: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   xstock_intraday: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   xstock_swing: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   prestock_speculative: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   index_intraday: No trade results, skipping.
+[2026-02-16T16:29:19.148Z]   index_leveraged: No trade results, skipping.
+[2026-02-16T16:29:19.148Z] 
+─── Master Comparison ───
+[2026-02-16T16:29:19.149Z] Wrote /workspace/Jarvis/jarvis-sniper/backtest-data/results/master_comparison.json (0.0 KB)
+[2026-02-16T16:29:19.149Z] ─── Master All Trades ───
+[2026-02-16T16:29:19.149Z] Master all trades: 0 rows
+[2026-02-16T16:29:19.149Z] 
+─── Data Manifest ───
+[2026-02-16T16:29:19.150Z] Wrote /workspace/Jarvis/jarvis-sniper/backtest-data/results/data_manifest.json (1.5 KB)
+[2026-02-16T16:29:19.150Z] 
+[2026-02-16T16:29:19.150Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:19.150Z] BACKTEST PIPELINE COMPLETE
+[2026-02-16T16:29:19.150Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:19.150Z] 
+[2026-02-16T16:29:19.151Z] Top 10 Algos by Expectancy:
+[2026-02-16T16:29:19.151Z] 
+[2026-02-16T16:29:19.151Z] Bottom 5 Algos by Expectancy:
+[2026-02-16T16:29:19.151Z] 
+[2026-02-16T16:29:19.151Z] Total trades across all algos: 0
+[2026-02-16T16:29:19.151Z] Algos with results: 0/26
+[2026-02-16T16:29:19.151Z] Overall win rate: NaN%
+[2026-02-16T16:29:19.151Z] Overall avg PnL: NaN%
+[2026-02-16T16:29:19.151Z] 
+✓ Phase 6 complete
+[2026-02-16T16:29:19.151Z]   → results/summary_{algo_id}.json (0 summaries)
+[2026-02-16T16:29:19.151Z]   → results/master_comparison.csv
+[2026-02-16T16:29:19.151Z]   → results/master_all_trades.csv (0 rows)
+[2026-02-16T16:29:19.151Z]   → results/data_manifest.json
+=== END 06_generate_reports status=0 elapsed=2s 2026-02-16T16:29:19+00:00 ===
+=== START 07b_consistency_report 2026-02-16T16:29:19+00:00 ===
+[2026-02-16T16:29:21.085Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:21.086Z] Phase 7b: Consistency Report
+[2026-02-16T16:29:21.086Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:21.086Z]   pump_fresh_tight: no trades
+[2026-02-16T16:29:21.086Z]   micro_cap_surge: no trades
+[2026-02-16T16:29:21.086Z]   elite: no trades
+[2026-02-16T16:29:21.086Z]   momentum: no trades
+[2026-02-16T16:29:21.086Z]   hybrid_b: no trades
+[2026-02-16T16:29:21.086Z]   let_it_ride: no trades
+[2026-02-16T16:29:21.087Z]   sol_veteran: no trades
+[2026-02-16T16:29:21.087Z]   utility_swing: no trades
+[2026-02-16T16:29:21.087Z]   established_breakout: no trades
+[2026-02-16T16:29:21.087Z]   meme_classic: no trades
+[2026-02-16T16:29:21.087Z]   volume_spike: no trades
+[2026-02-16T16:29:21.087Z]   bags_fresh_snipe: no trades
+[2026-02-16T16:29:21.087Z]   bags_momentum: no trades
+[2026-02-16T16:29:21.087Z]   bags_value: no trades
+[2026-02-16T16:29:21.087Z]   bags_dip_buyer: no trades
+[2026-02-16T16:29:21.087Z]   bags_bluechip: no trades
+[2026-02-16T16:29:21.087Z]   bags_conservative: no trades
+[2026-02-16T16:29:21.087Z]   bags_aggressive: no trades
+[2026-02-16T16:29:21.087Z]   bags_elite: no trades
+[2026-02-16T16:29:21.087Z]   bluechip_trend_follow: no trades
+[2026-02-16T16:29:21.087Z]   bluechip_breakout: no trades
+[2026-02-16T16:29:21.087Z]   xstock_intraday: no trades
+[2026-02-16T16:29:21.087Z]   xstock_swing: no trades
+[2026-02-16T16:29:21.087Z]   prestock_speculative: no trades
+[2026-02-16T16:29:21.087Z]   index_intraday: no trades
+[2026-02-16T16:29:21.087Z]   index_leveraged: no trades
+[2026-02-16T16:29:21.088Z] Wrote /workspace/Jarvis/jarvis-sniper/backtest-data/results/consistency_report.json (0.0 KB)
+[2026-02-16T16:29:21.088Z] 
+✓ Phase 7b complete
+[2026-02-16T16:29:21.088Z]   → results/consistency_report.csv
+[2026-02-16T16:29:21.088Z]   → results/consistency_report.json
+=== END 07b_consistency_report status=0 elapsed=2s 2026-02-16T16:29:21+00:00 ===
+=== START 05e_equity_sweep 2026-02-16T16:29:21+00:00 ===
+[2026-02-16T16:29:23.207Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:23.208Z] Phase 5e: Equity/Index Sweep
+[2026-02-16T16:29:23.208Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:23.210Z] Config: algos=5 | tfs=5m,15m,1h,1d | minTrades=30 | maxTokens=50 | topK=200
+[2026-02-16T16:29:23.210Z] 
+─── xstock_intraday: no qualified tokens ───
+[2026-02-16T16:29:23.210Z] 
+─── xstock_swing: no qualified tokens ───
+[2026-02-16T16:29:23.210Z] 
+─── prestock_speculative: no qualified tokens ───
+[2026-02-16T16:29:23.210Z] 
+─── index_intraday: no qualified tokens ───
+[2026-02-16T16:29:23.211Z] 
+─── index_leveraged: no qualified tokens ───
+[2026-02-16T16:29:23.211Z] Wrote /workspace/Jarvis/jarvis-sniper/backtest-data/results/equity_sweep_best.json (0.0 KB)
+[2026-02-16T16:29:23.211Z] Wrote /workspace/Jarvis/jarvis-sniper/backtest-data/results/equity_sweep_best_by_winrate.json (0.0 KB)
+[2026-02-16T16:29:23.211Z] Wrote /workspace/Jarvis/jarvis-sniper/backtest-data/results/equity_sweep_top.json (0.0 KB)
+[2026-02-16T16:29:23.211Z] 
+✓ Phase 5e complete
+[2026-02-16T16:29:23.211Z]   → results/equity_sweep_best.json
+[2026-02-16T16:29:23.211Z]   → results/equity_sweep_best_by_winrate.json
+[2026-02-16T16:29:23.211Z]   → results/equity_sweep_top.json
+=== END 05e_equity_sweep status=0 elapsed=2s 2026-02-16T16:29:23+00:00 ===
+=== START 05f_volume_gate_sweep 2026-02-16T16:29:23+00:00 ===
+[2026-02-16T16:29:25.206Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:25.208Z] Phase 5f: Volume Gate Sweep
+[2026-02-16T16:29:25.208Z] ═══════════════════════════════════════════════════════
+[2026-02-16T16:29:25.208Z] ERROR: No volume_spike trades found. Run 05_simulate_trades.ts first. 
+=== END 05f_volume_gate_sweep status=1 elapsed=2s 2026-02-16T16:29:25+00:00 ===
+FAIL=1

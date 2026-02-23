@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { usePhantomWallet } from './usePhantomWallet';
 import { useSniperStore } from '@/stores/useSniperStore';
-import { executeSwapFromQuote, getSellQuote } from '@/lib/bags-trading';
+import { executeSwapFromQuote, getSellQuote, SOL_MINT } from '@/lib/bags-trading';
 import { getOwnerTokenBalanceLamports, minLamportsString } from '@/lib/solana-tokens';
 import { closeEmptyTokenAccountsForMint, loadSessionWalletByPublicKey, loadSessionWalletFromStorage, sweepExcessToMainWallet } from '@/lib/session-wallet';
 import { isBlueChipLongConvictionSymbol } from '@/lib/trade-plan';
@@ -357,6 +357,39 @@ export function useAutomatedRiskManagement() {
         }
       } catch {
         // ignore rent reclaim errors (trade already closed)
+      }
+
+      // Also close any now-empty WSOL temp accounts. Some swap routes may touch WSOL as an
+      // intermediate and leave behind a zero-balance account that can be closed for rent.
+      if (pos.mint !== SOL_MINT) {
+        try {
+          const wsolCleanup = await closeEmptyTokenAccountsForMint(session!.keypair, SOL_MINT);
+          if (wsolCleanup.closedTokenAccounts > 0) {
+            addExecution({
+              id: `rent-wsol-${Date.now()}-${id.slice(-4)}`,
+              type: 'info',
+              symbol: 'WSOL',
+              mint: SOL_MINT,
+              amount: 0,
+              txHash: wsolCleanup.closeSignatures[0],
+              reason: `Reclaimed ${(wsolCleanup.reclaimedLamports / 1e9).toFixed(6)} SOL rent by closing ${wsolCleanup.closedTokenAccounts} empty WSOL token account${wsolCleanup.closedTokenAccounts === 1 ? '' : 's'}`,
+              timestamp: Date.now(),
+            });
+          }
+          if (wsolCleanup.failedToCloseTokenAccounts > 0) {
+            addExecution({
+              id: `rent-wsol-fail-${Date.now()}-${id.slice(-4)}`,
+              type: 'error',
+              symbol: 'WSOL',
+              mint: SOL_MINT,
+              amount: 0,
+              reason: `WSOL rent reclaim incomplete: ${wsolCleanup.failedToCloseTokenAccounts} empty token account${wsolCleanup.failedToCloseTokenAccounts === 1 ? '' : 's'} failed to close; retry Sweep Back later.`,
+              timestamp: Date.now(),
+            });
+          }
+        } catch {
+          // ignore WSOL cleanup errors (trade already closed)
+        }
       }
 
       // Auto-sweep profits back to the main wallet (banks gains, limits blast radius).

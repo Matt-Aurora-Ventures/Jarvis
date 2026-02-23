@@ -281,7 +281,7 @@ export function SnipePanel() {
     return (
         <div className="card-glass overflow-hidden">
             {/* Header */}
-            <div className="p-4 border-b border-theme-border/30">
+            <div className="p-4 border-b border-border-primary/30">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-accent-neon/20 flex items-center justify-center">
@@ -303,7 +303,7 @@ export function SnipePanel() {
                             onClick={() => setShowHistory(!showHistory)}
                             className={`
                                 p-2 rounded-lg transition-colors
-                                ${showHistory ? 'bg-accent-neon/20 text-accent-neon' : 'hover:bg-theme-dark/50 text-text-muted'}
+                                ${showHistory ? 'bg-accent-neon/20 text-accent-neon' : 'hover:bg-bg-secondary/50 text-text-muted'}
                             `}
                         >
                             <History className="w-4 h-4" />
@@ -316,7 +316,7 @@ export function SnipePanel() {
                                 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono transition-all
                                 ${useJito
                                     ? 'bg-accent-neon/20 text-accent-neon border border-accent-neon/30'
-                                    : 'bg-theme-dark/50 text-text-muted border border-theme-border/30'}
+                                    : 'bg-bg-secondary/50 text-text-muted border border-border-primary/30'}
                             `}
                         >
                             <Shield className="w-3 h-3" />
@@ -355,7 +355,7 @@ export function SnipePanel() {
                                             ? 'bg-accent-success/10 border-accent-success/30'
                                             : h.status === 'failed'
                                                 ? 'bg-accent-danger/10 border-accent-danger/30'
-                                                : 'bg-yellow-500/10 border-yellow-500/30'}
+                                                : 'bg-accent-warning/10 border-accent-warning/30'}
                                     `}
                                 >
                                     <div>
@@ -370,7 +370,7 @@ export function SnipePanel() {
                                         ) : h.status === 'failed' ? (
                                             <XCircle className="w-4 h-4 text-accent-danger" />
                                         ) : (
-                                            <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
+                                            <Loader2 className="w-4 h-4 text-text-muted animate-spin" />
                                         )}
                                     </div>
                                 </div>
@@ -388,7 +388,7 @@ export function SnipePanel() {
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                                 placeholder="Paste token address or search..."
-                                className="w-full px-4 py-3 pl-10 rounded-lg bg-theme-dark/50 border border-theme-border/30 text-text-primary placeholder-text-muted focus:border-accent-neon/50 focus:outline-none font-mono text-sm"
+                                className="w-full px-4 py-3 pl-10 rounded-lg bg-bg-secondary/50 border border-border-primary/30 text-text-primary placeholder-text-muted focus:border-accent-neon/50 focus:outline-none font-mono text-sm"
                             />
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                             <button
@@ -433,11 +433,11 @@ export function SnipePanel() {
                         {target && (
                             <div className={`
                                 p-4 rounded-xl border
-                                ${tierInfo ? `${tierInfo.colors.bg} ${tierInfo.colors.border}` : 'bg-theme-dark/50 border-theme-border/30'}
+                                ${tierInfo ? `${tierInfo.colors.bg} ${tierInfo.colors.border}` : 'bg-bg-secondary/50 border-border-primary/30'}
                             `}>
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-theme-dark flex items-center justify-center">
+                                        <div className="w-10 h-10 rounded-full bg-bg-secondary flex items-center justify-center">
                                             <span className="text-lg font-bold">{target.symbol[0]}</span>
                                         </div>
                                         <div>
@@ -451,7 +451,7 @@ export function SnipePanel() {
                                             setSentiment(null);
                                             setSearchQuery('');
                                         }}
-                                        className="p-1 rounded hover:bg-theme-dark/50"
+                                        className="p-1 rounded hover:bg-bg-secondary/50"
                                     >
                                         <XCircle className="w-4 h-4 text-text-muted" />
                                     </button>
@@ -460,21 +460,21 @@ export function SnipePanel() {
                                 {/* Metrics */}
                                 <div className="grid grid-cols-3 gap-2 text-center">
                                     {target.score !== undefined && (
-                                        <div className="p-2 rounded bg-theme-dark/30">
+                                        <div className="p-2 rounded bg-bg-secondary/30">
                                             <p className="text-[10px] text-text-muted">SCORE</p>
                                             <p className={`font-mono font-bold ${tierInfo?.colors.text}`}>{target.score}</p>
                                         </div>
                                     )}
                                     {sentiment && (
-                                        <div className="p-2 rounded bg-theme-dark/30">
+                                        <div className="p-2 rounded bg-bg-secondary/30">
                                             <p className="text-[10px] text-text-muted">SENTIMENT</p>
-                                            <p className={`font-mono font-bold ${sentiment.score >= 60 ? 'text-accent-success' : sentiment.score >= 40 ? 'text-yellow-400' : 'text-accent-danger'}`}>
+                                            <p className={`font-mono font-bold ${sentiment.score >= 60 ? 'text-accent-success' : sentiment.score >= 40 ? 'text-text-muted' : 'text-accent-danger'}`}>
                                                 {sentiment.score}
                                             </p>
                                         </div>
                                     )}
                                     {target.price && (
-                                        <div className="p-2 rounded bg-theme-dark/30">
+                                        <div className="p-2 rounded bg-bg-secondary/30">
                                             <p className="text-[10px] text-text-muted">PRICE</p>
                                             <p className="font-mono font-bold text-text-primary">${target.price.toFixed(6)}</p>
                                         </div>
@@ -484,9 +484,9 @@ export function SnipePanel() {
                                 {/* Warning if low score/sentiment */}
                                 {((target.score && target.score < algoParams.params.graduationScoreCutoff) ||
                                     (sentiment && sentiment.score < algoParams.params.sentimentBuyThreshold)) && (
-                                        <div className="mt-3 p-2 rounded bg-yellow-500/10 border border-yellow-500/30 flex items-center gap-2">
-                                            <AlertTriangle className="w-4 h-4 text-yellow-400" />
-                                            <p className="text-xs text-yellow-400">
+                                        <div className="mt-3 p-2 rounded bg-accent-warning/10 border border-accent-warning/30 flex items-center gap-2">
+                                            <AlertTriangle className="w-4 h-4 text-text-muted" />
+                                            <p className="text-xs text-text-muted">
                                                 Below algo thresholds - proceed with caution
                                             </p>
                                         </div>
@@ -512,14 +512,14 @@ export function SnipePanel() {
                                             onChange={(e) => setSnipeAmount(e.target.value)}
                                             step="0.1"
                                             min="0.01"
-                                            className="w-full px-4 py-2 rounded-lg bg-theme-dark/50 border border-theme-border/30 text-text-primary focus:border-accent-neon/50 focus:outline-none font-mono"
+                                            className="w-full px-4 py-2 rounded-lg bg-bg-secondary/50 border border-border-primary/30 text-text-primary focus:border-accent-neon/50 focus:outline-none font-mono"
                                         />
                                         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
                                             {[0.1, 0.5, 1].map(amt => (
                                                 <button
                                                     key={amt}
                                                     onClick={() => setSnipeAmount(String(amt))}
-                                                    className="px-2 py-0.5 rounded bg-theme-dark text-text-muted text-xs hover:bg-accent-neon/20 hover:text-accent-neon"
+                                                    className="px-2 py-0.5 rounded bg-bg-secondary text-text-muted text-xs hover:bg-accent-neon/20 hover:text-accent-neon"
                                                 >
                                                     {amt}
                                                 </button>
@@ -549,7 +549,7 @@ export function SnipePanel() {
                                                         flex-1 py-1.5 rounded text-xs font-mono transition-all
                                                         ${autoTP === pct
                                                             ? 'bg-accent-success/20 text-accent-success border border-accent-success/30'
-                                                            : 'bg-theme-dark/50 text-text-muted hover:bg-theme-dark'}
+                                                            : 'bg-bg-secondary/50 text-text-muted hover:bg-bg-secondary'}
                                                     `}
                                                 >
                                                     {pct}%
@@ -571,7 +571,7 @@ export function SnipePanel() {
                                                         flex-1 py-1.5 rounded text-xs font-mono transition-all
                                                         ${autoSL === pct
                                                             ? 'bg-accent-danger/20 text-accent-danger border border-accent-danger/30'
-                                                            : 'bg-theme-dark/50 text-text-muted hover:bg-theme-dark'}
+                                                            : 'bg-bg-secondary/50 text-text-muted hover:bg-bg-secondary'}
                                                     `}
                                                 >
                                                     {pct}%
@@ -588,7 +588,7 @@ export function SnipePanel() {
                                     className={`
                                         w-full py-4 rounded-xl font-display font-bold text-lg flex items-center justify-center gap-2 transition-all
                                         ${isExecuting || !connected || !positionMetrics.withinLimits
-                                            ? 'bg-theme-dark/50 text-text-muted cursor-not-allowed'
+                                            ? 'bg-bg-secondary/50 text-text-muted cursor-not-allowed'
                                             : 'bg-accent-neon text-black hover:brightness-110 hover:scale-[1.02]'}
                                     `}
                                 >

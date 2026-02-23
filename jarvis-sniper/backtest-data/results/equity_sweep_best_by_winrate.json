@@ -1,0 +1,45 @@
+{
+  "xstock_intraday": {
+    "algo_id": "xstock_intraday",
+    "timeframe": "15m",
+    "entryType": "mean_reversion",
+    "sl": 6,
+    "tp": 6,
+    "maxAge": 12,
+    "metrics": {
+      "trades": 39,
+      "winRate": 64.1,
+      "profitFactor": 1.182,
+      "expectancyPct": 0.416,
+      "totalReturnPct": 16.21,
+      "posFracByWindow": {
+        "10": 0.533,
+        "25": 0.533
+      },
+      "minPosFrac": 0.533
+    },
+    "score": 644.72129214053
+  },
+  "prestock_speculative": {
+    "algo_id": "prestock_speculative",
+    "timeframe": "1h",
+    "entryType": "equity_mean_reversion",
+    "sl": 10,
+    "tp": 5,
+    "maxAge": 720,
+    "metrics": {
+      "trades": 91,
+      "winRate": 74.7,
+      "profitFactor": 1.144,
+      "expectancyPct": 0.331,
+      "totalReturnPct": 30.15,
+      "posFracByWindow": {
+        "10": 0.622,
+        "25": 0.537,
+        "50": 0.524
+      },
+      "minPosFrac": 0.524
+    },
+    "score": 636.9308278464218
+  }
+}

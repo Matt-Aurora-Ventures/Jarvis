@@ -1,0 +1,14 @@
+{
+  "generated_at": "2026-02-16T17:24:38.341Z",
+  "files": {
+    "universe_raw_json": "2b65af4b2f287b259e4b1fdb7924722cffa8621b5012ab60de8f9eebe455b7cd",
+    "universe_scored_json": "f5113230c1b9f1e2a00989b34b792797b8ae07e3718bc413ade44b18756e5879",
+    "master_comparison_csv": "c760a7f3314e7424a7abfdd7347b0aed2172a54e0ee10053301b3f9ddb49aec0",
+    "consistency_report_csv": "3364904fbe1db694485849ea29120c5d143ad45ed059b7cc3ecbe3330cb4da79",
+    "walkforward_report_csv": "88a725380f29338c3286e49ef91c422b49e07bc91f28abd923357ce82d521f0f",
+    "gate_sweep_best_json": "3282eab3b76b67cbf8faf360aa633a55a5dd2370de69cf32c1f05d4983599bf1",
+    "equity_sweep_best_json": "7a23eb955dcd7dce46fdea8a76c9ae64ba11b076ede363650829d2895f2830d7",
+    "source_request_log_csv": null,
+    "data_manifest_json": "cb2c2706ee3cfef9ca61ae7117d9b68a79094a0909d9f5c77d811f91c9582403"
+  }
+}

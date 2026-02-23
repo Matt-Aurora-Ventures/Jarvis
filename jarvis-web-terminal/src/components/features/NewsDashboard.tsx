@@ -36,7 +36,7 @@ const CATEGORY_ICONS: Record<NewsCategory, React.ReactNode> = {
 
 const SENTIMENT_COLORS = {
     bullish: { bg: 'bg-accent-success/10', text: 'text-accent-success', border: 'border-accent-success/30' },
-    neutral: { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/30' },
+    neutral: { bg: 'bg-accent-warning/10', text: 'text-text-muted', border: 'border-accent-warning/30' },
     bearish: { bg: 'bg-accent-danger/10', text: 'text-accent-danger', border: 'border-accent-danger/30' },
 };
 
@@ -97,7 +97,7 @@ export function NewsDashboard() {
     return (
         <div className="card-glass overflow-hidden">
             {/* Header */}
-            <div className="p-4 border-b border-theme-border/30">
+            <div className="p-4 border-b border-border-primary/30">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-accent-neon/20 flex items-center justify-center">
@@ -117,7 +117,7 @@ export function NewsDashboard() {
                     <button
                         onClick={handleRefresh}
                         disabled={refreshing}
-                        className="p-2 rounded-lg hover:bg-theme-dark/50 transition-colors"
+                        className="p-2 rounded-lg hover:bg-bg-secondary/50 transition-colors"
                     >
                         <RefreshCw className={`w-4 h-4 text-text-muted ${refreshing ? 'animate-spin' : ''}`} />
                     </button>
@@ -129,15 +129,15 @@ export function NewsDashboard() {
                         mt-4 p-3 rounded-xl border flex items-center justify-between
                         ${regime.regime === 'risk_on' ? 'bg-accent-success/10 border-accent-success/30' :
                             regime.regime === 'risk_off' ? 'bg-accent-danger/10 border-accent-danger/30' :
-                                regime.regime === 'volatile' ? 'bg-yellow-500/10 border-yellow-500/30' :
-                                    'bg-theme-dark/50 border-theme-border/30'}
+                                regime.regime === 'volatile' ? 'bg-accent-warning/10 border-accent-warning/30' :
+                                    'bg-bg-secondary/50 border-border-primary/30'}
                     `}>
                         <div className="flex items-center gap-3">
                             <div className={`
                                 w-3 h-3 rounded-full animate-pulse
                                 ${regime.regime === 'risk_on' ? 'bg-accent-success' :
                                     regime.regime === 'risk_off' ? 'bg-accent-danger' :
-                                        regime.regime === 'volatile' ? 'bg-yellow-400' :
+                                        regime.regime === 'volatile' ? 'bg-accent-warning' :
                                             'bg-text-muted'}
                             `} />
                             <div>
@@ -145,7 +145,7 @@ export function NewsDashboard() {
                                 <p className={`font-mono font-bold uppercase
                                     ${regime.regime === 'risk_on' ? 'text-accent-success' :
                                         regime.regime === 'risk_off' ? 'text-accent-danger' :
-                                            regime.regime === 'volatile' ? 'text-yellow-400' :
+                                            regime.regime === 'volatile' ? 'text-text-muted' :
                                                 'text-text-primary'}
                                 `}>
                                     {regime.regime.replace('_', ' ')}
@@ -162,7 +162,7 @@ export function NewsDashboard() {
                 {/* Regime Indicators */}
                 {regime && (
                     <div className="grid grid-cols-4 gap-2 mt-3">
-                        <div className="p-2 rounded bg-theme-dark/30 text-center">
+                        <div className="p-2 rounded bg-bg-secondary/30 text-center">
                             <p className="text-[10px] text-text-muted">BTC</p>
                             <p className={`text-xs font-mono font-bold ${regime.indicators.btcTrend === 'up' ? 'text-accent-success' :
                                 regime.indicators.btcTrend === 'down' ? 'text-accent-danger' : 'text-text-muted'
@@ -170,7 +170,7 @@ export function NewsDashboard() {
                                 {regime.indicators.btcTrend.toUpperCase()}
                             </p>
                         </div>
-                        <div className="p-2 rounded bg-theme-dark/30 text-center">
+                        <div className="p-2 rounded bg-bg-secondary/30 text-center">
                             <p className="text-[10px] text-text-muted">SOL</p>
                             <p className={`text-xs font-mono font-bold ${regime.indicators.solTrend === 'up' ? 'text-accent-success' :
                                 regime.indicators.solTrend === 'down' ? 'text-accent-danger' : 'text-text-muted'
@@ -178,16 +178,16 @@ export function NewsDashboard() {
                                 {regime.indicators.solTrend.toUpperCase()}
                             </p>
                         </div>
-                        <div className="p-2 rounded bg-theme-dark/30 text-center">
+                        <div className="p-2 rounded bg-bg-secondary/30 text-center">
                             <p className="text-[10px] text-text-muted">VOLUME</p>
                             <p className="text-xs font-mono font-bold text-text-primary">
                                 {regime.indicators.volumeTrend.charAt(0).toUpperCase()}
                             </p>
                         </div>
-                        <div className="p-2 rounded bg-theme-dark/30 text-center">
+                        <div className="p-2 rounded bg-bg-secondary/30 text-center">
                             <p className="text-[10px] text-text-muted">SENTIMENT</p>
                             <p className={`text-xs font-mono font-bold ${regime.indicators.sentimentIndex >= 60 ? 'text-accent-success' :
-                                regime.indicators.sentimentIndex >= 40 ? 'text-yellow-400' : 'text-accent-danger'
+                                regime.indicators.sentimentIndex >= 40 ? 'text-text-muted' : 'text-accent-danger'
                                 }`}>
                                 {regime.indicators.sentimentIndex}
                             </p>
@@ -197,7 +197,7 @@ export function NewsDashboard() {
 
                 {/* Recommendation */}
                 {regime?.recommendation && (
-                    <div className="mt-3 p-2 rounded bg-theme-dark/30 flex items-start gap-2">
+                    <div className="mt-3 p-2 rounded bg-bg-secondary/30 flex items-start gap-2">
                         <Zap className="w-4 h-4 text-accent-neon shrink-0 mt-0.5" />
                         <p className="text-xs text-text-secondary">{regime.recommendation}</p>
                     </div>
@@ -206,7 +206,7 @@ export function NewsDashboard() {
 
             {/* Sectors Strip */}
             {sectors.length > 0 && (
-                <div className="px-4 py-3 border-b border-theme-border/30 overflow-x-auto">
+                <div className="px-4 py-3 border-b border-border-primary/30 overflow-x-auto">
                     <div className="flex gap-2">
                         {sectors.map(sector => (
                             <div
@@ -215,7 +215,7 @@ export function NewsDashboard() {
                                     shrink-0 px-3 py-2 rounded-lg border
                                     ${sector.trend === 'bullish' ? 'bg-accent-success/10 border-accent-success/30' :
                                         sector.trend === 'bearish' ? 'bg-accent-danger/10 border-accent-danger/30' :
-                                            'bg-theme-dark/30 border-theme-border/30'}
+                                            'bg-bg-secondary/30 border-border-primary/30'}
                                 `}
                             >
                                 <div className="flex items-center gap-2 mb-1">
@@ -229,13 +229,13 @@ export function NewsDashboard() {
                                 <div className="flex items-center gap-2">
                                     <span className={`text-lg font-mono font-bold
                                         ${sector.score >= 65 ? 'text-accent-success' :
-                                            sector.score >= 45 ? 'text-yellow-400' : 'text-accent-danger'}
+                                            sector.score >= 45 ? 'text-text-muted' : 'text-accent-danger'}
                                     `}>
                                         {sector.score}
                                     </span>
                                     <div className="flex flex-wrap gap-1">
                                         {sector.topTokens.slice(0, 2).map(token => (
-                                            <span key={token} className="text-[10px] px-1.5 py-0.5 rounded bg-theme-dark/50 text-text-muted">
+                                            <span key={token} className="text-[10px] px-1.5 py-0.5 rounded bg-bg-secondary/50 text-text-muted">
                                                 {token}
                                             </span>
                                         ))}
@@ -248,7 +248,7 @@ export function NewsDashboard() {
             )}
 
             {/* Category Filter */}
-            <div className="px-4 py-3 border-b border-theme-border/30">
+            <div className="px-4 py-3 border-b border-border-primary/30">
                 <div className="flex gap-1 overflow-x-auto pb-1">
                     {(['all', 'crypto', 'stocks', 'macro', 'regulatory', 'technical'] as NewsCategory[]).map(cat => (
                         <button
@@ -258,7 +258,7 @@ export function NewsDashboard() {
                                 px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-mono whitespace-nowrap transition-all
                                 ${category === cat
                                     ? 'bg-accent-neon/20 text-accent-neon'
-                                    : 'bg-theme-dark/30 text-text-muted hover:bg-theme-dark/50'}
+                                    : 'bg-bg-secondary/30 text-text-muted hover:bg-bg-secondary/50'}
                             `}
                         >
                             {CATEGORY_ICONS[cat]}
@@ -296,7 +296,7 @@ function NewsItem({ news }: { news: MarketNews }) {
 
     return (
         <div className={`
-            p-4 border-b border-theme-border/20 hover:bg-theme-dark/20 transition-colors cursor-pointer
+            p-4 border-b border-border-primary/20 hover:bg-bg-secondary/20 transition-colors cursor-pointer
         `}>
             <div className="flex items-start gap-3">
                 {/* Sentiment Indicator */}
@@ -344,7 +344,7 @@ function NewsItem({ news }: { news: MarketNews }) {
                             {news.symbols.map(symbol => (
                                 <span
                                     key={symbol}
-                                    className="text-[10px] px-2 py-0.5 rounded-full bg-theme-dark/50 text-accent-neon font-mono"
+                                    className="text-[10px] px-2 py-0.5 rounded-full bg-bg-secondary/50 text-accent-neon font-mono"
                                 >
                                     ${symbol}
                                 </span>
@@ -358,7 +358,7 @@ function NewsItem({ news }: { news: MarketNews }) {
                     <p className="text-[10px] text-text-muted">Relevance</p>
                     <p className={`font-mono font-bold text-sm
                         ${news.relevance >= 70 ? 'text-accent-success' :
-                            news.relevance >= 50 ? 'text-yellow-400' : 'text-text-muted'}
+                            news.relevance >= 50 ? 'text-text-muted' : 'text-text-muted'}
                     `}>
                         {news.relevance}
                     </p>

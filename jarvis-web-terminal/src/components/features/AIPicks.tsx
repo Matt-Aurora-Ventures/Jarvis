@@ -46,15 +46,15 @@ interface PickPerformance {
 
 const RECOMMENDATION_COLORS = {
     strong_buy: { bg: 'bg-accent-success/20', text: 'text-accent-success', border: 'border-accent-success/50' },
-    buy: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/50' },
-    hold: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/50' },
-    sell: { bg: 'bg-orange-500/20', text: 'text-orange-400', border: 'border-orange-500/50' },
+    buy: { bg: 'bg-accent-success/20', text: 'text-accent-success', border: 'border-accent-success/50' },
+    hold: { bg: 'bg-accent-warning/20', text: 'text-text-muted', border: 'border-accent-warning/50' },
+    sell: { bg: 'bg-accent-warning/20', text: 'text-accent-warning', border: 'border-accent-warning/50' },
     strong_sell: { bg: 'bg-accent-danger/20', text: 'text-accent-danger', border: 'border-accent-danger/50' },
 };
 
 const RISK_COLORS = {
     low: 'text-accent-success',
-    medium: 'text-yellow-400',
+    medium: 'text-text-muted',
     high: 'text-accent-danger',
 };
 
@@ -131,7 +131,7 @@ export function AIPicks() {
     return (
         <div className="card-glass overflow-hidden">
             {/* Header */}
-            <div className="p-4 border-b border-theme-border/30">
+            <div className="p-4 border-b border-border-primary/30">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-neon/30 to-purple-500/30 flex items-center justify-center">
@@ -154,7 +154,7 @@ export function AIPicks() {
                             <div className={`
                                 px-2 py-1 rounded-lg text-xs font-mono flex items-center gap-1
                                 ${accuracy >= 60 ? 'bg-accent-success/20 text-accent-success' :
-                                    accuracy >= 40 ? 'bg-yellow-500/20 text-yellow-400' :
+                                    accuracy >= 40 ? 'bg-accent-warning/20 text-text-muted' :
                                         'bg-accent-danger/20 text-accent-danger'}
                             `}>
                                 <Target className="w-3 h-3" />
@@ -165,7 +165,7 @@ export function AIPicks() {
                         <button
                             onClick={handleRefresh}
                             disabled={refreshing}
-                            className="p-2 rounded-lg hover:bg-theme-dark/50 transition-colors"
+                            className="p-2 rounded-lg hover:bg-bg-secondary/50 transition-colors"
                         >
                             <RefreshCw className={`w-4 h-4 text-text-muted ${refreshing ? 'animate-spin' : ''}`} />
                         </button>
@@ -174,7 +174,7 @@ export function AIPicks() {
             </div>
 
             {/* Picks List */}
-            <div className="divide-y divide-theme-border/20">
+            <div className="divide-y divide-border-primary/20">
                 {loading ? (
                     <div className="p-8 text-center">
                         <Brain className="w-8 h-8 text-accent-neon animate-pulse mx-auto mb-2" />
@@ -182,7 +182,7 @@ export function AIPicks() {
                     </div>
                 ) : picks.length === 0 ? (
                     <div className="p-8 text-center">
-                        <AlertTriangle className="w-12 h-12 text-yellow-400 mx-auto mb-3 opacity-50" />
+                        <AlertTriangle className="w-12 h-12 text-text-muted mx-auto mb-3 opacity-50" />
                         <p className="text-text-muted">No picks available</p>
                     </div>
                 ) : (
@@ -199,13 +199,13 @@ export function AIPicks() {
 
             {/* Selected Pick Detail */}
             {selectedPick && (
-                <div className="p-4 border-t border-theme-border/30 bg-theme-dark/30">
+                <div className="p-4 border-t border-border-primary/30 bg-bg-secondary/30">
                     <PickDetail pick={selectedPick} onClose={() => setSelectedPick(null)} />
                 </div>
             )}
 
             {/* Disclaimer */}
-            <div className="p-3 border-t border-theme-border/30 bg-theme-dark/20">
+            <div className="p-3 border-t border-border-primary/30 bg-bg-secondary/20">
                 <p className="text-[10px] text-text-muted text-center">
                     AI picks are for informational purposes only. Always DYOR. Past performance ≠ future results.
                 </p>
@@ -221,8 +221,8 @@ function PickCard({ pick, onSelect, isSelected }: { pick: AIPick; onSelect: () =
         <button
             onClick={onSelect}
             className={`
-                w-full p-4 text-left hover:bg-theme-dark/30 transition-all
-                ${isSelected ? 'bg-theme-dark/40 border-l-2 border-accent-neon' : ''}
+                w-full p-4 text-left hover:bg-bg-secondary/30 transition-all
+                ${isSelected ? 'bg-bg-secondary/40 border-l-2 border-accent-neon' : ''}
             `}
         >
             <div className="flex items-center justify-between">
@@ -243,7 +243,7 @@ function PickCard({ pick, onSelect, isSelected }: { pick: AIPick; onSelect: () =
                             <span className="text-xs text-text-muted">{pick.name}</span>
                         </div>
                         <div className="flex items-center gap-2 mt-1">
-                            <span className={`text-xs ${pick.sentimentScore >= 60 ? 'text-accent-success' : pick.sentimentScore >= 40 ? 'text-yellow-400' : 'text-accent-danger'}`}>
+                            <span className={`text-xs ${pick.sentimentScore >= 60 ? 'text-accent-success' : pick.sentimentScore >= 40 ? 'text-text-muted' : 'text-accent-danger'}`}>
                                 Sentiment: {pick.sentimentScore}
                             </span>
                             <span className="text-xs text-text-muted">•</span>
@@ -260,7 +260,7 @@ function PickCard({ pick, onSelect, isSelected }: { pick: AIPick; onSelect: () =
                         <p className="text-xs text-text-muted">Confidence</p>
                         <p className={`font-mono font-bold ${
                             pick.confidenceLevel >= 75 ? 'text-accent-success' :
-                                pick.confidenceLevel >= 50 ? 'text-yellow-400' : 'text-text-muted'
+                                pick.confidenceLevel >= 50 ? 'text-text-muted' : 'text-text-muted'
                         }`}>
                             {pick.confidenceLevel}%
                         </p>
@@ -330,7 +330,7 @@ function PickDetail({ pick, onClose }: { pick: AIPick; onSelect?: () => void; on
 
             {/* Trade Levels */}
             <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 rounded-lg bg-theme-dark/30 text-center">
+                <div className="p-3 rounded-lg bg-bg-secondary/30 text-center">
                     <p className="text-[10px] text-text-muted mb-1">ENTRY</p>
                     <p className="font-mono font-bold text-text-primary">${formatPrice(pick.suggestedEntry)}</p>
                 </div>
@@ -350,7 +350,7 @@ function PickDetail({ pick, onClose }: { pick: AIPick; onSelect?: () => void; on
             <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-text-muted">Sources:</span>
                 {pick.sources.map((source, i) => (
-                    <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-theme-dark/50 text-text-secondary">
+                    <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-bg-secondary/50 text-text-secondary">
                         {source}
                     </span>
                 ))}
@@ -369,7 +369,7 @@ function PickDetail({ pick, onClose }: { pick: AIPick; onSelect?: () => void; on
                     href={`https://birdeye.so/token/${pick.tokenAddress}?chain=solana`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-4 py-2 bg-theme-dark/50 border border-theme-border/50 rounded-lg hover:bg-theme-dark transition-colors flex items-center gap-2"
+                    className="px-4 py-2 bg-bg-secondary/50 border border-border-primary/50 rounded-lg hover:bg-bg-secondary transition-colors flex items-center gap-2"
                 >
                     <BarChart3 className="w-4 h-4" />
                     Chart

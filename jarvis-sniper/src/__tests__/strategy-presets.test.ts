@@ -77,7 +77,7 @@ describe('STRATEGY_CATEGORIES', () => {
     expect(labels).toContain('ESTABLISHED TOKENS');
     expect(labels).toContain('BAGS.FM');
     expect(labels).toContain('BLUE CHIP SOLANA');
-    expect(labels).toContain('EXPERIMENTAL');
+    expect(labels).toContain('xSTOCK & INDEX');
   });
 
   it('every preset ID in categories should exist in STRATEGY_PRESETS', async () => {

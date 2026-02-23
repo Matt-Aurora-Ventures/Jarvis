@@ -891,9 +891,6 @@ interface SniperState {
   /** Monotonic strategy revision. Bumped whenever algo selection/config changes. */
   strategyEpoch: number;
   assetFilter: AssetType;
-  /** Hide/show underperforming/disabled strategies in the preset picker. */
-  showExperimentalStrategies: boolean;
-  setShowExperimentalStrategies: (show: boolean) => void;
   loadBestEver: (cfg: Record<string, any>) => void;
 
   // Trade Signing Mode
@@ -1094,8 +1091,6 @@ export const useSniperStore = create<SniperState>()(
   activePreset: 'pump_fresh_tight',
   strategyEpoch: 0,
   assetFilter: 'memecoin' as AssetType,
-  showExperimentalStrategies: false,
-  setShowExperimentalStrategies: (show) => set({ showExperimentalStrategies: !!show }),
   tradeSignerMode: 'phantom',
   setTradeSignerMode: (mode) => set({ tradeSignerMode: mode }),
   sessionWalletPubkey: null,
@@ -2122,7 +2117,6 @@ export const useSniperStore = create<SniperState>()(
       partialize: (state) => ({
         positions: state.positions,
         config: state.config,
-        showExperimentalStrategies: state.showExperimentalStrategies,
         tradeSignerMode: state.tradeSignerMode,
         sessionWalletPubkey: state.sessionWalletPubkey,
         budget: state.budget,
@@ -2289,11 +2283,6 @@ export const useSniperStore = create<SniperState>()(
         // Migrate backtestMeta (added in Plan 02.1-03)
         if (!state.backtestMeta || typeof state.backtestMeta !== 'object') {
           state.backtestMeta = {};
-        }
-
-        // Migrate showExperimentalStrategies (UI-only flag).
-        if (typeof (state as any).showExperimentalStrategies !== 'boolean') {
-          (state as any).showExperimentalStrategies = false;
         }
 
         // Migrate strategyBeliefs (Discounted Thompson state).

@@ -57,4 +57,3 @@ gcloud scheduler jobs describe $JobName `
   --project $Project `
   --location $Region `
   --format="value(schedule,timeZone,state,httpTarget.uri)"
-

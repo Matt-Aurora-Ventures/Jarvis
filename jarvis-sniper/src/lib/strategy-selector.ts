@@ -32,6 +32,128 @@ export interface ApplyDiscountedOutcomeArgs {
   now?: number;
 }
 
+export interface ThompsonCandidate {
+  strategyId: string;
+}
+
+export interface ThompsonRankedStrategy {
+  strategyId: string;
+  sample: number;
+  mean: number;
+  alpha: number;
+  beta: number;
+  evidence: number;
+}
+
+export interface ThompsonSelection {
+  selected: ThompsonRankedStrategy;
+  ranked: ThompsonRankedStrategy[];
+}
+
+export function createDefaultStrategyBelief(strategyId: string, now = Date.now()): StrategyBelief {
+  return {
+    strategyId,
+    alpha: 1,
+    beta: 1,
+    wins: 0,
+    losses: 0,
+    totalOutcomes: 0,
+    updatedAt: now,
+  };
+}
+
+function clampShape(v: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(0.1, n);
+}
+
+/**
+ * Gamma(shape, 1) sampler via Marsaglia-Tsang.
+ * This is sufficient for Thompson sampling and avoids pulling in heavy deps.
+ */
+function sampleGamma(shapeRaw: number): number {
+  let shape = clampShape(shapeRaw);
+  if (shape < 1) {
+    const u = Math.random();
+    return sampleGamma(shape + 1) * Math.pow(u, 1 / shape);
+  }
+
+  const d = shape - 1 / 3;
+  const c = 1 / Math.sqrt(9 * d);
+
+  for (;;) {
+    let x = 0;
+    let v = 0;
+    do {
+      const u1 = Math.random();
+      const u2 = Math.random();
+      const z = Math.sqrt(-2 * Math.log(Math.max(Number.MIN_VALUE, u1))) * Math.cos(2 * Math.PI * u2);
+      x = z;
+      v = 1 + c * x;
+    } while (v <= 0);
+
+    v = v * v * v;
+    const u = Math.random();
+
+    if (u < 1 - 0.0331 * (x * x) * (x * x)) return d * v;
+    if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+  }
+}
+
+export function sampleBeta(alphaRaw: number, betaRaw: number): number {
+  const alpha = clampShape(alphaRaw);
+  const beta = clampShape(betaRaw);
+  const x = sampleGamma(alpha);
+  const y = sampleGamma(beta);
+  const denom = x + y;
+  if (!Number.isFinite(denom) || denom <= 0) return 0.5;
+  const out = x / denom;
+  if (!Number.isFinite(out)) return 0.5;
+  return Math.min(1, Math.max(0, out));
+}
+
+export function selectStrategyWithThompson(
+  candidates: ThompsonCandidate[],
+  beliefs: Record<string, StrategyBelief>,
+): ThompsonSelection | null {
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+
+  const ranked = candidates
+    .map((candidate) => {
+      const strategyId = String(candidate?.strategyId || '').trim();
+      if (!strategyId) return null;
+      const belief = beliefs?.[strategyId] ?? createDefaultStrategyBelief(strategyId);
+      const alpha = clampShape(Number(belief.alpha));
+      const beta = clampShape(Number(belief.beta));
+      const sample = sampleBeta(alpha, beta);
+      const mean = alpha / (alpha + beta);
+      const evidence = Math.max(0, Math.floor(Number(belief.totalOutcomes || 0)));
+
+      return {
+        strategyId,
+        sample,
+        mean: Number.isFinite(mean) ? mean : 0.5,
+        alpha,
+        beta,
+        evidence,
+      } as ThompsonRankedStrategy;
+    })
+    .filter((row): row is ThompsonRankedStrategy => !!row)
+    .sort((a, b) => {
+      if (b.sample !== a.sample) return b.sample - a.sample;
+      if (b.mean !== a.mean) return b.mean - a.mean;
+      if (b.evidence !== a.evidence) return b.evidence - a.evidence;
+      return a.strategyId.localeCompare(b.strategyId);
+    });
+
+  if (ranked.length === 0) return null;
+  return {
+    selected: ranked[0],
+    ranked,
+  };
+}
+
 /**
  * Apply a single outcome to a strategy belief using discounted Thompson updates.
  *

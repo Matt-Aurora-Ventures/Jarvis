@@ -33,18 +33,18 @@ const FIXED_COST_ROUND_TRIP_SOL = FIXED_COST_PER_TX_SOL * 2; // buy + sell = 2 t
 // Position sizing — users trade with $5-15 typically
 const POSITION_SIZE_USD = 10;
 const SOL_PRICE_USD = 150;
-const FIXED_COST_USD = FIXED_COST_ROUND_TRIP_SOL * SOL_PRICE_USD; // ~$0.36
-const FIXED_COST_PCT = (FIXED_COST_USD / POSITION_SIZE_USD) * 100; // ~3.6%
+const FIXED_COST_USD = FIXED_COST_ROUND_TRIP_SOL * SOL_PRICE_USD; // ~$0.06
+const FIXED_COST_PCT = (FIXED_COST_USD / POSITION_SIZE_USD) * 100; // ~0.6%
 
 const TOTAL_FRICTION_PCT = SLIPPAGE_ENTRY_PCT + SLIPPAGE_EXIT_PCT + FEE_PER_SIDE_PCT * 2 + FIXED_COST_PCT;
 
-// Cooldown between trades on same token
-const MIN_COOLDOWN_CANDLES = 12; // 12 × 5min = 1 hour
+// Cooldown between trades on the same token (time-based so it's timeframe-invariant).
+const MIN_COOLDOWN_SECONDS = 60 * 60; // 1 hour
 
 // ─── Exit Parameters Per Algo — TP > SL (TRADITIONAL R:R) ───
 // MATH PROOF: With ~1.9% total friction on a $10 position:
-//   SL>TP (SL=12,TP=6): needs 77% WR → IMPOSSIBLE → always loses
-//   TP>SL (SL=8,TP=15):  needs 43% WR → ACHIEVABLE → can profit
+//   SL>TP (SL=12,TP=6): needs ~77% WR → only viable with extremely selective entries
+//   TP>SL (SL=8,TP=15):  needs ~43% WR → more realistic for noisy markets
 // Trailing stops DISABLED (set to 99) — trail exits at sub-friction
 // profits are hidden losses that drag avg PnL negative.
 // When trail is needed later, it can be re-enabled once base strategy
@@ -59,9 +59,9 @@ const ALGO_EXIT_PARAMS: AlgoExitParams[] = [
 
   // ─── MEMECOIN WIDE — 3 strategies (SL 10%, TP 25% = 2.5:1 R:R) ───
   // FINAL: mean_reversion entry, SL 10/TP 25. PF 0.97 (borderline). Higher TP needed for profit.
-  { algo_id: 'momentum',             stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 24 },
-  { algo_id: 'hybrid_b',             stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 24 },
-  { algo_id: 'let_it_ride',          stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 48 },
+  { algo_id: 'momentum',             stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 48 },
+  { algo_id: 'hybrid_b',             stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 48 },
+  { algo_id: 'let_it_ride',          stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 72 },
 
   // ─── ESTABLISHED TOKENS — 5 strategies (SL 7-8%, TP 15%) ───
   // PROVEN: 8/15 works for sol_veteran, utility_swing, meme_classic
@@ -84,8 +84,9 @@ const ALGO_EXIT_PARAMS: AlgoExitParams[] = [
 
   // ─── BLUE CHIP SOLANA — 2 strategies (SL 10%, TP 25% = 2.5:1 R:R) ───
   // R4: mean_reversion entry + SL 10/TP 25. breakout entry failed in R3.
-  { algo_id: 'bluechip_trend_follow',stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 48 },
-  { algo_id: 'bluechip_breakout',    stopLossPct: 10,  takeProfitPct: 25,  trailingStopPct: 99, maxPositionAgeHours: 48 },
+  // Updated (2026-02-16 sweep on 15m candles): SL 5 / TP 30 / 14d max age.
+  { algo_id: 'bluechip_trend_follow',stopLossPct: 5,   takeProfitPct: 30,  trailingStopPct: 99, maxPositionAgeHours: 336 },
+  { algo_id: 'bluechip_breakout',    stopLossPct: 5,   takeProfitPct: 30,  trailingStopPct: 99, maxPositionAgeHours: 336 },
 
   // ─── xSTOCK & PRESTOCK — SL 4%, TP 10% = 2.5:1 R:R ───
   // TESTED: SL 3/4/5/10%, TP 10/15/100%, 8 entry types. None profitable at TP ≤15%.
@@ -93,16 +94,32 @@ const ALGO_EXIT_PARAMS: AlgoExitParams[] = [
   { algo_id: 'xstock_swing',         stopLossPct: 5,   takeProfitPct: 12,  trailingStopPct: 99, maxPositionAgeHours: 72 },
   { algo_id: 'prestock_speculative', stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
 
-  // ─── INDEX — SL 4%, TP 10% = 2.5:1 R:R ───
-  { algo_id: 'index_intraday',       stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
-  { algo_id: 'index_leveraged',      stopLossPct: 4,   takeProfitPct: 10,  trailingStopPct: 99, maxPositionAgeHours: 96 },
+  // ─── INDEX — requires higher TF + longer holds ───
+  // Calibrated via 05e (daily candles): equity_mean_reversion, SL 6 / TP 20 / 30d max age.
+  { algo_id: 'index_intraday',       stopLossPct: 6,   takeProfitPct: 20,  trailingStopPct: 99, maxPositionAgeHours: 720 },
+  { algo_id: 'index_leveraged',      stopLossPct: 6,   takeProfitPct: 20,  trailingStopPct: 99, maxPositionAgeHours: 720 },
 ];
 
 // ─── ENTRY SIGNAL SYSTEM ───
 // Strategy-specific entries that catch moves EARLY (not after they're extended).
 // Each strategy type has its own trigger optimized for that pattern.
 
-type EntryType = 'momentum' | 'fresh_pump' | 'aggressive' | 'mean_reversion' | 'trend_follow' | 'breakout' | 'dip_buy' | 'strict_trend' | 'sma_crossover' | 'accumulation' | 'range_breakout' | 'pullback_buy' | 'vol_surge_scalp';
+type EntryType =
+  | 'momentum'
+  | 'fresh_pump'
+  | 'aggressive'
+  | 'mean_reversion'
+  | 'trend_follow'
+  | 'breakout'
+  | 'dip_buy'
+  | 'strict_trend'
+  | 'sma_crossover'
+  | 'accumulation'
+  | 'range_breakout'
+  | 'pullback_buy'
+  | 'vol_surge_scalp'
+  // Tokenized equities move differently than memecoins; use separate thresholds.
+  | 'equity_mean_reversion';
 
 interface EntrySignal {
   candleIndex: number;
@@ -151,10 +168,11 @@ function findAllEntrySignals(candles: Candle[], entryType: EntryType): EntrySign
   if (candles.length < 20) return signals;
 
   const LB = 5;
-  let lastIdx = -MIN_COOLDOWN_CANDLES;
+  let lastSignalTs = -Infinity;
 
   for (let i = LB; i < candles.length - 5; i++) {
-    if (i - lastIdx < MIN_COOLDOWN_CANDLES) continue;
+    const ts = candles[i].timestamp;
+    if (Number.isFinite(lastSignalTs) && ts - lastSignalTs < MIN_COOLDOWN_SECONDS) continue;
 
     const c = candles[i];
     const prev = candles[i - 1];
@@ -187,6 +205,11 @@ function findAllEntrySignals(candles: Candle[], entryType: EntryType): EntrySign
         break;
       case 'mean_reversion':
         if (c.close < sma5 * 0.97 && c.close > c.open && prev.close < prev.open) triggered = true;
+        break;
+      case 'equity_mean_reversion':
+        // Equities/indexes usually won't dip 3% in one 5m bar. Use a smaller threshold.
+        // Keep the same "reversal candle" requirement to avoid catching falling knives.
+        if (c.close < sma5 * 0.998 && c.close > c.open && prev.close < prev.open) triggered = true;
         break;
       case 'trend_follow':
         if (c.close > sma5 && c.high > prev.high && pct > 0.5 && volSpike > 1.2) triggered = true;
@@ -295,7 +318,7 @@ function findAllEntrySignals(candles: Candle[], entryType: EntryType): EntrySign
 
     if (triggered) {
       signals.push({ candleIndex: i, entryPrice: c.close, score: 0 });
-      lastIdx = i;
+      lastSignalTs = ts;
     }
   }
 
@@ -449,15 +472,16 @@ function simulateAllTrades(
   if (signals.length === 0) return [];
 
   const results: TradeResult[] = [];
-  let lastExitCandle = -1;
+  let lastExitTs = -Infinity;
 
   for (const signal of signals) {
-    if (signal.candleIndex <= lastExitCandle + MIN_COOLDOWN_CANDLES) continue;
+    const entryTs = candles[signal.candleIndex]?.timestamp ?? 0;
+    if (Number.isFinite(lastExitTs) && entryTs - lastExitTs < MIN_COOLDOWN_SECONDS) continue;
 
     const result = simulateOneTrade(token, candles, params, signal);
     if (result) {
       results.push(result);
-      lastExitCandle = signal.candleIndex + result.candles_in_trade;
+      lastExitTs = result.exit_timestamp;
     }
   }
 
@@ -503,7 +527,10 @@ async function main(): Promise<void> {
     );
 
     if (!tokens || tokens.length === 0) {
-      log(`  No qualified tokens for ${algo_id}, skipping.`);
+      // Important: always overwrite stale results from prior runs, otherwise Phase 6 can
+      // accidentally pick up old `results_{algo}.json` for strategies that are now empty.
+      log(`  No qualified tokens for ${algo_id}, writing empty results.`);
+      writeJSON(`results/results_${algo_id}.json`, []);
       continue;
     }
 

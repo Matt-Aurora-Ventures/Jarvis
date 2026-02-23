@@ -1,8 +1,8 @@
 """
-ClawdMatt Telegram Bot - Marketing Communications Filter
+Arsenal Telegram Bot - COO Safety Filter
 
-A Telegram bot interface for the PR Matt content review service.
-Reviews messages for brand alignment before publishing.
+A Telegram bot interface for Arsenal — the tactical communications guardrail.
+Reviews messages for brand alignment and risk before publishing.
 
 Usage:
   /review <message> - Review a message for PR compliance
@@ -92,10 +92,11 @@ load_tokens()
 # Silence token for heartbeat monitors (also used by unit tests).
 HEARTBEAT_OK = "HEARTBEAT_OK"
 
-# Get token
-BOT_TOKEN = os.environ.get("CLAWDMATT_BOT_TOKEN")
+# Get token (user-facing rename: "Matt" -> "Arsenal")
+# Keep CLAWDMATT_BOT_TOKEN as a backward-compatible fallback.
+BOT_TOKEN = os.environ.get("CLAWDARSENAL_BOT_TOKEN") or os.environ.get("CLAWDMATT_BOT_TOKEN")
 if not BOT_TOKEN:
-    logger.error("CLAWDMATT_BOT_TOKEN not found in environment")
+    logger.error("CLAWDARSENAL_BOT_TOKEN (or CLAWDMATT_BOT_TOKEN) not found in environment")
     sys.exit(1)
 
 # Initialize bot
@@ -113,6 +114,9 @@ _allowlist = None
 if HAS_SECURITY:
     _allowlist = load_allowlist()
     logger.info(f"Loaded allowlist with {len(_allowlist)} authorized users")
+
+# Public beta toggle: when enabled, allow everyone to use "safe" bot commands.
+PUBLIC_MODE = os.environ.get("CLAWDBOT_PUBLIC_MODE", "").strip().lower() in ("1", "true", "yes", "on")
 
 # Initialize lifecycle (optional)
 _lifecycle = None
@@ -135,9 +139,19 @@ WARNING_PATTERNS = [
 
 def check_user_authorized(user_id: int) -> bool:
     """Check if a user is authorized to use the bot."""
+    if PUBLIC_MODE:
+        return True
     if not HAS_SECURITY or not _allowlist:
         return True  # Development mode - allow all
     return check_authorization(user_id, AuthorizationLevel.OBSERVER, _allowlist)
+
+
+async def _deny(bot: AsyncTeleBot, message, reason: str = "This bot is currently in private beta.") -> None:
+    """Tell unauthorized users why nothing happened (avoid silent failure)."""
+    try:
+        await bot.reply_to(message, f"⛔ {reason}\n\nIf you should have access, contact support.")
+    except Exception:
+        return
 
 
 def review_message(text: str) -> dict:
@@ -186,10 +200,11 @@ async def handle_help(message):
     """Send help message."""
     # Security check
     if not check_user_authorized(message.from_user.id):
-        return  # Silently ignore unauthorized users
+        await _deny(bot, message)
+        return
 
     help_text = """
-Welcome to ClawdMatt - PR Filter Bot
+Welcome to PR Matt - PR Filter Bot
 
 Commands:
 /review <message> - Review a message for PR compliance
@@ -210,12 +225,12 @@ async def handle_status(message):
     """Send status message."""
     # Security check
     if not check_user_authorized(message.from_user.id):
-        return  # Silently ignore unauthorized users
+        await _deny(bot, message)
+        return
 
     status_text = """
-ClawdMatt Status: ONLINE
+PR Matt Status: ONLINE
 
-Bot: @ClawdMatt_bot
 Purpose: Marketing Communications Filter
 Mode: Active
 
@@ -229,7 +244,8 @@ async def handle_brief(message):
     """Generate and send the morning brief."""
     # Security check
     if not check_user_authorized(message.from_user.id):
-        return  # Silently ignore unauthorized users
+        await _deny(bot, message)
+        return
 
     if not HAS_MORNING_BRIEF:
         await bot.reply_to(message, "Morning brief module not available.")
@@ -248,7 +264,8 @@ async def handle_review(message):
     """Review a message for PR compliance."""
     # Security check
     if not check_user_authorized(message.from_user.id):
-        return  # Silently ignore unauthorized users
+        await _deny(bot, message)
+        return
 
     # Get the message text after /review
     text = message.text.replace('/review', '', 1).strip()
@@ -283,7 +300,8 @@ async def handle_any(message):
     """Handle any message - check for multi-agent dispatch first, then review."""
     # Security check
     if not check_user_authorized(message.from_user.id):
-        return  # Silently ignore unauthorized users
+        await _deny(bot, message)
+        return
 
     if not message.text:
         return

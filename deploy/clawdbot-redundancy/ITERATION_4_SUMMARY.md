@@ -302,7 +302,7 @@ docker run --rm clawdbot-ready:2026.2.3 bash -c "which openclaw && npx @agent-ta
 
 **What**: Cloud-based long-term memory integration for OpenClaw
 **Provider**: Supermemory.ai (requires Pro subscription)
-**API Key**: `sm_9C4AwqczHUwJxjWfxjZiyu_MCsYawPgKFogZCSqLtpWYJFPOaFVeaejHPHFykCsjmRqPRXyOFGnsPJLhmryZAuI`
+**API Key**: `***REDACTED***` (set via `SUPERMEMORY_API_KEY`)
 **How Used**:
 - Auto-remembers conversations
 - Recalls relevant context on demand

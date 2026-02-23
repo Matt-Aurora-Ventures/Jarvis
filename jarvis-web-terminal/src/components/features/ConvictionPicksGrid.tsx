@@ -38,7 +38,7 @@ export function ConvictionPicksGrid({ picks, isLoading }: ConvictionPicksGridPro
     return (
         <div className="sentiment-panel">
             <div className="sentiment-panel-header">
-                <Award className="w-5 h-5 text-amber-400" />
+                <Award className="w-5 h-5 text-accent-neon" />
                 <h3>🎯 Top 10 Conviction Picks</h3>
             </div>
 
@@ -56,14 +56,14 @@ export function ConvictionPicksGrid({ picks, isLoading }: ConvictionPicksGridPro
                     onClick={() => setActiveRisk('medium')}
                     icon={Target}
                     label="Medium"
-                    color="text-yellow-400"
+                    color="text-text-muted"
                 />
                 <RiskTab
                     active={activeRisk === 'degen'}
                     onClick={() => setActiveRisk('degen')}
                     icon={Flame}
                     label="Degen"
-                    color="text-orange-400"
+                    color="text-accent-warning"
                 />
             </div>
 
@@ -124,8 +124,8 @@ function PickCard({ pick, riskLevel }: PickCardProps) {
     const convictionColor = pick.convictionScore >= 70
         ? 'bg-emerald-500'
         : pick.convictionScore >= 50
-            ? 'bg-yellow-500'
-            : 'bg-orange-500';
+            ? 'bg-accent-warning'
+            : 'bg-accent-warning';
 
     return (
         <div className="conviction-pick-card group">
@@ -151,7 +151,7 @@ function PickCard({ pick, riskLevel }: PickCardProps) {
             <div className={`px-2 py-0.5 rounded text-xs font-medium
         ${pick.direction === 'LONG'
                     ? 'bg-emerald-500/20 text-emerald-400'
-                    : 'bg-red-500/20 text-red-400'
+                    : 'bg-accent-error/20 text-accent-error'
                 }`}
             >
                 {pick.direction}
@@ -175,7 +175,7 @@ function PickCard({ pick, riskLevel }: PickCardProps) {
                 <div className="flex items-center gap-2 text-xs">
                     <span className="text-emerald-400">TP: +{tpPercent}%</span>
                     <span className="text-text-muted">|</span>
-                    <span className="text-red-400">SL: {slPercent}%</span>
+                    <span className="text-accent-error">SL: {slPercent}%</span>
                 </div>
                 <div className="text-xs text-text-muted mt-0.5 truncate max-w-[200px]">
                     {pick.reasoning}

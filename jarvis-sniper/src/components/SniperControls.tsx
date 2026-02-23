@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
 import { Buffer } from 'buffer';
-import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3, Trophy, Check, Gem, Rocket, Clock, HelpCircle, Package, X, Landmark, FlaskConical } from 'lucide-react';
+import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3, Trophy, Check, Gem, Rocket, Clock, HelpCircle, Package, X } from 'lucide-react';
 import { useSniperStore, makeDefaultAssetBreaker, type SniperConfig, type StrategyMode, type AssetType, type PerAssetBreakerConfig, STRATEGY_PRESETS } from '@/stores/useSniperStore';
 import type { BagsGraduation } from '@/lib/bags-api';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
@@ -134,20 +134,17 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   BarChart3: <BarChart3 className="w-3 h-3" />,
   Gem: <Gem className="w-3 h-3" />,
   Package: <Package className="w-3 h-3" />,
-  Landmark: <Landmark className="w-3 h-3" />,
-  TrendingUp: <TrendingUp className="w-3 h-3" />,
-  FlaskConical: <FlaskConical className="w-3 h-3" />,
 };
 
 /** Map asset filter to visible strategy categories */
 const ASSET_CATEGORY_MAP: Record<AssetType, string[]> = {
-  memecoin: ['TOP PERFORMERS', 'MEMECOIN', 'EXPERIMENTAL'],
-  established: ['TOP PERFORMERS', 'ESTABLISHED TOKENS', 'EXPERIMENTAL'],
-  bags: ['BAGS.FM', 'EXPERIMENTAL'],
+  memecoin: ['TOP PERFORMERS', 'MEMECOIN'],
+  established: ['TOP PERFORMERS', 'ESTABLISHED TOKENS'],
+  bags: ['BAGS.FM'],
   bluechip: ['BLUE CHIP SOLANA'],
-  xstock: ['EXPERIMENTAL'],
-  prestock: ['EXPERIMENTAL'],
-  index: ['EXPERIMENTAL'],
+  xstock: ['xSTOCK & INDEX'],
+  prestock: ['xSTOCK & INDEX'],
+  index: ['xSTOCK & INDEX'],
 };
 
 /** Risk level badge colors */
@@ -212,7 +209,7 @@ function InfoTip({ text }: { text: string }) {
 }
 
 export function SniperControls() {
-  const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining, graduations, tradeSignerMode, setTradeSignerMode, sessionWalletPubkey, setSessionWalletPubkey, assetFilter, showExperimentalStrategies, setShowExperimentalStrategies, backtestMeta, addExecution, autoResetRequired } = useSniperStore();
+  const { config, setConfig, setStrategyMode, loadPreset, activePreset, loadBestEver, positions, budget, setBudgetSol, authorizeBudget, deauthorizeBudget, budgetRemaining, graduations, tradeSignerMode, setTradeSignerMode, sessionWalletPubkey, setSessionWalletPubkey, assetFilter, backtestMeta, addExecution, autoResetRequired } = useSniperStore();
   const { connected, connecting, connect, address, signTransaction, signMessage, publicKey } = usePhantomWallet();
   const { snipe, ready: walletReady } = useSnipeExecutor();
   const [isHydrated, setIsHydrated] = useState(false);
@@ -382,12 +379,7 @@ export function SniperControls() {
   const suggestion = suggestStrategy(graduations as BagsGraduation[], assetFilter);
   const activePresetDef = STRATEGY_PRESETS.find((p) => p.id === activePreset);
   const activePresetLabel = activePresetDef?.name || activePreset?.toUpperCase() || 'CUSTOM';
-  const forcedExperimental = assetFilter === 'xstock' || assetFilter === 'prestock' || assetFilter === 'index';
-  const experimentalEnabled = forcedExperimental || showExperimentalStrategies;
-  const showExperimentalToggle =
-    !forcedExperimental &&
-    STRATEGY_PRESETS.some((p) => (p.underperformer || p.disabled) && p.assetType === assetFilter);
-  const wrGatePolicy = `WR Gate: ${Math.round(config.autoWrPrimaryPct)}→${Math.round(config.autoWrFallbackPct)} | ${config.autoWrMethod === 'wilson95_lower' ? 'Wilson95' : 'Point'} | Min ${Math.max(0, Math.floor(config.autoWrMinTrades))}T | PFT primary 50`;
+  const wrGatePolicy = `WR Gate: ${Math.round(config.autoWrPrimaryPct)}→${Math.round(config.autoWrFallbackPct)} | ${config.autoWrMethod === 'wilson95_lower' ? 'Wilson95' : 'Point'} | Min ${Math.max(0, Math.floor(config.autoWrMinTrades))}T | PFT primary 50 | Thompson d=0.90`;
   const wrGateScopeActive =
     config.autoWrGateEnabled &&
     scopeAllowsAsset(config.autoWrScope, assetFilter) &&
@@ -1415,69 +1407,18 @@ export function SniperControls() {
         {/* Dropdown panel with categories */}
         {strategyOpen && (
           <div className="mt-1.5 rounded-lg border border-border-primary bg-bg-secondary overflow-hidden animate-fade-in">
-            {showExperimentalToggle && (
-              <div className="flex items-center justify-between gap-3 px-3 py-2 bg-bg-tertiary/40 border-b border-border-primary/50">
-                <div className="flex items-center gap-2 min-w-0">
-                  <FlaskConical className="w-3.5 h-3.5 text-text-muted/70 flex-shrink-0" />
-                  <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-text-muted/70">
-                    Experimental
-                  </span>
-                  <span className="text-[9px] text-text-muted/60 truncate">
-                    show losing/disabled presets
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowExperimentalStrategies(!showExperimentalStrategies)}
-                  className={`relative w-11 h-6 rounded-full border transition-colors ${
-                    showExperimentalStrategies
-                      ? 'bg-accent-error/15 border-accent-error/25'
-                      : 'bg-bg-tertiary border-border-primary hover:border-border-hover'
-                  }`}
-                  aria-pressed={showExperimentalStrategies}
-                  aria-label="Toggle experimental strategies"
-                  title={showExperimentalStrategies ? 'Experimental: ON' : 'Experimental: OFF'}
-                >
-                  <span
-                    className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full transition-transform ${
-                      showExperimentalStrategies
-                        ? 'translate-x-[22px] bg-accent-error'
-                        : 'translate-x-1 bg-text-muted'
-                    }`}
-                  />
-                </button>
-              </div>
-            )}
-
-            {STRATEGY_CATEGORIES.filter((c) => {
+            {STRATEGY_CATEGORIES.filter(c => {
               const allowed = ASSET_CATEGORY_MAP[assetFilter];
-              if (allowed && !allowed.includes(c.label)) return false;
-              if (c.label === 'EXPERIMENTAL' && !experimentalEnabled) return false;
-              return true;
-            }).map((category) => {
-              const visiblePresetIds = category.presetIds.filter((presetId) => {
-                const preset = STRATEGY_PRESETS.find((p) => p.id === presetId);
-                if (!preset) return false;
-                if (category.label === 'EXPERIMENTAL') {
-                  if (forcedExperimental) {
-                    return preset.assetType === 'xstock' || preset.assetType === 'prestock' || preset.assetType === 'index';
-                  }
-                  return preset.assetType === assetFilter;
-                }
-                return true;
-              });
-
-              if (visiblePresetIds.length === 0) return null;
-
-              return (
-                <div key={category.label}>
-                  {/* Category header */}
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-tertiary/50 border-b border-border-primary/50">
-                    <span className="text-text-muted/60">{CATEGORY_ICONS[category.icon]}</span>
-                    <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-text-muted/60">{category.label}</span>
-                  </div>
-                  {/* Strategy rows */}
-                  {visiblePresetIds.map((presetId) => {
+              return allowed ? allowed.includes(c.label) : true;
+            }).map((category) => (
+              <div key={category.label}>
+                {/* Category header */}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-tertiary/50 border-b border-border-primary/50">
+                  <span className="text-text-muted/60">{CATEGORY_ICONS[category.icon]}</span>
+                  <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-text-muted/60">{category.label}</span>
+                </div>
+                {/* Strategy rows */}
+                {category.presetIds.map((presetId) => {
                   const preset = STRATEGY_PRESETS.find(p => p.id === presetId);
                   if (!preset) return null;
                   const isActive = activePreset === preset.id;
@@ -1487,8 +1428,7 @@ export function SniperControls() {
                     <button
                       key={preset.id}
                       onClick={() => { loadPreset(preset.id); setStrategyOpen(false); }}
-                      disabled={!!preset.disabled}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-all border-b border-border-primary/30 last:border-b-0 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-all border-b border-border-primary/30 last:border-b-0 ${
                         isActive
                           ? isAggressive
                             ? 'bg-accent-warning/[0.08] text-accent-warning'
@@ -1574,9 +1514,8 @@ export function SniperControls() {
                     </button>
                   );
                 })}
-                </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>

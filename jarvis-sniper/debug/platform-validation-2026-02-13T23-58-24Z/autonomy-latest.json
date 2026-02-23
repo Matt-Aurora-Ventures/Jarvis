@@ -1,0 +1,433 @@
+{
+  "cycleId": "2026021405",
+  "bundle": {
+    "cycleId": "2026021405",
+    "matrix": {
+      "cycleId": "2026021405",
+      "generatedAt": "2026-02-14T05:05:01.917Z",
+      "wrGatePolicy": {
+        "primaryPct": 70,
+        "fallbackPct": 50,
+        "minTrades": 1000,
+        "method": "wilson95_lower",
+        "scope": "memecoin_bags"
+      },
+      "strategyRows": [
+        {
+          "strategyId": "pump_fresh_tight",
+          "assetType": "memecoin",
+          "baselineWinRateText": "Unverified",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 18,
+            "takeProfitPct": 45,
+            "trailingStopPct": 5,
+            "minScore": 40,
+            "minLiquidityUsd": 5000,
+            "maxTokenAgeHours": 24
+          }
+        },
+        {
+          "strategyId": "micro_cap_surge",
+          "assetType": "memecoin",
+          "baselineWinRateText": "Unverified",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 28,
+            "takeProfitPct": 140,
+            "trailingStopPct": 12,
+            "minScore": 30,
+            "minLiquidityUsd": 3000,
+            "maxTokenAgeHours": 24
+          }
+        },
+        {
+          "strategyId": "elite",
+          "assetType": "memecoin",
+          "baselineWinRateText": "NEW — strictest filter",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 15,
+            "takeProfitPct": 45,
+            "trailingStopPct": 5,
+            "minLiquidityUsd": 100000,
+            "maxTokenAgeHours": 100,
+            "minMomentum1h": 10,
+            "minVolLiqRatio": 2
+          }
+        },
+        {
+          "strategyId": "momentum",
+          "assetType": "memecoin",
+          "baselineWinRateText": "Unverified",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 18,
+            "takeProfitPct": 45,
+            "trailingStopPct": 5,
+            "minScore": 0,
+            "minLiquidityUsd": 50000,
+            "minMomentum1h": 5,
+            "minVolLiqRatio": 1.5
+          }
+        },
+        {
+          "strategyId": "insight_j",
+          "assetType": "memecoin",
+          "baselineWinRateText": "Unverified",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 18,
+            "takeProfitPct": 50,
+            "trailingStopPct": 5,
+            "minLiquidityUsd": 50000,
+            "maxTokenAgeHours": 100,
+            "minMomentum1h": 10
+          }
+        },
+        {
+          "strategyId": "hybrid_b",
+          "assetType": "memecoin",
+          "baselineWinRateText": "Unverified",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 18,
+            "takeProfitPct": 50,
+            "trailingStopPct": 5,
+            "minLiquidityUsd": 50000,
+            "minMomentum1h": 5,
+            "minVolLiqRatio": 1
+          }
+        },
+        {
+          "strategyId": "let_it_ride",
+          "assetType": "memecoin",
+          "baselineWinRateText": "Unverified",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 20,
+            "takeProfitPct": 75,
+            "trailingStopPct": 3,
+            "minLiquidityUsd": 50000,
+            "minMomentum1h": 5
+          }
+        },
+        {
+          "strategyId": "loose",
+          "assetType": "memecoin",
+          "baselineWinRateText": "Unverified",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 22,
+            "takeProfitPct": 45,
+            "trailingStopPct": 5,
+            "minLiquidityUsd": 25000,
+            "maxTokenAgeHours": 500,
+            "minMomentum1h": 0,
+            "minVolLiqRatio": 0.5
+          }
+        },
+        {
+          "strategyId": "genetic_best",
+          "assetType": "memecoin",
+          "baselineWinRateText": "Unverified",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 24,
+            "takeProfitPct": 120,
+            "trailingStopPct": 8,
+            "minScore": 43,
+            "minLiquidityUsd": 3000,
+            "maxTokenAgeHours": 24
+          }
+        },
+        {
+          "strategyId": "genetic_v2",
+          "assetType": "memecoin",
+          "baselineWinRateText": "Unverified",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 28,
+            "takeProfitPct": 140,
+            "trailingStopPct": 8,
+            "minScore": 0,
+            "minLiquidityUsd": 5000
+          }
+        },
+        {
+          "strategyId": "xstock_intraday",
+          "assetType": "xstock",
+          "baselineWinRateText": "Calibrated to 1-3% daily ranges",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 3,
+            "takeProfitPct": 10,
+            "trailingStopPct": 2.2,
+            "minScore": 40,
+            "minLiquidityUsd": 0
+          }
+        },
+        {
+          "strategyId": "xstock_swing",
+          "assetType": "xstock",
+          "baselineWinRateText": "Calibrated to weekly stock ranges",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 6,
+            "takeProfitPct": 18,
+            "trailingStopPct": 4,
+            "minScore": 50,
+            "minLiquidityUsd": 0
+          }
+        },
+        {
+          "strategyId": "prestock_speculative",
+          "assetType": "prestock",
+          "baselineWinRateText": "Pre-IPO volatility adjusted",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 8,
+            "takeProfitPct": 24,
+            "trailingStopPct": 5,
+            "minScore": 30,
+            "minLiquidityUsd": 0
+          }
+        },
+        {
+          "strategyId": "index_intraday",
+          "assetType": "index",
+          "baselineWinRateText": "Calibrated to SPY 0.5-1.5% daily range",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 2.8,
+            "takeProfitPct": 9,
+            "trailingStopPct": 2,
+            "minScore": 50,
+            "minLiquidityUsd": 0
+          }
+        },
+        {
+          "strategyId": "index_leveraged",
+          "assetType": "index",
+          "baselineWinRateText": "Leveraged index calibrated",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 7,
+            "takeProfitPct": 20,
+            "trailingStopPct": 4.5,
+            "minScore": 40,
+            "minLiquidityUsd": 0
+          }
+        },
+        {
+          "strategyId": "bluechip_mean_revert",
+          "assetType": "bluechip",
+          "baselineWinRateText": "Seed (Not Promoted)",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 6,
+            "takeProfitPct": 12,
+            "trailingStopPct": 3,
+            "minScore": 55,
+            "minLiquidityUsd": 200000,
+            "maxTokenAgeHours": 99999,
+            "minMomentum1h": 0,
+            "minVolLiqRatio": 0.3
+          }
+        },
+        {
+          "strategyId": "bluechip_trend_follow",
+          "assetType": "bluechip",
+          "baselineWinRateText": "Seed (Not Promoted)",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 7,
+            "takeProfitPct": 18,
+            "trailingStopPct": 5,
+            "minScore": 60,
+            "minLiquidityUsd": 200000,
+            "maxTokenAgeHours": 99999,
+            "minMomentum1h": 3,
+            "minVolLiqRatio": 0.5
+          }
+        },
+        {
+          "strategyId": "bluechip_breakout",
+          "assetType": "bluechip",
+          "baselineWinRateText": "Seed (Not Promoted)",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 6,
+            "takeProfitPct": 16,
+            "trailingStopPct": 4,
+            "minScore": 65,
+            "minLiquidityUsd": 200000,
+            "maxTokenAgeHours": 99999,
+            "minMomentum1h": 5,
+            "minVolLiqRatio": 1.5
+          }
+        },
+        {
+          "strategyId": "bags_fresh_snipe",
+          "assetType": "bags",
+          "baselineWinRateText": "Bags: locked liq, community-driven",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 18,
+            "takeProfitPct": 55,
+            "trailingStopPct": 5,
+            "minScore": 35,
+            "minLiquidityUsd": 0,
+            "maxTokenAgeHours": 48
+          }
+        },
+        {
+          "strategyId": "bags_momentum",
+          "assetType": "bags",
+          "baselineWinRateText": "Bags: momentum-driven entries",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 20,
+            "takeProfitPct": 100,
+            "trailingStopPct": 8,
+            "minScore": 30,
+            "minLiquidityUsd": 0,
+            "maxTokenAgeHours": 168,
+            "minMomentum1h": 5
+          }
+        },
+        {
+          "strategyId": "bags_value",
+          "assetType": "bags",
+          "baselineWinRateText": "Bags: quality-focused",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 12,
+            "takeProfitPct": 30,
+            "trailingStopPct": 4,
+            "minScore": 55,
+            "minLiquidityUsd": 0,
+            "maxTokenAgeHours": 720
+          }
+        },
+        {
+          "strategyId": "bags_dip_buyer",
+          "assetType": "bags",
+          "baselineWinRateText": "Bags: mean-reversion play",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 25,
+            "takeProfitPct": 120,
+            "trailingStopPct": 8,
+            "minScore": 25,
+            "minLiquidityUsd": 0,
+            "maxTokenAgeHours": 336,
+            "minMomentum1h": 0
+          }
+        },
+        {
+          "strategyId": "bags_bluechip",
+          "assetType": "bags",
+          "baselineWinRateText": "Bags: established tokens",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 12,
+            "takeProfitPct": 28,
+            "trailingStopPct": 4,
+            "minScore": 60,
+            "minLiquidityUsd": 0,
+            "maxTokenAgeHours": 99999
+          }
+        },
+        {
+          "strategyId": "bags_conservative",
+          "assetType": "bags",
+          "baselineWinRateText": "Seed (Not Promoted)",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 14,
+            "takeProfitPct": 35,
+            "trailingStopPct": 5,
+            "minScore": 40,
+            "minLiquidityUsd": 0,
+            "maxTokenAgeHours": 336
+          }
+        },
+        {
+          "strategyId": "bags_aggressive",
+          "assetType": "bags",
+          "baselineWinRateText": "Seed (Not Promoted)",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 30,
+            "takeProfitPct": 180,
+            "trailingStopPct": 12,
+            "minScore": 10,
+            "minLiquidityUsd": 0,
+            "maxTokenAgeHours": 336
+          }
+        },
+        {
+          "strategyId": "bags_elite",
+          "assetType": "bags",
+          "baselineWinRateText": "Seed (Not Promoted)",
+          "baselineTrades": 0,
+          "baseConfig": {
+            "stopLossPct": 14,
+            "takeProfitPct": 45,
+            "trailingStopPct": 6,
+            "minScore": 70,
+            "minLiquidityUsd": 0,
+            "maxTokenAgeHours": 336
+          }
+        }
+      ],
+      "metrics": {
+        "liquidityRegime": {
+          "sampleSize": 120,
+          "avgLiquidityUsd": 11256.77,
+          "medianLiquidityUsd": 7278.67,
+          "avgMomentum1h": 1.3781,
+          "avgVolLiqRatio": 1.7118
+        },
+        "thompsonBeliefs": {
+          "availability": "unavailable_server_scope",
+          "reason": "Thompson beliefs are client-side persisted in browser localStorage and not server-visible.",
+          "rows": []
+        },
+        "reliability": {
+          "confirmed": 0,
+          "unresolved": 0,
+          "failed": 3
+        },
+        "realized": {
+          "totalPnlSol": 0,
+          "winCount": 0,
+          "lossCount": 0,
+          "tradeCount": 0,
+          "drawdownPct": 0
+        }
+      },
+      "tokenBudget": {
+        "maxInputTokens": 150000,
+        "maxOutputTokens": 30000,
+        "estimatedInputTokens": 1787
+      }
+    },
+    "response": {
+      "cycleId": "2026021405",
+      "status": "noop",
+      "reasonCode": "AUTONOMY_NOOP_XAI_UNAVAILABLE"
+    },
+    "reportMarkdown": "# Autonomy Decision Report — 2026-02-14T05:05:02.761Z\n\n- Status: noop\n- ReasonCode: AUTONOMY_NOOP_XAI_UNAVAILABLE\n- Decision: hold\n- Confidence: 0\n- Summary: AUTONOMY_NOOP_XAI_UNAVAILABLE\n\n## Constraint Check\n- Pass: no\n- AUTONOMY_NOOP_XAI_UNAVAILABLE\n\n## Targets\n- (none)\n\n## Alternatives Considered\n- adjust: AUTONOMY_NOOP_XAI_UNAVAILABLE\n\n## Applied Override Snapshot\n- version: 1\n- cycleId: \n- patchCount: 0\n- signature: 7989ceb737cbae104730e8703d08c90ceb4563e262bd85b121c2191aaaa036d3",
+    "appliedOverrides": {
+      "version": 1,
+      "updatedAt": "1970-01-01T00:00:00Z",
+      "cycleId": "",
+      "patches": [],
+      "signature": "7989ceb737cbae104730e8703d08c90ceb4563e262bd85b121c2191aaaa036d3"
+    }
+  },
+  "latestCycleId": "2026021405",
+  "latestCompletedCycleId": null
+}

@@ -1,70 +1,103 @@
 """
-Core Utilities - Reusable utilities for robustness and performance.
+Core Utilities - Reusable helpers.
+
+This package keeps optional dependencies lazy/soft so minimal runtime profiles
+(like isolated execution hosts) can import focused modules without pulling in
+extras such as aiohttp.
 """
 
-from core.utils.rate_limiter import (
-    RateLimiter,
+__all__: list[str] = []
+
+
+def _export(module_names: list[str], module_globals: dict) -> None:
+    for name in module_names:
+        if name in module_globals:
+            __all__.append(name)
+
+
+from core.utils.rate_limiter import (  # noqa: E402
     MultiRateLimiter,
+    RateLimiter,
     RateLimitConfig,
-    TokenBucket,
     SlidingWindow,
+    TokenBucket,
     get_rate_limiter,
     rate_limited,
 )
 
-from core.utils.connection_pool import (
-    ConnectionPool,
-    PoolConfig,
-    get_connection_pool,
-    get_session,
-    close_all_sessions,
+_export(
+    [
+        "RateLimiter",
+        "MultiRateLimiter",
+        "RateLimitConfig",
+        "TokenBucket",
+        "SlidingWindow",
+        "get_rate_limiter",
+        "rate_limited",
+    ],
+    globals(),
 )
 
-from core.utils.timeout import (
+try:
+    from core.utils.connection_pool import (  # noqa: E402
+        ConnectionPool,
+        PoolConfig,
+        close_all_sessions,
+        get_connection_pool,
+        get_session,
+    )
+
+    _export(
+        [
+            "ConnectionPool",
+            "PoolConfig",
+            "get_connection_pool",
+            "get_session",
+            "close_all_sessions",
+        ],
+        globals(),
+    )
+except Exception:  # noqa: BLE001
+    pass
+
+from core.utils.timeout import (  # noqa: E402
     TimeoutError,
-    with_timeout,
-    with_timeout_default,
-    timeout,
     race,
     retry_with_timeout,
+    timeout,
+    with_timeout,
+    with_timeout_default,
 )
 
-from core.utils.decorators import (
-    retry,
-    log_calls,
-    memoize,
-    singleton,
+_export(
+    [
+        "TimeoutError",
+        "with_timeout",
+        "with_timeout_default",
+        "timeout",
+        "race",
+        "retry_with_timeout",
+    ],
+    globals(),
+)
+
+from core.utils.decorators import (  # noqa: E402
     deprecated,
+    log_calls,
     measure_time,
+    memoize,
+    retry,
+    singleton,
 )
 
-__all__ = [
-    # Rate limiting
-    "RateLimiter",
-    "MultiRateLimiter",
-    "RateLimitConfig",
-    "TokenBucket",
-    "SlidingWindow",
-    "get_rate_limiter",
-    "rate_limited",
-    # Connection pool
-    "ConnectionPool",
-    "PoolConfig",
-    "get_connection_pool",
-    "get_session",
-    "close_all_sessions",
-    # Timeout utilities
-    "TimeoutError",
-    "with_timeout",
-    "with_timeout_default",
-    "timeout",
-    "race",
-    "retry_with_timeout",
-    # Decorators
-    "retry",
-    "log_calls",
-    "memoize",
-    "singleton",
-    "deprecated",
-    "measure_time",
-]
+_export(
+    [
+        "retry",
+        "log_calls",
+        "memoize",
+        "singleton",
+        "deprecated",
+        "measure_time",
+    ],
+    globals(),
+)

@@ -19,7 +19,7 @@ python-xlib>=0.33; sys_platform == 'linux'
 pywin32>=300; sys_platform == 'win32'
 pynput>=1.7.6
 requests>=2.31.0
-aiohttp>=3.11.7  # FIXED: Multiple vulnerabilities (directory traversal #15, DoS #22, #36, #37, etc.)
+aiohttp>=3.11.18  # FIXED: zip bomb, large payloads, chunked msgs, bypassing asserts DoS
 python-dotenv>=1.0.1
 tweepy>=4.14.0
 anthropic>=0.32.0

@@ -24,10 +24,13 @@ import type {
 } from './types';
 import { checkBudgetAndQuota, recordUsage } from '@/lib/xai/budget-rate';
 import {
+  addBatchRequests,
   createBatch,
   getBatch,
-  getFileContent,
-  uploadBatchInputFile,
+  getBatchResults,
+  XaiApiError,
+  type XaiBatchRequest,
+  type XaiBatchResult,
 } from '@/lib/xai/client';
 import { resolveFrontierModel } from '@/lib/xai/model-policy';
 import { parseAndValidateAutonomyDecision } from './decision-schema';
@@ -36,6 +39,7 @@ import { STRATEGY_PRESETS, type SniperConfig } from '@/stores/useSniperStore';
 const ALLOWED_REASON_CODES = new Set([
   'AUTONOMY_NOOP_XAI_UNAVAILABLE',
   'AUTONOMY_NOOP_BUDGET_CAP',
+  'AUTONOMY_NOOP_ACTIVE_CYCLE_LIMIT',
   'AUTONOMY_NOOP_MODEL_POLICY_FAIL',
   'AUTONOMY_NOOP_SCHEMA_INVALID',
   'AUTONOMY_NOOP_CONSTRAINT_BLOCK',
@@ -178,78 +182,106 @@ function makeNoopDecision(reason: string): AutonomyDecision {
   };
 }
 
-function buildBatchJsonl(args: {
+function buildBatchRequests(args: {
   model: string;
   cycleId: string;
   decisionPrompt: string;
   critiquePrompt: string;
-}): string {
-  const rows = [
-    {
-      custom_id: `${args.cycleId}:decision`,
-      method: 'POST',
-      url: '/v1/chat/completions',
-      body: {
-        model: args.model,
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: 'Return valid JSON only.' },
-          { role: 'user', content: args.decisionPrompt },
-        ],
-      },
+}): { requestIds: [string, string]; requests: XaiBatchRequest[] } {
+  const decisionId = `${args.cycleId}:decision`;
+  const critiqueId = `${args.cycleId}:self_critique`;
+  const decision: XaiBatchRequest = {
+    batch_request_id: decisionId,
+    completion_request: {
+      model: args.model,
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: 'Return valid JSON only.' },
+        { role: 'user', content: args.decisionPrompt },
+      ],
     },
-    {
-      custom_id: `${args.cycleId}:self_critique`,
-      method: 'POST',
-      url: '/v1/chat/completions',
-      body: {
-        model: args.model,
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: 'Return valid JSON only.' },
-          { role: 'user', content: args.critiquePrompt },
-        ],
-      },
+  };
+  const critique: XaiBatchRequest = {
+    batch_request_id: critiqueId,
+    completion_request: {
+      model: args.model,
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: 'Return valid JSON only.' },
+        { role: 'user', content: args.critiquePrompt },
+      ],
     },
-  ];
-  return rows.map((row) => JSON.stringify(row)).join('\n');
+  };
+
+  return {
+    requestIds: [decisionId, critiqueId],
+    requests: [decision, critique],
+  };
 }
 
-function extractDecisionFromBatchOutput(raw: string, cycleId: string): {
+function normalizeTextContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part === 'object' && typeof (part as any).text === 'string') {
+          return String((part as any).text);
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  return '';
+}
+
+function extractAssistantTextFromCompletion(body: any): string {
+  const direct = normalizeTextContent(body?.choices?.[0]?.message?.content);
+  if (direct) return direct;
+
+  const output0 = body?.outputs?.[0];
+  const alt = normalizeTextContent(output0?.content ?? output0?.text ?? output0?.message?.content);
+  if (alt) return alt;
+
+  if (typeof body?.output_text === 'string') return body.output_text;
+  return '';
+}
+
+function extractTokenUsageFromCompletion(body: any): { inputTokens: number; outputTokens: number } {
+  const usage = body?.usage ?? body?.usage_total ?? null;
+  const inputTokens = Number(usage?.prompt_tokens ?? usage?.input_tokens ?? 0) || 0;
+  const outputTokens = Number(usage?.completion_tokens ?? usage?.output_tokens ?? 0) || 0;
+  return { inputTokens, outputTokens };
+}
+
+function extractDecisionFromBatchResults(results: XaiBatchResult[], cycleId: string): {
   decisionRaw: string;
   critiqueRaw: string;
   inputTokens: number;
   outputTokens: number;
 } {
-  const lines = raw
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const decisionId = `${cycleId}:decision`;
+  const critiqueId = `${cycleId}:self_critique`;
   let decisionRaw = '';
   let critiqueRaw = '';
   let inputTokens = 0;
   let outputTokens = 0;
-  for (const line of lines) {
-    let parsed: any = null;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const customId = String(parsed.custom_id || '');
-    const content = parsed?.response?.body?.choices?.[0]?.message?.content;
-    const usage = parsed?.response?.body?.usage || {};
-    inputTokens += Number(usage.prompt_tokens || 0);
-    outputTokens += Number(usage.completion_tokens || 0);
-    const text = typeof content === 'string'
-      ? content
-      : Array.isArray(content)
-        ? content.map((c: any) => (typeof c?.text === 'string' ? c.text : '')).join('\n')
-        : '';
-    if (customId === `${cycleId}:decision`) decisionRaw = text;
-    if (customId === `${cycleId}:self_critique`) critiqueRaw = text;
+  for (const result of results) {
+    const id = String(result.batch_request_id || '').trim();
+    if (!id) continue;
+
+    const responseEnvelope: any = result.response;
+    const completionBody = responseEnvelope?.completion_response ?? responseEnvelope ?? null;
+    const text = extractAssistantTextFromCompletion(completionBody);
+    const usage = extractTokenUsageFromCompletion(completionBody);
+    inputTokens += usage.inputTokens;
+    outputTokens += usage.outputTokens;
+
+    if (id === decisionId) decisionRaw = text;
+    if (id === critiqueId) critiqueRaw = text;
   }
   return { decisionRaw, critiqueRaw, inputTokens, outputTokens };
 }
@@ -257,6 +289,55 @@ function extractDecisionFromBatchOutput(raw: string, cycleId: string): {
 function sanitizeReasonCode(code: string): string {
   if (ALLOWED_REASON_CODES.has(code)) return code;
   return 'AUTONOMY_NOOP_XAI_UNAVAILABLE';
+}
+
+function sanitizeXaiErrorMessage(message: string): string {
+  // Never leak any token/key-like substring into durable artifacts.
+  return String(message || 'xAI error')
+    .replace(/Incorrect API key provided:[^.]*(\\.|$)/gi, 'Incorrect API key provided (redacted).')
+    .slice(0, 500);
+}
+
+function describeXaiError(err: unknown): Record<string, unknown> {
+  if (err instanceof XaiApiError) {
+    return {
+      name: err.name,
+      message: sanitizeXaiErrorMessage(err.message),
+      status: err.status,
+      code: err.code || null,
+      correlationId: err.correlationId,
+    };
+  }
+  if (err instanceof Error) {
+    return {
+      name: err.name,
+      message: sanitizeXaiErrorMessage(err.message),
+    };
+  }
+  return { message: 'Unknown xAI error' };
+}
+
+function isBatchComplete(batch: { state?: { num_pending?: number; num_requests?: number; num_success?: number; num_error?: number; num_cancelled?: number } }): boolean {
+  const pending = Number(batch.state?.num_pending);
+  if (Number.isFinite(pending)) {
+    return pending <= 0 && Number(batch.state?.num_requests || 0) > 0;
+  }
+  const total = Number(batch.state?.num_requests || 0);
+  if (total <= 0) return false;
+  const done = Number(batch.state?.num_success || 0) + Number(batch.state?.num_error || 0) + Number(batch.state?.num_cancelled || 0);
+  return done >= total;
+}
+
+async function fetchAllBatchResults(batchId: string): Promise<XaiBatchResult[]> {
+  const all: XaiBatchResult[] = [];
+  let token: string | undefined;
+  for (let i = 0; i < 10; i++) {
+    const page = await getBatchResults({ batchId, limit: 100, paginationToken: token });
+    all.push(...page.results);
+    if (!page.pagination_token) break;
+    token = page.pagination_token;
+  }
+  return all;
 }
 
 async function persistCycleArtifacts(args: {
@@ -302,30 +383,39 @@ async function finalizePriorPendingBatch(state: AutonomyState, currentCycleId: s
   try {
     batch = await getBatch(pending.batchId);
   } catch {
-    // Keep pending; we'll try finalization on the next cycle.
+    // Keep the pending batch; we’ll retry on the next hourly cycle.
     return state;
   }
-  if (batch.status !== 'completed') {
+  if (!isBatchComplete(batch)) {
     return state;
   }
 
-  let outputText = '';
+  let results: XaiBatchResult[] = [];
+  let extracted = { decisionRaw: '', critiqueRaw: '', inputTokens: 0, outputTokens: 0 };
+  let fetchFailed = false;
   try {
-    outputText = batch.output_file_id ? await getFileContent(batch.output_file_id) : '';
+    results = await fetchAllBatchResults(pending.batchId);
+    extracted = extractDecisionFromBatchResults(results, pending.cycleId);
   } catch {
-    // If output fetch fails, keep pending and retry next cycle.
-    return state;
+    fetchFailed = true;
   }
-  const extracted = extractDecisionFromBatchOutput(outputText, pending.cycleId);
-  const validated = parseAndValidateAutonomyDecision(extracted.decisionRaw);
-  const critiqueValidated = parseAndValidateAutonomyDecision(extracted.critiqueRaw);
+
+  const validated = fetchFailed
+    ? { ok: false as const, decision: null, rawJson: null, errors: ['xAI batch results fetch failed'] }
+    : parseAndValidateAutonomyDecision(extracted.decisionRaw);
+  const critiqueValidated = fetchFailed
+    ? { ok: false as const, decision: null, rawJson: null, errors: ['xAI batch results fetch failed'] }
+    : parseAndValidateAutonomyDecision(extracted.critiqueRaw);
 
   let reasonCode = 'AUTONOMY_COMPLETED';
   let status: 'completed' | 'noop' = 'completed';
   let currentSnapshot = await getStrategyOverrideSnapshot();
   if (!currentSnapshot) currentSnapshot = emptyOverrideSnapshot();
 
-  if (!validated.ok || !validated.decision) {
+  if (fetchFailed) {
+    reasonCode = 'AUTONOMY_NOOP_XAI_UNAVAILABLE';
+    status = 'noop';
+  } else if (!validated.ok || !validated.decision) {
     reasonCode = 'AUTONOMY_NOOP_SCHEMA_INVALID';
     status = 'noop';
   } else if (!validated.decision.constraintsCheck.pass) {
@@ -334,14 +424,14 @@ async function finalizePriorPendingBatch(state: AutonomyState, currentCycleId: s
   }
 
   let nextSnapshot = currentSnapshot;
-  const effectiveDecision = validated.decision || makeNoopDecision('Schema validation failed');
-  const applyEnabled = isApplyOverridesEnabled();
-  const decisionWantsChanges = effectiveDecision.decision !== 'hold';
-  if (status === 'completed' && isAutonomyEnabled() && decisionWantsChanges && !applyEnabled) {
-    // Audit-only mode: write artifacts, but do not apply/commit runtime overrides.
-    reasonCode = 'AUTONOMY_NOOP_APPLY_DISABLED';
-  } else if (status === 'completed' && isAutonomyEnabled()) {
+  const effectiveDecision = validated.decision || makeNoopDecision(fetchFailed ? 'xAI batch results fetch failed' : 'Schema validation failed');
+  if (status === 'completed' && isAutonomyEnabled()) {
+    const canApply = isApplyOverridesEnabled();
     if (effectiveDecision.decision === 'rollback') {
+      if (!canApply) {
+        reasonCode = 'AUTONOMY_NOOP_APPLY_DISABLED';
+        status = 'noop';
+      }
       const targets = new Set(
         effectiveDecision.targets.map((t) => t.strategyId).filter(Boolean),
       );
@@ -352,8 +442,12 @@ async function finalizePriorPendingBatch(state: AutonomyState, currentCycleId: s
         cycleId: pending.cycleId,
         patches: nextPatches,
       });
-      await saveStrategyOverrideSnapshot(nextSnapshot);
+      if (canApply) await saveStrategyOverrideSnapshot(nextSnapshot);
     } else if (effectiveDecision.decision === 'adjust' || effectiveDecision.decision === 'disable_strategy') {
+      if (!canApply) {
+        reasonCode = 'AUTONOMY_NOOP_APPLY_DISABLED';
+        status = 'noop';
+      }
       const allowedTargets = effectiveDecision.targets.slice(0, maxAdjustmentsPerCycle());
       const map = new Map(currentSnapshot.patches.map((p) => [p.strategyId, p] as const));
       const nextPatches: StrategyOverridePatch[] = [];
@@ -385,7 +479,7 @@ async function finalizePriorPendingBatch(state: AutonomyState, currentCycleId: s
         cycleId: pending.cycleId,
         patches: [...map.values()],
       });
-      await saveStrategyOverrideSnapshot(nextSnapshot);
+      if (canApply) await saveStrategyOverrideSnapshot(nextSnapshot);
     }
   } else if (!isAutonomyEnabled()) {
     reasonCode = 'AUTONOMY_NOOP_DISABLED';
@@ -396,7 +490,8 @@ async function finalizePriorPendingBatch(state: AutonomyState, currentCycleId: s
   const responsePayload = {
     cycleId: pending.cycleId,
     batchId: pending.batchId,
-    outputFileId: batch.output_file_id || null,
+    batchState: batch.state || null,
+    resultCount: results.length,
     decisionValid: validated.ok,
     critiqueValid: critiqueValidated.ok,
     decisionErrors: validated.errors,
@@ -430,8 +525,6 @@ async function finalizePriorPendingBatch(state: AutonomyState, currentCycleId: s
         reasonCode,
         updatedAt: new Date().toISOString(),
         batchId: pending.batchId,
-        inputFileId: pending.inputFileId,
-        outputFileId: batch.output_file_id || undefined,
         matrixHash: hashes.matrixHash,
         responseHash: hashes.responseHash,
         decisionHash: hashes.decisionHash,
@@ -456,7 +549,10 @@ async function submitCurrentCycle(state: AutonomyState, cycleId: string): Promis
   const matrixJson = JSON.stringify(matrix);
   const matrixHash = hashText(matrixJson);
 
-  const baseNoop = async (reasonCodeRaw: string): Promise<AutonomyState> => {
+  const baseNoop = async (
+    reasonCodeRaw: string,
+    extraResponse: Record<string, unknown> = {},
+  ): Promise<AutonomyState> => {
     const reasonCode = sanitizeReasonCode(reasonCodeRaw);
     const decision = makeNoopDecision(reasonCode);
     const reportMd = summarizeDecision(decision, reasonCode, 'noop', await getStrategyOverrideSnapshot());
@@ -467,6 +563,7 @@ async function submitCurrentCycle(state: AutonomyState, cycleId: string): Promis
         cycleId,
         status: 'noop',
         reasonCode,
+        ...extraResponse,
       },
       reportMarkdown: reportMd,
       appliedOverrides: await getStrategyOverrideSnapshot(),
@@ -503,30 +600,32 @@ async function submitCurrentCycle(state: AutonomyState, cycleId: string): Promis
     return baseNoop(budget.reasonCode || 'AUTONOMY_NOOP_BUDGET_CAP');
   }
 
-  let frontier: Awaited<ReturnType<typeof resolveFrontierModel>>;
+  let frontier: Awaited<ReturnType<typeof resolveFrontierModel>> | null = null;
   try {
     frontier = await resolveFrontierModel();
-  } catch {
-    return baseNoop('AUTONOMY_NOOP_XAI_UNAVAILABLE');
+  } catch (err) {
+    return baseNoop('AUTONOMY_NOOP_XAI_UNAVAILABLE', { xaiError: describeXaiError(err) });
   }
-  if (!frontier.ok || !frontier.selectedModel) {
+  if (!frontier?.ok || !frontier.selectedModel) {
     return baseNoop('AUTONOMY_NOOP_MODEL_POLICY_FAIL');
   }
 
-  const batchJsonl = buildBatchJsonl({
+  const decisionPrompt = buildDecisionPrompt(matrix);
+  const critiquePrompt = buildSelfCritiquePrompt(matrix);
+  const batchRequests = buildBatchRequests({
     model: frontier.selectedModel,
     cycleId,
-    decisionPrompt: buildDecisionPrompt(matrix),
-    critiquePrompt: buildSelfCritiquePrompt(matrix),
+    decisionPrompt,
+    critiquePrompt,
   });
+  const batchName = `jarvis_autonomy_${cycleId}`;
 
-  let inputFileId = '';
   let batchId = '';
   try {
-    inputFileId = await uploadBatchInputFile(batchJsonl);
-    batchId = await createBatch(inputFileId, '/v1/chat/completions', '24h');
-  } catch {
-    return baseNoop('AUTONOMY_NOOP_XAI_UNAVAILABLE');
+    batchId = await createBatch(batchName);
+    await addBatchRequests(batchId, batchRequests.requests);
+  } catch (err) {
+    return baseNoop('AUTONOMY_NOOP_XAI_UNAVAILABLE', { xaiError: describeXaiError(err) });
   }
 
   const pendingState = {
@@ -535,7 +634,8 @@ async function submitCurrentCycle(state: AutonomyState, cycleId: string): Promis
     pendingBatch: {
       cycleId,
       batchId,
-      inputFileId,
+      batchName,
+      requestIds: batchRequests.requestIds,
       model: frontier.selectedModel,
       submittedAt: new Date().toISOString(),
       matrix,
@@ -550,7 +650,6 @@ async function submitCurrentCycle(state: AutonomyState, cycleId: string): Promis
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         batchId,
-        inputFileId,
         matrixHash,
       },
     },
@@ -576,7 +675,8 @@ async function submitCurrentCycle(state: AutonomyState, cycleId: string): Promis
       status: 'pending',
       reasonCode: 'AUTONOMY_PENDING_BATCH',
       batchId,
-      inputFileId,
+      batchName,
+      requestIds: batchRequests.requestIds,
       model: frontier.selectedModel,
       frontierPolicy: frontier,
     },

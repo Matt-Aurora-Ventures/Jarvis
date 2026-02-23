@@ -19,6 +19,11 @@ import {
   deduplicateByMint, ensureDir, readJSON, dataPath, geckoBaseUrl,
 } from './shared/utils';
 import type { TokenRecord, DiscoveryProgress } from './shared/types';
+import { ALL_TOKENIZED_EQUITIES } from './shared/tokenized-equities';
+import { ALL_BLUECHIPS } from './shared/bluechips';
+import { fetchBirdeyeTokenList } from './shared/sources/birdeye';
+import { fetchPumpfunCoins } from './shared/sources/pumpfun';
+import { fetchHeliusAssetBatch } from './shared/sources/helius';
 import * as fs from 'fs';
 
 function envInt(name: string, fallback: number): number {
@@ -27,8 +32,19 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+function envCsv(name: string): string[] {
+  const raw = String(process.env[name] || '').trim();
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 // ─── Rate Limiters (CoinGecko Basic paid: 250 req/min for GeckoTerminal) ───
-const geckoLimiter = new RateLimiter(200, 60_000, 300);   // 200 req/min with 300ms min delay (paid tier)
+// GeckoTerminal rate limits vary by plan/key. Default to a conservative value and allow override.
+const GECKO_RPM = envInt('GECKO_RPM', 28);
+const geckoLimiter = new RateLimiter(GECKO_RPM, 60_000);
 const dexLimiter = new RateLimiter(250, 60_000, 250);     // 250 req/min, min 250ms between requests
 const jupiterLimiter = new RateLimiter(60, 60_000, 1000);  // conservative, 1s between requests
 
@@ -544,13 +560,24 @@ async function discoverUniverse(): Promise<void> {
     dexscreener_profiles_done: false,
     dexscreener_boosts_done: false,
     jupiter_gems_done: false,
+    birdeye_done: false,
+    pumpfun_done: false,
+    helius_enrichment_done: false,
     total_tokens_discovered: 0,
     last_updated: new Date().toISOString(),
   });
 
-  const allTokens: TokenRecord[] = readJSON<TokenRecord[]>('universe/universe_raw_partial.json') || [];
+  // Resumable behavior:
+  // - If a partial run is in progress, use universe_raw_partial.json
+  // - If a previous full run completed, fall back to universe_raw.json so we can do incremental runs
+  //   (the progress file may say we're on page 10+, but the partial file is cleaned up on success).
+  const partial = readJSON<TokenRecord[]>('universe/universe_raw_partial.json');
+  const priorFull = !partial ? readJSON<TokenRecord[]>('universe/universe_raw.json') : null;
+  const allTokens: TokenRecord[] = partial || priorFull || [];
   if (allTokens.length > 0) {
-    log(`Resuming with ${allTokens.length} tokens already discovered`);
+    log(partial
+      ? `Resuming with ${allTokens.length} tokens already discovered (partial)`
+      : `Loaded existing universe_raw.json with ${allTokens.length} tokens (incremental run)`);
   }
 
   const p = progress.get();
@@ -559,7 +586,7 @@ async function discoverUniverse(): Promise<void> {
   // to maximize unique tokens (each sort returns different pools).
   const GECKO_MAX_PAGES_NEW_POOLS = envInt('GECKO_MAX_PAGES_NEW_POOLS', 200);
   const GECKO_MAX_PAGES_TOP_POOLS = envInt('GECKO_MAX_PAGES_TOP_POOLS', 200);
-  const GECKO_MAX_PAGES_MISC = envInt('GECKO_MAX_PAGES_MISC', 10);
+  const GECKO_MAX_PAGES_MISC = envInt('GECKO_MAX_PAGES_MISC', 25);
 
   // ─── 1. GeckoTerminal: New Pools ───
   log('─── GeckoTerminal: New Pools ───');
@@ -678,7 +705,8 @@ async function discoverUniverse(): Promise<void> {
     'laser', 'rocket', 'fire', 'flame', 'blaze',
   ];
 
-  for (const query of SEARCH_QUERIES) {
+  const dexQueries = Array.from(new Set([...SEARCH_QUERIES, ...envCsv('DEX_EXTRA_SEARCH_QUERIES')]));
+  for (const query of dexQueries) {
     const cacheKey = `dex_search_${query}`;
     let searchTokens = getCachedResponse<TokenRecord[]>(cacheKey);
     if (!searchTokens) {
@@ -692,6 +720,122 @@ async function discoverUniverse(): Promise<void> {
 
   writeJSON('universe/universe_raw_partial.json', deduplicateByMint(allTokens));
   log(`After DexScreener search: ${deduplicateByMint(allTokens).length} unique tokens`);
+
+  // ─── 5a. Birdeye + Pump.fun source expansion ───
+  if (!p.birdeye_done) {
+    log('─── Birdeye: Token List Expansion ───');
+    const cacheKey = 'birdeye_token_list';
+    let birdeyeTokens = getCachedResponse<TokenRecord[]>(cacheKey);
+    if (!birdeyeTokens) {
+      birdeyeTokens = await fetchBirdeyeTokenList();
+      if (birdeyeTokens.length > 0) setCachedResponse(cacheKey, birdeyeTokens);
+    }
+    log(`  Birdeye tokens: ${birdeyeTokens.length}`);
+    allTokens.push(...birdeyeTokens);
+    progress.update({
+      birdeye_done: true,
+      total_tokens_discovered: deduplicateByMint(allTokens).length,
+    });
+  }
+
+  if (!p.pumpfun_done) {
+    log('─── Pump.fun: Launch Feed Expansion ───');
+    const cacheKey = 'pumpfun_coins';
+    let pumpfunTokens = getCachedResponse<TokenRecord[]>(cacheKey);
+    if (!pumpfunTokens) {
+      pumpfunTokens = await fetchPumpfunCoins();
+      if (pumpfunTokens.length > 0) setCachedResponse(cacheKey, pumpfunTokens);
+    }
+    log(`  Pump.fun tokens: ${pumpfunTokens.length}`);
+    allTokens.push(...pumpfunTokens);
+    progress.update({
+      pumpfun_done: true,
+      total_tokens_discovered: deduplicateByMint(allTokens).length,
+    });
+  }
+
+  writeJSON('universe/universe_raw_partial.json', deduplicateByMint(allTokens));
+  log(`After Birdeye + Pump.fun: ${deduplicateByMint(allTokens).length} unique tokens`);
+
+  // ─── 5b. Tokenized Equities Registry (xStocks / PreStocks / Indexes) ───
+  // These mints often won't appear in "new pools" / "top volume" endpoints due to lower onchain activity.
+  // We explicitly include them so xStock/index strategies can be backtested against their real assets.
+  log('─── Tokenized Equities Registry ───');
+  {
+    const registryMints = ALL_TOKENIZED_EQUITIES
+      .map(t => t.mintAddress)
+      .filter(m => m && m.length >= 32);
+
+    // Always fetch full registry via DexScreener so we can upgrade stale/wrong pools
+    // (deduplicateByMint() will keep the highest-liquidity pool per mint).
+    const cacheKey = 'registry_tokens_dex';
+    let dexTokens = getCachedResponse<TokenRecord[]>(cacheKey);
+    if (!dexTokens) {
+      dexTokens = await fetchDexScreenerTokenDetails(registryMints);
+      setCachedResponse(cacheKey, dexTokens);
+    }
+    allTokens.push(...dexTokens);
+
+    // Fallback: GeckoTerminal "pools by token" endpoint for any mints DexScreener missed.
+    const found = new Set(dexTokens.map(t => t.mint));
+    const missing = registryMints.filter(m => !found.has(m));
+    let geckoAdded = 0;
+    if (missing.length > 0) {
+      log(`  DexScreener missing ${missing.length} registry mints; trying GeckoTerminal fallback...`);
+      for (const mint of missing) {
+        const ck = `registry_tokens_gecko_${mint}`;
+        let pools = getCachedResponse<TokenRecord[]>(ck);
+        if (!pools) {
+          pools = await fetchGeckoPoolsByToken(mint);
+          setCachedResponse(ck, pools);
+        }
+        if (pools.length > 0) {
+          allTokens.push(...pools);
+          geckoAdded += 1;
+        }
+      }
+    }
+
+    log(`  Registry mints: ${registryMints.length} | Dex pools: ${dexTokens.length} | Gecko fallback mints: ${geckoAdded}`);
+  }
+
+  writeJSON('universe/universe_raw_partial.json', deduplicateByMint(allTokens));
+  log(`After registry merge: ${deduplicateByMint(allTokens).length} unique tokens`);
+
+  // ─── 5c. Bluechip Registry (curated Solana majors) ───
+  // Ensure curated bluechips always resolve to their highest-liquidity pools.
+  log('─── Bluechip Registry ───');
+  {
+    const bluechipMints = ALL_BLUECHIPS.map(t => t.mintAddress).filter(m => m && m.length >= 32);
+    const cacheKey = 'bluechip_tokens_dex';
+    let dexTokens = getCachedResponse<TokenRecord[]>(cacheKey);
+    if (!dexTokens) {
+      dexTokens = await fetchDexScreenerTokenDetails(bluechipMints);
+      setCachedResponse(cacheKey, dexTokens);
+    }
+    allTokens.push(...dexTokens);
+
+    const found = new Set(dexTokens.map(t => t.mint));
+    const missing = bluechipMints.filter(m => !found.has(m));
+    let geckoAdded = 0;
+    if (missing.length > 0) {
+      log(`  DexScreener missing ${missing.length} bluechip mints; trying GeckoTerminal fallback...`);
+      for (const mint of missing) {
+        const ck = `bluechip_tokens_gecko_${mint}`;
+        let pools = getCachedResponse<TokenRecord[]>(ck);
+        if (!pools) {
+          pools = await fetchGeckoPoolsByToken(mint);
+          setCachedResponse(ck, pools);
+        }
+        if (pools.length > 0) {
+          allTokens.push(...pools);
+          geckoAdded += 1;
+        }
+      }
+    }
+
+    log(`  Bluechip mints: ${bluechipMints.length} | Dex pools: ${dexTokens.length} | Gecko fallback mints: ${geckoAdded}`);
+  }
 
   // ─── 6. Jupiter Gems ───
   if (!p.jupiter_gems_done) {
@@ -711,13 +855,34 @@ async function discoverUniverse(): Promise<void> {
     }
   }
 
+  // ─── 6b. Helius metadata enrichment for discovered mints ───
+  if (!p.helius_enrichment_done) {
+    log('─── Helius: Metadata Enrichment ───');
+    const cacheKey = 'helius_enrichment';
+    let heliusTokens = getCachedResponse<TokenRecord[]>(cacheKey);
+    if (!heliusTokens) {
+      const discoveredMints = deduplicateByMint(allTokens)
+        .map(t => t.mint)
+        .filter(m => m && m.length >= 32);
+      heliusTokens = await fetchHeliusAssetBatch(discoveredMints);
+      if (heliusTokens.length > 0) setCachedResponse(cacheKey, heliusTokens);
+    }
+    log(`  Helius enrichment records: ${heliusTokens.length}`);
+    allTokens.push(...heliusTokens);
+    progress.update({
+      helius_enrichment_done: true,
+      total_tokens_discovered: deduplicateByMint(allTokens).length,
+    });
+  }
+
   // ─── 7. GeckoTerminal: Search with diverse queries for more coverage ───
   log('─── GeckoTerminal: Search Queries ───');
   const GECKO_SEARCH_QUERIES = [
     'pump', 'sol', 'meme', 'pepe', 'doge', 'cat', 'dog', 'ai',
     'bonk', 'wif', 'trump', 'moon', 'baby', 'inu', 'bags',
   ];
-  for (const query of GECKO_SEARCH_QUERIES) {
+  const geckoQueries = Array.from(new Set([...GECKO_SEARCH_QUERIES, ...envCsv('GECKO_EXTRA_SEARCH_QUERIES')]));
+  for (const query of geckoQueries) {
     const cacheKey = `gecko_search_${query}`;
     let searchTokens = getCachedResponse<TokenRecord[]>(cacheKey);
     if (!searchTokens) {

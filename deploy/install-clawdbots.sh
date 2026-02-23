@@ -43,6 +43,8 @@ SERVICE_FILES=(
     "clawdjarvis.service"
     "clawdfriday.service"
     "clawdmatt.service"
+    "clawdyoda.service"
+    "clawdsquishy.service"
     "clawdbots.target"
 )
 
@@ -67,6 +69,8 @@ echo "Enabling services to start on boot..."
 systemctl enable clawdjarvis.service
 systemctl enable clawdfriday.service
 systemctl enable clawdmatt.service
+systemctl enable clawdyoda.service
+systemctl enable clawdsquishy.service
 systemctl enable clawdbots.target
 
 # Show status
@@ -88,11 +92,15 @@ echo "  systemctl status clawdbots.target"
 echo "  systemctl status clawdjarvis"
 echo "  systemctl status clawdfriday"
 echo "  systemctl status clawdmatt"
+echo "  systemctl status clawdyoda"
+echo "  systemctl status clawdsquishy"
 echo ""
 echo "View logs:"
 echo "  journalctl -u clawdjarvis -f"
 echo "  journalctl -u clawdfriday -f"
 echo "  journalctl -u clawdmatt -f"
+echo "  journalctl -u clawdyoda -f"
+echo "  journalctl -u clawdsquishy -f"
 echo ""
 echo "Restart individual bot:"
 echo "  systemctl restart clawdjarvis"

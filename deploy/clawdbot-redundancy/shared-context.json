@@ -26,8 +26,8 @@
   },
   "sharedKnowledge": {
     "telegramGroups": {
-      "main": "8527130908",
-      "alerts": "8527130908"
+      "main": "8527368699",
+      "alerts": "8527368699"
     },
     "recoveryCommands": {
       "restartBot": "ssh root@76.13.106.100 'docker restart clawdbot-{bot}'",

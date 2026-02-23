@@ -50,7 +50,7 @@ const COST_PER_1K_TOKENS = 0.003; // Approximate Grok cost
 export class GrokSentimentClient {
     private apiKey: string;
     private baseUrl = 'https://api.x.ai/v1/chat/completions';
-    private model = 'grok-4';
+    private model = 'grok-4-latest';
     private cache = new Map<string, CacheEntry>();
     private budget: BudgetState;
 
@@ -290,7 +290,7 @@ Be concise but accurate. Score 50 = neutral. Above 70 = bullish. Below 30 = bear
 
             if (!response.ok) {
                 const errData = await response.json().catch(() => ({}));
-                console.error('Grok API error:', response.status, errData.details || '');
+                console.error('Grok API error:', response.status, JSON.stringify(errData));
                 return null;
             }
 

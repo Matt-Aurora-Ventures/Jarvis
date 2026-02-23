@@ -32,9 +32,9 @@ interface AIStrategy {
 // Helper functions for colors
 function getRegimeColor(regime: MarketRegimeType): string {
     switch (regime) {
-        case 'BULL': return 'text-green-400 bg-green-500/20';
-        case 'BEAR': return 'text-red-400 bg-red-500/20';
-        case 'NEUTRAL': return 'text-yellow-400 bg-yellow-500/20';
+        case 'BULL': return 'text-accent-success bg-accent-success/20';
+        case 'BEAR': return 'text-accent-error bg-accent-error/20';
+        case 'NEUTRAL': return 'text-text-muted bg-bg-tertiary';
         case 'VOLATILE': return 'text-accent-neon bg-accent-neon/20';
     }
 }
@@ -50,33 +50,33 @@ function getRegimeIcon(regime: MarketRegimeType) {
 
 function getRiskColor(risk: RiskLevel): string {
     switch (risk) {
-        case 'LOW': return 'text-green-400 bg-green-500/20';
-        case 'MEDIUM': return 'text-yellow-400 bg-yellow-500/20';
-        case 'HIGH': return 'text-orange-400 bg-orange-500/20';
-        case 'EXTREME': return 'text-red-400 bg-red-500/20';
+        case 'LOW': return 'text-accent-success bg-accent-success/20';
+        case 'MEDIUM': return 'text-text-muted bg-bg-tertiary';
+        case 'HIGH': return 'text-accent-error bg-accent-error/20';
+        case 'EXTREME': return 'text-accent-error bg-accent-error/20';
     }
 }
 
 function getMomentumColor(momentum: Momentum): string {
-    if (momentum.includes('UP')) return 'text-green-400';
-    if (momentum.includes('DOWN')) return 'text-red-400';
-    return 'text-yellow-400';
+    if (momentum.includes('UP')) return 'text-accent-success';
+    if (momentum.includes('DOWN')) return 'text-accent-error';
+    return 'text-text-muted';
 }
 
 function getMomentumIcon(momentum: Momentum) {
-    if (momentum === 'STRONG UP') return <ArrowUpRight className="w-4 h-4 text-green-400" />;
-    if (momentum === 'UP') return <TrendingUp className="w-4 h-4 text-green-400" />;
-    if (momentum === 'STRONG DOWN') return <ArrowDownRight className="w-4 h-4 text-red-400" />;
-    if (momentum === 'DOWN') return <TrendingDown className="w-4 h-4 text-red-400" />;
-    return <Minus className="w-4 h-4 text-yellow-400" />;
+    if (momentum === 'STRONG UP') return <ArrowUpRight className="w-4 h-4 text-accent-success" />;
+    if (momentum === 'UP') return <TrendingUp className="w-4 h-4 text-accent-success" />;
+    if (momentum === 'STRONG DOWN') return <ArrowDownRight className="w-4 h-4 text-accent-error" />;
+    if (momentum === 'DOWN') return <TrendingDown className="w-4 h-4 text-accent-error" />;
+    return <Minus className="w-4 h-4 text-text-muted" />;
 }
 
 function getFearGreedColor(value: number): string {
-    if (value >= 75) return 'text-green-400';
-    if (value >= 55) return 'text-lime-400';
-    if (value >= 45) return 'text-yellow-400';
-    if (value >= 25) return 'text-orange-400';
-    return 'text-red-400';
+    if (value >= 75) return 'text-accent-success';
+    if (value >= 55) return 'text-accent-neon';
+    if (value >= 45) return 'text-text-muted';
+    if (value >= 25) return 'text-accent-error';
+    return 'text-accent-error';
 }
 
 function getFearGreedLabel(value: number): string {
@@ -89,10 +89,10 @@ function getFearGreedLabel(value: number): string {
 
 function getStrategyColor(rec: AIStrategy['recommendation']): string {
     switch (rec) {
-        case 'AGGRESSIVE': return 'text-green-400 bg-green-500/20 border-green-500/30';
-        case 'MODERATE': return 'text-blue-400 bg-blue-500/20 border-blue-500/30';
-        case 'CAUTION ADVISED': return 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30';
-        case 'RISK OFF': return 'text-red-400 bg-red-500/20 border-red-500/30';
+        case 'AGGRESSIVE': return 'text-accent-success bg-accent-success/20 border-accent-success/30';
+        case 'MODERATE': return 'text-accent-neon bg-accent-neon/20 border-accent-neon/30';
+        case 'CAUTION ADVISED': return 'text-text-muted bg-bg-tertiary border-border-primary';
+        case 'RISK OFF': return 'text-accent-error bg-accent-error/20 border-accent-error/30';
     }
 }
 
@@ -197,19 +197,12 @@ export function AIMarketReport() {
     }, [marketRegime, trendingTokens, stats]);
 
     return (
-        <div className="card-glass p-4 space-y-4">
+        <div className="card-glass p-3 space-y-3">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-accent-neon/20">
-                        <Brain className="w-5 h-5 text-accent-neon" />
-                    </div>
-                    <div>
-                        <h2 className="font-display font-bold text-lg text-text-primary">AI MARKET REPORT</h2>
-                        <p className="text-[10px] font-mono text-text-muted">
-                            {isLoading ? 'Fetching live data...' : 'DexScreener + CoinGecko + Sentiment'}
-                        </p>
-                    </div>
+                    <Brain className="w-4 h-4 text-accent-neon" />
+                    <span className="text-xs font-mono uppercase tracking-wider text-text-muted">AI MARKET REPORT</span>
                 </div>
                 <button
                     onClick={refresh}
@@ -291,13 +284,13 @@ export function AIMarketReport() {
                     <div className="space-y-1 text-xs">
                         <div className="flex justify-between">
                             <span className="text-text-muted">24h:</span>
-                            <span className={report.btc.change24h >= 0 ? 'text-green-400' : 'text-red-400'}>
+                            <span className={report.btc.change24h >= 0 ? 'text-accent-success' : 'text-accent-error'}>
                                 {report.btc.change24h >= 0 ? '+' : ''}{report.btc.change24h.toFixed(1)}%
                             </span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-text-muted">Trend:</span>
-                            <span className={report.btc.trend === 'BULLISH' ? 'text-green-400' : report.btc.trend === 'BEARISH' ? 'text-red-400' : 'text-yellow-400'}>
+                            <span className={report.btc.trend === 'BULLISH' ? 'text-accent-success' : report.btc.trend === 'BEARISH' ? 'text-accent-error' : 'text-text-muted'}>
                                 {report.btc.trend}
                             </span>
                         </div>
@@ -313,13 +306,13 @@ export function AIMarketReport() {
                     <div className="space-y-1 text-xs">
                         <div className="flex justify-between">
                             <span className="text-text-muted">24h:</span>
-                            <span className={report.sol.change24h >= 0 ? 'text-green-400' : 'text-red-400'}>
+                            <span className={report.sol.change24h >= 0 ? 'text-accent-success' : 'text-accent-error'}>
                                 {report.sol.change24h >= 0 ? '+' : ''}{report.sol.change24h.toFixed(1)}%
                             </span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-text-muted">Trend:</span>
-                            <span className={report.sol.trend === 'BULLISH' ? 'text-green-400' : report.sol.trend === 'BEARISH' ? 'text-red-400' : 'text-yellow-400'}>
+                            <span className={report.sol.trend === 'BULLISH' ? 'text-accent-success' : report.sol.trend === 'BEARISH' ? 'text-accent-error' : 'text-text-muted'}>
                                 {report.sol.trend}
                             </span>
                         </div>
@@ -330,7 +323,7 @@ export function AIMarketReport() {
             {/* Market Activity */}
             <div className="p-3 rounded-lg bg-bg-tertiary/50 border border-border-primary">
                 <div className="flex items-center gap-2 mb-2">
-                    <Flame className="w-4 h-4 text-orange-400" />
+                    <Flame className="w-4 h-4 text-accent-error" />
                     <span className="text-xs font-mono text-text-muted uppercase">Market Activity</span>
                 </div>
 
@@ -349,7 +342,7 @@ export function AIMarketReport() {
                     <div className="flex items-center gap-2">
                         <span className="text-text-muted">Top Gainer:</span>
                         {report.activity.topGainer ? (
-                            <span className="text-green-400 font-mono font-bold">
+                            <span className="text-accent-success font-mono font-bold">
                                 {report.activity.topGainer.symbol} +{report.activity.topGainer.change.toFixed(1)}%
                             </span>
                         ) : (
@@ -360,7 +353,7 @@ export function AIMarketReport() {
                     <div className="flex items-center gap-2">
                         <span className="text-text-muted">Top Loser:</span>
                         {report.activity.topLoser ? (
-                            <span className="text-red-400 font-mono font-bold">
+                            <span className="text-accent-error font-mono font-bold">
                                 {report.activity.topLoser.symbol} {report.activity.topLoser.change.toFixed(1)}%
                             </span>
                         ) : (

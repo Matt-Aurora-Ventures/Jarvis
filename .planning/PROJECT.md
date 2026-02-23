@@ -1,209 +1,135 @@
-# Jarvis - Autonomous Trading & AI Assistant
+# Jarvis - Sovereign AI Operating System
 
 **Created:** 2026-01-24
 **Owner:** @lucid
-**Status:** V1 Complete, V2 In Progress
+**Status:** V1 Complete, V2 In Progress, V3 Starting
 
 ---
 
-## Current Milestone: v2.0 Trading Web Interface
+## Current Milestone: v3.0 Sovereign AI Operating System
 
-**Goal:** Bring all Telegram `/demo` trading functionality to a production-grade web dashboard.
+**Goal:** Transform JARVIS from a Solana trading monolith into a true personal AI operating system — hub-and-spoke architecture with unified LLM gateway, self-editing memory, stateful agent orchestration, and multi-channel interfaces.
 
 **Target features:**
-- Real-time position monitoring with WebSocket updates
-- Buy/sell execution via web UI (mirroring Telegram flows)
-- AI sentiment analysis integration (Grok/xAI)
-- Portfolio value display and trade history
-- Mobile-responsive design with dark mode
+- LiteLLM gateway for model-agnostic routing with automatic failover
+- Letta/Mem0/Graphiti cognitive memory engine (4-tier: working, episodic, semantic, procedural)
+- Auto-generated boot document as "BIOS for the AI" — portable, encrypted, model-agnostic
+- LangGraph-based stateful agent orchestration replacing supervisor monolith
+- Multi-channel interface layer (WhatsApp, Telegram, Web PWA, Voice)
+- Domain plugin system (trading as first plugin, then research, communication, scheduling)
+- Edge/sovereignty layer for on-device inference and encrypted data sync
 
-**Why:** Telegram is powerful for mobile/on-the-go trading, but web provides better UX for power users, multi-monitor workflows, and public demos. 85% of trading logic can be directly reused from existing `tg_bot/handlers/demo/`.
+**Why:** The trading engine proves AI agents work in the highest-stakes domain. The infrastructure exists (OpenClaw, Letta, Mem0, LangGraph, LiteLLM) — JARVIS needs to wrap existing trading intelligence in production-grade infrastructure and expand from trading tool to life operating system.
+
+**Core insight from research:** Treat AI as an infrastructure problem, not a prompt engineering problem. The boot document is the key primitive — once a compressed representation of a person's entire context exists and works, everything else is engineering execution.
+
+---
+
+## Core Value
+
+The boot document — a portable, encrypted representation of the user's entire context that can initialize any model on any platform and make it "be you" from the first token.
+
+---
+
+## Requirements
+
+### Validated
+
+- ✓ Database consolidation (28 → 3 databases) — v1.0
+- ✓ Demo bot fully functional with 240 tests — v1.0
+- ✓ bags.fm API integrated with Jupiter fallback — v1.0
+- ✓ Mandatory TP/SL on all trades — v1.0
+- ✓ Zero critical security vulnerabilities — v1.0
+- ✓ 80%+ test coverage on critical paths — v1.0
+- ✓ 28 shared ClawdBot modules deployed to VPS — v2.0
+- ✓ 3 ClawdBots running (Matt/Friday/Jarvis) — v2.0
+- ✓ Jarvis Sniper backtesting pipeline — v2.0
+
+### Active
+
+- [ ] LLM Gateway (LiteLLM) — unified model routing with failover
+- [ ] Memory Engine — Mem0 extraction + Letta self-editing + Graphiti knowledge graph
+- [ ] Boot Document — auto-generated, portable, encrypted user context
+- [ ] Agent Orchestration — LangGraph stateful graphs replacing supervisor
+- [ ] Multi-Channel Interfaces — WhatsApp, upgraded Telegram, Web PWA, Voice
+- [ ] Domain Plugin System — modular domain registration
+- [ ] Infrastructure Consolidation — monorepo, CI/CD, proper package structure
+- [ ] Edge Inference — on-device models for private tasks
+
+### Out of Scope
+
+- $KR8TIV token implementation — defer to v4, focus on infrastructure first
+- Stripe payments integration — defer to v4, no monetization this milestone
+- iOS/Android native apps — PWA first, native later
+- Full 81-strategy trading coliseum migration — existing engine stays, just wrapped as plugin
+- Real-time chat between users — single-user system, not social platform
+
+---
+
+## Context
+
+**Technical Environment:**
+- Python 3.11 monolith, Docker (jarvis:4.6.5), PostgreSQL, Redis, Flask (port 5001)
+- Trading: Jupiter DEX, Jito MEV, bags.fm, 81+ strategies, paper trading coliseum
+- Multi-model: Grok (sentiment), Claude (code), GPT-4 (conversation), Llama (local/private)
+- VPS: 76.13.106.100 running 3 ClawdBots with 28 shared modules
+- Existing: core/memory/portable_brain.py (basic JSON export/import)
+
+**Key Research Findings (from architecture document):**
+- OpenClaw (196K stars): Hub-and-spoke gateway, plain-Markdown memory, model-agnostic failover
+- Letta/MemGPT: Self-editing memory — LLM manages its own context via tool calls
+- Mem0 (41K stars, $24M funding): 26% higher accuracy than OpenAI built-in memory
+- LangGraph (47M+ PyPI downloads): Stateful multi-agent orchestration at LinkedIn/Uber scale
+- LiteLLM (28.8K stars): Unified proxy, 100+ providers, 8ms P95 latency at 1K rps
+- Graphiti/Zep: Temporal knowledge graphs, 94.8% on Deep Memory Retrieval benchmark
+
+**Architecture Blueprint — 6 Layers:**
+1. LLM Gateway (LiteLLM) — unified endpoint, routing, failover, cost tracking
+2. Memory Engine (Letta + Mem0 + Graphiti) — 4-tier cognitive memory
+3. Agent Orchestration (LangGraph) — stateful graphs, domain subgraphs
+4. Domain Plugins — composable registry, trading first
+5. Interface Layer — WhatsApp, Telegram, Web PWA, Voice
+6. Edge/Sovereignty — on-device inference, encrypted sync
+
+---
+
+## Constraints
+
+- **Existing Trading Engine**: Must NOT break existing trading functionality during transformation
+- **VPS Budget**: Single VPS (76.13.106.100) — infrastructure must be efficient
+- **Python**: Stick with Python 3.11+ ecosystem (existing codebase, team knowledge)
+- **Incremental**: Each phase must deliver working functionality, not just scaffolding
+- **Privacy**: All personal data stays on user infrastructure — no third-party data storage
+- **ClawdBots**: 3 bots must keep running during transformation — backwards compatible
+
+---
+
+## Key Decisions
+
+| Decision | Rationale | Outcome |
+|----------|-----------|---------|
+| LiteLLM over OpenRouter | Self-hosted control, zero operational dependency, 8ms latency | — Pending |
+| Letta + Mem0 (both) | Letta for self-editing runtime, Mem0 for extraction pipeline — complementary | — Pending |
+| LangGraph over CrewAI | Production-proven at LinkedIn/Uber, explicit state management, checkpointing | — Pending |
+| WhatsApp as primary consumer channel | 2B+ users, zero learning curve, messaging-app-first UX | — Pending |
+| Boot document as key primitive | Portable across clouds/models, enables sovereign AI, single source of truth | — Pending |
+| Trading engine as first domain plugin | Already battle-tested, proves the plugin pattern works in highest-stakes domain | — Pending |
+| PWA over native mobile | Faster to ship, works on old smartphones, one codebase | — Pending |
 
 ---
 
 ## Previous Milestones
 
 ### v1.0 - Production-Ready Infrastructure ✅
+**Completed:** 2026-01-26 (4 days vs 10-13 weeks estimated)
+- Database consolidation (28 → 3), 240 tests, bags.fm + Jupiter, mandatory TP/SL
+- 13,621 total tests in 438 files, zero critical vulnerabilities
 
-**Completed:** 2026-01-26
-**Goal:** Transform Jarvis from fragmented experimental system into production-ready platform.
-
-**Delivered:**
-- ✅ Database consolidation (28 → 3 databases, 89% reduction)
-- ✅ Demo bot fully functional with 240 tests passing
-- ✅ bags.fm API integrated with Jupiter fallback
-- ✅ Mandatory TP/SL on all trades
-- ✅ Zero critical security vulnerabilities
-- ✅ 80%+ test coverage on critical paths
+### v2.0 - Trading Web Interface + ClawdBot Evolution (In Progress)
+**Started:** 2026-01-27
+- 28 shared modules deployed, 3 ClawdBots running
+- Jarvis Sniper backtesting pipeline active
+- Web trading dashboard phases 1-4 pending
 
 ---
-
-## Vision
-
-Transform Jarvis from a fragmented experimental system into a **production-ready, public-launch capable** autonomous trading and AI assistant platform on Solana.
-
-**Core Pillars:**
-1. **Reliability** - Zero critical bugs, <1% error rate, 99.9% uptime
-2. **Intelligence** - AI-powered trading decisions with continuous learning
-3. **User Experience** - Seamless Telegram interface, clear feedback, instant responses
-4. **Risk Management** - Mandatory stop-loss/take-profit on every trade
-5. **Performance** - Consolidated databases, optimized queries, event-driven architecture
-
----
-
-## Problem Statement
-
-### Current State
-Jarvis is a powerful but fragmented system with critical blockers preventing public launch:
-
-**Database Crisis:**
-- 28+ separate SQLite databases causing fragmentation
-- Data scattered across files and databases
-- No atomic cross-DB transactions
-- Massive overhead from multiple connection pools
-
-**Broken Core Features:**
-- `/demo` trading bot: 391.5KB monolithic file with execution failures
-- `/vibe` command: Partially implemented
-- Trade execution: Multiple implementations, no consistent error handling
-
-**Missing Critical Features:**
-- No stop-loss/take-profit enforcement
-- No bags.fm API integration (only Jupiter)
-- No unified trading interface
-- No AI learning from trade outcomes
-
-**Code Quality Issues:**
-- trading.py: 3,754 lines with 65+ functions
-- demo.py: ~10,000 lines in single file
-- 100+ sleep() calls (blocking patterns)
-- <50% test coverage (estimated)
-
----
-
-## Goals
-
-### V1 Success Criteria
-
-**Must-Have (Blockers for Launch):**
-1. ✅ `/demo` bot fully functional - buy/sell flows work 100% of the time
-2. ✅ `/vibe` command operational - Telegram-based vibe coding works
-3. ✅ bags.fm API integrated - Primary execution with Jupiter fallback
-4. ✅ Stop-loss/take-profit mandatory - Every trade has risk management
-5. ✅ Database consolidated - 3 DBs max (core, analytics, cache)
-6. ✅ Zero critical security vulnerabilities
-7. ✅ Core code refactored - No files >1000 lines
-
-**Should-Have (Quality Bar):**
-8. ✅ 80%+ test coverage on critical paths
-9. ✅ Performance optimized - Event-driven, no blocking sleep() calls
-10. ✅ Monitoring & alerting operational
-11. ✅ API key management centralized
-
-**Nice-to-Have (Post-V1):**
-12. Multi-wallet support
-13. Advanced order types (trailing stops, ladder exits)
-14. Cross-chain trading
-
----
-
-## Target Users
-
-**Primary:** Crypto traders who want an AI-powered trading assistant
-
-**User Personas:**
-1. **Degen Trader** - High-risk meme coin trading, needs fast execution and risk controls
-2. **Conservative Investor** - Wants AI recommendations with strict stop-losses
-3. **Developer** - Wants to extend Jarvis via `/vibe` command
-
----
-
-## Non-Goals (Out of Scope for V1)
-
-- ❌ Mobile app (Telegram only for V1)
-- ❌ Multi-chain support (Solana only)
-- ❌ Fiat on/off ramps
-- ❌ Social trading features
-- ❌ Portfolio analytics dashboard (basic only)
-
----
-
-## Technical Context
-
-### Existing Codebase
-
-**Core Components:**
-- **bots/supervisor.py** - Orchestrates all bot components
-- **bots/treasury/trading.py** - Treasury trading engine (3,754 lines - NEEDS REFACTOR)
-- **tg_bot/handlers/demo.py** - Demo bot (391.5KB - NEEDS REFACTOR)
-- **core/dexter/** - AI decision engine
-- **core/vibe_coding/** - Vibe command infrastructure (partial)
-
-**External Integrations:**
-- Twitter/X API (OAuth)
-- Telegram Bot API
-- Solana RPC (Helius)
-- Jupiter DEX (current primary)
-- **bags.fm** (TO BE INTEGRATED)
-- Grok AI (xAI)
-- PostgreSQL (continuous-claude DB)
-
-**Technical Debt:**
-- 28+ SQLite databases
-- Massive monolithic files
-- 100+ blocking sleep() calls
-- API keys scattered across 233 files
-- <50% test coverage
-
----
-
-## Constraints
-
-1. **Must maintain existing functionality** - No breaking changes to live bots
-2. **Zero data loss** - Database consolidation must preserve all data
-3. **Backward compatible** - Existing configs and state files must work
-4. **Security first** - All vulnerabilities fixed before launch
-5. **Performance cannot degrade** - Optimizations only
-
----
-
-## Success Metrics
-
-**Reliability:**
-- 99.9% uptime
-- <1% trade execution error rate
-- Zero critical security vulnerabilities
-
-**Performance:**
-- <500ms trade execution latency
-- <3 databases total
-- <100 total lines of sleep() calls
-
-**Code Quality:**
-- 80%+ test coverage
-- No files >1000 lines
-- All linting errors fixed
-
-**User Experience:**
-- 100% trade success rate in /demo bot
-- <2s response time for /vibe command
-- Clear error messages (no raw exceptions)
-
----
-
-## References
-
-**Codebase Analysis:**
-- `.planning/codebase/CONCERNS.md` - Technical debt report
-- `.planning/codebase/ARCHITECTURE.md` - System design
-- `.planning/codebase/STACK.md` - Technology stack
-
-**User Requirements:**
-- User explicitly wants: Solana fixes, Telegram fixes, bags.fm integration, stop-loss/TP
-- User wants: "ralph wiggum loop" - continuous iteration until V1 complete
-
----
-
-**Document Version:** 2.0
-**Last Updated:** 2026-01-27
-**Next Review:** After V2 Phase 1 complete
+*Last updated: 2026-02-16 after V3 milestone initialization*
